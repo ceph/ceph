@@ -63,7 +63,7 @@ override_dh_auto_install:
 	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
 	install -D -m 600 sudoers.d/ceph-osd-smartctl $(DESTDIR)/etc/sudoers.d/ceph-osd-smartctl
 	install -D -m 600 sudoers.d/cephadm $(DESTDIR)/etc/sudoers.d/cephadm
-	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/lib/rbd-nbd/rbd-nbd_quiesce
+	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/libexec/rbd-nbd/rbd-nbd_quiesce
 
 	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
 

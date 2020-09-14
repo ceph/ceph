@@ -141,7 +141,8 @@ public:
     } else {
       expect_is_lock_owner(mock_image_ctx);
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_size"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("set_size"), _, _, _, _))
                     .WillOnce(Return(r));
     }
   }
@@ -159,7 +160,13 @@ public:
       .WillOnce(Invoke([&mock_image_ctx, &mock_io_image_dispatch_spec, r]() {
                   auto aio_comp = mock_io_image_dispatch_spec.s_instance->aio_comp;
                   auto ctx = new LambdaContext([aio_comp](int r) {
-                    aio_comp->fail(r);
+                    if (r < 0) {
+                      aio_comp->fail(r);
+                    } else {
+                      aio_comp->set_request_count(1);
+                      aio_comp->add_request();
+                      aio_comp->complete_request(r);
+                    }
                   });
                   mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
                 }));

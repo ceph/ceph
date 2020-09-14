@@ -43,7 +43,7 @@ public:
     LightweightBufferExtents buffer_extents;
 
     bufferlist bl;
-    ExtentMap extent_map;
+    Extents extent_map;
 
     C_ObjectReadRequest(AioCompletion *aio_completion, uint64_t object_off,
                         uint64_t object_len,

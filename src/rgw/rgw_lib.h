@@ -121,7 +121,8 @@ namespace rgw {
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
-    static int init_from_header(struct req_state *s);
+    static int init_from_header(rgw::sal::RGWRadosStore *store,
+				struct req_state *s);
   }; /* RGWHandler_Lib */
 
   class RGWLibRequest : public RGWRequest,
@@ -173,7 +174,7 @@ namespace rgw {
 
       int ret = header_init();
       if (ret == 0) {
-	ret = init_from_header(_s);
+	ret = init_from_header(rados_ctx->get_store(), _s);
       }
       return ret;
     }

@@ -4,6 +4,7 @@
 #include "LogMap.h"
 #include "include/ceph_assert.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/rwl/LogEntry.h"
 
 namespace librbd {
 namespace cache {
@@ -273,3 +274,5 @@ bool LogMap<T>::LogMapEntryCompare::operator()(const LogMapEntry<T> &lhs,
 } //namespace rwl
 } //namespace cache
 } //namespace librbd
+
+template class librbd::cache::rwl::LogMap<librbd::cache::rwl::GenericWriteLogEntry>;

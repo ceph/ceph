@@ -1,7 +1,3 @@
-<cd-alert-panel *ngIf="isStale"
-                type="warning"
-                size="slim"
-                i18n>The bucket list data might be stale. If needed, you can manually reload it.</cd-alert-panel>
 <cd-table #table
           [autoReload]="false"
           [data]="buckets"
@@ -12,7 +8,8 @@
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)"
           identifier="bid"
-          (fetchData)="getBucketList($event)">
+          (fetchData)="getBucketList($event)"
+          [status]="tableStatus">
   <cd-table-actions class="table-actions"
                     [permission]="permission"
                     [selection]="selection"

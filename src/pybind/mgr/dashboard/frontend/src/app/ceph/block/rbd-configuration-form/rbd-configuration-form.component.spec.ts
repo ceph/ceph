@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { DirectivesModule } from '../../../shared/directives/directives.module';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { RbdConfigurationSourceField } from '../../../shared/models/configuration';
@@ -22,12 +22,7 @@ describe('RbdConfigurationFormComponent', () => {
   configureTestBed({
     imports: [ReactiveFormsModule, DirectivesModule, SharedModule],
     declarations: [RbdConfigurationFormComponent],
-    providers: [
-      RbdConfigurationService,
-      FormatterService,
-      DimlessBinaryPerSecondPipe,
-      i18nProviders
-    ]
+    providers: [RbdConfigurationService, FormatterService, DimlessBinaryPerSecondPipe]
   });
 
   beforeEach(() => {

@@ -251,7 +251,6 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     r = on_finishes[i]->wait();
     delete on_finishes[i];
     if (r < 0) {
-      delete ictxs[i];
       ictxs[i] = nullptr;
       ret_code = r;
     }
@@ -359,7 +358,6 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
     r = on_finishes[i]->wait();
     delete on_finishes[i];
     if (r < 0) {
-      delete ictxs[i];
       ictxs[i] = nullptr;
       ret_code = r;
     }
@@ -973,7 +971,6 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     r = on_finishes[i]->wait();
     delete on_finishes[i];
     if (r < 0) {
-      delete ictxs[i];
       ictxs[i] = nullptr;
       ret_code = r;
     }

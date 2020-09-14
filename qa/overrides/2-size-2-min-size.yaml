@@ -4,5 +4,5 @@ overrides:
       global:
         osd_pool_default_size: 2
         osd_pool_default_min_size: 2
-    log-whitelist:
+    log-ignorelist:
       - \(REQUEST_STUCK\)

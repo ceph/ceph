@@ -571,13 +571,20 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
   }
 }
 
-void Session::dump(Formatter *f) const
+void Session::dump(Formatter *f, bool cap_dump) const
 {
   f->dump_int("id", info.inst.name.num());
   f->dump_object("entity", info.inst);
   f->dump_string("state", get_state_name());
   f->dump_int("num_leases", leases.size());
   f->dump_int("num_caps", caps.size());
+  if (cap_dump) {
+    f->open_array_section("caps");
+    for (const auto& cap : caps) {
+      f->dump_object("cap", *cap);
+    }
+    f->close_section();
+  }
   if (is_open() || is_stale()) {
     f->dump_unsigned("request_load_avg", get_load_avg());
   }
@@ -997,15 +1004,16 @@ int Session::check_access(CInode *in, unsigned mask,
   if (path.length())
     path = path.substr(1);    // drop leading /
 
-  if (in->inode.is_dir() &&
-      in->inode.has_layout() &&
-      in->inode.layout.pool_ns.length() &&
+  const auto& inode = in->get_inode();
+  if (in->is_dir() &&
+      inode->has_layout() &&
+      inode->layout.pool_ns.length() &&
       !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
     return -EIO;
   }
 
-  if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+  if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
 			    info.inst.addr)) {

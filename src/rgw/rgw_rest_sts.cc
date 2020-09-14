@@ -670,9 +670,10 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_STS::get_handler(struct req_state* const s,
-                              const rgw::auth::StrategyRegistry& auth_registry,
-                              const std::string& frontend_prefix)
+RGWRESTMgr_STS::get_handler(rgw::sal::RGWRadosStore *store,
+			    struct req_state* const s,
+			    const rgw::auth::StrategyRegistry& auth_registry,
+			    const std::string& frontend_prefix)
 {
   return new RGWHandler_REST_STS(auth_registry);
 }

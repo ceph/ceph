@@ -1,12 +1,13 @@
-<cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
-<ng-container *ngIf="hasOrchestrator">
+<cd-orchestrator-doc-panel *ngIf="!orchStatus?.available"></cd-orchestrator-doc-panel>
+<ng-container *ngIf="orchStatus?.available">
   <legend i18n>Devices</legend>
   <div class="row">
     <div class="col-md-12">
       <cd-inventory-devices [devices]="devices"
                             [hiddenColumns]="hostname === undefined ? [] : ['hostname']"
                             selectionType="single"
-                            (fetchInventory)="refresh()">
+                            (fetchInventory)="refresh()"
+                            [orchStatus]="orchStatus">
       </cd-inventory-devices>
     </div>
   </div>

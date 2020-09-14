@@ -40,7 +40,7 @@ void cls_lock_lock_op::generate_test_instances(list<cls_lock_lock_op*>& o)
 {
   cls_lock_lock_op *i = new cls_lock_lock_op;
   i->name = "name";
-  i->type = LOCK_SHARED;
+  i->type = ClsLockType::SHARED;
   i->cookie = "cookie";
   i->tag = "tag";
   i->description = "description";
@@ -130,7 +130,7 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
 void cls_lock_get_info_reply::generate_test_instances(list<cls_lock_get_info_reply*>& o)
 {
   cls_lock_get_info_reply *i = new cls_lock_get_info_reply;
-  i->lock_type = LOCK_SHARED;
+  i->lock_type = ClsLockType::SHARED;
   i->tag = "tag";
   locker_id_t id1, id2;
   entity_addr_t addr1, addr2;
@@ -180,7 +180,7 @@ void cls_lock_assert_op::generate_test_instances(list<cls_lock_assert_op*>& o)
 {
   cls_lock_assert_op *i = new cls_lock_assert_op;
   i->name = "name";
-  i->type = LOCK_SHARED;
+  i->type = ClsLockType::SHARED;
   i->cookie = "cookie";
   i->tag = "tag";
   o.push_back(i);
@@ -200,7 +200,7 @@ void cls_lock_set_cookie_op::generate_test_instances(list<cls_lock_set_cookie_op
 {
   cls_lock_set_cookie_op *i = new cls_lock_set_cookie_op;
   i->name = "name";
-  i->type = LOCK_SHARED;
+  i->type = ClsLockType::SHARED;
   i->cookie = "cookie";
   i->tag = "tag";
   i->new_cookie = "new cookie";

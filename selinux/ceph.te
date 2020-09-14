@@ -14,6 +14,8 @@ require {
 	type setfiles_t;
 	type nvme_device_t;
 	type targetd_etc_rw_t;
+	type amqp_port_t;
+	type soundd_port_t;
 	class sock_file unlink;
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
@@ -88,6 +90,8 @@ corenet_tcp_sendrecv_cyphesis_port(ceph_t)
 
 allow ceph_t commplex_main_port_t:tcp_socket name_connect;
 allow ceph_t http_cache_port_t:tcp_socket name_connect;
+allow ceph_t amqp_port_t:tcp_socket name_connect;
+allow ceph_t soundd_port_t:tcp_socket name_connect;
 
 corecmd_exec_bin(ceph_t)
 corecmd_exec_shell(ceph_t)

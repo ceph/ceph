@@ -23,6 +23,11 @@ describe('PwdExpirationNotificationComponent', () => {
 
   const routes: Routes = [{ path: 'login', component: FakeComponent }];
 
+  const spyOnDate = (fakeDate: string) => {
+    const dateValue = Date;
+    spyOn(global, 'Date').and.callFake((date) => new dateValue(date ? date : fakeDate));
+  };
+
   configureTestBed({
     declarations: [PwdExpirationNotificationComponent, FakeComponent],
     imports: [NgbAlertModule, HttpClientTestingModule, RouterTestingModule.withRoutes(routes)],
@@ -58,42 +63,29 @@ describe('PwdExpirationNotificationComponent', () => {
     });
 
     it('should calculate password expiration in days', () => {
-      const dateValue = Date;
-      spyOn(global, 'Date').and.callFake((date) => {
-        if (date) {
-          return new dateValue(date);
-        } else {
-          return new Date('2022-02-18T00:00:00.000Z');
-        }
-      });
+      spyOnDate('2022-02-18T00:00:00.000Z');
       component.ngOnInit();
       expect(component['expirationDays']).toBe(4);
     });
 
     it('should set alert type warning correctly', () => {
-      const dateValue = Date;
-      spyOn(global, 'Date').and.callFake((date) => {
-        if (date) {
-          return new dateValue(date);
-        } else {
-          return new Date('2022-02-14T00:00:00.000Z');
-        }
-      });
+      spyOnDate('2022-02-14T00:00:00.000Z');
       component.ngOnInit();
       expect(component['alertType']).toBe('warning');
+      expect(component.displayNotification).toBeTruthy();
     });
 
     it('should set alert type danger correctly', () => {
-      const dateValue = Date;
-      spyOn(global, 'Date').and.callFake((date) => {
-        if (date) {
-          return new dateValue(date);
-        } else {
-          return new Date('2022-02-18T00:00:00.000Z');
-        }
-      });
+      spyOnDate('2022-02-18T00:00:00.000Z');
       component.ngOnInit();
       expect(component['alertType']).toBe('danger');
+      expect(component.displayNotification).toBeTruthy();
+    });
+
+    it('should not display if date is far', () => {
+      spyOnDate('2022-01-01T00:00:00.000Z');
+      component.ngOnInit();
+      expect(component.displayNotification).toBeFalsy();
     });
   });
 

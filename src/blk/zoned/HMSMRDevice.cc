@@ -34,7 +34,6 @@
 #include "common/debug.h"
 #include "common/numa.h"
 
-#include "global/global_context.h"
 #include "kernel/io_uring.h"
 
 extern "C" {
@@ -61,7 +60,7 @@ HMSMRDevice::HMSMRDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_
   fd_directs.resize(WRITE_LIFE_MAX, -1);
   fd_buffereds.resize(WRITE_LIFE_MAX, -1);
 
-  bool use_ioring = g_ceph_context->_conf.get_val<bool>("bluestore_ioring");
+  bool use_ioring = cct->_conf.get_val<bool>("bdev_ioring");
   unsigned int iodepth = cct->_conf->bdev_aio_max_queue_depth;
 
   if (use_ioring && ioring_queue_t::supported()) {
@@ -75,6 +74,11 @@ HMSMRDevice::HMSMRDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_
     }
     io_queue = std::make_unique<aio_queue_t>(iodepth);
   }
+}
+
+bool HMSMRDevice::support(const std::string& path)
+{
+  return zbc_device_is_zoned(path.c_str(), false, nullptr) == 1;
 }
 
 int HMSMRDevice::_lock()

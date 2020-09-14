@@ -235,6 +235,9 @@ public:
   std::pair<ObjectContextRef, bool> get_cached_obc(const hobject_t &hoid) {
     return obc_lru.get_or_create(hoid);
   }
+  ObjectContextRef maybe_get_cached_obc(const hobject_t &hoid) {
+    return obc_lru.get(hoid);
+  }
 
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const crimson::common::ConfigProxy& conf,

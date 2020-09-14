@@ -21,9 +21,6 @@ The format of token inspection url is https://[base-server-url]/token/introspect
   [client.radosgw.gateway]
   rgw sts key = {sts key for encrypting/ decrypting the session token}
   rgw s3 auth use sts = true
-  rgw_sts_token_introspection_url = {url for token introspection}
-  rgw_sts_client_id = {client-id}
-  rgw_sts_client_secret = {client-password}
 
 Example showing how to fetch a web token from Keycloak
 ======================================================

@@ -7,7 +7,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -28,7 +28,7 @@ describe('EditSiteNameModalComponent', () => {
       SharedModule,
       ToastrModule.forRoot()
     ],
-    providers: [NgbActiveModal, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

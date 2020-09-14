@@ -8,7 +8,7 @@ function(build_rocksdb)
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH_ALT_SEP})
   if(CMAKE_TOOLCHAIN_FILE)
     list(APPEND rocksdb_CMAKE_ARGS
-         -DCMAKE_TOOLCHAIN_FILE=$CMAKE_TOOLCHAIN_FILE)
+         -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
   endif()
 
   if(ALLOCATOR STREQUAL "jemalloc")
@@ -35,8 +35,8 @@ function(build_rocksdb)
   if(LZ4_FOUND)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES LZ4::LZ4)
     # When cross compiling, cmake may fail to locate lz4.
-    list(APPEND rocksdb_CMAKE_ARGS -DLZ4_INCLUDE_DIR=${LZ4_INCLUDE_DIR})
-    list(APPEND rocksdb_CMAKE_ARGS -DLZ4_LIBRARIES=${LZ4_LIBRARY})
+    list(APPEND rocksdb_CMAKE_ARGS -Dlz4_INCLUDE_DIRS=${LZ4_INCLUDE_DIR})
+    list(APPEND rocksdb_CMAKE_ARGS -Dlz4_LIBRARIES=${LZ4_LIBRARY})
   endif()
 
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_ZLIB=${ZLIB_FOUND})

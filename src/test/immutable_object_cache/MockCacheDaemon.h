@@ -24,14 +24,8 @@ class MockCacheClient {
   MOCK_METHOD0(stop, void());
   MOCK_METHOD0(connect, int());
   MOCK_METHOD1(connect, void(Context*));
-  void lookup_object(std::string pool_nspace, uint64_t pool_id, uint64_t snap_id,
-              std::string oid, CacheGenContextURef&& on_finish) {
-    // gmock don't support move
-    internal_lookup(pool_nspace, pool_id, snap_id, oid);
-  };
-  MOCK_METHOD4(internal_lookup, void(std::string pool_nspace,
-                uint64_t pool_id, uint64_t snap_id, 
-                std::string oid));
+  MOCK_METHOD5(lookup_object, void(std::string, uint64_t, uint64_t, std::string,
+                                   CacheGenContextURef));
   MOCK_METHOD1(register_client, int(Context*));
 };
 

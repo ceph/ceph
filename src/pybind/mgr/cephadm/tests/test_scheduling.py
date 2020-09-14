@@ -1,3 +1,7 @@
+# Disable autopep8 for this file:
+
+# fmt: off
+
 from typing import NamedTuple, List
 import pytest
 
@@ -315,7 +319,7 @@ def test_scheduler_daemons(host_key, hosts,
     )
 
 
-## =========================
+# =========================
 
 
 class NodeAssignmentTest(NamedTuple):
@@ -430,9 +434,16 @@ def test_node_assignment(service_type, placement, hosts, daemons, expected):
             return [HostSpec(h) for h in hosts]
         return hosts
 
+    service_id = None
+    if service_type == 'rgw':
+        service_id = 'realm.zone'
+
+    spec = ServiceSpec(service_type=service_type,
+                       service_id=service_id,
+                       placement=placement)
 
     hosts = HostAssignment(
-        spec=ServiceSpec(service_type, placement=placement),
+        spec=spec,
         get_hosts_func=get_hosts_func,
         get_daemons_func=lambda _: daemons).place()
     assert sorted([h.hostname for h in hosts]) == sorted(expected)
@@ -618,3 +629,156 @@ def test_bad_specs(service_type, placement, hosts, daemons, expected):
             get_hosts_func=get_hosts_func,
             get_daemons_func=lambda _: daemons).place()
     assert str(e.value) == expected
+
+class ActiveAssignmentTest(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    hosts: List[str]
+    daemons: List[DaemonDescription]
+    expected: List[List[str]]
+
+
+@pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
+                         [
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1', is_active=True),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3'),
+                                 ],
+                                 [['host1', 'host2'], ['host1', 'host3']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1'),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3', is_active=True),
+                                 ],
+                                 [['host1', 'host3'], ['host2', 'host3']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=1),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1'),
+                                     DaemonDescription('mgr', 'b', 'host2', is_active=True),
+                                     DaemonDescription('mgr', 'c', 'host3'),
+                                 ],
+                                 [['host2']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=1),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1'),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3', is_active=True),
+                                 ],
+                                 [['host3']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=1),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1', is_active=True),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3', is_active=True),
+                                 ],
+                                 [['host1'], ['host3']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1'),
+                                     DaemonDescription('mgr', 'b', 'host2', is_active=True),
+                                     DaemonDescription('mgr', 'c', 'host3', is_active=True),
+                                 ],
+                                 [['host2', 'host3']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=1),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1', is_active=True),
+                                     DaemonDescription('mgr', 'b', 'host2', is_active=True),
+                                     DaemonDescription('mgr', 'c', 'host3', is_active=True),
+                                 ],
+                                 [['host1'], ['host2'], ['host3']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=1),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1', is_active=True),
+                                     DaemonDescription('mgr', 'a2', 'host1'),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3'),
+                                 ],
+                                 [['host1']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=1),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1', is_active=True),
+                                     DaemonDescription('mgr', 'a2', 'host1', is_active=True),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3'),
+                                 ],
+                                 [['host1']]
+                             ),
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1', is_active=True),
+                                     DaemonDescription('mgr', 'a2', 'host1'),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3', is_active=True),
+                                 ],
+                                 [['host1', 'host3']]
+                             ),
+                             # Explicit placement should override preference for active daemon
+                             ActiveAssignmentTest(
+                                 'mgr',
+                                 PlacementSpec(count=1, hosts=['host1']),
+                                 'host1 host2 host3'.split(),
+                                 [
+                                     DaemonDescription('mgr', 'a', 'host1'),
+                                     DaemonDescription('mgr', 'b', 'host2'),
+                                     DaemonDescription('mgr', 'c', 'host3', is_active=True),
+                                 ],
+                                 [['host1']]
+                             ),
+
+                         ])
+def test_active_assignment(service_type, placement, hosts, daemons, expected):
+    def get_hosts_func(label=None, as_hostspec=False):
+        if as_hostspec:
+            return [HostSpec(h) for h in hosts]
+        return hosts
+
+    spec = ServiceSpec(service_type=service_type,
+                       service_id=None,
+                       placement=placement)
+
+    hosts = HostAssignment(
+        spec=spec,
+        get_hosts_func=get_hosts_func,
+        get_daemons_func=lambda _: daemons).place()
+    assert sorted([h.hostname for h in hosts]) in expected

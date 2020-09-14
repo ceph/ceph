@@ -1,21 +1,26 @@
+import os
+
+if 'UNITTEST' in os.environ:
+    import tests
+
 import cephfs
 import contextlib
 import datetime
 import errno
-import os
 import socket
 import time
 import logging
 import sys
 from threading import Lock, Condition, Event
 from typing import no_type_check
+from functools import wraps
 if sys.version_info >= (3, 3):
     from threading import Timer
 else:
     from threading import _Timer as Timer
 
 try:
-    from typing import Tuple
+    from typing import Tuple, Any, Callable
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
 
@@ -241,6 +246,25 @@ class CephfsClient(object):
         self.stopping.set()
         # second, delete all libcephfs handles from connection pool
         self.connection_pool.del_all_handles()
+
+    def get_fs(self, fs_name):
+        fs_map = self.mgr.get('fs_map')
+        for fs in fs_map['filesystems']:
+            if fs['mdsmap']['fs_name'] == fs_name:
+                return fs
+        return None
+
+    def get_mds_names(self, fs_name):
+        fs = self.get_fs(fs_name)
+        if fs is None:
+            return []
+        return [mds['name'] for mds in fs['mdsmap']['info'].values()]
+
+    def get_metadata_pool(self, fs_name):
+        fs = self.get_fs(fs_name)
+        if fs:
+            return fs['mdsmap']['metadata_pool']
+        return None
 
 
 @contextlib.contextmanager
@@ -627,3 +651,24 @@ def to_pretty_timedelta(n):
     if n < datetime.timedelta(days=365*2):
         return str(n.days // 30) + 'M'
     return str(n.days // 365) + 'y'
+
+
+def profile_method(skip_attribute=False):
+    """
+    Decorator for methods of the Module class. Logs the name of the given
+    function f with the time it takes to execute it.
+    """
+    def outer(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            self = args[0]
+            t = time.time()
+            self.log.debug('Starting method {}.'.format(f.__name__))
+            result = f(*args, **kwargs)
+            duration = time.time() - t
+            if not skip_attribute:
+                wrapper._execution_duration = duration  # type: ignore
+            self.log.debug('Method {} ran {:.3f} seconds.'.format(f.__name__, duration))
+            return result
+        return wrapper
+    return outer

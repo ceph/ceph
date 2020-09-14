@@ -6,11 +6,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SettingsService } from '../../api/settings.service';
 import { CephReleaseNamePipe } from '../../pipes/ceph-release-name.pipe';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
+import { DocComponent } from '../doc/doc.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { GrafanaComponent } from './grafana.component';
 
@@ -19,9 +20,9 @@ describe('GrafanaComponent', () => {
   let fixture: ComponentFixture<GrafanaComponent>;
 
   configureTestBed({
-    declarations: [GrafanaComponent, AlertPanelComponent, LoadingPanelComponent],
+    declarations: [GrafanaComponent, AlertPanelComponent, LoadingPanelComponent, DocComponent],
     imports: [NgbAlertModule, HttpClientTestingModule, RouterTestingModule, FormsModule],
-    providers: [CephReleaseNamePipe, SettingsService, SummaryService, i18nProviders]
+    providers: [CephReleaseNamePipe, SettingsService, SummaryService]
   });
 
   beforeEach(() => {

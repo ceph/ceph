@@ -37,6 +37,7 @@ class MCommand;
 class MOSDMap;
 class MOSDRepOpReply;
 class MOSDRepOp;
+class MOSDScrub2;
 class OSDMap;
 class OSDMeta;
 class Heartbeat;
@@ -134,7 +135,7 @@ public:
   seastar::future<> stop();
 
   void dump_status(Formatter*) const;
-
+  void dump_pg_state_history(Formatter*) const;
   void print(std::ostream&) const;
 
   seastar::future<> send_incremental_map(crimson::net::Connection* conn,
@@ -154,9 +155,6 @@ private:
 				   bool do_create);
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
-
-  epoch_t up_thru_wanted = 0;
-  seastar::future<> _send_alive();
 
   // OSDMapService methods
   epoch_t get_up_epoch() const final {
@@ -194,6 +192,8 @@ private:
 				      Ref<MOSDPeeringOp> m);
   seastar::future<> handle_recovery_subreq(crimson::net::Connection* conn,
 					   Ref<MOSDFastDispatchOp> m);
+  seastar::future<> handle_scrub(crimson::net::Connection* conn,
+				 Ref<MOSDScrub2> m);
   seastar::future<> handle_mark_me_down(crimson::net::Connection* conn,
 					Ref<MOSDMarkMeDown> m);
 

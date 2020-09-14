@@ -148,6 +148,19 @@ public:
     }
   }
 
+  /**
+   * Returns the TRef corresponding to k if it exists or
+   * nullptr otherwise.
+   */
+  TRef get(const K &k) {
+    if (auto iter = lru_set.find(k); iter != std::end(lru_set)) {
+      access(*iter);
+      return TRef(static_cast<T*>(&*iter));
+    } else {
+      return nullptr;
+    }
+  }
+
   void set_target_size(size_t target_size) {
     lru_target_size = target_size;
     evict();

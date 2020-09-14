@@ -262,7 +262,7 @@ void Instances<I>::remove_instances(const Instances<I>::clock_t::time_point& tim
 
   auto gather_ctx = new C_Gather(m_cct, ctx);
   for (auto& instance_id : instance_ids) {
-    InstanceWatcher<I>::remove_instance(m_ioctx, m_threads->work_queue,
+    InstanceWatcher<I>::remove_instance(m_ioctx, *m_threads->asio_engine,
                                         instance_id, gather_ctx->new_sub());
   }
 
@@ -278,7 +278,7 @@ void Instances<I>::handle_remove_instances(
   dout(10) << "r=" << r << ", instance_ids=" << instance_ids << dendl;
   ceph_assert(r == 0);
 
-  // fire removed notification now that instances have been blacklisted
+  // fire removed notification now that instances have been blocklisted
   m_threads->work_queue->queue(
     new C_NotifyInstancesRemoved(this, instance_ids), 0);
 

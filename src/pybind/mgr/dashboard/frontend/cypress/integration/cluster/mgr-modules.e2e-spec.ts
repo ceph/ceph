@@ -15,22 +15,6 @@ describe('Manager modules page', () => {
   });
 
   describe('verifies editing functionality for manager modules', () => {
-    it('should test editing on diskprediction_cloud module', () => {
-      const diskpredCloudArr: Input[] = [
-        {
-          id: 'diskprediction_cert_context',
-          newValue: 'Foo',
-          oldValue: ''
-        },
-        {
-          id: 'sleep_interval',
-          newValue: '456',
-          oldValue: '60'
-        }
-      ];
-      mgrmodules.editMgrModule('diskprediction_cloud', diskpredCloudArr);
-    });
-
     it('should test editing on balancer module', () => {
       const balancerArr: Input[] = [
         {

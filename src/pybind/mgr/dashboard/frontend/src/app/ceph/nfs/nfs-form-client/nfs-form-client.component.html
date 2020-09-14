@@ -37,7 +37,7 @@
                        placeholder="192.168.0.10, 192.168.1.0/8">
                 <span class="invalid-feedback">
                   <span *ngIf="showError(index, 'addresses', formDir, 'required')"
-                        i18n>Required field</span>
+                        i18n>This field is required.</span>
 
                   <span *ngIf="showError(index, 'addresses', formDir, 'pattern')">
                     <ng-container i18n>Must contain one or more comma-separated values</ng-container>

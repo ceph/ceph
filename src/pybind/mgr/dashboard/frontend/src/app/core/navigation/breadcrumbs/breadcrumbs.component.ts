@@ -26,7 +26,7 @@ import { Component, Injector, OnDestroy } from '@angular/core';
 import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '@angular/router';
 
 import { concat, from, Observable, of, Subscription } from 'rxjs';
-import { distinct, filter, first, flatMap, toArray } from 'rxjs/operators';
+import { distinct, filter, first, mergeMap, toArray } from 'rxjs/operators';
 
 import { BreadcrumbsResolver, IBreadcrumb } from '../../../shared/models/breadcrumbs';
 
@@ -38,7 +38,7 @@ import { BreadcrumbsResolver, IBreadcrumb } from '../../../shared/models/breadcr
 export class BreadcrumbsComponent implements OnDestroy {
   crumbs: IBreadcrumb[] = [];
   /**
-   * Usefull for e2e tests.
+   * Useful for e2e tests.
    * This allow us to mark the breadcrumb as pending during the navigation from
    * one page to another.
    * This resolves the problem of validating the breadcrumb of a new page and
@@ -62,10 +62,10 @@ export class BreadcrumbsComponent implements OnDestroy {
 
         this._resolveCrumbs(currentRoot)
           .pipe(
-            flatMap((x) => x),
+            mergeMap((x) => x),
             distinct((x) => x.text),
             toArray(),
-            flatMap((x) => {
+            mergeMap((x) => {
               const y = this.postProcess(x);
               return this.wrapIntoObservable<IBreadcrumb[]>(y).pipe(first());
             })

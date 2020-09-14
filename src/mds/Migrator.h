@@ -370,7 +370,7 @@ protected:
 
 private:
   MDSRank *mds;
-  MDCache *cache;
+  MDCache *mdcache;
   uint64_t max_export_size = 0;
   bool inject_session_race = false;
 };

@@ -11,7 +11,6 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders,
   Mocks
 } from '../../../../testing/unit-test-helper';
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
@@ -79,7 +78,7 @@ describe('CrushRuleFormComponent', () => {
       PoolModule,
       NgBootstrapFormValidationModule.forRoot()
     ],
-    providers: [CrushRuleService, NgbActiveModal, i18nProviders]
+    providers: [CrushRuleService, NgbActiveModal]
   });
 
   beforeEach(() => {

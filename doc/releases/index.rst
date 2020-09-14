@@ -15,7 +15,6 @@ Active Releases
 
    Octopus <octopus>
    Nautilus <nautilus>
-   Mimic <mimic>
 
 Archived Releases
 -----------------

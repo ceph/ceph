@@ -52,7 +52,7 @@ void UpdateRequest<I>::update_object_map() {
 
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "");
   }
   cls_client::object_map_update(&op, m_update_start_object_no,
                                 m_update_end_object_no, m_new_state,

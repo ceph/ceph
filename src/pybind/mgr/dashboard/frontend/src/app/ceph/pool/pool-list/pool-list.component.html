@@ -5,16 +5,15 @@
     <a ngbNavLink
        i18n>Pools List</a>
     <ng-template ngbNavContent>
-      <cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
-                     [status]="viewCacheStatus.status"
-                     [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
-
       <cd-table #table
                 id="pool-list"
                 [data]="pools"
                 [columns]="columns"
                 selectionType="single"
                 [hasDetails]="true"
+                [status]="tableStatus"
+                [autoReload]="-1"
+                (fetchData)="taskListService.fetch()"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)">
         <cd-table-actions id="pool-list-actions"
@@ -50,8 +49,9 @@
 
 <ng-template #poolUsageTpl
              let-row="row">
-  <cd-usage-bar *ngIf="row.stats?.max_avail?.latest"
-                [total]="row.stats.bytes_used.latest + row.stats.max_avail.latest"
-                [used]="row.stats.bytes_used.latest">
+  <cd-usage-bar *ngIf="row.stats?.avail_raw?.latest"
+                [total]="row.stats.bytes_used.latest + row.stats.avail_raw.latest"
+                [used]="row.stats.bytes_used.latest"
+                decimals="2">
   </cd-usage-bar>
 </ng-template>

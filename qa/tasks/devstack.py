@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 import contextlib
 import logging
-from io import BytesIO
 import textwrap
-from configparser import ConfigParser
-
-import six
 import time
+from configparser import ConfigParser
+from io import BytesIO, StringIO
 
 from teuthology.orchestra import run
 from teuthology import misc
@@ -206,7 +204,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         parser.read_file(config_stream)
         for (key, value) in update_dict.items():
             parser.set(section, key, value)
-        out_stream = six.StringIO()
+        out_stream = StringIO()
         parser.write(out_stream)
         out_stream.seek(0)
         return out_stream
@@ -251,7 +249,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         file_name = update['name']
         options = update['options']
         config_data = misc.get_file(devstack_node, file_name, sudo=True)
-        config_stream = six.StringIO(config_data)
+        config_stream = StringIO(config_data)
         backup_config(devstack_node, file_name)
         new_config_stream = update_config(file_name, config_stream, options)
         misc.sudo_write_file(devstack_node, file_name, new_config_stream)

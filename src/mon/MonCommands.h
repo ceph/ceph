@@ -363,7 +363,7 @@ COMMAND_WITH_FLAG("mds newfs "
 	"make new filesystem using pools <metadata> and <data>",
 	"mds", "rw", FLAG(OBSOLETE))
 COMMAND("fs new "
-	"name=fs_name,type=CephString "
+	"name=fs_name,type=CephString,goodchars=[A-Za-z0-9-_.] "
 	"name=metadata,type=CephString "
 	"name=data,type=CephString "
 	"name=force,type=CephBool,req=false "
@@ -405,6 +405,17 @@ COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"Set a global CephFS flag",
 	"fs", "rw")
+
+COMMAND("fs feature ls",
+        "list available cephfs features to be set/unset",
+	"mds", "r")
+
+COMMAND("fs required_client_features "
+        "name=fs_name,type=CephString "
+        "name=subop,type=CephChoices,strings=add|rm "
+        "name=val,type=CephString ",
+        "add/remove required features of clients", "mds", "rw")
+
 COMMAND("fs add_data_pool name=fs_name,type=CephString "
 	"name=pool,type=CephString",
 	"add data pool <pool>", "mds", "rw")
@@ -418,6 +429,21 @@ COMMAND_WITH_FLAG("fs set_default name=fs_name,type=CephString",
 COMMAND("fs set-default name=fs_name,type=CephString",
 	"set the default to the named filesystem",
 	"fs", "rw")
+COMMAND("fs mirror enable "
+	"name=fs_name,type=CephString ",
+	"enable mirroring for a ceph filesystem", "mds", "rw")
+COMMAND("fs mirror disable "
+	"name=fs_name,type=CephString ",
+	"disable mirroring for a ceph filesystem", "mds", "rw")
+COMMAND("fs mirror peer_add "
+	"name=fs_name,type=CephString "
+	"name=remote_cluster_spec,type=CephString "
+	"name=remote_fs_name,type=CephString",
+	"add a mirror peer for a ceph filesystem", "mds", "rw")
+COMMAND("fs mirror peer_remove "
+	"name=fs_name,type=CephString "
+	"name=uuid,type=CephString ",
+	"remove a mirror peer for a ceph filesystem", "mds", "rw")
 
 /*
  * Monmap commands
@@ -997,14 +1023,27 @@ COMMAND("osd new "
         "exist and have been previously destroyed. "
         "Reads secrets from JSON file via `-i <file>` (see man page).",
         "osd", "rw")
-COMMAND("osd blacklist "
+COMMAND("osd blocklist "
+	"name=blocklistop,type=CephChoices,strings=add|rm "
+	"name=addr,type=CephEntityAddr "
+	"name=expire,type=CephFloat,range=0.0,req=false",
+	"add (optionally until <expire> seconds from now) or remove <addr> from blocklist",
+	"osd", "rw")
+COMMAND("osd blocklist ls", "show blocklisted clients", "osd", "r")
+COMMAND("osd blocklist clear", "clear all blocklisted clients", "osd", "rw")
+
+COMMAND_WITH_FLAG("osd blacklist "
 	"name=blacklistop,type=CephChoices,strings=add|rm "
 	"name=addr,type=CephEntityAddr "
 	"name=expire,type=CephFloat,range=0.0,req=false",
 	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist",
-	"osd", "rw")
-COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r")
-COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw")
+	"osd", "rw",
+	FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd blacklist ls", "show blacklisted clients", "osd", "r",
+	FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
+	FLAG(DEPRECATED))
+
 COMMAND("osd pool mksnap "
 	"name=pool,type=CephPoolname "
 	"name=snap,type=CephString",

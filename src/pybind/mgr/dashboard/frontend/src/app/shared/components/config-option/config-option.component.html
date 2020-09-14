@@ -2,7 +2,7 @@
   <div *ngFor="let option of options; let last = last">
     <div class="form-group row pt-2"
          *ngIf="option.type === 'bool'">
-      <label class="col-form-label col-6"
+      <label class="cd-col-form-label"
              [for]="option.name">
         <b>{{ option.text }}</b>
         <br>
@@ -13,7 +13,7 @@
         </span>
       </label>
 
-      <div class="col-6">
+      <div class="cd-col-form-input">
         <div class="custom-control custom-checkbox">
           <input class="custom-control-input"
                  type="checkbox"
@@ -27,7 +27,7 @@
 
     <div class="form-group row pt-2"
          *ngIf="option.type !== 'bool'">
-      <label class="col-6 col-form-label"
+      <label class="cd-col-form-label"
              [for]="option.name">{{ option.text }}
         <br>
         <span class="text-muted">
@@ -36,7 +36,7 @@
             {{ option.long_desc }}</cd-helper>
         </span>
       </label>
-      <div class="col-6">
+      <div class="cd-col-form-input">
         <div class="input-group">
           <input class="form-control"
                  [type]="option.additionalTypeInfo.inputType"

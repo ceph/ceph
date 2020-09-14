@@ -3,9 +3,8 @@ import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import * as moment from 'moment';
+import _ from 'lodash';
+import moment from 'moment';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { AuthService } from '../../../shared/api/auth.service';
@@ -47,7 +46,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   userFormMode = UserFormMode;
   mode: UserFormMode;
   allRoles: Array<UserFormRoleModel>;
-  messages = new SelectMessages({ empty: this.i18n('There are no roles.') }, this.i18n);
+  messages = new SelectMessages({ empty: $localize`There are no roles.` });
   action: string;
   resource: string;
   passwordPolicyHelpText = '';
@@ -66,16 +65,15 @@ export class UserFormComponent extends CdForm implements OnInit {
     private roleService: RoleService,
     private userService: UserService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n,
     private passwordPolicyService: PasswordPolicyService,
     private formBuilder: CdFormBuilder,
     private settingsService: SettingsService
   ) {
     super();
-    this.resource = this.i18n('user');
+    this.resource = $localize`user`;
     this.createForm();
-    this.messages = new SelectMessages({ empty: this.i18n('There are no roles.') }, this.i18n);
+    this.messages = new SelectMessages({ empty: $localize`There are no roles.` });
   }
 
   createForm() {
@@ -176,9 +174,6 @@ export class UserFormComponent extends CdForm implements OnInit {
     );
     const expirationDate = response['pwdExpirationDate'];
     if (expirationDate) {
-      const mom = moment(expirationDate * 1000);
-      console.log(this.pwdExpirationFormat, mom.format(this.pwdExpirationFormat));
-
       this.userForm
         .get('pwdExpirationDate')
         .setValue(moment(expirationDate * 1000).format(this.pwdExpirationFormat));
@@ -210,7 +205,7 @@ export class UserFormComponent extends CdForm implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Created user '{{username}}'`, { username: userFormModel.username })
+          $localize`Created user '${userFormModel.username}'`
         );
         this.router.navigate(['/user-management/users']);
       },
@@ -223,8 +218,8 @@ export class UserFormComponent extends CdForm implements OnInit {
   editAction() {
     if (this.isUserRemovingNeededRolePermissions()) {
       const initialState = {
-        titleText: this.i18n('Update user'),
-        buttonText: this.i18n('Continue'),
+        titleText: $localize`Update user`,
+        buttonText: $localize`Continue`,
         bodyTpl: this.removeSelfUserReadUpdatePermissionTpl,
         onSubmit: () => {
           this.modalRef.close();
@@ -279,13 +274,13 @@ export class UserFormComponent extends CdForm implements OnInit {
           this.authService.logout(() => {
             this.notificationService.show(
               NotificationType.info,
-              this.i18n('You were automatically logged out because your roles have been changed.')
+              $localize`You were automatically logged out because your roles have been changed.`
             );
           });
         } else {
           this.notificationService.show(
             NotificationType.success,
-            this.i18n(`Updated user '{{username}}'`, { username: userFormModel.username })
+            $localize`Updated user '${userFormModel.username}'`
           );
           this.router.navigate(['/user-management/users']);
         }

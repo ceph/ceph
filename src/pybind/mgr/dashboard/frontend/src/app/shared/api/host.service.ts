@@ -17,8 +17,8 @@ export class HostService {
 
   constructor(private http: HttpClient, private deviceService: DeviceService) {}
 
-  list() {
-    return this.http.get(this.baseURL);
+  list(): Observable<object[]> {
+    return this.http.get<object[]>(this.baseURL);
   }
 
   create(hostname: string) {

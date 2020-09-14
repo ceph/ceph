@@ -38,7 +38,7 @@ bool can_upgrade_from(ceph_release_t from_release,
   if (cutoff < to_release) {
     err << "recorded " << from_release_name << " "
         << to_integer<int>(from_release) << " (" << from_release << ") "
-        << "is >2 releases older than installed "
+        << "is more than two releases older than installed "
         << to_integer<int>(to_release) << " (" << to_release << "); "
         << "you can only upgrade 2 releases at a time\n"
         << "you should first upgrade to ";

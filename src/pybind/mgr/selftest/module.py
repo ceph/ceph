@@ -431,11 +431,11 @@ class Module(MgrModule):
         import orchestrator
         if what == 'OrchestratorError':
             c = orchestrator.TrivialReadCompletion(result=None)
-            c.fail(orchestrator.OrchestratorError('hello', 'world'))
+            c.fail(orchestrator.OrchestratorError('hello, world'))
             return c
         elif what == "ZeroDivisionError":
             c = orchestrator.TrivialReadCompletion(result=None)
-            c.fail(ZeroDivisionError('hello', 'world'))
+            c.fail(ZeroDivisionError('hello, world'))
             return c
         assert False, repr(what)
 

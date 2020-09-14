@@ -4,9 +4,7 @@
                 type="info"
                 i18n>To see all configured Prometheus alerts, please
   provide the URL to the API of Prometheus as described in
-  the <a href="{{docsUrl}}"
-         target="_blank">documentation</a>.
-</cd-alert-panel>
+  the <cd-doc section="prometheus"></cd-doc>.</cd-alert-panel>
 
 <cd-table *ngIf="isPrometheusConfigured"
           [data]="prometheusAlertService.rules"

@@ -234,7 +234,7 @@ void ObjectMap<I>::aio_save(Context *on_finish) {
 
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "");
   }
   cls_client::object_map_save(&op, m_object_map);
 

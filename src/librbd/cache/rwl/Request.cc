@@ -4,6 +4,7 @@
 #include "Request.h"
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/rwl/LogEntry.h"
+#include "librbd/cache/ReplicatedWriteLog.h"
 
 #define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
@@ -410,57 +411,6 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
-void C_ReadRequest::finish(int r) {
-  ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
-  int hits = 0;
-  int misses = 0;
-  int hit_bytes = 0;
-  int miss_bytes = 0;
-  if (r >= 0) {
-    /*
-     * At this point the miss read has completed. We'll iterate through
-     * read_extents and produce *m_out_bl by assembling pieces of miss_bl
-     * and the individual hit extent bufs in the read extents that represent
-     * hits.
-     */
-    uint64_t miss_bl_offset = 0;
-    for (auto &extent : read_extents) {
-      if (extent.m_bl.length()) {
-        /* This was a hit */
-        ceph_assert(extent.second == extent.m_bl.length());
-        ++hits;
-        hit_bytes += extent.second;
-        m_out_bl->claim_append(extent.m_bl);
-      } else {
-        /* This was a miss. */
-        ++misses;
-        miss_bytes += extent.second;
-        bufferlist miss_extent_bl;
-        miss_extent_bl.substr_of(miss_bl, miss_bl_offset, extent.second);
-        /* Add this read miss bufferlist to the output bufferlist */
-        m_out_bl->claim_append(miss_extent_bl);
-        /* Consume these bytes in the read miss bufferlist */
-        miss_bl_offset += extent.second;
-      }
-    }
-  }
-  ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << " bl=" << *m_out_bl << dendl;
-  utime_t now = ceph_clock_now();
-  ceph_assert((int)m_out_bl->length() == hit_bytes + miss_bytes);
-  m_on_finish->complete(r);
-  m_perfcounter->inc(l_librbd_rwl_rd_bytes, hit_bytes + miss_bytes);
-  m_perfcounter->inc(l_librbd_rwl_rd_hit_bytes, hit_bytes);
-  m_perfcounter->tinc(l_librbd_rwl_rd_latency, now - m_arrived_time);
-  if (!misses) {
-    m_perfcounter->inc(l_librbd_rwl_rd_hit_req, 1);
-    m_perfcounter->tinc(l_librbd_rwl_rd_hit_latency, now - m_arrived_time);
-  } else {
-    if (hits) {
-      m_perfcounter->inc(l_librbd_rwl_rd_part_hit_req, 1);
-    }
-  }
-}
-
 template <typename T>
 C_DiscardRequest<T>::C_DiscardRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
                                       uint32_t discard_granularity_bytes, ceph::mutex &lock,
@@ -671,33 +621,13 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
-std::ostream &operator<<(std::ostream &os,
-                         const BlockGuardReqState &r) {
-  os << "barrier=" << r.barrier << ", "
-     << "current_barrier=" << r.current_barrier << ", "
-     << "detained=" << r.detained << ", "
-     << "queued=" << r.queued;
-  return os;
-}
-
-GuardedRequestFunctionContext::GuardedRequestFunctionContext(boost::function<void(GuardedRequestFunctionContext&)> &&callback)
-  : m_callback(std::move(callback)){ }
-
-GuardedRequestFunctionContext::~GuardedRequestFunctionContext(void) { }
-
-void GuardedRequestFunctionContext::finish(int r) {
-  ceph_assert(cell);
-  m_callback(*this);
-}
-
-std::ostream &operator<<(std::ostream &os,
-                         const GuardedRequest &r) {
-  os << "guard_ctx->state=[" << r.guard_ctx->state << "], "
-     << "block_extent.block_start=" << r.block_extent.block_start << ", "
-     << "block_extent.block_start=" << r.block_extent.block_end;
-  return os;
-}
-
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
+
+template class librbd::cache::rwl::C_BlockIORequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_WriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_FlushRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_DiscardRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_WriteSameRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_CompAndWriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;

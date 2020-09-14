@@ -2,7 +2,7 @@
   "extends": "stylelint-config-sass-guidelines",
   "plugins": [
     "stylelint-declaration-use-variable"
-  ],  
+  ],
   "rules": {
     "function-parentheses-space-inside": null,
     "indentation": null,
@@ -27,10 +27,17 @@
             "inherit",
             "initial",
             "transparent",
-            "/darken/"
+            "/darken/",
+            "/\\w+\\.\\$.+/"
           ]
         }
       ]
+    ],
+    "property-no-unknown": [
+      true,
+      {
+        "ignoreSelectors": [":export"]
+      }
     ]
-  }  
+  }
 }

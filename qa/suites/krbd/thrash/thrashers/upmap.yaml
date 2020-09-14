@@ -4,7 +4,7 @@ overrides:
     conf:
       mon:
         mon osd initial require min compat client: luminous
-    log-whitelist:
+    log-ignorelist:
     - wrongly marked me down
     - objects unfound and apparently lost
 tasks:

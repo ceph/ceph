@@ -5,7 +5,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { SharedModule } from '../../../../shared/shared.module';
 import { TablePerformanceCounterComponent } from '../../../performance-counter/table-performance-counter/table-performance-counter.component';
@@ -29,8 +29,7 @@ describe('OsdDetailsComponent', () => {
       SmartListComponent,
       TablePerformanceCounterComponent,
       OsdPerformanceHistogramComponent
-    ],
-    providers: i18nProviders
+    ]
   });
 
   beforeEach(() => {

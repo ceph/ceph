@@ -15,24 +15,3 @@ LBAManagerRef create_lba_manager(
 }
 
 }
-
-namespace crimson::os::seastore {
-
-std::ostream &operator<<(std::ostream &out, const LBAPin &rhs)
-{
-  return out << "LBAPin(" << rhs.get_laddr() << "~" << rhs.get_length()
-	     << "->" << rhs.get_paddr();
-}
-
-std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)
-{
-  bool first = true;
-  out << '[';
-  for (auto &i: rhs) {
-    out << (first ? "" : ",") << *i;
-    first = false;
-  }
-  return out << ']';
-}
-
-};

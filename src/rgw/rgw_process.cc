@@ -6,7 +6,6 @@
 #include "common/WorkQueue.h"
 #include "include/scope_guard.h"
 
-#include "rgw_rados.h"
 #include "rgw_dmclock_scheduler.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
@@ -48,8 +47,12 @@ auto schedule_request(Scheduler *scheduler, req_state *s, RGWOp *op)
 
   const auto client = op->dmclock_client();
   const auto cost = op->dmclock_cost();
-  ldpp_dout(op,10) << "scheduling with dmclock client=" << static_cast<int>(client)
-		   << " cost=" << cost << dendl;
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 10)) {
+    ldpp_dout(op,10) << "scheduling with "
+		     << s->cct->_conf.get_val<std::string>("rgw_scheduler_type")
+		     << " client=" << static_cast<int>(client)
+		     << " cost=" << cost << dendl;
+  }
   return scheduler->schedule_request(client, {},
                                      req_state::Clock::to_double(s->time),
                                      cost,
@@ -185,7 +188,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  rgw::sal::RGWRadosUser user;
+  rgw::sal::RGWRadosUser user(store);
 
   struct req_state rstate(g_ceph_context, &rgw_env, &user, req->id);
   struct req_state *s = &rstate;

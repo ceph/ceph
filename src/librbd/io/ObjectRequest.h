@@ -16,6 +16,8 @@
 class Context;
 class ObjectExtent;
 
+namespace neorados { struct WriteOp; }
+
 namespace librbd {
 
 struct ImageCtx;
@@ -36,6 +38,7 @@ public:
   static ObjectRequest* create_write(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+      int write_flags, std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, Context *completion);
   static ObjectRequest* create_discard(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
@@ -51,15 +54,15 @@ public:
       const ::SnapContext &snapc, uint64_t *mismatch_offset, int op_flags,
       const ZTracer::Trace &parent_trace, Context *completion);
 
-  ObjectRequest(ImageCtxT *ictx, uint64_t objectno, uint64_t off, uint64_t len,
-                librados::snap_t snap_id, const char *trace_name,
-                const ZTracer::Trace &parent_trace, Context *completion);
+  ObjectRequest(ImageCtxT *ictx, uint64_t objectno, librados::snap_t snap_id,
+                const char *trace_name, const ZTracer::Trace &parent_trace,
+                Context *completion);
   virtual ~ObjectRequest() {
     m_trace.event("finish");
   }
 
   static void add_write_hint(ImageCtxT& image_ctx,
-                             librados::ObjectWriteOperation *wr);
+                             neorados::WriteOp *wr);
 
   virtual void send() = 0;
 
@@ -73,7 +76,7 @@ protected:
   bool compute_parent_extents(Extents *parent_extents, bool read_request);
 
   ImageCtxT *m_ictx;
-  uint64_t m_object_no, m_object_off, m_object_len;
+  uint64_t m_object_no;
   librados::snap_t m_snap_id;
   Context *m_completion;
   ZTracer::Trace m_trace;
@@ -88,23 +91,21 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ObjectReadRequest : public ObjectRequest<ImageCtxT> {
 public:
-  typedef std::map<uint64_t, uint64_t> ExtentMap;
-
   static ObjectReadRequest* create(
-      ImageCtxT *ictx, uint64_t objectno, uint64_t offset, uint64_t len,
+      ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
       librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      ExtentMap* extent_map, Context *completion) {
-    return new ObjectReadRequest(ictx, objectno, offset, len,
-                                 snap_id, op_flags, parent_trace, read_data,
-                                 extent_map, completion);
+      Extents* extent_map, uint64_t* version, Context *completion) {
+    return new ObjectReadRequest(ictx, objectno, extents, snap_id, op_flags,
+                                 parent_trace, read_data, extent_map, version,
+                                 completion);
   }
 
   ObjectReadRequest(
-      ImageCtxT *ictx, uint64_t objectno, uint64_t offset, uint64_t len,
+      ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
       librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      ExtentMap* extent_map, Context *completion);
+      Extents* extent_map, uint64_t* version, Context *completion);
 
   void send() override;
 
@@ -134,10 +135,16 @@ private:
    * @endverbatim
    */
 
+  const Extents m_extents;
+
+  typedef std::pair<ceph::bufferlist, Extents> ExtentResult;
+  typedef std::vector<ExtentResult> ExtentResults;
+  ExtentResults m_extent_results;
   int m_op_flags;
 
   ceph::bufferlist* m_read_data;
-  ExtentMap* m_extent_map;
+  Extents* m_extent_map;
+  uint64_t* m_version;
 
   void read_object();
   void handle_read_object(int r);
@@ -164,7 +171,7 @@ public:
     return OBJECT_EXISTS;
   }
 
-  virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {
+  virtual void add_copyup_ops(neorados::WriteOp *wr) {
     add_write_ops(wr);
   }
 
@@ -173,6 +180,8 @@ public:
   void send() override;
 
 protected:
+  uint64_t m_object_off;
+  uint64_t m_object_len;
   bool m_full_object = false;
   bool m_copyup_enabled = true;
 
@@ -189,8 +198,8 @@ protected:
     return false;
   }
 
-  virtual void add_write_hint(librados::ObjectWriteOperation *wr);
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
+  virtual void add_write_hint(neorados::WriteOp *wr);
+  virtual void add_write_ops(neorados::WriteOp *wr) = 0;
 
   virtual int filter_write_result(int r) const {
     return r;
@@ -257,11 +266,13 @@ public:
   ObjectWriteRequest(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
       ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+      int write_flags, std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                             data.length(), snapc, "write",
                                             parent_trace, completion),
-      m_write_data(std::move(data)), m_op_flags(op_flags) {
+      m_write_data(std::move(data)), m_op_flags(op_flags),
+      m_write_flags(write_flags), m_assert_version(assert_version) {
   }
 
   bool is_empty_write_op() const override {
@@ -273,11 +284,13 @@ public:
   }
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override;
+  void add_write_ops(neorados::WriteOp *wr) override;
 
 private:
   ceph::bufferlist m_write_data;
   int m_op_flags;
+  int m_write_flags;
+  std::optional<uint64_t> m_assert_version;
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -345,29 +358,11 @@ protected:
     return (m_discard_action == DISCARD_ACTION_REMOVE);
   }
 
-  void add_write_hint(librados::ObjectWriteOperation *wr) override {
+  void add_write_hint(neorados::WriteOp *wr) override {
     // no hint for discard
   }
 
-  void add_write_ops(librados::ObjectWriteOperation *wr) override {
-    switch (m_discard_action) {
-    case DISCARD_ACTION_REMOVE:
-      wr->remove();
-      break;
-    case DISCARD_ACTION_REMOVE_TRUNCATE:
-      wr->create(false);
-      // fall through
-    case DISCARD_ACTION_TRUNCATE:
-      wr->truncate(this->m_object_off);
-      break;
-    case DISCARD_ACTION_ZERO:
-      wr->zero(this->m_object_off, this->m_object_len);
-      break;
-    default:
-      ceph_abort();
-      break;
-    }
-  }
+  void add_write_ops(neorados::WriteOp *wr) override;
 
 private:
   enum DiscardAction {
@@ -400,7 +395,7 @@ public:
   }
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override;
+  void add_write_ops(neorados::WriteOp *wr) override;
 
 private:
   ceph::bufferlist m_write_data;
@@ -427,7 +422,7 @@ public:
     return "compare_and_write";
   }
 
-  void add_copyup_ops(librados::ObjectWriteOperation *wr) override {
+  void add_copyup_ops(neorados::WriteOp *wr) override {
     // no-op on copyup
   }
 
@@ -436,7 +431,7 @@ protected:
     return true;
   }
 
-  void add_write_ops(librados::ObjectWriteOperation *wr) override;
+  void add_write_ops(neorados::WriteOp *wr) override;
 
   int filter_write_result(int r) const override;
 

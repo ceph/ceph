@@ -4,11 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  i18nProviders
-} from '../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks } from '../../../testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { ExecutingTask } from '../models/executing-task';
 import { SummaryService } from './summary.service';
@@ -29,7 +25,7 @@ describe('TaskListService', () => {
   };
 
   configureTestBed({
-    providers: [TaskListService, TaskMessageService, SummaryService, i18nProviders, RbdService],
+    providers: [TaskListService, TaskMessageService, SummaryService, RbdService],
     imports: [HttpClientTestingModule, RouterTestingModule]
   });
 

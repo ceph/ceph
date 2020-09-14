@@ -631,6 +631,13 @@ void librados::ObjectReadOperation::cache_evict()
   o->cache_evict();
 }
 
+void librados::ObjectReadOperation::tier_flush()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_flush();
+}
+
 void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj, 
 						  const IoCtx& tgt_ioctx,
 						  uint64_t tgt_version,
@@ -667,13 +674,6 @@ void librados::ObjectWriteOperation::unset_manifest()
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
   o->unset_manifest();
-}
-
-void librados::ObjectWriteOperation::tier_flush()
-{
-  ceph_assert(impl);
-  ::ObjectOperation *o = &impl->o;
-  o->tier_flush();
 }
 
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
@@ -1756,7 +1756,7 @@ int librados::IoCtx::lock_exclusive(const std::string &oid, const std::string &n
   if (duration)
     dur.set_from_timeval(duration);
 
-  return rados::cls::lock::lock(this, oid, name, LOCK_EXCLUSIVE, cookie, "",
+  return rados::cls::lock::lock(this, oid, name, ClsLockType::EXCLUSIVE, cookie, "",
 		  		description, dur, flags);
 }
 
@@ -1769,7 +1769,7 @@ int librados::IoCtx::lock_shared(const std::string &oid, const std::string &name
   if (duration)
     dur.set_from_timeval(duration);
 
-  return rados::cls::lock::lock(this, oid, name, LOCK_SHARED, cookie, tag,
+  return rados::cls::lock::lock(this, oid, name, ClsLockType::SHARED, cookie, tag,
 		  		description, dur, flags);
 }
 
@@ -1837,7 +1837,7 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   if (tag)
     *tag = tmp_tag;
   if (exclusive) {
-    if (tmp_type == LOCK_EXCLUSIVE)
+    if (tmp_type == ClsLockType::EXCLUSIVE)
       *exclusive = 1;
     else
       *exclusive = 0;
@@ -2625,9 +2625,9 @@ int librados::Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   return 0;
 }
 
-void librados::Rados::test_blacklist_self(bool set)
+void librados::Rados::test_blocklist_self(bool set)
 {
-  client->blacklist_self(set);
+  client->blocklist_self(set);
 }
 
 int librados::Rados::get_pool_stats(std::list<string>& v,
@@ -2810,10 +2810,10 @@ int librados::Rados::wait_for_latest_osdmap()
   return client->wait_for_latest_osdmap();
 }
 
-int librados::Rados::blacklist_add(const std::string& client_address,
+int librados::Rados::blocklist_add(const std::string& client_address,
 				   uint32_t expire_seconds)
 {
-  return client->blacklist_add(client_address, expire_seconds);
+  return client->blocklist_add(client_address, expire_seconds);
 }
 
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()

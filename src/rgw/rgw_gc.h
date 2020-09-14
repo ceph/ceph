@@ -11,7 +11,7 @@
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "rgw_common.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "cls/rgw/cls_rgw_types.h"
 
 #include <atomic>
@@ -24,6 +24,8 @@ class RGWGC : public DoutPrefixProvider {
   int max_objs;
   string *obj_names;
   std::atomic<bool> down_flag = { false };
+
+  static constexpr uint64_t seed = 8675309;
 
   int tag_index(const string& tag);
 

@@ -5,6 +5,7 @@
 
 #include <seastar/core/future.hh>
 
+#include "crimson/osd/backfill_state.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/scheduler/scheduler.h"
@@ -14,14 +15,17 @@
 
 class PGBackend;
 
-class PGRecovery {
+class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
-  void start_background_recovery(
-    crimson::osd::scheduler::scheduler_class_t klass);
+  void start_pglogbased_recovery();
 
   crimson::osd::blocking_future<bool> start_recovery_ops(size_t max_to_start);
+  void on_backfill_reserved();
+  void dispatch_backfill_event(
+    boost::intrusive_ptr<const boost::statechart::event_base> evt);
+
   seastar::future<> stop() { return seastar::now(); }
 private:
   PGRecoveryListener* pg;
@@ -29,9 +33,6 @@ private:
     size_t max_to_start,
     std::vector<crimson::osd::blocking_future<>> *out);
   size_t start_replica_recovery_ops(
-    size_t max_to_start,
-    std::vector<crimson::osd::blocking_future<>> *out);
-  size_t start_backfill_ops(
     size_t max_to_start,
     std::vector<crimson::osd::blocking_future<>> *out);
 
@@ -77,4 +78,32 @@ private:
   seastar::future<> handle_recovery_delete_reply(
       Ref<MOSDPGRecoveryDeleteReply> m);
   seastar::future<> handle_pull_response(Ref<MOSDPGPush> m);
+  seastar::future<> handle_scan(MOSDPGScan& m);
+
+  // backfill begin
+  std::unique_ptr<crimson::osd::BackfillState> backfill_state;
+
+  template <class EventT>
+  void start_backfill_recovery(
+    const EventT& evt);
+  void request_replica_scan(
+    const pg_shard_t& target,
+    const hobject_t& begin,
+    const hobject_t& end) final;
+  void request_primary_scan(
+    const hobject_t& begin) final;
+  void enqueue_push(
+    const pg_shard_t& target,
+    const hobject_t& obj,
+    const eversion_t& v) final;
+  void enqueue_drop(
+    const pg_shard_t& target,
+    const hobject_t& obj,
+    const eversion_t& v) final;
+  void update_peers_last_backfill(
+    const hobject_t& new_last_backfill) final;
+  bool budget_available() const final;
+  void backfilled() final;
+  friend crimson::osd::BackfillState::PGFacade;
+  // backfill end
 };

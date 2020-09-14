@@ -51,7 +51,7 @@ class health_check_map_t;
  * bound on the actual osd death.  down_at (if it is > up_from) is an
  * upper bound on the actual osd death.
  *
- * the second is the last_clean interval [first,last].  in that case,
+ * the second is the last_clean interval [begin,end).  in that case,
  * the last interval is the last epoch known to have been either
  * _finished_, or during which the osd cleanly shut down.  when
  * possible, we push this forward to the epoch the osd was eventually
@@ -395,8 +395,8 @@ public:
     mempool::osdmap::map<int32_t,uuid_d> new_uuid;
     mempool::osdmap::map<int32_t,osd_xinfo_t> new_xinfo;
 
-    mempool::osdmap::map<entity_addr_t,utime_t> new_blacklist;
-    mempool::osdmap::vector<entity_addr_t> old_blacklist;
+    mempool::osdmap::map<entity_addr_t,utime_t> new_blocklist;
+    mempool::osdmap::vector<entity_addr_t> old_blocklist;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
@@ -582,7 +582,7 @@ private:
   std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
-  mempool::osdmap::unordered_map<entity_addr_t,utime_t> blacklist;
+  mempool::osdmap::unordered_map<entity_addr_t,utime_t> blocklist;
 
   /// queue of snaps to remove
   mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
@@ -595,7 +595,7 @@ private:
 
   epoch_t cluster_snapshot_epoch;
   std::string cluster_snapshot;
-  bool new_blacklist_entries;
+  bool new_blocklist_entries;
 
   float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
 
@@ -640,7 +640,7 @@ private:
 	     primary_temp(std::make_shared<mempool::osdmap::map<pg_t,int32_t>>()),
 	     osd_uuid(std::make_shared<mempool::osdmap::vector<uuid_d>>()),
 	     cluster_snapshot_epoch(0),
-	     new_blacklist_entries(false),
+	     new_blocklist_entries(false),
 	     cached_up_osd_features(0),
 	     crc_defined(false), crc(0),
 	     crush(std::make_shared<CrushWrapper>()),
@@ -693,10 +693,10 @@ public:
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
 
-  bool is_blacklisted(const entity_addr_t& a) const;
-  bool is_blacklisted(const entity_addrvec_t& a) const;
-  void get_blacklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
-  void get_blacklist(std::set<entity_addr_t> *bl) const;
+  bool is_blocklisted(const entity_addr_t& a) const;
+  bool is_blocklisted(const entity_addrvec_t& a) const;
+  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
+  void get_blocklist(std::set<entity_addr_t> *bl) const;
 
   std::string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
@@ -1533,7 +1533,7 @@ public:
   void dump_osd(int id, ceph::Formatter *f) const;
   void dump_osds(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<OSDMap*>& o);
-  bool check_new_blacklist_entries() const { return new_blacklist_entries; }
+  bool check_new_blocklist_entries() const { return new_blocklist_entries; }
 
   void check_health(CephContext *cct, health_check_map_t *checks) const;
 

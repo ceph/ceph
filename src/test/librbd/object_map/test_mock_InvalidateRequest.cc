@@ -33,11 +33,12 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
   ASSERT_FALSE(flags_set);
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
+  AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, true, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
-                .Times(0);
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+                   _, _))
+                .WillOnce(DoDefault());
 
   {
     std::shared_lock owner_locker{ictx->owner_lock};
@@ -62,7 +63,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+                   _, _))
                 .WillOnce(DoDefault());
 
   {
@@ -91,7 +93,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
                                                 &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+                   _, _))
                 .WillOnce(DoDefault());
 
   {
@@ -102,7 +105,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
   ASSERT_EQ(0, cond_ctx.wait());
 }
 
-TEST_F(TestMockObjectMapInvalidateRequest, SkipOnDiskUpdateWithoutLock) {
+TEST_F(TestMockObjectMapInvalidateRequest, ErrorOnDiskUpdateWithoutLock) {
   REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
 
   librbd::ImageCtx *ictx;
@@ -112,7 +115,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, SkipOnDiskUpdateWithoutLock) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+                   _, _))
                 .Times(0);
 
   {
@@ -120,12 +124,12 @@ TEST_F(TestMockObjectMapInvalidateRequest, SkipOnDiskUpdateWithoutLock) {
     std::unique_lock image_locker{ictx->image_lock};
     request->send();
   }
-  ASSERT_EQ(0, cond_ctx.wait());
+  ASSERT_EQ(-EROFS, cond_ctx.wait());
 
   expect_unlock_exclusive_lock(*ictx);
 }
 
-TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
+TEST_F(TestMockObjectMapInvalidateRequest, ErrorOnDiskUpdateFailure) {
   REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
 
   librbd::ImageCtx *ictx;
@@ -136,7 +140,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _,
+                   _, _))
                 .WillOnce(Return(-EINVAL));
 
   {
@@ -144,7 +149,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
     std::unique_lock image_locker{ictx->image_lock};
     request->send();
   }
-  ASSERT_EQ(0, cond_ctx.wait());
+  ASSERT_EQ(-EINVAL, cond_ctx.wait());
 
   expect_unlock_exclusive_lock(*ictx);
 }

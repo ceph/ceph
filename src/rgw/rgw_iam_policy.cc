@@ -977,12 +977,9 @@ ostream& operator <<(ostream& m, const Condition& c) {
 Effect Statement::eval(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida,
 		       uint64_t act, const ARN& res) const {
-  if (ida) {
-    if (!princ.empty() && !ida->is_identity(princ)) {
-      return Effect::Pass;
-    } else if (!noprinc.empty() && ida->is_identity(noprinc)) {
-      return Effect::Pass;
-    }
+
+  if (eval_principal(e, ida) == Effect::Deny) {
+    return Effect::Pass;
   }
 
   if (!resource.empty()) {

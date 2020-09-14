@@ -49,7 +49,7 @@ else(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
 endif(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
 
 add_library(ceph_zlib SHARED ${zlib_sources})
-target_link_libraries(ceph_zlib ZLIB::ZLIB)
+target_link_libraries(ceph_zlib ZLIB::ZLIB compressor)
 target_include_directories(ceph_zlib SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
 set_target_properties(ceph_zlib PROPERTIES
   VERSION 2.0.0

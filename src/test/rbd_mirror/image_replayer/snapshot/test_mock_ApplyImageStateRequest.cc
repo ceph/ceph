@@ -128,7 +128,7 @@ public:
       ceph::encode(key, bl);
       EXPECT_CALL(get_mock_io_ctx(m_mock_local_image_ctx->md_ctx),
                   exec(m_mock_local_image_ctx->header_oid, _, StrEq("rbd"),
-                  StrEq("metadata_remove"), ContentsEqual(bl), _, _))
+                  StrEq("metadata_remove"), ContentsEqual(bl), _, _, _))
         .WillOnce(Return(r));
       if (r < 0) {
         return;
@@ -140,7 +140,7 @@ public:
       ceph::encode(pairs, bl);
       EXPECT_CALL(get_mock_io_ctx(m_mock_local_image_ctx->md_ctx),
                   exec(m_mock_local_image_ctx->header_oid, _, StrEq("rbd"),
-                  StrEq("metadata_set"), ContentsEqual(bl), _, _))
+                  StrEq("metadata_set"), ContentsEqual(bl), _, _, _))
         .WillOnce(Return(r));
     }
   }

@@ -144,7 +144,7 @@ void osd_xinfo_t::encode(ceph::buffer::list& bl, uint64_t enc_features) const
   }
   ENCODE_START(v, 1, bl);
   encode(down_stamp, bl);
-  __u32 lp = laggy_probability * 0xfffffffful;
+  __u32 lp = laggy_probability * float(0xfffffffful);
   encode(lp, bl);
   encode(laggy_interval, bl);
   encode(features, bl);
@@ -514,8 +514,8 @@ void OSDMap::Incremental::encode_classic(ceph::buffer::list& bl, uint64_t featur
   encode(new_up_thru, bl);
   encode(new_last_clean_interval, bl);
   encode(new_lost, bl);
-  encode(new_blacklist, bl, features);
-  encode(old_blacklist, bl, features);
+  encode(new_blocklist, bl, features);
+  encode(old_blocklist, bl, features);
   encode(new_up_cluster, bl, features);
   encode(cluster_snapshot, bl);
   encode(new_uuid, bl);
@@ -667,8 +667,8 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     encode(new_up_thru, bl);
     encode(new_last_clean_interval, bl);
     encode(new_lost, bl);
-    encode(new_blacklist, bl, features);
-    encode(old_blacklist, bl, features);
+    encode(new_blocklist, bl, features);
+    encode(old_blocklist, bl, features);
     if (target_v < 7) {
       encode_addrvec_map_as_addr(new_up_cluster, bl, features);
     } else {
@@ -817,8 +817,8 @@ void OSDMap::Incremental::decode_classic(ceph::buffer::list::const_iterator &p)
   decode(new_up_thru, p);
   decode(new_last_clean_interval, p);
   decode(new_lost, p);
-  decode(new_blacklist, p);
-  decode(old_blacklist, p);
+  decode(new_blocklist, p);
+  decode(old_blocklist, p);
   if (ev >= 6)
     decode(new_up_cluster, p);
   if (ev >= 7)
@@ -921,8 +921,8 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
     decode(new_lost, bl);
-    decode(new_blacklist, bl);
-    decode(old_blacklist, bl);
+    decode(new_blocklist, bl);
+    decode(old_blocklist, bl);
     decode(new_up_cluster, bl);
     decode(cluster_snapshot, bl);
     decode(new_uuid, bl);
@@ -1216,15 +1216,15 @@ void OSDMap::Incremental::dump(Formatter *f) const
   }
   f->close_section();
 
-  f->open_array_section("new_blacklist");
-  for (const auto &blist : new_blacklist) {
+  f->open_array_section("new_blocklist");
+  for (const auto &blist : new_blocklist) {
     stringstream ss;
     ss << blist.first;
     f->dump_stream(ss.str().c_str()) << blist.second;
   }
   f->close_section();
-  f->open_array_section("old_blacklist");
-  for (const auto &blist : old_blacklist)
+  f->open_array_section("old_blocklist");
+  for (const auto &blist : old_blocklist)
     f->dump_stream("addr") << blist;
   f->close_section();
 
@@ -1337,13 +1337,13 @@ void OSDMap::set_epoch(epoch_t e)
     pool.second.last_change = e;
 }
 
-bool OSDMap::is_blacklisted(const entity_addr_t& orig) const
+bool OSDMap::is_blocklisted(const entity_addr_t& orig) const
 {
-  if (blacklist.empty()) {
+  if (blocklist.empty()) {
     return false;
   }
 
-  // all blacklist entries are type ANY for nautilus+
+  // all blocklist entries are type ANY for nautilus+
   // FIXME: avoid this copy!
   entity_addr_t a = orig;
   if (require_osd_release < ceph_release_t::nautilus) {
@@ -1353,15 +1353,15 @@ bool OSDMap::is_blacklisted(const entity_addr_t& orig) const
   }
 
   // this specific instance?
-  if (blacklist.count(a)) {
+  if (blocklist.count(a)) {
     return true;
   }
 
-  // is entire ip blacklisted?
+  // is entire ip blocklisted?
   if (a.is_ip()) {
     a.set_port(0);
     a.set_nonce(0);
-    if (blacklist.count(a)) {
+    if (blocklist.count(a)) {
       return true;
     }
   }
@@ -1369,13 +1369,13 @@ bool OSDMap::is_blacklisted(const entity_addr_t& orig) const
   return false;
 }
 
-bool OSDMap::is_blacklisted(const entity_addrvec_t& av) const
+bool OSDMap::is_blocklisted(const entity_addrvec_t& av) const
 {
-  if (blacklist.empty())
+  if (blocklist.empty())
     return false;
 
   for (auto& a : av.v) {
-    if (is_blacklisted(a)) {
+    if (is_blocklisted(a)) {
       return true;
     }
   }
@@ -1383,14 +1383,14 @@ bool OSDMap::is_blacklisted(const entity_addrvec_t& av) const
   return false;
 }
 
-void OSDMap::get_blacklist(list<pair<entity_addr_t,utime_t> > *bl) const
+void OSDMap::get_blocklist(list<pair<entity_addr_t,utime_t> > *bl) const
 {
-   std::copy(blacklist.begin(), blacklist.end(), std::back_inserter(*bl));
+   std::copy(blocklist.begin(), blocklist.end(), std::back_inserter(*bl));
 }
 
-void OSDMap::get_blacklist(std::set<entity_addr_t> *bl) const
+void OSDMap::get_blocklist(std::set<entity_addr_t> *bl) const
 {
-  for (const auto &i : blacklist) {
+  for (const auto &i : blocklist) {
     bl->insert(i.first);
   }
 }
@@ -2066,7 +2066,7 @@ bool OSDMap::clean_pg_upmaps(
 
 int OSDMap::apply_incremental(const Incremental &inc)
 {
-  new_blacklist_entries = false;
+  new_blocklist_entries = false;
   if (inc.epoch == 1)
     fsid = inc.fsid;
   else if (inc.fsid != fsid)
@@ -2273,13 +2273,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
     pg_upmap_items.erase(pg);
   }
 
-  // blacklist
-  if (!inc.new_blacklist.empty()) {
-    blacklist.insert(inc.new_blacklist.begin(),inc.new_blacklist.end());
-    new_blacklist_entries = true;
+  // blocklist
+  if (!inc.new_blocklist.empty()) {
+    blocklist.insert(inc.new_blocklist.begin(),inc.new_blocklist.end());
+    new_blocklist_entries = true;
   }
-  for (const auto &addr : inc.old_blacklist)
-    blacklist.erase(addr);
+  for (const auto &addr : inc.old_blocklist)
+    blocklist.erase(addr);
 
   for (auto& i : inc.new_crush_node_flags) {
     if (i.second) {
@@ -2846,7 +2846,7 @@ void OSDMap::encode_client_old(ceph::buffer::list& bl) const
   // for encode(pg_temp, bl);
   n = pg_temp->size();
   encode(n, bl);
-  for (const auto pg : *pg_temp) {
+  for (const auto& pg : *pg_temp) {
     old_pg_t opg = pg.first.get_old_pg();
     encode(opg, bl);
     encode(pg.second, bl);
@@ -2904,7 +2904,7 @@ void OSDMap::encode_classic(ceph::buffer::list& bl, uint64_t features) const
   encode(ev, bl);
   encode(osd_addrs->hb_back_addrs, bl, features);
   encode(osd_info, bl);
-  encode(blacklist, bl, features);
+  encode(blocklist, bl, features);
   encode(osd_addrs->cluster_addrs, bl, features);
   encode(cluster_snapshot_epoch, bl);
   encode(cluster_snapshot, bl);
@@ -3055,10 +3055,10 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     {
       // put this in a sorted, ordered map<> so that we encode in a
       // deterministic order.
-      map<entity_addr_t,utime_t> blacklist_map;
-      for (const auto &addr : blacklist)
-	blacklist_map.insert(make_pair(addr.first, addr.second));
-      encode(blacklist_map, bl, features);
+      map<entity_addr_t,utime_t> blocklist_map;
+      for (const auto &addr : blocklist)
+	blocklist_map.insert(make_pair(addr.first, addr.second));
+      encode(blocklist_map, bl, features);
     }
     if (target_v < 7) {
       encode_addrvec_pvec_as_addr(osd_addrs->cluster_addrs, bl, features);
@@ -3224,7 +3224,7 @@ void OSDMap::decode_classic(ceph::buffer::list::const_iterator& p)
   if (v < 5)
     decode(pool_name, p);
 
-  decode(blacklist, p);
+  decode(blocklist, p);
   if (ev >= 6)
     decode(osd_addrs->cluster_addrs, p);
   else
@@ -3363,7 +3363,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
     DECODE_START(10, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
-    decode(blacklist, bl);
+    decode(blocklist, bl);
     decode(osd_addrs->cluster_addrs, bl);
     decode(cluster_snapshot_epoch, bl);
     decode(cluster_snapshot, bl);
@@ -3644,8 +3644,8 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section(); // primary_temp
 
-  f->open_object_section("blacklist");
-  for (const auto &addr : blacklist) {
+  f->open_object_section("blocklist");
+  for (const auto &addr : blocklist) {
     stringstream ss;
     ss << addr.first;
     f->dump_stream(ss.str().c_str()) << addr.second;
@@ -3745,7 +3745,7 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   uuid_d fsid;
   o.back()->build_simple(cct, 1, fsid, 16);
   o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
-  o.back()->blacklist[entity_addr_t()] = utime_t(5, 6);
+  o.back()->blocklist[entity_addr_t()] = utime_t(5, 6);
   cct->put();
 }
 
@@ -3900,14 +3900,14 @@ void OSDMap::print(ostream& out) const
     out << "pg_upmap_items " << p.first << " " << p.second << "\n";
   }
 
-  for (const auto pg : *pg_temp)
+  for (const auto& pg : *pg_temp)
     out << "pg_temp " << pg.first << " " << pg.second << "\n";
 
   for (const auto pg : *primary_temp)
     out << "primary_temp " << pg.first << " " << pg.second << "\n";
 
-  for (const auto &addr : blacklist)
-    out << "blacklist " << addr.first << " expires " << addr.second << "\n";
+  for (const auto &addr : blocklist)
+    out << "blocklist " << addr.first << " expires " << addr.second << "\n";
 }
 
 class OSDTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
@@ -6179,7 +6179,6 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   switch (pool->get_type()) {
   case pg_pool_t::TYPE_REPLICATED:
     return pool->get_size();
-    break;
   case pg_pool_t::TYPE_ERASURE:
   {
     auto& ecp =

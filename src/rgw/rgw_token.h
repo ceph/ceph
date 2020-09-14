@@ -53,13 +53,10 @@ namespace rgw {
       switch (type) {
       case TOKEN_AD:
 	return "ad";
-	break;
       case TOKEN_LDAP:
 	return "ldap";
-	break;
       case TOKEN_KEYSTONE:
 	return "keystone";
-	break;
       default:
 	return "none";
       };

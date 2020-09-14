@@ -297,7 +297,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
 
   int get_policy();
   int get_tags();
-  void rebuild_key(string& key);
+  void rebuild_key(rgw::sal::RGWObject* obj);
 
   std::string get_current_filename() const override;
   std::string get_current_content_type() const override;
@@ -625,7 +625,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(rgw::sal::RGWRadosStore *store, struct req_state *s, int default_formatter, bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
@@ -765,7 +765,8 @@ public:
 
   ~RGWRESTMgr_S3() override = default;
 
-  RGWHandler_REST *get_handler(struct req_state* s,
+  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };

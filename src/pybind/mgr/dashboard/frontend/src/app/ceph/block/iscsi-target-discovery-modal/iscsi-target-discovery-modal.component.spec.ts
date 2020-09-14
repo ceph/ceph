@@ -11,12 +11,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  FormHelper,
-  i18nProviders,
-  IscsiHelper
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper, IscsiHelper } from '../../../../testing/unit-test-helper';
 import { Permission } from '../../../shared/models/permissions';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetDiscoveryModalComponent } from './iscsi-target-discovery-modal.component';
@@ -39,7 +34,7 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
       ToastrModule.forRoot(),
       RouterTestingModule
     ],
-    providers: [i18nProviders, NgbActiveModal]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

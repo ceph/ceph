@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { RoleDetailsComponent } from './role-details.component';
 
@@ -14,8 +14,7 @@ describe('RoleDetailsComponent', () => {
 
   configureTestBed({
     imports: [SharedModule, RouterTestingModule, HttpClientTestingModule, NgbNavModule],
-    declarations: [RoleDetailsComponent],
-    providers: i18nProviders
+    declarations: [RoleDetailsComponent]
   });
 
   beforeEach(() => {

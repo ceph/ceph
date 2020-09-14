@@ -9,10 +9,10 @@
       <div class="modal-body">
         <!-- Priority -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-6 required"
+          <label class="cd-col-form-label required"
                  for="priority"
                  i18n>Priority</label>
-          <div class="col-sm-6">
+          <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     formControlName="priority"
                     id="priority"
@@ -30,7 +30,7 @@
 
         <!-- Customize priority -->
         <div class="form-group row">
-          <div class="offset-sm-6 col-sm-6">
+          <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input formControlName="customizePriority"
                      class="custom-control-input"
@@ -48,14 +48,14 @@
         <!-- Priority values -->
         <div class="form-group row"
              *ngFor="let attr of priorityAttrs | keyvalue">
-          <label class="col-form-label col-sm-6"
+          <label class="cd-col-form-label"
                  [for]="attr.key">
             <span [ngClass]="{'required': osdRecvSpeedForm.getValue('customizePriority')}">
               {{ attr.value.text }}
             </span>
             <cd-helper *ngIf="attr.value.desc">{{ attr.value.desc }}</cd-helper>
           </label>
-          <div class="col-sm-6">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="number"
                    [id]="attr.key"

@@ -20,6 +20,11 @@ struct TaskFinisherSingleton {
   SafeTimer *m_safe_timer;
   Finisher *m_finisher;
 
+  static TaskFinisherSingleton& get_singleton(CephContext* cct) {
+    return cct->lookup_or_create_singleton_object<
+      TaskFinisherSingleton>("librbd::TaskFinisherSingleton", false, cct);
+  }
+
   explicit TaskFinisherSingleton(CephContext *cct) {
     m_safe_timer = new SafeTimer(cct, m_lock, false);
     m_safe_timer->init();
@@ -36,6 +41,10 @@ struct TaskFinisherSingleton {
     m_finisher->stop();
     delete m_finisher;
   }
+
+  void queue(Context* ctx, int r) {
+    m_finisher->queue(ctx, r);
+  }
 };
 
 
@@ -43,9 +52,7 @@ template <typename Task>
 class TaskFinisher {
 public:
   TaskFinisher(CephContext &cct) : m_cct(cct) {
-    auto& singleton =
-      cct.lookup_or_create_singleton_object<TaskFinisherSingleton>(
-	"librbd::TaskFinisher::m_safe_timer", false, &cct);
+    auto& singleton = TaskFinisherSingleton::get_singleton(&cct);
     m_lock = &singleton.m_lock;
     m_safe_timer = singleton.m_safe_timer;
     m_finisher = singleton.m_finisher;

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { RbdConfigurationType } from '../models/configuration';
 import { RbdConfigurationService } from './rbd-configuration.service';
 
@@ -8,7 +8,7 @@ describe('RbdConfigurationService', () => {
   let service: RbdConfigurationService;
 
   configureTestBed({
-    providers: [RbdConfigurationService, i18nProviders]
+    providers: [RbdConfigurationService]
   });
 
   beforeEach(() => {

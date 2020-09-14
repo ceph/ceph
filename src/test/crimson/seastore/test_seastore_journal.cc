@@ -182,6 +182,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     return delta_info_t{
       extent_types_t::TEST_BLOCK,
       paddr_t{},
+      L_ADDR_NULL,
       0, 0,
       block_size,
       1,

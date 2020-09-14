@@ -51,7 +51,8 @@ public:
   explicit ThreadPoolSingleton(CephContext *cct)
     : ThreadPool(cct, "librbd::Journal", "tp_librbd_journ", 1),
       work_queue(new ContextWQ("librbd::journal::work_queue",
-                               cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
+                               ceph::make_timespan(
+                                 cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout")),
                                this)) {
     start();
   }
@@ -1119,7 +1120,7 @@ void Journal<I>::create_journaler() {
     m_image_ctx.config.template get_val<uint64_t>("rbd_journal_max_concurrent_object_sets");
   // TODO: a configurable filter to exclude certain peers from being
   // disconnected.
-  settings.whitelisted_laggy_clients = {IMAGE_CLIENT_ID};
+  settings.ignored_laggy_clients = {IMAGE_CLIENT_ID};
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
@@ -1599,7 +1600,9 @@ void Journal<I>::transition_state(State state, int r) {
   }
 
   if (is_steady_state()) {
-    Contexts wait_for_state_contexts(std::move(m_wait_for_state_contexts));
+    auto wait_for_state_contexts(std::move(m_wait_for_state_contexts));
+    m_wait_for_state_contexts.clear();
+
     for (auto ctx : wait_for_state_contexts) {
       ctx->complete(m_error_result);
     }

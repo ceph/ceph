@@ -14,7 +14,6 @@
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
-#include "rgw_rados.h"
 #include "rgw_http_errors.h"
 #include "rgw_arn.h"
 #include "rgw_data_sync.h"
@@ -812,8 +811,17 @@ int RGWHTTPArgs::parse()
     int ret = nv.parse();
     if (ret >= 0) {
       string& name = nv.get_name();
+      if (name.find("X-Amz-") != string::npos) {
+        std::for_each(name.begin(),
+          name.end(),
+          [](char &c){
+            if (c != '-') {
+              c = ::tolower(static_cast<unsigned char>(c));
+            }
+        });
+      }
       string& val = nv.get_val();
-
+      dout(10) << "name: " << name << " val: " << val << dendl;
       append(name, val);
     }
 
@@ -1008,7 +1016,7 @@ struct perm_state_from_req_state : public perm_state_base {
   perm_state_from_req_state(req_state * const _s) : perm_state_base(_s->cct,
                                                                     _s->env,
                                                                     _s->auth.identity.get(),
-                                                                    _s->bucket_info,
+                                                                    _s->bucket.get() ? _s->bucket->get_info() : RGWBucketInfo(),
                                                                     _s->perm_mask,
                                                                     _s->defer_to_bucket_acls,
                                                                     _s->bucket_access_conf),
@@ -1249,7 +1257,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 
   return verify_bucket_permission(dpp, 
                                   &ps,
-                                  s->bucket,
+                                  s->bucket->get_key(),
                                   s->user_acl.get(),
                                   s->bucket_acl.get(),
                                   s->iam_policy,
@@ -1263,14 +1271,14 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 int verify_bucket_owner_or_policy(struct req_state* const s,
 				  const uint64_t op)
 {
-  auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket));
+  auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket->get_key()));
   if (usr_policy_res == Effect::Deny) {
     return -EACCES;
   }
 
   auto e = eval_or_pass(s->iam_policy,
 			s->env, *s->auth.identity,
-			op, ARN(s->bucket));
+			op, ARN(s->bucket->get_key()));
   if (e == Effect::Deny) {
     return -EACCES;
   }
@@ -1474,7 +1482,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s
 
   return verify_object_permission(dpp,
                                   &ps,
-                                  rgw_obj(s->bucket, s->object),
+                                  rgw_obj(s->bucket->get_key(), s->object->get_key()),
                                   s->user_acl.get(),
                                   s->bucket_acl.get(),
                                   s->object_acl.get(),

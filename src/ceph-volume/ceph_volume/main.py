@@ -6,7 +6,7 @@ import sys
 import logging
 
 from ceph_volume.decorators import catches
-from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory
+from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory, drive_group
 
 
 class Volume(object):
@@ -29,6 +29,7 @@ Ceph Conf: {ceph_path}
             'simple': devices.simple.Simple,
             'raw': devices.raw.Raw,
             'inventory': inventory.Inventory,
+            'drive-group': drive_group.Deploy,
         }
         self.plugin_help = "No plugins found/loaded"
         if argv is None:

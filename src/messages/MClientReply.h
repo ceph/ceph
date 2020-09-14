@@ -145,7 +145,7 @@ struct InodeStat {
   void decode(ceph::buffer::list::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(2, p);
+      DECODE_START(4, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -192,6 +192,9 @@ struct InodeStat {
       }
       if (struct_v >= 3) {
         decode(snap_btime, p);
+      } // else remains zero
+      if (struct_v >= 4) {
+        decode(rstat.rsnaps, p);
       } // else remains zero
       DECODE_FINISH(p);
     }

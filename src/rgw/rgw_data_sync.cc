@@ -9,7 +9,6 @@
 #include "common/errno.h"
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
@@ -4935,14 +4934,14 @@ string RGWBucketPipeSyncStatusManager::status_oid(const rgw_zone_id& source_zone
 
 string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
                                                       const rgw_zone_id& source_zone,
-                                                      const rgw_obj& obj)
+                                                      const rgw::sal::RGWObject* obj)
 {
-  string prefix = object_status_oid_prefix + "." + source_zone.id + ":" + obj.bucket.get_key();
+  string prefix = object_status_oid_prefix + "." + source_zone.id + ":" + obj->get_bucket()->get_key().get_key();
   if (sync_pipe.source_bucket_info.bucket !=
       sync_pipe.dest_bucket_info.bucket) {
     prefix += string("/") + sync_pipe.dest_bucket_info.bucket.get_key();
   }
-  return prefix + ":" + obj.key.name + ":" + obj.key.instance;
+  return prefix + ":" + obj->get_name() + ":" + obj->get_instance();
 }
 
 class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {

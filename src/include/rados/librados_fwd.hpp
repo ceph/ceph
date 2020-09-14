@@ -1,6 +1,8 @@
 #ifndef __LIBRADOS_FWD_HPP
 #define __LIBRADOS_FWD_HPP
 
+struct blkin_trace_info;
+
 namespace libradosstriper {
 
 class RadosStriper;

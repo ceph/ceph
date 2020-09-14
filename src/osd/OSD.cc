@@ -98,7 +98,6 @@
 #include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
-#include "messages/MOSDPGScan.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDForceRecovery.h"
@@ -122,7 +121,6 @@
 #include "messages/MCommandReply.h"
 
 #include "messages/MPGStats.h"
-#include "messages/MPGStatsAck.h"
 
 #include "messages/MWatchNotify.h"
 #include "messages/MOSDPGPush.h"
@@ -622,7 +620,7 @@ void OSDService::agent_entry()
 	<< " no agent_work, delay for " << cct->_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
-      osd->logger->inc(l_osd_tier_delay);
+      logger->inc(l_osd_tier_delay);
       // Queue a timer to call agent_choose_mode for this pg in 5 seconds
       std::lock_guard timer_locker{agent_timer_lock};
       Context *cb = new AgentTimeoutCB(pg);
@@ -971,9 +969,9 @@ void OSDService::set_statfs(const struct store_statfs_t &stbuf,
     used = bytes - avail;
   }
 
-  osd->logger->set(l_osd_stat_bytes, bytes);
-  osd->logger->set(l_osd_stat_bytes_used, used);
-  osd->logger->set(l_osd_stat_bytes_avail, avail);
+  logger->set(l_osd_stat_bytes, bytes);
+  logger->set(l_osd_stat_bytes_used, used);
+  logger->set(l_osd_stat_bytes_avail, avail);
 
   std::lock_guard l(stat_lock);
   osd_stat.statfs = stbuf;
@@ -1514,12 +1512,10 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
 {
   bool found = map_bl_cache.lookup(e, &bl);
   if (found) {
-    if (logger)
-      logger->inc(l_osd_map_bl_cache_hit);
+    logger->inc(l_osd_map_bl_cache_hit);
     return true;
   }
-  if (logger)
-    logger->inc(l_osd_map_bl_cache_miss);
+  logger->inc(l_osd_map_bl_cache_miss);
   found = store->read(meta_ch,
 		      OSD::get_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
@@ -1534,12 +1530,10 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
   std::lock_guard l(map_cache_lock);
   bool found = map_bl_inc_cache.lookup(e, &bl);
   if (found) {
-    if (logger)
-      logger->inc(l_osd_map_bl_cache_hit);
+    logger->inc(l_osd_map_bl_cache_hit);
     return true;
   }
-  if (logger)
-    logger->inc(l_osd_map_bl_cache_miss);
+  logger->inc(l_osd_map_bl_cache_miss);
   found = store->read(meta_ch,
 		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
@@ -1596,12 +1590,10 @@ OSDMapRef OSDService::try_get_map(epoch_t epoch)
   OSDMapRef retval = map_cache.lookup(epoch);
   if (retval) {
     dout(30) << "get_map " << epoch << " -cached" << dendl;
-    if (logger) {
-      logger->inc(l_osd_map_cache_hit);
-    }
+    logger->inc(l_osd_map_cache_hit);
     return retval;
   }
-  if (logger) {
+  {
     logger->inc(l_osd_map_cache_miss);
     epoch_t lb = map_cache.cached_key_lower_bound();
     if (epoch < lb) {
@@ -2160,8 +2152,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   objecter_messenger(osdc_messenger),
   monc(mc),
   mgrc(cct_, client_messenger, &mc->monmap),
-  logger(NULL),
-  recoverystate_perf(NULL),
+  logger(create_logger()),
+  recoverystate_perf(create_recoverystate_perf()),
   store(store_),
   log_client(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel()),
@@ -2189,8 +2181,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   test_ops_hook(NULL),
   op_shardedwq(
     this,
-    cct->_conf->osd_op_thread_timeout,
-    cct->_conf->osd_op_thread_suicide_timeout,
+    ceph::make_timespan(cct->_conf->osd_op_thread_timeout),
+    ceph::make_timespan(cct->_conf->osd_op_thread_suicide_timeout),
     &osd_op_tp),
   last_pg_create_epoch(0),
   boot_finisher(cct),
@@ -2537,12 +2529,12 @@ will start to track new ops received afterwards.";
     f->open_object_section("pq");
     op_shardedwq.dump(f);
     f->close_section();
-  } else if (prefix == "dump_blacklist") {
+  } else if (prefix == "dump_blocklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
-    f->open_array_section("blacklist");
-    curmap->get_blacklist(&bl);
+    f->open_array_section("blocklist");
+    curmap->get_blocklist(&bl);
     for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
 	it != bl.end(); ++it) {
       f->open_object_section("entry");
@@ -2552,7 +2544,7 @@ will start to track new ops received afterwards.";
       it->second.localtime(f->dump_stream("expire_time"));
       f->close_section(); //entry
     }
-    f->close_section(); //blacklist
+    f->close_section(); //blocklist
   } else if (prefix == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     // scan pg's
@@ -2738,7 +2730,6 @@ will start to track new ops received afterwards.";
   }
 
   else if (prefix == "bench") {
-    lock_guard l(osd_lock);
     int64_t count;
     int64_t bsize;
     int64_t osize, onum;
@@ -3489,8 +3480,6 @@ int OSD::init()
 
   check_osdmap_features();
 
-  create_recoverystate_perf();
-
   {
     epoch_t bind_epoch = osdmap->get_epoch();
     service.set_epochs(NULL, NULL, &bind_epoch);
@@ -3509,7 +3498,10 @@ int OSD::init()
 
   dout(2) << "superblock: I am osd." << superblock.whoami << dendl;
 
-  create_logger();
+  if (cct->_conf.get_val<bool>("osd_compact_on_start")) {
+    dout(2) << "compacting object store's omap" << dendl;
+    store->compact();
+  }
 
   // prime osd stats
   {
@@ -3735,9 +3727,9 @@ void OSD::final_init()
 				     asok_hook,
 				     "dump op priority queue state");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_blacklist",
+  r = admin_socket->register_command("dump_blocklist",
 				     asok_hook,
-				     "dump blacklisted clients and times");
+				     "dump blocklisted clients and times");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_watchers",
 				     asok_hook,
@@ -3750,7 +3742,7 @@ void OSD::final_init()
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_scrub_reservations",
 				     asok_hook,
-				     "show recovery reservations");
+				     "show scrub reservations");
   ceph_assert(r == 0);
   r = admin_socket->register_command("get_latest_osdmap",
 				     asok_hook,
@@ -4052,20 +4044,18 @@ void OSD::final_init()
   ceph_assert(r == 0);
 }
 
-void OSD::create_logger()
+PerfCounters* OSD::create_logger()
 {
-  dout(10) << "create_logger" << dendl;
-
-  logger = build_osd_logger(cct);
+  PerfCounters* logger = build_osd_logger(cct);
   cct->get_perfcounters_collection()->add(logger);
+  return logger;
 }
 
-void OSD::create_recoverystate_perf()
+PerfCounters* OSD::create_recoverystate_perf()
 {
-  dout(10) << "create_recoverystate_perf" << dendl;
-
-  recoverystate_perf = build_recoverystate_perf(cct);
+  PerfCounters* recoverystate_perf = build_recoverystate_perf(cct);
   cct->get_perfcounters_collection()->add(recoverystate_perf);
+  return recoverystate_perf;
 }
 
 int OSD::shutdown()
@@ -7456,16 +7446,15 @@ void OSD::sched_scrub()
     return;
   }
   bool allow_requested_repair_only = false;
-  if (service.is_recovery_active()) {
-    if (!cct->_conf->osd_scrub_during_recovery && cct->_conf->osd_repair_during_recovery) {
-      dout(10) << __func__
-               << " will only schedule explicitly requested repair due to active recovery"
-               << dendl;
-      allow_requested_repair_only = true;
-    } else if (!cct->_conf->osd_scrub_during_recovery && !cct->_conf->osd_repair_during_recovery) {
+  if (service.is_recovery_active() && !cct->_conf->osd_scrub_during_recovery) {
+    if (!cct->_conf->osd_repair_during_recovery) {
       dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
       return;
     }
+    dout(10) << __func__
+             << " will only schedule explicitly requested repair due to active recovery"
+             << dendl;
+    allow_requested_repair_only = true;
   }
 
   utime_t now = ceph_clock_now();
@@ -7959,6 +7948,13 @@ void OSD::handle_osd_map(MOSDMap *m)
 	delete o;
 	request_full_map(e, last);
 	last = e - 1;
+
+	// don't continue committing if we failed to enc the first inc map
+	if (last < start) {
+	  dout(10) << __func__ << " bailing because last < start (" << last << "<" << start << ")" << dendl;
+	  m->put();
+	  return;
+	}
 	break;
       }
       got_full_map(e);
@@ -8091,10 +8087,12 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   }
   map_lock.lock();
 
+  ceph_assert(first <= last);
+
   bool do_shutdown = false;
   bool do_restart = false;
   bool network_error = false;
-  OSDMapRef osdmap;
+  OSDMapRef osdmap = get_osdmap();
 
   // advance through the new maps
   for (epoch_t cur = first; cur <= last; cur++) {
@@ -8106,7 +8104,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     OSDMapRef newmap = get_map(cur);
     ceph_assert(newmap);  // we just cached it above!
 
-    // start blacklisting messages sent to peers that go down.
+    // start blocklisting messages sent to peers that go down.
     service.pre_publish_map(newmap);
 
     // kill connections to newly down osds

@@ -85,7 +85,6 @@ void RemoveRequest<I>::handle_open_image(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    m_image_ctx->destroy();
     m_image_ctx = nullptr;
 
     if (r != -ENOENT) {
@@ -251,7 +250,6 @@ void RemoveRequest<I>::handle_send_close_image(int r) {
                  << cpp_strerror(r) << dendl;
   }
 
-  m_image_ctx->destroy();
   m_image_ctx = nullptr;
   if (m_ret_val < 0) {
     r = m_ret_val;

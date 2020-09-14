@@ -8,5 +8,5 @@ overrides:
         mon client directed command retry: 5
       mgr:
         debug monc: 10
-    log-whitelist:
+    log-ignorelist:
       - \(OSD_SLOW_PING_TIME

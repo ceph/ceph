@@ -1,4 +1,5 @@
-@import 'chart-tooltip.scss';
+@use './src/styles/chart-tooltip';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 $canvas-width: 100%;
 $canvas-height: 100%;

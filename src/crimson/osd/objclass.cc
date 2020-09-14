@@ -25,7 +25,7 @@ static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
   // created for us by `seastar::async` in `::do_op_call()`.
   int ret = 0;
   using osd_op_errorator = crimson::osd::OpsExecuter::osd_op_errorator;
-  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_osd_op(op).handle_error(
+  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_op(op).handle_error(
     osd_op_errorator::all_same_way([&ret] (const std::error_code& err) {
       assert(err.value() > 0);
       ret = -err.value();
@@ -199,6 +199,14 @@ int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
   return execute_osd_op(hctx, op);
 }
 
+int cls_cxx_write_zero(cls_method_context_t hctx, int offset, int len)
+{
+  OSDOp op{CEPH_OSD_OP_ZERO};
+  op.op.extent.offset = offset;
+  op.op.extent.length = len;
+  return execute_osd_op(hctx, op);
+}
+
 int cls_cxx_getxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *outbl)
@@ -289,6 +297,24 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
     return -EIO;
   }
   return vals->size();
+}
+
+int cls_cxx_map_get_vals_by_keys(cls_method_context_t hctx,
+				 const std::set<std::string> &keys,
+				 std::map<std::string, ceph::bufferlist> *vals)
+{
+  OSDOp op{CEPH_OSD_OP_OMAPGETVALSBYKEYS};
+  encode(keys, op.indata);
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*vals, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return 0;
 }
 
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
@@ -411,6 +437,12 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   } catch (crimson::osd::error& e) {
     return -e.code().value();
   }
+}
+
+uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
+{
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  return ox->get_pool_stripe_width();
 }
 
 ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx)

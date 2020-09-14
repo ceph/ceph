@@ -1,7 +1,7 @@
 import { Injectable, NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, PreloadAllModules, RouterModule, Routes } from '@angular/router';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
@@ -20,6 +20,7 @@ import { ActiveAlertListComponent } from './ceph/cluster/prometheus/active-alert
 import { RulesListComponent } from './ceph/cluster/prometheus/rules-list/rules-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
+import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
@@ -106,8 +107,15 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        component: ServicesComponent,
-        data: { breadcrumbs: 'Cluster/Services' }
+        data: { breadcrumbs: 'Cluster/Services' },
+        children: [
+          { path: '', component: ServicesComponent },
+          {
+            path: URLVerbs.CREATE,
+            component: ServiceFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          }
+        ]
       },
       {
         path: 'inventory',

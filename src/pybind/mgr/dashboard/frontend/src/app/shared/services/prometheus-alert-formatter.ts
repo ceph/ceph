@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { Icons } from '../../shared/enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';

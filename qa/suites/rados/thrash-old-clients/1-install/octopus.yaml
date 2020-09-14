@@ -1,13 +1,12 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - \(MON_DOWN\)
 tasks:
 - install:
     branch: octopus
     exclude_packages:
       - ceph-mgr-dashboard
-      - ceph-mgr-diskprediction-cloud
       - ceph-mgr-diskprediction-local
       - ceph-mgr-rook
       - ceph-mgr-cephadm

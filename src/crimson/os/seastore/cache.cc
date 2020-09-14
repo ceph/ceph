@@ -28,6 +28,24 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
+Cache::retire_extent_ret Cache::retire_extent_if_cached(
+  Transaction &t, paddr_t addr)
+{
+  if (auto ext = t.write_set.find_offset(addr); ext != t.write_set.end()) {
+    t.add_to_retired_set(CachedExtentRef(&*ext));
+    return retire_extent_ertr::now();
+  } else if (auto iter = extents.find_offset(addr);
+      iter != extents.end()) {
+    auto ret = CachedExtentRef(&*iter);
+    return ret->wait_io().then([&t, ret=std::move(ret)]() mutable {
+      t.add_to_retired_set(ret);
+      return retire_extent_ertr::now();
+    });
+  } else {
+    return retire_extent_ertr::now();
+  }
+}
+
 void Cache::add_extent(CachedExtentRef ref)
 {
   assert(ref->is_valid());
@@ -117,6 +135,10 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   // Add new copy of mutated blocks, set_io_wait to block until written
   record.deltas.reserve(t.mutated_block_list.size());
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      logger().debug("try_construct_record: ignoring invalid {}", *i);
+      continue;
+    }
     logger().debug("try_construct_record: mutating {}", *i);
     add_extent(i);
     i->prepare_write();
@@ -127,6 +149,9 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       delta_info_t{
 	i->get_type(),
 	i->get_paddr(),
+	(i->is_logical()
+	? i->cast<LogicalCachedExtent>()->get_laddr()
+	: L_ADDR_NULL),
 	i->last_committed_crc,
 	final_crc,
 	(segment_off_t)i->get_length(),
@@ -141,6 +166,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       delta_info_t{
 	extent_types_t::ROOT,
 	paddr_t{},
+	L_ADDR_NULL,
 	0,
 	0,
 	0,
@@ -161,7 +187,6 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     record.extents.push_back(extent_t{std::move(bl)});
   }
 
-  t.read_set.clear();
   return std::make_optional<record_t>(std::move(record));
 }
 
@@ -180,21 +205,35 @@ void Cache::complete_commit(
   for (auto &i: t.fresh_block_list) {
     i->set_paddr(cur);
     cur.offset += i->get_length();
-    i->state = CachedExtent::extent_state_t::CLEAN;
     i->last_committed_crc = i->get_crc32c();
-    logger().debug("complete_commit: fresh {}", *i);
     i->on_initial_write();
+
+    if (!i->is_valid()) {
+      logger().debug("complete_commit: invalid {}", *i);
+      continue;
+    }
+
+    i->state = CachedExtent::extent_state_t::CLEAN;
+    logger().debug("complete_commit: fresh {}", *i);
     add_extent(i);
   }
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      logger().debug("complete_commit: ignoring invalid {}", *i);
+      continue;
+    }
     i->state = CachedExtent::extent_state_t::DIRTY;
     logger().debug("complete_commit: mutated {}", *i);
     i->on_delta_write(final_block_start);
   }
 
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      logger().debug("complete_commit: ignoring invalid {}", *i);
+      continue;
+    }
     i->complete_io();
   }
 }
@@ -232,6 +271,7 @@ Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
     return get_extent_by_type(
       delta.type,
       delta.paddr,
+      delta.laddr,
       delta.length).safe_then([this, record_base, delta](auto extent) {
 	logger().debug(
 	  "replay_delta: replaying {} on {}",
@@ -269,40 +309,54 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
 Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
+  laddr_t laddr,
   segment_off_t length)
 {
-  switch (type) {
-  case extent_types_t::ROOT:
-    assert(0 == "ROOT is never directly read");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
-  case extent_types_t::LADDR_INTERNAL:
-    return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::LADDR_LEAF:
-    return get_extent<lba_manager::btree::LBALeafNode>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::ONODE_BLOCK:
-    return get_extent<OnodeBlock>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::TEST_BLOCK:
-    return get_extent<TestBlock>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::NONE: {
-    ceph_assert(0 == "NONE is an invalid extent type");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
-  }
-  default:
-    ceph_assert(0 == "impossible");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
-  }
+  return [=] {
+    switch (type) {
+    case extent_types_t::ROOT:
+      assert(0 == "ROOT is never directly read");
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    case extent_types_t::LADDR_INTERNAL:
+      return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::LADDR_LEAF:
+      return get_extent<lba_manager::btree::LBALeafNode>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::ONODE_BLOCK:
+      return get_extent<OnodeBlock>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::TEST_BLOCK:
+      return get_extent<TestBlock>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::TEST_BLOCK_PHYSICAL:
+      return get_extent<TestBlockPhysical>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::NONE: {
+      ceph_assert(0 == "NONE is an invalid extent type");
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    }
+    default:
+      ceph_assert(0 == "impossible");
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    }
+  }().safe_then([laddr](CachedExtentRef e) {
+    assert(e->is_logical() == (laddr != L_ADDR_NULL));
+    if (e->is_logical()) {
+      e->cast<LogicalCachedExtent>()->set_laddr(laddr);
+    }
+    return get_extent_ertr::make_ready_future<CachedExtentRef>(e);
+  });
 }
 
 }

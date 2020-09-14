@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { CrushRuleService } from './crush-rule.service';
 
 describe('CrushRuleService', () => {
@@ -11,7 +11,7 @@ describe('CrushRuleService', () => {
 
   configureTestBed({
     imports: [HttpClientTestingModule],
-    providers: [CrushRuleService, i18nProviders]
+    providers: [CrushRuleService]
   });
 
   beforeEach(() => {

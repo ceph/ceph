@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -31,8 +31,7 @@ describe('UserPasswordFormComponent', () => {
       ToastrModule.forRoot(),
       SharedModule
     ],
-    declarations: [UserPasswordFormComponent],
-    providers: i18nProviders
+    declarations: [UserPasswordFormComponent]
   });
 
   beforeEach(() => {

@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 p {
   font-family: monospace;
@@ -27,22 +27,18 @@ p {
   }
 
   .err {
-    color: $color-pink;
+    color: bd.$danger;
   }
 
   .warn {
-    color: $color-bright-yellow;
+    color: bd.$warning;
   }
 
   .info {
-    color: $color-brand-teal;
+    color: bd.$info;
   }
 }
 
 ::ng-deep ngb-timepicker input.ngb-tp-input {
   width: 3.5rem !important;
-}
-
-.middle {
-  padding-top: 7px;
 }

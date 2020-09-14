@@ -118,7 +118,7 @@ public:
 
   int get_params();
   void init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store);
-  int get_torrent_file(RGWRados::Object::Read &read_op,
+  int get_torrent_file(rgw::sal::RGWObject* object,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,
                        rgw_obj &obj);

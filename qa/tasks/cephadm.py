@@ -10,10 +10,10 @@ import os
 import json
 import re
 import uuid
+import yaml
 
-from io import BytesIO
+from io import BytesIO, StringIO
 import toml
-from six import StringIO
 from tarfile import ReadError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
@@ -159,6 +159,16 @@ def ceph_log(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
+    # Add logs directory to job's info log file
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {'log': '/var/log/ceph'}
+        else:
+            info_yaml['archive']['log'] = '/var/log/ceph'
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
     try:
         yield
 
@@ -200,13 +210,13 @@ def ceph_log(ctx, config):
             return None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-whitelist')) is not None:
+                             config.get('log-ignorelist')) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-whitelist'])
+                    match = first_in_ceph_log(pattern, config['log-ignorelist'])
                     if match is not None:
                         ctx.summary['failure_reason'] = \
                             '"{match}" in cluster log'.format(
@@ -266,6 +276,16 @@ def ceph_crash(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
+    # Add logs directory to job's info log file
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {'crash': '/var/lib/ceph/%s/crash' % fsid}
+        else:
+            info_yaml['archive']['crash'] = '/var/lib/ceph/%s/crash' % fsid
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
     try:
         yield
 
@@ -308,7 +328,7 @@ def ceph_bootstrap(ctx, config, registry):
     first_mon = ctx.ceph[cluster_name].first_mon
     first_mon_role = ctx.ceph[cluster_name].first_mon_role
     mons = ctx.ceph[cluster_name].mons
-    
+
     ctx.cluster.run(args=[
         'sudo', 'mkdir', '-p', '/etc/ceph',
         ]);
@@ -470,7 +490,7 @@ def ceph_bootstrap(ctx, config, registry):
                 ctx.daemons.get_daemon(type_, id_, cluster).stop()
             except Exception:
                 log.exception(f'Failed to stop "{role}"')
-                raise 
+                raise
 
         # clean up /etc/ceph
         ctx.cluster.run(args=[
@@ -1129,7 +1149,7 @@ def task(ctx, config):
     if cluster_name not in ctx.ceph:
         ctx.ceph[cluster_name] = argparse.Namespace()
         ctx.ceph[cluster_name].bootstrapped = False
- 
+
     # image
     teuth_defaults = teuth_config.get('defaults', {})
     cephadm_defaults = teuth_defaults.get('cephadm', {})
@@ -1144,17 +1164,17 @@ def task(ctx, config):
     container_registry_mirror = mirrors.get('docker.io',
                                             container_registry_mirror)
 
-    if not container_image_name:
-        raise Exception("Configuration error occurred. "
-                        "The 'image' value is undefined for 'cephadm' task. "
-                        "Please provide corresponding options in the task's "
-                        "config, task 'overrides', or teuthology 'defaults' "
-                        "section.")
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
         ctx.ceph[cluster_name].image = config.get('image')
     ref = None
     if not ctx.ceph[cluster_name].image:
+        if not container_image_name:
+            raise Exception("Configuration error occurred. "
+                            "The 'image' value is undefined for 'cephadm' task. "
+                            "Please provide corresponding options in the task's "
+                            "config, task 'overrides', or teuthology 'defaults' "
+                            "section.")
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
 
@@ -1249,9 +1269,9 @@ def registries_add_mirror_to_docker_io(conf, mirror):
 
 def add_mirror_to_cluster(ctx, mirror):
     log.info('Adding local image mirror %s' % mirror)
-    
+
     registries_conf = '/etc/containers/registries.conf'
-    
+
     for remote in ctx.cluster.remotes.keys():
         try:
             config = teuthology.get_file(

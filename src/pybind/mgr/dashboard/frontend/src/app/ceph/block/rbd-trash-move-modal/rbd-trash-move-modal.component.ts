@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import * as moment from 'moment';
+import moment from 'moment';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';

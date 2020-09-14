@@ -192,7 +192,7 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
       } catch (const ErrorT& obj) {
         return std::invoke(std::forward<Func>(func), obj);
       }
-      assert("exception type mismatch – impossible!" == nullptr);
+      ceph_abort_msg("exception type mismatch – impossible!");
     };
   }
 
@@ -351,6 +351,14 @@ private:
     // has this member private.
     template <class ErrorVisitor, class Futurator>
     friend class maybe_handle_error_t;
+
+    // any `seastar::futurize` specialization must be able to access the base.
+    // see : `satisfy_with_result_of()` far below.
+    template <typename>
+    friend class seastar::futurize;
+
+    template <typename T1, typename T2, typename... More>
+    friend auto seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, More&&... more);
 
     template <class, class = std::void_t<>>
     struct get_errorator {
@@ -698,6 +706,7 @@ private:
       using decayed_t = std::decay_t<decltype(e)>;
       auto&& handler =
         decayed_t::error_t::handle(std::forward<ErrorFunc>(func));
+      static_assert(std::is_invocable_v<decltype(handler), ErrorT>);
       return std::invoke(std::move(handler), std::forward<ErrorT>(e));
     }
   };
@@ -747,7 +756,7 @@ public:
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
@@ -963,6 +972,8 @@ namespace ct_error {
   using value_too_large = ct_error_code<std::errc::value_too_large>;
   using eagain =
     ct_error_code<std::errc::resource_unavailable_try_again>;
+  using file_too_large =
+    ct_error_code<std::errc::file_too_large>;
 
   struct pass_further_all {
     template <class ErrorT>
@@ -1035,8 +1046,8 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   [[gnu::always_inline]]
   static inline type apply(Func&& func, std::tuple<FuncArgs...>&& args) noexcept {
     try {
-      return ::seastar::apply(std::forward<Func>(func),
-                              std::forward<std::tuple<FuncArgs...>>(args));
+      return std::apply(std::forward<Func>(func),
+                        std::forward<std::tuple<FuncArgs...>>(args));
     } catch (...) {
       return make_exception_future(std::current_exception());
     }
@@ -1056,6 +1067,21 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   static type make_exception_future(Arg&& arg) {
     return errorator_type::template make_exception_future2<Values...>(std::forward<Arg>(arg));
   }
+
+private:
+  template<typename PromiseT, typename Func>
+  static void satisfy_with_result_of(PromiseT&& pr, Func&& func) {
+    // this may use the protected variant of `seastar::future::forward_to()`
+    // because:
+    //   1. `seastar::future` established a friendship with with all
+    //      specializations of `seastar::futurize`, including this
+    //      one (we're in the `seastar` namespace!) WHILE
+    //   2. any errorated future declares now the friendship with any
+    //      `seastar::futurize<...>`.
+    func().forward_to(std::move(pr));
+  }
+  template <typename... U>
+  friend class future;
 };
 
 namespace internal {

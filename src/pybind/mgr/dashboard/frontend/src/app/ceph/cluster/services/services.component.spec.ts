@@ -3,9 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../core/core.module';
 import { CephServiceService } from '../../../shared/api/ceph-service.service';
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
@@ -58,10 +59,10 @@ describe('ServicesComponent', () => {
       CoreModule,
       SharedModule,
       HttpClientTestingModule,
-      RouterTestingModule
+      RouterTestingModule,
+      ToastrModule.forRoot()
     ],
-    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }, i18nProviders],
-    declarations: []
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }]
   });
 
   beforeEach(() => {

@@ -38,7 +38,7 @@ if (process.argv.includes('--res')) {
 function prepareLocales() {
   try {
     fs.accessSync(backup, fs.constants.F_OK);
-    logger(`'${backup}' alread exists, restoring it into '${filename}'}`);
+    logger(`'${backup}' already exists, restoring it into '${filename}'}`);
     fs.copyFileSync(backup, filename);
   } catch (err) {
     fs.copyFileSync(filename, backup);

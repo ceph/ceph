@@ -72,8 +72,7 @@ void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados->ioctx_create(_remote_pool_name.c_str(), m_remote_io_ctx));
   m_image_name = get_temp_image_name();
 
-  m_threads = new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
-    m_local_io_ctx.cct()));
+  m_threads = new rbd::mirror::Threads<>(_rados);
 }
 
 void TestFixture::TearDown() {

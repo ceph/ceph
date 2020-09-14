@@ -4,25 +4,41 @@
 #ifndef CEPH_LIBRBD_ASIO_CONTEXT_WQ_H
 #define CEPH_LIBRBD_ASIO_CONTEXT_WQ_H
 
+#include "include/common_fwd.h"
+#include "include/Context.h"
 #include <atomic>
+#include <memory>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/io_context_strand.hpp>
-
-struct Context;
+#include <boost/asio/post.hpp>
 
 namespace librbd {
 namespace asio {
 
 class ContextWQ {
 public:
-  explicit ContextWQ(boost::asio::io_context& io_context);
+  explicit ContextWQ(CephContext* cct, boost::asio::io_context& io_context);
+  ~ContextWQ();
 
   void drain();
-  void queue(Context *ctx, int r = 0);
+
+  void queue(Context *ctx, int r = 0) {
+    ++m_queued_ops;
+
+    // ensure all legacy ContextWQ users are dispatched sequentially for
+    // backwards compatibility (i.e. might not be concurrent thread-safe)
+    boost::asio::post(*m_strand, [this, ctx, r]() {
+      ctx->complete(r);
+
+      ceph_assert(m_queued_ops > 0);
+      --m_queued_ops;
+    });
+  }
 
 private:
+  CephContext* m_cct;
   boost::asio::io_context& m_io_context;
-  boost::asio::io_context::strand m_strand;
+  std::unique_ptr<boost::asio::io_context::strand> m_strand;
 
   std::atomic<uint64_t> m_queued_ops;
 

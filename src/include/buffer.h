@@ -267,7 +267,7 @@ struct error_code;
 
     // misc
     bool is_aligned(unsigned align) const {
-      return ((long)c_str() & (align-1)) == 0;
+      return ((uintptr_t)c_str() & (align-1)) == 0;
     }
     bool is_page_aligned() const { return is_aligned(CEPH_PAGE_SIZE); }
     bool is_n_align_sized(unsigned align) const
@@ -1132,6 +1132,11 @@ struct error_code;
     void append(ptr&& bp);
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
+    /// append each non-empty line from the stream and add '\n',
+    /// so a '\n' will be added even the stream does not end with EOL.
+    ///
+    /// For example, if the stream contains "ABC\n\nDEF", "ABC\nDEF\n" is
+    /// actually appended.
     void append(std::istream& in);
     contiguous_filler append_hole(unsigned len);
     void append_zero(unsigned len);

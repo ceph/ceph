@@ -58,7 +58,15 @@ static void fuse_usage()
   struct fuse_args args = FUSE_ARGS_INIT(2, (char**)argv);
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   struct fuse_cmdline_opts opts = {};
-  if (fuse_parse_cmdline(&args, &opts) == -1) {
+  if (fuse_parse_cmdline(&args, &opts) != -1) {
+    if (opts.show_help) {
+      cout << "usage: " << argv[0] << " [options] <mountpoint>\n\n";
+      cout << "FUSE options:\n";
+      fuse_cmdline_help();
+      fuse_lowlevel_help();
+      cout << "\n";
+    }
+  } else {
 #else
   if (fuse_parse_cmdline(&args, nullptr, nullptr, nullptr) == -1) {
 #endif

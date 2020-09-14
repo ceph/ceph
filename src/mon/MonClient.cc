@@ -141,6 +141,14 @@ int MonClient::get_monmap_and_config()
     }
   });
 
+  want_bootstrap_config = true;
+  auto shutdown_config = make_scope_guard([this] {
+    std::unique_lock l(monc_lock);
+    want_bootstrap_config = false;
+    bootstrap_config.reset();
+  });
+
+  ceph::ref_t<MConfig> config;
   while (tries-- > 0) {
     r = init();
     if (r < 0) {
@@ -164,13 +172,15 @@ int MonClient::get_monmap_and_config()
 	r = 0;
 	break;
       }
-      while ((!got_config || monmap.get_epoch() == 0) && r == 0) {
+      while ((!bootstrap_config || monmap.get_epoch() == 0) && r == 0) {
 	ldout(cct,20) << __func__ << " waiting for monmap|config" << dendl;
 	map_cond.wait_for(l, ceph::make_timespan(
           cct->_conf->mon_client_hunt_interval));
       }
-      if (got_config) {
+
+      if (bootstrap_config) {
 	ldout(cct,10) << __func__ << " success" << dendl;
+	config = std::move(bootstrap_config);
 	r = 0;
 	break;
       }
@@ -178,6 +188,12 @@ int MonClient::get_monmap_and_config()
     lderr(cct) << __func__ << " failed to get config" << dendl;
     shutdown();
     continue;
+  }
+
+  if (config) {
+    // apply the bootstrap config to ensure its applied prior to completing
+    // the bootstrap
+    cct->_conf.set_mon_vals(cct, config->config, config_cb);
   }
 
   shutdown();
@@ -424,6 +440,8 @@ void MonClient::handle_monmap(MMonMap *m)
     }
   }
 
+  cct->set_mon_addrs(monmap);
+
   sub.got("monmap", monmap.get_epoch());
   map_cond.notify_all();
   want_monmap = false;
@@ -436,6 +454,15 @@ void MonClient::handle_monmap(MMonMap *m)
 void MonClient::handle_config(MConfig *m)
 {
   ldout(cct,10) << __func__ << " " << *m << dendl;
+
+  if (want_bootstrap_config) {
+    // get_monmap_and_config is waiting for config which it will apply
+    // synchronously
+    bootstrap_config = ceph::ref_t<MConfig>(m, false);
+    map_cond.notify_all();
+    return;
+  }
+
   // Take the sledgehammer approach to ensuring we don't depend on
   // anything in MonClient.
   boost::asio::defer(finish_strand,
@@ -448,8 +475,6 @@ void MonClient::handle_config(MConfig *m)
 		      }
 		      m->put();
 		    });
-  got_config = true;
-  map_cond.notify_all();
 }
 
 // ----------------------
@@ -959,11 +984,13 @@ void MonClient::_un_backoff()
 void MonClient::schedule_tick()
 {
   auto do_tick = make_lambda_context([this](int) { tick(); });
-  if (_hunting()) {
+  if (!is_connected()) {
+    // start another round of hunting
     const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
 				reopen_interval_multiplier);
     timer.add_event_after(hunt_interval, do_tick);
   } else {
+    // keep in touch
     timer.add_event_after(std::min(cct->_conf->mon_client_ping_interval,
 				   cct->_conf->mon_client_log_interval),
 			  do_tick);

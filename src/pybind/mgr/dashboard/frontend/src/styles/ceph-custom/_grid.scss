@@ -1,0 +1,6 @@
+@use '../defaults/bootstrap-defaults' as bd;
+
+/* Grid */
+.container-fluid {
+  padding: 0 bd.$grid-gutter-width;
+}

@@ -110,45 +110,44 @@ ssh errors
 
 Error message::
 
-  xxxxxx.gateway_bootstrap.HostNotFound: -F /tmp/cephadm-conf-kbqvkrkw root@10.10.1.2
-  raise OrchestratorError('Failed to connect to %s (%s).  Check that the host is reachable and accepts  connections using the cephadm SSH key' % (host, addr)) from
-  orchestrator._interface.OrchestratorError: Failed to connect to 10.10.1.2 (10.10.1.2).  Check that the host is reachable and accepts connections using the cephadm SSH key
+  execnet.gateway_bootstrap.HostNotFound: -F /tmp/cephadm-conf-73z09u6g -i /tmp/cephadm-identity-ky7ahp_5 root@10.10.1.2
+  ...
+  raise OrchestratorError(msg) from e
+  orchestrator._interface.OrchestratorError: Failed to connect to 10.10.1.2 (10.10.1.2).
+  Please make sure that the host is reachable and accepts connections using the cephadm SSH key
+  ...
 
 Things users can do:
 
 1. Ensure cephadm has an SSH identity key::
-      
-     [root@mon1~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_key > key
+
+     [root@mon1~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
      INFO:cephadm:Inferring fsid f8edc08a-7f17-11ea-8707-000c2915dd98
      INFO:cephadm:Using recent ceph image docker.io/ceph/ceph:v15 obtained 'mgr/cephadm/ssh_identity_key'
-     [root@mon1 ~] # chmod 0600 key
+     [root@mon1 ~] # chmod 0600 ~/cephadm_private_key
 
  If this fails, cephadm doesn't have a key. Fix this by running the following command::
-   
+
      [root@mon1 ~]# cephadm shell -- ceph cephadm generate-ssh-key
 
  or::
-   
-     [root@mon1 ~]# cat key | cephadm shell -- ceph cephadm set-ssk-key -i -
+
+     [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-ssk-key -i -
 
 2. Ensure that the ssh config is correct::
-   
+
      [root@mon1 ~]# cephadm shell -- ceph cephadm get-ssh-config > config
 
 3. Verify that we can connect to the host::
-    
-     [root@mon1 ~]# ssh -F config -i key root@mon1
 
-4. There is a limitation right now: the ssh user is always `root`.
-
-
+     [root@mon1 ~]# ssh -F config -i ~/cephadm_private_key root@mon1
 
 Verifying that the Public Key is Listed in the authorized_keys file
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 To verify that the public key is in the authorized_keys file, run the following commands::
 
-     [root@mon1 ~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_pub > key.pub
-     [root@mon1 ~]# grep "`cat key.pub`"  /root/.ssh/authorized_keys
+     [root@mon1 ~]# cephadm shell -- ceph cephadm get-pub-key > ~/ceph.pub
+     [root@mon1 ~]# grep "`cat ~/ceph.pub`"  /root/.ssh/authorized_keys
 
 Failed to infer CIDR network error
 ----------------------------------

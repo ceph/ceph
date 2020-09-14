@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
@@ -411,10 +411,10 @@ TEST_F(TestClsQueue, MultiProducer)
 
   std::vector<std::thread> producers(max_producer_count);
   for (auto& p : producers) {
-    p = std::move(std::thread([this, &queue_name, &producer_count] {
-                test_enqueue(queue_name, number_of_ops, number_of_elements, 0);
-                --producer_count;
-    }));
+    p = std::thread([this, &queue_name, &producer_count] {
+		      test_enqueue(queue_name, number_of_ops, number_of_elements, 0);
+		      --producer_count;
+		    });
   }
 
   auto consume_count = 0U;

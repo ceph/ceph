@@ -72,7 +72,17 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
   std::lock_guard l(lock);
 
   const int from = stats->get_orig_source().num();
-  pending_inc.update_stat(from, std::move(stats->osd_stat));
+  bool is_in = with_osdmap([from](const OSDMap& osdmap) {
+    return osdmap.is_in(from);
+  });
+
+  if (is_in) {
+    pending_inc.update_stat(from, std::move(stats->osd_stat));
+  } else {
+    osd_stat_t empty_stat;
+    empty_stat.seq = stats->osd_stat.seq;
+    pending_inc.update_stat(from, std::move(empty_stat));  
+  }
 
   for (auto p : stats->pg_stat) {
     pg_t pgid = p.first;

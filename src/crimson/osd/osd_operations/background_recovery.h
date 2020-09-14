@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <boost/statechart/event_base.hpp>
+
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/common/type_helpers.h"
@@ -39,7 +41,7 @@ protected:
       scheduler_class
     };
   }
-  virtual seastar::future<bool> do_recovery();
+  virtual seastar::future<bool> do_recovery() = 0;
 };
 
 class UrgentRecovery final : public BackgroundRecovery {
@@ -49,9 +51,8 @@ public:
     const eversion_t& need,
     Ref<PG> pg,
     ShardServices& ss,
-    epoch_t epoch_started,
-    crimson::osd::scheduler::scheduler_class_t scheduler_class)
-  : BackgroundRecovery{pg, ss, epoch_started, scheduler_class},
+    epoch_t epoch_started)
+  : BackgroundRecovery{pg, ss, epoch_started, crimson::osd::scheduler::scheduler_class_t::immediate},
     soid{soid}, need(need) {}
   void print(std::ostream&) const final;
   void dump_detail(Formatter* f) const final;
@@ -60,5 +61,54 @@ private:
   const eversion_t need;
   seastar::future<bool> do_recovery() override;
 };
+
+class PglogBasedRecovery final : public BackgroundRecovery {
+  seastar::future<bool> do_recovery() override;
+
+public:
+  PglogBasedRecovery(
+    Ref<PG> pg,
+    ShardServices &ss,
+    epoch_t epoch_started);
+};
+
+class BackfillRecovery final : public BackgroundRecovery {
+  boost::intrusive_ptr<const boost::statechart::event_base> evt;
+  OrderedPipelinePhase::Handle handle;
+  seastar::future<bool> do_recovery() override;
+
+public:
+  class BackfillRecoveryPipeline {
+    OrderedPipelinePhase process = {
+      "BackfillRecovery::PGPipeline::process"
+    };
+    friend class BackfillRecovery;
+    friend class PeeringEvent;
+  };
+
+  template <class EventT>
+  BackfillRecovery(
+    Ref<PG> pg,
+    ShardServices &ss,
+    epoch_t epoch_started,
+    const EventT& evt);
+
+  static BackfillRecoveryPipeline &bp(PG &pg);
+};
+
+template <class EventT>
+BackfillRecovery::BackfillRecovery(
+  Ref<PG> pg,
+  ShardServices &ss,
+  const epoch_t epoch_started,
+  const EventT& evt)
+  : BackgroundRecovery(
+      std::move(pg),
+      ss,
+      epoch_started,
+      crimson::osd::scheduler::scheduler_class_t::background_best_effort),
+    evt(evt.intrusive_from_this())
+{}
+
 
 }

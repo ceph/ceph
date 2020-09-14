@@ -4,15 +4,11 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  i18nProviders
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks } from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -57,7 +53,7 @@ describe('PoolListComponent', () => {
       NgbNavModule,
       HttpClientTestingModule
     ],
-    providers: [i18nProviders, PgCategoryService]
+    providers: [PgCategoryService]
   });
 
   beforeEach(() => {
@@ -309,6 +305,8 @@ describe('PoolListComponent', () => {
           stats: {
             bytes_used: { latest: 0, rate: 0, rates: [] },
             max_avail: { latest: 0, rate: 0, rates: [] },
+            avail_raw: { latest: 0, rate: 0, rates: [] },
+            percent_used: { latest: 0, rate: 0, rates: [] },
             rd: { latest: 0, rate: 0, rates: [] },
             rd_bytes: { latest: 0, rate: 0, rates: [] },
             wr: { latest: 0, rate: 0, rates: [] },
@@ -328,7 +326,8 @@ describe('PoolListComponent', () => {
       pool = _.merge(pool, {
         stats: {
           bytes_used: { latest: 5, rate: 0, rates: [] },
-          max_avail: { latest: 15, rate: 0, rates: [] },
+          avail_raw: { latest: 15, rate: 0, rates: [] },
+          percent_used: { latest: 0.25, rate: 0, rates: [] },
           rd_bytes: {
             latest: 6,
             rate: 4,
@@ -345,7 +344,8 @@ describe('PoolListComponent', () => {
           pg_status: '8 active+clean, 2 down',
           stats: {
             bytes_used: { latest: 5, rate: 0, rates: [] },
-            max_avail: { latest: 15, rate: 0, rates: [] },
+            avail_raw: { latest: 15, rate: 0, rates: [] },
+            percent_used: { latest: 0.25, rate: 0, rates: [] },
             rd_bytes: { latest: 6, rate: 4, rates: [2, 6] }
           },
           usage: 0.25
@@ -475,6 +475,10 @@ describe('PoolListComponent', () => {
   });
 
   describe('getDisableDesc', () => {
+    beforeEach(() => {
+      component.selection.selected = [{ pool_name: 'foo' }];
+    });
+
     it('should return message if mon_allow_pool_delete flag is set to false', () => {
       component.monAllowPoolDelete = false;
       expect(component.getDisableDesc()).toBe(
@@ -482,9 +486,9 @@ describe('PoolListComponent', () => {
       );
     });
 
-    it('should return undefined if mon_allow_pool_delete flag is set to true', () => {
+    it('should return false if mon_allow_pool_delete flag is set to true', () => {
       component.monAllowPoolDelete = true;
-      expect(component.getDisableDesc()).toBeUndefined();
+      expect(component.getDisableDesc()).toBeFalsy();
     });
   });
 });

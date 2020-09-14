@@ -69,12 +69,16 @@ export abstract class PageHelper {
     cy.get('.breadcrumb-item.active').should('have.text', text);
   }
 
+  getTabs() {
+    return cy.get('.nav.nav-tabs li');
+  }
+
   getTabText(index: number) {
-    return cy.get('.nav.nav-tabs li').its(index).text();
+    return this.getTabs().its(index).text();
   }
 
   getTabsCount(): any {
-    return cy.get('.nav.nav-tabs li').its('length');
+    return this.getTabs().its('length');
   }
 
   /**

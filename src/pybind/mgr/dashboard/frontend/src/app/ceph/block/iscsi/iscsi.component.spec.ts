@@ -4,7 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
@@ -38,8 +38,7 @@ describe('IscsiComponent', () => {
       FormatterService,
       RelativeDatePipe,
       IscsiBackstorePipe,
-      { provide: IscsiService, useValue: fakeService },
-      i18nProviders
+      { provide: IscsiService, useValue: fakeService }
     ]
   });
 

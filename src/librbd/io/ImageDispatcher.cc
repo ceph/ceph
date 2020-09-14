@@ -128,7 +128,7 @@ void ImageDispatcher<I>::shut_down(Context* on_finish) {
   // currently outside dispatcher tracking
   auto async_op = new AsyncOperation();
 
-  on_finish = new LambdaContext([this, async_op, on_finish](int r) {
+  on_finish = new LambdaContext([async_op, on_finish](int r) {
       async_op->finish_op();
       delete async_op;
       on_finish->complete(0);

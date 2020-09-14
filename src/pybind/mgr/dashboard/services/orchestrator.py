@@ -3,8 +3,9 @@ from __future__ import absolute_import
 import logging
 
 from functools import wraps
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
+from ceph.deployment.service_spec import ServiceSpec
 from orchestrator import InventoryFilter, DeviceLightLoc, Completion
 from orchestrator import ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
@@ -110,6 +111,15 @@ class ServiceManager(ResourceManager):
         for c in completion_list:
             raise_if_exception(c)
 
+    @wait_api_result
+    def apply(self, service_spec: Dict) -> Completion:
+        spec = ServiceSpec.from_json(service_spec)
+        return self.api.apply([spec])
+
+    @wait_api_result
+    def remove(self, service_name: str) -> List[str]:
+        return self.api.remove_service(service_name)
+
 
 class OsdManager(ResourceManager):
     @wait_api_result
@@ -131,6 +141,7 @@ class OrchClient(object):
 
     @classmethod
     def instance(cls):
+        # type: () -> OrchClient
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -143,14 +154,47 @@ class OrchClient(object):
         self.services = ServiceManager(self.api)
         self.osds = OsdManager(self.api)
 
-    def available(self):
-        return self.status()['available']
+    def available(self, features: Optional[List[str]] = None) -> bool:
+        available = self.status()['available']
+        if available and features is not None:
+            return not self.get_missing_features(features)
+        return available
 
-    def status(self):
-        return self.api.status()
+    def status(self) -> Dict[str, Any]:
+        status = self.api.status()
+        status['features'] = {}
+        if status['available']:
+            status['features'] = self.api.get_feature_set()
+        return status
+
+    def get_missing_features(self, features: List[str]) -> List[str]:
+        supported_features = {k for k, v in self.api.get_feature_set().items() if v['available']}
+        return list(set(features) - supported_features)
 
     @wait_api_result
     def blink_device_light(self, hostname, device, ident_fault, on):
         # type: (str, str, str, bool) -> Completion
         return self.api.blink_device_light(
             ident_fault, on, [DeviceLightLoc(hostname, device, device)])
+
+
+class OrchFeature(object):
+    HOST_LIST = 'get_hosts'
+    HOST_CREATE = 'add_host'
+    HOST_DELETE = 'remove_host'
+    HOST_LABEL_ADD = 'add_host_label'
+    HOST_LABEL_REMOVE = 'remove_host_label'
+
+    SERVICE_LIST = 'describe_service'
+    SERVICE_CREATE = 'apply'
+    SERVICE_DELETE = 'remove_service'
+    SERVICE_RELOAD = 'service_action'
+    DAEMON_LIST = 'list_daemons'
+
+    OSD_GET_REMOVE_STATUS = 'remove_osds_status'
+
+    OSD_CREATE = 'apply_drivegroups'
+    OSD_DELETE = 'remove_osds'
+
+    DEVICE_LIST = 'get_inventory'
+    DEVICE_BLINK_LIGHT = 'blink_device_light'

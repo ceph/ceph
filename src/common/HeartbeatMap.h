@@ -39,14 +39,17 @@ namespace ceph {
 
 struct heartbeat_handle_d {
   const std::string name;
-  pthread_t thread_id;
-  // TODO: use atomic<time_point>, once we can ditch GCC 4.8
-  std::atomic<unsigned> timeout = { 0 }, suicide_timeout = { 0 };
-  time_t grace, suicide_grace;
+  pthread_t thread_id = 0;
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+  std::atomic<time> timeout = clock::zero();
+  std::atomic<time> suicide_timeout = clock::zero();
+  ceph::timespan grace = ceph::timespan::zero();
+  ceph::timespan suicide_grace = ceph::timespan::zero();
   std::list<heartbeat_handle_d*>::iterator list_item;
 
   explicit heartbeat_handle_d(const std::string& n)
-    : name(n), thread_id(0), grace(0), suicide_grace(0)
+    : name(n)
   { }
 };
 
@@ -58,8 +61,8 @@ class HeartbeatMap {
 
   // reset the timeout so that it expects another touch within grace amount of time
   void reset_timeout(heartbeat_handle_d *h,
-		     ceph::coarse_mono_clock::rep grace,
-		     ceph::coarse_mono_clock::rep suicide_grace);
+		     ceph::timespan grace,
+		     ceph::timespan suicide_grace);
   // clear the timeout so that it's not checked on
   void clear_timeout(heartbeat_handle_d *h);
 
@@ -79,16 +82,17 @@ class HeartbeatMap {
   ~HeartbeatMap();
 
  private:
+  using clock = ceph::coarse_mono_clock;
   CephContext *m_cct;
   ceph::shared_mutex m_rwlock =
     ceph::make_shared_mutex("HeartbeatMap::m_rwlock");
-  ceph::coarse_mono_clock::time_point m_inject_unhealthy_until;
+  clock::time_point m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
   std::atomic<unsigned> m_unhealthy_workers = { 0 };
   std::atomic<unsigned> m_total_workers = { 0 };
 
   bool _check(const heartbeat_handle_d *h, const char *who,
-	      ceph::coarse_mono_clock::rep now);
+	      ceph::coarse_mono_time now);
 };
 
 }

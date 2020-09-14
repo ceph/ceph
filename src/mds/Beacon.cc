@@ -304,9 +304,9 @@ void Beacon::notify_health(MDSRank const *mds)
   }
 
   // Detect MDS_HEALTH_TRIM condition
-  // Arbitrary factor of 2, indicates MDS is not trimming promptly
+  // Indicates MDS is not trimming promptly
   {
-    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * 2)) {
+    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * g_conf().get_val<double>("mds_log_warn_factor"))) {
       std::ostringstream oss;
       oss << "Behind on trimming (" << mds->mdlog->get_num_segments()
         << "/" << g_conf()->mds_log_max_segments << ")";
@@ -364,14 +364,16 @@ void Beacon::notify_health(MDSRank const *mds)
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
 
+    const auto min_caps_working_set = g_conf().get_val<uint64_t>("mds_min_caps_working_set");
     const auto recall_warning_threshold = g_conf().get_val<Option::size_t>("mds_recall_warning_threshold");
     const auto max_completed_requests = g_conf()->mds_max_completed_requests;
     const auto max_completed_flushes = g_conf()->mds_max_completed_flushes;
     std::vector<MDSHealthMetric> late_recall_metrics;
     std::vector<MDSHealthMetric> large_completed_requests_metrics;
     for (auto& session : sessions) {
+      const uint64_t num_caps = session->get_num_caps();
       const uint64_t recall_caps = session->get_recall_caps();
-      if (recall_caps > recall_warning_threshold) {
+      if (recall_caps > recall_warning_threshold && num_caps > min_caps_working_set) {
         dout(2) << "Session " << *session <<
              " is not releasing caps fast enough. Recalled caps at " << recall_caps
           << " > " << recall_warning_threshold << " (mds_recall_warning_threshold)." << dendl;

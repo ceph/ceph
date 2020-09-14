@@ -70,8 +70,10 @@ void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
 RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(CephContext *_cct, int num_threads)
   : cct(_cct), m_tp(cct, "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads),
     req_throttle(_cct, "rgw_async_rados_ops", num_threads * 2),
-    req_wq(this, g_conf()->rgw_op_thread_timeout,
-    g_conf()->rgw_op_thread_suicide_timeout, &m_tp) {
+    req_wq(this,
+	   ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
+	   ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
+	   &m_tp) {
 }
 
 void RGWAsyncRadosProcessor::start() {
@@ -635,18 +637,19 @@ int RGWAsyncFetchRemoteObj::_send_request()
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
   map<string, bufferlist> attrs;
 
-  rgw_obj src_obj(src_bucket, key);
-
-  rgw_obj dest_obj(dest_bucket_info.bucket, dest_key.value_or(key));
+  rgw::sal::RGWRadosBucket bucket(store, src_bucket);
+  rgw::sal::RGWRadosObject src_obj(store, key, &bucket);
+  rgw::sal::RGWRadosBucket dest_bucket(store, dest_bucket_info);
+  rgw::sal::RGWRadosObject dest_obj(store, dest_key.value_or(key), &dest_bucket);
 
   std::optional<uint64_t> bytes_transferred;
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
                        user_id.value_or(rgw_user()),
                        NULL, /* req_info */
                        source_zone,
-                       dest_obj,
-                       src_obj,
-                       dest_bucket_info, /* dest */
+                       &dest_obj,
+                       &src_obj,
+                       &dest_bucket, /* dest */
                        nullptr, /* source */
 		       dest_placement_rule,
                        NULL, /* real_time* src_mtime, */
@@ -694,13 +697,14 @@ int RGWAsyncStatRemoteObj::_send_request()
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
-  rgw_obj src_obj(src_bucket, key);
+  rgw::sal::RGWRadosBucket bucket(store, src_bucket);
+  rgw::sal::RGWRadosObject src_obj(store, key, &bucket);
 
   int r = store->getRados()->stat_remote_obj(obj_ctx,
                        rgw_user(user_id),
                        nullptr, /* req_info */
                        source_zone,
-                       src_obj,
+                       &src_obj,
                        nullptr, /* source */
                        pmtime, /* real_time* src_mtime, */
                        psize, /* uint64_t * */

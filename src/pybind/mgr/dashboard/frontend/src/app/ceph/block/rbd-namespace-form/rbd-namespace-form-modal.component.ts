@@ -8,7 +8,6 @@ import {
 } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Subject } from 'rxjs';
 
 import { PoolService } from '../../../shared/api/pool.service';
@@ -43,8 +42,7 @@ export class RbdNamespaceFormModalComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private notificationService: NotificationService,
     private poolService: PoolService,
-    private rbdService: RbdService,
-    private i18n: I18n
+    private rbdService: RbdService
   ) {
     this.poolPermission = this.authStorageService.getPermissions().pool;
     this.createForm();
@@ -132,10 +130,7 @@ export class RbdNamespaceFormModalComponent implements OnInit {
       .then(() => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Created namespace '{{pool}}/{{namespace}}'`, {
-            pool: pool,
-            namespace: namespace
-          })
+          $localize`Created namespace '${pool}/${namespace}'`
         );
         this.activeModal.close();
         this.onSubmit.next();

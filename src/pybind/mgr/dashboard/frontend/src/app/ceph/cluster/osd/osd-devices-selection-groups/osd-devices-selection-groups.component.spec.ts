@@ -5,12 +5,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  i18nProviders,
-  Mocks
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, FixtureHelper, Mocks } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
@@ -41,7 +36,6 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       SharedModule,
       ToastrModule.forRoot()
     ],
-    providers: [i18nProviders],
     declarations: [OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });
 

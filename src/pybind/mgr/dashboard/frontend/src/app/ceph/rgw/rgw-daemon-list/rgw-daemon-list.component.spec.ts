@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders, TabHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, TabHelper } from '../../../../testing/unit-test-helper';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -37,8 +37,7 @@ describe('RgwDaemonListComponent', () => {
       PerformanceCounterModule,
       SharedModule,
       RouterTestingModule
-    ],
-    providers: i18nProviders
+    ]
   });
 
   beforeEach(() => {

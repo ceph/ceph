@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { filter, first } from 'rxjs/operators';
 

@@ -1413,6 +1413,7 @@ TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  SetVal(g_conf(), "bluestore_block_db_path", "");
   StartDeferred(65536);
   SetVal(g_conf(), "bluestore_compression_mode", "force");
   SetVal(g_conf(), "bluestore_max_blob_size", "524288");
@@ -1942,6 +1943,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
 TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  SetVal(g_conf(), "bluestore_block_db_path", "");
   StartDeferred(0x10000);
 
   int r;
@@ -4728,41 +4730,6 @@ TEST_P(StoreTest, Synthetic) {
 }
 
 #if defined(WITH_BLUESTORE)
-TEST_P(StoreTestSpecificAUSize, BlueFSExtenderTest) {
-  if(string(GetParam()) != "bluestore")
-    return;
-
-  SetVal(g_conf(), "bluestore_block_db_size", "0");
-  SetVal(g_conf(), "bluestore_block_wal_size", "0");
-  SetVal(g_conf(), "bluestore_bluefs_min", "12582912");
-  SetVal(g_conf(), "bluestore_bluefs_min_free", "4194304");
-  SetVal(g_conf(), "bluestore_bluefs_gift_ratio", "0");
-  SetVal(g_conf(), "bluestore_bluefs_min_ratio", "0");
-  SetVal(g_conf(), "bluestore_bluefs_balance_interval", "100000");
-  SetVal(g_conf(), "bluestore_bluefs_db_compatibility", "false");
-
-  g_conf().apply_changes(nullptr);
-
-  StartDeferred(4096);
-
-  doSyntheticTest(10000, 400*1024, 40*1024, 0);
-
-  BlueStore* bstore = NULL;
-  EXPECT_NO_THROW(bstore = dynamic_cast<BlueStore*> (store.get()));
-
-  // verify downgrades are broken and repair that
-  bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 0);
-
-  SetVal(g_conf(), "bluestore_bluefs_db_compatibility", "true");
-  g_conf().apply_changes(nullptr);
-
-  ASSERT_EQ(bstore->fsck(false), 1);
-  ASSERT_EQ(bstore->repair(false), 0);
-  ASSERT_EQ(bstore->fsck(false), 0);
-  bstore->mount();
-}
-
 TEST_P(StoreTestSpecificAUSize, SyntheticMatrixSharding) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -6438,15 +6405,18 @@ TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
 #if defined(WITH_BLUESTORE)
 void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
 {
+  uint64_t meta_allocated = mempool::bluestore_cache_meta::allocated_bytes();
   uint64_t onode_allocated = mempool::bluestore_cache_onode::allocated_bytes();
   uint64_t other_allocated = mempool::bluestore_cache_other::allocated_bytes();
 
+  uint64_t meta_items = mempool::bluestore_cache_meta::allocated_items();
   uint64_t onode_items = mempool::bluestore_cache_onode::allocated_items();
   uint64_t other_items = mempool::bluestore_cache_other::allocated_items();
-  cout << "onode(" << onode_allocated << "/" << onode_items
+  cout << "meta(" << meta_allocated << "/" << meta_items
+       << ") onode(" << onode_allocated << "/" << onode_items
        << ") other(" << other_allocated << "/" << other_items
        << ")" << std::endl;
-  *total_bytes = onode_allocated + other_allocated;
+  *total_bytes = meta_allocated + onode_allocated + other_allocated;
   *total_items = onode_items;
 }
 
@@ -7884,6 +7854,16 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     return;
   const size_t offs_base = 65536 / 2;
 
+
+  // Now we need standalone db to pass "false free fix" section below
+  // Due to new BlueFS allocation model (single allocator for main device)
+  // it might cause "false free" blob overwrite by BlueFS/DB stuff
+  // and hence fail the test case and corrupt data.
+  //
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "4294967296");
+
   SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
   SetVal(g_conf(), "bluestore_max_blob_size", 
@@ -7968,8 +7948,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   ASSERT_EQ(bstore->fsck(false), 0);
   ASSERT_EQ(bstore->mount(), 0);
   ASSERT_EQ(bstore->statfs(&statfs), 0);
-  // adjust free space to success in comparison
+  // adjust free/internal meta space to success in comparison
   statfs0.available = statfs.available;
+  statfs0.internal_metadata = statfs.internal_metadata;
   ASSERT_EQ(statfs0, statfs);
 
   ///////// undecodable shared blob key / stray shared blob records ///////
@@ -8299,43 +8280,6 @@ TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
   bstore->mount();
 }
 
-TEST_P(StoreTestSpecificAUSize, BluestoreTinyDevFailure) {
-  if (string(GetParam()) != "bluestore")
-    return;
-  // This caused superblock overwrite by bluefs, see
-  // https://tracker.ceph.com/issues/24480
-  SetVal(g_conf(), "bluestore_block_size",
-    stringify(1024 * 1024 * 1024).c_str()); //1 Gb
-  SetVal(g_conf(), "bluestore_block_db_size", "0");
-  SetVal(g_conf(), "bluestore_block_db_create", "false");
-  SetVal(g_conf(), "bluestore_bluefs_min",
-    stringify(1024 * 1024 * 1024).c_str());
-  StartDeferred(0x1000);
-  store->umount();
-  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
-  store->mount();
-}
-
-TEST_P(StoreTestSpecificAUSize, BluestoreTinyDevFailure2) {
-  if (string(GetParam()) != "bluestore")
-    return;
-
-  // This caused assert in allocator as initial bluefs extent as slow device
-  // overlaped with superblock
-  // https://tracker.ceph.com/issues/24480
-  SetVal(g_conf(), "bluestore_block_size",
-    stringify(1024 * 1024 * 1024).c_str()); //1 Gb
-  SetVal(g_conf(), "bluestore_block_db_size",
-    stringify(1024 * 1024 * 1024).c_str()); //1 Gb
-  SetVal(g_conf(), "bluestore_block_db_create", "true");
-  SetVal(g_conf(), "bluestore_bluefs_min",
-    stringify(1024 * 1024 * 1024).c_str());
-  StartDeferred(0x1000);
-  store->umount();
-  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
-  store->mount();
-}
-
 TEST_P(StoreTest, SpuriousReadErrorTest) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -8365,6 +8309,7 @@ TEST_P(StoreTest, SpuriousReadErrorTest) {
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
   }
+  ch = store->open_collection(cid);
 
   cerr << "Injecting CRC error with no retry, expecting EIO" << std::endl;
   SetVal(g_conf(), "bluestore_retry_disk_reads", "0");
@@ -8396,30 +8341,6 @@ TEST_P(StoreTest, SpuriousReadErrorTest) {
     }
     ASSERT_GE(logger->get(l_bluestore_reads_with_retries), 1u);
   }
-}
-
-TEST_P(StoreTest, allocateBlueFSTest) {
-  if (string(GetParam()) != "bluestore")
-    return;
-
-  BlueStore* bstore = NULL;
-  EXPECT_NO_THROW(bstore = dynamic_cast<BlueStore*> (store.get()));
-
-  struct store_statfs_t statfs;
-  store->statfs(&statfs);
-
-  uint64_t to_alloc = g_conf().get_val<Option::size_t>("bluefs_alloc_size");
-
-  int r = bstore->allocate_bluefs_freespace(to_alloc, to_alloc, nullptr);
-  ASSERT_EQ(r, 0);
-  r = bstore->allocate_bluefs_freespace(statfs.total, statfs.total, nullptr);
-  ASSERT_EQ(r, -ENOSPC);
-  r = bstore->allocate_bluefs_freespace(to_alloc * 16, to_alloc * 16, nullptr);
-  ASSERT_EQ(r, 0);
-  store->umount();
-  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
-  r = store->mount();
-  ASSERT_EQ(r, 0);
 }
 
 TEST_P(StoreTest, mergeRegionTest) {

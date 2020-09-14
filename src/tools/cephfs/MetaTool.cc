@@ -207,7 +207,7 @@ int MetaTool::process(string& mode, string& ino, string out, string in, bool con
 int MetaTool::show_fnode(string& ino, string& out)
 {
   if (ino != "0") {
-    inodeno_t i_ino = conv2hexino(ino.c_str());
+    inodeno_t i_ino = std::stoull(ino.c_str(), nullptr, 0);
     meta_op op(_debug, out);
     meta_op::sub_op* nsop = new meta_op::sub_op(&op);
     nsop->sub_op_t = meta_op::OP_SHOW_FN;
@@ -233,7 +233,7 @@ int MetaTool::amend_fnode(string& in, bool confirm)
 int MetaTool::amend_meta_info(string& ino, string& in, bool confirm)
 {
   if (ino != "0" && in != "") {
-    inodeno_t i_ino = conv2hexino(ino.c_str());
+    inodeno_t i_ino = std::stoull(ino.c_str(), nullptr, 0);
     meta_op op(_debug, "", in, confirm);
     meta_op::sub_op* nsop = new meta_op::sub_op(&op);
     nsop->sub_op_t = meta_op::OP_AMEND;
@@ -249,7 +249,7 @@ int MetaTool::amend_meta_info(string& ino, string& in, bool confirm)
 int MetaTool::list_meta_info(string& ino, string& out)
 {
   if (ino != "0") {
-    inodeno_t i_ino = conv2hexino(ino.c_str());
+    inodeno_t i_ino = std::stoull(ino.c_str(), nullptr, 0);
     meta_op op(_debug, out);
     meta_op::sub_op* nsop = new meta_op::sub_op(&op);
     nsop->sub_op_t = meta_op::OP_LIST;
@@ -265,7 +265,7 @@ int MetaTool::list_meta_info(string& ino, string& out)
 int MetaTool::show_meta_info(string& ino, string& out)
 {
   if (ino != "0") {
-    inodeno_t i_ino = conv2hexino(ino.c_str());
+    inodeno_t i_ino = std::stoull(ino.c_str(), nullptr, 0);
     meta_op op(_debug, out);
 
     meta_op::sub_op* nsop = new meta_op::sub_op(&op);
@@ -425,7 +425,7 @@ int MetaTool::_show_fn(inode_meta_t& inode_meta, const string& fn)
   f->open_object_section("fnodes");
   for (const auto &frag : frags) {
     bufferlist hbl;
-    string oid = obj_name(inode_meta.get_meta()->inode.ino, frag);
+    string oid = obj_name(inode_meta.get_meta()->inode->ino, frag);
     int ret = io_meta.omap_get_header(oid, &hbl);
     if (ret < 0) {
       std::cerr << __func__ << " : can't find oid("<< oid << ")" << std::endl;
@@ -771,15 +771,6 @@ int MetaTool::list_meta(meta_op &op)
   }
   return 0;
 }
-unsigned long long MetaTool::conv2hexino(const char* ino)
-{
-  unsigned long long iino = 0;
-  std::stringstream conv;
-  conv << ino;
-  conv >> iino;
-  printf("convert to hexadecimal ino  %s => %llx \n", ino, iino);
-  return iino;
-}
 
 int MetaTool::file_meta(meta_op &op)
 {
@@ -976,10 +967,10 @@ int MetaTool::show_child(std::string_view key,
     f->close_section();
     f->flush(ds);
 
-    if (sp_ino > 0 && op != NULL && sp_ino == inode_data.inode.ino) {
+    if (sp_ino > 0 && op != NULL && sp_ino == inode_data.inode->ino) {
       inode_meta_t* tmp = new inode_meta_t(first, type, &inode_data);
-      op->inodes[inode_data.inode.ino] = tmp;
-      op->okeys[inode_data.inode.ino] = key.data();
+      op->inodes[inode_data.inode->ino] = tmp;
+      op->okeys[inode_data.inode->ino] = key.data();
       return 1;
     } else {
       delete &inode_data;

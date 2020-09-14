@@ -3,6 +3,8 @@
 
 #include "crimson/osd/shard_services.h"
 
+#include "messages/MOSDAlive.h"
+
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
 #include "crimson/common/config_proxy.h"
@@ -28,12 +30,14 @@ namespace crimson::osd {
 
 ShardServices::ShardServices(
   OSDMapService &osdmap_service,
+  const int whoami,
   crimson::net::Messenger &cluster_msgr,
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc,
   crimson::os::FuturizedStore &store)
     : osdmap_service(osdmap_service),
+      whoami(whoami),
       cluster_msgr(cluster_msgr),
       public_msgr(public_msgr),
       monc(monc),
@@ -133,7 +137,10 @@ seastar::future<> ShardServices::dispatch_context(
   return seastar::when_all_succeed(
     dispatch_context_messages(
       BufferedRecoveryMessages{ceph_release_t::octopus, ctx}),
-    col ? dispatch_context_transaction(col, ctx) : seastar::now());
+    col ? dispatch_context_transaction(col, ctx) : seastar::now()
+  ).then_unpack([] {
+    return seastar::now();
+  });
 }
 
 void ShardServices::queue_want_pg_temp(pg_t pgid,
@@ -281,6 +288,35 @@ HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
     stamps->second = ceph::make_ref<HeartbeatStamps>(peer);
   }
   return stamps->second;
+}
+
+seastar::future<> ShardServices::send_alive(const epoch_t want)
+{
+  logger().info(
+    "{} want={} up_thru_wanted={}",
+    __func__,
+    want,
+    up_thru_wanted);
+
+  if (want > up_thru_wanted) {
+    up_thru_wanted = want;
+  } else {
+    logger().debug("{} want={} <= up_thru_wanted={}; skipping",
+                   __func__, want, up_thru_wanted);
+    return seastar::now();
+  }
+  if (!osdmap->exists(whoami)) {
+    logger().warn("{} DNE", __func__);
+    return seastar::now();
+  } if (const epoch_t up_thru = osdmap->get_up_thru(whoami);
+        up_thru_wanted > up_thru) {
+    logger().debug("{} up_thru_wanted={} up_thru={}", __func__, want, up_thru);
+    return monc.send_message(
+      make_message<MOSDAlive>(osdmap->get_epoch(), want));
+  } else {
+    logger().debug("{} {} <= {}", __func__, want, osdmap->get_up_thru(whoami));
+    return seastar::now();
+  }
 }
 
 };

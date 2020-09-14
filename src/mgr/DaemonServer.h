@@ -165,7 +165,8 @@ private:
     }
   };
 
-  void update_task_status(DaemonKey key, const ref_t<MMgrReport>& m);
+  void update_task_status(DaemonKey key,
+			  const std::map<std::string,std::string>& task_status);
 
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);

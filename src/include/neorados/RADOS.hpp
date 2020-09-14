@@ -55,6 +55,7 @@
 #include "include/common_fwd.h"
 
 #include "include/buffer.h"
+#include "include/rados/librados_fwd.hpp"
 
 #include "common/ceph_time.h"
 
@@ -73,7 +74,7 @@ struct hash<neorados::IOContext>;
 
 namespace neorados {
 namespace detail {
-class RADOS;
+class Client;
 }
 
 class RADOS;
@@ -531,6 +532,8 @@ public:
     return init.result.get();
   }
 
+  static RADOS make_with_librados(librados::Rados& rados);
+
   RADOS(const RADOS&) = delete;
   RADOS& operator =(const RADOS&) = delete;
 
@@ -548,23 +551,25 @@ public:
   template<typename CompletionToken>
   auto execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 	       ceph::buffer::list* bl,
-	       CompletionToken&& token, uint64_t* objver = nullptr) {
+	       CompletionToken&& token, uint64_t* objver = nullptr,
+	       const blkin_trace_info* trace_info = nullptr) {
     boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
     execute(o, ioc, std::move(op), bl,
 	    ReadOp::Completion::create(get_executor(),
 				       std::move(init.completion_handler)),
-	    objver);
+	    objver, trace_info);
     return init.result.get();
   }
 
   template<typename CompletionToken>
   auto execute(const Object& o, const IOContext& ioc, WriteOp&& op,
-	       CompletionToken&& token, uint64_t* objver = nullptr) {
+	       CompletionToken&& token, uint64_t* objver = nullptr,
+	       const blkin_trace_info* trace_info = nullptr) {
     boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
     execute(o, ioc, std::move(op),
 	    Op::Completion::create(get_executor(),
 				   std::move(init.completion_handler)),
-	    objver);
+	    objver, trace_info);
     return init.result.get();
   }
 
@@ -936,6 +941,26 @@ public:
 					    std::move(init.completion_handler)));
     return init.result.get();
   }
+
+  template<typename CompletionToken>
+  auto blocklist_add(std::string_view client_address,
+                     std::optional<std::chrono::seconds> expire,
+                     CompletionToken&& token) {
+    boost::asio::async_completion<CompletionToken, SimpleOpSig> init(token);
+    blocklist_add(client_address, expire,
+                  SimpleOpComp::create(get_executor(),
+                                       std::move(init.completion_handler)));
+    return init.result.get();
+  }
+
+  template<typename CompletionToken>
+  auto wait_for_latest_osd_map(CompletionToken&& token) {
+    boost::asio::async_completion<CompletionToken, SimpleOpSig> init(token);
+    wait_for_latest_osd_map(
+      SimpleOpComp::create(get_executor(), std::move(init.completion_handler)));
+    return init.result.get();
+  }
+
   uint64_t instance_id() const;
 
 private:
@@ -944,17 +969,18 @@ private:
 
   friend Builder;
 
-  RADOS(std::unique_ptr<detail::RADOS> impl);
+  RADOS(std::unique_ptr<detail::Client> impl);
   static void make_with_cct(CephContext* cct,
 			    boost::asio::io_context& ioctx,
 		    std::unique_ptr<BuildComp> c);
 
   void execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 	       ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
-	       uint64_t* objver);
+	       uint64_t* objver, const blkin_trace_info* trace_info);
 
   void execute(const Object& o, const IOContext& ioc, WriteOp&& op,
-	       std::unique_ptr<Op::Completion> c, uint64_t* objver);
+	       std::unique_ptr<Op::Completion> c, uint64_t* objver,
+	       const blkin_trace_info* trace_info);
 
   void execute(const Object& o, std::int64_t pool, ReadOp&& op,
 	       ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
@@ -1067,10 +1093,14 @@ private:
   void enable_application(std::string_view pool, std::string_view app_name,
 			  bool force, std::unique_ptr<SimpleOpComp> c);
 
+  void blocklist_add(std::string_view client_address,
+                     std::optional<std::chrono::seconds> expire,
+                     std::unique_ptr<SimpleOpComp> c);
 
-  // Since detail::RADOS has immovable things inside it, hold a
-  // unique_ptr to it so we can be moved.
-  std::unique_ptr<detail::RADOS> impl;
+  void wait_for_latest_osd_map(std::unique_ptr<SimpleOpComp> c);
+
+  // Proxy object to provide access to low-level RADOS messaging clients
+  std::unique_ptr<detail::Client> impl;
 };
 
 enum class errc {

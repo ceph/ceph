@@ -1,13 +1,9 @@
-@import 'defaults.scss';
-
-thead {
-  background-color: $color-table-header-bg;
-}
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .fa {
   font-size: large;
 
   &.fa-square-o {
-    color: $color-light-gray;
+    color: bd.$gray-400;
   }
 }

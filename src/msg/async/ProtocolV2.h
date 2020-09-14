@@ -181,7 +181,6 @@ private:
   Ct<ProtocolV2> *throttle_message();
   Ct<ProtocolV2> *throttle_bytes();
   Ct<ProtocolV2> *throttle_dispatch_queue();
-  Ct<ProtocolV2> *read_message_data_prepare();
 
   Ct<ProtocolV2> *handle_keepalive2(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_keepalive2_ack(ceph::bufferlist &payload);

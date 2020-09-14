@@ -9,7 +9,7 @@ overrides:
       flavor: notcmalloc
       debuginfo: true
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(PG_
     conf:

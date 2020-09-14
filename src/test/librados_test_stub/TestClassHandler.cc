@@ -132,13 +132,14 @@ cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
 }
 
 TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
-    TestIoCtxImpl *io_ctx_impl, const std::string &oid,
+    TestIoCtxImpl *io_ctx_impl, const std::string &oid, uint64_t snap_id,
     const SnapContext &snapc) {
   SharedMethodContext ctx(new MethodContext());
 
   // clone to ioctx to provide a firewall for gmock expectations
   ctx->io_ctx_impl = io_ctx_impl->clone();
   ctx->oid = oid;
+  ctx->snap_id = snap_id;
   ctx->snapc = snapc;
   return ctx;
 }

@@ -2,23 +2,25 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/io/CopyupRequest.h"
+#include "include/neorados/RADOS.hpp"
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
+#include "librbd/asio/Utils.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 
-#include <boost/bind.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
@@ -154,10 +156,8 @@ void CopyupRequest<I>::read_from_parent() {
   if (m_image_ctx->parent == nullptr) {
     ldout(cct, 5) << "parent detached" << dendl;
 
-    m_image_ctx->op_work_queue->queue(
-      util::create_context_callback<
-        CopyupRequest<I>, &CopyupRequest<I>::handle_read_from_parent>(this),
-      -ENOENT);
+    m_image_ctx->asio_engine->post(
+      [this]() { handle_read_from_parent(-ENOENT); });
     return;
   } else if (is_deep_copy()) {
     deep_copy();
@@ -372,6 +372,7 @@ void CopyupRequest<I>::copyup() {
   auto cct = m_image_ctx->cct;
   m_image_ctx->image_lock.lock_shared();
   auto snapc = m_image_ctx->snapc;
+  auto io_context = m_image_ctx->get_data_io_context();
   m_image_ctx->image_lock.unlock_shared();
 
   m_lock.lock();
@@ -392,8 +393,7 @@ void CopyupRequest<I>::copyup() {
     m_copyup_extent_map.clear();
   }
 
-  int r;
-  librados::ObjectWriteOperation copyup_op;
+  neorados::WriteOp copyup_op;
   if (copy_on_read || deep_copyup) {
     if (m_image_ctx->enable_sparse_copyup) {
       cls_client::sparse_copyup(&copyup_op, m_copyup_extent_map, m_copyup_data);
@@ -404,7 +404,7 @@ void CopyupRequest<I>::copyup() {
     ++m_pending_copyups;
   }
 
-  librados::ObjectWriteOperation write_op;
+  neorados::WriteOp write_op;
   if (!copy_on_read) {
     if (!deep_copyup) {
       if (m_image_ctx->enable_sparse_copyup) {
@@ -429,8 +429,7 @@ void CopyupRequest<I>::copyup() {
   m_lock.unlock();
 
   // issue librados ops at the end to simplify test cases
-  std::string oid(data_object_name(m_image_ctx, m_object_no));
-  std::vector<librados::snap_t> snaps;
+  auto object = neorados::Object{data_object_name(m_image_ctx, m_object_no)};
   if (copyup_op.size() > 0) {
     // send only the copyup request with a blank snapshot context so that
     // all snapshots are detected from the parent for this object.  If
@@ -438,13 +437,14 @@ void CopyupRequest<I>::copyup() {
     // actual modification.
     ldout(cct, 20) << "copyup with empty snapshot context" << dendl;
 
-    auto comp = util::create_rados_callback<
-      CopyupRequest<I>, &CopyupRequest<I>::handle_copyup>(this);
-    r = m_image_ctx->data_ctx.aio_operate(
-      oid, comp, &copyup_op, 0, snaps,
-      (m_trace.valid() ? m_trace.get_info() : nullptr));
-    ceph_assert(r == 0);
-    comp->release();
+    auto copyup_io_context = *io_context;
+    copyup_io_context.write_snap_context({});
+
+    m_image_ctx->rados_api.execute(
+      object, copyup_io_context, std::move(copyup_op),
+      librbd::asio::util::get_callback_adapter(
+        [this](int r) { handle_copyup(r); }), nullptr,
+        (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
   }
 
   if (write_op.size() > 0) {
@@ -455,14 +455,11 @@ void CopyupRequest<I>::copyup() {
                         "copyup + ops" : !deep_copyup ? "copyup" : "ops")
                    << " with current snapshot context" << dendl;
 
-    snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
-    auto comp = util::create_rados_callback<
-      CopyupRequest<I>, &CopyupRequest<I>::handle_copyup>(this);
-    r = m_image_ctx->data_ctx.aio_operate(
-      oid, comp, &write_op, snapc.seq, snaps,
-      (m_trace.valid() ? m_trace.get_info() : nullptr));
-    ceph_assert(r == 0);
-    comp->release();
+    m_image_ctx->rados_api.execute(
+      object, *io_context, std::move(write_op),
+      librbd::asio::util::get_callback_adapter(
+        [this](int r) { handle_copyup(r); }), nullptr,
+        (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
   }
 }
 
@@ -470,21 +467,28 @@ template <typename I>
 void CopyupRequest<I>::handle_copyup(int r) {
   auto cct = m_image_ctx->cct;
   unsigned pending_copyups;
+  int copyup_ret_val = r;
   {
     std::lock_guard locker{m_lock};
     ceph_assert(m_pending_copyups > 0);
     pending_copyups = --m_pending_copyups;
+    if (m_copyup_ret_val < 0) {
+      copyup_ret_val = m_copyup_ret_val;
+    } else if (r < 0) {
+      m_copyup_ret_val = r;
+    }
   }
 
   ldout(cct, 20) << "r=" << r << ", "
                  << "pending=" << pending_copyups << dendl;
 
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to copyup object: " << cpp_strerror(r) << dendl;
-    complete_requests(false, r);
-  }
-
   if (pending_copyups == 0) {
+    if (copyup_ret_val < 0 && copyup_ret_val != -ENOENT) {
+      lderr(cct) << "failed to copyup object: " << cpp_strerror(copyup_ret_val)
+                 << dendl;
+      complete_requests(false, copyup_ret_val);
+    }
+
     finish(0);
   }
 }
@@ -603,6 +607,7 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
       deep_copied.insert(it.second.front());
     }
   }
+  ldout(m_image_ctx->cct, 15) << "deep_copied=" << deep_copied << dendl;
 
   std::copy_if(m_image_ctx->snaps.rbegin(), m_image_ctx->snaps.rend(),
                std::back_inserter(m_snap_ids),

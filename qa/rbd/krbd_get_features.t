@@ -3,7 +3,7 @@ journaling makes the image only unwritable, rather than both unreadable
 and unwritable:
 
   $ rbd create --size 1 --image-feature layering,exclusive-lock,journaling img
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone --image-feature layering,exclusive-lock,journaling img@snap cloneimg
 

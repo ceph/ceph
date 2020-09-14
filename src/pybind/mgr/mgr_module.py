@@ -13,7 +13,9 @@ from collections import defaultdict, namedtuple
 import rados
 import re
 import time
+from mgr_util import profile_method
 
+# Full list of strings in "osd_types.cc:pg_state_string()"
 PG_STATES = [
     "active",
     "clean",
@@ -44,7 +46,12 @@ PG_STATES = [
     "snaptrim_wait",
     "snaptrim_error",
     "creating",
-    "unknown"]
+    "unknown",
+    "premerge",
+    "failed_repair",
+    "laggy",
+    "wait",
+]
 
 
 class CommandResult(object):
@@ -300,10 +307,25 @@ class CLICommand(object):
 
     def call(self, mgr, cmd_dict, inbuf):
         kwargs = {}
+        kwargs_switch = False
         for a, d in self.args_dict.items():
             if 'req' in d and d['req'] == "false" and a not in cmd_dict:
                 continue
-            kwargs[a.replace("-", "_")] = cmd_dict[a]
+
+            if isinstance(cmd_dict[a], str) and '=' in cmd_dict[a]:
+                k, arg = cmd_dict[a].split('=', 1)
+                if k in self.args_dict:
+                    kwargs_switch = True
+
+            if kwargs_switch:
+                try:
+                    k, arg = cmd_dict[a].split('=', 1)
+                except ValueError as e:
+                    mgr.log.error('found positional arg after switching to kwarg parsing')
+                    return -errno.EINVAL, '', 'Error EINVAL: postitional arg not allowed after kwarg'
+                kwargs[k.replace("-", "_")] = arg
+            else:
+                kwargs[a.replace("-", "_")] = cmd_dict[a]
         if inbuf:
             kwargs['inbuf'] = inbuf
         assert self.func
@@ -1056,7 +1078,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_server(None)
 
-    def get_metadata(self, svc_type, svc_id):
+    def get_metadata(self, svc_type, svc_id, default=None):
         """
         Fetch the daemon metadata for a particular service.
 
@@ -1069,7 +1091,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             calling this
         :rtype: dict, or None if no metadata found
         """
-        return self._ceph_get_metadata(svc_type, svc_id)
+        metadata = self._ceph_get_metadata(svc_type, svc_id)
+        if metadata is None:
+            return default
+        return metadata
 
     def get_daemon_status(self, svc_type, svc_id):
         """
@@ -1379,6 +1404,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0, 0
 
+    @profile_method()
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
                                         "rbd-mirror", "rgw", "tcmu-runner")):

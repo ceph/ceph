@@ -22,7 +22,7 @@ Clients can request capabilities and will generally get them, but when
 there is competing access or memory pressure on the MDS, they may be
 **revoked**. When a capability is revoked, the client is responsible for
 returning it as soon as it is able. Clients that fail to do so in a
-timely fashion may end up **blacklisted** and unable to communicate with
+timely fashion may end up **blocklisted** and unable to communicate with
 the cluster.
 
 Since the cache is distributed, the MDS must take great care to ensure

@@ -8,7 +8,8 @@ import os
 import cherrypy
 import cephfs
 
-from . import ApiController, ControllerDoc, RESTController, UiApiController
+from . import ApiController, ControllerDoc, RESTController, \
+    UiApiController, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -16,10 +17,16 @@ from ..services.cephfs import CephFS as CephFS_
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
+GET_QUOTAS_SCHEMA = {
+    'max_bytes': (int, ''),
+    'max_files': (int, '')
+}
+
 
 @ApiController('/cephfs', Scope.CEPHFS)
+@ControllerDoc("Cephfs Management API", "Cephfs")
 class CephFS(RESTController):
-    def __init__(self):
+    def __init__(self):  # pragma: no cover
         super(CephFS, self).__init__()
 
         # Stateful instances of CephFSClients, hold cached results.  Key to
@@ -179,7 +186,7 @@ class CephFS(RESTController):
                                                     info['name'],
                                                     "mds_server.handle_client_request")
                 else:
-                    activity = 0.0
+                    activity = 0.0  # pragma: no cover
 
                 self._append_mds_metadata(mds_versions, info['name'])
                 rank_table.append(
@@ -285,15 +292,15 @@ class CephFS(RESTController):
         # indepdendent of whether it's a kernel or userspace
         # client, so that the javascript doesn't have to grok that.
         for client in clients:
-            if "ceph_version" in client['client_metadata']:
+            if "ceph_version" in client['client_metadata']:  # pragma: no cover - no complexity
                 client['type'] = "userspace"
                 client['version'] = client['client_metadata']['ceph_version']
                 client['hostname'] = client['client_metadata']['hostname']
-            elif "kernel_version" in client['client_metadata']:
+            elif "kernel_version" in client['client_metadata']:  # pragma: no cover - no complexity
                 client['type'] = "kernel"
                 client['version'] = client['client_metadata']['kernel_version']
                 client['hostname'] = client['client_metadata']['hostname']
-            else:
+            else:  # pragma: no cover - no complexity there
                 client['type'] = "unknown"
                 client['version'] = ""
                 client['hostname'] = ""
@@ -334,7 +341,7 @@ class CephFS(RESTController):
         """
         try:
             return self._get_root_directory(self._cephfs_instance(fs_id))
-        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             return None
 
     def _get_root_directory(self, cfs):
@@ -365,7 +372,7 @@ class CephFS(RESTController):
         try:
             cfs = self._cephfs_instance(fs_id)
             paths = cfs.ls_dir(path, depth)
-        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths
 
@@ -431,6 +438,12 @@ class CephFS(RESTController):
         cfs.rm_snapshot(path, name)
 
     @RESTController.Resource('GET')
+    @EndpointDoc("Get Cephfs Quotas of the specified path",
+                 parameters={
+                     'fs_id': (str, 'File System Identifier'),
+                     'path': (str, 'File System Path'),
+                 },
+                 responses={200: GET_QUOTAS_SCHEMA})
     def get_quotas(self, fs_id, path):
         """
         Get the quotas of the specified path.
@@ -516,6 +529,6 @@ class CephFsUi(CephFS):
             paths = cfs.ls_dir(path, depth)
             if path == os.sep:
                 paths = [self._get_root_directory(cfs)] + paths
-        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths

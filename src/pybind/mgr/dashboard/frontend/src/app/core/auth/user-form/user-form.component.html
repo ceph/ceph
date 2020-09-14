@@ -22,6 +22,7 @@
                    id="username"
                    name="username"
                    formControlName="username"
+                   autocomplete="off"
                    autofocus>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('username', formDir, 'required')"
@@ -33,12 +34,13 @@
         </div>
 
         <!-- Password -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="!authStorageService.isSSO()">
           <label class="cd-col-form-label"
                  for="password">
             <ng-container i18n>Password</ng-container>
             <cd-helper *ngIf="passwordPolicyHelpText.length > 0"
-                       class="text-pre"
+                       class="text-pre-wrap"
                        html="{{ passwordPolicyHelpText }}">
             </cd-helper>
           </label>
@@ -75,7 +77,8 @@
         </div>
 
         <!-- Confirm password -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="!authStorageService.isSSO()">
           <label i18n
                  class="cd-col-form-label"
                  for="confirmpassword">Confirm password</label>
@@ -86,6 +89,7 @@
                      placeholder="Confirm password..."
                      id="confirmpassword"
                      name="confirmpassword"
+                     autocomplete="new-password"
                      formControlName="confirmpassword">
               <span class="input-group-append">
                 <button type="button"
@@ -93,13 +97,13 @@
                         cdPasswordButton="confirmpassword">
                 </button>
               </span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
+                    i18n>Password confirmation doesn't match the password.</span>
             </div>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
                   i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
-                  i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
 
@@ -110,7 +114,7 @@
                  [ngClass]="{'required': pwdExpirationSettings.pwdExpirationSpan > 0}"
                  for="pwdExpirationDate">
             <ng-container i18n>Password expiration date</ng-container>
-            <cd-helper class="text-pre"
+            <cd-helper class="text-pre-wrap"
                        *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
               <p>
                 The Dashboard setting defining the expiration interval of

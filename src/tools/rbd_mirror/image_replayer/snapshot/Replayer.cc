@@ -273,14 +273,13 @@ bool Replayer<I>::get_replay_status(std::string* description,
 
   auto pending_bytes = bytes_per_snapshot * m_pending_snapshots;
   if (bytes_per_second > 0 && m_pending_snapshots > 0) {
-    auto seconds_until_synced = round_to_two_places(
+    std::uint64_t seconds_until_synced = round_to_two_places(
       pending_bytes / bytes_per_second);
     if (seconds_until_synced >= std::numeric_limits<uint64_t>::max()) {
       seconds_until_synced = std::numeric_limits<uint64_t>::max();
     }
 
-    root_obj["seconds_until_synced"] = static_cast<uint64_t>(
-      seconds_until_synced);
+    root_obj["seconds_until_synced"] = seconds_until_synced;
   }
 
   *description = json_spirit::write(

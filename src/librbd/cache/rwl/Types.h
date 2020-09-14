@@ -275,14 +275,18 @@ public:
   uint64_t first_image_byte;
   uint64_t last_image_byte;
   explicit ExtentsSummary(const ExtentsType &extents);
-  template <typename U>
   friend std::ostream &operator<<(std::ostream &os,
-                                  const ExtentsSummary<U> &s);
+                                  const ExtentsSummary &s) {
+    os << "total_bytes=" << s.total_bytes << ", "
+       << "first_image_byte=" << s.first_image_byte << ", "
+       << "last_image_byte=" << s.last_image_byte << "";
+    return os;
+  }
   BlockExtent block_extent() {
     return BlockExtent(first_image_byte, last_image_byte);
   }
   io::Extent image_extent() {
-    return image_extent(block_extent());
+    return librbd::cache::rwl::image_extent(block_extent());
   }
 };
 

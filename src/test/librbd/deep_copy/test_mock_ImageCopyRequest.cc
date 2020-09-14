@@ -3,6 +3,7 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -10,8 +11,6 @@
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
-#include "librbd/image/CloseRequest.h"
-#include "librbd/image/OpenRequest.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -82,49 +81,6 @@ ObjectCopyRequest<librbd::MockTestImageCtx>* ObjectCopyRequest<librbd::MockTestI
 
 } // namespace deep_copy
 
-namespace image {
-
-template <>
-struct CloseRequest<MockTestImageCtx> {
-  Context* on_finish = nullptr;
-  static CloseRequest* s_instance;
-  static CloseRequest* create(MockTestImageCtx *image_ctx, Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  MOCK_METHOD0(send, void());
-
-  CloseRequest() {
-    s_instance = this;
-  }
-};
-
-CloseRequest<MockTestImageCtx>* CloseRequest<MockTestImageCtx>::s_instance = nullptr;
-
-template <>
-struct OpenRequest<MockTestImageCtx> {
-  Context* on_finish = nullptr;
-  static OpenRequest* s_instance;
-  static OpenRequest* create(MockTestImageCtx *image_ctx,
-                             bool skip_open_parent, Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  MOCK_METHOD0(send, void());
-
-  OpenRequest() {
-    s_instance = this;
-  }
-};
-
-OpenRequest<MockTestImageCtx>* OpenRequest<MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace image
-
 namespace object_map {
 
 template <>
@@ -174,7 +130,10 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
+
+  std::shared_ptr<librbd::AsioEngine> m_asio_engine;
   asio::ContextWQ *m_work_queue;
+
   librbd::SnapSeqs m_snap_seqs;
   SnapMap m_snap_map;
 
@@ -188,7 +147,9 @@ public:
     ASSERT_EQ(0, create_image_pp(rbd, m_ioctx, dst_image_name, m_image_size));
     ASSERT_EQ(0, open_image(dst_image_name, &m_dst_image_ctx));
 
-    librbd::ImageCtx::get_work_queue(m_src_image_ctx->cct, &m_work_queue);
+    m_asio_engine = std::make_shared<librbd::AsioEngine>(
+      m_src_image_ctx->md_ctx);
+    m_work_queue = m_asio_engine->get_work_queue();
   }
 
   void expect_get_image_size(librbd::MockTestImageCtx &mock_image_ctx,

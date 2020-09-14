@@ -383,7 +383,7 @@ GET(array, *u_.array_)
 GET(object, *u_.object_)
 #ifdef PICOJSON_USE_INT64
 GET(double,
-    (type_ == int64_type && (const_cast<value *>(this)->type_ = number_type, const_cast<value *>(this)->u_.number_ = u_.int64_),
+    (type_ == int64_type && (const_cast<value *>(this)->type_ = number_type, (const_cast<value *>(this)->u_.number_ = u_.int64_)),
      u_.number_))
 GET(int64_t, u_.int64_)
 #else
@@ -903,6 +903,8 @@ template <typename Context, typename Iter> inline bool _parse(Context &ctx, inpu
         return false;
       }
 #ifdef PICOJSON_USE_INT64
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtautological-type-limit-compare"
       {
         errno = 0;
         intmax_t ival = strtoimax(num_str.c_str(), &endp, 10);
@@ -912,6 +914,7 @@ template <typename Context, typename Iter> inline bool _parse(Context &ctx, inpu
           return true;
         }
       }
+#pragma clang diagnostic pop
 #endif
       f = strtod(num_str.c_str(), &endp);
       if (endp == num_str.c_str() + num_str.size()) {

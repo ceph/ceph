@@ -487,12 +487,7 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_local(new librados::Rados()),
   m_cache_manager_handler(new CacheManagerHandler(cct)),
   m_pool_meta_cache(new PoolMetaCache(cct)),
-  m_asok_hook(new MirrorAdminSocketHook(cct, this))
-{
-  m_threads =
-    &(cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx>>(
-	"rbd_mirror::threads", false, cct));
-  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
+  m_asok_hook(new MirrorAdminSocketHook(cct, this)) {
 }
 
 Mirror::~Mirror()
@@ -538,6 +533,10 @@ int Mirror::init()
     derr << "error connecting to local cluster" << dendl;
     return r;
   }
+
+  m_threads = &(m_cct->lookup_or_create_singleton_object<
+    Threads<librbd::ImageCtx>>("rbd_mirror::threads", false, m_local));
+  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
 
   r = m_service_daemon->init();
   if (r < 0) {
@@ -714,8 +713,8 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);
-        } else if (pool_replayer->is_blacklisted()) {
-          derr << "restarting blacklisted pool replayer for " << peer << dendl;
+        } else if (pool_replayer->is_blocklisted()) {
+          derr << "restarting blocklisted pool replayer for " << peer << dendl;
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);

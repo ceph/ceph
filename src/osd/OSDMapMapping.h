@@ -115,7 +115,10 @@ protected:
     ParallelPGMapper *m;
 
     WQ(ParallelPGMapper *m_, ThreadPool *tp)
-      : ThreadPool::WorkQueue<Item>("ParallelPGMapper::WQ", 0, 0, tp),
+      : ThreadPool::WorkQueue<Item>("ParallelPGMapper::WQ",
+				    ceph::timespan::zero(),
+				    ceph::timespan::zero(),
+				    tp),
         m(m_) {}
 
     bool _enqueue(Item *i) override {

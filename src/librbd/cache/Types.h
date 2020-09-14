@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_CACHE_TYPES_H
 
 #include <list>
+#include <string>
 
 class Context;
 
@@ -16,6 +17,8 @@ enum ImageCacheType {
 };
 
 typedef std::list<Context *> Contexts;
+
+const std::string IMAGE_CACHE_STATE = ".librbd/image_cache_state";
 
 } // namespace cache
 } // namespace librbd

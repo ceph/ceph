@@ -39,7 +39,7 @@ struct chunk_refs_t {
     virtual uint8_t get_type() const = 0;
     virtual bool empty() const = 0;
     virtual uint64_t count() const = 0;
-    virtual bool get(const hobject_t& o) = 0;
+    virtual void get(const hobject_t& o) = 0;
     virtual bool put(const hobject_t& o) = 0;
     virtual void dump(Formatter *f) const = 0;
     virtual std::string describe_encoding() const {
@@ -72,8 +72,8 @@ struct chunk_refs_t {
     return r->count();
   }
 
-  bool get(const hobject_t& o) {
-    return r->get(o);
+  void get(const hobject_t& o) {
+    r->get(o);
   }
   bool put(const hobject_t& o) {
     bool ret = r->put(o);
@@ -104,7 +104,7 @@ WRITE_CLASS_ENCODER(chunk_refs_t)
 // these are internal and should generally not be used directly
 
 struct chunk_refs_by_object_t : public chunk_refs_t::refs_t {
-  std::set<hobject_t> by_object;
+  std::multiset<hobject_t> by_object;
 
   uint8_t get_type() const {
     return chunk_refs_t::TYPE_BY_OBJECT;
@@ -115,12 +115,8 @@ struct chunk_refs_by_object_t : public chunk_refs_t::refs_t {
   uint64_t count() const override {
     return by_object.size();
   }
-  bool get(const hobject_t& o) override {
-    if (by_object.count(o)) {
-      return false;
-    }
+  void get(const hobject_t& o) override {
     by_object.insert(o);
-    return true;
   }
   bool put(const hobject_t& o) override {
     auto p = by_object.find(o);
@@ -199,10 +195,9 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
   uint64_t count() const override {
     return total;
   }
-  bool get(const hobject_t& o) override {
+  void get(const hobject_t& o) override {
     by_hash[make_pair(o.pool, o.get_hash() & mask())]++;
     ++total;
-    return true;
   }
   bool put(const hobject_t& o) override {
     auto p = by_hash.find(make_pair(o.pool, o.get_hash() & mask()));
@@ -289,10 +284,9 @@ struct chunk_refs_by_pool_t : public chunk_refs_t::refs_t {
   uint64_t count() const override {
     return total;
   }
-  bool get(const hobject_t& o) override {
+  void get(const hobject_t& o) override {
     ++by_pool[o.pool];
     ++total;
-    return true;
   }
   bool put(const hobject_t& o) override {
     auto p = by_pool.find(o.pool);
@@ -367,9 +361,8 @@ struct chunk_refs_count_t : public chunk_refs_t::refs_t {
   uint64_t count() const override {
     return total;
   }
-  bool get(const hobject_t& o) override {
+  void get(const hobject_t& o) override {
     ++total;
-    return true;
   }
   bool put(const hobject_t& o) override {
     if (!total) {

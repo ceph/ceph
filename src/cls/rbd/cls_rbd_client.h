@@ -12,6 +12,7 @@
 
 class Context;
 namespace ceph { template <uint8_t> class BitVector; }
+namespace neorados { struct WriteOp; }
 
 namespace librbd {
 namespace cls_client {
@@ -626,17 +627,24 @@ int namespace_list(librados::IoCtx *ioctx,
                    std::list<std::string> *entries);
 
 // operations on data objects
-int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
-                     uint64_t snapc_seq,
-                     cls::rbd::AssertSnapcSeqState state);
+void assert_snapc_seq(neorados::WriteOp* op,
+                      uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state);
 void assert_snapc_seq(librados::ObjectWriteOperation *op,
                       uint64_t snapc_seq,
                       cls::rbd::AssertSnapcSeqState state);
+int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
+                     uint64_t snapc_seq,
+                     cls::rbd::AssertSnapcSeqState state);
 
+void copyup(neorados::WriteOp* op, ceph::buffer::list data);
 void copyup(librados::ObjectWriteOperation *op, ceph::buffer::list data);
 int copyup(librados::IoCtx *ioctx, const std::string &oid,
            ceph::buffer::list data);
 
+void sparse_copyup(neorados::WriteOp* op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   ceph::buffer::list data);
 void sparse_copyup(librados::ObjectWriteOperation *op,
                    const std::map<uint64_t, uint64_t> &extent_map,
                    ceph::buffer::list data);

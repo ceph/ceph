@@ -331,6 +331,7 @@ else
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                 fi
+                $SUDO dnf copr enable -y tchaikov/gcc-toolset-9 centos-stream-x86_64
                 ;;
         esac
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
@@ -347,18 +348,6 @@ else
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
-        ;;
-    alpine)
-        # for now we need the testing repo for leveldb
-        TESTREPO="http://nl.alpinelinux.org/alpine/edge/testing"
-        if ! grep -qF "$TESTREPO" /etc/apk/repositories ; then
-            $SUDO echo "$TESTREPO" | sudo tee -a /etc/apk/repositories > /dev/null
-        fi
-        source alpine/APKBUILD.in
-        $SUDO apk --update add abuild build-base ccache $makedepends
-        if id -u build >/dev/null 2>&1 ; then
-           $SUDO addgroup build abuild
-        fi
         ;;
     *)
         echo "$ID is unknown, dependencies will have to be installed manually."

@@ -27,11 +27,7 @@ namespace kernel {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-namespace {
-
-std::map<std::string, std::string> map_options; // used for both map and unmap
-
-} // anonymous namespace
+typedef std::map<std::string, std::string> MapOptions;
 
 static std::string map_option_uuid_cb(const char *value_char)
 {
@@ -64,13 +60,38 @@ static std::string map_option_int_cb(const char *value_char)
   return stringify(d);
 }
 
-static void put_map_option(const std::string &key, const std::string &val)
+static std::string map_option_string_cb(const char *value_char)
 {
-  map_options[key] = val;
+  return value_char;
+}
+
+static std::string map_option_read_from_replica_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "no") || !strcmp(value_char, "balance") ||
+      !strcmp(value_char, "localize")) {
+    return value_char;
+  }
+  return "";
+}
+
+static std::string map_option_compression_hint_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "none") || !strcmp(value_char, "compressible") ||
+      !strcmp(value_char, "incompressible")) {
+    return value_char;
+  }
+  return "";
+}
+
+static void put_map_option(const std::string &key, const std::string &val,
+                           MapOptions* map_options)
+{
+  (*map_options)[key] = val;
 }
 
 static int put_map_option_value(const std::string &opt, const char *value_char,
-                                std::string (*parse_cb)(const char *))
+                                std::string (*parse_cb)(const char *),
+                                MapOptions* map_options)
 {
   if (!value_char || *value_char == '\0') {
     std::cerr << "rbd: " << opt << " option requires a value" << std::endl;
@@ -84,11 +105,12 @@ static int put_map_option_value(const std::string &opt, const char *value_char,
     return -EINVAL;
   }
 
-  put_map_option(opt, opt + "=" + value);
+  put_map_option(opt, opt + "=" + value, map_options);
   return 0;
 }
 
-static int parse_map_options(const std::string &options_string)
+static int parse_map_options(const std::string &options_string,
+                             MapOptions* map_options)
 {
   char *options = strdup(options_string.c_str());
   BOOST_SCOPE_EXIT(options) {
@@ -104,54 +126,75 @@ static int parse_map_options(const std::string &options_string)
       *value_char++ = '\0';
 
     if (!strcmp(this_char, "fsid")) {
-      if (put_map_option_value("fsid", value_char, map_option_uuid_cb))
+      if (put_map_option_value("fsid", value_char, map_option_uuid_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "ip")) {
-      if (put_map_option_value("ip", value_char, map_option_ip_cb))
+      if (put_map_option_value("ip", value_char, map_option_ip_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "share") || !strcmp(this_char, "noshare")) {
-      put_map_option("share", this_char);
+      put_map_option("share", this_char, map_options);
     } else if (!strcmp(this_char, "crc") || !strcmp(this_char, "nocrc")) {
-      put_map_option("crc", this_char);
+      put_map_option("crc", this_char, map_options);
     } else if (!strcmp(this_char, "cephx_require_signatures") ||
                !strcmp(this_char, "nocephx_require_signatures")) {
-      put_map_option("cephx_require_signatures", this_char);
+      put_map_option("cephx_require_signatures", this_char, map_options);
     } else if (!strcmp(this_char, "tcp_nodelay") ||
                !strcmp(this_char, "notcp_nodelay")) {
-      put_map_option("tcp_nodelay", this_char);
+      put_map_option("tcp_nodelay", this_char, map_options);
     } else if (!strcmp(this_char, "cephx_sign_messages") ||
                !strcmp(this_char, "nocephx_sign_messages")) {
-      put_map_option("cephx_sign_messages", this_char);
+      put_map_option("cephx_sign_messages", this_char, map_options);
     } else if (!strcmp(this_char, "mount_timeout")) {
-      if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
+      if (put_map_option_value("mount_timeout", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "osd_request_timeout")) {
-      if (put_map_option_value("osd_request_timeout", value_char, map_option_int_cb))
+      if (put_map_option_value("osd_request_timeout", value_char,
+                               map_option_int_cb, map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "lock_timeout")) {
-      if (put_map_option_value("lock_timeout", value_char, map_option_int_cb))
+      if (put_map_option_value("lock_timeout", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "osdkeepalive")) {
-      if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb))
+      if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "osd_idle_ttl")) {
-      if (put_map_option_value("osd_idle_ttl", value_char, map_option_int_cb))
+      if (put_map_option_value("osd_idle_ttl", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "rw") || !strcmp(this_char, "ro")) {
-      put_map_option("rw", this_char);
+      put_map_option("rw", this_char, map_options);
     } else if (!strcmp(this_char, "queue_depth")) {
-      if (put_map_option_value("queue_depth", value_char, map_option_int_cb))
+      if (put_map_option_value("queue_depth", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "lock_on_read")) {
-      put_map_option("lock_on_read", this_char);
+      put_map_option("lock_on_read", this_char, map_options);
     } else if (!strcmp(this_char, "exclusive")) {
-      put_map_option("exclusive", this_char);
+      put_map_option("exclusive", this_char, map_options);
     } else if (!strcmp(this_char, "notrim")) {
-      put_map_option("notrim", this_char);
+      put_map_option("notrim", this_char, map_options);
     } else if (!strcmp(this_char, "abort_on_full")) {
-      put_map_option("abort_on_full", this_char);
+      put_map_option("abort_on_full", this_char, map_options);
     } else if (!strcmp(this_char, "alloc_size")) {
-      if (put_map_option_value("alloc_size", value_char, map_option_int_cb))
+      if (put_map_option_value("alloc_size", value_char, map_option_int_cb,
+                               map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "crush_location")) {
+      if (put_map_option_value("crush_location", value_char,
+                               map_option_string_cb, map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "read_from_replica")) {
+      if (put_map_option_value("read_from_replica", value_char,
+                               map_option_read_from_replica_cb, map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "compression_hint")) {
+      if (put_map_option_value("compression_hint", value_char,
+                               map_option_compression_hint_cb, map_options))
         return -EINVAL;
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
@@ -162,7 +205,8 @@ static int parse_map_options(const std::string &options_string)
   return 0;
 }
 
-static int parse_unmap_options(const std::string &options_string)
+static int parse_unmap_options(const std::string &options_string,
+                               MapOptions* unmap_options)
 {
   char *options = strdup(options_string.c_str());
   BOOST_SCOPE_EXIT(options) {
@@ -178,9 +222,10 @@ static int parse_unmap_options(const std::string &options_string)
       *value_char++ = '\0';
 
     if (!strcmp(this_char, "force")) {
-      put_map_option("force", this_char);
+      put_map_option("force", this_char, unmap_options);
     } else {
-      std::cerr << "rbd: unknown unmap option '" << this_char << "'" << std::endl;
+      std::cerr << "rbd: unknown unmap option '" << this_char << "'"
+                << std::endl;
       return -EINVAL;
     }
   }
@@ -312,7 +357,8 @@ static void print_error_description(const char *poolname,
 }
 
 static int do_kernel_map(const char *poolname, const char *nspace_name,
-                         const char *imgname, const char *snapname)
+                         const char *imgname, const char *snapname,
+                         MapOptions&& map_options)
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
@@ -370,7 +416,7 @@ out:
 
 static int do_kernel_unmap(const char *dev, const char *poolname,
                            const char *nspace_name, const char *imgname,
-                           const char *snapname)
+                           const char *snapname, MapOptions&& unmap_options)
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
@@ -381,8 +427,8 @@ static int do_kernel_unmap(const char *dev, const char *poolname,
   if (r < 0)
     return r;
 
-  for (auto it = map_options.cbegin(); it != map_options.cend(); ++it) {
-    if (it != map_options.cbegin())
+  for (auto it = unmap_options.cbegin(); it != unmap_options.cend(); ++it) {
+    if (it != unmap_options.cbegin())
       oss << ",";
     oss << it->second;
   }
@@ -434,31 +480,24 @@ int execute_map(const po::variables_map &vm,
     return r;
   }
 
+  MapOptions map_options;
   if (vm["quiesce"].as<bool>()) {
     std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
   }
   if (vm["read-only"].as<bool>()) {
-    put_map_option("rw", "ro");
+    put_map_option("rw", "ro", &map_options);
   }
   if (vm["exclusive"].as<bool>()) {
-    put_map_option("exclusive", "exclusive");
+    put_map_option("exclusive", "exclusive", &map_options);
   }
 
   if (vm.count("quiesce-hook")) {
     std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
   }
 
-  // parse default options first so they can be overwritten by cli options
-  r = parse_map_options(
-      g_conf().get_val<std::string>("rbd_default_map_options"));
-  if (r < 0) {
-    std::cerr << "rbd: couldn't parse default map options" << std::endl;
-    return r;
-  }
-
   if (vm.count("options")) {
     for (auto &options : vm["options"].as<std::vector<std::string>>()) {
-      r = parse_map_options(options);
+      r = parse_map_options(options, &map_options);
       if (r < 0) {
         std::cerr << "rbd: couldn't parse map options" << std::endl;
         return r;
@@ -466,10 +505,32 @@ int execute_map(const po::variables_map &vm,
     }
   }
 
-  utils::init_context();
+  // connect to the cluster to get the default pool and the default map
+  // options
+  librados::Rados rados;
+  r = utils::init_rados(&rados);
+  if (r < 0) {
+    return r;
+  }
+
+  utils::normalize_pool_name(&pool_name);
+
+  MapOptions default_map_options;
+  r = parse_map_options(
+      g_conf().get_val<std::string>("rbd_default_map_options"),
+      &default_map_options);
+  if (r < 0) {
+    std::cerr << "rbd: couldn't parse default map options" << std::endl;
+    return r;
+  }
+  for (auto& [key, value] : default_map_options) {
+    if (map_options.count(key) == 0) {
+      map_options[key] = value;
+    }
+  }
 
   r = do_kernel_map(pool_name.c_str(), nspace_name.c_str(), image_name.c_str(),
-                    snap_name.c_str());
+                    snap_name.c_str(), std::move(map_options));
   if (r < 0) {
     std::cerr << "rbd: map failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -507,9 +568,10 @@ int execute_unmap(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  MapOptions unmap_options;
   if (vm.count("options")) {
     for (auto &options : vm["options"].as<std::vector<std::string>>()) {
-      r = parse_unmap_options(options);
+      r = parse_unmap_options(options, &unmap_options);
       if (r < 0) {
         std::cerr << "rbd: couldn't parse unmap options" << std::endl;
         return r;
@@ -517,11 +579,21 @@ int execute_unmap(const po::variables_map &vm,
     }
   }
 
-  utils::init_context();
+  if (device_name.empty() && pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = utils::init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    utils::normalize_pool_name(&pool_name);
+  }
 
   r = do_kernel_unmap(device_name.empty() ? nullptr : device_name.c_str(),
                       pool_name.c_str(), nspace_name.c_str(),
-                      image_name.c_str(), snap_name.c_str());
+                      image_name.c_str(), snap_name.c_str(),
+                      std::move(unmap_options));
   if (r < 0) {
     std::cerr << "rbd: unmap failed: " << cpp_strerror(r) << std::endl;
     return r;

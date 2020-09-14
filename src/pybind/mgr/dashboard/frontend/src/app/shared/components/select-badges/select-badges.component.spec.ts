@@ -2,9 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SelectMessages } from '../select/select-messages.model';
 import { SelectComponent } from '../select/select.component';
 import { SelectBadgesComponent } from './select-badges.component';
@@ -15,8 +14,7 @@ describe('SelectBadgesComponent', () => {
 
   configureTestBed({
     declarations: [SelectBadgesComponent, SelectComponent],
-    imports: [NgbPopoverModule, NgbTooltipModule, ReactiveFormsModule],
-    providers: i18nProviders
+    imports: [NgbPopoverModule, NgbTooltipModule, ReactiveFormsModule]
   });
 
   beforeEach(() => {
@@ -35,8 +33,7 @@ describe('SelectBadgesComponent', () => {
       { name: 'option1', description: '', selected: false, enabled: true },
       { name: 'option2', description: '', selected: false, enabled: true }
     ];
-    const i18n = TestBed.inject(I18n);
-    const messages = new SelectMessages({ empty: 'foo bar' }, i18n);
+    const messages = new SelectMessages({ empty: 'foo bar' });
     const selectionLimit = 2;
     const customBadges = true;
     const customBadgeValidators = [Validators.required];

@@ -70,9 +70,8 @@ class FooArgs(RESTController):
         raise cherrypy.NotFound()
 
 
-# pylint: disable=blacklisted-name
 class Root(object):
-    foo = FooResource()
+    foo_resource = FooResource()
     fooargs = FooArgs()
 
 

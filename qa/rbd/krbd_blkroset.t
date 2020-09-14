@@ -4,7 +4,7 @@ Setup
 
   $ RO_KEY=$(ceph auth get-or-create-key client.ro mon 'profile rbd' mgr 'profile rbd' osd 'profile rbd-read-only')
   $ rbd create --size 10 img
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
   $ rbd create --size 1 imgpart
@@ -15,7 +15,7 @@ Setup
   > /dev/rbd0p2 : start=       1024, size=    512, Id=83
   > EOF
   $ sudo rbd unmap $DEV
-  $ rbd snap create imgpart@snap
+  $ rbd snap create --no-progress imgpart@snap
 
 
 Image HEAD

@@ -7,7 +7,7 @@ import time
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
 from mgr_util import get_most_recent_rate
 
-from . import ApiController, RESTController, Endpoint, Task
+from . import ApiController, RESTController, Endpoint, Task, EndpointDoc, ControllerDoc
 from . import CreatePermission, ReadPermission, UpdatePermission, DeletePermission
 from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
@@ -15,15 +15,27 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_send_command_error, handle_orchestrator_error
-from ..services.orchestrator import OrchClient
+from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import str_to_bool
 try:
     from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
-except ImportError:
+except ImportError:  # pragma: no cover
     pass  # For typing only
 
 
 logger = logging.getLogger('controllers.osd')
+
+SAFE_TO_DESTROY_SCHEMA = {
+    "safe_to_destroy": ([str], "Is OSD safe to destroy?"),
+    "active": ([int], ""),
+    "missing_stats": ([str], ""),
+    "stored_pgs": ([str], "Stored Pool groups in Osd"),
+    "is_safe_to_destroy": (bool, "Is OSD safe to destroy?")
+}
+
+EXPORT_FLAGS_SCHEMA = {
+    "list_of_flags": ([str], "")
+}
 
 
 def osd_task(name, metadata, wait_for=2.0):
@@ -31,6 +43,7 @@ def osd_task(name, metadata, wait_for=2.0):
 
 
 @ApiController('/osd', Scope.OSD)
+@ControllerDoc("Get OSD Details", "OSD")
 class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
@@ -58,7 +71,7 @@ class Osd(RESTController):
             osd['stats_history'] = {}
             osd_spec = str(osd_id)
             if 'osd' not in osd:
-                continue
+                continue  # pragma: no cover - simple early continue
             for stat in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = stat.split('.')[1]
                 rates = CephService.get_rates('osd', osd_spec, stat)
@@ -105,10 +118,10 @@ class Osd(RESTController):
         try:
             histogram = CephService.send_command(
                 'osd', srv_spec=svc_id, prefix='perf histogram dump')
-        except SendCommandError as e:
-            if 'osd down' in str(e):
+        except SendCommandError as e:  # pragma: no cover - the handling is too obvious
+            if 'osd down' in str(e):  # pragma: no cover - no complexity there
                 histogram = str(e)
-            else:
+            else:  # pragma: no cover - no complexity there
                 raise
 
         return {
@@ -117,7 +130,7 @@ class Osd(RESTController):
             'histogram': histogram,
         }
 
-    def set(self, svc_id, device_class):
+    def set(self, svc_id, device_class):  # pragma: no cover
         old_device_class = CephService.send_command('mon', 'osd crush get-device-class',
                                                     ids=[svc_id])
         old_device_class = old_device_class[0]['device_class']
@@ -154,10 +167,10 @@ class Osd(RESTController):
         }
 
     @DeletePermission
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.OSD_DELETE, OrchFeature.OSD_GET_REMOVE_STATUS])
     @handle_orchestrator_error('osd')
     @osd_task('delete', {'svc_id': '{svc_id}'})
-    def delete(self, svc_id, preserve_id=None, force=None):
+    def delete(self, svc_id, preserve_id=None, force=None):  # pragma: no cover
         replace = False
         check = False
         try:
@@ -168,7 +181,6 @@ class Osd(RESTController):
         except ValueError:
             raise DashboardException(
                 component='osd', http_status_code=400, msg='Invalid parameter(s)')
-
         orch = OrchClient.instance()
         if check:
             logger.info('Check for removing osd.%s...', svc_id)
@@ -259,7 +271,7 @@ class Osd(RESTController):
             'uuid': uuid,
         }
 
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.OSD_CREATE])
     @handle_orchestrator_error('osd')
     def _create_with_drive_groups(self, drive_groups):
         """Create OSDs with DriveGroups."""
@@ -302,6 +314,11 @@ class Osd(RESTController):
 
     @Endpoint('GET', query_params=['ids'])
     @ReadPermission
+    @EndpointDoc("Check If OSD is Safe to Destroy",
+                 parameters={
+                     'ids': (str, 'OSD Service Identifier'),
+                 },
+                 responses={200: SAFE_TO_DESTROY_SCHEMA})
     def safe_to_destroy(self, ids):
         """
         :type ids: int|[int]
@@ -327,7 +344,7 @@ class Osd(RESTController):
 
     @Endpoint('GET', query_params=['svc_ids'])
     @ReadPermission
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator()
     @handle_orchestrator_error('osd')
     def safe_to_delete(self, svc_ids):
         """
@@ -346,6 +363,7 @@ class Osd(RESTController):
 
 
 @ApiController('/osd/flags', Scope.OSD)
+@ControllerDoc("OSD Flags controller Management API", "OsdFlagsController")
 class OsdFlagsController(RESTController):
     @staticmethod
     def _osd_flags():
@@ -359,6 +377,8 @@ class OsdFlagsController(RESTController):
                 set(enabled_flags) - {'pauserd', 'pausewr'} | {'pause'})
         return sorted(enabled_flags)
 
+    @EndpointDoc("Display OSD Flags",
+                 responses={200: EXPORT_FLAGS_SCHEMA})
     def list(self):
         return self._osd_flags()
 

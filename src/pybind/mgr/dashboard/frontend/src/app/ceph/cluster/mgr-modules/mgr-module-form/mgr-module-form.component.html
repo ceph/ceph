@@ -12,7 +12,7 @@
              *ngFor="let moduleOption of moduleOptions | keyvalue">
 
           <!-- Field label -->
-          <label class="col-form-label col-sm-5"
+          <label class="cd-col-form-label"
                  for="{{ moduleOption.value.name }}">
             {{ moduleOption.value.name }}
             <cd-helper *ngIf="moduleOption.value.long_desc || moduleOption.value.desc">
@@ -22,7 +22,7 @@
 
           <!-- Field control -->
           <!-- bool -->
-          <div class="col-sm-7"
+          <div class="cd-col-form-input"
                *ngIf="moduleOption.value.type === 'bool'">
             <div class="custom-control custom-checkbox">
               <input id="{{ moduleOption.value.name }}"
@@ -35,7 +35,7 @@
           </div>
 
           <!-- addr|str|uuid -->
-          <div class="col-sm-7"
+          <div class="cd-col-form-input"
                *ngIf="['addr', 'str', 'uuid'].includes(moduleOption.value.type)">
             <input id="{{ moduleOption.value.name }}"
                    class="form-control"
@@ -60,7 +60,7 @@
           </div>
 
           <!-- uint|int|size|secs -->
-          <div class="col-sm-7"
+          <div class="cd-col-form-input"
                *ngIf="['uint', 'int', 'size', 'secs'].includes(moduleOption.value.type)">
             <input id="{{ moduleOption.value.name }}"
                    class="form-control"
@@ -83,7 +83,7 @@
           </div>
 
           <!-- float -->
-          <div class="col-sm-7"
+          <div class="cd-col-form-input"
                *ngIf="moduleOption.value.type === 'float'">
             <input id="{{ moduleOption.value.name }}"
                    class="form-control"

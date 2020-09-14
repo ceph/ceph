@@ -428,7 +428,75 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 
   CLS_LOG(20, "%s: updating header", __func__);
   return cls_cxx_map_write_header(hctx, &bl);
-}
+} /* legacy cls_user_reset_stats */
+
+/// A method to reset the user.buckets header stats in accordance to
+/// the values seen in the user.buckets omap keys. This is not be
+/// equivalent to --sync-stats which also re-calculates the stats for
+/// each bucket.
+static int cls_user_reset_stats2(cls_method_context_t hctx,
+				 buffer::list *in, buffer::list *out)
+{
+  cls_user_reset_stats2_op op;
+
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+
+  cls_user_header header;
+  string from_index{op.marker}, prefix;
+  cls_user_reset_stats2_ret ret;
+
+  map<string, buffer::list> keys;
+  int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
+				&keys, &ret.truncated);
+  if (rc < 0) {
+    CLS_LOG(0, "ERROR: %s failed to retrieve omap key-values", __func__);
+    return rc;
+  }
+  CLS_LOG(20, "%s: read %lu key-values, truncated=%d",
+	  __func__, keys.size(), ret.truncated);
+
+  for (const auto& kv : keys) {
+    cls_user_bucket_entry e;
+    try {
+      auto& bl = kv.second;
+      auto bliter = bl.cbegin();
+      decode(e, bliter);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(0, "ERROR: %s failed to decode bucket entry for %s",
+	      __func__, kv.first.c_str());
+      return -EIO;
+    }
+    add_header_stats(&ret.acc_stats, e);
+  }
+
+  /* try-update marker */
+  if(!keys.empty())
+    ret.marker = (--keys.cend())->first;
+
+  if (! ret.truncated) {
+    buffer::list bl;
+    header.last_stats_update = op.time;
+    header.stats = ret.acc_stats;
+    encode(header, bl);
+
+    CLS_LOG(20, "%s: updating header", __func__);
+    rc = cls_cxx_map_write_header(hctx, &bl);
+
+    /* return final result */
+    encode(ret, *out);
+    return rc;
+  }
+
+  /* return partial result */
+  encode(ret, *out);
+  return 0;
+} /* cls_user_reset_stats2 */
 
 CLS_INIT(user)
 {
@@ -441,6 +509,7 @@ CLS_INIT(user)
   cls_method_handle_t h_user_list_buckets;
   cls_method_handle_t h_user_get_header;
   cls_method_handle_t h_user_reset_stats;
+  cls_method_handle_t h_user_reset_stats2;
 
   cls_register("user", &h_class);
 
@@ -453,5 +522,7 @@ CLS_INIT(user)
   cls_register_cxx_method(h_class, "list_buckets", CLS_METHOD_RD, cls_user_list_buckets, &h_user_list_buckets);
   cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);
   cls_register_cxx_method(h_class, "reset_user_stats", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats, &h_user_reset_stats);
+  cls_register_cxx_method(h_class, "reset_user_stats2", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats2, &h_user_reset_stats2);
+
   return;
 }

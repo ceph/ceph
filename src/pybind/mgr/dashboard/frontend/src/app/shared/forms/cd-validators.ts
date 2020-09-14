@@ -6,8 +6,7 @@ import {
   Validators
 } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Observable, of as observableOf, timer as observableTimer } from 'rxjs';
 import { map, switchMapTo, take } from 'rxjs/operators';
 
@@ -36,10 +35,10 @@ export class CdValidators {
   /**
    * Validator function in order to validate IP addresses.
    * @param {number} version determines the protocol version. It needs to be set to 4 for IPv4 and
-   * to 6 for IPv6 validation. For any other number (it's also the default case) it will return a
-   * function to validate the input string against IPv4 OR IPv6.
+   *   to 6 for IPv6 validation. For any other number (it's also the default case) it will return a
+   *   function to validate the input string against IPv4 OR IPv6.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
-   * if the validation failed, otherwise `null`.
+   *   if the validation check fails, otherwise `null`.
    */
   static ip(version: number = 0): ValidatorFn {
     // prettier-ignore
@@ -59,7 +58,7 @@ export class CdValidators {
   /**
    * Validator function in order to validate numbers.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
-   * if the validation failed, otherwise `null`.
+   *   if the validation check fails, otherwise `null`.
    */
   static number(allowsNegative: boolean = true): ValidatorFn {
     if (allowsNegative) {
@@ -72,7 +71,7 @@ export class CdValidators {
   /**
    * Validator function in order to validate decimal numbers.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
-   * if the validation failed, otherwise `null`.
+   *   if the validation check fails, otherwise `null`.
    */
   static decimalNumber(allowsNegative: boolean = true): ValidatorFn {
     if (allowsNegative) {
@@ -83,16 +82,54 @@ export class CdValidators {
   }
 
   /**
+   * Validator that performs SSL certificate validation.
+   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *   if the validation check fails, otherwise `null`.
+   */
+  static sslCert(): ValidatorFn {
+    return Validators.pattern(
+      /^-----BEGIN CERTIFICATE-----(\n|\r|\f)((.+)?((\n|\r|\f).+)*)(\n|\r|\f)-----END CERTIFICATE-----[\n\r\f]*$/
+    );
+  }
+
+  /**
+   * Validator that performs SSL private key validation.
+   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *   if the validation check fails, otherwise `null`.
+   */
+  static sslPrivKey(): ValidatorFn {
+    return Validators.pattern(
+      /^-----BEGIN RSA PRIVATE KEY-----(\n|\r|\f)((.+)?((\n|\r|\f).+)*)(\n|\r|\f)-----END RSA PRIVATE KEY-----[\n\r\f]*$/
+    );
+  }
+
+  /**
    * Validator that requires controls to fulfill the specified condition if
    * the specified prerequisites matches. If the prerequisites are fulfilled,
    * then the given function is executed and if it succeeds, the 'required'
    * validation error will be returned, otherwise null.
    * @param {Object} prerequisites An object containing the prerequisites.
+   *   To do additional checks rather than checking for equality you can
+   *   use the extended prerequisite syntax:
+   *     'field_name': { 'op': '<OPERATOR>', arg1: '<OPERATOR_ARGUMENT>' }
+   *   The following operators are supported:
+   *   * empty
+   *   * !empty
+   *   * equal
+   *   * !equal
+   *   * minLength
    *   ### Example
    *   ```typescript
    *   {
    *     'generate_key': true,
    *     'username': 'Max Mustermann'
+   *   }
+   *   ```
+   *   ### Example - Extended prerequisites
+   *   ```typescript
+   *   {
+   *     'generate_key': { 'op': 'equal', 'arg1': true },
+   *     'username': { 'op': 'minLength', 'arg1': 5 }
    *   }
    *   ```
    *   Only if all prerequisites are fulfilled, then the validation of the
@@ -120,7 +157,35 @@ export class CdValidators {
       // Check if all prerequisites met.
       if (
         !Object.keys(prerequisites).every((key) => {
-          return control.parent && control.parent.get(key).value === prerequisites[key];
+          if (!control.parent) {
+            return false;
+          }
+          const value = control.parent.get(key).value;
+          const prerequisite = prerequisites[key];
+          if (_.isObjectLike(prerequisite)) {
+            let result = false;
+            switch (prerequisite['op']) {
+              case 'empty':
+                result = _.isEmpty(value);
+                break;
+              case '!empty':
+                result = !_.isEmpty(value);
+                break;
+              case 'equal':
+                result = value === prerequisite['arg1'];
+                break;
+              case '!equal':
+                result = value !== prerequisite['arg1'];
+                break;
+              case 'minLength':
+                if (_.isString(value)) {
+                  result = value.length >= prerequisite['arg1'];
+                }
+                break;
+            }
+            return result;
+          }
+          return value === prerequisite;
         })
       ) {
         return null;
@@ -333,7 +398,7 @@ export class CdValidators {
    * be called in a static one.
    */
   static binaryMin(bytes: number): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: (i18n: I18n) => string } | null => {
+    return (control: AbstractControl): { [key: string]: () => string } | null => {
       const formatterService = new FormatterService();
       const currentBytes = new FormatterService().toBytes(control.value);
       if (bytes <= currentBytes) {
@@ -341,7 +406,7 @@ export class CdValidators {
       }
       const value = new DimlessBinaryPipe(formatterService).transform(bytes);
       return {
-        binaryMin: (i18n: I18n) => i18n(`Size has to be at least {{value}} or more`, { value })
+        binaryMin: () => $localize`Size has to be at least ${value} or more`
       };
     };
   }
@@ -353,7 +418,7 @@ export class CdValidators {
    * be called in a static one.
    */
   static binaryMax(bytes: number): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: (i18n: I18n) => string } | null => {
+    return (control: AbstractControl): { [key: string]: () => string } | null => {
       const formatterService = new FormatterService();
       const currentBytes = formatterService.toBytes(control.value);
       if (bytes >= currentBytes) {
@@ -361,7 +426,7 @@ export class CdValidators {
       }
       const value = new DimlessBinaryPipe(formatterService).transform(bytes);
       return {
-        binaryMax: (i18n: I18n) => i18n(`Size has to be at most {{value}} or less`, { value })
+        binaryMax: () => $localize`Size has to be at most ${value} or less`
       };
     };
   }

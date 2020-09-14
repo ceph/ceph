@@ -43,6 +43,8 @@ public:
 
   int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
 
+  static bool support(const std::string& path);
+
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
 	   bool buffered) override;

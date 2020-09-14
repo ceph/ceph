@@ -28,12 +28,12 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
+#define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 
 ostream& CDentry::print_db_line_prefix(ostream& out)
 {
-  return out << ceph_clock_now() << " mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
+  return out << ceph_clock_now() << " mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
 
 LockType CDentry::lock_type(CEPH_LOCK_DN);
@@ -190,7 +190,7 @@ void CDentry::mark_dirty(version_t pv, LogSegment *ls)
   _mark_dirty(ls);
 
   // mark dir too
-  dir->mark_dirty(pv, ls);
+  dir->mark_dirty(ls, pv);
 }
 
 
@@ -414,7 +414,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
   if (linkage.is_primary()) {
     c = 1;
     encode(c, bl);
-    encode(linkage.get_inode()->inode.ino, bl);
+    encode(linkage.get_inode()->ino(), bl);
   }
   else if (linkage.is_remote()) {
     c = 2;

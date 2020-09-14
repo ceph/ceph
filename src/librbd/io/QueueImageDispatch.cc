@@ -4,10 +4,11 @@
 #include "librbd/io/QueueImageDispatch.h"
 #include "common/dout.h"
 #include "common/Cond.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/FlushTracker.h"
 #include "librbd/io/ImageDispatchSpec.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -20,13 +21,19 @@ namespace io {
 
 template <typename I>
 QueueImageDispatch<I>::QueueImageDispatch(I* image_ctx)
-  : m_image_ctx(image_ctx) {
+  : m_image_ctx(image_ctx), m_flush_tracker(new FlushTracker<I>(image_ctx)) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
 }
 
 template <typename I>
+QueueImageDispatch<I>::~QueueImageDispatch() {
+  delete m_flush_tracker;
+}
+
+template <typename I>
 void QueueImageDispatch<I>::shut_down(Context* on_finish) {
+  m_flush_tracker->shut_down();
   on_finish->complete(0);
 }
 
@@ -39,7 +46,7 @@ bool QueueImageDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return enqueue(dispatch_result, on_dispatched);
+  return enqueue(true, tid, dispatch_result, on_dispatched);
 }
 
 template <typename I>
@@ -51,7 +58,7 @@ bool QueueImageDispatch<I>::write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return enqueue(dispatch_result, on_dispatched);
+  return enqueue(false, tid, dispatch_result, on_dispatched);
 }
 
 template <typename I>
@@ -63,7 +70,7 @@ bool QueueImageDispatch<I>::discard(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return enqueue(dispatch_result, on_dispatched);
+  return enqueue(false, tid, dispatch_result, on_dispatched);
 }
 
 template <typename I>
@@ -75,7 +82,7 @@ bool QueueImageDispatch<I>::write_same(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return enqueue(dispatch_result, on_dispatched);
+  return enqueue(false, tid, dispatch_result, on_dispatched);
 }
 
 template <typename I>
@@ -88,7 +95,7 @@ bool QueueImageDispatch<I>::compare_and_write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return enqueue(dispatch_result, on_dispatched);
+  return enqueue(false, tid, dispatch_result, on_dispatched);
 }
 
 template <typename I>
@@ -100,22 +107,33 @@ bool QueueImageDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  if (flush_source != FLUSH_SOURCE_USER) {
-    return false;
-  }
+  *dispatch_result = DISPATCH_RESULT_CONTINUE;
+  m_flush_tracker->flush(on_dispatched);
+  return true;
+}
 
-  return enqueue(dispatch_result, on_dispatched);
+template <typename I>
+void QueueImageDispatch<I>::handle_finished(int r, uint64_t tid) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << "tid=" << tid << dendl;
+
+  m_flush_tracker->finish_io(tid);
 }
 
 template <typename I>
 bool QueueImageDispatch<I>::enqueue(
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    bool read_op, uint64_t tid, DispatchResult* dispatch_result,
+    Context* on_dispatched) {
   if (!m_image_ctx->non_blocking_aio) {
     return false;
   }
 
+  if (!read_op) {
+    m_flush_tracker->start_io(tid);
+  }
+
   *dispatch_result = DISPATCH_RESULT_CONTINUE;
-  m_image_ctx->op_work_queue->queue(on_dispatched, 0);
+  m_image_ctx->asio_engine->post(on_dispatched, 0);
   return true;
 }
 

@@ -5,7 +5,7 @@ For reads, only the object extent needs to be reverse mapped:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite 0 5M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
   $ rbd resize --no-progress --size 12M cloneimg
@@ -34,7 +34,7 @@ For writes, the entire object needs to be reverse mapped:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite 0 1M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
   $ rbd resize --no-progress --size 8M cloneimg

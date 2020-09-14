@@ -10,8 +10,7 @@ import { BehaviorSubject, of } from 'rxjs';
 import {
   configureTestBed,
   FixtureHelper,
-  FormHelper,
-  i18nProviders
+  FormHelper
 } from '../../../../../testing/unit-test-helper';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
@@ -104,7 +103,6 @@ describe('OsdFormComponent', () => {
       ReactiveFormsModule,
       ToastrModule.forRoot()
     ],
-    providers: [i18nProviders],
     declarations: [OsdFormComponent, OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });
 

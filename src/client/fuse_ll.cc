@@ -88,6 +88,7 @@ public:
   struct fuse_session *se;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   struct fuse_cmdline_opts opts;
+  struct fuse_conn_info_opts *conn_opts;
 #else
   struct fuse_chan *ch;
   char *mountpoint;
@@ -612,9 +613,28 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   bufferlist bl;
   int r = cfuse->client->ll_read(fh, off, size, &bl);
-  if (r >= 0)
-    fuse_reply_buf(req, bl.c_str(), bl.length());
-  else
+  if (r >= 0) {
+    vector<iovec> iov;
+    size_t len;
+    struct fuse_bufvec *bufv;
+
+    bl.prepare_iov(&iov);
+    len = sizeof(struct fuse_bufvec) + sizeof(struct fuse_buf) * (iov.size() - 1);
+    bufv = (struct fuse_bufvec *)calloc(1, len);
+    if (bufv) {
+      int i = 0;
+      bufv->count = iov.size();
+      for (auto &v: iov) {
+        bufv->buf[i].mem = v.iov_base;
+        bufv->buf[i++].size = v.iov_len;
+      }
+      fuse_reply_data(req, bufv, FUSE_BUF_SPLICE_MOVE);
+      free(bufv);
+      return;
+    }
+    iov.insert(iov.begin(), {0}); // the first one is reserved for fuse_out_header
+    fuse_reply_iov(req, &iov[0], iov.size());
+  } else
     fuse_reply_err(req, -r);
 }
 
@@ -986,6 +1006,13 @@ static void do_init(void *data, fuse_conn_info *conn)
   CephFuse::Handle *cfuse = (CephFuse::Handle *)data;
   Client *client = cfuse->client;
 
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  fuse_apply_conn_info_opts(cfuse->conn_opts, conn);
+#endif
+
+  if(conn->capable & FUSE_CAP_SPLICE_MOVE)
+    conn->want |= FUSE_CAP_SPLICE_MOVE;
+
 #if !defined(__APPLE__)
   if (!client->fuse_default_permissions && client->ll_handle_umask()) {
     // apply umask in userspace if posix acl is enabled
@@ -1102,6 +1129,8 @@ void CephFuse::Handle::finalize()
     fuse_session_unmount(se);
     fuse_session_destroy(se);
   }
+  if (conn_opts)
+    free(conn_opts);
   if (opts.mountpoint)
     free(opts.mountpoint);
 #else
@@ -1129,7 +1158,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
 
   // set up fuse argc/argv
   int newargc = 0;
-  const char **newargv = (const char **) malloc((argc + 10) * sizeof(char *));
+  const char **newargv = (const char **) malloc((argc + 17) * sizeof(char *));
   if(!newargv)
     return ENOMEM;
 
@@ -1143,11 +1172,17 @@ int CephFuse::Handle::init(int argc, const char *argv[])
 #if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   auto fuse_big_writes = client->cct->_conf.get_val<bool>(
     "fuse_big_writes");
+#endif
   auto fuse_max_write = client->cct->_conf.get_val<Option::size_t>(
     "fuse_max_write");
   auto fuse_atomic_o_trunc = client->cct->_conf.get_val<bool>(
     "fuse_atomic_o_trunc");
-#endif
+  auto fuse_splice_read = client->cct->_conf.get_val<bool>(
+    "fuse_splice_read");
+  auto fuse_splice_write = client->cct->_conf.get_val<bool>(
+    "fuse_splice_write");
+  auto fuse_splice_move = client->cct->_conf.get_val<bool>(
+    "fuse_splice_move");
   auto fuse_debug = client->cct->_conf.get_val<bool>(
     "fuse_debug");
 
@@ -1165,6 +1200,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     newargv[newargc++] = "-o";
     newargv[newargc++] = "big_writes";
   }
+#endif
   if (fuse_max_write > 0) {
     char strsplice[65];
     newargv[newargc++] = "-o";
@@ -1175,7 +1211,18 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     newargv[newargc++] = "-o";
     newargv[newargc++] = "atomic_o_trunc";
   }
-#endif
+  if (fuse_splice_read) {
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "splice_read";
+  }
+  if (fuse_splice_write) {
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "splice_write";
+  }
+  if (fuse_splice_move) {
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "splice_move";
+  }
 #endif
   if (fuse_debug)
     newargv[newargc++] = "-d";
@@ -1198,6 +1245,17 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     return EINVAL;
   }
 
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  derr << "init, args.argv = " << args.argv << " args.argc=" << args.argc << dendl;
+  conn_opts = fuse_parse_conn_info_opts(&args);
+  if (!conn_opts) {
+    derr << "fuse_parse_conn_info_opts failed" << dendl;
+    fuse_opt_free_args(&args);
+    free(newargv);
+    return EINVAL;
+  }
+#endif
+
   ceph_assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
   free(newargv);
   return 0;
@@ -1207,6 +1265,10 @@ int CephFuse::Handle::start()
 {
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   se = fuse_session_new(&args, &fuse_ll_oper, sizeof(fuse_ll_oper), this);
+  if (!se) {
+    derr << "fuse_session_new failed" << dendl;
+    return EDOM;
+  }
 #else
   ch = fuse_mount(mountpoint, &args);
   if (!ch) {
@@ -1215,11 +1277,11 @@ int CephFuse::Handle::start()
   }
 
   se = fuse_lowlevel_new(&args, &fuse_ll_oper, sizeof(fuse_ll_oper), this);
-#endif
   if (!se) {
     derr << "fuse_lowlevel_new failed" << dendl;
     return EDOM;
   }
+#endif
 
   signal(SIGTERM, SIG_DFL);
   signal(SIGINT, SIG_DFL);

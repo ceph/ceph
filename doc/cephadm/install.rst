@@ -108,8 +108,16 @@ or run ``cephadm bootstrap -h`` to see all available options:
 * You can choose the ssh user cephadm will use to connect to hosts by
   using the ``--ssh-user *<user>*`` option. The ssh key will be added
   to ``/home/*<user>*/.ssh/authorized_keys``. This user will require
-  passwordless sudo access. 
+  passwordless sudo access.
 
+* If you are using a container on an authenticated registry that requires
+  login you may add the three arguments ``--registry-url <url of registry>``,
+  ``--registry-username <username of account on registry>``,
+  ``--registry-password <password of account on registry>`` OR
+  ``--registry-json <json file with login info>``. Cephadm will attempt
+  to login to this registry so it may pull your container and then store
+  the login info in its config database so other hosts added to the cluster
+  may also make use of the authenticated registry.
 
 Enable Ceph CLI
 ===============
@@ -130,9 +138,9 @@ command.  There are several ways to do this:
 
     # cephadm shell
 
-* It may be helpful to create an alias::
+* To execute ``ceph`` commands, you can also run commands like so::
 
-    # alias ceph='cephadm shell -- ceph'
+    # cephadm shell -- ceph -s
 
 * You can install the ``ceph-common`` package, which contains all of the
   ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
@@ -262,6 +270,49 @@ hosts to the cluster. No further steps are necessary.
     # ceph orch daemon add mon newhost1:10.1.2.123
     # ceph orch daemon add mon newhost2:10.1.2.0/24
 
+  .. note::
+     The **apply** command can be confusing. For this reason, we recommend using
+     YAML specifications. 
+
+     Each 'ceph orch apply mon' command supersedes the one before it. 
+     This means that you must use the proper comma-separated list-based 
+     syntax when you want to apply monitors to more than one host. 
+     If you do not use the proper syntax, you will clobber your work 
+     as you go.
+
+     For example::
+        
+          # ceph orch apply mon host1
+          # ceph orch apply mon host2
+          # ceph orch apply mon host3
+
+     This results in only one host having a monitor applied to it: host 3.
+
+     (The first command creates a monitor on host1. Then the second command
+     clobbers the monitor on host1 and creates a monitor on host2. Then the
+     third command clobbers the monitor on host2 and creates a monitor on 
+     host3. In this scenario, at this point, there is a monitor ONLY on
+     host3.)
+
+     To make certain that a monitor is applied to each of these three hosts,
+     run a command like this::
+       
+          # ceph orch apply mon "host1,host2,host3"
+
+     Instead of using the "ceph orch apply mon" commands, run a command like
+     this::
+
+          # ceph orch apply -i file.yaml
+
+     Here is a sample **file.yaml** file::
+
+          service_type: mon
+          placement:
+            hosts:
+             - host1
+             - host2
+             - host3
+
 
 Deploy OSDs
 ===========
@@ -331,18 +382,6 @@ that configuration isn't already in place (usually in the
 daemons will start up with default settings (e.g., binding to port
 80).
 
-If a realm has not been created yet, first create a realm::
-
-  # radosgw-admin realm create --rgw-realm=<realm-name> --default
-
-Next create a new zonegroup::
-
-  # radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
-
-Next create a zone::
-
-  # radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
-
 To deploy a set of radosgw daemons for a particular realm and zone::
 
   # ceph orch apply rgw *<realm-name>* *<zone-name>* --placement="*<num-daemons>* [*<host1>* ...]"
@@ -350,10 +389,19 @@ To deploy a set of radosgw daemons for a particular realm and zone::
 For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-1*
 zone on *myhost1* and *myhost2*::
 
-  # radosgw-admin realm create --rgw-realm=myorg --default
-  # radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
-  # radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=us-east-1 --master --default
   # ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
+
+Cephadm will wait for a healthy cluster and automatically create the supplied realm and zone if they do not exist before deploying the rgw daemon(s)
+
+Alternatively, the realm, zonegroup, and zone can be manually created using ``radosgw-admin`` commands::
+
+  # radosgw-admin realm create --rgw-realm=<realm-name> --default
+
+  # radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
+
+  # radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
+
+  # radosgw-admin period update --rgw-realm=<realm-name> --commit
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
@@ -379,4 +427,4 @@ See :ref:`orchestrator-cli-placement-spec` for details of the placement specific
 
 Deploying custom containers
 ===========================
-It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard. 
+It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard.

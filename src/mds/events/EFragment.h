@@ -19,7 +19,7 @@
 #include "EMetaBlob.h"
 
 struct dirfrag_rollback {
-  fnode_t fnode;
+  CDir::fnode_const_ptr fnode;
   dirfrag_rollback() { }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);

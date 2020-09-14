@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3KeyModalComponent } from './rgw-user-s3-key-modal.component';
 
@@ -15,7 +15,7 @@ describe('RgwUserS3KeyModalComponent', () => {
   configureTestBed({
     declarations: [RgwUserS3KeyModalComponent],
     imports: [ReactiveFormsModule, SharedModule, RouterTestingModule],
-    providers: [NgbActiveModal, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

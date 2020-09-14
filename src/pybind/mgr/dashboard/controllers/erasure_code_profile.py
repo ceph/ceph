@@ -4,19 +4,30 @@ from __future__ import absolute_import
 from cherrypy import NotFound
 
 from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, \
-    UiApiController
+    UiApiController, EndpointDoc
 from ..security import Scope
 from ..services.ceph_service import CephService
 from .. import mgr
 
+LIST_CODE__SCHEMA = {
+    "crush-failure-domain": (str, ''),
+    "k": (int, 'Number of data chunks'),
+    "m": (int, 'Number of coding chunks'),
+    "plugin": (str, 'Plugin Info'),
+    "technique": (str, ''),
+    "name": (str, 'Name of the profile')
+}
+
 
 @ApiController('/erasure_code_profile', Scope.POOL)
+@ControllerDoc("Erasure Code Profile Management API", "ErasureCodeProfile")
 class ErasureCodeProfile(RESTController):
     """
     create() supports additional key-value arguments that are passed to the
     ECP plugin.
     """
-
+    @EndpointDoc("List Erasure Code Profile Information",
+                 responses={'200': [LIST_CODE__SCHEMA]})
     def list(self):
         return CephService.get_erasure_code_profiles()
 

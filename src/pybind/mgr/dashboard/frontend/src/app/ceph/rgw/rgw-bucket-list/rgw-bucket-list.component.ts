@@ -7,12 +7,12 @@ import {
   ViewChild
 } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
+import { TableStatus } from '../../../shared/classes/table-status';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -49,7 +49,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  isStale = false;
+  tableStatus = new TableStatus();
   staleTimeout: number;
 
   constructor(
@@ -58,7 +58,6 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     private dimlessPipe: DimlessPipe,
     private rgwBucketService: RgwBucketService,
     private modalService: ModalService,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
     private ngZone: NgZone,
@@ -96,35 +95,35 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'bid',
         flexGrow: 2
       },
       {
-        name: this.i18n('Owner'),
+        name: $localize`Owner`,
         prop: 'owner',
         flexGrow: 2.5
       },
       {
-        name: this.i18n('Used Capacity'),
+        name: $localize`Used Capacity`,
         prop: 'bucket_size',
         flexGrow: 0.6,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Capacity Limit %'),
+        name: $localize`Capacity Limit %`,
         prop: 'size_usage',
         cellTemplate: this.bucketSizeTpl,
         flexGrow: 0.8
       },
       {
-        name: this.i18n('Objects'),
+        name: $localize`Objects`,
         prop: 'num_objects',
         flexGrow: 0.6,
         pipe: this.dimlessPipe
       },
       {
-        name: this.i18n('Object Limit %'),
+        name: $localize`Object Limit %`,
         prop: 'object_usage',
         cellTemplate: this.bucketObjectTpl,
         flexGrow: 0.8
@@ -156,14 +155,17 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     this.ngZone.runOutsideAngular(() => {
       this.staleTimeout = window.setTimeout(() => {
         this.ngZone.run(() => {
-          this.isStale = true;
+          this.tableStatus = new TableStatus(
+            'warning',
+            $localize`The bucket list data might be stale. If needed, you can manually reload it.`
+          );
         });
       }, 10000);
     });
   }
 
   getBucketList(context: CdTableFetchDataContext) {
-    this.isStale = false;
+    this.tableStatus = new TableStatus();
     this.timeConditionReached();
     this.rgwBucketService.list().subscribe(
       (resp: object[]) => {
@@ -183,9 +185,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
 
   deleteAction() {
     this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.selection.hasSingleSelection
-        ? this.i18n('bucket')
-        : this.i18n('buckets'),
+      itemDescription: this.selection.hasSingleSelection ? $localize`bucket` : $localize`buckets`,
       itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
       submitActionObservable: () => {
         return new Observable((observer: Subscriber<any>) => {

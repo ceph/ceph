@@ -65,7 +65,9 @@ void PurgeItem::decode(bufferlist::const_iterator &p)
       decode(stamp, p);
       decode(pad_size, p);
       p += pad_size;
-      decode((uint8_t&)action, p);
+      uint8_t raw_action;
+      decode(raw_action, p);
+      action = (Action)raw_action;
       decode(ino, p);
       decode(size, p);
       decode(layout, p);
@@ -80,7 +82,9 @@ void PurgeItem::decode(bufferlist::const_iterator &p)
     }
   }
   if (!done) {
-    decode((uint8_t&)action, p);
+    uint8_t raw_action;
+    decode(raw_action, p);
+    action = (Action)raw_action;
     decode(ino, p);
     decode(size, p);
     decode(layout, p);
@@ -591,7 +595,7 @@ void PurgeQueue::_execute_item(
                       new LambdaContext([this, expire_to](int r){
     std::lock_guard l(lock);
 
-    if (r == -EBLACKLISTED) {
+    if (r == -EBLOCKLISTED) {
       finisher.queue(on_error, r);
       on_error = nullptr;
       return;

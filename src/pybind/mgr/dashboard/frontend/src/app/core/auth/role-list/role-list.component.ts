@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { forkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
@@ -48,7 +47,6 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -88,18 +86,18 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 3
       },
       {
-        name: this.i18n('Description'),
+        name: $localize`Description`,
         prop: 'description',
         flexGrow: 5,
         pipe: this.emptyPipe
       },
       {
-        name: this.i18n('System Role'),
+        name: $localize`System Role`,
         prop: 'system',
         cellClass: 'text-center',
         flexGrow: 1,
@@ -126,10 +124,7 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
       () => {
         this.getRoles();
         this.modalRef.close();
-        this.notificationService.show(
-          NotificationType.success,
-          this.i18n(`Deleted role '{{role_name}}'`, { role_name: role })
-        );
+        this.notificationService.show(NotificationType.success, $localize`Deleted role '${role}'`);
       },
       () => {
         this.modalRef.componentInstance.stopLoadingSpinner();
@@ -154,21 +149,18 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
           type: 'text',
           name: 'newName',
           value: `${name}_clone`,
-          label: this.i18n('New name'),
+          label: $localize`New name`,
           required: true
         }
       ],
-      titleText: this.i18n('Clone Role'),
-      submitButtonText: this.i18n('Clone Role'),
+      titleText: $localize`Clone Role`,
+      submitButtonText: $localize`Clone Role`,
       onSubmit: (values: object) => {
         this.roleService.clone(name, values['newName']).subscribe(() => {
           this.getRoles();
           this.notificationService.show(
             NotificationType.success,
-            this.i18n(`Cloned role '{{dst_name}}' from '{{src_name}}'`, {
-              src_name: name,
-              dst_name: values['newName']
-            })
+            $localize`Cloned role '${values['newName']}' from '${name}'`
           );
         });
       }

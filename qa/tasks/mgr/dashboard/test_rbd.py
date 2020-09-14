@@ -173,14 +173,13 @@ class RbdTest(DashboardTestCase):
         cls._ceph_cmd(['osd', 'pool', 'delete', 'rbd_data', 'rbd_data',
                        '--yes-i-really-really-mean-it'])
 
-    @classmethod
-    def create_image_in_trash(cls, pool, name, delay=0):
-        cls.create_image(pool, None, name, 10240)
-        img = cls._get('/api/block/image/{}%2F{}'.format(pool, name))
+    def create_image_in_trash(self, pool, name, delay=0):
+        self.create_image(pool, None, name, 10240)
+        img = self._get('/api/block/image/{}%2F{}'.format(pool, name))
 
-        cls._task_post("/api/block/image/{}%2F{}/move_trash".format(pool, name),
+        self._task_post("/api/block/image/{}%2F{}/move_trash".format(pool, name),
                        {'delay': delay})
-
+        self.assertStatus([200, 201])
         return img['id']
 
     @classmethod
@@ -776,7 +775,6 @@ class RbdTest(DashboardTestCase):
 
     def test_move_image_to_trash(self):
         id = self.create_image_in_trash('rbd', 'test_rbd')
-        self.assertStatus(200)
 
         self.get_image('rbd', None, 'test_rbd')
         self.assertStatus(404)

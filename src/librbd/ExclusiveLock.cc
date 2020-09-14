@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/cache/Utils.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
@@ -31,10 +32,10 @@ using ML = ManagedLock<I>;
 template <typename I>
 ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
   : RefCountedObject(image_ctx.cct),
-    ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
+    ML<I>(image_ctx.md_ctx, *image_ctx.asio_engine, image_ctx.header_oid,
           image_ctx.image_watcher, managed_lock::EXCLUSIVE,
-          image_ctx.config.template get_val<bool>("rbd_blacklist_on_break_lock"),
-          image_ctx.config.template get_val<uint64_t>("rbd_blacklist_expire_seconds")),
+          image_ctx.config.template get_val<bool>("rbd_blocklist_on_break_lock"),
+          image_ctx.config.template get_val<uint64_t>("rbd_blocklist_expire_seconds")),
     m_image_ctx(image_ctx) {
   std::lock_guard locker{ML<I>::m_lock};
   ML<I>::set_state_uninitialized();
@@ -111,8 +112,8 @@ void ExclusiveLock<I>::unblock_requests() {
 
 template <typename I>
 int ExclusiveLock<I>::get_unlocked_op_error() const {
-  if (m_image_ctx.image_watcher->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_image_ctx.image_watcher->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
   return -EROFS;
 }
@@ -140,6 +141,7 @@ template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << dendl;
 
+  auto ref = ceph::ref_t<ExclusiveLock<I>>(this);
   on_shut_down = create_context_callback<Context>(on_shut_down, this);
 
   ML<I>::shut_down(on_shut_down);
@@ -203,8 +205,10 @@ void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
       on_finish->complete(r);
     });
 
+  bool rwl_enabled = cache::util::is_rwl_enabled(m_image_ctx);
   if (m_image_ctx.clone_copy_on_read ||
-      (features & RBD_FEATURE_JOURNALING) != 0) {
+      (features & RBD_FEATURE_JOURNALING) != 0 ||
+      rwl_enabled) {
     m_image_dispatch->set_require_lock(io::DIRECTION_BOTH, on_finish);
   } else {
     m_image_dispatch->set_require_lock(io::DIRECTION_WRITE, on_finish);

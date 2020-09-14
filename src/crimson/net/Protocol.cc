@@ -71,29 +71,27 @@ void Protocol::close(bool dispatch_reset,
   }
   set_write_state(write_state_t::drop);
   auto gate_closed = gate.close();
-  auto reset_dispatched = seastar::futurize_invoke([this, dispatch_reset, is_replace] {
-    if (dispatch_reset) {
-      dispatcher->ms_handle_reset(
-	  seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
-	  is_replace);
+
+  if (dispatch_reset) {
+    try {
+        dispatcher->ms_handle_reset(
+            seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
+            is_replace);
+    } catch (...) {
+      logger().error("{} got unexpected exception in ms_handle_reset() {}",
+                     conn, std::current_exception());
     }
-    return seastar::now();
-  }).handle_exception([this] (std::exception_ptr eptr) {
-    logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
-    ceph_abort("unexpected exception from ms_handle_reset()");
-  });
+  }
 
   // asynchronous operations
   assert(!close_ready.valid());
-  close_ready = seastar::when_all_succeed(
-    std::move(gate_closed).finally([this] {
-      if (socket) {
-        return socket->close();
-      }
+  close_ready = std::move(gate_closed).finally([this] {
+    if (socket) {
+      return socket->close();
+    } else {
       return seastar::now();
-    }),
-    std::move(reset_dispatched)
-  ).finally(std::move(cleanup));
+    }
+  }).finally(std::move(cleanup));
 }
 
 seastar::future<> Protocol::send(MessageRef msg)

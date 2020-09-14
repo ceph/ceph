@@ -1,15 +1,14 @@
 <cd-rbd-tabs></cd-rbd-tabs>
 
-<cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
-               [status]="viewCacheStatus.status"
-               [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
-
 <cd-table [data]="images"
           columnMode="flex"
           [columns]="columns"
           identifier="id"
           forceIdentifier="true"
           selectionType="single"
+          [status]="tableStatus"
+          [autoReload]="-1"
+          (fetchData)="taskListService.fetch()"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
     <cd-table-actions class="btn-group"

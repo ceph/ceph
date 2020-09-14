@@ -12,7 +12,7 @@ the host name  can be resolved in four different ways:
 
 -  a custom ssh config resolving the name to an IP
 -  via an externally maintained ``/etc/hosts``
--  via explictly providing an IP address to cephadm: ``ceph orch host add <hostname> <IP>``
+-  via explicitly providing an IP address to cephadm: ``ceph orch host add <hostname> <IP>``
 -  automatic name resolution via DNS.
 
 Ceph itself uses the command ``hostname`` to determine the name of the
@@ -33,7 +33,7 @@ When configuring new hosts, there are two **valid** ways to set the
 1. Using the bare host name. In this case:
 
 -  ``hostname`` returns the bare host name.
-- ``hostname -f`` returns the FQDN.
+-  ``hostname -f`` returns the FQDN.
 
 2. Using the fully qualified domain name as the host name. In this case:
 
@@ -47,7 +47,7 @@ host name:
     name that the resolver(3) returns for the host name, such as,
     ursula.example.com. It is usually the hostname followed by the DNS
     domain name (the part after the first dot). You can check the FQDN
-    using hostname --fqdn or the domain name using dnsdomainname.
+    using ``hostname --fqdn`` or the domain name using ``dnsdomainname``.
 
     ::
 
@@ -74,7 +74,7 @@ Cephadm Scheduler
 -----------------
 
 Cephadm uses a declarative state to define the layout of the cluster. This
-state consists of a list of service specificatins containing placement 
+state consists of a list of service specifications containing placement
 specifications (See :ref:`orchestrator-cli-service-spec` ). 
 
 Cephadm constantly compares list of actually running daemons in the cluster
@@ -88,7 +88,7 @@ in the specification, cephadm will select hosts based on a host pattern. If
 there is no pattern defined, cepham will finally select all known hosts as
 candidates.
 
-Then, cephadm will consider existing daemons of this servics and will try to 
+Then, cephadm will consider existing daemons of this services and will try to
 avoid moving any daemons.
 
 Cephadm supports the deployment of a specific amount of services. Let's 
@@ -102,7 +102,7 @@ consider a service specification like so:
       count: 3
       label: myfs
 
-This instructs cephadm to deploy three daemons on hosts labeld with 
+This instructs cephadm to deploy three daemons on hosts labeled with
 ``myfs`` across the cluster.
 
 Then, in case there are less than three daemons deployed on the candidate 

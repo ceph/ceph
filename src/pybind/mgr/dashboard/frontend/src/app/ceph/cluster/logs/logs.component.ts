@@ -18,7 +18,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   icons = Icons;
 
   interval: number;
-  prioritys: Array<{ name: string; value: string }> = [
+  priorities: Array<{ name: string; value: string }> = [
     { name: 'Info', value: '[INF]' },
     { name: 'Warning', value: '[WRN]' },
     { name: 'Error', value: '[ERR]' },
@@ -58,7 +58,7 @@ export class LogsComponent implements OnInit, OnDestroy {
     });
   }
 
-  abstractfilters(): any {
+  abstractFilters(): any {
     const priority = this.priority;
     const key = this.search.toLowerCase().replace(/,/g, '');
 
@@ -107,7 +107,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   }
 
   filterLogs() {
-    const filters = this.abstractfilters();
+    const filters = this.abstractFilters();
     this.clog = this.filterExecutor(this.contentData.clog, filters);
     this.audit_log = this.filterExecutor(this.contentData.audit_log, filters);
   }

@@ -5,6 +5,7 @@
 #include "include/interval_set.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd/object_map_types.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -112,6 +113,8 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
+
+  std::shared_ptr<librbd::AsioEngine> m_asio_engine;
   asio::ContextWQ *m_work_queue;
 
   SnapMap m_snap_map;
@@ -132,7 +135,9 @@ public:
     ASSERT_EQ(0, create_image_pp(rbd, m_ioctx, dst_image_name, m_image_size));
     ASSERT_EQ(0, open_image(dst_image_name, &m_dst_image_ctx));
 
-    librbd::ImageCtx::get_work_queue(m_src_image_ctx->cct, &m_work_queue);
+    m_asio_engine = std::make_shared<librbd::AsioEngine>(
+      m_src_image_ctx->md_ctx);
+    m_work_queue = m_asio_engine->get_work_queue();
   }
 
   bool is_fast_diff(librbd::MockImageCtx &mock_image_ctx) {
@@ -220,7 +225,8 @@ public:
   void expect_sparse_read(librados::MockTestMemIoCtxImpl &mock_io_ctx, uint64_t offset,
                           uint64_t length, int r) {
 
-    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _));
+    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _,
+                                                        _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -934,10 +940,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ObjectMapUpdateError) {
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
-                           m_dst_snap_ids[0], OBJECT_EXISTS, -EBLACKLISTED);
+                           m_dst_snap_ids[0], OBJECT_EXISTS, -EBLOCKLISTED);
 
   request->send();
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
 }
 
 TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {

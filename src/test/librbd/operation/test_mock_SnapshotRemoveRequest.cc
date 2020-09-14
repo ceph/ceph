@@ -121,7 +121,7 @@ public:
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                StrEq("snapshot_trash_add"),
-                                _, _, _));
+                               _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -138,7 +138,7 @@ public:
     using ceph::encode;
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("snapshot_get"), _, _, _))
+                     StrEq("snapshot_get"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([snap_info, r](bufferlist* bl) {
                              encode(snap_info, *bl);
                              return r;
@@ -154,7 +154,7 @@ public:
     using ceph::encode;
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("children_list"), _, _, _))
+                     StrEq("children_list"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([child_images, r](bufferlist* bl) {
                              encode(child_images, *bl);
                              return r;
@@ -171,7 +171,7 @@ public:
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(util::header_name(parent_spec.image_id),
                      _, StrEq("rbd"), StrEq("child_detach"), ContentsEqual(bl),
-                     _, _))
+                     _, _, _))
       .WillOnce(Return(r));
   }
 
@@ -217,7 +217,7 @@ public:
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                StrEq(mock_image_ctx.old_format ? "snap_remove" :
                                                                   "snapshot_remove"),
-                                _, _, _));
+                                _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - \(MDS_TRIM\)
       - \(MDS_SLOW_REQUEST\)
       - MDS_SLOW_METADATA_IO

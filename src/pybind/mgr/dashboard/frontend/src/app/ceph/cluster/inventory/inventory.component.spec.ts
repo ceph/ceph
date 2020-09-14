@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { InventoryDevicesComponent } from './inventory-devices/inventory-devices.component';
@@ -27,7 +27,6 @@ describe('InventoryComponent', () => {
       RouterTestingModule,
       ToastrModule.forRoot()
     ],
-    providers: [i18nProviders],
     declarations: [InventoryComponent, InventoryDevicesComponent]
   });
 

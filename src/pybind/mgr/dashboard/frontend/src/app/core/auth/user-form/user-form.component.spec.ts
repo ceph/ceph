@@ -9,7 +9,7 @@ import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { SettingsService } from '../../../shared/api/settings.service';
 import { UserService } from '../../../shared/api/user.service';
@@ -55,8 +55,7 @@ describe('UserFormComponent', () => {
         SharedModule,
         NgbPopoverModule
       ],
-      declarations: [UserFormComponent, FakeComponent],
-      providers: i18nProviders
+      declarations: [UserFormComponent, FakeComponent]
     },
     [LoadingPanelComponent]
   );
