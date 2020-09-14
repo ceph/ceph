@@ -49,6 +49,8 @@ CephContext *common_preinit(const CephInitParameters &iparams,
     conf.set_val_default("keyring", "$mds_data/keyring");
   } else if (conf->name.is_osd()) {
     conf.set_val_default("keyring", "$osd_data/keyring");
+  } else if (conf->name.is_replica()) {
+    //TODO: do we need keyring for authorization?
   }
 
   if ((flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
