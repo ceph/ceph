@@ -86,7 +86,7 @@ class CephadmService(metaclass=ABCMeta):
             network=netowrk
         )
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         raise NotImplementedError()
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
@@ -310,7 +310,7 @@ class CephService(CephadmService):
 class MonService(CephService):
     TYPE = 'mon'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         """
         Create a new monitor on the given host.
         """
@@ -356,7 +356,7 @@ class MonService(CephService):
         daemon_spec.extra_config = {'config': extra_config}
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def _check_safe_to_destroy(self, mon_id: str) -> None:
         ret, out, err = self.mgr.check_mon_command({
@@ -398,7 +398,7 @@ class MonService(CephService):
 class MgrService(CephService):
     TYPE = 'mgr'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         """
         Create a new manager instance on a host.
         """
@@ -437,7 +437,7 @@ class MgrService(CephService):
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         for daemon in daemon_descrs:
@@ -486,7 +486,7 @@ class MdsService(CephService):
             'value': spec.service_id,
         })
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         mds_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -500,7 +500,7 @@ class MdsService(CephService):
         })
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         active_mds_strs = list()
@@ -581,7 +581,7 @@ class RgwService(CephService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -589,7 +589,7 @@ class RgwService(CephService):
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def get_keyring(self, rgw_id: str):
         ret, keyring, err = self.mgr.check_mon_command({
@@ -721,7 +721,7 @@ class RgwService(CephService):
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -734,13 +734,13 @@ class RbdMirrorService(CephService):
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
 
 class CrashService(CephService):
     TYPE = 'crash'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -753,4 +753,4 @@ class CrashService(CephService):
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec

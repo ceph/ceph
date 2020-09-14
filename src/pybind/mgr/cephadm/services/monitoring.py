@@ -14,9 +14,9 @@ class GrafanaService(CephadmService):
     TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -83,10 +83,10 @@ class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
     DEFAULT_SERVICE_PORT = 9093
 
-    def create(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         assert daemon_spec.spec
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -151,7 +151,8 @@ class AlertmanagerService(CephadmService):
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
-        service_url = 'http://{}:{}'.format(self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
+        service_url = 'http://{}:{}'.format(self._inventory_get_addr(dd.hostname),
+                                            self.DEFAULT_SERVICE_PORT)
         self._set_service_url_on_dashboard(
             'AlertManager',
             'dashboard get-alertmanager-api-host',
@@ -164,9 +165,9 @@ class PrometheusService(CephadmService):
     TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -257,9 +258,9 @@ class PrometheusService(CephadmService):
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
