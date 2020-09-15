@@ -123,8 +123,7 @@ public:
     case RWState::RWNONE:
       return seastar::make_ready_future<>();
     default:
-      ceph_abort_msg("invalid lock type");
-      return seastar::make_ready_future<>();
+      assert(0 == "invalid lock type");
     }
   }
 
@@ -139,8 +138,7 @@ public:
     case RWState::RWNONE:
       return;
     default:
-      ceph_abort_msg("invalid lock type");
-      return;
+      assert(0 == "invalid lock type");
     }
   }
 
