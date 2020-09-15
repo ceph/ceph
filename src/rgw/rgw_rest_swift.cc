@@ -27,6 +27,7 @@
 #include "rgw_process.h"
 
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 
@@ -1396,9 +1397,9 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
 
   const char * const fresh_meta = s->info.env->get("HTTP_X_FRESH_METADATA");
   if (fresh_meta && strcasecmp(fresh_meta, "TRUE") == 0) {
-    attrs_mod = RGWRados::ATTRSMOD_REPLACE;
+    attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
   } else {
-    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+    attrs_mod = rgw::sal::ATTRSMOD_MERGE;
   }
 
   int r = get_delete_at_param(s, delete_at);
@@ -1553,8 +1554,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
       }
     }
 
-    get_contype_from_attrs(attrs.attrs, content_type);
-    dump_object_metadata(this, s, attrs.attrs);
+    get_contype_from_attrs(attrs, content_type);
+    dump_object_metadata(this, s, attrs);
   }
 
   end_header(s, this, !content_type.empty() ? content_type.c_str()

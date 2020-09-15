@@ -19,6 +19,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 #include "osd/osd_types.h"
 
 #include "services/svc_sys_obj.h"

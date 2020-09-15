@@ -169,7 +169,7 @@ blocking_future<> join_blocking_futures(T &&t) {
       [](auto &&bf) {
 	return std::move(bf.fut);
       }).then([agg=std::move(agg)] {
-	return seastar::now();
+	return seastar::make_ready_future<>();
       }));
 }
 
@@ -349,7 +349,7 @@ public:
       if (cont)
 	return with_throttle_while(op, params, f);
       else
-	return seastar::now();
+	return seastar::make_ready_future<>();
     });
   }
 protected:

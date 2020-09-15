@@ -17,7 +17,7 @@ ensuring it is running.  If there is no mgr daemon running, you will
 see a health warning to that effect, and some of the other information
 in the output of `ceph status` will be missing or stale until a mgr is started.
 
-Use your normal deployment tools, such as ceph-ansible or ceph-deploy, to
+Use your normal deployment tools, such as ceph-ansible or cephadm, to
 set up ceph-mgr daemons on each of your mon nodes.  It is not mandatory
 to place mgr daemons on the same nodes as mons, but it is almost always
 sensible.

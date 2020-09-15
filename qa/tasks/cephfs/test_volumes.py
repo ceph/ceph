@@ -12,7 +12,6 @@ from textwrap import dedent
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
-from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -333,7 +332,8 @@ class TestVolumes(CephFSTestCase):
             # add a fake clone source
             meta_contents = meta_contents + '[source]\nvolume = fake\nsubvolume = fake\nsnapshot = fake\n'
         meta_filepath1 = os.path.join(self.mount_a.mountpoint, basepath, ".meta")
-        sudo_write_file(self.mount_a.client_remote, meta_filepath1, meta_contents)
+        self.mount_a.client_remote.write_file(meta_filepath1,
+                                              meta_contents, sudo=True)
         return createpath
 
     def _update_fake_trash(self, subvol_name, subvol_group=None, trash_name='fake', create=True):

@@ -90,6 +90,8 @@ click on `New issue`_.
 .. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
 .. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
 
+.. _mailing-list:
+
 Mailing list
 ------------
 
@@ -129,6 +131,7 @@ There are also `other Ceph-related mailing lists`_.
 
 .. _`other Ceph-related mailing lists`: https://ceph.com/irc/
 
+.. _irc:
 
 IRC
 ---
@@ -140,6 +143,8 @@ time using `Internet Relay Chat`_.
 
 See ``https://ceph.com/irc/`` for how to set up your IRC
 client and a list of channels.
+
+.. _submitting-patches:
 
 Submitting patches
 ------------------
@@ -161,25 +166,27 @@ See instructions at :doc:`/install/build-ceph`.
 Using ccache to speed up local builds
 -------------------------------------
 
+.. code-block:: console
+
 Rebuilds of the ceph source tree can benefit significantly from use of
 `ccache`_.
 
 Many a times while switching branches and such, one might see build failures
 for certain older branches mostly due to older build artifacts. These rebuilds
 can significantly benefit the use of ccache. For a full clean source tree, one
-could do ::
+could do::
 
   $ make clean
-
   # note the following will nuke everything in the source tree that
   # isn't tracked by git, so make sure to backup any log files /conf options
-
   $ git clean -fdx; git submodule foreach git clean -fdx
 
 ccache is available as a package in most distros. To build ceph with ccache
-one can::
+one can
 
-  $ cmake -DWITH_CCACHE=ON ..
+.. prompt:: bash $
+
+  cmake -DWITH_CCACHE=ON ..
 
 ccache can also be used for speeding up all builds in the system. for more
 details refer to the `run modes`_ of the ccache manual. The default settings
@@ -202,10 +209,12 @@ configuration file ``ccache.conf``::
 
 Now, set the environment variable ``SOURCE_DATE_EPOCH`` to a fixed value (a
 UNIX timestamp) and set ``ENABLE_GIT_VERSION`` to ``OFF`` when running
-``cmake``::
+``cmake``
 
-  $ export SOURCE_DATE_EPOCH=946684800
-  $ cmake -DWITH_CCACHE=ON -DENABLE_GIT_VERSION=OFF ..
+.. prompt:: bash $
+
+  export SOURCE_DATE_EPOCH=946684800
+  cmake -DWITH_CCACHE=ON -DENABLE_GIT_VERSION=OFF ..
 
 .. note:: Binaries produced with these build options are not suitable for
   production or debugging purposes, as they do not contain the correct build
@@ -224,6 +233,8 @@ Kubernetes/Rook development cluster
 -----------------------------------
 
 See :ref:`kubernetes-dev`
+
+.. _backporting:
 
 Backporting
 -----------

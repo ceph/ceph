@@ -381,6 +381,41 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Type: Boolean
 :Default: ``true``
 
+Lifecycle Settings
+==================
+
+Bucket Lifecycle configuration can be used to manage your objects so they are stored
+effectively throughout their lifetime. In past releases Lifecycle processing was rate-limited
+by single threaded processing. With the Nautilus release this has been addressed and the
+Ceph Object Gateway now allows for parallel thread processing of bucket lifecycles across
+additional Ceph Object Gateway instances and replaces the in-order
+index shard enumeration with a random ordered sequence.
+
+There are two options in particular to look at when looking to increase the
+aggressiveness of lifecycle processing:
+
+``rgw lc max worker``
+
+:Description: This option specifies the number of lifecycle worker threads
+              to run in parallel, thereby processing bucket and index
+              shards simultaneously.
+
+:Type: Integer
+:Default: ``3``
+
+``rgw lc max wp worker``
+
+:Description: This option specifies the number of threads in each lifecycle
+              workers work pool. This option can help accelerate processing each bucket.
+
+These values can be tuned based upon your specific workload to further increase the
+aggressiveness of lifecycle processing. For a workload with a larger number of buckets (thousands)
+you would look at increasing the ``rgw lc max worker`` value from the default value of 3 whereas a
+workload with a smaller number of buckets but higher number of objects (hundreds of thousands)
+per bucket you would look at tuning ``rgw lc max wp worker`` from the default value of 3.
+
+:NOTE: When looking to to tune either of these specific values please validate the
+       current Cluster performance and Ceph Object Gateway utilization before increasing.
 
 Garbage Collection Settings
 ===========================

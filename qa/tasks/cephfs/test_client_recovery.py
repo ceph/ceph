@@ -630,10 +630,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.umount_wait()
 
         if isinstance(self.mount_a, FuseMount):
-            self.mount_a.mount(mount_options=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
+            self.mount_a.mount(mntopts=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
         else:
             try:
-                self.mount_a.mount(mount_options=['recover_session=clean'])
+                self.mount_a.mount(mntopts=['recover_session=clean'])
             except CommandFailedError:
                 self.mount_a.kill_cleanup()
                 self.skipTest("Not implemented in current kernel")

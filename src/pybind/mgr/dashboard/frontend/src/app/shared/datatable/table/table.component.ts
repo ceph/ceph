@@ -11,6 +11,7 @@ import {
   OnInit,
   Output,
   PipeTransform,
+  SimpleChanges,
   TemplateRef,
   ViewChild
 } from '@angular/core';
@@ -584,8 +585,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     return _.isEmpty(css) ? undefined : css;
   }
 
-  ngOnChanges() {
-    this.useData();
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes.data && changes.data.currentValue) {
+      this.useData();
+    }
   }
 
   setLimit(e: any) {

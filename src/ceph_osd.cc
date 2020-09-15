@@ -137,8 +137,7 @@ int main(int argc, const char **argv)
   auto cct = global_init(
     &defaults,
     args, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_DAEMON,
-    0, "osd_data");
+    CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
 
   Preforker forker;

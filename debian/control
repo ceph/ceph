@@ -453,6 +453,30 @@ Description: debugging symbols for ceph-fuse
  .
  This package contains the debugging symbols for ceph-fuse.
 
+Package: cephfs-mirror
+Architecture: linux-any
+Depends: ceph-common (= ${binary:Version}),
+         librados2 (= ${binary:Version}),
+         libcephfs2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description:  Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage. This is a daemon for mirroring CephFS
+ directory snapshots between Ceph clusters.
+
+Package: cephfs-mirror-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: cephfs-mirror (= ${binary:Version}),
+         ${misc:Depends}
+Description: debugging symbols for cephfs-mirror
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a  daemon for mirroring CephFS
+ directory snapshots between Ceph clusters.
+
 Package: rbd-fuse
 Architecture: linux-any
 Depends: ${misc:Depends},

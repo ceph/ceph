@@ -1064,10 +1064,7 @@ struct RGWObjVersionTracker {
   void prepare_op_for_read(librados::ObjectReadOperation *op);
   void prepare_op_for_write(librados::ObjectWriteOperation *op);
 
-  void apply_write() {
-    read_version = write_version;
-    write_version = obj_version();
-  }
+  void apply_write();
 
   void clear() {
     read_version = obj_version();
@@ -1643,7 +1640,7 @@ struct req_state : DoutPrefixProvider {
 
   bool has_bad_meta{false};
 
-  rgw::sal::RGWUser* user{nullptr};
+  std::unique_ptr<rgw::sal::RGWUser> user;
 
   struct {
     /* TODO(rzarzynski): switch out to the static_ptr for both members. */
@@ -1729,9 +1726,11 @@ struct req_state : DoutPrefixProvider {
   //token claims from STS token for ops log (can be used for Keystone token also)
   std::vector<string> token_claims;
 
-  req_state(CephContext* _cct, RGWEnv* e, rgw::sal::RGWUser* u, uint64_t id);
+  req_state(CephContext* _cct, RGWEnv* e, uint64_t id);
   ~req_state();
 
+
+  void set_user(std::unique_ptr<rgw::sal::RGWUser>& u) { user.swap(u); }
   bool is_err() const { return err.is_err(); }
 
   // implements DoutPrefixProvider

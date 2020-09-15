@@ -1,8 +1,4 @@
 import ipaddress
-import sys
-
-if sys.version_info > (3, 0):
-    unicode = str
 
 
 def unwrap_ipv6(address):
@@ -19,7 +15,7 @@ def wrap_ipv6(address):
     # it's already wrapped it'll not pass (like if it's a hostname) and trigger
     # the ValueError
     try:
-        if ipaddress.ip_address(unicode(address)).version == 6:
+        if ipaddress.ip_address(address).version == 6:
             return f"[{address}]"
     except ValueError:
         pass
@@ -31,6 +27,6 @@ def is_ipv6(address):
     # type: (str) -> bool
     address = unwrap_ipv6(address)
     try:
-        return ipaddress.ip_address(unicode(address)).version == 6
+        return ipaddress.ip_address(address).version == 6
     except ValueError:
         return False

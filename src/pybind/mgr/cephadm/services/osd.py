@@ -12,13 +12,13 @@ from cephadm.utils import forall_hosts
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
+from cephadm.services.cephadmservice import CephadmDaemonSpec, CephService
 
 logger = logging.getLogger(__name__)
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 
-class OSDService(CephadmService):
+class OSDService(CephService):
     TYPE = 'osd'
 
     def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
@@ -125,13 +125,19 @@ class OSDService(CephadmService):
         for host in matching_hosts:
             inventory_for_host = _find_inv_for_host(host, self.mgr.cache.devices)
             logger.debug(f"Found inventory for host {inventory_for_host}")
-            drive_selection = DriveSelection(drive_group, inventory_for_host)
+
+            # List of Daemons on that host
+            dd_for_spec = self.mgr.cache.get_daemons_by_service(drive_group.service_name())
+            dd_for_spec_and_host = [dd for dd in dd_for_spec if dd.hostname == host]
+
+            drive_selection = DriveSelection(drive_group, inventory_for_host,
+                                             existing_daemons=len(dd_for_spec_and_host))
             logger.debug(f"Found drive selection {drive_selection}")
             host_ds_map.append((host, drive_selection))
         return host_ds_map
 
-    def driveselection_to_ceph_volume(self,
-                                      drive_selection: DriveSelection,
+    @staticmethod
+    def driveselection_to_ceph_volume(drive_selection: DriveSelection,
                                       osd_id_claims: Optional[List[str]] = None,
                                       preview: bool = False) -> Optional[str]:
         logger.debug(f"Translating DriveGroup <{drive_selection.spec}> to ceph-volume command")

@@ -15,7 +15,7 @@ namespace crimson {
 template<typename Iterator, typename AsyncAction>
 inline auto do_for_each(Iterator begin, Iterator end, AsyncAction action) {
   using futurator = \
-    ::seastar::futurize<std::result_of_t<AsyncAction(decltype(*begin))>>;
+    ::seastar::futurize<std::invoke_result_t<AsyncAction, decltype(*begin)>>;
 
   if (begin == end) {
     return futurator::type::errorator_type::template make_ready_future<>();
@@ -54,7 +54,7 @@ inline auto do_until(AsyncAction action) {
 
   while (true) {
     auto f = futurator::invoke(action);
-    if (!seastar::need_preempt() && f.available() && std::get<0>(f.get())) {
+    if (!seastar::need_preempt() && f.available() && f.get()) {
       return futurator::type::errorator_type::template make_ready_future<>();
     }
     if (!f.available() || seastar::need_preempt()) {
@@ -570,8 +570,8 @@ private:
             // solution here would be mark the `::get_available_state()`
             // as `protected` and use dedicated `get_value()` exactly as
             // `::then()` already does.
-            return futurator_t::apply(std::forward<ValueFuncT>(valfunc),
-                                      std::move(future).get());
+            return futurator_t::invoke(std::forward<ValueFuncT>(valfunc),
+                                       std::move(future).get());
           }
         });
     }
@@ -835,21 +835,39 @@ private:
   class futurize {
     using vanilla_futurize = seastar::futurize<T>;
 
-    template <class...>
-    struct tuple2future {};
-    template <class... Args>
-    struct tuple2future <std::tuple<Args...>> {
-      using type = future<Args...>;
+    // explicit specializations for nested type is not allowed unless both
+    // the member template and the enclosing template are specialized. see
+    // section temp.expl.spec, N4659
+    template <class Stored, int Dummy = 0>
+    struct stored_to_future {
+      using type = future<Stored>;
+    };
+    template <int Dummy>
+    struct stored_to_future <seastar::internal::monostate, Dummy> {
+      using type = future<>;
     };
 
   public:
     using type =
-      typename tuple2future<typename vanilla_futurize::value_type>::type;
+      typename stored_to_future<typename vanilla_futurize::value_type>::type;
 
     template <class Func, class... Args>
-    static type apply(Func&& func, std::tuple<Args...>&& args) {
-      return vanilla_futurize::apply(std::forward<Func>(func),
-                                     std::forward<std::tuple<Args...>>(args));
+    static type invoke(Func&& func, Args&&... args) {
+      try {
+        return vanilla_futurize::invoke(std::forward<Func>(func),
+                                        std::forward<Args>(args)...);
+      } catch (...) {
+        return make_exception_future(std::current_exception());
+      }
+    }
+
+    template <class Func>
+    static type invoke(Func&& func, seastar::internal::monostate) {
+      try {
+        return vanilla_futurize::invoke(std::forward<Func>(func));
+      } catch (...) {
+        return make_exception_future(std::current_exception());
+      }
     }
 
     template <typename Arg>
@@ -871,6 +889,25 @@ private:
       try {
         return ::seastar::futurize_apply(std::forward<Func>(func),
 					 std::forward<std::tuple<Args...>>(args));
+      } catch (...) {
+        return make_exception_future(std::current_exception());
+      }
+    }
+
+    template <class Func, class... Args>
+    static type invoke(Func&& func, Args&&... args) {
+      try {
+        return ::seastar::futurize_invoke(std::forward<Func>(func),
+                                          std::forward<Args>(args)...);
+      } catch (...) {
+        return make_exception_future(std::current_exception());
+      }
+    }
+
+    template <class Func>
+    static type invoke(Func&& func, seastar::internal::monostate) {
+      try {
+        return ::seastar::futurize_invoke(std::forward<Func>(func));
       } catch (...) {
         return make_exception_future(std::current_exception());
       }
@@ -1044,21 +1081,21 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
 
   template<typename Func, typename... FuncArgs>
   [[gnu::always_inline]]
-  static inline type apply(Func&& func, std::tuple<FuncArgs...>&& args) noexcept {
+  static inline type invoke(Func&& func, FuncArgs&&... args) noexcept {
     try {
-      return std::apply(std::forward<Func>(func),
-                        std::forward<std::tuple<FuncArgs...>>(args));
+      return func(std::forward<FuncArgs>(args)...);
     } catch (...) {
       return make_exception_future(std::current_exception());
     }
   }
 
-  template<typename Func, typename... FuncArgs>
-  static inline type invoke(Func&& func, FuncArgs&&... args) noexcept {
+  template <class Func>
+  [[gnu::always_inline]]
+  static type invoke(Func&& func, seastar::internal::monostate) noexcept {
     try {
-        return func(std::forward<FuncArgs>(args)...);
+      return func();
     } catch (...) {
-        return make_exception_future(std::current_exception());
+      return make_exception_future(std::current_exception());
     }
   }
 
@@ -1084,12 +1121,10 @@ private:
   friend class future;
 };
 
-namespace internal {
 template <template <class...> class Container,
           class... Values>
 struct continuation_base_from_future<Container<::crimson::errorated_future_marker<Values...>>> {
   using type = continuation_base<Values...>;
 };
-}
 
 } // namespace seastar

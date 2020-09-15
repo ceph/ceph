@@ -1,18 +1,16 @@
 # type: ignore
 import argparse
 import mock
+from mock import patch
 import os
 import sys
 import unittest
 
 import pytest
 
-if sys.version_info >= (3, 3):
+with patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
-else:
-    import imp
-    cd = imp.load_source('cephadm', 'cephadm')
 
 class TestCephAdm(object):
     def test_is_fsid(self):
@@ -238,3 +236,20 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
         with pytest.raises(Exception) as e:
             cd.command_registry_login()
         assert str(e.value) == "Failed to login to custom registry @ sample-url as sample-user with given password"
+
+    def test_get_image_info_from_inspect(self):
+        # podman
+        out = """204a01f9b0b6710dd0c0af7f37ce7139c47ff0f0105d778d7104c69282dfbbf1,["docker.io/ceph/ceph@sha256:1cc9b824e1b076cdff52a9aa3f0cc8557d879fb2fbbba0cafed970aca59a3992"]"""
+        r = cd.get_image_info_from_inspect(out, 'registry/ceph/ceph:latest')
+        assert r == {
+            'image_id': '204a01f9b0b6710dd0c0af7f37ce7139c47ff0f0105d778d7104c69282dfbbf1',
+            'repo_digest': 'docker.io/ceph/ceph@sha256:1cc9b824e1b076cdff52a9aa3f0cc8557d879fb2fbbba0cafed970aca59a3992'
+        }
+
+        # docker
+        out = """sha256:16f4549cf7a8f112bbebf7946749e961fbbd1b0838627fe619aab16bc17ce552,["quay.ceph.io/ceph-ci/ceph@sha256:4e13da36c1bd6780b312a985410ae678984c37e6a9493a74c87e4a50b9bda41f"]"""
+        r = cd.get_image_info_from_inspect(out, 'registry/ceph/ceph:latest')
+        assert r == {
+            'image_id': '16f4549cf7a8f112bbebf7946749e961fbbd1b0838627fe619aab16bc17ce552',
+            'repo_digest': 'quay.ceph.io/ceph-ci/ceph@sha256:4e13da36c1bd6780b312a985410ae678984c37e6a9493a74c87e4a50b9bda41f'
+        }

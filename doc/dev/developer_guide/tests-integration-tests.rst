@@ -1,7 +1,9 @@
+.. _testing-integration-tests:
+
 Testing - Integration Tests
 ===========================
 
-Ceph has two types of tests: `make check`_ tests and integration tests.
+Ceph has two types of tests: :ref:`make check <make-check>` tests and integration tests.
 When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
 is deemed to be an integration test. Integration tests are organized into
@@ -22,7 +24,7 @@ installed on any machine running those platforms.
 
 Teuthology has a `list of platforms that it supports
 <https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_ (as
-of December 2017 the list consisted of "CentOS 7.2" and "Ubuntu 16.04").  It
+of September 2020 the list consisted of "RHEL/CentOS 8" and "Ubuntu 18.04").  It
 expects to be provided pre-built Ceph packages for these platforms.
 Teuthology deploys these platforms on machines (bare-metal or
 cloud-provisioned), installs the packages on them, and deploys Ceph
@@ -54,9 +56,7 @@ Nightlies are often half-finished and cancelled due to the volume of testing
 done so your jobs may never finish. Therefore, it is common to select a
 priority less than 1000.
 
-Any priority may be selected when submitting jobs. But, in order to be
-sensitive to the workings of other developers that also need to do testing,
-the following recommendations should be followed:
+Job priority should be selected based on the following recommendations:
 
 * **Priority < 10:** Use this if the sky is falling and some group of tests
   must be run ASAP.
@@ -85,6 +85,10 @@ In case you don't know how many jobs would be triggered by
 issue ``teuthology-suite`` command again, this time without ``--dry-run`` and
 with ``-p`` and an appropriate number as an argument to it.
 
+To skip the priority check, use ``--force-priority``. In order to be sensitive
+to the runs of other developers who also need to do testing, please use it in
+emergency only.
+
 Suites Inventory
 ----------------
 
@@ -96,7 +100,7 @@ all the integration tests, for all the Ceph components.
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
-  verify the `integration testing`_ infrastructure works as expected)
+  verify the :ref:`testing-integration-tests` infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
   test CephFS mounted using FUSE
@@ -183,9 +187,11 @@ so-called "teuthology machine" from which tests suites are triggered using the
 ``teuthology-suite`` command.
 
 A detailed and up-to-date description of each `teuthology-suite`_ option is
-available by running the following command on the teuthology machine::
+available by running the following command on the teuthology machine
 
-   $ teuthology-suite --help
+.. prompt:: bash $
+
+   teuthology-suite --help
 
 .. _teuthology-suite: http://docs.ceph.com/teuthology/docs/teuthology.suite.html
 
@@ -207,7 +213,8 @@ Let us first examine a standalone test, or "singleton".
 Here is a commented example using the integration test
 `rados/singleton/all/admin-socket.yaml
 <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/admin-socket.yaml>`_
-::
+
+.. code-block:: yaml
 
       roles:
       - - mon.a
@@ -265,9 +272,11 @@ the parameter is a set of commands to be sent to the admin socket of
 ``osd.0``. The task verifies that each of them returns on success (i.e.
 exit code zero).
 
-This test can be run with::
+This test can be run with
 
-    $ teuthology-suite --machine-type smithi --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
+.. prompt:: bash $
+
+   teuthology-suite --machine-type smithi --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
 
 Test descriptions
 -----------------
@@ -321,17 +330,20 @@ teuthology to construct a test matrix from yaml facets found in
 subdirectories below the directory containing the operator.
 
 For example, the `ceph-deploy suite
-<https://github.com/ceph/ceph/tree/jewel/qa/suites/ceph-deploy/>`_ is
+<https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy/>`_ is
 defined by the ``suites/ceph-deploy/`` tree, which consists of the files and
-subdirectories in the following structure::
+subdirectories in the following structure
 
-  directory: ceph-deploy/basic
-      file: %
-      directory: distros
-         file: centos_7.0.yaml
-         file: ubuntu_16.04.yaml
-      directory: tasks
-         file: ceph-deploy.yaml
+.. code-block:: none
+
+  qa/suites/ceph-deploy
+  ├── %
+  ├── distros
+  │   ├── centos_latest.yaml
+  │   └── ubuntu_latest.yaml
+  └── tasks
+      ├── ceph-admin-commands.yaml
+      └── rbd_import_export.yaml
 
 This is interpreted as a 2x1 matrix consisting of two tests:
 
@@ -359,14 +371,18 @@ By using symlinks instead of copying, a single file can appear in multiple
 suites. This eases the maintenance of the test framework as a whole.
 
 All the tests generated from the ``suites/ceph-deploy/`` directory tree
-(also known as the "ceph-deploy suite") can be run with::
+(also known as the "ceph-deploy suite") can be run with
 
-  $ teuthology-suite --machine-type smithi --suite ceph-deploy
+.. prompt:: bash $
+
+   teuthology-suite --machine-type smithi --suite ceph-deploy
 
 An individual test from the `ceph-deploy suite`_ can be run by adding the
-``--filter`` option::
+``--filter`` option
 
-  $ teuthology-suite \
+.. prompt:: bash $
+
+   teuthology-suite \
       --machine-type smithi \
       --suite ceph-deploy/basic \
       --filter 'ceph-deploy/basic/{distros/ubuntu_16.04.yaml tasks/ceph-deploy.yaml}'
@@ -384,17 +400,20 @@ For even greater flexibility in sharing yaml files between suites, the
 special file plus (``+``) can be used to concatenate files within a
 directory. For instance, consider the `suites/rbd/thrash
 <https://github.com/ceph/ceph/tree/master/qa/suites/rbd/thrash>`_
-tree::
+tree
 
-  directory: rbd/thrash
-    file: %
-    directory: clusters
-      file: +
-      file: fixed-2.yaml
-      file: openstack.yaml
-    directory: workloads
-      file: rbd_api_tests_copy_on_read.yaml
-      file: rbd_api_tests.yaml
+.. code-block:: none
+
+  qa/suites/rbd/thrash
+  ├── %
+  ├── clusters
+  │   ├── +
+  │   ├── fixed-2.yaml
+  │   └── openstack.yaml
+  └── workloads
+      ├── rbd_api_tests_copy_on_read.yaml
+      ├── rbd_api_tests.yaml
+      └── rbd_fsx_rate_limit.yaml
 
 This creates two tests:
 
@@ -414,21 +433,27 @@ a 2x2 matrix:
 * rbd/thrash/{clusters/fixed-2.yaml workloads/rbd_api_tests.yaml}
 
 The ``clusters/fixed-2.yaml`` file is shared among many suites to
-define the following ``roles``::
+define the following ``roles``
+
+.. code-block:: yaml
 
   roles:
   - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
   - [mon.b, osd.3, osd.4, osd.5, client.1]
 
 The ``rbd/thrash`` suite as defined above, consisting of two tests,
-can be run with::
+can be run with
 
-  $ teuthology-suite --machine-type smithi --suite rbd/thrash
+.. prompt:: bash $
+
+   teuthology-suite --machine-type smithi --suite rbd/thrash
 
 A single test from the rbd/thrash suite can be run by adding the
-``--filter`` option::
+``--filter`` option
 
-  $ teuthology-suite \
+.. prompt:: bash $
+
+   teuthology-suite \
       --machine-type smithi \
       --suite rbd/thrash \
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
@@ -439,16 +464,20 @@ Filtering tests by their description
 When a few jobs fail and need to be run again, the ``--filter`` option
 can be used to select tests with a matching description. For instance, if the
 ``rados`` suite fails the `all/peer.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/peer.yaml>`_ test, the following will only
-run the tests that contain this file::
+run the tests that contain this file
 
-  teuthology-suite --machine-type smithi --suite rados --filter all/peer.yaml
+.. prompt:: bash $
+
+   teuthology-suite --machine-type smithi --suite rados --filter all/peer.yaml
 
 The ``--filter-out`` option does the opposite (it matches tests that do `not`
 contain a given string), and can be combined with the ``--filter`` option.
 
 Both ``--filter`` and ``--filter-out`` take a comma-separated list of strings
 (which means the comma character is implicitly forbidden in filenames found in
-the `ceph/qa sub-directory`_). For instance::
+the `ceph/qa sub-directory`_). For instance
+
+.. prompt:: bash $
 
   teuthology-suite --machine-type smithi --suite rados --filter all/peer.yaml,all/rest-api.yaml
 
@@ -476,9 +505,11 @@ All integration tests are required to be run before a Ceph release is
 published. When merely verifying whether a contribution can be merged without
 risking a trivial regression, it is enough to run a subset. The ``--subset``
 option can be used to reduce the number of tests that are triggered. For
-instance::
+instance
 
-  teuthology-suite --machine-type smithi --suite rados --subset 0/4000
+.. prompt:: bash $
+
+   teuthology-suite --machine-type smithi --suite rados --subset 0/4000
 
 will run as few tests as possible. The tradeoff in this case is that
 not all combinations of test variations will together,
@@ -492,8 +523,6 @@ this is rarely useful, however, because there is no way to control which
 test will be first.
 
 .. _ceph/qa sub-directory: https://github.com/ceph/ceph/tree/master/qa
-.. _Integration testing: testing-integration-tests
-.. _make check:
 .. _Sepia Lab: https://wiki.sepia.ceph.com/doku.php
 .. _teuthology repository: https://github.com/ceph/teuthology
 .. _teuthology framework: https://github.com/ceph/teuthology

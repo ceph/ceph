@@ -12,6 +12,7 @@ import traceback
 
 from io import BytesIO
 from io import StringIO
+from errno import EBUSY
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -336,42 +337,6 @@ class MDSCluster(CephCluster):
     def status(self):
         return FSStatus(self.mon_manager)
 
-    def delete_all_filesystems(self):
-        """
-        Remove all filesystems that exist, and any pools in use by them.
-        """
-        pools = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
-        pool_id_name = {}
-        for pool in pools:
-            pool_id_name[pool['pool']] = pool['pool_name']
-
-        # mark cluster down for each fs to prevent churn during deletion
-        status = self.status()
-        for fs in status.get_filesystems():
-            self.mon_manager.raw_cluster_cmd("fs", "fail", str(fs['mdsmap']['fs_name']))
-
-        # get a new copy as actives may have since changed
-        status = self.status()
-        for fs in status.get_filesystems():
-            mdsmap = fs['mdsmap']
-            metadata_pool = pool_id_name[mdsmap['metadata_pool']]
-
-            self.mon_manager.raw_cluster_cmd('fs', 'rm', mdsmap['fs_name'], '--yes-i-really-mean-it')
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                             metadata_pool, metadata_pool,
-                                             '--yes-i-really-really-mean-it')
-            for data_pool in mdsmap['data_pools']:
-                data_pool = pool_id_name[data_pool]
-                try:
-                    self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                                     data_pool, data_pool,
-                                                     '--yes-i-really-really-mean-it')
-                except CommandFailedError as e:
-                    if e.exitstatus == 16: # EBUSY, this data pool is used
-                        pass               # by two metadata pools, let the 2nd
-                    else:                  # pass delete it
-                        raise
-
     def get_standby_daemons(self):
         return set([s['name'] for s in self.status().get_standbys()])
 
@@ -423,6 +388,14 @@ class MDSCluster(CephCluster):
                 return 'full' in pool['flags_names'].split(",")
 
         raise RuntimeError("Pool not found '{0}'".format(pool_name))
+
+    def delete_all_filesystems(self):
+        """
+        Remove all filesystems that exist, and any pools in use by them.
+        """
+        for fs in self.status().get_filesystems():
+            Filesystem(ctx=self._ctx, fscid=fs['id']).destroy()
+
 
 class Filesystem(MDSCluster):
     """
@@ -611,7 +584,43 @@ class Filesystem(MDSCluster):
 
         self.getinfo(refresh = True)
 
-        
+    def destroy(self, reset_obj_attrs=True):
+        log.info('Destroying file system ' + self.name +  ' and related '
+                 'pools')
+
+        # make sure no MDSs are attached to given FS.
+        self.mon_manager.raw_cluster_cmd('fs', 'fail', self.name)
+        self.mon_manager.raw_cluster_cmd(
+            'fs', 'rm', self.name, '--yes-i-really-mean-it')
+
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm',
+            self.get_metadata_pool_name(), self.get_metadata_pool_name(),
+            '--yes-i-really-really-mean-it')
+        for poolname in self.get_data_pool_names():
+            try:
+                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', poolname,
+                    poolname, '--yes-i-really-really-mean-it')
+            except CommandFailedError as e:
+                # EBUSY, this data pool is used by two metadata pools, let the
+                # 2nd pass delete it
+                if e.exitstatus == EBUSY:
+                    pass
+                else:
+                    raise
+
+        if reset_obj_attrs:
+            self.id = None
+            self.name = None
+            self.metadata_pool_name = None
+            self.data_pool_name = None
+            self.data_pools = None
+
+    def recreate(self):
+        self.destroy(reset_obj_attrs=False)
+
+        self.create()
+        self.getinfo(refresh=True)
+
     def check_pool_application(self, pool_name):
         osd_map = self.mon_manager.get_osd_dump_json()
         for pool in osd_map['pools']:
@@ -620,7 +629,6 @@ class Filesystem(MDSCluster):
                     if not "cephfs" in pool['application_metadata']:
                         raise RuntimeError("Pool {pool_name} does not name cephfs as application!".\
                                            format(pool_name=pool_name))
-        
 
     def __del__(self):
         if getattr(self._ctx, "filesystem", None) == self:
@@ -937,12 +945,6 @@ class Filesystem(MDSCluster):
                 raise ValueError("Explicit MDS argument required when multiple MDSs in use")
         else:
             return self.mds_ids[0]
-
-    def recreate(self):
-        log.info("Creating new filesystem")
-        self.delete_all_filesystems()
-        self.id = None
-        self.create()
 
     def put_metadata_object_raw(self, object_id, infile):
         """
@@ -1440,3 +1442,20 @@ class Filesystem(MDSCluster):
 
     def is_full(self):
         return self.is_pool_full(self.get_data_pool_name())
+
+    def enable_multifs(self):
+        self.mon_manager.raw_cluster_cmd('fs', 'flag', 'set',
+            'enable_multiple', 'true', '--yes-i-really-mean-it')
+
+    def authorize(self, client_id, caps=('/', 'rw')):
+        """
+        Run "ceph fs authorize" and run "ceph auth get" to get and returnt the
+        keyring.
+
+        client_id: client id that will be authorized
+        caps: tuple containing the path and permission (can be r or rw)
+              respectively.
+        """
+        client_name = 'client.' + client_id
+        return self.mon_manager.raw_cluster_cmd('fs', 'authorize', self.name,
+                                                client_name, *caps)

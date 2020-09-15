@@ -2292,7 +2292,7 @@ class SetChunkOp : public TestOp {
 public:
   string oid, oid_tgt, tgt_pool_name;
   ObjectDesc src_value, tgt_value;
-  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation op;
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
   std::shared_ptr<int> in_use;
@@ -2301,7 +2301,6 @@ public:
   uint64_t offset;
   uint32_t length;
   uint64_t tgt_offset;
-  bool enable_with_reference;
   SetChunkOp(int n,
 	     RadosTestContext *context,
 	     const string &oid,
@@ -2310,13 +2309,12 @@ public:
 	     const string &oid_tgt,
 	     const string &tgt_pool_name,
 	     uint64_t tgt_offset,
-	     TestOpStat *stat = 0,
-	     bool enable_with_reference = false)
+	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       oid(oid), oid_tgt(oid_tgt), tgt_pool_name(tgt_pool_name),
       comp(NULL), done(0), 
       r(0), offset(offset), length(length), 
-      tgt_offset(tgt_offset), enable_with_reference(enable_with_reference)
+      tgt_offset(tgt_offset)
   {}
 
   void _begin() override
@@ -2332,13 +2330,8 @@ public:
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    if (enable_with_reference) {
-      op.set_chunk(offset, length, context->low_tier_io_ctx, 
-		   context->prefix+oid_tgt, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    } else {
-      op.set_chunk(offset, length, context->low_tier_io_ctx, 
-		   context->prefix+oid_tgt, tgt_offset);
-    }
+    op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		 context->prefix+oid_tgt, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2346,7 +2339,7 @@ public:
     comp = context->rados.aio_create_completion((void*) cb_arg,
 						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
-				librados::OPERATION_ORDER_READS_WRITES);
+				librados::OPERATION_ORDER_READS_WRITES, NULL);
   }
 
   void _finish(CallbackInfo *info) override
@@ -2460,14 +2453,13 @@ public:
       /* unset redirect target */
       comp = context->rados.aio_create_completion();
       bool present = !src_value.deleted();
-      context->remove_object(oid);
-      op.remove();
+      op.unset_manifest();
       context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				  librados::OPERATION_ORDER_READS_WRITES |
 				  librados::OPERATION_IGNORE_REDIRECT);
       comp->wait_for_complete();
       if ((r = comp->get_return_value())) {
-	if (!(r == -ENOENT && !present)) {
+	if (!(r == -ENOENT && !present) && r != -EOPNOTSUPP) {
 	  cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
 	  ceph_abort();
 	}

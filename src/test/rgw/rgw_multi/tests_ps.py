@@ -67,17 +67,23 @@ class HTTPPostHandler(http_server.BaseHTTPRequestHandler):
             log.error('HTTP Server received empty event')
             self.send_response(400)
         else:
-            self.send_response(100)
+            if self.headers.get('Expect') == '100-continue':
+                self.send_response(100)
+            else:
+                self.send_response(200)
         finally:
+            if self.server.delay > 0:
+                time.sleep(self.server.delay)
             self.end_headers()
 
 
 class HTTPServerWithEvents(http_server.HTTPServer):
     """HTTP server used by the handler to store events"""
-    def __init__(self, addr, handler, worker_id):
+    def __init__(self, addr, handler, worker_id, delay=0):
         http_server.HTTPServer.__init__(self, addr, handler, False)
         self.worker_id = worker_id
         self.events = []
+        self.delay = delay
 
     def append(self, event):
         self.events.append(event)
@@ -85,11 +91,11 @@ class HTTPServerWithEvents(http_server.HTTPServer):
 
 class HTTPServerThread(threading.Thread):
     """thread for running the HTTP server. reusing the same socket for all threads"""
-    def __init__(self, i, sock, addr):
+    def __init__(self, i, sock, addr, delay=0):
         threading.Thread.__init__(self)
         self.i = i
         self.daemon = True
-        self.httpd = HTTPServerWithEvents(addr, HTTPPostHandler, i)
+        self.httpd = HTTPServerWithEvents(addr, HTTPPostHandler, i, delay)
         self.httpd.socket = sock
         # prevent the HTTP server from re-binding every handler
         self.httpd.server_bind = self.server_close = lambda self: None
@@ -117,13 +123,13 @@ class HTTPServerThread(threading.Thread):
 class StreamingHTTPServer:
     """multi-threaded http server class also holding list of events received into the handler
     each thread has its own server, and all servers share the same socket"""
-    def __init__(self, host, port, num_workers=100):
+    def __init__(self, host, port, num_workers=100, delay=0):
         addr = (host, port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(addr)
         self.sock.listen(num_workers)
-        self.workers = [HTTPServerThread(i, self.sock, addr) for i in range(num_workers)]
+        self.workers = [HTTPServerThread(i, self.sock, addr, delay) for i in range(num_workers)]
 
     def verify_s3_events(self, keys, exact_match=False, deletions=False, expected_sizes={}):
         """verify stored s3 records agains a list of keys"""
@@ -158,6 +164,7 @@ class StreamingHTTPServer:
         for worker in self.workers:
             worker.close()
             worker.join()
+
 
 # AMQP endpoint functions
 
@@ -371,7 +378,7 @@ def init_rabbitmq():
     # TODO: support multiple brokers per host using env
     # make sure we don't collide with the default
     try:
-        proc = subprocess.Popen('rabbitmq-server')
+        proc = subprocess.Popen(['sudo', 'rabbitmq-server'])
     except Exception as error:
         log.info('failed to execute rabbitmq-server: %s', str(error))
         print('failed to execute rabbitmq-server: %s' % str(error))
@@ -384,7 +391,7 @@ def init_rabbitmq():
 def clean_rabbitmq(proc): #, data_dir, log_dir)
     """ stop the rabbitmq broker """
     try:
-        subprocess.call(['rabbitmqctl', 'stop'])
+        subprocess.call(['sudo', 'rabbitmqctl', 'stop'])
         time.sleep(5)
         proc.terminate()
     except:
@@ -1453,6 +1460,721 @@ def test_ps_s3_notification_push_amqp_on_master():
     clean_rabbitmq(proc)
 
 
+def test_ps_s3_persistent_cleanup():
+    """ test reservation cleanup after gateway crash """
+    return SkipTest("only used in manual testing")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 200
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+
+    gw = master_zone
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = gw.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf = PSTopicS3(gw.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:Put']
+        }]
+    s3_notification_conf = PSNotificationS3(gw.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    # stop gateway while clients are sending
+    os.system("killall -9 radosgw");
+    zonegroup.master_zone.gateways[0].stop()
+    print('wait for 10 sec for before restarting the gateway')
+    time.sleep(10)
+    zonegroup.master_zone.gateways[0].start()
+    [thr.join() for thr in client_threads] 
+   
+    keys = list(bucket.list())
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    # check http receiver
+    events = http_server.get_and_reset_events()
+
+    print(str(len(events) ) + " events found out of " + str(number_of_objects))
+    
+    # make sure that things are working now
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+   
+    keys = list(bucket.list())
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    print('wait for 180 sec for reservations to be stale before queue deletion')
+    time.sleep(180)
+
+    # check http receiver
+    events = http_server.get_and_reset_events()
+
+    print(str(len(events)) + " events found out of " + str(number_of_objects))
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    gw.delete_bucket(bucket_name)
+    http_server.close()
+
+
+def test_ps_s3_persistent_gateways_recovery():
+    """ test gateway recovery of persistent notifications """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.master_zone.gateways) < 2:
+        return SkipTest("this test requires two gateways")
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 10
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+
+    gw1 = master_zone
+    gw2 = zonegroup.master_zone.gateways[1]
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = gw1.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # create two s3 topics
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf1 = PSTopicS3(gw1.conn, topic_name+'_1', zonegroup.name, endpoint_args=endpoint_args+'&OpaqueData=fromgw1')
+    topic_arn1 = topic_conf1.set_config()
+    topic_conf2 = PSTopicS3(gw2.connection, topic_name+'_2', zonegroup.name, endpoint_args=endpoint_args+'&OpaqueData=fromgw2')
+    topic_arn2 = topic_conf2.set_config()
+
+    # create two s3 notifications
+    notification_name = bucket_name + NOTIFICATION_SUFFIX+'_1'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn1,
+        'Events': ['s3:ObjectCreated:Put']
+        }]
+    s3_notification_conf1 = PSNotificationS3(gw1.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf1.set_config()
+    assert_equal(status/100, 2)
+    notification_name = bucket_name + NOTIFICATION_SUFFIX+'_2'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn2,
+        'Events': ['s3:ObjectRemoved:Delete']
+        }]
+    s3_notification_conf2 = PSNotificationS3(gw2.connection, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf2.set_config()
+    assert_equal(status/100, 2)
+
+    # stop gateway 2
+    print('stopping gateway2...')
+    gw2.stop()
+
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+   
+    keys = list(bucket.list())
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    print('wait for 60 sec for before restarting the gateway')
+    time.sleep(60)
+    gw2.start()
+    
+    # check http receiver
+    events = http_server.get_and_reset_events()
+    for key in keys:
+        creations = 0
+        deletions = 0
+        for event in events:
+            if event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+                    key.name == event['Records'][0]['s3']['object']['key']:
+                creations += 1
+            elif event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+                    key.name == event['Records'][0]['s3']['object']['key']:
+                deletions += 1
+        assert_equal(creations, 1)
+        assert_equal(deletions, 1)
+
+    # cleanup
+    s3_notification_conf1.del_config()
+    topic_conf1.del_config()
+    gw1.delete_bucket(bucket_name)
+    time.sleep(10)
+    s3_notification_conf2.del_config()
+    topic_conf2.del_config()
+    http_server.close()
+
+
+def test_ps_s3_persistent_multiple_gateways():
+    """ test pushing persistent notification via two gateways """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.master_zone.gateways) < 2:
+        return SkipTest("this test requires two gateways")
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 10
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+
+    gw1 = master_zone
+    gw2 = zonegroup.master_zone.gateways[1]
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket1 = gw1.create_bucket(bucket_name)
+    bucket2 = gw2.connection.get_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # create two s3 topics
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic1_opaque = 'fromgw1'
+    topic_conf1 = PSTopicS3(gw1.conn, topic_name+'_1', zonegroup.name, endpoint_args=endpoint_args+'&OpaqueData='+topic1_opaque)
+    topic_arn1 = topic_conf1.set_config()
+    topic2_opaque = 'fromgw2'
+    topic_conf2 = PSTopicS3(gw2.connection, topic_name+'_2', zonegroup.name, endpoint_args=endpoint_args+'&OpaqueData='+topic2_opaque)
+    topic_arn2 = topic_conf2.set_config()
+
+    # create two s3 notifications
+    notification_name = bucket_name + NOTIFICATION_SUFFIX+'_1'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn1,
+                         'Events': []
+                       }]
+    s3_notification_conf1 = PSNotificationS3(gw1.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf1.set_config()
+    assert_equal(status/100, 2)
+    notification_name = bucket_name + NOTIFICATION_SUFFIX+'_2'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn2,
+                         'Events': []
+                       }]
+    s3_notification_conf2 = PSNotificationS3(gw2.connection, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf2.set_config()
+    assert_equal(status/100, 2)
+
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket1.new_key('gw1_'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+        key = bucket2.new_key('gw2_'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    keys = list(bucket1.list())
+
+    delay = 30
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+
+    events = http_server.get_and_reset_events()
+    for key in keys:
+        topic1_count = 0
+        topic2_count = 0
+        for event in events:
+            if event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+                    key.name == event['Records'][0]['s3']['object']['key'] and \
+                    topic1_opaque == event['Records'][0]['opaqueData']:
+                topic1_count += 1
+            elif event['Records'][0]['eventName'] == 's3:ObjectCreated:Put' and \
+                    key.name == event['Records'][0]['s3']['object']['key'] and \
+                    topic2_opaque == event['Records'][0]['opaqueData']:
+                topic2_count += 1
+        assert_equal(topic1_count, 1)
+        assert_equal(topic2_count, 1)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket1.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+
+    events = http_server.get_and_reset_events()
+    for key in keys:
+        topic1_count = 0
+        topic2_count = 0
+        for event in events:
+            if event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+                    key.name == event['Records'][0]['s3']['object']['key'] and \
+                    topic1_opaque == event['Records'][0]['opaqueData']:
+                topic1_count += 1
+            elif event['Records'][0]['eventName'] == 's3:ObjectRemoved:Delete' and \
+                    key.name == event['Records'][0]['s3']['object']['key'] and \
+                    topic2_opaque == event['Records'][0]['opaqueData']:
+                topic2_count += 1
+        assert_equal(topic1_count, 1)
+        assert_equal(topic2_count, 1)
+    
+    # cleanup
+    s3_notification_conf1.del_config()
+    topic_conf1.del_config()
+    s3_notification_conf2.del_config()
+    topic_conf2.del_config()
+    gw1.delete_bucket(bucket_name)
+    http_server.close()
+
+
+def test_ps_s3_persistent_multiple_endpoints():
+    """ test pushing persistent notification when one of the endpoints has error """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 10
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = master_zone.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # create two s3 topics
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf1 = PSTopicS3(master_zone.conn, topic_name+'_1', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+    endpoint_address = 'http://kaboom:9999'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf2 = PSTopicS3(master_zone.conn, topic_name+'_2', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
+
+    # create two s3 notifications
+    notification_name = bucket_name + NOTIFICATION_SUFFIX+'_1'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn1,
+                         'Events': []
+                       }]
+    s3_notification_conf1 = PSNotificationS3(master_zone.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf1.set_config()
+    assert_equal(status/100, 2)
+    notification_name = bucket_name + NOTIFICATION_SUFFIX+'_2'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn2,
+                         'Events': []
+                       }]
+    s3_notification_conf2 = PSNotificationS3(master_zone.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf2.set_config()
+    assert_equal(status/100, 2)
+
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    keys = list(bucket.list())
+
+    delay = 30
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+    
+    http_server.verify_s3_events(keys, exact_match=False, deletions=False)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+    
+    http_server.verify_s3_events(keys, exact_match=False, deletions=True)
+
+    # cleanup
+    s3_notification_conf1.del_config()
+    topic_conf1.del_config()
+    s3_notification_conf2.del_config()
+    topic_conf2.del_config()
+    master_zone.delete_bucket(bucket_name)
+    http_server.close()
+
+
+def persistent_notification(endpoint_type):
+    """ test pushing persistent notification """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = master_zone.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    receiver = {}
+    host = get_ip()
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = StreamingHTTPServer(host, port, num_workers=10)
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+        # the http server does not guarantee order, so duplicates are expected
+        exact_match = False
+    elif endpoint_type == 'amqp':
+        proc = init_rabbitmq()
+        if proc is None:
+            return SkipTest('end2end amqp tests require rabbitmq-server installed')
+        # start amqp receiver
+        exchange = 'ex1'
+        task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+        task.start()
+        endpoint_address = 'amqp://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange='+exchange+'&amqp-ack-level=broker'+'&persistent=true'
+        # amqp broker guarantee ordering
+        exact_match = True
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+
+    # create s3 topic
+    topic_conf = PSTopicS3(master_zone.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+
+    s3_notification_conf = PSNotificationS3(master_zone.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 100
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    
+    keys = list(bucket.list())
+
+    delay = 40
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+
+    receiver.verify_s3_events(keys, exact_match=exact_match, deletions=False)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    time_diff = time.time() - start_time
+    print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+    
+    receiver.verify_s3_events(keys, exact_match=exact_match, deletions=True)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    master_zone.delete_bucket(bucket_name)
+    if endpoint_type == 'http':
+        receiver.close()
+    else:
+        stop_amqp_receiver(receiver, task)
+        clean_rabbitmq(proc)
+
+
+def test_ps_s3_persistent_notification_http():
+    """ test pushing persistent notification http """
+    persistent_notification('http')
+
+
+def test_ps_s3_persistent_notification_amqp():
+    """ test pushing persistent notification amqp """
+    persistent_notification('amqp')
+
+
+def random_string(length):
+    import string
+    letters = string.ascii_letters
+    return ''.join(random.choice(letters) for i in range(length))
+
+
+def test_ps_s3_persistent_notification_large():
+    """ test pushing persistent notification of large notifications """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = master_zone.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    receiver = {}
+    host = get_ip()
+    proc = init_rabbitmq()
+    if proc is None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    # start amqp receiver
+    exchange = 'ex1'
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task.start()
+    endpoint_address = 'amqp://' + host
+    opaque_data = random_string(1024*2)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&OpaqueData='+opaque_data+'&amqp-exchange='+exchange+'&amqp-ack-level=broker'+'&persistent=true'
+    # amqp broker guarantee ordering
+    exact_match = True
+
+    # create s3 topic
+    topic_conf = PSTopicS3(master_zone.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+
+    s3_notification_conf = PSNotificationS3(master_zone.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 100
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key_value = random_string(63)
+        key = bucket.new_key(key_value)
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    
+    keys = list(bucket.list())
+
+    delay = 40
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+
+    receiver.verify_s3_events(keys, exact_match=exact_match, deletions=False)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    time_diff = time.time() - start_time
+    print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+    
+    receiver.verify_s3_events(keys, exact_match=exact_match, deletions=True)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    master_zone.delete_bucket(bucket_name)
+    stop_amqp_receiver(receiver, task)
+    clean_rabbitmq(proc)
+
+
+def test_ps_s3_persistent_notification_pushback():
+    """ test pushing persistent notification pushback """
+    return SkipTest("only used in manual testing")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    http_server = StreamingHTTPServer(host, port, num_workers=10, delay=0.5)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = master_zone.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf = PSTopicS3(master_zone.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+
+    s3_notification_conf = PSNotificationS3(master_zone.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    for j in range(100):
+        number_of_objects = randint(500, 1000)
+        client_threads = []
+        start_time = time.time()
+        for i in range(number_of_objects):
+            key = bucket.new_key(str(j)+'-'+str(i))
+            content = str(os.urandom(1024*1024))
+            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        time_diff = time.time() - start_time
+        print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    
+    keys = list(bucket.list())
+
+    delay = 30
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    count = 0
+    for key in bucket.list():
+        count += 1
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+        if count%100 == 0:
+            [thr.join() for thr in client_threads]
+            time_diff = time.time() - start_time
+            print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+            client_threads = []
+            start_time = time.time()
+
+    print('wait for '+str(delay)+'sec for the messages...')
+    time.sleep(delay)
+    
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    master_zone.delete_bucket(bucket_name)
+    time.sleep(delay)
+    http_server.close()
+
+
 def test_ps_s3_notification_push_kafka():
     """ test pushing kafka s3 notification on master """
     if skip_push_tests:
@@ -1764,8 +2486,8 @@ def test_ps_s3_notification_multi_delete_on_master():
     client_threads = []
     objects_size = {}
     for i in range(number_of_objects):
-        object_size = randint(1, 1024)
-        content = str(os.urandom(object_size))
+        content = str(os.urandom(randint(1, 1024)))
+        object_size = len(content)
         key = bucket.new_key(str(i))
         objects_size[key.name] = object_size
         thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
@@ -1835,8 +2557,8 @@ def test_ps_s3_notification_push_http_on_master():
     objects_size = {}
     start_time = time.time()
     for i in range(number_of_objects):
-        object_size = randint(1, 1024)
-        content = str(os.urandom(object_size))
+        content = str(os.urandom(randint(1, 1024)))
+        object_size = len(content)
         key = bucket.new_key(str(i))
         objects_size[key.name] = object_size
         thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
@@ -2674,15 +3396,19 @@ def test_ps_creation_triggers():
     key.set_contents_from_string('bar')
     # create objects in the bucket using COPY
     bucket.copy_key('copy', bucket.name, key.name)
+
     # create objects in the bucket using multi-part upload
-    fp = tempfile.TemporaryFile(mode='w')
-    fp.write('bar')
-    fp.close()
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
+    object_size = 1024
+    content = bytearray(os.urandom(object_size))
+    fp.write(content)
+    fp.flush()
+    fp.seek(0)
     uploader = bucket.initiate_multipart_upload('multipart')
-    fp = tempfile.NamedTemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
+    
     # wait for sync
     zone_bucket_checkpoint(ps_zone.zone, master_zone.zone, bucket_name)
 
@@ -2745,12 +3471,15 @@ def test_ps_s3_creation_triggers_on_master():
     key.set_contents_from_string('bar')
     # create objects in the bucket using COPY
     bucket.copy_key('copy', bucket.name, key.name)
+
     # create objects in the bucket using multi-part upload
-    fp = tempfile.TemporaryFile(mode='w')
-    fp.write('bar')
-    fp.close()
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
+    object_size = 10*1024*1024
+    content = bytearray(os.urandom(object_size))
+    fp.write(content)
+    fp.flush()
+    fp.seek(0)
     uploader = bucket.initiate_multipart_upload('multipart')
-    fp = tempfile.NamedTemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
@@ -2826,7 +3555,7 @@ def test_ps_s3_multipart_on_master():
 
     # create objects in the bucket using multi-part upload
     fp = tempfile.NamedTemporaryFile(mode='w+b')
-    object_size = 10*1024*1024
+    object_size = 1024
     content = bytearray(os.urandom(object_size))
     fp.write(content)
     fp.flush()
@@ -3020,16 +3749,20 @@ def test_ps_s3_metadata_on_master():
     
     # create objects in the bucket using COPY
     bucket.copy_key('copy_of_foo', bucket.name, key.name)
+
     # create objects in the bucket using multi-part upload
-    fp = tempfile.NamedTemporaryFile(mode='w')
-    fp.write('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
-    fp.close()
-    uploader = bucket.initiate_multipart_upload('multipart_foo', 
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
+    object_size = 1024
+    content = bytearray(os.urandom(object_size))
+    fp.write(content)
+    fp.flush()
+    fp.seek(0)
+    uploader = bucket.initiate_multipart_upload('multipart_foo',
             metadata={meta_key: meta_value})
-    fp = tempfile.TemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
+    
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver

@@ -5,6 +5,7 @@
 #include "crimson/common/log.h"
 
 // included for get_extent_by_type
+#include "crimson/os/seastore/extentmap_manager/btree/extentmap_btree_node_impl.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node_impl.h"
 #include "crimson/os/seastore/onode_manager/simple-fltree/onode_block.h"
 #include "test/crimson/seastore/test_block.h"
@@ -326,6 +327,16 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       return get_extent<lba_manager::btree::LBALeafNode>(offset, length
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::EXTMAP_INNER:
+      return get_extent<extentmap_manager::ExtMapInnerNode>(offset, length
+      ).safe_then([](auto extent) {
+        return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::EXTMAP_LEAF:
+      return get_extent<extentmap_manager::ExtMapLeafNode>(offset, length
+      ).safe_then([](auto extent) {
+        return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::ONODE_BLOCK:
       return get_extent<OnodeBlock>(offset, length

@@ -17,9 +17,11 @@ class DriveSelection(object):
     def __init__(self,
                  spec,  # type: DriveGroupSpec
                  disks,  # type: List[Device]
+                 existing_daemons=None,  # type: Optional[int]
                  ):
         self.disks = disks.copy()
         self.spec = spec
+        self.existing_daemons = existing_daemons or 0
 
         if self.spec.data_devices.paths:  # type: ignore
             # re: type: ignore there is *always* a path attribute assigned to DeviceSelection
@@ -50,8 +52,7 @@ class DriveSelection(object):
         # type: () -> List[Device]
         return self._journal
 
-    @staticmethod
-    def _limit_reached(device_filter, len_devices,
+    def _limit_reached(self, device_filter, len_devices,
                        disk_path):
         # type: (DeviceSelection, int, str) -> bool
         """ Check for the <limit> property and apply logic
@@ -68,7 +69,7 @@ class DriveSelection(object):
         """
         limit = device_filter.limit or 0
 
-        if limit > 0 and len_devices >= limit:
+        if limit > 0 and (len_devices + self.existing_daemons >= limit):
             logger.info("Refuse to add {} due to limit policy of <{}>".format(
                 disk_path, limit))
             return True

@@ -35,13 +35,17 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 0 8  * * * CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -p 71 -e $CEPH_QA_EMAIL --force-priority
 
 
-## master branch runs - frequency 3 times a week
+## master branch runs
 ## suites rados, rbd and multimds use --subset arg and must be call with schedule_subset.sh
 ## see script in https://github.com/ceph/ceph/tree/master/qa/machine_types
 
-01 07 * * 3   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 2 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
-01 07 * * 5   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
-01 07 * * 7   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+01 07 * * 0   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 0 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+01 07 * * 1   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+01 07 * * 2   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 2 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+01 07 * * 3   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 3 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+01 07 * * 4   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+01 07 * * 5   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 5 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+01 07 * * 6   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rados; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
 01 02 * * 1   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rbd; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 0 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 01 02 * * 2   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=rbd; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
@@ -92,11 +96,8 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 15 13 * * 7   CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; SUITE_NAME=multimds; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
 
-
 25 13 * * 2   CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; SUITE_NAME=kcephfs; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 0 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 25 13 * * 0   CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; SUITE_NAME=kcephfs; KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 5 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
-
-
 
 
 05 05 * * 1  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL

@@ -31,6 +31,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
+#include "rgw_datalog.h"
 #include "rgw_putobj_processor.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
@@ -45,6 +46,7 @@
 #include "rgw_compression.h"
 #include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
+#include "rgw_notify.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
 
@@ -81,7 +83,6 @@ using namespace librados;
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_bucket.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_datalog_rados.h"
 
 #include "compressor/Compressor.h"
 
@@ -183,6 +184,20 @@ void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
   } else {
     cls_version_inc(*op);
   }
+}
+
+void RGWObjVersionTracker::apply_write()
+{
+  const bool checked = (read_version.ver != 0);
+  const bool incremented = (write_version.ver == 0);
+
+  if (checked && incremented) {
+    // apply cls_version_inc() so our next operation can recheck it
+    ++read_version.ver;
+  } else {
+    read_version = write_version;
+  }
+  write_version = obj_version();
 }
 
 RGWObjState::RGWObjState() {
@@ -313,7 +328,8 @@ public:
     http_manager.start();
   }
 
-  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
+  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map,
+		 bc::flat_map<int, bc::flat_set<string> >& shards) {
     rgw_http_param_pair pairs[] = { { "type", "data" },
                                     { "notify", NULL },
                                     { "source-zone", store->svc.zone->get_zone_params().get_id().c_str() },
@@ -323,7 +339,7 @@ public:
     for (auto iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
       RGWRESTConn *conn = iter->second;
       RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
-      stack->call(new RGWPostRESTResourceCR<map<int, set<string> >, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
+      stack->call(new RGWPostRESTResourceCR<bc::flat_map<int, bc::flat_set<string> >, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
 
       stacks.push_back(stack);
     }
@@ -440,21 +456,20 @@ public:
 
 int RGWDataNotifier::process()
 {
-  auto data_log = store->svc.datalog_rados->get_log();
+  auto data_log = store->svc.datalog_rados;
   if (!data_log) {
     return 0;
   }
 
-  map<int, set<string> > shards;
-
-  data_log->read_clear_modified(shards);
+  auto shards = data_log->read_clear_modified();
 
   if (shards.empty()) {
     return 0;
   }
 
-  for (map<int, set<string> >::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
-    ldout(cct, 20) << __func__ << "(): notifying datalog change, shard_id=" << iter->first << ": " << iter->second << dendl;
+  for (const auto& [shard_id, keys] : shards) {
+    ldout(cct, 20) << __func__ << "(): notifying datalog change, shard_id="
+		   << shard_id << ": " << keys << dendl;
   }
 
   notify_mgr.notify_all(store->svc.zone->get_zone_data_notify_to_map(), shards);
@@ -1073,6 +1088,8 @@ void RGWRados::finalize()
   }
   delete reshard;
   delete index_completion_manager;
+
+  rgw::notify::shutdown();
 }
 
 /** 
@@ -1165,6 +1182,10 @@ int RGWRados::init_complete()
     return ret;
 
   ret = open_reshard_pool_ctx();
+  if (ret < 0)
+    return ret;
+
+  ret = open_notif_pool_ctx();
   if (ret < 0)
     return ret;
 
@@ -1299,6 +1320,13 @@ int RGWRados::init_complete()
 
   index_completion_manager = new RGWIndexCompletionManager(this);
   ret = index_completion_manager->start();
+  if (ret < 0) {
+    return ret;
+  }
+  ret = rgw::notify::init(cct, store);
+  if (ret < 0 ) {
+    ldout(cct, 1) << "ERROR: failed to initialize notification manager" << dendl;
+  }
 
   return ret;
 }
@@ -1377,6 +1405,11 @@ int RGWRados::open_objexp_pool_ctx()
 int RGWRados::open_reshard_pool_ctx()
 {
   return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().reshard_pool, reshard_pool_ctx, true, true);
+}
+
+int RGWRados::open_notif_pool_ctx()
+{
+  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().notif_pool, notif_pool_ctx, true, true);
 }
 
 int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,

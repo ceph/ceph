@@ -148,12 +148,15 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Command *command, Config *cfg);
 static int netlink_resize(int nbd_index, uint64_t size);
 
-static void run_quiesce_hook(const std::string &quiesce_hook,
-                             const std::string &devpath,
-                             const std::string &command);
+static int run_quiesce_hook(const std::string &quiesce_hook,
+                            const std::string &devpath,
+                            const std::string &command);
 
 class NBDServer
 {
+public:
+  uint64_t quiesce_watch_handle = 0;
+
 private:
   int fd;
   librbd::Image &image;
@@ -167,7 +170,6 @@ public:
     , reader_thread(*this, &NBDServer::reader_entry)
     , writer_thread(*this, &NBDServer::writer_entry)
     , quiesce_thread(*this, &NBDServer::quiesce_entry)
-    , started(false)
   {
     std::vector<librbd::config_option_t> options;
     image.config_list(&options);
@@ -421,10 +423,9 @@ signal:
     return true;
   }
 
-  void wait_unquiesce() {
+  void wait_unquiesce(std::unique_lock<ceph::mutex> &locker) {
     dout(20) << __func__ << dendl;
 
-    std::unique_lock locker{lock};
     cond.wait(locker, [this] { return !quiesce || terminated; });
 
     dout(20) << __func__ << ": got unquiesce request" << dendl;
@@ -459,13 +460,23 @@ signal:
 
     while (wait_quiesce()) {
 
-      run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "quiesce");
+      int r = run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "quiesce");
 
       wait_inflight_io();
 
-      image.quiesce_complete(0); // TODO: return quiesce hook exit code
+      {
+        std::unique_lock locker{lock};
+        ceph_assert(quiesce == true);
 
-      wait_unquiesce();
+        image.quiesce_complete(quiesce_watch_handle, r);
+
+        if (r < 0) {
+          quiesce = false;
+          continue;
+        }
+
+        wait_unquiesce(locker);
+      }
 
       run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "unquiesce");
     }
@@ -492,8 +503,8 @@ signal:
     }
   } reader_thread, writer_thread, quiesce_thread;
 
-  bool started;
-  bool quiesce;
+  bool started = false;
+  bool quiesce = false;
 
 public:
   void start()
@@ -1186,9 +1197,9 @@ static int try_netlink_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
   return 0;
 }
 
-static void run_quiesce_hook(const std::string &quiesce_hook,
-                             const std::string &devpath,
-                             const std::string &command) {
+static int run_quiesce_hook(const std::string &quiesce_hook,
+                            const std::string &devpath,
+                            const std::string &command) {
   dout(10) << __func__ << ": " << quiesce_hook << " " << devpath << " "
            << command << dendl;
 
@@ -1197,18 +1208,23 @@ static void run_quiesce_hook(const std::string &quiesce_hook,
   hook.add_cmd_args(devpath.c_str(), command.c_str(), NULL);
   bufferlist err;
   int r = hook.spawn();
-  if (r != 0) {
+  if (r < 0) {
     err.append("subprocess spawn failed");
   } else {
     err.read_fd(hook.get_stderr(), 16384);
     r = hook.join();
+    if (r > 0) {
+      r = -r;
+    }
   }
-  if (r != 0) {
+  if (r < 0) {
     derr << __func__ << ": " << quiesce_hook << " " << devpath << " "
          << command << " failed: " << err.to_str() << dendl;
   } else {
     dout(10) << " succeeded: " << err.to_str() << dendl;
   }
+
+  return r;
 }
 
 static void handle_signal(int signum)
@@ -1415,9 +1431,9 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
   {
     NBDQuiesceWatchCtx quiesce_watch_ctx(server);
-    uint64_t quiesce_watch_handle;
     if (cfg->quiesce) {
-      r = image.quiesce_watch(&quiesce_watch_ctx, &quiesce_watch_handle);
+      r = image.quiesce_watch(&quiesce_watch_ctx,
+                              &server->quiesce_watch_handle);
       if (r < 0) {
         goto close_nbd;
       }
@@ -1436,7 +1452,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     run_server(forker, server, use_netlink);
 
     if (cfg->quiesce) {
-      r = image.quiesce_unwatch(quiesce_watch_handle);
+      r = image.quiesce_unwatch(server->quiesce_watch_handle);
       ceph_assert(r == 0);
     }
 

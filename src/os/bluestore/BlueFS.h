@@ -70,7 +70,22 @@ public:
   virtual void get_paths(const std::string& base, paths& res) const = 0;
   virtual void dump(std::ostream& sout) = 0;
 };
-class BlueFS;
+
+struct bluefs_shared_alloc_context_t {
+  bool need_init = false;
+  Allocator* a = nullptr;
+
+  std::atomic<uint64_t> bluefs_used = 0;
+
+  void set(Allocator* _a) {
+    a = _a;
+    need_init = true;
+    bluefs_used = 0;
+  }
+  void reset() {
+    a = nullptr;
+  }
+};
 
 class BlueFS {
 public:
@@ -300,19 +315,21 @@ private:
    */
   std::vector<BlockDevice*> bdev;                  ///< block devices we can use
   std::vector<IOContext*> ioc;                     ///< IOContexts for bdevs
-  std::vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
+  std::vector<uint64_t> block_reserved;            ///< starting reserve extent per device
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
   std::vector<interval_set<uint64_t>> pending_release; ///< extents to release
-  std::vector<interval_set<uint64_t>> block_unused_too_granular;
+  //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
   std::unique_ptr<BlueFSVolumeSelector> vselector;
-  bool need_shared_alloc_init = false;
-  Allocator* shared_bdev_alloc = nullptr;
-  std::atomic<uint64_t> shared_bdev_used = 0;
 
+  bluefs_shared_alloc_context_t* shared_alloc = nullptr;
+  unsigned shared_alloc_id = unsigned(-1);
+  inline bool is_shared_alloc(unsigned id) const {
+    return id == shared_alloc_id;
+  }
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -325,6 +342,10 @@ private:
   void _stop_alloc();
 
   void _pad_bl(ceph::buffer::list& bl);  ///< pad ceph::buffer::list to block size w/ zeros
+
+  uint64_t _get_used(unsigned id) const;
+  uint64_t _get_total(unsigned id) const;
+
 
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
@@ -399,13 +420,10 @@ private:
   int _write_super(int dev);
   int _check_new_allocations(const bluefs_fnode_t& fnode,
     size_t dev_count,
-    boost::dynamic_bitset<uint64_t>* owned_blocks,
     boost::dynamic_bitset<uint64_t>* used_blocks);
   int _verify_alloc_granularity(
     __u8 id, uint64_t offset, uint64_t length,
     const char *op);
-  int _adjust_granularity(
-    __u8 id, uint64_t *offset, uint64_t *length, bool alloc);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
@@ -419,9 +437,6 @@ private:
   unsigned get_super_length() {
     return 4096;
   }
-
-  void _add_block_extent(bool create, unsigned bdev, uint64_t offset,
-			 uint64_t len, bool skip=false);
 
 public:
   BlueFS(CephContext* cct);
@@ -458,7 +473,6 @@ public:
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
-  void get_usage(std::vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
   void dump_perf_counters(ceph::Formatter *f);
 
   void dump_block_extents(std::ostream& out);
@@ -519,19 +533,10 @@ public:
   }
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
-		       bool shared_with_bluestore = false,
-                       Allocator* shared_bdev_alloc = nullptr);
+                       uint64_t reserved,
+		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
-  uint64_t get_block_device_size(unsigned bdev);
-
-  /// gift more block space
-  void add_block_extent(bool create, unsigned bdev, uint64_t offset, uint64_t len,
-                        bool skip=false) {
-    std::unique_lock l(lock);
-    _add_block_extent(create, bdev, offset, len, skip);
-    int r = _flush_and_sync_log(l);
-    ceph_assert(r == 0);
-  }
+  uint64_t get_block_device_size(unsigned bdev) const;
 
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
@@ -590,7 +595,6 @@ public:
 			      bufferlist* bl);
 
   /// test purpose methods
-  void debug_inject_duplicate_gift(unsigned bdev, uint64_t offset, uint64_t len);
   const PerfCounters* get_perf_counters() const {
     return logger;
   }

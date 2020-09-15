@@ -1245,7 +1245,7 @@ public:
                             bool &dirty_big_info);
 
   void merge_log(pg_info_t &oinfo,
-		 pg_log_t &olog,
+		 pg_log_t&& olog,
 		 pg_shard_t from,
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
@@ -1660,8 +1660,8 @@ public:
     ) {
     return read_log_and_missing_crimson(
       store, ch, info,
-      log, missing, pgmeta_oid,
-      this);
+      log, (pg_log_debug ? &log_keys_debug : nullptr),
+      missing, pgmeta_oid, this);
   }
 
   template <typename missing_type>
@@ -1670,6 +1670,7 @@ public:
     crimson::os::CollectionRef ch;
     const pg_info_t &info;
     IndexedLog &log;
+    std::set<std::string>* log_keys_debug = NULL;
     missing_type &missing;
     ghobject_t pgmeta_oid;
     const DoutPrefixProvider *dpp;
@@ -1727,6 +1728,8 @@ public:
 	  ceph_assert(last_e.version.epoch <= e.version.epoch);
 	}
 	entries.push_back(e);
+	if (log_keys_debug)
+	  log_keys_debug->insert(e.get_key_name());
       }
     }
 
@@ -1767,6 +1770,7 @@ public:
     crimson::os::CollectionRef ch,
     const pg_info_t &info,
     IndexedLog &log,
+    std::set<std::string>* log_keys_debug,
     missing_type &missing,
     ghobject_t pgmeta_oid,
     const DoutPrefixProvider *dpp = nullptr
@@ -1775,7 +1779,8 @@ public:
 		       << ch->get_cid()
 		       << " " << pgmeta_oid << dendl;
     return (new FuturizedStoreLogReader<missing_type>{
-      store, ch, info, log, missing, pgmeta_oid, dpp})->start();
+      store, ch, info, log, log_keys_debug,
+      missing, pgmeta_oid, dpp})->start();
   }
 
 #endif

@@ -4,7 +4,7 @@ cd-info-card {
   padding: 0 0.5vw;
 }
 
-::ng-deep .pg-status-popover-wrapper {
+::ng-deep cd-health .pg-status-popover-wrapper {
   position: relative;
 
   .popover {

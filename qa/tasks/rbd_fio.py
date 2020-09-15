@@ -78,8 +78,7 @@ def run_rbd_map(remote, image, iodepth):
     iodepth = max(iodepth, 128)  # RBD_QUEUE_DEPTH_DEFAULT
     dev = remote.sh(['sudo', 'rbd', 'device', 'map', '-o',
                      'queue_depth={}'.format(iodepth), image]).rstrip('\n')
-    teuthology.sudo_write_file(
-        remote,
+    remote.sudo_write_file(
         '/sys/block/{}/queue/nr_requests'.format(os.path.basename(dev)),
         str(iodepth))
     return dev

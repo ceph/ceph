@@ -44,15 +44,19 @@ import time
 import sys
 import errno
 from IPy import IP
-from unittest import suite, loader
 import unittest
 import platform
+import logging
+
+from unittest import suite, loader
+
 from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
-import logging
+from teuthology.contextutil import MaxWhileTries
+from teuthology.orchestra.run import CommandFailedError
 
 def init_log():
     global log
@@ -125,14 +129,12 @@ if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
 
 
 try:
-    from teuthology.exceptions import CommandFailedError
     from tasks.ceph_manager import CephManager
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.kernel_mount import KernelMount
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
     from tasks.cephfs.mount import CephFSMount
     from tasks.mgr.mgr_test_case import MgrCluster
-    from teuthology.contextutil import MaxWhileTries
     from teuthology.task import interactive
 except ImportError:
     sys.stderr.write("***\nError importing packages, have you activated your teuthology virtualenv "
@@ -381,7 +383,8 @@ class LocalRemote(object):
                     args[0]
                 ))
 
-        log.info("Running {0}".format(args))
+        log.info('> ' +
+                 ' '.join([str(a.value) if isinstance(a, Raw) else a for a in args]))
 
         if shell:
             subproc = subprocess.Popen(quote(args),
@@ -552,9 +555,16 @@ def safe_kill(pid):
         else:
             raise
 
+
 class LocalKernelMount(KernelMount):
-    def __init__(self, ctx, test_dir, client_id, brxnet):
-        super(LocalKernelMount, self).__init__(ctx, test_dir, client_id, LocalRemote(), brxnet)
+    def __init__(self, ctx, test_dir, client_id=None,
+                 client_keyring_path=None, client_remote=None,
+                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
+                 brxnet=None):
+        super(LocalKernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
+            client_id=client_id, client_keyring_path=client_keyring_path,
+            client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
     @property
     def config_path(self):
@@ -604,50 +614,73 @@ class LocalKernelMount(KernelMount):
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def mount(self, mount_path=None, mount_fs_name=None, mount_options=[], **kwargs):
-        self.setupfs(name=mount_fs_name)
+    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+        self.update_attrs(**kwargs)
+        self.assert_and_log_minimum_mount_details()
+
         if opt_use_ns:
             self.using_namespace = True
             self.setup_netns()
         else:
             self.using_namespace = False
 
-        log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
-            id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
+        if not self.cephfs_mntpt:
+            self.cephfs_mntpt = "/"
+        # TODO: don't call setupfs() from within mount()
+        if createfs:
+            self.setupfs(name=self.cephfs_name)
 
-        self.client_remote.run(
-            args=[
-                'mkdir',
-                '--',
-                self.mountpoint,
-            ],
-            timeout=(5*60),
-        )
+        opts = 'norequire_active_mds'
+        if self.client_id:
+            opts += ',name=' + self.client_id
+        if self.client_keyring_path and self.client_id:
+            opts += ",secret=" + self.get_key_from_keyfile()
+        if self.config_path:
+            opts += ',conf=' + self.config_path
+        if self.cephfs_name:
+            opts += ",mds_namespace={0}".format(self.cephfs_name)
+        if mntopts:
+            opts += ',' + ','.join(mntopts)
 
-        if mount_path is None:
-            mount_path = "/"
+        stderr = StringIO()
+        try:
+            self.client_remote.run(args=['mkdir', '--', self.hostfs_mntpt],
+                                   timeout=(5*60), stderr=stderr)
+        except CommandFailedError:
+            if 'file exists' not in stderr.getvalue().lower():
+                raise
 
-        opts = 'name={id},norequire_active_mds,conf={conf}'.format(id=self.client_id,
-                                                        conf=self.config_path)
-
-        if mount_fs_name is not None:
-            opts += ",mds_namespace={0}".format(mount_fs_name)
-
-        for mount_opt in mount_options:
-            opts += ",{0}".format(mount_opt)
-
-        mount_cmd_args = ['sudo']
+        if self.cephfs_mntpt is None:
+            self.cephfs_mntpt = "/"
+        cmdargs = ['sudo']
         if self.using_namespace:
-            mount_cmd_args += ['nsenter',
-                               '--net=/var/run/netns/{0}'.format(self.netns_name)]
-        mount_cmd_args += ['./bin/mount.ceph',
-                           ':{mount_path}'.format(mount_path=mount_path),
-                           self.mountpoint, '-v', '-o', opts]
-        self.client_remote.run(args=mount_cmd_args, timeout=(30*60),
-                               omit_sudo=False)
+           cmdargs += ['nsenter',
+                       '--net=/var/run/netns/{0}'.format(self.netns_name)]
+        cmdargs += ['./bin/mount.ceph', ':' + self.cephfs_mntpt,
+                    self.hostfs_mntpt, '-v', '-o', opts]
 
-        self.client_remote.run(
-            args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
+        mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
+        try:
+            self.client_remote.run(args=cmdargs, timeout=(30*60),
+                omit_sudo=False, stdout=mountcmd_stdout,
+                stderr=mountcmd_stderr)
+        except CommandFailedError as e:
+            if check_status:
+                raise
+            else:
+                return (e, mountcmd_stdout.getvalue(),
+                        mountcmd_stderr.getvalue())
+
+        stderr = StringIO()
+        try:
+            self.client_remote.run(args=['sudo', 'chmod', '1777',
+                                   self.hostfs_mntpt], stderr=stderr,
+                                   timeout=(5*60))
+        except CommandFailedError:
+            # the client does not have write permissions in cap it holds for
+            # the Ceph FS that was just mounted.
+            if 'permission denied' in stderr.getvalue().lower():
+                pass
 
         self.mounted = True
 
@@ -664,8 +697,14 @@ class LocalKernelMount(KernelMount):
                                       wait=False, stdout=StringIO())
 
 class LocalFuseMount(FuseMount):
-    def __init__(self, ctx, test_dir, client_id, brxnet):
-        super(LocalFuseMount, self).__init__(ctx, None, test_dir, client_id, LocalRemote(), brxnet)
+    def __init__(self, ctx, test_dir, client_id, client_keyring_path=None,
+                 client_remote=None, hostfs_mntpt=None, cephfs_name=None,
+                 cephfs_mntpt=None, brxnet=None):
+        super(LocalFuseMount, self).__init__(ctx=ctx, client_config=None,
+            test_dir=test_dir, client_id=client_id,
+            client_keyring_path=client_keyring_path,
+            client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
     @property
     def config_path(self):
@@ -709,17 +748,27 @@ class LocalFuseMount(FuseMount):
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
-        if mountpoint is not None:
-            self.mountpoint = mountpoint
-        self.setupfs(name=mount_fs_name)
+    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+        self.update_attrs(**kwargs)
+        self.assert_and_log_minimum_mount_details()
+
         if opt_use_ns:
             self.using_namespace = True
             self.setup_netns()
         else:
             self.using_namespace = False
 
-        self.client_remote.run(args=['mkdir', '-p', self.mountpoint])
+        # TODO: don't call setupfs() from within mount()
+        if createfs:
+            self.setupfs(name=self.cephfs_name)
+
+        stderr = StringIO()
+        try:
+            self.client_remote.run(args=['mkdir', '-p', self.hostfs_mntpt],
+                                   stderr=stderr)
+        except CommandFailedError:
+            if 'file exists' not in stderr.getvalue().lower():
+                raise
 
         def list_connections():
             self.client_remote.run(
@@ -744,26 +793,30 @@ class LocalFuseMount(FuseMount):
         pre_mount_conns = list_connections()
         log.info("Pre-mount connections: {0}".format(pre_mount_conns))
 
-        prefix = []
+        cmdargs = []
         if self.using_namespace:
-            prefix += ['sudo', 'nsenter',
+            cmdargs = ['sudo', 'nsenter',
                        '--net=/var/run/netns/{0}'.format(self.netns_name),
                        '--setuid', str(os.getuid())]
-        prefix += [os.path.join(BIN_PREFIX, "ceph-fuse")]
+        cmdargs += [os.path.join(BIN_PREFIX, 'ceph-fuse'), self.hostfs_mntpt,
+                    '-f']
+        if self.client_id is not None:
+            cmdargs += ["--id", self.client_id]
+        if self.client_keyring_path and self.client_id is not None:
+            cmdargs.extend(['-k', self.client_keyring_path])
+        if self.cephfs_name:
+            cmdargs += ["--client_fs=" + self.cephfs_name]
+        if self.cephfs_mntpt:
+            cmdargs += ["--client_mountpoint=" + self.cephfs_mntpt]
         if os.getuid() != 0:
-            prefix += ["--client_die_on_failed_dentry_invalidate=false"]
-        if mount_path is not None:
-            prefix += ["--client_mountpoint={0}".format(mount_path)]
-        if mount_fs_name is not None:
-            prefix += ["--client_fs={0}".format(mount_fs_name)]
-        prefix += mount_options;
-        fuse_cmd_args = prefix + ["-f", "--name",
-                                  "client.{0}".format(self.client_id),
-                                  self.mountpoint]
+            cmdargs += ["--client_die_on_failed_dentry_invalidate=false"]
+        if mntopts:
+            cmdargs += mntopts
 
-        self.fuse_daemon = self.client_remote.run(args=fuse_cmd_args,
-                                                  wait=False, omit_sudo=False)
-        self._set_fuse_daemon_pid()
+        mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
+        self.fuse_daemon = self.client_remote.run(args=cmdargs, wait=False,
+            omit_sudo=False, stdout=mountcmd_stdout, stderr=mountcmd_stderr)
+        self._set_fuse_daemon_pid(check_status)
         log.info("Mounting client.{0} with pid "
                  "{1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
@@ -774,7 +827,14 @@ class LocalFuseMount(FuseMount):
             if self.fuse_daemon.finished:
                 # Did mount fail?  Raise the CommandFailedError instead of
                 # hitting the "failed to populate /sys/" timeout
-                self.fuse_daemon.wait()
+                try:
+                    self.fuse_daemon.wait()
+                except CommandFailedError as e:
+                    if check_status:
+                        raise
+                    else:
+                        return (e, mountcmd_stdout.getvalue(),
+                                mountcmd_stderr.getvalue())
             time.sleep(1)
             waited += 1
             if waited > 30:
@@ -798,20 +858,27 @@ class LocalFuseMount(FuseMount):
         self.gather_mount_info()
 
         self.mounted = True
-    def _set_fuse_daemon_pid(self):
+
+    def _set_fuse_daemon_pid(self, check_status):
         # NOTE: When a command <args> is launched with sudo, two processes are
         # launched, one with sudo in <args> and other without. Make sure we
         # get the PID of latter one.
-        with safe_while(sleep=1, tries=15) as proceed:
-            while proceed():
-                try:
-                    sock = self.find_admin_socket()
-                except (RuntimeError, CommandFailedError):
-                    continue
+        try:
+            with safe_while(sleep=1, tries=15) as proceed:
+                while proceed():
+                    try:
+                        sock = self.find_admin_socket()
+                    except (RuntimeError, CommandFailedError):
+                        continue
 
-                self.fuse_daemon.fuse_pid = int(re.match(".*\.(\d+)\.asok$",
-                                                         sock).group(1))
-                break
+                    self.fuse_daemon.fuse_pid = int(re.match(".*\.(\d+)\.asok$",
+                                                             sock).group(1))
+                    break
+        except MaxWhileTries:
+            if check_status:
+                raise
+            else:
+                pass
 
     def cleanup_netns(self):
         if self.using_namespace:
@@ -1024,7 +1091,6 @@ class LocalCephCluster(CephCluster):
 class LocalMDSCluster(LocalCephCluster, MDSCluster):
     def __init__(self, ctx):
         super(LocalMDSCluster, self).__init__(ctx)
-
         self.mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
         self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
@@ -1034,6 +1100,13 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
 
     def newfs(self, name='cephfs', create=True):
         return LocalFilesystem(self._ctx, name=name, create=create)
+
+    def delete_all_filesystems(self):
+        """
+        Remove all filesystems that exist, and any pools in use by them.
+        """
+        for fs in self.status().get_filesystems():
+            LocalFilesystem(ctx=self._ctx, fscid=fs['id']).destroy()
 
 
 class LocalMgrCluster(LocalCephCluster, MgrCluster):
@@ -1045,7 +1118,7 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
-    def __init__(self, ctx, fscid=None, name='cephfs', create=False, ec_profile=None):
+    def __init__(self, ctx, fscid=None, name=None, create=False, ec_profile=None):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
 
@@ -1372,17 +1445,19 @@ def exec_test():
             open("./keyring", "at").write(p.stdout.getvalue())
 
         if use_kernel_client:
-            mount = LocalKernelMount(ctx, test_dir, client_id, opt_brxnet)
+            mount = LocalKernelMount(ctx=ctx, test_dir=test_dir,
+                                     client_id=client_id, brxnet=opt_brxnet)
         else:
-            mount = LocalFuseMount(ctx, test_dir, client_id, opt_brxnet)
+            mount = LocalFuseMount(ctx=ctx, test_dir=test_dir,
+                                   client_id=client_id, brxnet=opt_brxnet)
 
         mounts.append(mount)
-        if os.path.exists(mount.mountpoint):
+        if os.path.exists(mount.hostfs_mntpt):
             if mount.is_mounted():
-                log.warning("unmounting {0}".format(mount.mountpoint))
+                log.warning("unmounting {0}".format(mount.hostfs_mntpt))
                 mount.umount_wait()
             else:
-                os.rmdir(mount.mountpoint)
+                os.rmdir(mount.hostfs_mntpt)
 
     from tasks.cephfs_test_runner import DecoratingLoader
 

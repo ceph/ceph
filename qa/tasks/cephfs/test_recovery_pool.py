@@ -187,7 +187,7 @@ class TestRecoveryPool(CephFSTestCase):
 
         # Mount a client
         self.mount_a.mount_wait()
-        self.mount_b.mount_wait(mount_fs_name=recovery_fs)
+        self.mount_b.mount_wait(cephfs_name=recovery_fs)
 
         # See that the files are present and correct
         errors = workload.validate()

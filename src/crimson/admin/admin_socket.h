@@ -44,7 +44,7 @@ struct tell_result_t {
    * \param formatter the content of formatter will be flushed to the
    *        output buffer
    */
-  tell_result_t(Formatter* formatter);
+  tell_result_t(std::unique_ptr<Formatter> formatter);
 };
 
 /**

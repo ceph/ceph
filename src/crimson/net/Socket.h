@@ -197,27 +197,7 @@ public:
   FixedCPUServerSocket(const FixedCPUServerSocket&) = delete;
   FixedCPUServerSocket& operator=(const FixedCPUServerSocket&) = delete;
 
-  seastar::future<> listen(entity_addr_t addr) {
-    assert(seastar::this_shard_id() == cpu);
-    logger().trace("FixedCPUServerSocket::listen({})...", addr);
-    return container().invoke_on_all([addr] (auto& ss) {
-      ss.addr = addr;
-      seastar::socket_address s_addr(addr.in4_addr());
-      seastar::listen_options lo;
-      lo.reuse_address = true;
-      lo.set_fixed_cpu(ss.cpu);
-      ss.listener = seastar::listen(s_addr, lo);
-    }).handle_exception_type([addr] (const std::system_error& e) {
-      if (e.code() == std::errc::address_in_use) {
-        logger().trace("FixedCPUServerSocket::listen({}): address in use", addr);
-        throw;
-      } else {
-        logger().error("FixedCPUServerSocket::listen({}): "
-                       "got unexpeted error {}", addr, e);
-        ceph_abort();
-      }
-    });
-  }
+  seastar::future<> listen(entity_addr_t addr);
 
   // fn_accept should be a nothrow function of type
   // seastar::future<>(SocketRef, entity_addr_t)
@@ -277,45 +257,9 @@ public:
     });
   }
 
-  seastar::future<> shutdown() {
-    assert(seastar::this_shard_id() == cpu);
-    logger().trace("FixedCPUServerSocket({})::shutdown()...", addr);
-    return container().invoke_on_all([] (auto& ss) {
-      if (ss.listener) {
-        ss.listener->abort_accept();
-      }
-      return ss.shutdown_gate.close();
-    }).then([this] {
-      return reset();
-    });
-  }
-
-  seastar::future<> destroy() {
-    assert(seastar::this_shard_id() == cpu);
-    return shutdown().then([this] {
-      // we should only construct/stop shards on #0
-      return container().invoke_on(0, [] (auto& ss) {
-        assert(ss.service);
-        return ss.service->stop().finally([cleanup = std::move(ss.service)] {});
-      });
-    });
-  }
-
-  static seastar::future<FixedCPUServerSocket*> create() {
-    auto cpu = seastar::this_shard_id();
-    // we should only construct/stop shards on #0
-    return seastar::smp::submit_to(0, [cpu] {
-      auto service = std::make_unique<sharded_service_t>();
-      return service->start(cpu, construct_tag{}
-      ).then([service = std::move(service)] () mutable {
-        auto p_shard = service.get();
-        p_shard->local().service = std::move(service);
-        return p_shard;
-      });
-    }).then([] (auto p_shard) {
-      return &p_shard->local();
-    });
-  }
+  seastar::future<> shutdown();
+  seastar::future<> destroy();
+  static seastar::future<FixedCPUServerSocket*> create();
 };
 
 } // namespace crimson::net

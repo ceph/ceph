@@ -30,7 +30,7 @@ hobject_t RecoveryBackend::get_temp_recovery_object(
 }
 
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
-			       const std::string& why)
+			       std::string_view why)
 {
   for (auto& soid : temp_contents) {
     t.remove(pg.get_collection_ref()->get_cid(),
@@ -39,7 +39,9 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   temp_contents.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if (recovery_waiter.obc && recovery_waiter.obc->obs.exists) {
+    if ((recovery_waiter.pi && recovery_waiter.pi->is_complete())
+	|| (!recovery_waiter.pi
+	  && recovery_waiter.obc && recovery_waiter.obc->obs.exists)) {
       recovery_waiter.obc->drop_recovery_read();
       recovery_waiter.interrupt(why);
     }

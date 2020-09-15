@@ -545,7 +545,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
     //TX completion may come either from
     // 1) regular send message, WCE wr_id points to chunk
     // 2) 'fin' message, wr_id points to the QP
-    if (ib->get_memory_manager()->is_tx_buffer(chunk->buffer)) {
+    if (ib->get_memory_manager()->is_valid_chunk(chunk)) {
       tx_chunks.push_back(chunk);
     } else if (reinterpret_cast<QueuePair*>(response->wr_id)->get_local_qp_number() == response->qp_num ) {
       ldout(cct, 1) << __func__ << " sending of the disconnect msg completed" << dendl;

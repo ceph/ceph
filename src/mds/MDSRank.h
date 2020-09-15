@@ -84,6 +84,16 @@ enum {
   l_mds_root_rfiles,
   l_mds_root_rbytes,
   l_mds_root_rsnaps,
+  l_mdss_handle_inode_file_caps,
+  l_mdss_ceph_cap_op_revoke,
+  l_mdss_ceph_cap_op_grant,
+  l_mdss_ceph_cap_op_trunc,
+  l_mdss_ceph_cap_op_flushsnap_ack,
+  l_mdss_ceph_cap_op_flush_ack,
+  l_mdss_handle_client_caps,
+  l_mdss_handle_client_caps_dirty,
+  l_mdss_handle_client_cap_release,
+  l_mdss_process_request_cap_release,
   l_mds_last,
 };
 
@@ -146,6 +156,7 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
+	std::string fs_name_,
         ceph::mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -159,6 +170,7 @@ class MDSRank {
 	boost::asio::io_context& ioc);
 
     mds_rank_t get_nodeid() const { return whoami; }
+    std::string_view get_fs_name() const { return fs_name; }
     int64_t get_metadata_pool();
 
     mono_time get_starttime() const {
@@ -421,6 +433,7 @@ class MDSRank {
     friend class C_MDS_MonCommand;
 
     const mds_rank_t whoami;
+    std::string fs_name;
 
     ~MDSRank();
 
@@ -636,6 +649,7 @@ class MDSRankDispatcher : public MDSRank, public md_config_obs_t
 public:
   MDSRankDispatcher(
       mds_rank_t whoami_,
+      std::string fs_name,
       ceph::mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,

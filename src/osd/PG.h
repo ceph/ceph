@@ -204,11 +204,6 @@ public:
     const char *state_name, utime_t enter_time,
     uint64_t events, utime_t event_dur) override;
 
-  void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
-    handle.suspend_tp_timeout();
-    lock();
-    handle.reset_tp_timeout();
-  }
   void lock(bool no_lockdep = false) const;
   void unlock() const;
   bool is_locked() const;

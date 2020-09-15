@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-
 from contextlib import contextmanager
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
@@ -21,12 +19,12 @@ class CephfsTest(DashboardTestCase):
         return self.fs.get_namespace_id()
 
     def mk_dirs(self, path, expectedStatus=200):
-        self._post("/api/cephfs/{}/mk_dirs".format(self.get_fs_id()),
+        self._post("/api/cephfs/{}/tree".format(self.get_fs_id()),
                    params={'path': path})
         self.assertStatus(expectedStatus)
 
     def rm_dir(self, path, expectedStatus=200):
-        self._post("/api/cephfs/{}/rm_dir".format(self.get_fs_id()),
+        self._delete("/api/cephfs/{}/tree".format(self.get_fs_id()),
                    params={'path': path})
         self.assertStatus(expectedStatus)
 
@@ -36,10 +34,10 @@ class CephfsTest(DashboardTestCase):
         self.assertIsInstance(data, dict)
         return data
 
-    def ls_dir(self, path, expectedLength, depth = None):
+    def ls_dir(self, path, expectedLength, depth=None):
         return self._ls_dir(path, expectedLength, depth, "api")
 
-    def ui_ls_dir(self, path, expectedLength, depth = None):
+    def ui_ls_dir(self, path, expectedLength, depth=None):
         return self._ls_dir(path, expectedLength, depth, "ui-api")
 
     def _ls_dir(self, path, expectedLength, depth, baseApiPath):
@@ -53,24 +51,24 @@ class CephfsTest(DashboardTestCase):
         self.assertEqual(len(data), expectedLength)
         return data
 
-    def setQuotas(self, bytes=None, files=None):
+    def set_quotas(self, max_bytes=None, max_files=None):
         quotas = {
-            'max_bytes': bytes,
-            'max_files': files
+            'max_bytes': max_bytes,
+            'max_files': max_files
         }
-        self._post("/api/cephfs/{}/set_quotas".format(self.get_fs_id()), data=quotas,
-                   params={'path': self.QUOTA_PATH})
+        self._put("/api/cephfs/{}/quota".format(self.get_fs_id()), data=quotas,
+                  params={'path': self.QUOTA_PATH})
         self.assertStatus(200)
 
-    def assertQuotas(self, bytes, files):
+    def assert_quotas(self, max_bytes, files):
         data = self.ls_dir('/', 1)[0]
-        self.assertEqual(data['quotas']['max_bytes'], bytes)
+        self.assertEqual(data['quotas']['max_bytes'], max_bytes)
         self.assertEqual(data['quotas']['max_files'], files)
 
     @contextmanager
     def new_quota_dir(self):
         self.mk_dirs(self.QUOTA_PATH)
-        self.setQuotas(1024**3, 1024)
+        self.set_quotas(1024 ** 3, 1024)
         yield 1
         self.rm_dir(self.QUOTA_PATH)
 
@@ -146,7 +144,7 @@ class CephfsTest(DashboardTestCase):
 
     def test_cephfs_get_quotas(self):
         fs_id = self.get_fs_id()
-        data = self._get("/api/cephfs/{}/get_quotas?path=/".format(fs_id))
+        data = self._get("/api/cephfs/{}/quota?path=/".format(fs_id))
         self.assertStatus(200)
         self.assertSchema(data, JObj({
             'max_bytes': int,
@@ -210,7 +208,7 @@ class CephfsTest(DashboardTestCase):
         fs_id = self.get_fs_id()
         self.mk_dirs('/movies/dune/extended_version')
 
-        self._post("/api/cephfs/{}/mk_snapshot".format(fs_id),
+        self._post("/api/cephfs/{}/snapshot".format(fs_id),
                    params={'path': '/movies/dune', 'name': 'test'})
         self.assertStatus(200)
 
@@ -240,7 +238,7 @@ class CephfsTest(DashboardTestCase):
         snapshots = data[0]['snapshots']
         self.assertEqual(len(snapshots), 0)
 
-        self._post("/api/cephfs/{}/rm_snapshot".format(fs_id),
+        self._delete("/api/cephfs/{}/snapshot".format(fs_id),
                    params={'path': '/movies/dune', 'name': 'test'})
         self.assertStatus(200)
 
@@ -255,27 +253,27 @@ class CephfsTest(DashboardTestCase):
 
     def test_quotas_default(self):
         self.mk_dirs(self.QUOTA_PATH)
-        self.assertQuotas(0, 0)
+        self.assert_quotas(0, 0)
         self.rm_dir(self.QUOTA_PATH)
 
     def test_quotas_set_both(self):
         with self.new_quota_dir():
-            self.assertQuotas(1024**3, 1024)
+            self.assert_quotas(1024 ** 3, 1024)
 
     def test_quotas_set_only_bytes(self):
         with self.new_quota_dir():
-            self.setQuotas(2048**3)
-            self.assertQuotas(2048**3, 1024)
+            self.set_quotas(2048 ** 3)
+            self.assert_quotas(2048 ** 3, 1024)
 
     def test_quotas_set_only_files(self):
         with self.new_quota_dir():
-            self.setQuotas(None, 2048)
-            self.assertQuotas(1024**3, 2048)
+            self.set_quotas(None, 2048)
+            self.assert_quotas(1024 ** 3, 2048)
 
     def test_quotas_unset_both(self):
         with self.new_quota_dir():
-            self.setQuotas(0, 0)
-            self.assertQuotas(0, 0)
+            self.set_quotas(0, 0)
+            self.assert_quotas(0, 0)
 
     def test_listing_of_root_dir(self):
         self.ls_dir('/', 0)  # Should not list root

@@ -14,6 +14,7 @@
 #include "rgw_arn.h"
 #include "rgw_zone.h"
 #include "services/svc_zone.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

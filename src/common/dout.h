@@ -129,7 +129,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define dendl_impl                              \
      "";                                        \
       _logger.log(crimson::to_log_level(_lv),   \
-                  _out.str().c_str());          \
+                  "{}", _out.str().c_str());    \
     }                                           \
   } while (0)
 #elif defined(WITH_SEASTAR) && defined(WITH_ALIEN)

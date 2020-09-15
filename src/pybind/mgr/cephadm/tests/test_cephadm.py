@@ -124,7 +124,7 @@ class TestCephadm(object):
                     out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
                     expected = [
                         {
-                            'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
+                            'placement': {'hosts': ['test']},
                             'service_id': 'name',
                             'service_name': 'mds.name',
                             'service_type': 'mds',
@@ -134,7 +134,7 @@ class TestCephadm(object):
                         {
                             'placement': {
                                 'count': 1,
-                                'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
+                                'hosts': ["test"]
                             },
                             'spec': {
                                 'rgw_realm': 'r',
@@ -581,11 +581,39 @@ class TestCephadm(object):
             # automatically.
             assert_rm_service(cephadm_module, 'iscsi.name')
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_blink_device_light(self, cephadm_module):
+    @pytest.mark.parametrize(
+        "on_bool",
+        [
+            True,
+            False
+        ]
+    )
+    @pytest.mark.parametrize(
+        "fault_ident",
+        [
+            'fault',
+            'ident'
+        ]
+    )
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_blink_device_light(self, _run_cephadm, on_bool, fault_ident, cephadm_module):
+        _run_cephadm.return_value = '{}', '', 0
         with with_host(cephadm_module, 'test'):
-            c = cephadm_module.blink_device_light('ident', True, [('test', '', '')])
+            c = cephadm_module.blink_device_light(fault_ident, on_bool, [('test', '', 'dev')])
+            on_off = 'on' if on_bool else 'off'
+            assert wait(cephadm_module, c) == [f'Set {fault_ident} light for test: {on_off}']
+            _run_cephadm.assert_called_with('test', 'osd', 'shell', [
+                                            '--', 'lsmcli', f'local-disk-{fault_ident}-led-{on_off}', '--path', 'dev'], error_ok=True)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_blink_device_light_custom(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = '{}', '', 0
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.set_store('lsmcli_blink_lights_cmd', 'echo hello')
+            c = cephadm_module.blink_device_light('ident', True, [('test', '', 'dev')])
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
+            _run_cephadm.assert_called_with('test', 'osd', 'shell', [
+                                            '--', 'echo', 'hello'], error_ok=True)
 
     @pytest.mark.parametrize(
         "spec, meth",
@@ -817,3 +845,30 @@ class TestCephadm(object):
             code, out, err = cephadm_module.registry_login('fail-url', 'fail-user', 'fail-password')
             assert err == 'Host test failed to login to fail-url as fail-user with given password'
             check_registry_credentials('json-url', 'json-user', 'json-pass')
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(json.dumps({
+        'image_id': 'image_id',
+                    'repo_digest': 'image@repo_digest',
+    })))
+    @pytest.mark.parametrize("use_repo_digest",
+                             [
+                                 False,
+                                 True
+                             ])
+    def test_upgrade_run(self, use_repo_digest, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.set_container_image('global', 'image')
+            if use_repo_digest:
+                cephadm_module.use_repo_digest = True
+
+            cephadm_module.convert_tags_to_repo_digest()
+
+            _, image, _ = cephadm_module.check_mon_command({
+                'prefix': 'config get',
+                'who': 'global',
+                'key': 'container_image',
+            })
+            if use_repo_digest:
+                assert image == 'image@repo_digest'
+            else:
+                assert image == 'image'

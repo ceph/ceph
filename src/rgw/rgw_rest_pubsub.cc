@@ -14,6 +14,8 @@
 #include "rgw_rest_s3.h"
 #include "rgw_arn.h"
 #include "rgw_auth_s3.h"
+#include "rgw_notify.h"
+#include "rgw_sal_rados.h"
 #include "services/svc_zone.h"
 
 #define dout_context g_ceph_context
@@ -22,7 +24,7 @@
 
 // command (AWS compliant): 
 // POST
-// Action=CreateTopic&Name=<topic-name>[&push-endpoint=<endpoint>[&<arg1>=<value1>]]
+// Action=CreateTopic&Name=<topic-name>[&OpaqueData=data][&push-endpoint=<endpoint>[&persistent][&<arg1>=<value1>]]
 class RGWPSCreateTopic_ObjStore_AWS : public RGWPSCreateTopicOp {
 public:
   int get_params() override {
@@ -35,6 +37,7 @@ public:
     opaque_data = s->info.args.get("OpaqueData");
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
+    dest.persistent = s->info.args.exists("persistent");
 
     if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
       return -EINVAL;
@@ -49,6 +52,13 @@ public:
     if (!dest.push_endpoint_args.empty()) {
       // remove last separator
       dest.push_endpoint_args.pop_back();
+    }
+    if (!dest.push_endpoint.empty() && dest.persistent) {
+      const auto ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
+      if (ret < 0) {
+        ldout(s->cct, 1) << "CreateTopic Action failed to create queue for persistent topics. error:" << ret << dendl;
+        return ret;
+      }
     }
     
     // dest object only stores endpoint info
@@ -172,6 +182,19 @@ public:
     }
 
     topic_name = topic_arn->resource;
+
+    // upon deletion it is not known if topic is persistent or not
+    // will try to delete the persistent topic anyway
+    const auto ret = rgw::notify::remove_persistent_topic(topic_name, s->yield);
+    if (ret == -ENOENT) {
+      // topic was not persistent, or already deleted
+      return 0;
+    }
+    if (ret < 0) {
+      ldout(s->cct, 1) << "DeleteTopic Action failed to remove queue for persistent topics. error:" << ret << dendl;
+      return ret;
+    }
+
     return 0;
   }
   

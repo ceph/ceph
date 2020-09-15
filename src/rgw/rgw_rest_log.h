@@ -15,6 +15,9 @@
 
 #pragma once
 
+#include "rgw_datalog.h"
+#include "rgw_rest.h"
+#include "rgw_rest_s3.h"
 #include "rgw_metadata.h"
 #include "rgw_mdlog.h"
 
@@ -192,8 +195,8 @@ public:
 };
 
 class RGWOp_DATALog_List : public RGWRESTOp {
-  list<rgw_data_change_log_entry> entries;
-  string last_marker;
+  std::vector<rgw_data_change_log_entry> entries;
+  std::string last_marker;
   bool truncated;
   bool extra_info;
 public:

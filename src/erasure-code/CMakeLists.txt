@@ -28,7 +28,8 @@ if(HAVE_BETTER_YASM_ELF64 OR HAVE_ARMV8_SIMD)
 endif()
 
 add_library(erasure_code STATIC ErasureCodePlugin.cc)
-target_link_libraries(erasure_code ${CMAKE_DL_LIBS})
+target_link_libraries(erasure_code $<$<PLATFORM_ID:Windows>:dlfcn_win32>
+                      ${CMAKE_DL_LIBS})
 
 add_library(erasure_code_objs OBJECT ErasureCode.cc)
 

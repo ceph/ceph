@@ -2240,7 +2240,7 @@ void CDir::_omap_commit(int op_prio)
       op.priority = op_prio;
 
       // don't create new dirfrag blindly
-      if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
+      if (!is_new())
 	op.stat(nullptr, nullptr, nullptr);
 
       if (!to_set.empty())
@@ -2258,7 +2258,7 @@ void CDir::_omap_commit(int op_prio)
     }
   };
 
-  if (state_test(CDir::STATE_FRAGMENTING)) {
+  if (state_test(CDir::STATE_FRAGMENTING) && is_new()) {
     assert(committed_version == 0);
     for (auto p = items.begin(); p != items.end(); ) {
       CDentry *dn = p->second;
@@ -2279,7 +2279,7 @@ void CDir::_omap_commit(int op_prio)
   op.priority = op_prio;
 
   // don't create new dirfrag blindly
-  if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
+  if (!is_new())
     op.stat(nullptr, nullptr, nullptr);
 
   /*

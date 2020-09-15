@@ -24,6 +24,7 @@ check_function_exists(strerror_r HAVE_Strerror_R)
 check_function_exists(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 check_function_exists(pipe2 HAVE_PIPE2)
 check_function_exists(accept4 HAVE_ACCEPT4)
+check_function_exists(sigdescr_np HAVE_SIGDESCR_NP)
 
 include(CMakePushCheckState)
 cmake_push_check_state(RESET)
