@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <array>
 #include <cstring>
 #include <memory>
 #include <random>
@@ -9,10 +10,9 @@
 #include <vector>
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/node_impl.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/stages/node_stage.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/stages/stage.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node_layout.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
 
 #include "test/crimson/gtest_seastar.h"
@@ -129,37 +129,30 @@ TEST_F(a_basic_test_t, 2_node_sizes)
     auto nm = NodeExtentManager::create_dummy();
     auto t = make_transaction();
     context_t c{*nm, *t};
-    std::vector<std::pair<Ref<Node>, NodeExtentMutable>> nodes = {
-      InternalNode0::allocate(c, 1u, false).unsafe_get0().make_pair(),
-      InternalNode1::allocate(c, 1u, false).unsafe_get0().make_pair(),
-      InternalNode2::allocate(c, 1u, false).unsafe_get0().make_pair(),
-      InternalNode3::allocate(c, 1u, false).unsafe_get0().make_pair(),
-      InternalNode0::allocate(c, 1u, true).unsafe_get0().make_pair(),
-      InternalNode1::allocate(c, 1u, true).unsafe_get0().make_pair(),
-      InternalNode2::allocate(c, 1u, true).unsafe_get0().make_pair(),
-      InternalNode3::allocate(c, 1u, true).unsafe_get0().make_pair(),
-      LeafNode0::allocate(c, false).unsafe_get0().make_pair(),
-      LeafNode1::allocate(c, false).unsafe_get0().make_pair(),
-      LeafNode2::allocate(c, false).unsafe_get0().make_pair(),
-      LeafNode3::allocate(c, false).unsafe_get0().make_pair(),
-      LeafNode0::allocate(c, true).unsafe_get0().make_pair(),
-      LeafNode1::allocate(c, true).unsafe_get0().make_pair(),
-      LeafNode2::allocate(c, true).unsafe_get0().make_pair(),
-      LeafNode3::allocate(c, true).unsafe_get0().make_pair()
+    std::array<std::pair<NodeImplURef, NodeExtentMutable>, 16> nodes = {
+      InternalNode0::allocate(c, false, 1u).unsafe_get0().make_pair(),
+      InternalNode1::allocate(c, false, 1u).unsafe_get0().make_pair(),
+      InternalNode2::allocate(c, false, 1u).unsafe_get0().make_pair(),
+      InternalNode3::allocate(c, false, 1u).unsafe_get0().make_pair(),
+      InternalNode0::allocate(c, true, 1u).unsafe_get0().make_pair(),
+      InternalNode1::allocate(c, true, 1u).unsafe_get0().make_pair(),
+      InternalNode2::allocate(c, true, 1u).unsafe_get0().make_pair(),
+      InternalNode3::allocate(c, true, 1u).unsafe_get0().make_pair(),
+      LeafNode0::allocate(c, false, 0u).unsafe_get0().make_pair(),
+      LeafNode1::allocate(c, false, 0u).unsafe_get0().make_pair(),
+      LeafNode2::allocate(c, false, 0u).unsafe_get0().make_pair(),
+      LeafNode3::allocate(c, false, 0u).unsafe_get0().make_pair(),
+      LeafNode0::allocate(c, true, 0u).unsafe_get0().make_pair(),
+      LeafNode1::allocate(c, true, 0u).unsafe_get0().make_pair(),
+      LeafNode2::allocate(c, true, 0u).unsafe_get0().make_pair(),
+      LeafNode3::allocate(c, true, 0u).unsafe_get0().make_pair()
     };
     std::ostringstream oss;
     oss << "\nallocated nodes:";
-    auto node_tracker = RootNodeTracker::create(c.nm.is_read_isolated());
-    assert(node_tracker->is_clean());
     for (auto iter = nodes.begin(); iter != nodes.end(); ++iter) {
+      oss << "\n  ";
       auto& ref_node = iter->first;
-      auto& mut = iter->second;
-      oss << "\n  " << *ref_node;
-      ref_node->test_make_destructable(
-          c, mut, c.nm.get_super(c.t, *node_tracker).unsafe_get0());
-      assert(!node_tracker->is_clean());
-      iter->first.reset();
-      assert(node_tracker->is_clean());
+      ref_node->dump_brief(oss);
     }
     logger().info("{}", oss.str());
   });
@@ -567,11 +560,63 @@ TEST_F(b_dummy_tree_test_t, 4_split_leaf_node)
 namespace crimson::os::seastore::onode {
 
 class DummyChildPool {
-  class DummyChild final : public Node {
+  class DummyChildImpl final : public NodeImpl {
    public:
-    virtual ~DummyChild() {
+    using URef = std::unique_ptr<DummyChildImpl>;
+    DummyChildImpl(const std::set<onode_key_t>& keys, bool is_level_tail, laddr_t laddr)
+        : keys{keys}, _is_level_tail{is_level_tail}, _laddr{laddr} {
+      std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
+    }
+    ~DummyChildImpl() override {
       std::free(p_mem_key_view);
     }
+
+    const std::set<onode_key_t>& get_keys() const { return keys; }
+
+    void reset(const std::set<onode_key_t>& _keys, bool level_tail) {
+      keys = _keys;
+      _is_level_tail = level_tail;
+      std::free(p_mem_key_view);
+      std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
+    }
+
+   public:
+    laddr_t laddr() const override { return _laddr; }
+    bool is_level_tail() const override { return _is_level_tail; }
+
+   protected:
+    field_type_t field_type() const override { return field_type_t::N0; }
+    level_t level() const override { return 0u; }
+    key_view_t get_largest_key_view() const override { return key_view; }
+    void prepare_mutate(context_t) override {
+      assert(false && "impossible path"); }
+    bool is_empty() const override {
+      assert(false && "impossible path"); }
+    node_offset_t free_size() const override {
+      assert(false && "impossible path"); }
+    key_view_t get_key_view(const search_position_t&) const override {
+      assert(false && "impossible path"); }
+    std::ostream& dump(std::ostream&) const override {
+      assert(false && "impossible path"); }
+    std::ostream& dump_brief(std::ostream&) const override {
+      assert(false && "impossible path"); }
+    void test_copy_to(NodeExtentMutable&) const override {
+      assert(false && "impossible path"); }
+    void test_set_tail(NodeExtentMutable&) override {
+      assert(false && "impossible path"); }
+
+   private:
+    std::set<onode_key_t> keys;
+    bool _is_level_tail;
+    laddr_t _laddr;
+
+    key_view_t key_view;
+    void* p_mem_key_view;
+  };
+
+  class DummyChild final : public Node {
+   public:
+    ~DummyChild() override = default;
 
     node_future<> populate_split(
         context_t c, std::set<Ref<DummyChild>>& splitable_nodes) {
@@ -579,6 +624,7 @@ class DummyChildPool {
       assert(splitable_nodes.find(this) != splitable_nodes.end());
 
       size_t index;
+      const auto& keys = impl->get_keys();
       if (keys.size() == 2) {
         index = 1;
       } else {
@@ -589,21 +635,22 @@ class DummyChildPool {
 
       std::set<onode_key_t> left_keys(keys.begin(), iter);
       std::set<onode_key_t> right_keys(iter, keys.end());
-      bool right_is_tail = _is_level_tail;
-      reset(left_keys, false);
-      auto right_child = DummyChild::create(right_keys, right_is_tail, pool);
+      bool right_is_tail = impl->is_level_tail();
+      impl->reset(left_keys, false);
+      auto right_child = DummyChild::create_new(right_keys, right_is_tail, pool);
       if (!can_split()) {
         splitable_nodes.erase(this);
       }
       if (right_child->can_split()) {
         splitable_nodes.insert(right_child);
       }
-      return this->insert_parent(c, right_child);
+      return insert_parent(c, right_child);
     }
 
     node_future<> insert_and_split(
         context_t c, const onode_key_t& insert_key,
         std::set<Ref<DummyChild>>& splitable_nodes) {
+      const auto& keys = impl->get_keys();
       assert(keys.size() == 1);
       auto& key = *keys.begin();
       assert(insert_key < key);
@@ -611,7 +658,7 @@ class DummyChildPool {
       std::set<onode_key_t> new_keys;
       new_keys.insert(insert_key);
       new_keys.insert(key);
-      reset(new_keys, _is_level_tail);
+      impl->reset(new_keys, impl->is_level_tail());
 
       splitable_nodes.clear();
       splitable_nodes.insert(this);
@@ -626,15 +673,22 @@ class DummyChildPool {
     }
 
     static Ref<DummyChild> create(
+        const std::set<onode_key_t>& keys, bool is_level_tail,
+        laddr_t addr, DummyChildPool& pool) {
+      auto ref_impl = std::make_unique<DummyChildImpl>(keys, is_level_tail, addr);
+      return new DummyChild(ref_impl.get(), std::move(ref_impl), pool);
+    }
+
+    static Ref<DummyChild> create_new(
         const std::set<onode_key_t>& keys, bool is_level_tail, DummyChildPool& pool) {
       static laddr_t seed = 0;
-      return new DummyChild(keys, is_level_tail, seed++, pool);
+      return create(keys, is_level_tail, seed++, pool);
     }
 
     static node_future<Ref<DummyChild>> create_initial(
         context_t c, const std::set<onode_key_t>& keys,
         DummyChildPool& pool, RootNodeTracker& root_tracker) {
-      auto initial = create(keys, true, pool);
+      auto initial = create_new(keys, true, pool);
       return c.nm.get_super(c.t, root_tracker
       ).safe_then([c, &pool, initial](auto super) {
         initial->make_root_new(c, std::move(super));
@@ -644,70 +698,38 @@ class DummyChildPool {
       });
     }
 
-    static Ref<DummyChild> create_clone(
-        const std::set<onode_key_t>& keys, bool is_level_tail,
-        laddr_t addr, DummyChildPool& pool) {
-      return new DummyChild(keys, is_level_tail, addr, pool);
-    }
-
    protected:
-    bool is_level_tail() const override { return _is_level_tail; }
-    field_type_t field_type() const override { return field_type_t::N0; }
-    laddr_t laddr() const override { return _laddr; }
-    level_t level() const override { return 0u; }
-    key_view_t get_key_view(const search_position_t&) const override {
-      assert(false && "impossible path"); }
-    key_view_t get_largest_key_view() const override { return key_view; }
-    std::ostream& dump(std::ostream&) const override {
-      assert(false && "impossible path"); }
-    std::ostream& dump_brief(std::ostream&) const override {
-      assert(false && "impossible path"); }
-    node_future<search_result_t> do_lower_bound(
-        context_t, const key_hobj_t&, MatchHistory&) override {
-      assert(false && "impossible path"); }
-    node_future<Ref<tree_cursor_t>> lookup_smallest(context_t) override {
-      assert(false && "impossible path"); }
-    node_future<Ref<tree_cursor_t>> lookup_largest(context_t) override {
-      assert(false && "impossible path"); }
-    void test_make_destructable(
-        context_t, NodeExtentMutable&, Super::URef&&) override {
-      assert(false && "impossible path"); }
     node_future<> test_clone_non_root(
         context_t, Ref<InternalNode> new_parent) const override {
       assert(!is_root());
       auto p_pool_clone = pool.pool_clone_in_progress;
       assert(p_pool_clone);
-      auto clone = create_clone(keys, _is_level_tail, _laddr, *p_pool_clone);
+      auto clone = create(
+          impl->get_keys(), impl->is_level_tail(), impl->laddr(), *p_pool_clone);
       clone->as_child(parent_info().position, new_parent);
-      clone->_laddr = _laddr;
       return node_ertr::now();
     }
+    node_future<Ref<tree_cursor_t>> lookup_smallest(context_t) override {
+      assert(false && "impossible path"); }
+    node_future<Ref<tree_cursor_t>> lookup_largest(context_t) override {
+      assert(false && "impossible path"); }
+    node_future<> test_clone_root(context_t, RootNodeTracker&) const override {
+      assert(false && "impossible path"); }
+    node_future<search_result_t> lower_bound_tracked(
+        context_t, const key_hobj_t&, MatchHistory&) override {
+      assert(false && "impossible path"); }
 
    private:
-    DummyChild(const std::set<onode_key_t>& keys,
-               bool is_level_tail, laddr_t laddr, DummyChildPool& pool)
-        : keys{keys}, _is_level_tail{is_level_tail}, _laddr{laddr}, pool{pool} {
-      std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
+    DummyChild(DummyChildImpl* impl, DummyChildImpl::URef&& ref, DummyChildPool& pool)
+      : Node(std::move(ref)), impl{impl}, pool{pool} {
       pool.track_node(this);
     }
 
-    bool can_split() const { return keys.size() > 1; }
+    bool can_split() const { return impl->get_keys().size() > 1; }
 
-    void reset(const std::set<onode_key_t>& _keys, bool level_tail) {
-      keys = _keys;
-      _is_level_tail = level_tail;
-      std::free(p_mem_key_view);
-      std::tie(key_view, p_mem_key_view) = build_key_view(*keys.crbegin());
-    }
-
-    mutable std::random_device rd;
-    std::set<onode_key_t> keys;
-    bool _is_level_tail;
-    laddr_t _laddr;
+    DummyChildImpl* impl;
     DummyChildPool& pool;
-
-    key_view_t key_view;
-    void* p_mem_key_view;
+    mutable std::random_device rd;
   };
 
  public:

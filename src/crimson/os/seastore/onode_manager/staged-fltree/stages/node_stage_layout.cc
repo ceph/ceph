@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "node_layout.h"
+#include "node_stage_layout.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_mutable.h"
 
