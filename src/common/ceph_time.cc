@@ -87,70 +87,69 @@ namespace ceph {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
 
-  }
+    using std::chrono::duration_cast;
+    using std::chrono::seconds;
+    using std::chrono::microseconds;
 
-  using std::chrono::duration_cast;
-  using std::chrono::seconds;
-  using std::chrono::microseconds;
+    template<typename Clock,
+	     typename std::enable_if<Clock::is_steady>::type*>
+    std::ostream& operator<<(std::ostream& m,
+			     const std::chrono::time_point<Clock>& t) {
+      return m << std::fixed
+	       << std::chrono::duration<double>(t.time_since_epoch()).count()
+	       << 's';
+    }
 
-  template<typename Clock,
-	   typename std::enable_if<Clock::is_steady>::type*>
-  std::ostream& operator<<(std::ostream& m,
-			   const std::chrono::time_point<Clock>& t) {
-    return m << std::fixed << std::chrono::duration<double>(
-		t.time_since_epoch()).count()
-	     << 's';
-  }
+    std::ostream& operator<<(std::ostream& m, const timespan& t) {
+      static_assert(std::is_unsigned_v<timespan::rep>);
+      m << std::chrono::duration_cast<std::chrono::seconds>(t).count();
+      if (auto ns = (t % 1s).count(); ns > 0) {
+	char oldfill = m.fill();
+	m.fill('0');
+	m << '.' << std::setw(9) << ns;
+	m.fill(oldfill);
+      }
+      return m << 's';
+    }
 
-  std::ostream& operator<<(std::ostream& m, const timespan& t) {
-    static_assert(std::is_unsigned_v<timespan::rep>);
-    m << std::chrono::duration_cast<std::chrono::seconds>(t).count();
-    if (auto ns = (t % 1s).count(); ns > 0) {
+    template<typename Clock,
+	     typename std::enable_if<!Clock::is_steady>::type*>
+    std::ostream& operator<<(std::ostream& m,
+			     const std::chrono::time_point<Clock>& t) {
+      m.setf(std::ios::right);
       char oldfill = m.fill();
       m.fill('0');
-      m << '.' << std::setw(9) << ns;
+      // localtime.  this looks like an absolute time.
+      //  conform to http://en.wikipedia.org/wiki/ISO_8601
+      struct tm bdt;
+      time_t tt = Clock::to_time_t(t);
+      localtime_r(&tt, &bdt);
+      char tz[32] = { 0 };
+      strftime(tz, sizeof(tz), "%z", &bdt);
+      m << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
+	<< '-' << std::setw(2) << (bdt.tm_mon+1)
+	<< '-' << std::setw(2) << bdt.tm_mday
+	<< 'T'
+	<< std::setw(2) << bdt.tm_hour
+	<< ':' << std::setw(2) << bdt.tm_min
+	<< ':' << std::setw(2) << bdt.tm_sec
+	<< "." << std::setw(6) << duration_cast<microseconds>(
+          t.time_since_epoch() % seconds(1)).count()
+	<< tz;
       m.fill(oldfill);
+      m.unsetf(std::ios::right);
+      return m;
     }
-    return m << 's';
-  }
 
-  template<typename Clock,
-	   typename std::enable_if<!Clock::is_steady>::type*>
-  std::ostream& operator<<(std::ostream& m,
-			   const std::chrono::time_point<Clock>& t) {
-    m.setf(std::ios::right);
-    char oldfill = m.fill();
-    m.fill('0');
-    // localtime.  this looks like an absolute time.
-    //  conform to http://en.wikipedia.org/wiki/ISO_8601
-    struct tm bdt;
-    time_t tt = Clock::to_time_t(t);
-    localtime_r(&tt, &bdt);
-    char tz[32] = { 0 };
-    strftime(tz, sizeof(tz), "%z", &bdt);
-    m << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
-      << '-' << std::setw(2) << (bdt.tm_mon+1)
-      << '-' << std::setw(2) << bdt.tm_mday
-      << 'T'
-      << std::setw(2) << bdt.tm_hour
-      << ':' << std::setw(2) << bdt.tm_min
-      << ':' << std::setw(2) << bdt.tm_sec
-      << "." << std::setw(6) << duration_cast<microseconds>(
-	t.time_since_epoch() % seconds(1)).count()
-      << tz;
-    m.fill(oldfill);
-    m.unsetf(std::ios::right);
-    return m;
+    template std::ostream&
+    operator<< <mono_clock>(std::ostream& m, const mono_time& t);
+    template std::ostream&
+    operator<< <real_clock>(std::ostream& m, const real_time& t);
+    template std::ostream&
+    operator<< <coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
+    template std::ostream&
+    operator<< <coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
   }
-
-  template std::ostream&
-  operator<< <mono_clock>(std::ostream& m, const mono_time& t);
-  template std::ostream&
-  operator<< <real_clock>(std::ostream& m, const real_time& t);
-  template std::ostream&
-  operator<< <coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
-  template std::ostream&
-  operator<< <coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
 
   std::string timespan_str(timespan t)
   {

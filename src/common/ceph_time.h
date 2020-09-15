@@ -51,6 +51,7 @@ namespace ceph {
 
     // A concrete duration, unsigned. The timespan Ceph thinks in.
     typedef std::chrono::duration<rep, std::nano> timespan;
+    std::ostream& operator<<(std::ostream& m, const timespan& t);
 
 
     // Like the above but signed.
@@ -299,6 +300,15 @@ namespace ceph {
       }
     };
 
+    template<typename Clock,
+	     typename std::enable_if<!Clock::is_steady>::type* = nullptr>
+    std::ostream& operator<<(std::ostream& m,
+			     const std::chrono::time_point<Clock>& t);
+    template<typename Clock,
+	     typename std::enable_if<Clock::is_steady>::type* = nullptr>
+    std::ostream& operator<<(std::ostream& m,
+			     const std::chrono::time_point<Clock>& t);
+
     // So that our subtractions produce negative spans rather than
     // arithmetic underflow.
     namespace {
@@ -440,15 +450,7 @@ namespace ceph {
     }
   }
 
-  std::ostream& operator<<(std::ostream& m, const timespan& t);
-  template<typename Clock,
-	   typename std::enable_if<!Clock::is_steady>::type* = nullptr>
-  std::ostream& operator<<(std::ostream& m,
-			   const std::chrono::time_point<Clock>& t);
-  template<typename Clock,
-	   typename std::enable_if<Clock::is_steady>::type* = nullptr>
-  std::ostream& operator<<(std::ostream& m,
-			   const std::chrono::time_point<Clock>& t);
+  using time_detail::operator<<;
 
   // The way std::chrono handles the return type of subtraction is not
   // wonderful. The difference of two unsigned types SHOULD be signed.
