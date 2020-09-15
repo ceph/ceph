@@ -1837,6 +1837,7 @@ int Mirror<I>::image_global_status_list(
         static_cast<mirror_image_state_t>(info.state),
         false}; // XXX: To set "primary" right would require an additional call.
 
+    bool found_local_site_status = false;
     auto s_it = statuses_.find(image_id);
     if (s_it != statuses_.end()) {
       auto& status = s_it->second;
@@ -1844,6 +1845,11 @@ int Mirror<I>::image_global_status_list(
       global_status.site_statuses.reserve(
         status.mirror_image_site_statuses.size());
       for (auto& site_status : status.mirror_image_site_statuses) {
+        if (site_status.mirror_uuid ==
+              cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
+          found_local_site_status = true;
+        }
+
         global_status.site_statuses.push_back(mirror_image_site_status_t{
           site_status.mirror_uuid,
           static_cast<mirror_image_status_state_t>(site_status.state),
@@ -1851,8 +1857,9 @@ int Mirror<I>::image_global_status_list(
             STATUS_NOT_FOUND : site_status.description,
           site_status.last_update.sec(), site_status.up});
       }
-    } else {
-      // older OSD that only returns local status
+    }
+
+    if (!found_local_site_status) {
       global_status.site_statuses.push_back(mirror_image_site_status_t{
         cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID,
         MIRROR_IMAGE_STATUS_STATE_UNKNOWN, STATUS_NOT_FOUND, 0, false});
