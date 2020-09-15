@@ -28,6 +28,7 @@
 #include "rgw_string.h"
 #include "rgw_multi.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
@@ -352,12 +353,19 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days,
     cmp = days*cct->_conf->rgw_lc_debug_interval;
     base_time = ceph_clock_now();
   }
-  timediff = base_time - ceph::real_clock::to_time_t(mtime);
+  auto tt_mtime = ceph::real_clock::to_time_t(mtime);
+  timediff = base_time - tt_mtime;
 
   if (expire_time) {
     *expire_time = mtime + make_timespan(cmp);
   }
-  ldout(cct, 20) << __func__ << "(): mtime=" << mtime << " days=" << days << " base_time=" << base_time << " timediff=" << timediff << " cmp=" << cmp << dendl;
+
+  ldout(cct, 20) << __func__ << __func__
+		 << "(): mtime=" << mtime << " days=" << days
+		 << " base_time=" << base_time << " timediff=" << timediff
+		 << " cmp=" << cmp
+		 << " is_expired=" << (timediff >= cmp) 
+		 << dendl;
 
   return (timediff >= cmp);
 }
@@ -530,7 +538,7 @@ struct lc_op_ctx {
   op_env env;
   rgw_bucket_dir_entry o;
   boost::optional<std::string> next_key_name;
-  ceph::real_time dm_effective_mtime;
+  ceph::real_time effective_mtime;
 
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
@@ -544,9 +552,10 @@ struct lc_op_ctx {
 
   lc_op_ctx(op_env& env, rgw_bucket_dir_entry& o,
 	    boost::optional<std::string> next_key_name,
-	    ceph::real_time dem,
+	    ceph::real_time effective_mtime,
 	    const DoutPrefixProvider *dpp, WorkQ* wq)
     : cct(env.store->ctx()), env(env), o(o), next_key_name(next_key_name),
+      effective_mtime(effective_mtime),
       store(env.store), bucket_info(env.bucket_info), op(env.op), ol(env.ol),
       obj(env.bucket_info.bucket, o.key), rctx(env.store), dpp(dpp), wq(wq)
     {}
@@ -631,7 +640,7 @@ class LCOpRule {
 
   op_env env;
   boost::optional<std::string> next_key_name;
-  ceph::real_time dm_effective_mtime;
+  ceph::real_time effective_mtime;
 
   std::vector<shared_ptr<LCOpFilter> > filters; // n.b., sharing ovhd
   std::vector<shared_ptr<LCOpAction> > actions;
@@ -641,6 +650,10 @@ public:
 
   boost::optional<std::string> get_next_key_name() {
     return next_key_name;
+  }
+
+  std::vector<shared_ptr<LCOpAction>>& get_actions() {
+    return actions;
   }
 
   void build();
@@ -1101,10 +1114,8 @@ public:
 
 class LCOpAction_NonCurrentExpiration : public LCOpAction {
 protected:
-  ceph::real_time mtime;
 public:
   LCOpAction_NonCurrentExpiration(op_env& env)
-    : mtime(env.ol.get_prev_obj().meta.mtime)
     {}
 
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
@@ -1117,11 +1128,13 @@ public:
     }
 
     int expiration = oc.op.noncur_expiration;
-    bool is_expired = obj_has_expired(oc.cct, mtime, expiration, exp_time);
+    bool is_expired = obj_has_expired(oc.cct, oc.effective_mtime, expiration,
+				      exp_time);
 
     ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired="
 		      << is_expired << " "
 		      << oc.wq->thr_name() << dendl;
+
     return is_expired &&
       pass_object_lock_check(oc.store->getRados(),
 			     oc.bucket_info, oc.obj, oc.rctx);
@@ -1313,7 +1326,7 @@ protected:
   }
 
   ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
-    return oc.dm_effective_mtime;
+    return oc.effective_mtime;
   }
 public:
   LCOpAction_NonCurrentTransition(op_env& env,
@@ -1362,14 +1375,14 @@ void LCOpRule::build()
 void LCOpRule::update()
 {
   next_key_name = env.ol.next_key_name();
-  dm_effective_mtime = env.ol.get_prev_obj().meta.mtime;
+  effective_mtime = env.ol.get_prev_obj().meta.mtime;
 }
 
 int LCOpRule::process(rgw_bucket_dir_entry& o,
 		      const DoutPrefixProvider *dpp,
 		      WorkQ* wq)
 {
-  lc_op_ctx ctx(env, o, next_key_name, dm_effective_mtime, dpp, wq);
+  lc_op_ctx ctx(env, o, next_key_name, effective_mtime, dpp, wq);
   shared_ptr<LCOpAction> *selected = nullptr; // n.b., req'd by sharing
   real_time exp;
 
@@ -2154,8 +2167,8 @@ std::string s3_expiration_header(
   for (const auto& ri : rule_map) {
     const auto& rule = ri.second;
     auto& id = rule.get_id();
-    auto& prefix = rule.get_prefix();
     auto& filter = rule.get_filter();
+    auto& prefix = filter.has_prefix() ? filter.get_prefix(): rule.get_prefix();
     auto& expiration = rule.get_expiration();
     auto& noncur_expiration = rule.get_noncur_expiration();
 
@@ -2185,7 +2198,7 @@ std::string s3_expiration_header(
 
     if(! prefix.empty()) {
       if (! boost::starts_with(obj_key.name, prefix))
-	continue;
+        continue;
     }
 
     if (filter.has_tags()) {

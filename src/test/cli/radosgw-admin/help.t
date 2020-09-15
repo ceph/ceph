@@ -129,8 +129,7 @@
     metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog list                 list metadata log
-    mdlog trim                 trim metadata log (use start-date, end-date or
-                               start-marker, end-marker)
+    mdlog trim                 trim metadata log (use marker)
     mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)

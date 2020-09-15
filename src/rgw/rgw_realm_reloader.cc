@@ -8,6 +8,7 @@
 #include "rgw_rest.h"
 #include "rgw_user.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 

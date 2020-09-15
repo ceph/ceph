@@ -2213,6 +2213,14 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
 
+    Option("mon_auth_validate_all_caps", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("Whether to parse non-monitor capabilities set by the "
+		     "'ceph auth ...' commands. Disabling this saves CPU on the "
+		     "monitor, but allows invalid capabilities to be set, and "
+		     "only be rejected later, when they are used.")
+    .set_flag(Option::FLAG_RUNTIME),
 
     // PAXOS
 
@@ -3369,11 +3377,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_class_load_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap queue 2pc_queue")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap queue 2pc_queue fifo")
     .set_description(""),
 
     Option("osd_class_default_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap queue 2pc_queue")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap queue 2pc_queue fifo")
     .set_description(""),
 
     Option("osd_check_for_log_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4042,10 +4050,6 @@ std::vector<Option> get_global_options() {
 
     Option("bdev_nvme_unbind_from_kernel", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
-
-    Option("bdev_nvme_retry_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(-1)
     .set_description(""),
 
     Option("bdev_enable_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -7192,6 +7196,17 @@ std::vector<Option> get_rgw_options() {
     .set_description("mclock limit for metadata requests")
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
+
+   Option("rgw_data_log_backing", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("auto")
+    .set_enum_allowed( { "auto", "fifo", "omap" } )
+    .set_description("Backing store for the RGW data sync log")
+    .set_long_description(
+        "Whether to use the older OMAP backing store or the high performance "
+	"FIFO based backing store. Auto uses whatever already exists "
+	"but will default to FIFO if there isn't an existing log. Either of "
+	"the explicit options will cause startup to fail if the other log is "
+	"still around."),
   });
 }
 
@@ -8745,6 +8760,20 @@ std::vector<Option> get_mds_client_options() {
     });
 }
 
+std::vector<Option> get_cephfs_mirror_options() {
+  return std::vector<Option>({
+    Option("cephfs_mirror_max_concurrent_directory_syncs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min(1)
+    .set_description("maximum number of concurrent snapshot synchronization threads")
+    .set_long_description("maximum number of directory snapshots that can be synchronized concurrently by cephfs-mirror daemon. Controls the number of synchronization threads."),
+
+    Option("cephfs_mirror_directory_choose_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("random")
+    .set_description("policy for choosing directories to mirror snapshots")
+    .set_long_description("policy used by cephfs-mirror daemon to choose directories for snapshot mirroring"),
+    });
+}
 
 static std::vector<Option> build_options()
 {
@@ -8763,6 +8792,7 @@ static std::vector<Option> build_options()
   ingest(get_immutable_object_cache_options(), "immutable-objet-cache");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
+  ingest(get_cephfs_mirror_options(), "cephfs-mirror");
 
   return result;
 }

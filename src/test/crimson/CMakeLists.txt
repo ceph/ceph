@@ -41,6 +41,8 @@ target_link_libraries(unittest_seastar_alienstore_thread_pool
 
 add_executable(unittest_seastar_config
   test_config.cc)
+add_ceph_test(unittest_seastar_config
+  unittest_seastar_config --memory 256M)
 target_link_libraries(unittest_seastar_config crimson)
 
 add_executable(unittest_seastar_monc

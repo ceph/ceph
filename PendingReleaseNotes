@@ -1,5 +1,16 @@
 >=16.0.0
 --------
+* The allowable options for some "radosgw-admin" commands have been changed.
+
+  * "mdlog-list", "datalog-list", "sync-error-list" no longer accepts
+    start and end dates, but does accept a single optional start marker.
+  * "mdlog-trim", "datalog-trim", "sync-error-trim" only accept a
+    single marker giving the end of the trimmed range.
+  * Similarly the date ranges and marker ranges have been removed on
+    the RESTful DATALog and MDLog list and trim operations.
+
+>=15.0.0
+--------
 
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
@@ -101,6 +112,10 @@
   an OSD compaction on start. Setting this option to ``true`` and restarting an OSD
   will result in an offline compaction of the OSD prior to booting.
 
+* OSD: the option named ``bdev_nvme_retry_count`` has been removed. Because
+  in SPDK v20.07, there is no easy access to bdev_nvme options, and this
+  option is hardly used, so it was removed.
+
 * Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
   scheduled scrubs of the type disabled will be aborted. All user initiated
   scrubs are NOT interrupted.
@@ -137,3 +152,11 @@
 
   - ``ceph osd dump``
   - ``ceph <tell|daemon> osd.<N> dump_blocklist``
+
+* caps: MON and MDS caps can now be used to restrict client's ability to view
+  and operate on specific Ceph file systems. The FS can be specificed using
+  ``fsname`` in caps. This also affects subcommand ``fs authorize``, the caps
+  produce by it will be specific to the FS name passed in its arguments.
+
+* fs: "fs authorize" now sets MON cap to "allow <perm> fsname=<fsname>"
+      instead of setting it to "allow r" all the time.

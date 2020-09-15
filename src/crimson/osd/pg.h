@@ -529,6 +529,7 @@ public:
 			   const MOSDRepOpReply& m);
 
   void print(std::ostream& os) const;
+  void dump_primary(Formatter*);
 
 private:
   void do_peering_event(
@@ -628,6 +629,10 @@ public:
     get_pool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
     return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
   }
+  seastar::future<> mark_unfound_lost(int) {
+    // TODO: see PrimaryLogPG::mark_all_unfound_lost()
+    return seastar::now();
+  }
 
 private:
   // instead of seastar::gate, we use a boolean flag to indicate
@@ -665,6 +670,9 @@ private:
     return seastar::make_ready_future<bool>(true);
   }
 
+  template <typename MsgType>
+  bool can_discard_replica_op(const MsgType& m) const;
+  bool can_discard_op(const MOSDOp& m) const;
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }

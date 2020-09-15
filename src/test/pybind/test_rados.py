@@ -3,7 +3,7 @@ from nose import SkipTest
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
-                   ObjectNotFound, ObjectBusy, NotConnected, requires, opt,
+                   ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO)
 from datetime import timedelta
@@ -46,37 +46,6 @@ def test_parse_argv_empty_str():
     r = Rados()
     eq(args, r.conf_parse_argv(args))
 
-class TestRequires(object):
-    @requires(('foo', str), ('bar', int), ('baz', int))
-    def _method_plain(self, foo, bar, baz):
-        ok(isinstance(foo, str))
-        ok(isinstance(bar, int))
-        ok(isinstance(baz, int))
-        return (foo, bar, baz)
-
-    def test_method_plain(self):
-        assert_raises(TypeError, self._method_plain, 42, 42, 42)
-        assert_raises(TypeError, self._method_plain, '42', '42', '42')
-        assert_raises(TypeError, self._method_plain, foo='42', bar='42', baz='42')
-        eq(self._method_plain('42', 42, 42), ('42', 42, 42))
-        eq(self._method_plain(foo='42', bar=42, baz=42), ('42', 42, 42))
-
-    @requires(('opt_foo', opt(str)), ('opt_bar', opt(int)), ('baz', int))
-    def _method_with_opt_arg(self, foo, bar, baz):
-        ok(isinstance(foo, str) or foo is None)
-        ok(isinstance(bar, int) or bar is None)
-        ok(isinstance(baz, int))
-        return (foo, bar, baz)
-
-    def test_method_with_opt_args(self):
-        assert_raises(TypeError, self._method_with_opt_arg, 42, 42, 42)
-        assert_raises(TypeError, self._method_with_opt_arg, '42', '42', 42)
-        assert_raises(TypeError, self._method_with_opt_arg, None, None, None)
-        eq(self._method_with_opt_arg(None, 42, 42), (None, 42, 42))
-        eq(self._method_with_opt_arg('42', None, 42), ('42', None, 42))
-        eq(self._method_with_opt_arg(None, None, 42), (None, None, 42))
-
-
 class TestRadosStateError(object):
     def _requires_configuring(self, rados):
         assert_raises(RadosStateError, rados.connect)
@@ -87,7 +56,7 @@ class TestRadosStateError(object):
         assert_raises(RadosStateError, rados.conf_parse_env)
         assert_raises(RadosStateError, rados.conf_get, 'opt')
         assert_raises(RadosStateError, rados.conf_set, 'opt', 'val')
-        assert_raises(RadosStateError, rados.ping_monitor, 0)
+        assert_raises(RadosStateError, rados.ping_monitor, '0')
 
     def _requires_connected(self, rados):
         assert_raises(RadosStateError, rados.pool_exists, 'foo')
@@ -152,6 +121,10 @@ class TestRados(object):
                 buf = json.loads(output)
                 if buf.get('health'):
                     break
+
+    def test_annotations(self):
+        with assert_raises(TypeError):
+            self.rados.create_pool(0xf00)
 
     def test_create(self):
         self.rados.create_pool('foo')
@@ -685,6 +658,23 @@ class TestIoctx(object):
         eq(contents, b"bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_cmpext(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+
+        self.ioctx.write('test_object', b'abcdefghi')
+        comp = self.ioctx.aio_cmpext('test_object', b'abcdefghi', 0, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+
     def test_aio_write_no_comp_ref(self):
         lock = threading.Condition()
         count = [0]
@@ -830,27 +820,29 @@ class TestIoctx(object):
         r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
 
-    @attr('thrash')
-    def test_aio_read(self):
+    def test_aio_read_wait_for_complete(self):
+        # use wait_for_complete() and wait for cb by
+        # watching retval[0]
+
         # this is a list so that the local cb() can modify it
+        payload = b"bar\000frob"
+        self.ioctx.write("foo", payload)
+        self._take_down_acting_set('test_pool', 'foo')
+
         retval = [None]
         lock = threading.Condition()
         def cb(_, buf):
             with lock:
                 retval[0] = buf
                 lock.notify()
-        payload = b"bar\000frob"
-        self.ioctx.write("foo", payload)
 
-        # test1: use wait_for_complete() and wait for cb by
-        # watching retval[0]
-        self._take_down_acting_set('test_pool', 'foo')
         comp = self.ioctx.aio_read("foo", len(payload), 0, cb)
         eq(False, comp.is_complete())
         time.sleep(3)
         eq(False, comp.is_complete())
         with lock:
             eq(None, retval[0])
+
         self._let_osds_back_up()
         comp.wait_for_complete()
         loops = 0
@@ -863,30 +855,48 @@ class TestIoctx(object):
         eq(retval[0], payload)
         eq(sys.getrefcount(comp), 2)
 
-        # test2: use wait_for_complete_and_cb(), verify retval[0] is
+    def test_aio_read_wait_for_complete_and_cb(self):
+        # use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control
+        payload = b"bar\000frob"
+        self.ioctx.write("foo", payload)
 
-        retval[0] = None
         self._take_down_acting_set('test_pool', 'foo')
+        # this is a list so that the local cb() can modify it
+        retval = [None]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                retval[0] = buf
+                lock.notify()
         comp = self.ioctx.aio_read("foo", len(payload), 0, cb)
         eq(False, comp.is_complete())
         time.sleep(3)
         eq(False, comp.is_complete())
         with lock:
             eq(None, retval[0])
-        self._let_osds_back_up()
 
+        self._let_osds_back_up()
         comp.wait_for_complete_and_cb()
         assert(retval[0] is not None)
         eq(retval[0], payload)
         eq(sys.getrefcount(comp), 2)
 
-        # test3: error case, use wait_for_complete_and_cb(), verify retval[0] is
+    def test_aio_read_wait_for_complete_and_cb_error(self):
+        # error case, use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control
-
-        retval[0] = 1
         self._take_down_acting_set('test_pool', 'bar')
-        comp = self.ioctx.aio_read("bar", len(payload), 0, cb)
+
+        # this is a list so that the local cb() can modify it
+        retval = [1]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                retval[0] = buf
+                lock.notify()
+
+        # read from a DNE object
+        comp = self.ioctx.aio_read("bar", 3, 0, cb)
         eq(False, comp.is_complete())
         time.sleep(3)
         eq(False, comp.is_complete())
@@ -898,8 +908,6 @@ class TestIoctx(object):
         eq(None, retval[0])
         assert(comp.get_return_value() < 0)
         eq(sys.getrefcount(comp), 2)
-
-        [i.remove() for i in self.ioctx.list_objects()]
 
     def test_lock(self):
         self.ioctx.lock_exclusive("foo", "lock", "locker", "desc_lock",

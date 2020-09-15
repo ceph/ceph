@@ -62,6 +62,7 @@
 #include "rgw_rest_sts.h"
 #include "rgw_rest_iam.h"
 #include "rgw_sts.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -255,7 +256,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     /* JSON encode object metadata */
     JSONFormatter jf;
     jf.open_object_section("obj_metadata");
-    encode_json("attrs", attrs.attrs, &jf);
+    encode_json("attrs", attrs, &jf);
     utime_t ut(lastmod);
     encode_json("mtime", ut, &jf);
     jf.close_section();
@@ -270,14 +271,14 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
     uint64_t pg_ver = 0;
-    int r = decode_attr_bl_single_value(attrs.attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
+    int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
     if (r < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     dump_header(s, "Rgwx-Obj-PG-Ver", pg_ver);
 
     uint32_t source_zone_short_id = 0;
-    r = decode_attr_bl_single_value(attrs.attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
+    r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
     if (r < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
@@ -443,7 +444,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
 
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = rgw_s3_prepare_decrypt(s, attrs.attrs, &block_crypt, crypt_http_responses);
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
   if (res == 0) {
     if (block_crypt != nullptr) {
       auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s->cct, cb, std::move(block_crypt));
@@ -2344,8 +2345,6 @@ int RGWPutObj_ObjStore_S3::get_params()
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
-  map<string, bufferlist> src_attrs;
-  size_t pos;
   int ret;
 
   map_qs_metadata(s);
@@ -2359,93 +2358,6 @@ int RGWPutObj_ObjStore_S3::get_params()
 
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
-  copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
-  copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
-
-  /* handle x-amz-copy-source */
-  std::string_view cs_view(copy_source);
-  if (! cs_view.empty()) {
-    if (cs_view[0] == '/')
-      cs_view.remove_prefix(1);
-    copy_source_bucket_name = std::string(cs_view);
-    pos = copy_source_bucket_name.find("/");
-    if (pos == std::string::npos) {
-      ret = -EINVAL;
-      ldpp_dout(this, 5) << "x-amz-copy-source bad format" << dendl;
-      return ret;
-    }
-    copy_source_object_name =
-      copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
-    copy_source_bucket_name = copy_source_bucket_name.substr(0, pos);
-#define VERSION_ID_STR "?versionId="
-    pos = copy_source_object_name.find(VERSION_ID_STR);
-    if (pos == std::string::npos) {
-      copy_source_object_name = url_decode(copy_source_object_name);
-    } else {
-      copy_source_version_id =
-	copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
-      copy_source_object_name =
-	url_decode(copy_source_object_name.substr(0, pos));
-    }
-    pos = copy_source_bucket_name.find(":");
-    if (pos == std::string::npos) {
-       copy_source_tenant_name = s->src_tenant_name;
-    } else {
-       copy_source_tenant_name = copy_source_bucket_name.substr(0, pos);
-       copy_source_bucket_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
-       if (copy_source_bucket_name.empty()) {
-         ret = -EINVAL;
-         ldpp_dout(this, 5) << "source bucket name is empty" << dendl;
-         return ret;
-       }
-    }
-    ret = store->getRados()->get_bucket_info(store->svc(),
-                                 copy_source_tenant_name,
-                                 copy_source_bucket_name,
-                                 copy_source_bucket_info,
-                                 NULL, s->yield, &src_attrs);
-    if (ret < 0) {
-      ldpp_dout(this, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
-      return ret;
-    }
-
-    /* handle x-amz-copy-source-range */
-
-    if (copy_source_range) {
-      string range = copy_source_range;
-      pos = range.find("bytes=");
-      if (pos == std::string::npos || pos != 0) {
-        ret = -EINVAL;
-        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
-        return ret;
-      }
-      /* 6 is the length of "bytes=" */
-      range = range.substr(pos + 6);
-      pos = range.find("-");
-      if (pos == std::string::npos) {
-        ret = -EINVAL;
-        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
-        return ret;
-      }
-      string first = range.substr(0, pos);
-      string last = range.substr(pos + 1);
-      if (first.find_first_not_of("0123456789") != std::string::npos || last.find_first_not_of("0123456789") != std::string::npos)
-      {
-        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format not an integer" << dendl;
-        ret = -EINVAL;
-        return ret;
-      }
-      copy_source_range_fst = strtoull(first.c_str(), NULL, 10);
-      copy_source_range_lst = strtoull(last.c_str(), NULL, 10);
-      if (copy_source_range_fst > copy_source_range_lst)
-      {
-        ret = -ERANGE;
-        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format first number bigger than second" << dendl;
-        return ret;
-      }
-    }
-
-  } /* copy_source */
 
   /* handle object tagging */
   auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
@@ -3303,11 +3215,11 @@ int RGWCopyObj_ObjStore_S3::get_params()
   auto tmp_md_d = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (tmp_md_d) {
     if (strcasecmp(tmp_md_d, "COPY") == 0) {
-      attrs_mod = RGWRados::ATTRSMOD_NONE;
+      attrs_mod = rgw::sal::ATTRSMOD_NONE;
     } else if (strcasecmp(tmp_md_d, "REPLACE") == 0) {
-      attrs_mod = RGWRados::ATTRSMOD_REPLACE;
+      attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
-      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
+      attrs_mod = rgw::sal::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
       s->err.message = "Unknown metadata directive.";
       ldpp_dout(this, 0) << s->err.message << dendl;
@@ -3321,7 +3233,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_obj_name.compare(src_object->get_name()) == 0) &&
       src_object->get_instance().empty() &&
-      (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
+      (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
   }
 
@@ -4993,7 +4905,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
       return -ERR_NO_SUCH_BUCKET;
   }
 
-  s->bucket_attrs = s->bucket->get_attrs().attrs;
+  s->bucket_attrs = s->bucket->get_attrs();
 
   if (!s->bucket->get_info().has_website) {
       // TODO-FUTURE: if the bucket has no WebsiteConfig, expose it here

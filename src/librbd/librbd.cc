@@ -3071,9 +3071,9 @@ namespace librbd {
     return r;
   }
 
-  void Image::quiesce_complete(int r) {
+  void Image::quiesce_complete(uint64_t handle, int r) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    ictx->state->quiesce_complete(r);
+    ictx->state->quiesce_complete(handle, r);
   }
 
 } // namespace librbd
@@ -7238,8 +7238,8 @@ extern "C" int rbd_quiesce_unwatch(rbd_image_t image, uint64_t handle)
   return r;
 }
 
-extern "C" void rbd_quiesce_complete(rbd_image_t image, int r)
+extern "C" void rbd_quiesce_complete(rbd_image_t image, uint64_t handle, int r)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  ictx->state->quiesce_complete(r);
+  ictx->state->quiesce_complete(handle, r);
 }

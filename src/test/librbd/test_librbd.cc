@@ -8210,7 +8210,6 @@ TEST_F(TestLibRBD, QuiesceWatch)
   uint64_t size = 2 << 20;
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
 
-  uint64_t handle1, handle2;
   rbd_image_t image1, image2;
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image1, NULL));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image2, NULL));
@@ -8226,6 +8225,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
     }
 
     rbd_image_t &image;
+    uint64_t handle = 0;
     size_t quiesce_count = 0;
     size_t unquiesce_count = 0;
 
@@ -8238,7 +8238,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
     void handle_quiesce() {
       ASSERT_EQ(quiesce_count, unquiesce_count);
       quiesce_count++;
-      rbd_quiesce_complete(image, 0);
+      rbd_quiesce_complete(image, handle, 0);
     }
     void handle_unquiesce() {
       std::unique_lock locker(lock);
@@ -8254,9 +8254,11 @@ TEST_F(TestLibRBD, QuiesceWatch)
   } watcher1(image1), watcher2(image2);
 
   ASSERT_EQ(0, rbd_quiesce_watch(image1, Watcher::quiesce_cb,
-                                 Watcher::unquiesce_cb, &watcher1, &handle1));
+                                 Watcher::unquiesce_cb, &watcher1,
+                                 &watcher1.handle));
   ASSERT_EQ(0, rbd_quiesce_watch(image2, Watcher::quiesce_cb,
-                                 Watcher::unquiesce_cb, &watcher2, &handle2));
+                                 Watcher::unquiesce_cb, &watcher2,
+                                 &watcher2.handle));
 
   ASSERT_EQ(0, rbd_snap_create(image1, "snap1"));
   ASSERT_EQ(1U, watcher1.quiesce_count);
@@ -8270,7 +8272,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
   ASSERT_EQ(2U, watcher2.quiesce_count);
   ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
-  ASSERT_EQ(0, rbd_quiesce_unwatch(image1, handle1));
+  ASSERT_EQ(0, rbd_quiesce_unwatch(image1, watcher1.handle));
 
   ASSERT_EQ(0, rbd_snap_create(image1, "snap3"));
   ASSERT_EQ(2U, watcher1.quiesce_count);
@@ -8278,7 +8280,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
   ASSERT_EQ(3U, watcher2.quiesce_count);
   ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
-  ASSERT_EQ(0, rbd_quiesce_unwatch(image2, handle2));
+  ASSERT_EQ(0, rbd_quiesce_unwatch(image2, watcher2.handle));
 
   ASSERT_EQ(0, rbd_snap_remove(image1, "snap1"));
   ASSERT_EQ(0, rbd_snap_remove(image1, "snap2"));
@@ -8306,6 +8308,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
 
     struct Watcher : public librbd::QuiesceWatchCtx {
       librbd::Image &image;
+      uint64_t handle = 0;
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
@@ -8318,7 +8321,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
       void handle_quiesce() override {
         ASSERT_EQ(quiesce_count, unquiesce_count);
         quiesce_count++;
-        image.quiesce_complete(0);
+        image.quiesce_complete(handle, 0);
       }
       void handle_unquiesce() override {
         std::unique_lock locker(lock);
@@ -8332,10 +8335,9 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
                            [this, c]() { return unquiesce_count >= c; });
       }
     } watcher1(image1), watcher2(image2);
-    uint64_t handle1, handle2;
 
-    ASSERT_EQ(0, image1.quiesce_watch(&watcher1, &handle1));
-    ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &handle2));
+    ASSERT_EQ(0, image1.quiesce_watch(&watcher1, &watcher1.handle));
+    ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &watcher2.handle));
 
     ASSERT_EQ(0, image1.snap_create("snap1"));
     ASSERT_EQ(1U, watcher1.quiesce_count);
@@ -8349,7 +8351,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
     ASSERT_EQ(2U, watcher2.quiesce_count);
     ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
-    ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
+    ASSERT_EQ(0, image1.quiesce_unwatch(watcher1.handle));
 
     ASSERT_EQ(0, image1.snap_create("snap3"));
     ASSERT_EQ(2U, watcher1.quiesce_count);
@@ -8357,7 +8359,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
     ASSERT_EQ(3U, watcher2.quiesce_count);
     ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
-    ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
+    ASSERT_EQ(0, image2.quiesce_unwatch(watcher2.handle));
 
     ASSERT_EQ(0, image1.snap_remove("snap1"));
     ASSERT_EQ(0, image1.snap_remove("snap2"));
@@ -8386,6 +8388,7 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     struct Watcher : public librbd::QuiesceWatchCtx {
       librbd::Image &image;
       int r;
+      uint64_t handle;
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
@@ -8395,9 +8398,14 @@ TEST_F(TestLibRBD, QuiesceWatchError)
       Watcher(librbd::Image &image, int r) : image(image), r(r) {
       }
 
+      void reset_counters() {
+        quiesce_count = 0;
+        unquiesce_count = 0;
+      }
+
       void handle_quiesce() override {
         quiesce_count++;
-        image.quiesce_complete(r);
+        image.quiesce_complete(handle, r);
       }
 
       void handle_unquiesce() override {
@@ -8406,45 +8414,60 @@ TEST_F(TestLibRBD, QuiesceWatchError)
         cv.notify_one();
       }
 
-      bool wait_for_unquiesce(size_t c) {
+      bool wait_for_unquiesce() {
         std::unique_lock locker(lock);
         return cv.wait_for(locker, seconds(60),
-                           [this, c]() { return unquiesce_count >= c; });
+                           [this]() {
+                             return quiesce_count == unquiesce_count;
+                           });
       }
-    } watcher1(image1, -EINVAL), watcher2(image2, 0);
-    uint64_t handle1, handle2;
+    } watcher10(image1, -EINVAL), watcher11(image1, 0), watcher20(image2, 0);
 
-    ASSERT_EQ(0, image1.quiesce_watch(&watcher1, &handle1));
-    ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &handle2));
+    ASSERT_EQ(0, image1.quiesce_watch(&watcher10, &watcher10.handle));
+    ASSERT_EQ(0, image1.quiesce_watch(&watcher11, &watcher11.handle));
+    ASSERT_EQ(0, image2.quiesce_watch(&watcher20, &watcher20.handle));
 
     ASSERT_EQ(-EINVAL, image1.snap_create("snap1"));
-    ASSERT_LT(0U, watcher1.quiesce_count);
-    ASSERT_EQ(0U, watcher1.unquiesce_count);
-    ASSERT_EQ(1U, watcher2.quiesce_count);
-    ASSERT_TRUE(watcher2.wait_for_unquiesce(1U));
+    ASSERT_GT(watcher10.quiesce_count, 0U);
+    ASSERT_EQ(watcher10.unquiesce_count, 0U);
+    ASSERT_GT(watcher11.quiesce_count, 0U);
+    ASSERT_TRUE(watcher11.wait_for_unquiesce());
+    ASSERT_GT(watcher20.quiesce_count, 0U);
+    ASSERT_TRUE(watcher20.wait_for_unquiesce());
 
     PrintProgress prog_ctx;
-    watcher1.quiesce_count = 0;
+    watcher10.reset_counters();
+    watcher11.reset_counters();
+    watcher20.reset_counters();
     ASSERT_EQ(0, image2.snap_create2("snap2",
                                      RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
                                      prog_ctx));
-    ASSERT_LT(0U, watcher1.quiesce_count);
-    ASSERT_EQ(0U, watcher1.unquiesce_count);
-    ASSERT_EQ(2U, watcher2.quiesce_count);
-    ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
+    ASSERT_GT(watcher10.quiesce_count, 0U);
+    ASSERT_EQ(watcher10.unquiesce_count, 0U);
+    ASSERT_GT(watcher11.quiesce_count, 0U);
+    ASSERT_TRUE(watcher11.wait_for_unquiesce());
+    ASSERT_GT(watcher20.quiesce_count, 0U);
+    ASSERT_TRUE(watcher20.wait_for_unquiesce());
 
-    ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
+    ASSERT_EQ(0, image1.quiesce_unwatch(watcher10.handle));
 
+    watcher11.reset_counters();
+    watcher20.reset_counters();
     ASSERT_EQ(0, image1.snap_create("snap3"));
-    ASSERT_EQ(3U, watcher2.quiesce_count);
-    ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
+    ASSERT_GT(watcher11.quiesce_count, 0U);
+    ASSERT_TRUE(watcher11.wait_for_unquiesce());
+    ASSERT_GT(watcher20.quiesce_count, 0U);
+    ASSERT_TRUE(watcher20.wait_for_unquiesce());
 
+    ASSERT_EQ(0, image1.quiesce_unwatch(watcher11.handle));
+
+    watcher20.reset_counters();
     ASSERT_EQ(0, image2.snap_create2("snap4", RBD_SNAP_CREATE_SKIP_QUIESCE,
                                      prog_ctx));
-    ASSERT_EQ(3U, watcher2.quiesce_count);
-    ASSERT_EQ(3U, watcher2.unquiesce_count);
+    ASSERT_EQ(watcher20.quiesce_count, 0U);
+    ASSERT_EQ(watcher20.unquiesce_count, 0U);
 
-    ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
+    ASSERT_EQ(0, image2.quiesce_unwatch(watcher20.handle));
 
     ASSERT_EQ(0, image1.snap_remove("snap2"));
     ASSERT_EQ(0, image1.snap_remove("snap3"));
@@ -8495,20 +8518,21 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
         m_cond.notify_one();
       }
 
-      void wait_for_quiesce_count(size_t count) {
+      void wait_for_quiesce() {
         std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
-                                    [this, count] {
-                                      return this->quiesce_count == count;
+                                    [this] {
+                                      return quiesce_count >= 1;
                                     }));
       }
 
-      void wait_for_unquiesce_count(size_t count) {
+      void wait_for_unquiesce() {
         std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
-                                    [this, count] {
-                                      return this->unquiesce_count == count;
+                                    [this] {
+                                      return quiesce_count == unquiesce_count;
                                     }));
+        quiesce_count = unquiesce_count = 0;
       }
     } watcher(image);
     uint64_t handle;
@@ -8517,49 +8541,46 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
     std::cerr << "test quiesce is not long enough to time out" << std::endl;
 
-    thread quiesce1([&image, &watcher]() {
-      watcher.wait_for_quiesce_count(1);
+    thread quiesce1([&image, &watcher, handle]() {
+      watcher.wait_for_quiesce();
       sleep(8);
-      image.quiesce_complete(0);
+      image.quiesce_complete(handle, 0);
     });
 
     ASSERT_EQ(0, image.snap_create("snap1"));
     quiesce1.join();
-    ASSERT_EQ(1U, watcher.quiesce_count);
-    watcher.wait_for_unquiesce_count(1);
-    ASSERT_EQ(1U, watcher.unquiesce_count);
+    ASSERT_GE(watcher.quiesce_count, 1U);
+    watcher.wait_for_unquiesce();
 
     std::cerr << "test quiesce is timed out" << std::endl;
 
     bool timed_out = false;
-    thread quiesce2([&image, &watcher, &timed_out]() {
-      watcher.wait_for_quiesce_count(2);
+    thread quiesce2([&image, &watcher, handle, &timed_out]() {
+      watcher.wait_for_quiesce();
       for (int i = 0; !timed_out && i < 60; i++) {
         std::cerr << "waiting for timed out ... " << i << std::endl;
         sleep(1);
       }
-      image.quiesce_complete(0);
+      image.quiesce_complete(handle, 0);
     });
 
     ASSERT_EQ(-ETIMEDOUT, image.snap_create("snap2"));
     timed_out = true;
     quiesce2.join();
-    ASSERT_EQ(2U, watcher.quiesce_count);
-    watcher.wait_for_unquiesce_count(2);
-    ASSERT_EQ(2U, watcher.unquiesce_count);
+    ASSERT_GE(watcher.quiesce_count, 1U);
+    watcher.wait_for_unquiesce();
 
-    thread quiesce3([&image, &watcher]() {
-      watcher.wait_for_quiesce_count(3);
-      image.quiesce_complete(0);
+    thread quiesce3([&image, handle, &watcher]() {
+      watcher.wait_for_quiesce();
+      image.quiesce_complete(handle, 0);
     });
 
     std::cerr << "test retry succeeds" << std::endl;
 
     ASSERT_EQ(0, image.snap_create("snap2"));
     quiesce3.join();
-    ASSERT_EQ(3U, watcher.quiesce_count);
-    watcher.wait_for_unquiesce_count(3);
-    ASSERT_EQ(3U, watcher.unquiesce_count);
+    ASSERT_GE(watcher.quiesce_count, 1U);
+    watcher.wait_for_unquiesce();
 
     ASSERT_EQ(0, image.snap_remove("snap1"));
     ASSERT_EQ(0, image.snap_remove("snap2"));

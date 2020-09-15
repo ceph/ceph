@@ -1402,11 +1402,11 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             # pgid will already be in the command for the pg <pgid>
             # form, but for tell <pgid>, we need to put it in
             if cmd:
-                cmddict = json.loads(cmd[0])
+                cmddict = json.loads(cmd)
                 cmddict['pgid'] = pgid
             else:
                 cmddict = dict(pgid=pgid)
-            cmd = [json.dumps(cmddict)]
+            cmd = json.dumps(cmddict)
             if verbose:
                 print('submit {0} for pgid {1}'.format(cmd, pgid),
                       file=sys.stderr)
@@ -1488,7 +1488,7 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
                 # use the target we were originally given
                 pass
         ret, outbuf, outs = send_command_retry(cluster,
-                                               target, [json.dumps(cmddict)],
+                                               target, json.dumps(cmddict),
                                                inbuf, timeout, verbose)
 
     except Exception as e:

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ApiController, RESTController, ControllerDoc, EndpointDoc
+from . import ApiController, RESTController, \
+    allow_empty_body, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -93,6 +94,7 @@ class MgrModules(RESTController):
 
     @RESTController.Resource('POST')
     @handle_send_command_error('mgr_modules')
+    @allow_empty_body
     def enable(self, module_name):
         """
         Enable the specified Ceph Mgr module.
@@ -105,6 +107,7 @@ class MgrModules(RESTController):
 
     @RESTController.Resource('POST')
     @handle_send_command_error('mgr_modules')
+    @allow_empty_body
     def disable(self, module_name):
         """
         Disable the specified Ceph Mgr module.

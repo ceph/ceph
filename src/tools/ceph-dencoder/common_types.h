@@ -324,9 +324,6 @@ MESSAGE(MMonJoin)
 #include "messages/MMonMap.h"
 MESSAGE(MMonMap)
 
-#include "messages/MMonMetadata.h"
-MESSAGE(MMonMetadata)
-
 #include "messages/MMonPaxos.h"
 MESSAGE(MMonPaxos)
 

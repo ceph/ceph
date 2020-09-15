@@ -481,6 +481,7 @@ class BaseController(object):
         """
         An instance of this class represents an endpoint.
         """
+
         def __init__(self, ctrl, func):
             self.ctrl = ctrl
             self.inst = None
@@ -948,4 +949,18 @@ def UpdatePermission(func):  # noqa: N802
     :raises PermissionNotValid: If the permission is missing.
     """
     _set_func_permissions(func, Permission.UPDATE)
+    return func
+
+
+# Empty request body decorator
+
+def allow_empty_body(func):  # noqa: N802
+    """
+    The POST/PUT request methods decorated with ``@allow_empty_body``
+    are allowed to send empty request body.
+    """
+    try:
+        func._cp_config['tools.json_in.force'] = False
+    except (AttributeError, KeyError):
+        func._cp_config = {'tools.json_in.force': False}
     return func

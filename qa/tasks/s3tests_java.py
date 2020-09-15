@@ -271,26 +271,13 @@ class S3tests_java(Task):
 
     def _write_cfg_file(self, cfg_dict, client):
         """
-        To write the final s3 tests config file on the remote
-        a temporary one is created on the local machine
+        Write s3 tests java config file on the remote node.
         """
         testdir = teuthology.get_testdir(self.ctx)
         (remote,) = self.ctx.cluster.only(client).remotes.keys()
-        with open('s3_tests_tmp.yaml', 'w') as outfile:
-            yaml.dump(cfg_dict, outfile, default_flow_style=False)
-
-        conf_fp = BytesIO()
-        with open('s3_tests_tmp.yaml', 'rb') as infile:
-            for line in infile:
-                conf_fp.write(line)
-
-        teuthology.write_file(
-            remote=remote,
-            path='{tdir}/archive/s3-tests-java.{client}.conf'.format(
-                tdir=testdir, client=client),
-            data=conf_fp.getvalue(),
-        )
-        os.remove('s3_tests_tmp.yaml')
+        data = yaml.safe_dump(cfg_dict, default_flow_style=False)
+        path = testdir + '/archive/s3-tests-java.' + client + '.conf'
+        remote.write_file(path, data)
 
     def _set_cfg_entry(self, cfg_dict, key, value):
         if not (key in cfg_dict):

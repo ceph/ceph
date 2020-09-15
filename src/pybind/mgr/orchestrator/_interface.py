@@ -1291,6 +1291,10 @@ class DaemonDescription(object):
                 if len(v) in [3, 4]:
                     return '.'.join(v[0:2])
 
+            if self.daemon_type == 'iscsi':
+                v = self.daemon_id.split('.')
+                return '.'.join(v[0:-1])
+
             # daemon_id == "service_id"
             return self.daemon_id
 

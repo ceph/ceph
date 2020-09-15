@@ -476,6 +476,7 @@ private:
 
 MDSRank::MDSRank(
     mds_rank_t whoami_,
+    std::string fs_name_,
     ceph::mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -487,7 +488,7 @@ MDSRank::MDSRank(
     Context *respawn_hook_,
     Context *suicide_hook_,
     boost::asio::io_context& ioc) :
-    cct(msgr->cct), mds_lock(mds_lock_), clog(clog_),
+    cct(msgr->cct), fs_name(fs_name_), mds_lock(mds_lock_), clog(clog_),
     timer(timer_), mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, ioc, 0, 0)),
     damage_table(whoami_), sessionmap(this),
@@ -1417,7 +1418,8 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
   // send mdsmap first?
   auto addrs = mdsmap->get_addrs(mds);
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    auto _m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
+    auto _m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap,
+				    std::string(mdsmap->get_fs_name()));
     send_message_mds(_m, addrs);
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
@@ -3187,6 +3189,7 @@ void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostr
 
 void MDSRank::dump_status(Formatter *f) const
 {
+  f->dump_string("fs_name", fs_name);
   if (state == MDSMap::STATE_REPLAY ||
       state == MDSMap::STATE_STANDBY_REPLAY) {
     mdlog->dump_replay_status(f);
@@ -3254,6 +3257,28 @@ void MDSRank::create_logger()
                             "exi", PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mds_imported_inodes, "imported_inodes", "Imported inodes",
                             "imi", PerfCountersBuilder::PRIO_INTERESTING);
+
+    // caps msg stats
+    mds_plb.add_u64_counter(l_mdss_handle_client_caps, "handle_client_caps",
+                           "Client caps msg", "hcc", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_handle_client_caps_dirty, "handle_client_caps_dirty",
+                           "Client dirty caps msg", "hccd", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_handle_client_cap_release, "handle_client_cap_release",
+                           "Client cap release msg", "hccr", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_process_request_cap_release, "process_request_cap_release",
+                           "Process request cap release", "prcr", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_ceph_cap_op_revoke, "ceph_cap_op_revoke",
+                           "Revoke caps", "crev", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_ceph_cap_op_grant, "ceph_cap_op_grant",
+                           "Grant caps", "cgra", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_ceph_cap_op_trunc, "ceph_cap_op_trunc",
+                           "caps truncate notify", "ctru", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_ceph_cap_op_flushsnap_ack, "ceph_cap_op_flushsnap_ack",
+                           "caps truncate notify", "cfsa", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_ceph_cap_op_flush_ack, "ceph_cap_op_flush_ack",
+                           "caps truncate notify", "cfa", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdss_handle_inode_file_caps, "handle_inode_file_caps",
+                           "Inter mds caps msg", "hifc", PerfCountersBuilder::PRIO_INTERESTING);
 
     // useful dir/inode/subtree stats
     mds_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
@@ -3545,7 +3570,8 @@ void MDSRank::bcast_mds_map()
   set<Session*> clients;
   sessionmap.get_client_session_set(clients);
   for (const auto &session : clients) {
-    auto m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
+    auto m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap,
+				   std::string(mdsmap->get_fs_name()));
     session->get_connection()->send_message2(std::move(m));
   }
   last_client_mdsmap_bcast = mdsmap->get_epoch();
@@ -3553,6 +3579,7 @@ void MDSRank::bcast_mds_map()
 
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
+    std::string fs_name_,
     ceph::mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -3564,7 +3591,7 @@ MDSRankDispatcher::MDSRankDispatcher(
     Context *respawn_hook_,
     Context *suicide_hook_,
     boost::asio::io_context& ioc)
-  : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
+  : MDSRank(whoami_, fs_name_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
             msgr, monc_, mgrc, respawn_hook_, suicide_hook_, ioc)
 {
     g_conf().add_observer(this);

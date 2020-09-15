@@ -12,6 +12,7 @@
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"
 
@@ -54,7 +55,6 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
 
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-  bool is_truncated = false;
   string marker;
   int ret;
 
@@ -85,7 +85,7 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
 	ldout(cct, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }
     }
-  } while (is_truncated);
+  } while (user_buckets.is_truncated());
 
   ret = store->ctl()->user->complete_flush_stats(user.get_user());
   if (ret < 0) {

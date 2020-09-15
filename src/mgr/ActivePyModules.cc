@@ -111,11 +111,9 @@ PyObject *ActivePyModules::list_servers_python()
       (const std::map<std::string, DaemonStateCollection> &all) {
     PyEval_RestoreThread(tstate);
 
-    for (const auto &i : all) {
-      const auto &hostname = i.first;
-
+    for (const auto &[hostname, daemon_state] : all) {
       f.open_object_section("server");
-      dump_server(hostname, i.second, &f);
+      dump_server(hostname, daemon_state, &f);
       f.close_section();
     }
   });
@@ -136,8 +134,8 @@ PyObject *ActivePyModules::get_metadata_python(
   std::lock_guard l(metadata->lock);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
-  for (const auto &i : metadata->metadata) {
-    f.dump_string(i.first.c_str(), i.second);
+  for (const auto &[key, val] : metadata->metadata) {
+    f.dump_string(key, val);
   }
 
   return f.get();
@@ -155,8 +153,8 @@ PyObject *ActivePyModules::get_daemon_status_python(
 
   std::lock_guard l(metadata->lock);
   PyFormatter f;
-  for (const auto &i : metadata->service_status) {
-    f.dump_string(i.first.c_str(), i.second);
+  for (const auto &[daemon, status] : metadata->service_status) {
+    f.dump_string(daemon, status);
   }
   return f.get();
 }

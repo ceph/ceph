@@ -1276,7 +1276,14 @@ bool AuthMonitor::valid_caps(
     if (!moncap.parse(caps, out)) {
       return false;
     }
-  } else if (type == "mgr") {
+    return true;
+  }
+
+  if (!g_conf().get_val<bool>("mon_auth_validate_all_caps")) {
+    return true;
+  }
+
+  if (type == "mgr") {
     MgrCap mgrcap;
     if (!mgrcap.parse(caps, out)) {
       return false;
@@ -1593,8 +1600,21 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   } else if (prefix == "fs authorize") {
     string filesystem;
     cmd_getval(cmdmap, "filesystem", filesystem);
+    string mon_cap_string = "allow r";
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
+
+    std::shared_ptr<const Filesystem> fs;
+    if (filesystem != "*" && filesystem != "all") {
+      fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
+      if (fs == nullptr) {
+	ss << "filesystem " << filesystem << " does not exist.";
+	err = -EINVAL;
+	goto done;
+      } else {
+	mon_cap_string += " fsname=" + std::string(fs->mds_map.get_fs_name());
+      }
+    }
 
     for (auto it = caps_vec.begin();
 	 it != caps_vec.end() && (it + 1) != caps_vec.end();
@@ -1632,32 +1652,29 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
       mds_cap_string += mds_cap_string.empty() ? "" : ", ";
       mds_cap_string += "allow " + cap;
+
+      if (filesystem != "*" && filesystem != "all" && fs != nullptr) {
+	mds_cap_string += " fsname=" + std::string(fs->mds_map.get_fs_name());
+      }
+
       if (path != "/") {
 	mds_cap_string += " path=" + path;
       }
     }
 
-    if (filesystem != "*" && filesystem != "all") {
-      auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
-      if (!fs) {
-	ss << "filesystem " << filesystem << " does not exist.";
-	err = -EINVAL;
-	goto done;
-      }
-    }
-
-    osd_cap_string += osd_cap_string.empty()? "" : ", ";
+    osd_cap_string += osd_cap_string.empty() ? "" : ", ";
     osd_cap_string += "allow " + osd_cap_wanted
       + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS
       + " data=" + filesystem;
 
     std::map<string, bufferlist> wanted_caps = {
-      { "mon", _encode_cap("allow r") },
+      { "mon", _encode_cap(mon_cap_string) },
       { "osd", _encode_cap(osd_cap_string) },
       { "mds", _encode_cap(mds_cap_string) }
     };
 
-    if (!valid_caps("osd", osd_cap_string, &ss) ||
+    if (!valid_caps("mon", mon_cap_string, &ss) ||
+        !valid_caps("osd", osd_cap_string, &ss) ||
 	!valid_caps("mds", mds_cap_string, &ss)) {
       err = -EINVAL;
       goto done;

@@ -56,6 +56,46 @@ def updates_schedule_db(func):
     return f
 
 
+def get_prune_set(candidates, retention):
+    PRUNING_PATTERNS = OrderedDict([
+        # n is for keep last n snapshots, uses the snapshot name timestamp
+        # format for lowest granularity
+        ("n", SNAPSHOT_TS_FORMAT),
+        # TODO remove M for release
+        ("M", '%Y-%m-%d-%H_%M'),
+        ("h", '%Y-%m-%d-%H'),
+        ("d", '%Y-%m-%d'),
+        ("w", '%G-%V'),
+        ("m", '%Y-%m'),
+        ("y", '%Y'),
+    ])
+    keep = []
+    if not retention:
+        log.info(f'no retention set, assuming n: {MAX_SNAPS_PER_PATH}')
+        retention = {'n': MAX_SNAPS_PER_PATH}
+    for period, date_pattern in PRUNING_PATTERNS.items():
+        log.debug(f'compiling keep set for period {period}')
+        period_count = retention.get(period, 0)
+        if not period_count:
+            continue
+        last = None
+        for snap in sorted(candidates, key=lambda x: x[0].d_name,
+                           reverse=True):
+            snap_ts = snap[1].strftime(date_pattern)
+            if snap_ts != last:
+                last = snap_ts
+                if snap not in keep:
+                    log.debug(f'keeping {snap[0].d_name} due to {period_count}{period}')
+                    keep.append(snap)
+                    if len(keep) == period_count:
+                        log.debug(f'found enough snapshots for {period_count}{period}')
+                        break
+    if len(keep) > MAX_SNAPS_PER_PATH:
+        log.info(f'Would keep more then {MAX_SNAPS_PER_PATH}, pruning keep set')
+        keep = keep[:MAX_SNAPS_PER_PATH]
+    return candidates - set(keep)
+
+
 class SnapSchedClient(CephfsClient):
 
     def __init__(self, mgr):
@@ -175,7 +215,7 @@ class SnapSchedClient(CephfsClient):
                         else:
                             log.debug(f'skipping dir entry {dir_.d_name}')
                         dir_ = fs_handle.readdir(d_handle)
-                to_prune = self.get_prune_set(prune_candidates, ret)
+                to_prune = get_prune_set(prune_candidates, ret)
                 for k in to_prune:
                     dirname = k[0].d_name.decode('utf-8')
                     log.debug(f'rmdir on {dirname}')
@@ -185,42 +225,6 @@ class SnapSchedClient(CephfsClient):
                                         len(to_prune))
         except Exception:
             self._log_exception('prune_snapshots')
-
-    def get_prune_set(self, candidates, retention):
-        PRUNING_PATTERNS = OrderedDict([
-            # n is for keep last n snapshots, uses the snapshot name timestamp
-            # format for lowest granularity
-            ("n", SNAPSHOT_TS_FORMAT),
-            # TODO remove M for release
-            ("M", '%Y-%m-%d-%H_%M'),
-            ("h", '%Y-%m-%d-%H'),
-            ("d", '%Y-%m-%d'),
-            ("w", '%G-%V'),
-            ("m", '%Y-%m'),
-            ("y", '%Y'),
-        ])
-        keep = []
-        for period, date_pattern in PRUNING_PATTERNS.items():
-            log.debug(f'compiling keep set for period {period}')
-            period_count = retention.get(period, 0)
-            if not period_count:
-                continue
-            last = None
-            for snap in sorted(candidates, key=lambda x: x[0].d_name,
-                               reverse=True):
-                snap_ts = snap[1].strftime(date_pattern)
-                if snap_ts != last:
-                    last = snap_ts
-                    if snap not in keep:
-                        log.debug(f'keeping {snap[0].d_name} due to {period_count}{period}')
-                        keep.append(snap)
-                        if len(keep) == period_count:
-                            log.debug(f'found enough snapshots for {period_count}{period}')
-                            break
-        if len(keep) > MAX_SNAPS_PER_PATH:
-            log.info(f'Would keep more then {MAX_SNAPS_PER_PATH}, pruning keep set')
-            keep = keep[:MAX_SNAPS_PER_PATH]
-        return candidates - set(keep)
 
     def get_snap_schedules(self, fs, path):
         db = self.get_schedule_db(fs)

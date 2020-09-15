@@ -12,6 +12,7 @@
 #include "rgw_multi.h"
 #include "rgw_op.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"

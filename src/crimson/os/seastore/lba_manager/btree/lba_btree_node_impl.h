@@ -30,8 +30,8 @@ constexpr size_t LBA_BLOCK_SIZE = 4096;
  * On disk layout for lba_node_meta_t
  */
 struct lba_node_meta_le_t {
-  laddr_le_t begin = init_le64(0);
-  laddr_le_t end = init_le64(0);
+  laddr_le_t begin = laddr_le_t(0);
+  laddr_le_t end = laddr_le_t(0);
   depth_le_t depth = init_les32(0);
 
   lba_node_meta_le_t() = default;

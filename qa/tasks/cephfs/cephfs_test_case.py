@@ -1,19 +1,23 @@
 import json
 import logging
-from tasks.ceph_test_case import CephTestCase
 import os
 import re
 
+from shlex import split as shlex_split
+from io import StringIO
+
+from tasks.ceph_test_case import CephTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 
 from teuthology import contextutil
+from teuthology.misc import sudo_write_file
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
+
 from teuthology.contextutil import safe_while
 
 
 log = logging.getLogger(__name__)
-
 
 def for_teuthology(f):
     """
@@ -30,6 +34,25 @@ def needs_trimming(f):
     """
     f.needs_trimming = True
     return f
+
+
+class MountDetails():
+
+    def __init__(self, mntobj):
+        self.client_id = mntobj.client_id
+        self.client_keyring_path = mntobj.client_keyring_path
+        self.client_remote = mntobj.client_remote
+        self.cephfs_name = mntobj.cephfs_name
+        self.cephfs_mntpt = mntobj.cephfs_mntpt
+        self.hostfs_mntpt = mntobj.hostfs_mntpt
+
+    def restore(self, mntobj):
+        mntobj.client_id = self.client_id
+        mntobj.client_keyring_path = self.client_keyring_path
+        mntobj.client_remote = self.client_remote
+        mntobj.cephfs_name = self.cephfs_name
+        mntobj.cephfs_mntpt = self.cephfs_mntpt
+        mntobj.hostfs_mntpt = self.hostfs_mntpt
 
 
 class CephFSTestCase(CephTestCase):
@@ -59,6 +82,15 @@ class CephFSTestCase(CephTestCase):
     REQUIRE_RECOVERY_FILESYSTEM = False
 
     LOAD_SETTINGS = [] # type: ignore
+
+    def _save_mount_details(self):
+        """
+        XXX: Tests may change details of mount objects, so let's stash them so
+        that these details are restored later to ensure smooth setUps and
+        tearDowns for upcoming tests.
+        """
+        self._orig_mount_details = [MountDetails(m) for m in self.mounts]
+        log.info(self._orig_mount_details)
 
     def setUp(self):
         super(CephFSTestCase, self).setUp()
@@ -96,6 +128,7 @@ class CephFSTestCase(CephTestCase):
         for mount in self.mounts:
             if mount.is_mounted():
                 mount.umount_wait(force=True)
+        self._save_mount_details()
 
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
@@ -117,11 +150,6 @@ class CephFSTestCase(CephTestCase):
                 self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "rm", addr)
 
         client_mount_ids = [m.client_id for m in self.mounts]
-        # In case the test changes the IDs of clients, stash them so that we can
-        # reset in tearDown
-        self._original_client_ids = client_mount_ids
-        log.info(client_mount_ids)
-
         # In case there were any extra auth identities around from a previous
         # test, delete them
         for entry in self.auth_list():
@@ -134,11 +162,16 @@ class CephFSTestCase(CephTestCase):
 
             # In case some test messed with auth caps, reset them
             for client_id in client_mount_ids:
-                self.mds_cluster.mon_manager.raw_cluster_cmd_result(
-                    'auth', 'caps', "client.{0}".format(client_id),
-                    'mds', 'allow',
-                    'mon', 'allow r',
-                    'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+                cmd = ['auth', 'caps', f'client.{client_id}', 'mon','allow r',
+                       'osd', f'allow rw pool={self.fs.get_data_pool_name()}',
+                       'mds', 'allow']
+
+                if self.run_cluster_cmd_result(cmd) == 0:
+                    break
+
+                cmd[1] = 'add'
+                if self.run_cluster_cmd_result(cmd) != 0:
+                    raise RuntimeError(f'Failed to create new client {cmd[2]}')
 
             # wait for ranks to become active
             self.fs.wait_for_daemons()
@@ -174,8 +207,8 @@ class CephFSTestCase(CephTestCase):
         for m in self.mounts:
             m.teardown()
 
-        for i, m in enumerate(self.mounts):
-            m.client_id = self._original_client_ids[i]
+        for m, md in zip(self.mounts, self._orig_mount_details):
+            md.restore(m)
 
         for subsys, key in self.configs_set:
             self.mds_cluster.clear_ceph_conf(subsys, key)
@@ -369,3 +402,43 @@ class CephFSTestCase(CephTestCase):
                         return subtrees
         except contextutil.MaxWhileTries as e:
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
+
+    def run_cluster_cmd(self, cmd):
+        if isinstance(cmd, str):
+            cmd = shlex_split(cmd)
+        return self.fs.mon_manager.raw_cluster_cmd(*cmd)
+
+    def run_cluster_cmd_result(self, cmd):
+        if isinstance(cmd, str):
+            cmd = shlex_split(cmd)
+        return self.fs.mon_manager.raw_cluster_cmd_result(*cmd)
+
+    def create_client(self, client_id, moncap=None, osdcap=None, mdscap=None):
+        if not (moncap or osdcap or mdscap):
+            if self.fs:
+                return self.fs.authorize(client_id, ('/', 'rw'))
+            else:
+                raise RuntimeError('no caps were passed and the default FS '
+                                   'is not created yet to allow client auth '
+                                   'for it.')
+
+        cmd = ['auth', 'add', f'client.{client_id}']
+        if moncap:
+            cmd += ['mon', moncap]
+        if osdcap:
+            cmd += ['osd', osdcap]
+        if mdscap:
+            cmd += ['mds', mdscap]
+
+        self.run_cluster_cmd(cmd)
+        return self.run_cluster_cmd(f'auth get {self.client_name}')
+
+    def create_keyring_file(self, remote, keyring):
+        keyring_path = remote.run(args=['mktemp'], stdout=StringIO()).\
+            stdout.getvalue().strip()
+        sudo_write_file(remote, keyring_path, keyring)
+
+        # required when triggered using vstart_runner.py.
+        remote.run(args=['chmod', '644', keyring_path])
+
+        return keyring_path

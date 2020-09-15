@@ -1677,39 +1677,42 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
+  if (!op.log_op) {
+   return 0;
+  }
+
   rgw_bucket_dir_header header;
   ret = read_bucket_header(hctx, &header);
   if (ret < 0) {
     CLS_LOG(1, "ERROR: rgw_bucket_link_olh(): failed to read header\n");
     return ret;
   }
-
-  if (op.log_op && !header.syncstopped) {
-    rgw_bucket_dir_entry& entry = obj.get_dir_entry();
-
-    rgw_bucket_entry_ver ver;
-    ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
-
-    string *powner = NULL;
-    string *powner_display_name = NULL;
-
-    if (op.delete_marker) {
-      powner = &entry.meta.owner;
-      powner_display_name = &entry.meta.owner_display_name;
-    }
-
-    RGWModifyOp operation = (op.delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH);
-    ret = log_index_operation(hctx, op.key, operation, op.op_tag,
-                              entry.meta.mtime, ver,
-                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
-                              powner, powner_display_name, &op.zones_trace);
-    if (ret < 0)
-      return ret;
-
-    return write_bucket_header(hctx, &header); /* updates header version */
+  if (header.syncstopped) {
+    return 0;
   }
 
-  return 0;
+  rgw_bucket_dir_entry& entry = obj.get_dir_entry();
+
+  rgw_bucket_entry_ver ver;
+  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+
+  string *powner = NULL;
+  string *powner_display_name = NULL;
+
+  if (op.delete_marker) {
+    powner = &entry.meta.owner;
+    powner_display_name = &entry.meta.owner_display_name;
+  }
+
+  RGWModifyOp operation = (op.delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH);
+  ret = log_index_operation(hctx, op.key, operation, op.op_tag,
+                            entry.meta.mtime, ver,
+                            CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
+                            powner, powner_display_name, &op.zones_trace);
+  if (ret < 0)
+    return ret;
+
+  return write_bucket_header(hctx, &header); /* updates header version */
 }
 
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -1771,11 +1774,12 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       return ret;
     }
 
-    if (!obj.is_delete_marker()) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    if (obj.is_delete_marker()) {
+      return 0;
     }
 
-    return 0;
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    return olh.write();
   }
 
   rgw_bucket_olh_entry& olh_entry = olh.get_entry();
@@ -1838,30 +1842,33 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
+  if (!op.log_op) {
+    return 0;
+  }
+
   rgw_bucket_dir_header header;
   ret = read_bucket_header(hctx, &header);
   if (ret < 0) {
     CLS_LOG(1, "ERROR: rgw_bucket_unlink_instance(): failed to read header\n");
     return ret;
   }
-
-  if (op.log_op && !header.syncstopped) {
-    rgw_bucket_entry_ver ver;
-    ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
-
-    real_time mtime = obj.mtime(); /* mtime has no real meaning in
-				    * instance removal context */
-    ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
-                              mtime, ver,
-                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
-                              op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
-    if (ret < 0)
-      return ret;
-
-    return write_bucket_header(hctx, &header); /* updates header version */
+  if (header.syncstopped) {
+    return 0;
   }
 
-  return 0;
+  rgw_bucket_entry_ver ver;
+  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+
+  real_time mtime = obj.mtime(); /* mtime has no real meaning in
+                                  * instance removal context */
+  ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
+                            mtime, ver,
+                            CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
+                            op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
+  if (ret < 0)
+    return ret;
+
+  return write_bucket_header(hctx, &header); /* updates header version */
 }
 
 static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)

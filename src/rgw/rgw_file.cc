@@ -75,8 +75,7 @@ namespace rgw {
   {
     LookupFHResult fhr{nullptr, 0};
     std::string bucket_name{path};
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-    RGWStatBucketRequest req(cct, &ruser, bucket_name, bs);
+    RGWStatBucketRequest req(cct, rgwlib.get_store()->get_user(user.user_id), bucket_name, bs);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
@@ -162,7 +161,6 @@ namespace rgw {
      * object locator w/o trailing slash */
 
     std::string obj_path = parent->format_child_name(path, false);
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
 
     for (auto ix : { 0, 1, 2 }) {
       switch (ix) {
@@ -172,7 +170,7 @@ namespace rgw {
 	if (type == RGW_FS_TYPE_DIRECTORY)
 	  continue;
 
-	RGWStatObjRequest req(cct, &ruser,
+	RGWStatObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
 	int rc = rgwlib.get_fe()->execute_req(&req);
@@ -208,7 +206,7 @@ namespace rgw {
 	  continue;
 
 	obj_path += "/";
-	RGWStatObjRequest req(cct, &ruser,
+	RGWStatObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
 	int rc = rgwlib.get_fe()->execute_req(&req);
@@ -239,7 +237,8 @@ namespace rgw {
       case 2:
       {
 	std::string object_name{path};
-	RGWStatLeafRequest req(cct, &ruser, parent, object_name);
+	RGWStatLeafRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+			       parent, object_name);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
@@ -291,9 +290,8 @@ namespace rgw {
     if (rgw_fh->deleted())
       return -ESTALE;
 
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-    RGWReadRequest req(get_context(), &ruser, rgw_fh, offset, length,
-		       buffer);
+    RGWReadRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
+		       rgw_fh, offset, length, buffer);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
@@ -315,9 +313,8 @@ namespace rgw {
     if (rgw_fh->deleted())
       return -ESTALE;
 
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-    RGWReadRequest req(get_context(), &ruser, rgw_fh, offset, length,
-                       buffer);
+    RGWReadRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
+		       rgw_fh, offset, length, buffer);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
@@ -348,7 +345,6 @@ namespace rgw {
       /* LOCKED */
     }
 
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
     if (parent->is_root()) {
       /* a bucket may have an object storing Unix attributes, check
        * for and delete it */
@@ -375,14 +371,15 @@ namespace rgw {
       } else {
 	/* delete object w/key "<bucket>/" (uxattrs), if any */
 	string oname{"/"};
-	RGWDeleteObjRequest req(cct, &ruser, bkt_fh->bucket_name(), oname);
+	RGWDeleteObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+				bkt_fh->bucket_name(), oname);
 	rc = rgwlib.get_fe()->execute_req(&req);
 	/* don't care if ENOENT */
 	unref(bkt_fh);
       }
 
       string bname{name};
-      RGWDeleteBucketRequest req(cct, &ruser, bname);
+      RGWDeleteBucketRequest req(cct, rgwlib.get_store()->get_user(user.user_id), bname);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
@@ -418,7 +415,7 @@ namespace rgw {
 	}
 	oname += "/";
       }
-      RGWDeleteObjRequest req(cct, &ruser, parent->bucket_name(),
+      RGWDeleteObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id), parent->bucket_name(),
 			      oname);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
@@ -452,8 +449,6 @@ namespace rgw {
     /* XXX initial implementation: try-copy, and delete if copy
      * succeeds */
     int rc = -EINVAL;
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-
     real_time t;
 
     std::string src_name{_src_name};
@@ -498,8 +493,8 @@ namespace rgw {
       switch (ix) {
       case 0:
       {
-	RGWCopyObjRequest req(cct, &ruser, src_fh, dst_fh, src_name,
-			      dst_name);
+	RGWCopyObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+			      src_fh, dst_fh, src_name, dst_name);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
@@ -570,7 +565,6 @@ namespace rgw {
   {
     int rc, rc2;
     rgw_file_handle *lfh;
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
 
     rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh,
 		    nullptr /* st */, 0 /* mask */,
@@ -620,7 +614,8 @@ namespace rgw {
 	return mkr;
       }
 
-      RGWCreateBucketRequest req(get_context(), &ruser, bname);
+      RGWCreateBucketRequest req(get_context(),
+				 rgwlib.get_store()->get_user(user.user_id), bname);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -646,8 +641,8 @@ namespace rgw {
 	return mkr;
       }
 
-      RGWPutObjRequest req(get_context(), &ruser, parent->bucket_name(),
-			  dir_name, bl);
+      RGWPutObjRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
+			   parent->bucket_name(), dir_name, bl);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -705,8 +700,8 @@ namespace rgw {
 
     /* create it */
     buffer::list bl;
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-    RGWPutObjRequest req(cct, &ruser, parent->bucket_name(), obj_name, bl);
+    RGWPutObjRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+			 parent->bucket_name(), obj_name, bl);
     MkObjResult mkr{nullptr, -EINVAL};
 
     rc = rgwlib.get_fe()->execute_req(&req);
@@ -816,9 +811,8 @@ namespace rgw {
       buffer::copy(link_path, strlen(link_path)));
 #endif
 
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-    RGWPutObjRequest req(get_context(), &ruser, parent->bucket_name(),
-                         obj_name, bl);
+    RGWPutObjRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id),
+			 parent->bucket_name(), obj_name, bl);
 
     /* save attrs */
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -892,8 +886,8 @@ namespace rgw {
       obj_name += "/";
     }
 
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-    RGWSetAttrsRequest req(cct, &ruser, rgw_fh->bucket_name(), obj_name);
+    RGWSetAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+			   rgw_fh->bucket_name(), obj_name);
 
     rgw_fh->create_stat(st, mask);
     rgw_fh->encode_attrs(ux_key, ux_attrs);
@@ -910,7 +904,7 @@ namespace rgw {
     if (rc == -ENOENT) {
       /* special case:  materialize placeholder dir */
       buffer::list bl;
-      RGWPutObjRequest req(get_context(), &ruser, rgw_fh->bucket_name(),
+      RGWPutObjRequest req(get_context(), rgwlib.get_store()->get_user(user.user_id), rgw_fh->bucket_name(),
 			   obj_name, bl);
 
       rgw_fh->encode_attrs(ux_key, ux_attrs); /* because std::moved */
@@ -949,8 +943,8 @@ namespace rgw {
       << " update old versioned fh : " << obj_name
       << dendl;
 
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), user);
-    RGWSetAttrsRequest req(cct, &ruser, rgw_fh->bucket_name(), obj_name);
+    RGWSetAttrsRequest req(cct, rgwlib.get_store()->get_user(user.user_id),
+			   rgw_fh->bucket_name(), obj_name);
 
     rgw_fh->encode_attrs(ux_key, ux_attrs);
 
@@ -1228,11 +1222,12 @@ namespace rgw {
 
   bool RGWFileHandle::has_children() const
   {
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), *fs->get_user());
     if (unlikely(! is_dir()))
       return false;
 
-    RGWRMdirCheck req(fs->get_context(), &ruser, this);
+    RGWRMdirCheck req(fs->get_context(),
+		      rgwlib.get_store()->get_user(fs->get_user()->user_id),
+		      this);
     int rc = rgwlib.get_fe()->execute_req(&req);
     if (! rc) {
       return req.valid && req.has_children;
@@ -1263,7 +1258,6 @@ namespace rgw {
     int rc = 0;
     struct timespec now;
     CephContext* cct = fs->get_context();
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), *fs->get_user());
 
     lsubdout(cct, rgw, 10)
       << __func__ << " readdir called on "
@@ -1288,8 +1282,8 @@ namespace rgw {
     }
 
     if (is_root()) {
-      RGWListBucketsRequest req(cct, &ruser, this, rcb, cb_arg,
-				offset);
+      RGWListBucketsRequest req(cct, rgwlib.get_store()->get_user(fs->get_user()->user_id),
+				this, rcb, cb_arg, offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
@@ -1301,7 +1295,8 @@ namespace rgw {
 	*eof = req.eof();
       }
     } else {
-      RGWReaddirRequest req(cct, &ruser, this, rcb, cb_arg, offset);
+      RGWReaddirRequest req(cct, rgwlib.get_store()->get_user(fs->get_user()->user_id),
+			    this, rcb, cb_arg, offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
@@ -1331,7 +1326,6 @@ namespace rgw {
   {
     using std::get;
     using WriteCompletion = RGWLibFS::WriteCompletion;
-    rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), *fs->get_user());
 
     lock_guard guard(mtx);
 
@@ -1370,8 +1364,9 @@ namespace rgw {
       /* start */
       std::string object_name = relative_object_name();
       f->write_req =
-	new RGWWriteRequest(rgwlib.get_store(), &ruser, this,
-			    bucket_name(), object_name);
+	new RGWWriteRequest(rgwlib.get_store(),
+			    rgwlib.get_store()->get_user(fs->get_user()->user_id),
+			    this, bucket_name(), object_name);
       rc = rgwlib.get_fe()->start_req(f->write_req);
       if (rc < 0) {
 	lsubdout(fs->get_context(), rgw, 5)
@@ -1840,9 +1835,10 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   struct rados_cluster_stat_t stats;
-  rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), *fs->get_user());
 
-  RGWGetClusterStatReq req(fs->get_context(), &ruser, stats);
+  RGWGetClusterStatReq req(fs->get_context(),
+			   rgwlib.get_store()->get_user(fs->get_user()->user_id),
+			   stats);
   int rc = rgwlib.get_fe()->execute_req(&req);
   if (rc < 0) {
     lderr(fs->get_context()) << "ERROR: getting total cluster usage"
@@ -2392,7 +2388,6 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), *fs->get_user());
 
   if (! rgw_fh->is_file())
     return -EINVAL;
@@ -2406,8 +2401,8 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   }
 
   std::string oname = rgw_fh->relative_object_name();
-  RGWPutObjRequest req(cct, &ruser, rgw_fh->bucket_name(),
-		       oname, bl);
+  RGWPutObjRequest req(cct, rgwlib.get_store()->get_user(fs->get_user()->user_id),
+		       rgw_fh->bucket_name(), oname, bl);
 
   int rc = rgwlib.get_fe()->execute_req(&req);
 

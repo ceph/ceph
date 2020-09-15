@@ -394,7 +394,7 @@ describe('CephfsDirectoriesComponent', () => {
     lsDirSpy = spyOn(cephfsService, 'lsDir').and.callFake(mockLib.lsDir);
     spyOn(cephfsService, 'mkSnapshot').and.callFake(mockLib.mkSnapshot);
     spyOn(cephfsService, 'rmSnapshot').and.callFake(mockLib.rmSnapshot);
-    spyOn(cephfsService, 'updateQuota').and.callFake(mockLib.updateQuota);
+    spyOn(cephfsService, 'quota').and.callFake(mockLib.updateQuota);
 
     modalShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(mockLib.modalShow);
     notificationShowSpy = spyOn(TestBed.inject(NotificationService), 'show').and.stub();
@@ -777,7 +777,7 @@ describe('CephfsDirectoriesComponent', () => {
         });
 
         it('should update max_files correctly', () => {
-          expect(cephfsService.updateQuota).toHaveBeenCalledWith(1, '/a/c/b', { max_files: 5 });
+          expect(cephfsService.quota).toHaveBeenCalledWith(1, '/a/c/b', { max_files: 5 });
           assert.quotaIsNotInherited('files', 5, 10);
         });
 
@@ -803,7 +803,7 @@ describe('CephfsDirectoriesComponent', () => {
         });
 
         it('should update max_files correctly', () => {
-          expect(cephfsService.updateQuota).toHaveBeenCalledWith(1, '/a/c/b', { max_bytes: 512 });
+          expect(cephfsService.quota).toHaveBeenCalledWith(1, '/a/c/b', { max_bytes: 512 });
           assert.quotaIsNotInherited('bytes', '512 B', 1024);
         });
 
@@ -848,7 +848,7 @@ describe('CephfsDirectoriesComponent', () => {
         });
 
         it('should unset max_files correctly', () => {
-          expect(cephfsService.updateQuota).toHaveBeenCalledWith(1, '/a/c/b', { max_files: 0 });
+          expect(cephfsService.quota).toHaveBeenCalledWith(1, '/a/c/b', { max_files: 0 });
           assert.dirQuotas(2048, 0);
         });
 
@@ -868,7 +868,7 @@ describe('CephfsDirectoriesComponent', () => {
         });
 
         it('should unset max_files correctly', () => {
-          expect(cephfsService.updateQuota).toHaveBeenCalledWith(1, '/a/c/b', { max_bytes: 0 });
+          expect(cephfsService.quota).toHaveBeenCalledWith(1, '/a/c/b', { max_bytes: 0 });
           assert.dirQuotas(0, 20);
         });
 

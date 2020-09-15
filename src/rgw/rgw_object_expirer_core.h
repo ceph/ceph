@@ -30,6 +30,7 @@
 #include "include/str_list.h"
 
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 class RGWSI_RADOS;
 class RGWSI_Zone;

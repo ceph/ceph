@@ -31,7 +31,7 @@
 #include "pmem/PMEMDevice.h"
 #endif
 
-#if defined(HAVE_LIBZBC)
+#if defined(HAVE_LIBZBD)
 #include "zoned/HMSMRDevice.h"
 #endif
 
@@ -99,7 +99,7 @@ BlockDevice::detect_device_type(const std::string& path)
     return block_device_t::pmem;
   }
 #endif
-#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIBZBC)
+#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIBZBD)
   if (HMSMRDevice::support(path)) {
     return block_device_t::hm_smr;
   }
@@ -126,7 +126,7 @@ BlockDevice::device_type_from_name(const std::string& blk_dev_name)
     return block_device_t::pmem;
   }
 #endif
-#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIBZBC)
+#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIBZBD)
   if (blk_dev_name == "hm_smr") {
     return block_device_t::hm_smr;
   }
@@ -152,7 +152,7 @@ BlockDevice* BlockDevice::create_with_type(block_device_t device_type,
   case block_device_t::pmem:
     return new PMEMDevice(cct, cb, cbpriv);
 #endif
-#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIBZBC)
+#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIBZBD)
   case block_device_t::hm_smr:
     return new HMSMRDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
 #endif

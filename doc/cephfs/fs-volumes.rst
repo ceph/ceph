@@ -45,9 +45,29 @@ Create a volume using::
 
     $ ceph fs volume create <vol_name> [<placement>]
 
-This creates a CephFS file system and its data and metadata pools. It also tries
-to create MDSes for the filesystem using the enabled ceph-mgr orchestrator
-module  (see :doc:`/mgr/orchestrator`) , e.g., rook.
+This creates a CephFS file system and its data and metadata pools. It can also
+try to create MDSes for the filesystem using the enabled ceph-mgr orchestrator
+module (see :doc:`/mgr/orchestrator`), e.g. rook.
+
+<vol_name> is the volume name (an arbitrary string), and
+
+<placement> is an optional string signifying which hosts should have NFS Ganesha
+daemon containers running on them and, optionally, the total number of NFS
+Ganesha daemons the cluster (should you want to have more than one NFS Ganesha
+daemon running per node). For example, the following placement string means
+"deploy NFS Ganesha daemons on nodes host1 and host2 (one daemon per host):
+
+    "host1,host2"
+
+and this placement specification says to deploy two NFS Ganesha daemons each
+on nodes host1 and host2 (for a total of four NFS Ganesha daemons in the
+cluster):
+
+    "4 host1,host2"
+
+For more details on placement specification refer to the `orchestrator doc
+<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_
+but keep in mind that specifying the placement via a YAML file is not supported.
 
 Remove a volume using::
 

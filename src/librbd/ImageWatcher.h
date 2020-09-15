@@ -100,7 +100,8 @@ private:
       if (m_task_code != rhs.m_task_code) {
         return m_task_code < rhs.m_task_code;
       } else if ((m_task_code == TASK_CODE_ASYNC_REQUEST ||
-                  m_task_code == TASK_CODE_ASYNC_PROGRESS) &&
+                  m_task_code == TASK_CODE_ASYNC_PROGRESS ||
+                  m_task_code == TASK_CODE_QUIESCE) &&
                  m_async_request_id != rhs.m_async_request_id) {
         return m_async_request_id < rhs.m_async_request_id;
       }
@@ -168,6 +169,9 @@ private:
   ceph::shared_mutex m_async_request_lock;
   std::map<watch_notify::AsyncRequestId, AsyncRequest> m_async_requests;
   std::set<watch_notify::AsyncRequestId> m_async_pending;
+  std::set<watch_notify::AsyncRequestId> m_async_complete;
+  std::set<std::pair<utime_t,
+                     watch_notify::AsyncRequestId>> m_async_complete_expiration;
 
   ceph::mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
@@ -187,6 +191,8 @@ private:
 
   void notify_lock_owner(watch_notify::Payload *payload, Context *on_finish);
 
+  bool is_new_request(const watch_notify::AsyncRequestId &id) const;
+  bool mark_async_request_complete(const watch_notify::AsyncRequestId &id);
   Context *remove_async_request(const watch_notify::AsyncRequestId &id);
   void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void async_request_timed_out(const watch_notify::AsyncRequestId &id);

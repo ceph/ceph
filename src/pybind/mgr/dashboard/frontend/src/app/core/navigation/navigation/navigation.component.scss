@@ -4,7 +4,7 @@
     NAVBAR STYLE
 --------------------------------------------------- */
 
-::ng-deep .cd-navbar-top {
+::ng-deep cd-navigation .cd-navbar-top {
   .cd-navbar-brand {
     background: bd.$secondary;
     border-top: 4px solid bd.$primary;

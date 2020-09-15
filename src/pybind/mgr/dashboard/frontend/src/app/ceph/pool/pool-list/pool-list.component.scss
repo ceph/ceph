@@ -1,17 +1,19 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
-::ng-deep .pg-clean {
-  color: bd.$success;
-}
+::ng-deep cd-pool-list {
+  .pg-clean {
+    color: bd.$success;
+  }
 
-::ng-deep .pg-working {
-  color: bd.$primary;
-}
+  .pg-working {
+    color: bd.$primary;
+  }
 
-::ng-deep .pg-warning {
-  color: bd.$warning;
-}
+  .pg-warning {
+    color: bd.$warning;
+  }
 
-::ng-deep .pg-unknown {
-  color: bd.$danger;
+  .pg-unknown {
+    color: bd.$danger;
+  }
 }

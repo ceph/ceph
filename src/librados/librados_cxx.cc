@@ -649,7 +649,7 @@ void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj,
 			  tgt_ioctx.io_ctx_impl->oloc, tgt_version, flag);
 }
 
-void librados::ObjectWriteOperation::set_chunk(uint64_t src_offset,
+void librados::ObjectReadOperation::set_chunk(uint64_t src_offset,
 					       uint64_t src_length,
 					       const IoCtx& tgt_ioctx,
 					       string tgt_oid,
@@ -2814,6 +2814,10 @@ int librados::Rados::blocklist_add(const std::string& client_address,
 				   uint32_t expire_seconds)
 {
   return client->blocklist_add(client_address, expire_seconds);
+}
+
+std::string librados::Rados::get_addrs() const {
+  return client->get_addrs();
 }
 
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()

@@ -4,6 +4,7 @@
 #include "services/svc_zone.h"
 #include "rgw_b64.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_pubsub.h"
 #include "rgw_tools.h"
 #include "rgw_xml.h"
@@ -362,13 +363,19 @@ void rgw_pubsub_sub_dest::dump(Formatter *f) const
   encode_json("push_endpoint", push_endpoint, f);
   encode_json("push_endpoint_args", push_endpoint_args, f);
   encode_json("push_endpoint_topic", arn_topic, f);
+  encode_json("stored_secret", stored_secret, f);
+  encode_json("persistent", persistent, f);
 }
 
 void rgw_pubsub_sub_dest::dump_xml(Formatter *f) const
 {
+  // first 2 members are omitted here since they
+  // dont apply to AWS compliant topics
   encode_xml("EndpointAddress", push_endpoint, f);
   encode_xml("EndpointArgs", push_endpoint_args, f);
   encode_xml("EndpointTopic", arn_topic, f);
+  encode_xml("HasStoredSecret", stored_secret, f);
+  encode_xml("Persistent", persistent, f);
 }
 
 void rgw_pubsub_sub_config::dump(Formatter *f) const

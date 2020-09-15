@@ -14,7 +14,6 @@ DEPS_DIR="${DEPS_DIR:-$CEPH_DIR/build.deps}"
 CLEAN_BUILD=${CLEAN_BUILD:-}
 SKIP_BUILD=${SKIP_BUILD:-}
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
-NINJA_BUILD=${NINJA_BUILD:-}
 DEV_BUILD=${DEV_BUILD:-}
 
 # We'll have to be explicit here since auto-detecting doesn't work
@@ -36,11 +35,7 @@ zlibDir="${depsToolsetDir}/zlib"
 backtraceDir="${depsToolsetDir}/backtrace"
 snappyDir="${depsToolsetDir}/snappy"
 winLibDir="${depsToolsetDir}/windows/lib"
-if [[ -n $NINJA_BUILD ]]; then
-    generatorUsed="Ninja"
-else
-    generatorUsed="Unix Makefiles"
-fi
+generatorUsed="Unix Makefiles"
 
 pyVersion=`python -c "import sys; print('%d.%d' % (sys.version_info.major, sys.version_info.minor))"`
 
@@ -110,17 +105,19 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
 
 if [[ -z $SKIP_BUILD ]]; then
     echo "Building using $NUM_WORKERS workers. Log: ${BUILD_DIR}/build.log"
-    echo "NINJA_BUILD = $NINJA_BUILD"
+    echo "" > "${BUILD_DIR}/build.log"
 
-    # We're currently limitting the build scope to the rados/rbd binaries.
-    if [[ -n $NINJA_BUILD ]]; then
-        cd $BUILD_DIR
-        ninja -v rados.exe rbd.exe compressor | tee "${BUILD_DIR}/build.log"
-    else
-        cd $BUILD_DIR/src/tools
-        make -j $NUM_WORKERS 2>&1 | tee "${BUILD_DIR}/build.log"
+    # We're going to use an associative array having subdirectories as keys
+    # and targets as values.
+    declare -A make_targets
+    make_targets["src/tools"]="ceph-conf ceph_radosacl ceph_scratchtool rados"
+    make_targets["src/tools/immutable_object_cache"]="all"
+    make_targets["src/tools/rbd"]="all"
+    make_targets["src/tools/rbd_mirror"]="all"
+    make_targets["src/compressor"]="all"
 
-        cd $BUILD_DIR/src/compressor
-        make -j $NUM_WORKERS 2>&1 | tee -a "${BUILD_DIR}/build.log"
-    fi
+    for target_subdir in "${!make_targets[@]}"; do
+      echo "Building $target_subdir: ${make_targets[$target_subdir]}" | tee -a "${BUILD_DIR}/build.log"
+      make -j $NUM_WORKERS -C $target_subdir ${make_targets[$target_subdir]} 2>&1 | tee -a "${BUILD_DIR}/build.log"
+    done
 fi

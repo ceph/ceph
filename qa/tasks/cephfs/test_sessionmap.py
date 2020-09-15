@@ -5,7 +5,6 @@ import logging
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -160,7 +159,7 @@ class TestSessionMap(CephFSTestCase):
             "mon", mon_caps
         )
         mount.client_id = id_name
-        sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
+        mount.client_remote.write_file(mount.get_keyring_path(), out, sudo=True)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def test_session_reject(self):
@@ -177,7 +176,7 @@ class TestSessionMap(CephFSTestCase):
         # Configure a client that is limited to /foo/bar
         self._configure_auth(self.mount_b, "badguy", "allow rw path=/foo/bar")
         # Check he can mount that dir and do IO
-        self.mount_b.mount_wait(mount_path="/foo/bar")
+        self.mount_b.mount_wait(cephfs_mntpt="/foo/bar")
         self.mount_b.create_destroy()
         self.mount_b.umount_wait()
 
@@ -186,7 +185,7 @@ class TestSessionMap(CephFSTestCase):
         # Try to mount the client, see that it fails
         with self.assert_cluster_log("client session with non-allowable root '/baz' denied"):
             with self.assertRaises(CommandFailedError):
-                self.mount_b.mount_wait(mount_path="/foo/bar")
+                self.mount_b.mount_wait(cephfs_mntpt="/foo/bar")
 
     def test_session_evict_blocklisted(self):
         """

@@ -1183,6 +1183,8 @@ public:
     policy.set_ctx(s->cct);
   }
 
+  virtual int init_processing() override;
+
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
@@ -1425,7 +1427,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, buffer::list> attrs;
+  rgw::sal::RGWAttrs attrs;
   string src_tenant_name, src_bucket_name, src_obj_name;
   std::unique_ptr<rgw::sal::RGWBucket> src_bucket;
   std::unique_ptr<rgw::sal::RGWObject> src_object;
@@ -1434,7 +1436,7 @@ protected:
   std::unique_ptr<rgw::sal::RGWObject> dest_object;
   ceph::real_time src_mtime;
   ceph::real_time mtime;
-  RGWRados::AttrsMod attrs_mod;
+  rgw::sal::AttrsMod attrs_mod;
   string source_zone;
   string etag;
 
@@ -1461,7 +1463,7 @@ public:
     end = -1;
     mod_ptr = NULL;
     unmod_ptr = NULL;
-    attrs_mod = RGWRados::ATTRSMOD_NONE;
+    attrs_mod = rgw::sal::ATTRSMOD_NONE;
     last_ofs = 0;
     olh_epoch = 0;
     copy_if_newer = false;

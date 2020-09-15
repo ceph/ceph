@@ -140,10 +140,10 @@ public:
     case RWState::RWEXCL:
       return get_lock(op, [this] { return rwstate.get_excl_lock(); });
     case RWState::RWNONE:
-      return seastar::now();
+      return seastar::make_ready_future<>();
     default:
       ceph_abort_msg("invalid lock type");
-      return seastar::now();
+      return seastar::make_ready_future<>();
     }
   }
 
@@ -204,8 +204,9 @@ public:
     return put_lock_type(RWState::RWREAD);
   }
   seastar::future<bool> get_recovery_read(bool can_wait = false) {
-    if (!can_wait) {
-      return seastar::make_ready_future<bool>(rwstate.get_recovery_read());
+    if (bool acquired = rwstate.get_recovery_read();
+        acquired || !can_wait) {
+      return seastar::make_ready_future<bool>(acquired);
     }
     return with_queue([this] {
       return rwstate.get_recovery_read();
