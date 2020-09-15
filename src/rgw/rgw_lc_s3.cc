@@ -313,7 +313,7 @@ void LCRule_S3::dump_xml(Formatter *f) const {
   }
 }
 
-int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfiguration& dest)
+int RGWLifecycleConfiguration_S3::rebuild(RGWLifecycleConfiguration& dest)
 {
   int ret = 0;
   multimap<string, LCRule>::iterator iter;

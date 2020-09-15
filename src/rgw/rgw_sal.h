@@ -21,6 +21,7 @@
 class RGWGetDataCB;
 struct RGWObjState;
 class RGWAccessListFilter;
+class RGWLC;
 
 struct RGWUsageIter {
   string read_iter;
@@ -28,6 +29,22 @@ struct RGWUsageIter {
 
   RGWUsageIter() : index(0) {}
 };
+
+/**
+ * @struct RGWClusterStat
+ * Cluster-wide usage information
+ */
+struct RGWClusterStat {
+  /// total device size
+  uint64_t kb;
+  /// total used
+  uint64_t kb_used;
+  /// total available/free
+  uint64_t kb_avail;
+  /// number of objects
+  uint64_t num_objects;
+};
+
 
 namespace rgw { namespace sal {
 
@@ -37,6 +54,8 @@ class RGWUser;
 class RGWBucket;
 class RGWObject;
 class RGWBucketList;
+struct MPSerializer;
+class Lifecycle;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -55,7 +74,7 @@ class RGWStore : public DoutPrefixProvider {
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) = 0;
     virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) = 0;
-    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
+    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string& name, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
                             const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
@@ -80,6 +99,9 @@ class RGWStore : public DoutPrefixProvider {
 			 optional_yield y) = 0;
     virtual const RGWZoneGroup& get_zonegroup() = 0;
     virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) = 0;
+    virtual int cluster_stat(RGWClusterStat& stats) = 0;
+    virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
+    virtual RGWLC* get_rgwlc(void) = 0;
 
     virtual void finalize(void)=0;
 
@@ -162,7 +184,7 @@ class RGWBucket {
     struct ListResults {
       vector<rgw_bucket_dir_entry> objs;
       map<std::string, bool> common_prefixes;
-      bool is_truncated;
+      bool is_truncated{false};
       rgw_obj_key next_marker;
     };
 
@@ -205,6 +227,7 @@ class RGWBucket {
     virtual int chown(RGWUser* new_user, RGWUser* old_user, optional_yield y) = 0;
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) = 0;
     virtual bool is_owner(RGWUser* user) = 0;
+    virtual RGWUser* get_owner(void) { return owner; };
     virtual int check_empty(optional_yield y) = 0;
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) = 0;
@@ -432,6 +455,7 @@ class RGWObject {
     virtual int delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y) = 0;
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual bool is_expired() = 0;
+    virtual MPSerializer* get_serializer(const std::string& lock_name) = 0;
 
     RGWAttrs& get_attrs(void) { return attrs; }
     ceph::real_time get_mtime(void) const { return mtime; }
@@ -445,6 +469,14 @@ class RGWObject {
     bool get_in_extra_data(void) { return in_extra_data; }
     void set_in_extra_data(bool i) { in_extra_data = i; }
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
+
+    /* Swift versioning */
+    virtual int swift_versioning_restore(RGWObjectCtx* obj_ctx,
+					 bool& restored,   /* out */
+					 const DoutPrefixProvider *dpp) = 0;
+    virtual int swift_versioning_copy(RGWObjectCtx* obj_ctx,
+				      const DoutPrefixProvider *dpp,
+				      optional_yield y) = 0;
 
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx*) = 0;
@@ -469,6 +501,14 @@ class RGWObject {
     }
     virtual void gen_rand_obj_instance_name() = 0;
     virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) = 0;
+    virtual void get_raw_obj(rgw_raw_obj* raw_obj) = 0;
+    virtual int transition(RGWObjectCtx& rctx,
+			   RGWBucket* bucket,
+			   const rgw_placement_rule& placement_rule,
+			   const real_time& mtime,
+			   uint64_t olh_epoch,
+			   const DoutPrefixProvider *dpp,
+			   optional_yield y) = 0;
 
     /* dang - This is temporary, until the API is completed */
     rgw_obj_key& get_key() { return key; }
@@ -491,6 +531,64 @@ class RGWObject {
       out << p.get();
       return out;
     }
+};
+
+struct Serializer {
+  Serializer() = default;
+  virtual ~Serializer() = default;
+
+  virtual int try_lock(utime_t dur, optional_yield y) = 0;
+  virtual int unlock()  = 0;
+};
+
+struct MPSerializer : Serializer {
+  bool locked;
+  std::string oid;
+  MPSerializer() : locked(false) {}
+  virtual ~MPSerializer() = default;
+
+  void clear_locked() {
+    locked = false;
+  }
+};
+
+struct LCSerializer : Serializer {
+  LCSerializer() {}
+  virtual ~LCSerializer() = default;
+};
+
+class Lifecycle {
+public:
+  struct LCHead {
+    time_t start_date{0};
+    std::string marker;
+
+    LCHead() = default;
+    LCHead(time_t _date, std::string& _marker) : start_date(_date), marker(_marker) {}
+  };
+
+  struct LCEntry {
+    std::string bucket;
+    uint64_t start_time{0};
+    uint32_t status{0};
+
+    LCEntry() = default;
+    LCEntry(std::string& _bucket, uint64_t _time, uint32_t _status) : bucket(_bucket), start_time(_time), status(_status) {}
+  };
+
+  Lifecycle() = default;
+  virtual ~Lifecycle() = default;
+
+  virtual int get_entry(const string& oid, const std::string& marker, LCEntry& entry) = 0;
+  virtual int get_next_entry(const string& oid, std::string& marker, LCEntry& entry) = 0;
+  virtual int set_entry(const string& oid, const LCEntry& entry) = 0;
+  virtual int list_entries(const string& oid, const string& marker,
+			   uint32_t max_entries, vector<LCEntry>& entries) = 0;
+  virtual int rm_entry(const string& oid, const LCEntry& entry) = 0;
+  virtual int get_head(const string& oid, LCHead& head) = 0;
+  virtual int put_head(const string& oid, const LCHead& head) = 0;
+
+  virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) = 0;
 };
 
 } } // namespace rgw::sal
