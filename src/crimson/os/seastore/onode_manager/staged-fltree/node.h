@@ -38,6 +38,7 @@ struct key_hobj_t;
 class LeafNode;
 class InternalNode;
 
+using layout_version_t = uint32_t;
 class tree_cursor_t final
   : public boost::intrusive_ref_counter<
            tree_cursor_t, boost::thread_unsafe_counter> {
@@ -53,18 +54,19 @@ class tree_cursor_t final
   const onode_t* get_p_value() const;
 
  private:
-  tree_cursor_t(Ref<LeafNode>, const search_position_t&, const onode_t*);
+  tree_cursor_t(Ref<LeafNode>, const search_position_t&,
+                const onode_t*, layout_version_t);
   const search_position_t& get_position() const { return position; }
   Ref<LeafNode> get_leaf_node() { return leaf_node; }
-  // TODO: version based invalidation
-  void invalidate_p_value() { p_value = nullptr; }
   void update_track(Ref<LeafNode>, const search_position_t&);
-  void set_p_value(const onode_t* _p_value);
+  void update_p_value(const onode_t*, layout_version_t);
 
  private:
   Ref<LeafNode> leaf_node;
   search_position_t position;
+  // cached information
   mutable const onode_t* p_value;
+  mutable layout_version_t node_version;
 
   friend class LeafNode;
   friend class Node; // get_position(), get_leaf_node()
@@ -245,7 +247,9 @@ class LeafNode final : public Node {
   LeafNode& operator=(const LeafNode&) = delete;
   LeafNode& operator=(LeafNode&&) = delete;
 
-  const onode_t* get_p_value(const search_position_t&) const;
+  layout_version_t get_layout_version() const { return layout_version; }
+  std::pair<const onode_t*, layout_version_t> get_p_value(
+      const search_position_t&) const;
   void do_track_cursor(tree_cursor_t& cursor) {
     validate_cursor(cursor);
     auto& cursor_pos = cursor.get_position();
@@ -291,11 +295,9 @@ class LeafNode final : public Node {
     }
 #endif
   }
-  void validate_cursor(tree_cursor_t& cursor) const {
-    assert(this == cursor.get_leaf_node().get());
-    assert(!cursor.is_end());
-    assert(get_p_value(cursor.get_position()) == cursor.get_p_value());
-  }
+  void validate_cursor(tree_cursor_t& cursor) const;
+  // invalidate p_value pointers in tree_cursor_t
+  void on_layout_change() { ++layout_version; }
 
   struct fresh_node_t {
     Ref<LeafNode> node;
@@ -311,6 +313,7 @@ class LeafNode final : public Node {
   // track the current living cursors by position
   std::map<search_position_t, tree_cursor_t*> tracked_cursors;
   LeafNodeImpl* impl;
+  layout_version_t layout_version = 0;
 };
 
 }
