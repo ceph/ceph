@@ -1819,7 +1819,8 @@ static int fix_single_bucket_lc(rgw::sal::RGWRadosStore *store,
     return ret;
   }
 
-  return rgw::lc::fix_lc_shard_entry(store, bucket_info, bucket_attrs);
+  return rgw::lc::fix_lc_shard_entry(store, store->get_rgwlc()->get_lc(), bucket_info,
+				     bucket_attrs);
 }
 
 static void format_lc_status(Formatter* formatter,
