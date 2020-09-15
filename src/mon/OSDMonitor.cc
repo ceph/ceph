@@ -10431,6 +10431,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = parse_erasure_code_profile(profile, &profile_map, &ss);
     if (err)
       goto reply;
+    if (auto found = profile_map.find("crush-failure-domain");
+	found != profile_map.end()) {
+      const auto& failure_domain = found->second;
+      int failure_domain_type = osdmap.crush->get_type_id(failure_domain);
+      if (failure_domain_type < 0) {
+	ss << "erasure-code-profile " << profile_map
+	  << " contains an invalid failure-domain " << std::quoted(failure_domain);
+	err = -EINVAL;
+	goto reply;
+      }
+    }
+
     if (profile_map.find("plugin") == profile_map.end()) {
       ss << "erasure-code-profile " << profile_map
 	 << " must contain a plugin entry" << std::endl;
