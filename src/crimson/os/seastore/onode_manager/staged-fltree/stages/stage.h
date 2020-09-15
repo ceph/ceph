@@ -65,17 +65,6 @@ search_result_bs_t binary_search_r(
   return {rbegin, MatchKindBS::NE};
 }
 
-using match_stat_t = int8_t;
-constexpr match_stat_t MSTAT_END = -2; // index is search_position_t::end()
-constexpr match_stat_t MSTAT_EQ  = -1; // key == index
-constexpr match_stat_t MSTAT_NE0 =  0; // key == index [pool/shard crush ns/oid]; key < index [snap/gen]
-constexpr match_stat_t MSTAT_NE1 =  1; // key == index [pool/shard crush]; key < index [ns/oid]
-constexpr match_stat_t MSTAT_NE2 =  2; // key < index [pool/shard crush ns/oid] ||
-                                       // key == index [pool/shard]; key < index [crush]
-constexpr match_stat_t MSTAT_NE3 =  3; // key < index [pool/shard]
-constexpr match_stat_t MSTAT_MIN = MSTAT_END;
-constexpr match_stat_t MSTAT_MAX = MSTAT_NE3;
-
 inline bool matchable(field_type_t type, match_stat_t mstat) {
   assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
   /*
@@ -142,96 +131,6 @@ inline void assert_mstat(
     break;
   }
 }
-
-template <node_type_t NODE_TYPE, match_stage_t STAGE>
-struct staged_result_t {
-  using me_t = staged_result_t<NODE_TYPE, STAGE>;
-  bool is_end() const { return position.is_end(); }
-  MatchKindBS match() const {
-    assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
-    return (mstat == MSTAT_EQ ? MatchKindBS::EQ : MatchKindBS::NE);
-  }
-
-  static me_t end() {
-    return {staged_position_t<STAGE>::end(), nullptr, MSTAT_END};
-  }
-  template <typename T = me_t>
-  static std::enable_if_t<STAGE != STAGE_BOTTOM, T> from_nxt(
-      size_t index, const staged_result_t<NODE_TYPE, STAGE - 1>& nxt_stage_result) {
-    return {{index, nxt_stage_result.position},
-            nxt_stage_result.p_value,
-            nxt_stage_result.mstat};
-  }
-
-  staged_position_t<STAGE> position;
-  const value_type_t<NODE_TYPE>* p_value;
-  match_stat_t mstat;
-};
-
-template <node_type_t NODE_TYPE>
-staged_result_t<NODE_TYPE, STAGE_TOP>&& normalize(
-    staged_result_t<NODE_TYPE, STAGE_TOP>&& result) { return std::move(result); }
-
-template <node_type_t NODE_TYPE, match_stage_t STAGE,
-          typename = std::enable_if_t<STAGE != STAGE_TOP>>
-staged_result_t<NODE_TYPE, STAGE_TOP> normalize(
-    staged_result_t<NODE_TYPE, STAGE>&& result) {
-  // FIXME: assert result.mstat correct
-  return {normalize(std::move(result.position)), result.p_value, result.mstat};
-}
-
-/*
- * staged infrastructure
- */
-
-template <node_type_t _NODE_TYPE>
-struct staged_params_subitems {
-  using container_t = sub_items_t<_NODE_TYPE>;
-  static constexpr auto NODE_TYPE = _NODE_TYPE;
-  static constexpr auto STAGE = STAGE_RIGHT;
-
-  // dummy type in order to make our type system work
-  // any better solution to get rid of this?
-  using next_param_t = staged_params_subitems<NODE_TYPE>;
-};
-
-template <node_type_t _NODE_TYPE>
-struct staged_params_item_iterator {
-  using container_t = item_iterator_t<_NODE_TYPE>;
-  static constexpr auto NODE_TYPE = _NODE_TYPE;
-  static constexpr auto STAGE = STAGE_STRING;
-
-  using next_param_t = staged_params_subitems<NODE_TYPE>;
-};
-
-template <typename NodeType>
-struct staged_params_node_01 {
-  using container_t = NodeType;
-  static constexpr auto NODE_TYPE = NodeType::NODE_TYPE;
-  static constexpr auto STAGE = STAGE_LEFT;
-
-  using next_param_t = staged_params_item_iterator<NODE_TYPE>;
-};
-
-template <typename NodeType>
-struct staged_params_node_2 {
-  using container_t = NodeType;
-  static constexpr auto NODE_TYPE = NodeType::NODE_TYPE;
-  static constexpr auto STAGE = STAGE_STRING;
-
-  using next_param_t = staged_params_subitems<NODE_TYPE>;
-};
-
-template <typename NodeType>
-struct staged_params_node_3 {
-  using container_t = NodeType;
-  static constexpr auto NODE_TYPE = NodeType::NODE_TYPE;
-  static constexpr auto STAGE = STAGE_RIGHT;
-
-  // dummy type in order to make our type system work
-  // any better solution to get rid of this?
-  using next_param_t = staged_params_node_3<NodeType>;
-};
 
 #define NXT_STAGE_T staged<next_param_t>
 
@@ -1314,7 +1213,7 @@ struct staged {
     assert(false);
   }
 
-  static staged_result_t<NODE_TYPE, STAGE_TOP> lower_bound_normalized(
+  static lookup_result_t<NODE_TYPE> lower_bound_normalized(
       const container_t& container,
       const full_key_t<KeyT::HOBJ>& key,
       MatchHistory& history) {
@@ -1866,6 +1765,59 @@ struct staged {
       iter.trim_until(mut);
     }
   }
+};
+
+/*
+ * staged infrastructure
+ */
+
+template <node_type_t _NODE_TYPE>
+struct staged_params_subitems {
+  using container_t = sub_items_t<_NODE_TYPE>;
+  static constexpr auto NODE_TYPE = _NODE_TYPE;
+  static constexpr auto STAGE = STAGE_RIGHT;
+
+  // dummy type in order to make our type system work
+  // any better solution to get rid of this?
+  using next_param_t = staged_params_subitems<NODE_TYPE>;
+};
+
+template <node_type_t _NODE_TYPE>
+struct staged_params_item_iterator {
+  using container_t = item_iterator_t<_NODE_TYPE>;
+  static constexpr auto NODE_TYPE = _NODE_TYPE;
+  static constexpr auto STAGE = STAGE_STRING;
+
+  using next_param_t = staged_params_subitems<NODE_TYPE>;
+};
+
+template <typename NodeType>
+struct staged_params_node_01 {
+  using container_t = NodeType;
+  static constexpr auto NODE_TYPE = NodeType::NODE_TYPE;
+  static constexpr auto STAGE = STAGE_LEFT;
+
+  using next_param_t = staged_params_item_iterator<NODE_TYPE>;
+};
+
+template <typename NodeType>
+struct staged_params_node_2 {
+  using container_t = NodeType;
+  static constexpr auto NODE_TYPE = NodeType::NODE_TYPE;
+  static constexpr auto STAGE = STAGE_STRING;
+
+  using next_param_t = staged_params_subitems<NODE_TYPE>;
+};
+
+template <typename NodeType>
+struct staged_params_node_3 {
+  using container_t = NodeType;
+  static constexpr auto NODE_TYPE = NodeType::NODE_TYPE;
+  static constexpr auto STAGE = STAGE_RIGHT;
+
+  // dummy type in order to make our type system work
+  // any better solution to get rid of this?
+  using next_param_t = staged_params_node_3<NodeType>;
 };
 
 template <typename NodeType, typename Enable = void> struct _node_to_stage_t;

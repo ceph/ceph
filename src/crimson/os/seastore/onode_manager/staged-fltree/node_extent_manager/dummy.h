@@ -27,7 +27,7 @@ class DummyNodeExtent final: public NodeExtent {
   }
   ~DummyNodeExtent() override = default;
  protected:
-  Ref mutate(context_t) override {
+  NodeExtentRef mutate(context_t) override {
     assert(false && "impossible path"); }
   CachedExtentRef duplicate_for_write() override {
     assert(false && "impossible path"); }
@@ -46,15 +46,15 @@ class DummyNodeExtentManager final: public NodeExtentManager {
  protected:
   bool is_read_isolated() const { return false; }
 
-  tm_future<NodeExtent::Ref> read_extent(
+  tm_future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) {
     auto iter = allocate_map.find(addr);
     assert(iter != allocate_map.end());
     assert(iter->second->get_length() == len);
-    return tm_ertr::make_ready_future<NodeExtent::Ref>(iter->second);
+    return tm_ertr::make_ready_future<NodeExtentRef>(iter->second);
   }
 
-  tm_future<NodeExtent::Ref> alloc_extent(
+  tm_future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
@@ -64,7 +64,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     extent->set_laddr(addr);
     assert(allocate_map.find(extent->get_laddr()) == allocate_map.end());
     allocate_map.insert({extent->get_laddr(), extent});
-    return tm_ertr::make_ready_future<NodeExtent::Ref>(extent);
+    return tm_ertr::make_ready_future<NodeExtentRef>(extent);
   }
 
   tm_future<Super::URef> get_super(Transaction& t, RootNodeTracker& tracker) {
