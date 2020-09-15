@@ -149,6 +149,10 @@ if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
 
+if(WITH_CACHE_REPLICA)
+  add_subdirectory(cache_replica)
+endif()
+
 add_subdirectory(immutable_object_cache)
 add_subdirectory(ceph-dencoder)
 add_subdirectory(erasure-code)
