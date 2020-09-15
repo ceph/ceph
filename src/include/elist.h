@@ -32,19 +32,27 @@ template<typename T>
 class elist {
 public:
   struct item {
+  private:
+    elist *_list = NULL;
+
+  public:
     item *_prev, *_next;
-    
+
     item(T i=0) : _prev(this), _next(this) {}
-    ~item() { 
+    item(elist *l) : _list(l), _prev(this), _next(this) {}
+    ~item() {
       ceph_assert(!is_on_list());
     }
 
     item(const item& other) = delete;
     const item& operator= (const item& right) = delete;
 
-    
     bool empty() const { return _prev == this; }
     bool is_on_list() const { return !empty(); }
+
+    void set_list(elist *l) {
+      _list = l;
+    }
 
     bool remove_myself() {
       if (_next == this) {
@@ -54,18 +62,23 @@ public:
       _next->_prev = _prev;
       _prev->_next = _next;
       _prev = _next = this;
+      ceph_assert(_list);
+      _list->items--;
+      _list = NULL;
       return true;
     }
 
-    void insert_after(item *other) {
+    void insert_after(elist *l, item *other) {
       ceph_assert(other->empty());
+      other->set_list(l);
       other->_prev = this;
       other->_next = _next;
       _next->_prev = other;
       _next = other;
     }
-    void insert_before(item *other) {
+    void insert_before(elist *l, item *other) {
       ceph_assert(other->empty());
+      other->set_list(l);
       other->_next = this;
       other->_prev = _prev;
       _prev->_next = other;
@@ -81,14 +94,19 @@ public:
 private:
   item _head;
   size_t item_offset;
+  uint64_t items = 0;
 
 public:
   elist(const elist& other);
   const elist& operator=(const elist& other);
 
-  elist(size_t o) : _head(NULL), item_offset(o) {}
-  ~elist() { 
+  elist(size_t o) : _head(this), item_offset(o) {}
+  ~elist() {
     ceph_assert(_head.empty());
+  }
+
+  size_t size() const {
+    return items;
   }
 
   bool empty() const {
@@ -103,12 +121,14 @@ public:
   void push_front(item *i) {
     if (!i->empty()) 
       i->remove_myself();
-    _head.insert_after(i);
+    _head.insert_after(this, i);
+    items++;
   }
   void push_back(item *i) {
     if (!i->empty()) 
       i->remove_myself();
-    _head.insert_before(i);
+    _head.insert_before(this, i);
+    items++;
   }
 
   T front(size_t o=0) {
@@ -132,6 +152,7 @@ public:
   void clear_list() {
     while (!empty())
       pop_front();
+    ceph_assert(items == 0);
   }
 
   enum mode_t {
