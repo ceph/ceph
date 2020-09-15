@@ -160,3 +160,7 @@
 
 * fs: "fs authorize" now sets MON cap to "allow <perm> fsname=<fsname>"
       instead of setting it to "allow r" all the time.
+
+* ``ceph pg #.# list_unfound`` output has been enhanced to provide
+  might_have_unfound information which indicates which OSDs may
+  contain the unfound objects.
