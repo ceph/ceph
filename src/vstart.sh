@@ -102,6 +102,7 @@ export CEPH_DEV=1
 [ -z "$CEPH_NUM_MGR" ] && CEPH_NUM_MGR="$MGR"
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS="$FS"
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW="$RGW"
+[ -z "$CEPH_NUM_REPLICA"] && CEPH_NUM_REPLICA="$REPLICA"
 [ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM="$NFS"
 
 # if none of the CEPH_NUM_* number is specified, kill the existing
@@ -110,6 +111,7 @@ if [ -z "$CEPH_NUM_MON" -a \
      -z "$CEPH_NUM_OSD" -a \
      -z "$CEPH_NUM_MDS" -a \
      -z "$CEPH_NUM_MGR" -a \
+     -z "$CEPH_NUM_REPLICA" -a \
      -z "$GANESHA_DAEMON_NUM" ]; then
     kill_all=1
 else
@@ -123,6 +125,7 @@ fi
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS=1
 [ -z "$CEPH_MAX_MDS" ] && CEPH_MAX_MDS=1
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=0
+[ -z "$CEPH_NUM_REPLICA" ] && CEPH_NUM_REPLICA=0
 [ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM=0
 
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
@@ -483,6 +486,9 @@ if [ "$new" -eq 0 ]; then
         CEPH_NUM_RGW="$RGW"
     NFS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_ganesha 2>/dev/null` && \
         GANESHA_DAEMON_NUM="$NFS"
+    #TODO: Get replica daemon number if there's no requirement to create new cluster
+    #      I don't think we need this function.
+    #REPLICA=unknown_number
 else
     # only delete if -n
     if [ -e "$conf_fn" ]; then
@@ -599,6 +605,7 @@ prepare_conf() {
         num mds = $CEPH_NUM_MDS
         num mgr = $CEPH_NUM_MGR
         num rgw = $CEPH_NUM_RGW
+        num replica = $CEPH_NUM_REPLICA
         num ganesha = $GANESHA_DAEMON_NUM
 
 [global]
@@ -742,6 +749,12 @@ $CMONDEBUG
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
 EOF
+if [ $CEPH_NUM_REPLICA -gt 0 ]; then
+    wconf << EOF
+[replica]
+$DAEMONOPTS
+EOF
+fi
 }
 
 write_logrotate_conf() {
@@ -1114,6 +1127,20 @@ EOF
 
 }
 
+start_replica() {
+    local replica_start_index=0
+    local replica_end_index=$(($CEPH_NUM_REPLICA - 1))
+    for replica_index in `seq $replica_start_index $replica_end_index`
+    do
+            wconf <<EOF
+[replica.$replica_index]
+        host = $HOSTNAME
+EOF
+    run 'replica' $replica_index $SUDO $CEPH_BIN/ceph-replica -i $replica_index $ARGS &
+    replica_pid=$!
+    done
+}
+
 # Ganesha Daemons requires nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rados-grace
 # nfs-ganesha-rados-urls (version 3.3 and above) packages installed. On
 # Fedora>=31 these packages can be installed directly with 'dnf'. For CentOS>=8
@@ -1396,6 +1423,10 @@ if [ $CEPH_NUM_MDS -gt 0 ]; then
     start_mds
     # key with access to all FS
     ceph_adm fs authorize \* "client.fs" / rwp >> "$keyring_fn"
+fi
+
+if [ $CEPH_NUM_REPLICA -gt 0 ]; then
+    start_replica
 fi
 
 # Don't set max_mds until all the daemons are started, otherwise

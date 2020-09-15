@@ -85,6 +85,7 @@ stop_mon=0
 stop_mds=0
 stop_osd=0
 stop_mgr=0
+stop_replica=0
 stop_rgw=0
 stop_ganesha=0
 ceph_osd=ceph-osd
@@ -101,6 +102,10 @@ while [ $# -ge 1 ]; do
             ;;
         mgr | ceph-mgr )
             stop_mgr=1
+            stop_all=0
+            ;;
+        replica | ceph-replica )
+            stop_replica=1
             stop_all=0
             ;;
         mds | ceph-mds )
@@ -161,7 +166,7 @@ if [ $stop_all -eq 1 ]; then
         do_killcephadm
     fi
 
-    for p in $ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd ; do
+    for p in $ceph_osd ceph-mon ceph-mds ceph-mgr ceph-replica radosgw lt-radosgw apache2 ganesha.nfsd ; do
         for try in 0 1 1 1 1 ; do
             if ! pkill -u $MYUID $p ; then
                 break
@@ -180,6 +185,7 @@ else
     [ $stop_mds -eq 1 ] && do_killall ceph-mds
     [ $stop_osd -eq 1 ] && do_killall $ceph_osd
     [ $stop_mgr -eq 1 ] && do_killall ceph-mgr
+    [ $stop_replica -eq 1 ] && do_killall ceph-replica
     [ $stop_ganesha -eq 1 ] && do_killall ganesha.nfsd
     [ $stop_rgw -eq 1 ] && do_killall radosgw lt-radosgw apache2
     [ $stop_cephadm -eq 1 ] && do_killcephadm
