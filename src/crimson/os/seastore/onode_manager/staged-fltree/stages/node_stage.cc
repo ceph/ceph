@@ -4,7 +4,7 @@
 #include "node_stage.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_mutable.h"
-#include "node_layout.h"
+#include "node_stage_layout.h"
 
 namespace crimson::os::seastore::onode {
 

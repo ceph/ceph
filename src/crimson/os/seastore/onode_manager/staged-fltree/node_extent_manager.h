@@ -16,7 +16,6 @@ namespace crimson::os::seastore::onode {
 using crimson::os::seastore::LogicalCachedExtent;
 class NodeExtent : public LogicalCachedExtent {
  public:
-  using Ref = crimson::os::seastore::TCachedExtentRef<NodeExtent>;
   virtual ~NodeExtent() = default;
   const char* get_read() const {
     return get_bptr().c_str();
@@ -25,7 +24,7 @@ class NodeExtent : public LogicalCachedExtent {
     assert(is_pending());
     return NodeExtentMutable(*this);
   }
-  virtual Ref mutate(context_t/* DeltaBuffer::Ref */) = 0;
+  virtual NodeExtentRef mutate(context_t/* DeltaBuffer::Ref */) = 0;
 
  protected:
   template <typename... T>
@@ -56,9 +55,9 @@ class NodeExtentManager {
   using tm_future = tm_ertr::future<ValuesT...>;
 
   virtual bool is_read_isolated() const = 0;
-  virtual tm_future<NodeExtent::Ref> read_extent(
+  virtual tm_future<NodeExtentRef> read_extent(
       Transaction&, laddr_t, extent_len_t) = 0;
-  virtual tm_future<NodeExtent::Ref> alloc_extent(Transaction&, extent_len_t) = 0;
+  virtual tm_future<NodeExtentRef> alloc_extent(Transaction&, extent_len_t) = 0;
   virtual tm_future<Super::URef> get_super(Transaction&, RootNodeTracker&) = 0;
 
   static NodeExtentManagerURef create_dummy();

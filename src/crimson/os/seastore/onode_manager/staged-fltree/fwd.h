@@ -10,6 +10,7 @@
 #include <string>
 
 #include "crimson/common/errorator.h"
+#include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction.h"
 
@@ -23,15 +24,25 @@ using crimson::os::seastore::L_ADDR_MIN;
 using crimson::os::seastore::L_ADDR_NULL;
 using crimson::os::seastore::extent_len_t;
 
+class NodeExtent;
 class NodeExtentManager;
 class RootNodeTracker;
+using NodeExtentRef = crimson::os::seastore::TCachedExtentRef<NodeExtent>;
+using NodeExtentManagerURef = std::unique_ptr<NodeExtentManager>;
+using RootNodeTrackerURef = std::unique_ptr<RootNodeTracker>;
 struct context_t {
   NodeExtentManager& nm;
   Transaction& t;
 };
-using NodeExtentManagerURef = std::unique_ptr<NodeExtentManager>;
-using RootNodeTrackerURef = std::unique_ptr<RootNodeTracker>;
 
+class LeafNodeImpl;
+class InternalNodeImpl;
+class NodeImpl;
+using LeafNodeImplURef = std::unique_ptr<LeafNodeImpl>;
+using InternalNodeImplURef = std::unique_ptr<InternalNodeImpl>;
+using NodeImplURef = std::unique_ptr<NodeImpl>;
+
+using level_t = uint8_t;
 constexpr auto INDEX_END = std::numeric_limits<size_t>::max();
 
 // TODO: decide by NODE_BLOCK_SIZE

@@ -34,7 +34,7 @@ class SeastoreNodeExtent final: public NodeExtent {
     : NodeExtent(other) {}
   ~SeastoreNodeExtent() override = default;
  protected:
-  Ref mutate(context_t c) override;
+  NodeExtentRef mutate(context_t c) override;
   CachedExtentRef duplicate_for_write() override {
     return CachedExtentRef(new SeastoreNodeExtent(*this));
   }
@@ -61,21 +61,21 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
  protected:
   bool is_read_isolated() const { return true; }
 
-  tm_future<NodeExtent::Ref> read_extent(
+  tm_future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) {
     return tm.read_extents<SeastoreNodeExtent>(t, addr, len
     ).safe_then([](auto&& extents) {
       assert(extents.size() == 1);
       [[maybe_unused]] auto [laddr, e] = extents.front();
-      return NodeExtent::Ref(e);
+      return NodeExtentRef(e);
     });
   }
 
-  tm_future<NodeExtent::Ref> alloc_extent(
+  tm_future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) {
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
     ).safe_then([](auto extent) {
-      return NodeExtent::Ref(extent);
+      return NodeExtentRef(extent);
     });
   }
 
@@ -89,7 +89,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   const laddr_t addr_min;
 };
 
-inline NodeExtent::Ref SeastoreNodeExtent::mutate(context_t c) {
+inline NodeExtentRef SeastoreNodeExtent::mutate(context_t c) {
   auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
   auto ret = nm->get_tm().get_mutable_extent(c.t, this);
   return ret->cast<SeastoreNodeExtent>();

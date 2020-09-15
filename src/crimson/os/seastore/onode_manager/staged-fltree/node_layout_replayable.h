@@ -63,15 +63,10 @@ struct NodeLayoutReplayableT {
     return p_value;
   }
 
-  static void prepare_internal_split(
-      NodeExtentMutable& mut,
-      const node_stage_t& node_stage,
-      const laddr_t left_child_addr,
-      const laddr_t right_child_addr,
-      laddr_t* p_split_addr) {
+  static void update_child_addr(
+      NodeExtentMutable& mut, const laddr_t new_addr, laddr_t* p_addr) {
     assert(NODE_TYPE == node_type_t::INTERNAL);
-    assert(*p_split_addr == left_child_addr);
-    mut.copy_in_absolute(p_split_addr, right_child_addr);
+    mut.copy_in_absolute(p_addr, new_addr);
   }
 
 };

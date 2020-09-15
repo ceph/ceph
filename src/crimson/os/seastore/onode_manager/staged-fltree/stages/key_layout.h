@@ -17,11 +17,11 @@ class NodeExtentMutable;
 class key_view_t;
 class key_hobj_t;
 enum class KeyT { VIEW, HOBJ };
-template <KeyT> struct _key_type;
-template<> struct _key_type<KeyT::VIEW> { using type = key_view_t; };
-template<> struct _key_type<KeyT::HOBJ> { using type = key_hobj_t; };
+template <KeyT> struct _full_key_type;
+template<> struct _full_key_type<KeyT::VIEW> { using type = key_view_t; };
+template<> struct _full_key_type<KeyT::HOBJ> { using type = key_hobj_t; };
 template <KeyT type>
-using full_key_t = typename _key_type<type>::type;
+using full_key_t = typename _full_key_type<type>::type;
 
 // TODO: consider alignments
 struct shard_pool_t {

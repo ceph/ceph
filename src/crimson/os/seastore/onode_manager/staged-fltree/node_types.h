@@ -43,6 +43,4 @@ inline std::ostream& operator<<(std::ostream &os, const node_type_t& type) {
   return os;
 }
 
-using level_t = uint8_t;
-
 }

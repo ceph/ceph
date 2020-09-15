@@ -4,18 +4,12 @@
 #pragma once
 
 #include "node_extent_manager.h"
-#include "node_impl_replayable.h"
+#include "node_layout_replayable.h"
 
 namespace crimson::os::seastore::onode {
 
 template <typename FieldType, node_type_t NODE_TYPE>
 class NodeExtentT {
-  enum class state_t {
-    NO_RECORDING,  // extent_state_t::INITIAL_WRITE_PENDING
-    RECORDING,     // extent_state_t::MUTATION_PENDING
-    PENDING_MUTATE // extent_state_t::CLEAN/DIRTY
-  };
-
  public:
   using layout_t = NodeLayoutReplayableT<FieldType, NODE_TYPE>;
   using node_stage_t = typename layout_t::node_stage_t;
@@ -23,19 +17,34 @@ class NodeExtentT {
   using StagedIterator = typename layout_t::StagedIterator;
   using value_t = typename layout_t::value_t;
   static constexpr auto FIELD_TYPE = layout_t::FIELD_TYPE;
+  enum class state_t {
+    NO_RECORDING,  // extent_state_t::INITIAL_WRITE_PENDING
+    RECORDING,     // extent_state_t::MUTATION_PENDING
+    PENDING_MUTATE // extent_state_t::CLEAN/DIRTY
+  };
 
-  // TODO: remove
-  NodeExtentT() = default;
-  NodeExtentT(NodeExtentT&& other) noexcept {
-    *this = std::move(other);
+  NodeExtentT(state_t state, NodeExtentRef extent)
+      : state{state}, extent{extent},
+        node_stage{reinterpret_cast<const FieldType*>(extent->get_read())} {
+    if (state == state_t::NO_RECORDING) {
+      assert(!mut.has_value());
+      mut.emplace(extent->get_mutable());
+      // TODO: recorder = nullptr;
+    } else if (state == state_t::RECORDING) {
+      assert(!mut.has_value());
+      mut.emplace(extent->get_mutable());
+      // TODO: get recorder from extent
+    } else if (state == state_t::PENDING_MUTATE) {
+      // TODO: recorder = nullptr;
+    } else {
+      ceph_abort("impossible path");
+    }
   }
-  NodeExtentT& operator=(NodeExtentT&& other) noexcept {
-    extent = std::move(other.extent);
-    state = std::move(other.state);
-    node_stage = std::move(other.node_stage);
-    mut.emplace(*other.mut);
-    return *this;
-  }
+  ~NodeExtentT() = default;
+  NodeExtentT(const NodeExtentT&) = delete;
+  NodeExtentT(NodeExtentT&&) = delete;
+  NodeExtentT& operator=(const NodeExtentT&) = delete;
+  NodeExtentT& operator=(NodeExtentT&&) = delete;
 
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }
@@ -91,14 +100,11 @@ class NodeExtentT {
         insert_pos, insert_stage, insert_size);
   }
 
-  void prepare_internal_split_replayable(
-      const laddr_t left_child_addr,
-      const laddr_t right_child_addr,
-      laddr_t* p_split_addr) {
+  void update_child_addr_replayable(
+      const laddr_t new_addr, laddr_t* p_addr) {
     assert(state != state_t::PENDING_MUTATE);
     // TODO: encode params to recorder as delta
-    return layout_t::prepare_internal_split(
-        *mut, read(), left_child_addr, right_child_addr, p_split_addr);
+    return layout_t::update_child_addr(*mut, new_addr, p_addr);
   }
 
   void test_copy_to(NodeExtentMutable& to) const {
@@ -106,7 +112,7 @@ class NodeExtentT {
     std::memcpy(to.get_write(), extent->get_read(), extent->get_length());
   }
 
-  static NodeExtentT load(NodeExtent::Ref extent) {
+  static state_t loaded(NodeExtentRef extent) {
     state_t state;
     if (extent->is_initial_pending()) {
       state = state_t::NO_RECORDING;
@@ -117,51 +123,21 @@ class NodeExtentT {
     } else {
       ceph_abort("invalid extent");
     }
-    return NodeExtentT(extent, state);
+    return state;
   }
 
-  struct fresh_extent_t {
-    NodeExtentT extent;
-    NodeExtentMutable mut;
-  };
-  using alloc_ertr = NodeExtentManager::tm_ertr;
-  static alloc_ertr::future<fresh_extent_t>
-  allocate(context_t c, level_t level, bool is_level_tail) {
-    // NOTE:
-    // *option1: all types of node have the same length;
-    // option2: length is defined by node/field types;
-    // option3: length is totally flexible;
-    return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
-    ).safe_then([level, is_level_tail](auto extent) {
-      assert(extent->is_initial_pending());
-      auto mut = extent->get_mutable();
-      node_stage_t::bootstrap_extent(
-          mut, FIELD_TYPE, NODE_TYPE, is_level_tail, level);
-      return fresh_extent_t{NodeExtentT(extent, state_t::NO_RECORDING), mut};
-    });
+  static std::tuple<state_t, NodeExtentMutable> allocated(
+      NodeExtentRef extent, bool is_level_tail, level_t level) {
+    assert(extent->is_initial_pending());
+    auto mut = extent->get_mutable();
+    node_stage_t::bootstrap_extent(
+        mut, FIELD_TYPE, NODE_TYPE, is_level_tail, level);
+    return {state_t::NO_RECORDING, mut};
   }
 
  private:
-  NodeExtentT(NodeExtent::Ref extent, state_t state)
-      : extent{extent}, state{state},
-        node_stage{reinterpret_cast<const FieldType*>(extent->get_read())} {
-    if (state == state_t::NO_RECORDING) {
-      assert(!mut.has_value());
-      mut.emplace(extent->get_mutable());
-      // TODO: recorder = nullptr;
-    } else if (state == state_t::RECORDING) {
-      assert(!mut.has_value());
-      mut.emplace(extent->get_mutable());
-      // TODO: get recorder from extent
-    } else if (state == state_t::PENDING_MUTATE) {
-      // TODO: recorder = nullptr;
-    } else {
-      ceph_abort("impossible path");
-    }
-  }
-
-  NodeExtent::Ref extent;
   state_t state;
+  NodeExtentRef extent;
   node_stage_t node_stage;
   std::optional<NodeExtentMutable> mut;
   // TODO: DeltaRecorderT* recorder;
