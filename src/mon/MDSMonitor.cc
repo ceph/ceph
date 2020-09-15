@@ -1456,7 +1456,9 @@ int MDSMonitor::filesystem_command(
     MDSMap::mds_info_t failed_info;
     mds_gid_t gid = gid_from_arg(fsmap, who, ss);
     if (gid == MDS_GID_NONE) {
-      return -EINVAL;
+      ss << "MDS named '" << who << "' does not exist, is not up or you "
+	 << "lack the permission to see.";
+      return 0;
     }
     if(!fsmap.gid_exists(gid, op->get_session()->get_allowed_fs_names())) {
       ss << "MDS named '" << who << "' does not exist, is not up or you "
