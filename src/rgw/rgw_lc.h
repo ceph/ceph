@@ -184,9 +184,6 @@ class LCFilter
   bool has_multi_condition() const {
     if (obj_tags.count() > 1)
       return true;
-    else if (has_prefix() && has_tags())
-      return true;
-
     return false;
   }
 
