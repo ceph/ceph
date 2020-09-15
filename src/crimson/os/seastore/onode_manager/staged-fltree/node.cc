@@ -23,12 +23,14 @@ using node_future = Node::node_future<ValuesT...>;
  */
 
 tree_cursor_t::tree_cursor_t(
-    Ref<LeafNode> node, const search_position_t& pos, const onode_t* p_value)
-      : leaf_node{node}, position{pos}, p_value{p_value} {
-  assert((!pos.is_end() && p_value) || (pos.is_end() && !p_value));
+    Ref<LeafNode> node, const search_position_t& pos,
+    const onode_t* _p_value, layout_version_t v)
+      : leaf_node{node}, position{pos} {
   if (!pos.is_end()) {
-    assert(p_value == leaf_node->get_p_value(position));
+    update_p_value(_p_value, v);
     leaf_node->do_track_cursor(*this);
+  } else {
+    assert(!_p_value);
   }
 }
 
@@ -40,9 +42,9 @@ tree_cursor_t::~tree_cursor_t() {
 
 const onode_t* tree_cursor_t::get_p_value() const {
   assert(!is_end());
-  if (!p_value) {
+  if (!p_value || node_version != leaf_node->get_layout_version()) {
     // NOTE: the leaf node is always present when we hold its reference.
-    p_value = leaf_node->get_p_value(position);
+    std::tie(p_value, node_version) = leaf_node->get_p_value(position);
   }
   assert(p_value);
   return p_value;
@@ -50,22 +52,22 @@ const onode_t* tree_cursor_t::get_p_value() const {
 
 void tree_cursor_t::update_track(
     Ref<LeafNode> node, const search_position_t& pos) {
-  // already untracked
+  // the cursor must be already untracked
+  // track the new node and new pos
   assert(!pos.is_end());
   assert(!is_end());
   leaf_node = node;
   position = pos;
-  // p_value must be already invalidated
-  assert(!p_value);
+  p_value = nullptr;
   leaf_node->do_track_cursor(*this);
 }
 
-void tree_cursor_t::set_p_value(const onode_t* _p_value) {
-  if (!p_value) {
-    p_value = _p_value;
-  } else {
-    assert(p_value == _p_value);
-  }
+void tree_cursor_t::update_p_value(const onode_t* _p_value, layout_version_t v) {
+  assert(!is_end());
+  assert(_p_value);
+  assert(std::make_pair(_p_value, v) == leaf_node->get_p_value(position));
+  p_value = _p_value;
+  node_version = v;
 }
 
 /*
@@ -480,8 +482,9 @@ node_future<InternalNode::fresh_node_t> InternalNode::allocate(
 LeafNode::LeafNode(LeafNodeImpl* impl, NodeImplURef&& impl_ref)
   : Node(std::move(impl_ref)), impl{impl} {}
 
-const onode_t* LeafNode::get_p_value(const search_position_t& pos) const {
-  return impl->get_p_value(pos);
+std::pair<const onode_t*, layout_version_t> LeafNode::get_p_value(
+    const search_position_t& pos) const {
+  return {impl->get_p_value(pos), layout_version};
 }
 
 node_future<Ref<tree_cursor_t>>
@@ -549,7 +552,6 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     assert(impl->is_level_tail());
   }
 #endif
-  impl->prepare_mutate(c);
 
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
@@ -557,6 +559,8 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   auto free_size = impl->free_size();
   if (free_size >= insert_size) {
     // insert
+    on_layout_change();
+    impl->prepare_mutate(c);
     auto p_value = impl->insert(key, value, insert_pos, insert_stage, insert_size);
     assert(impl->free_size() == free_size - insert_size);
     assert(insert_pos <= pos);
@@ -577,6 +581,9 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   }).safe_then([this_ref, this, c, &key, &value, &history,
                 insert_pos, insert_stage, insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
+    // no need to bump version for right node, as it is fresh
+    on_layout_change();
+    impl->prepare_mutate(c);
     auto [split_pos, is_insert_left, p_value] = impl->split_insert(
         fresh_right.mut, *right_node->impl, key, value,
         insert_pos, insert_stage, insert_size);
@@ -619,34 +626,31 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
     assert(impl->is_level_tail());
     assert(!p_value);
     // we need to return the leaf node to insert
-    return new tree_cursor_t(this, position, p_value);
+    return new tree_cursor_t(this, position, p_value, layout_version);
   }
 
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
-    p_cursor = new tree_cursor_t(this, position, p_value);
+    p_cursor = new tree_cursor_t(this, position, p_value, layout_version);
   } else {
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
     assert(p_cursor->get_position() == position);
-    p_cursor->set_p_value(p_value);
+    p_cursor->update_p_value(p_value, layout_version);
   }
   return p_cursor;
+}
+
+void LeafNode::validate_cursor(tree_cursor_t& cursor) const {
+  assert(this == cursor.get_leaf_node().get());
+  assert(!cursor.is_end());
+  assert(impl->get_p_value(cursor.get_position()) == cursor.get_p_value());
 }
 
 Ref<tree_cursor_t> LeafNode::track_insert(
     const search_position_t& insert_pos, match_stage_t insert_stage,
     const onode_t* p_onode) {
-  // invalidate cursor value
-  // TODO: version based invalidation
-  auto pos_invalidate_begin = insert_pos;
-  pos_invalidate_begin.index_by_stage(STAGE_RIGHT) = 0;
-  auto begin_invalidate = tracked_cursors.lower_bound(pos_invalidate_begin);
-  std::for_each(begin_invalidate, tracked_cursors.end(), [](auto& kv) {
-    kv.second->invalidate_p_value();
-  });
-
   // update cursor position
   auto pos_upper_bound = insert_pos;
   pos_upper_bound.index_by_stage(insert_stage) = INDEX_END;
@@ -664,20 +668,11 @@ Ref<tree_cursor_t> LeafNode::track_insert(
   }
 
   // track insert
-  return new tree_cursor_t(this, insert_pos, p_onode);
+  return new tree_cursor_t(this, insert_pos, p_onode, layout_version);
 }
 
 void LeafNode::track_split(
     const search_position_t& split_pos, Ref<LeafNode> right_node) {
-  // invalidate cursor value
-  // TODO: version based invalidation
-  auto pos_invalidate_begin = split_pos;
-  pos_invalidate_begin.index_by_stage(STAGE_RIGHT) = 0;
-  auto begin_invalidate = tracked_cursors.lower_bound(pos_invalidate_begin);
-  std::for_each(begin_invalidate, tracked_cursors.end(), [](auto& kv) {
-    kv.second->invalidate_p_value();
-  });
-
   // update cursor ownership and position
   auto first = tracked_cursors.lower_bound(split_pos);
   auto iter = first;
