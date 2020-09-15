@@ -2560,10 +2560,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
-            int marker_delim_pos = cur_marker.name.find(
-	      params.delim, cur_prefix.size());
-
-            skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
+            skip_after_delim = obj.name.substr(0, delim_pos);
             skip_after_delim.append(after_delim_s);
 
             ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
