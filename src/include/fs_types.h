@@ -92,11 +92,14 @@ struct file_layout_t {
   int64_t pool_id;        ///< rados pool id
   std::string pool_ns;         ///< rados pool namespace
 
+  bool inherit;         ///< is the layout inherited?
+
   file_layout_t(uint32_t su=0, uint32_t sc=0, uint32_t os=0)
     : stripe_unit(su),
       stripe_count(sc),
       object_size(os),
-      pool_id(-1) {
+      pool_id(-1), 
+      inherit(false) {
   }
 
   static file_layout_t get_default() {

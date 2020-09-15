@@ -3677,7 +3677,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     SnapRealm *dir_realm,
 			     snapid_t snapid,
 			     unsigned max_bytes,
-			     int getattr_caps)
+			     int getattr_caps,
+			     file_layout_t inherit_layout)
 {
   client_t client = session->get_client();
   ceph_assert(snapid);
@@ -3784,6 +3785,11 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     layout = (ppolicy ? pi : oi)->layout;
   } else {
     layout = file_i->layout;
+  }
+
+  if (inherit_layout != file_layout_t()) {
+    layout = inherit_layout;
+    dout(10) << "Inside if condition" << dendl;
   }
 
   // max_size is min of projected, actual

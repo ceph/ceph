@@ -184,7 +184,7 @@ public:
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
-			      bool no_want_auth=false);
+			      bool no_want_auth=false, bool want_layout=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
 				    bool okexist=false, bool want_layout=false);
   std::pair<CDentry*, CDentry*>

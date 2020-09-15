@@ -11929,7 +11929,8 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     if (vxattr->flags & VXATTR_RSTAT) {
       flags |= CEPH_STAT_RSTAT;
     }
-    if (vxattr->flags & VXATTR_DIRSTAT) {
+    if (vxattr->flags & (VXATTR_DIRSTAT || 
+	  vxattr->name.compare(0, 15, "ceph.dir.layout") == 0)) {
       flags |= CEPH_CAP_FILE_SHARED;
     }
     r = _getattr(in, flags | CEPH_STAT_CAP_XATTR, perms, true);
@@ -11961,7 +11962,11 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
+  //if (strncmp(name, "layout", 6)) {
+    //r = _getattr(in, CEPH_STAT_INHERIT_LAYOUT, perms, in->xattr_version == 0);
+  //} else {
   r = _getattr(in, CEPH_STAT_CAP_XATTR, perms, in->xattr_version == 0);
+  //}
   if (r == 0) {
     string n(name);
     r = -ENODATA;
@@ -12389,6 +12394,8 @@ size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
   if (in->layout.pool_ns.length())
     r += snprintf(val + r, size - r, " pool_namespace=%s",
 		  in->layout.pool_ns.c_str());
+  if (in->layout.inherit)
+    r += snprintf(val + r, size -r, "inherited");
   return r;
 }
 size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size)

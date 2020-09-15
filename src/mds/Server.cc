@@ -2305,7 +2305,12 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
 
   // inode
   if (in) {
-    in->encode_inodestat(bl, session, NULL, snapid, 0, mdr->getattr_caps);
+    if (mdr->client_request->head.args.getattr.mask && CEPH_STAT_INHERIT_LAYOUT) {
+      in->encode_inodestat(bl, session, NULL, snapid, 0, mdr->getattr_caps, mdr->dir_layout);
+    } else {
+      in->encode_inodestat(bl, session, NULL, snapid, 0, mdr->getattr_caps);
+    }
+
     dout(20) << "set_trace_dist added in   " << *in << dendl;
     reply->head.is_target = 1;
   } else
@@ -3387,7 +3392,7 @@ public:
  * as appropriate: forwarded on, or the client's been replied to */
 CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
 				    bool want_auth,
-				    bool no_want_auth)
+				    bool no_want_auth, bool want_layout)
 {
   const filepath& refpath = mdr->get_filepath();
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
@@ -3408,6 +3413,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
   }
   if (want_auth)
     flags |= MDS_TRAVERSE_WANT_AUTH;
+  if (want_layout)
+    flags |= MDS_TRAVERSE_WANT_DIRLAYOUT;
   int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[0], &mdr->in[0]);
   if (r > 0)
     return nullptr; // delayed
@@ -3767,15 +3774,26 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   }
 
   bool want_auth = false;
+  bool want_layout = false;
   int mask = req->head.args.getattr.mask;
   if (mask & CEPH_STAT_RSTAT)
     want_auth = true; // set want_auth for CEPH_STAT_RSTAT mask
 
+  if (mask & CEPH_STAT_INHERIT_LAYOUT) {
+    want_layout = true;
+  }
+
   if (!mdr->is_batch_head() && mdr->can_batch()) {
     CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
+    int flags = 0;
+    if (want_auth) {
+      flags |= MDS_TRAVERSE_WANT_AUTH;
+    }
+    if (want_layout) {
+      flags |= MDS_TRAVERSE_WANT_DIRLAYOUT;
+    }
     int r = mdcache->path_traverse(mdr, cf, mdr->get_filepath(),
-				   (want_auth ? MDS_TRAVERSE_WANT_AUTH : 0),
-				   &mdr->dn[0], &mdr->in[0]);
+				   flags, &mdr->dn[0], &mdr->in[0]);
     if (r > 0)
       return; // delayed
 
@@ -3806,7 +3824,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
     }
   }
 
-  CInode *ref = rdlock_path_pin_ref(mdr, want_auth, false);
+  CInode *ref = rdlock_path_pin_ref(mdr, want_auth, false, want_layout);
   if (!ref)
     return;
 
@@ -3865,6 +3883,10 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   mdr->getattr_caps = mask;
 
   mds->balancer->hit_inode(ref, META_POP_IRD, req->get_source().num());
+
+  if (want_layout) {
+    mdr->dir_layout.inherit = true; 
+  }
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
