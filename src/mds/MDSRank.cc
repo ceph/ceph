@@ -488,13 +488,13 @@ MDSRank::MDSRank(
     Context *respawn_hook_,
     Context *suicide_hook_,
     boost::asio::io_context& ioc) :
-    cct(msgr->cct), fs_name(fs_name_), mds_lock(mds_lock_), clog(clog_),
+    cct(msgr->cct), mds_lock(mds_lock_), clog(clog_),
     timer(timer_), mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, ioc, 0, 0)),
     damage_table(whoami_), sessionmap(this),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),
-    progress_thread(this), whoami(whoami_),
+    progress_thread(this), whoami(whoami_), fs_name(fs_name_),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
       new LambdaContext([this](int r) {
