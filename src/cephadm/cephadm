@@ -3851,14 +3851,20 @@ def list_daemons(detail=True, legacy_dir=None, target_fsid=None):
                             "started": _container['StartedAt'],
                         })
                     else:
-                        # if the daemon is not in the lookup, it's either not running
-                        # or the podman/docker command failed. Fallback to basics
-                        with open(os.path.join(fsid_dir, daemon_name, 'unit.image'), 'r') as f:
-                            image_name = f.read().strip()
-                        daemon_info.update({
-                            "container_image_name": image_name,
-                            "version": _version_from_tag(image_name),
-                        })
+                        # if the daemon is not in the lookup, it's either 
+                        # a) not running b) the podman/docker command failed or 
+                        # c) not a container based daemon. Fallback to basics
+                        unit_image = os.path.join(fsid_dir, daemon_name, 'unit.image')
+                        if os.path.exists(unit_image):
+                            with open(unit_image, 'r') as f:
+                                image_name = f.read().strip()
+                            daemon_info.update({
+                                "container_image_name": image_name,
+                                "version": _version_from_tag(image_name),
+                            })
+                        else:
+                            # not a container based daemon
+                            version = 'unknown'
 
                     ls.append(daemon_info)
     return ls  # type: ignore
