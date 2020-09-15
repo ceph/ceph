@@ -55,11 +55,12 @@ int clock_gettime(int clk_id, struct timespec *tp)
 using namespace std::literals;
 
 namespace ceph {
-namespace time_detail {
+using std::chrono::seconds;
+using std::chrono::nanoseconds;
 void real_clock::to_ceph_timespec(const time_point& t,
 				  struct ceph_timespec& ts) {
   ts.tv_sec = to_time_t(t);
-  ts.tv_nsec = (t.time_since_epoch() % seconds(1)).count();
+  ts.tv_nsec = (t.time_since_epoch() % 1s).count();
 }
 struct ceph_timespec real_clock::to_ceph_timespec(const time_point& t) {
   struct ceph_timespec ts;
@@ -87,7 +88,6 @@ coarse_real_clock::time_point coarse_real_clock::from_ceph_timespec(
   return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
 }
 
-}
 
 using std::chrono::duration_cast;
 using std::chrono::seconds;
