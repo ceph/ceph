@@ -73,6 +73,10 @@
 #define tracepoint(...)
 #endif
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+#include "rgw_s3_mirror.h"
+#endif
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -2324,7 +2328,16 @@ void RGWListBuckets::execute()
       read_count = max_buckets;
     }
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+    if (auto mirror = S3Mirror::getInstanceForRequest(s)) {
+      op_ret = mirror->intercept_list_buckets_rgwop(s, buckets);
+    }
+    else {
+#endif
     op_ret = s->user->list_buckets(marker, end_marker, read_count, should_get_stats(), buckets);
+#ifdef WITH_RADOSGW_S3_MIRROR
+    }
+#endif
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -2813,6 +2826,28 @@ void RGWListBucket::execute()
 
   rgw::sal::RGWBucket::ListResults results;
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+  int op_ret = 0;
+
+  if (auto mirror = S3Mirror::getInstanceForRequest(s))
+  {
+    int list_type = 1;
+    s->info.args.get_int("list-type", &list_type, 1);
+    switch (list_type) {
+      case 1:
+        op_ret = mirror->intercept_list_objects_rgwop(s, max, objs, common_prefixes, params, is_truncated, next_marker);
+        break;
+      case 2:
+        bool continuation_token_exist;
+        s->info.args.get("continuation-token", &continuation_token_exist);
+        op_ret = mirror->intercept_list_objects_rgwop_V2(s, max, objs, common_prefixes, params, is_truncated, next_marker, continuation_token_exist);
+        break;
+      default:
+        break;
+    }
+  }
+  else {
+#endif
   op_ret = s->bucket->list(params, max, results, s->yield);
   if (op_ret >= 0) {
     next_marker = results.next_marker;
@@ -2820,6 +2855,9 @@ void RGWListBucket::execute()
     objs = std::move(results.objs);
     common_prefixes = std::move(results.common_prefixes);
   }
+#ifdef WITH_RADOSGW_S3_MIRROR
+  }
+#endif
 }
 
 int RGWGetBucketLogging::verify_permission()
@@ -3723,6 +3761,13 @@ void RGWPutObj::execute()
   off_t lst;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
+
+#ifdef WITH_RADOSGW_S3_MIRROR
+  auto mirror = S3Mirror::getInstanceForRequest(s);
+  long long contentLength = 0;
+  Aws::StringStream ss;
+#endif
+
   perfcounter->inc(l_rgw_put);
   // report latency on return
   auto put_lat = make_scope_guard([&] {
@@ -3915,6 +3960,7 @@ void RGWPutObj::execute()
       }
     }
   }
+
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
   do {
     bufferlist data;
@@ -3945,6 +3991,13 @@ void RGWPutObj::execute()
 
     /* update torrrent */
     torrent.update(data);
+
+#ifdef WITH_RADOSGW_S3_MIRROR
+    if (mirror != nullptr) {
+      ss.write(data.c_str(),data.length());
+      contentLength += data.length();
+    }
+#endif
 
     op_ret = filter->process(std::move(data), ofs);
     if (op_ret < 0) {
@@ -4087,6 +4140,13 @@ void RGWPutObj::execute()
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
+
+#ifdef WITH_RADOSGW_S3_MIRROR
+  if (mirror != nullptr) {
+    const shared_ptr<Aws::IOStream> awsbody = Aws::MakeShared<Aws::StringStream>("cache:partupload", ss.str());
+    mirror->intercept_put_object_rgwop(s, multipart_upload_id, multipart_part_str, multipart_part_num, contentLength, awsbody);
+  }
+#endif
 }
 
 int RGWPostObj::verify_permission()
@@ -4886,6 +4946,11 @@ void RGWDeleteObj::execute()
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
     }
+#ifdef WITH_RADOSGW_S3_MIRROR
+    if (auto mirror = S3Mirror::getInstanceForRequest(s)) {
+      mirror->remote_delete_object(s);
+    }
+#endif
   } else {
     op_ret = -EINVAL;
   }
@@ -5227,6 +5292,11 @@ void RGWCopyObj::execute()
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
+#ifdef WITH_RADOSGW_S3_MIRROR
+  if (auto mirror = S3Mirror::getInstanceForRequest(s)) {
+    mirror->intercept_copy_object_rgwop(s, src_bucket->get_info().bucket.name + "/" + src_object->get_key().name);
+  }
+#endif
 }
 
 int RGWGetACLs::verify_permission()
@@ -5820,6 +5890,10 @@ void RGWInitMultipart::execute()
   map<string, bufferlist> attrs;
   rgw_obj obj;
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+  auto mirror = S3Mirror::getInstanceForRequest(s);
+#endif
+
   if (get_params() < 0)
     return;
 
@@ -5850,10 +5924,28 @@ void RGWInitMultipart::execute()
   }
 
   do {
+
+#ifdef WITH_RADOSGW_S3_MIRROR
+    if (mirror)
+    {
+      int _ret = mirror->intercept_init_multipart_upload_rgwop(s, upload_id);
+      if (_ret < 0)
+      {
+        char buf[33];
+        gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
+        upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
+        upload_id.append(buf);
+      }
+    }
+    else {
+#endif
     char buf[33];
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
     upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
     upload_id.append(buf);
+#ifdef WITH_RADOSGW_S3_MIRROR
+    }
+#endif
 
     string tmp_obj_name;
     RGWMPObj mp(s->object->get_name(), upload_id);
@@ -6212,6 +6304,14 @@ void RGWCompleteMultipart::execute()
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
+
+#ifdef WITH_RADOSGW_S3_MIRROR
+  if (auto  mirror = S3Mirror::getInstanceForRequest(s))
+  {
+    mirror->intercept_complete_multipart_rgwop(s, upload_id, obj_parts);
+  }
+#endif
+
 }
 
 int RGWCompleteMultipart::MPSerializer::try_lock(
@@ -6299,6 +6399,15 @@ void RGWAbortMultipart::execute()
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   op_ret = abort_multipart_upload(store, s->cct, obj_ctx, s->bucket->get_info(), mp);
+
+#ifdef WITH_RADOSGW_S3_MIRROR
+  if (op_ret < 0)
+    return;
+
+  if (auto mirror = S3Mirror::getInstanceForRequest(s)) {
+    mirror->intercept_abort_multipart_rgwop(s, upload_id);
+  }
+#endif
 }
 
 int RGWListMultipart::verify_permission()

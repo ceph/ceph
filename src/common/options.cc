@@ -6525,6 +6525,40 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "A comma delimited list of default frontends configuration."),
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+    Option("mirror_s3_endpoint", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .set_description("Mirror S3 url endpoint")
+    .set_long_description("Url the points to an S3 endpoint that radosgw will mirror.")
+    .add_see_also("mirror_s3_bucket")
+    .add_see_also("mirror_s3_access_id")
+    .add_see_also("mirror_s3_access_key"),
+
+    Option("mirror_s3_bucket", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .set_description("Mirror S3 bucket")
+    .set_long_description("The bucket from the mirror S3 endpoint that radosgw will mirror.")
+    .add_see_also("mirror_s3_endpoint")
+    .add_see_also("mirror_s3_access_id")
+    .add_see_also("mirror_s3_access_key"),
+
+    Option("mirror_s3_access_id", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .set_description("Mirror S3 access ID")
+    .set_long_description("The ID by which the radosgw will connect to the mirror S3 endpoint")
+    .add_see_also("mirror_s3_bucket")
+    .add_see_also("mirror_s3_endpoint")
+    .add_see_also("mirror_s3_access_key"),
+
+    Option("mirror_s3_access_key", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .set_description("Mirror S3 endpoint access secret")
+    .set_long_description("The access secret by which the radosgw will connect to the mirror S3 endpoint")
+    .add_see_also("mirror_s3_bucket")
+    .add_see_also("mirror_s3_access_id")
+    .add_see_also("mirror_s3_endpoint"),
+#endif
+
     Option("rgw_user_quota_bucket_sync_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(180)
     .set_description("User quota bucket sync interval")

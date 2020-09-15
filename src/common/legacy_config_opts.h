@@ -1456,6 +1456,13 @@ OPTION(rgw_expose_bucket, OPT_BOOL) // Return the bucket name in the 'Bucket' re
 
 OPTION(rgw_frontends, OPT_STR) // rgw front ends
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+OPTION(mirror_s3_bucket, OPT_STR) // rgw remote bucket
+OPTION(mirror_s3_endpoint, OPT_STR) // rgw remote s3
+OPTION(mirror_s3_access_id, OPT_STR) // rgw remote id
+OPTION(mirror_s3_access_key, OPT_STR) // rgw remote secret
+#endif
+
 OPTION(rgw_user_quota_bucket_sync_interval, OPT_INT) // time period for accumulating modified buckets before syncing stats
 OPTION(rgw_user_quota_sync_interval, OPT_INT) // time period for accumulating modified buckets before syncing entire user stats
 OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL) // whether stats for idle users be fully synced

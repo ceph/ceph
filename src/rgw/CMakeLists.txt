@@ -157,6 +157,11 @@ set(librgw_common_srcs
   rgw_datalog.cc
   cls_fifo_legacy.cc)
 
+if(WITH_RADOSGW_S3_MIRROR)
+  list(APPEND librgw_common_srcs rgw_s3_mirror.cc)
+  list(APPEND librgw_common_srcs rgw_s3_mirror_local.cc)
+endif()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
@@ -230,6 +235,9 @@ target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 target_include_directories(rgw_a SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 
+if(WITH_RADOSGW_S3_MIRROR)
+  find_package(AWSSDK REQUIRED COMPONENTS s3)
+endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
 endif()
@@ -243,6 +251,7 @@ target_link_libraries(rgw_a
   cls_log_client cls_timeindex_client cls_version_client cls_cmpomap_client
   cls_user_client cls_rgw_gc_client cls_2pc_queue_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
+  ${AWSSDK_LINK_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
   OATH::OATH)
@@ -322,7 +331,7 @@ target_link_libraries(radosgwd radosgw librados
   global
   ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
-  ${ALLOC_LIBS})
+  ${ALLOC_LIBS} ${AWSSDK_LINK_LIBRARIES})
 set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
 install(TARGETS radosgwd DESTINATION bin)
 
@@ -335,7 +344,8 @@ target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
+  ${AWSSDK_LINK_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
@@ -346,7 +356,8 @@ target_link_libraries(radosgw-es ${rgw_libs} librados
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
+  ${AWSSDK_LINK_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
@@ -364,7 +375,8 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES}
+  ${AWSSDK_LINK_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
@@ -387,6 +399,7 @@ target_link_libraries(rgw
   global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
+  ${AWSSDK_LINK_LIBRARIES}
   ${EXPAT_LIBRARIES}
   PUBLIC
   dmclock::dmclock)

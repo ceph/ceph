@@ -430,6 +430,8 @@ endif (WITH_RADOSGW)
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
 
+option(WITH_RADOSGW_S3_MIRROR "Rados Gateway mirroring remote S3 bucket is enabled" ON)
+
 # Please specify 3.[0-7] if you want to build with a certain version of python3.
 set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
 if(NOT WITH_PYTHON3 STREQUAL "3")

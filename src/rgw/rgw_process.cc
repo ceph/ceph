@@ -18,6 +18,10 @@
 
 #include "services/svc_zone_utils.h"
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+#include "rgw_s3_mirror.h"
+#endif
+
 #define dout_subsys ceph_subsys_rgw
 
 using rgw::dmclock::Scheduler;
@@ -281,6 +285,26 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 
     ret = rgw_process_authenticated(handler, op, req, s);
     if (ret < 0) {
+
+#ifdef WITH_RADOSGW_S3_MIRROR
+      int mirror_ret = 0;
+      if (auto mirror = S3Mirror::getInstanceForRequest(s))
+      {
+        mirror_ret = mirror->intercept_rgw_process_error(ret, s);
+        if (mirror_ret >= 0)
+        {
+          ret = rgw_process_authenticated(handler, op, req, s);  
+          if (ret >= 0) 
+          {
+            goto done;
+          }
+        }
+        else if (mirror_ret == S3MIRRORINTERCEPTED) 
+        {
+          goto done;
+        }
+      }
+#endif
       abort_early(s, op, ret, handler);
       goto done;
     }
