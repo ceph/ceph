@@ -820,6 +820,21 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
 {
   const auto& conf = cct->_conf;
 
+  // mon_host_override?
+  auto mon_host_override = conf.get_val<std::string>("mon_host_override");
+  if (!mon_host_override.empty()) {
+    lgeneric_dout(cct, 1) << "Using mon_host_override " << mon_host_override << dendl;
+    auto ret = init_with_ips(mon_host_override, for_mkfs, "noname-");
+    if (ret == -EINVAL) {
+      ret = init_with_hosts(mon_host_override, for_mkfs, "noname-");
+    }
+    if (ret < 0) {
+      errout << "unable to parse addrs in '" << mon_host_override << "'"
+	     << std::endl;
+    }
+    return ret;
+  }
+
   // cct?
   auto addrs = cct->get_mon_addrs();
   if (addrs != nullptr && (addrs->size() > 0)) {
