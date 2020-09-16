@@ -175,10 +175,8 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
 }
 
 ReadResult::C_ObjectReadRequest::C_ObjectReadRequest(
-    AioCompletion *aio_completion, uint64_t object_off, uint64_t object_len,
-    LightweightBufferExtents&& buffer_extents)
-  : aio_completion(aio_completion), object_off(object_off),
-    object_len(object_len), buffer_extents(std::move(buffer_extents)) {
+    AioCompletion *aio_completion, ReadExtents&& extents)
+  : aio_completion(aio_completion), extents(std::move(extents)) {
   aio_completion->add_request();
 }
 
@@ -191,24 +189,47 @@ void ReadResult::C_ObjectReadRequest::finish(int r) {
     r = 0;
   }
   if (r >= 0) {
-    ldout(cct, 10) << " got " << extent_map
-                   << " for " << buffer_extents
-                   << " bl " << bl.length() << dendl;
+    uint64_t object_len = 0;
     aio_completion->lock.lock();
-    if (!extent_map.empty()) {
+    for (auto& extent: extents) {
+      ldout(cct, 10) << " got " << extent.extent_map
+                     << " for " << extent.buffer_extents
+                     << " bl " << extent.bl.length() << dendl;
+
       aio_completion->read_result.m_destriper.add_partial_sparse_result(
-        cct, bl, extent_map, object_off, buffer_extents);
-    } else {
-      // handle the case where a sparse-read wasn't issued
-      aio_completion->read_result.m_destriper.add_partial_result(
-        cct, std::move(bl), buffer_extents);
+              cct, std::move(extent.bl), extent.extent_map, extent.offset,
+              extent.buffer_extents);
+
+      object_len += extent.length;
     }
     aio_completion->lock.unlock();
-
     r = object_len;
   }
 
   aio_completion->complete_request(r);
+}
+
+ReadResult::C_ObjectReadMergedExtents::C_ObjectReadMergedExtents(
+        CephContext* cct, ReadExtents* extents, Context* on_finish)
+        : cct(cct), extents(extents), on_finish(on_finish) {
+}
+
+void ReadResult::C_ObjectReadMergedExtents::finish(int r) {
+  if (r >= 0) {
+    for (auto& extent: *extents) {
+      if (bl.length() < extent.length) {
+        lderr(cct) << "Merged extents length is less than expected" << dendl;
+        r = -EIO;
+        break;
+      }
+      bl.splice(0, extent.length, &extent.bl);
+    }
+    if (bl.length() != 0) {
+      lderr(cct) << "Merged extents length is greater than expected" << dendl;
+      r = -EIO;
+    }
+  }
+  on_finish->complete(r);
 }
 
 ReadResult::ReadResult() : m_buffer(Empty()) {
