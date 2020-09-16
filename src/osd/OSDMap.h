@@ -1149,6 +1149,15 @@ public:
     return p->get_size();
   }
 
+  int get_pg_pool_primary_write_size(pg_t pgid) const {
+    if (!pg_exists(pgid)) {
+      return -ENOENT;
+    }
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    ceph_assert(p);
+    return p->get_primary_write_size();
+  }
+
   int get_pg_pool_crush_rule(pg_t pgid) const {
     if (!pg_exists(pgid)) {
       return -ENOENT;

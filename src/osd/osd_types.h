@@ -1367,6 +1367,7 @@ struct pg_pool_t {
   uint64_t flags = 0;           ///< FLAG_*
   __u8 type = 0;                ///< TYPE_*
   __u8 size = 0, min_size = 0;  ///< number of osds in each pg
+  __u8 primary_write_size = 0;  ///< number of how many osds should commit before replying
   __u8 crush_rule = 0;          ///< crush placement rule
   __u8 object_hash = 0;         ///< hash mapping object name to ps
   pg_autoscale_mode_t pg_autoscale_mode = pg_autoscale_mode_t::UNKNOWN;
@@ -1563,6 +1564,7 @@ public:
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
+  unsigned get_primary_write_size() const { return primary_write_size; }
   int get_crush_rule() const { return crush_rule; }
   int get_object_hash() const { return object_hash; }
   const char *get_object_hash_name() const {
@@ -3183,6 +3185,8 @@ public:
     int new_size,
     int old_min_size,
     int new_min_size,
+    int old_primary_write_size,
+    int new_primary_write_size,
     unsigned old_pg_num,
     unsigned new_pg_num,
     unsigned old_pg_num_pending,

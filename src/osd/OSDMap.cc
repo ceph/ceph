@@ -4167,6 +4167,7 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].size = cct->_conf.get_val<uint64_t>("osd_pool_default_size");
       pools[pool].min_size = cct->_conf.get_osd_pool_default_min_size(
                                  pools[pool].size);
+      pools[pool].primary_write_size = cct->_conf.get_osd_pool_default_primary_write_size(pools[pool].size, pools[pool].min_size);
       pools[pool].crush_rule = default_replicated_rule;
       pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
       pools[pool].set_pg_num(poolbase << pg_bits);
