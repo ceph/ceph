@@ -56,6 +56,8 @@ class tree_cursor_t final
  private:
   tree_cursor_t(Ref<LeafNode>, const search_position_t&,
                 const onode_t*, layout_version_t);
+  // lookup reaches the end, contain leaf node for further insert
+  tree_cursor_t(Ref<LeafNode>);
   const search_position_t& get_position() const { return position; }
   Ref<LeafNode> get_leaf_node() { return leaf_node; }
   void update_track(Ref<LeafNode>, const search_position_t&);
@@ -247,6 +249,7 @@ class LeafNode final : public Node {
   LeafNode& operator=(const LeafNode&) = delete;
   LeafNode& operator=(LeafNode&&) = delete;
 
+  bool is_level_tail() const;
   layout_version_t get_layout_version() const { return layout_version; }
   std::pair<const onode_t*, layout_version_t> get_p_value(
       const search_position_t&) const;
