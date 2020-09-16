@@ -299,6 +299,59 @@ TEST(Option, validation)
   EXPECT_EQ(input, "1");
 }
 
+TEST(Option, parimary_write_size)
+{
+  ConfigProxy conf{false};
+
+  // osd_pool_default_primary_write_size should be equal to osd_pool_default_size
+  // when osd_objectstore is not bluestore
+  {
+    EXPECT_EQ(0, conf.set_val("osd_pool_default_primary_write_size", "2"));
+
+    EXPECT_EQ(0, conf.set_val("osd_objectstore", "filestore"));
+    EXPECT_EQ(3, conf.get_osd_pool_default_primary_write_size(3, 1));
+
+    EXPECT_EQ(0, conf.set_val("osd_objectstore", "memstore"));
+    EXPECT_EQ(3, conf.get_osd_pool_default_primary_write_size(3, 1));
+
+    EXPECT_EQ(0, conf.set_val("osd_objectstore", "kstore"));
+    EXPECT_EQ(3, conf.get_osd_pool_default_primary_write_size(3, 1));
+
+    EXPECT_EQ(0, conf.set_val("osd_objectstore", "bluestore"));
+    EXPECT_EQ(2, conf.get_osd_pool_default_primary_write_size(3, 1));
+  }
+
+  // osd_pool_default_primary_write_size should be equal to osd_pool_default_size
+  // when osd_pool_default_primary_write_size is zero
+  {
+    EXPECT_EQ(0, conf.set_val("osd_pool_default_primary_write_size", "0"));
+    EXPECT_EQ(3, conf.get_osd_pool_default_primary_write_size(3, 1));
+  }
+
+  // osd_pool_default_primary_write_size should be equal to osd_pool_default_size
+  // when osd_pool_default_primary_write_size is greater than osd_pool_default_size
+  {
+    EXPECT_EQ(0, conf.set_val("osd_pool_default_primary_write_size", "9"));
+    EXPECT_EQ(3, conf.get_osd_pool_default_primary_write_size(3, 2));
+  }
+
+  // osd_pool_default_primary_write_size should be greater than or equal to osd_pool_default_min_size
+  {
+    EXPECT_EQ(0, conf.set_val("osd_pool_default_primary_write_size", "2"));
+    EXPECT_EQ(2, conf.get_osd_pool_default_primary_write_size(3, 2));
+
+    EXPECT_EQ(0, conf.set_val("osd_pool_default_primary_write_size", "3"));
+    EXPECT_EQ(3, conf.get_osd_pool_default_primary_write_size(5, 2));
+  }
+
+  // osd_pool_default_primary_write_size should be equal to osd_pool_default_min_size
+  // when is less than osd_pool_default_min_size
+  {
+    EXPECT_EQ(0, conf.set_val("osd_pool_default_primary_write_size", "1"));
+    EXPECT_EQ(2, conf.get_osd_pool_default_primary_write_size(3, 2));
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;
