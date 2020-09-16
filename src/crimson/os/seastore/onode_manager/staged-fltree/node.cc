@@ -26,16 +26,19 @@ tree_cursor_t::tree_cursor_t(
     Ref<LeafNode> node, const search_position_t& pos,
     const onode_t* _p_value, layout_version_t v)
       : leaf_node{node}, position{pos} {
-  if (!pos.is_end()) {
-    update_p_value(_p_value, v);
-    leaf_node->do_track_cursor(*this);
-  } else {
-    assert(!_p_value);
-  }
+  assert(!is_end());
+  update_p_value(_p_value, v);
+  leaf_node->do_track_cursor(*this);
+}
+
+tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
+      : leaf_node{node}, position{search_position_t::end()} {
+  assert(is_end());
+  assert(leaf_node->is_level_tail());
 }
 
 tree_cursor_t::~tree_cursor_t() {
-  if (!position.is_end()) {
+  if (!is_end()) {
     leaf_node->do_untrack_cursor(*this);
   }
 }
@@ -482,6 +485,10 @@ node_future<InternalNode::fresh_node_t> InternalNode::allocate(
 LeafNode::LeafNode(LeafNodeImpl* impl, NodeImplURef&& impl_ref)
   : Node(std::move(impl_ref)), impl{impl} {}
 
+bool LeafNode::is_level_tail() const {
+  return impl->is_level_tail();
+}
+
 std::pair<const onode_t*, layout_version_t> LeafNode::get_p_value(
     const search_position_t& pos) const {
   return {impl->get_p_value(pos), layout_version};
@@ -489,31 +496,27 @@ std::pair<const onode_t*, layout_version_t> LeafNode::get_p_value(
 
 node_future<Ref<tree_cursor_t>>
 LeafNode::lookup_smallest(context_t) {
-  search_position_t pos;
-  const onode_t* p_value;
   if (unlikely(impl->is_empty())) {
     assert(is_root());
-    pos = search_position_t::end();
-    p_value = nullptr;
-  } else {
-    pos = search_position_t::begin();
-    p_value = impl->get_p_value(pos);
+    return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+        new tree_cursor_t(this));
   }
+  auto pos = search_position_t::begin();
+  auto p_value = impl->get_p_value(pos);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
       get_or_track_cursor(pos, p_value));
 }
 
 node_future<Ref<tree_cursor_t>>
 LeafNode::lookup_largest(context_t) {
-  search_position_t pos;
-  const onode_t* p_value = nullptr;
   if (unlikely(impl->is_empty())) {
     assert(is_root());
-    pos = search_position_t::end();
-  } else {
-    impl->get_largest_value(pos, p_value);
-    assert(p_value != nullptr);
+    return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+        new tree_cursor_t(this));
   }
+  search_position_t pos;
+  const onode_t* p_value = nullptr;
+  impl->get_largest_value(pos, p_value);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
       get_or_track_cursor(pos, p_value));
 }
@@ -522,9 +525,15 @@ node_future<Node::search_result_t>
 LeafNode::lower_bound_tracked(
     context_t c, const key_hobj_t& key, MatchHistory& history) {
   auto result = impl->lower_bound(key, history);
-  auto cursor_ref = get_or_track_cursor(result.position, result.p_value);
+  Ref<tree_cursor_t> cursor;
+  if (result.position.is_end()) {
+    assert(!result.p_value);
+    cursor = new tree_cursor_t(this);
+  } else {
+    cursor = get_or_track_cursor(result.position, result.p_value);
+  }
   return node_ertr::make_ready_future<search_result_t>(
-      search_result_t{cursor_ref, result.match()});
+      search_result_t{cursor, result.match()});
 }
 
 node_future<> LeafNode::test_clone_root(
@@ -622,13 +631,8 @@ node_future<Ref<LeafNode>> LeafNode::allocate_root(
 
 Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
     const search_position_t& position, const onode_t* p_value) {
-  if (position.is_end()) {
-    assert(impl->is_level_tail());
-    assert(!p_value);
-    // we need to return the leaf node to insert
-    return new tree_cursor_t(this, position, p_value, layout_version);
-  }
-
+  assert(!position.is_end());
+  assert(p_value);
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {

@@ -18,7 +18,7 @@ using Cursor = Btree::Cursor;
 Cursor::Cursor(Btree* p_tree, Ref<tree_cursor_t> _p_cursor)
   : p_tree(p_tree) {
   if (_p_cursor->is_end()) {
-    // for cursors indicating end of tree untrack the leaf node
+    // no need to hold the leaf node
   } else {
     p_cursor = _p_cursor;
   }
