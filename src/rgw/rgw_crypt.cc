@@ -1035,7 +1035,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 	  ldpp_dout(s, 5) << "ERROR: not provide a valid key id" << dendl;
 	  s->err.message = "Server Side Encryption with KMS managed key requires "
 	    "HTTP header x-amz-server-side-encryption-aws-kms-key-id";
-	  return -ERR_INVALID_ACCESS_KEY;
+	  return -EINVAL;
 	}
 	/* try to retrieve actual key */
 	std::string key_selector = create_random_key_selector(s->cct);
@@ -1054,7 +1054,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 	  ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
             key_id << " is not 256 bit size" << dendl;
 	  s->err.message = "KMS provided an invalid key for the given kms-keyid.";
-	  return -ERR_INVALID_ACCESS_KEY;
+	  return -EINVAL;
 	}
 
 	if (block_crypt) {
