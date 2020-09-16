@@ -268,8 +268,8 @@ void FSMirror::init_instance_watcher(Context *on_finish) {
   dout(20) << dendl;
 
   m_on_init_finish = new LambdaContext([this, on_finish](int r) {
-                                         if (r == 0 ) {
-                                           init_replayers();
+                                         if (r < 0) {
+                                           m_init_failed = true;
                                          }
                                          on_finish->complete(r);
                                          if (m_on_shutdown_finish != nullptr) {
@@ -420,14 +420,18 @@ void FSMirror::remove_peer(const Peer &peer) {
 void FSMirror::mirror_status(Formatter *f) {
   std::scoped_lock locker(m_lock);
   f->open_object_section("status");
-  f->open_object_section("peers");
-  for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
-    peer.dump(f);
+  if (m_init_failed) {
+    f->dump_string("state", "failed");
+  } else {
+    f->open_object_section("peers");
+    for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
+      peer.dump(f);
+    }
+    f->close_section(); // peers
+    f->open_object_section("snap_dirs");
+    f->dump_int("dir_count", m_directories.size());
+    f->close_section(); // snap_dirs
   }
-  f->close_section(); // peers
-  f->open_object_section("snap_dirs");
-  f->dump_int("dir_count", m_directories.size());
-  f->close_section(); // snap_dirs
   f->close_section(); // status
 }
 

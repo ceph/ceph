@@ -37,6 +37,11 @@ public:
     return m_stopping;
   }
 
+  bool is_failed() {
+    std::scoped_lock locker(m_lock);
+    return m_init_failed;
+  }
+
   // admin socket helpers
   void mirror_status(Formatter *f);
 
