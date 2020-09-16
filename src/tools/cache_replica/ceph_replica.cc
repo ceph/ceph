@@ -88,5 +88,23 @@ int main(int argc, const char **argv)
    * TODO: consider NUMA affinity
    */
   dout(1) << FN_NAME << " not setting numa affinity" << dendl;
+
+  std::string val;
+  for (auto i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else {
+      // #TODO: check other supported options
+      ++i;
+    }
+  }
+  if (!args.empty()) {
+    cerr << "unregcognized arg " << args[0] << std::endl;
+    for (auto& unknown_arg : args) {
+      cerr << "\t" << unknown_arg << std::endl;
+    }
+    exit(1);
+  }
+
   return 0;
 }
