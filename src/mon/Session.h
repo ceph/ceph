@@ -111,7 +111,7 @@ struct MonSession : public RefCountedObject {
   }
 
   bool fs_name_capable(string_view fsname, __u8 mask) {
-    return caps.fs_name_capable(fsname, mask);
+    return caps.fs_name_capable(entity_name, fsname, mask);
   }
 
   const entity_addr_t& get_peer_socket_addr() {
