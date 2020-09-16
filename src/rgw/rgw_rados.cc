@@ -7196,7 +7196,7 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, const RGWBuck
     cls_rgw_obj_key {
       obj_instance.key.get_index_key_name(), obj_instance.key.instance},
     op_tag,
-    &zones_trace,
+    zones_trace,
     0);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "rgw_rados_operate() after cls_rgw_bucket_link_olh() returned r=" << r << dendl;
@@ -7254,7 +7254,7 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
     cls_rgw_obj_key {
       obj_instance.key.get_index_key_name(), obj_instance.key.instance },
     op_tag,
-    &zones_trace,
+    zones_trace,
     0);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "rgw_rados_operate() after cls_rgw_bucket_link_instance() returned r=" << r << dendl;
@@ -8679,7 +8679,7 @@ int RGWRados::cls_obj_complete_op(const RGWBucketInfo& bucket_info,
     bucket_info,
     cls_rgw_obj_key { ent.key.name, ent.key.instance },
     tag,
-    &zones_trace,
+    zones_trace,
     bilog_flags);
 }
 
