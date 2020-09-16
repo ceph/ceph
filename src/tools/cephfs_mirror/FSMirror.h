@@ -56,19 +56,32 @@ private:
     }
   };
 
-  class SnapshotReplayer : public Thread {
+  struct PeerReplayer;
+  class SnapshotReplayerThread : public Thread {
   public:
-    SnapshotReplayer(FSMirror *fs_mirror)
-      : m_fs_mirror(fs_mirror) {
+    SnapshotReplayerThread(FSMirror *fs_mirror, PeerReplayer *peer_replayer)
+      : m_fs_mirror(fs_mirror),
+        m_peer_replayer(peer_replayer) {
     }
 
     void *entry() override {
-      m_fs_mirror->run();
+      m_fs_mirror->run(m_peer_replayer);
       return 0;
     }
 
   private:
     FSMirror *m_fs_mirror;
+    PeerReplayer *m_peer_replayer;
+  };
+
+  typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
+  struct PeerReplayer {
+    SnapshotReplayers replayers;
+    bool stopping = false;
+
+    bool is_stopping() {
+      return stopping;
+    }
   };
 
   std::string m_fs_name;
@@ -79,9 +92,8 @@ private:
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::fs_mirror");
   ceph::condition_variable m_cond;
   SnapListener m_snap_listener;
-  std::set<Peer> m_peers;
   std::set<std::string, std::less<>> m_directories;
-  std::vector<std::unique_ptr<SnapshotReplayer>> m_snapshot_replayers;
+  std::map<Peer, PeerReplayer> m_peer_replayers;
 
   RadosRef m_cluster;
   std::string m_addrs;
@@ -91,14 +103,16 @@ private:
 
   int m_retval = 0;
   bool m_stopping = false;
+  bool m_init_failed = false;
   Context *m_on_init_finish = nullptr;
   Context *m_on_shutdown_finish = nullptr;
 
   MirrorAdminSocketHook *m_asok_hook = nullptr;
 
-  void run();
-  void init_replayers();
-  void wait_for_replayers();
+  void run(PeerReplayer *peer_replayer);
+  void init_replayers(PeerReplayer *peer_replayer);
+  void shutdown_replayers(PeerReplayer *peer_replayer,
+                          std::unique_lock<ceph::mutex> &locker);
 
   int connect(std::string_view cluster_name, std::string_view client_name,
               RadosRef *cluster);
