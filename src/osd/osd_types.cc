@@ -3929,6 +3929,8 @@ bool PastIntervals::is_new_interval(
   int new_size,
   int old_min_size,
   int new_min_size,
+  int old_primary_write_size,
+  int new_primary_write_size,
   unsigned old_pg_num,
   unsigned new_pg_num,
   unsigned old_pg_num_pending,
@@ -3943,6 +3945,7 @@ bool PastIntervals::is_new_interval(
     old_up_primary != new_up_primary ||
     new_up != old_up ||
     old_min_size != new_min_size ||
+    old_primary_write_size != new_primary_write_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
     // (is or was) pre-merge source
@@ -3993,6 +3996,8 @@ bool PastIntervals::is_new_interval(
 		    pi->size,
 		    plast->min_size,
 		    pi->min_size,
+        plast->primary_write_size,
+        pi->primary_write_size,
 		    plast->get_pg_num(),
 		    pi->get_pg_num(),
 		    plast->get_pg_num_pending(),

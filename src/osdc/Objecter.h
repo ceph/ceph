@@ -1776,6 +1776,7 @@ public:
     int acting_primary = -1;  ///< last acting_primary we mapped to
     int size = -1; ///< the size of the pool when were were last mapped
     int min_size = -1; ///< the min size of the pool when were were last mapped
+    int primary_write_size = -1; ///< number of how many osds should commit before replying
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
 

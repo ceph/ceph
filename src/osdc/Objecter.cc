@@ -2751,6 +2751,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 
   int size = pi->size;
   int min_size = pi->min_size;
+  int primary_write_size = pi->primary_write_size;
   unsigned pg_num = pi->get_pg_num();
   unsigned pg_num_mask = pi->get_pg_num_mask();
   unsigned pg_num_pending = pi->get_pg_num_pending();
@@ -2789,6 +2790,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	size,
 	t->min_size,
 	min_size,
+  t->primary_write_size,
+  primary_write_size,
 	t->pg_num,
 	pg_num,
 	t->pg_num_pending,
