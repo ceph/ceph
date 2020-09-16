@@ -506,6 +506,11 @@ void ReplicatedBackend::submit_transaction(
     parent->get_acting_recovery_backfill_shards().begin(),
     parent->get_acting_recovery_backfill_shards().end());
 
+  unsigned pool_size = get_osdmap()->get_pg_pool_size(get_info().pgid.pgid);
+  unsigned pw_size = get_osdmap()->get_pg_pool_primary_write_size(get_info().pgid.pgid);
+  bool is_use_tier = get_parent()->get_pool().has_tiers() || get_parent()->get_pool().is_tier();
+  op.set_tolerated_uncommit_size(pool_size, pw_size, is_use_tier);
+
   issue_op(
     soid,
     at_version,
@@ -554,18 +559,24 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
 
   FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
-  dout(10) << __func__ << ": " << op->tid << dendl;
+  dout(10) << __func__ << ": tid " << op->tid
+           << " waiting_for_commit_size " << op->waiting_for_commit.size()
+           << " tolerated_uncommit_size " << op->tolerated_uncommit_size << dendl;
   if (op->op) {
     op->op->mark_event("op_commit");
     op->op->pg_trace.event("op commit");
   }
 
   op->waiting_for_commit.erase(get_parent()->whoami_shard());
+  op->primary_committed = true;
 
   if (op->waiting_for_commit.empty()) {
     op->on_commit->complete(0);
     op->on_commit = 0;
     in_progress_ops.erase(op->tid);
+  }
+  else if (op->waiting_for_commit.size() == op->tolerated_uncommit_size) {
+    op->on_commit->partial_complete(op->tolerated_uncommit_size);
   }
 }
 
@@ -592,11 +603,17 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
+	      << " waiting_for_commit_size " << ip_op.waiting_for_commit.size()
+	      << " tolerated_uncommit_size " << ip_op.tolerated_uncommit_size
+	      << " primary_committed " << ip_op.primary_committed
 	      << dendl;
     else
       dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
+	      << " waiting_for_commit_size " << ip_op.waiting_for_commit.size()
+	      << " tolerated_uncommit_size " << ip_op.tolerated_uncommit_size
+	      << " primary_committed " << ip_op.primary_committed
 	      << dendl;
 
     // oh, good.
@@ -621,6 +638,11 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ip_op.on_commit->complete(0);
       ip_op.on_commit = 0;
       in_progress_ops.erase(iter);
+    }
+    else if (ip_op.on_commit &&
+             ip_op.primary_committed &&
+             ip_op.waiting_for_commit.size() == ip_op.tolerated_uncommit_size) {
+      ip_op.on_commit->partial_complete(ip_op.tolerated_uncommit_size);
     }
   }
 }
@@ -1053,6 +1075,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   dout(10) << __func__ << " " << soid
            << " v " << m->version
+           << " tid " << m->get_tid()
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
 	   << " " << m->logbl.length()
 	   << dendl;

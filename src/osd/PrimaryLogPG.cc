@@ -10543,15 +10543,27 @@ class C_OSD_RepopCommit : public Context {
 public:
   C_OSD_RepopCommit(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
     : pg(pg), repop(repop) {}
-  void finish(int) override {
-    pg->repop_all_committed(repop.get());
+  void finish(int r) override {
+    if (r)
+      pg->repop_partial_committed(repop.get());
+    else
+      pg->repop_all_committed(repop.get());
   }
 };
 
+void PrimaryLogPG::repop_partial_committed(RepGather *repop)
+{
+  dout(10) << __func__ << ": repop tid " << repop->rep_tid
+           << " partial committed " << dendl;
+  repop->partial_committed = true;
+  if (!repop->rep_aborted)
+    eval_repop(repop);
+}
+
 void PrimaryLogPG::repop_all_committed(RepGather *repop)
 {
-  dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
-	   << dendl;
+  dout(10) << __func__ << ": repop tid " << repop->rep_tid
+           << " all committed " << dendl;
   repop->all_committed = true;
   if (!repop->rep_aborted) {
     if (repop->v != eversion_t()) {
@@ -10581,15 +10593,15 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
-  dout(10) << "eval_repop " << *repop
-    << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)") << dendl;
+  dout(10) << __func__ << " " << *repop
+           << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)")
+           << dendl;
 
-  // ondisk?
-  if (repop->all_committed) {
+  if (repop->partial_committed != repop->all_committed) {
     dout(10) << " commit: " << *repop << dendl;
     for (auto p = repop->on_committed.begin();
-	 p != repop->on_committed.end();
-	 repop->on_committed.erase(p++)) {
+         p != repop->on_committed.end();
+         repop->on_committed.erase(p++)) {
       (*p)();
     }
     // send dup commits, in order
@@ -10606,7 +10618,10 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
       }
       waiting_for_ondisk.erase(it);
     }
+  }
 
+  // ondisk?
+  if (repop->all_committed) {
     publish_stats_to_osd();
 
     dout(10) << " removing " << *repop << dendl;
@@ -14670,7 +14685,7 @@ bool PrimaryLogPG::already_complete(eversion_t v)
 	       << " (*i)->v past v" << dendl;
       break;
     }
-    if (!(*i)->all_committed) {
+    if (!((*i)->all_committed || (*i)->partial_committed)) {
       dout(20) << __func__ << ": " << **i
 	       << " not committed, returning false"
 	       << dendl;

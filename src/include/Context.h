@@ -95,6 +95,9 @@ class Context {
  public:
   Context() {}
   virtual ~Context() {}       // we want a virtual destructor!!!
+  virtual void partial_complete(int r) {
+    finish(r);
+  }
   virtual void complete(int r) {
     finish(r);
     delete this;
