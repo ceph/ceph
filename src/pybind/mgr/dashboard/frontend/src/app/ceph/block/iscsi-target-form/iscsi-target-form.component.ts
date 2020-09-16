@@ -264,12 +264,12 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       // updatedInitiatorSelector()
     });
 
-    _.forEach(res.groups, (group) => {
+    (res.groups as any[]).forEach((group: any, group_index: number) => {
       const fg = this.addGroup();
       group.disks = _.map(group.disks, (disk) => `${disk.pool}/${disk.image}`);
       fg.patchValue(group);
       _.forEach(group.members, (member) => {
-        this.onGroupMemberSelection({ option: new SelectOption(true, member, '') });
+        this.onGroupMemberSelection({ option: new SelectOption(true, member, '') }, group_index);
       });
     });
   }
@@ -577,26 +577,44 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   }
 
   removeGroup(index: number) {
+    // Remove group and disk selections
     this.groups.removeAt(index);
+
+    // Free initiator from group
+    const selectedMembers = this.groupMembersSelections[index].filter((value) => value.selected);
+    selectedMembers.forEach((selection) => {
+      selection.selected = false;
+      this.onGroupMemberSelection({ option: selection }, index);
+    });
+
+    this.groupMembersSelections.splice(index, 1);
     this.groupDiskSelections.splice(index, 1);
   }
 
-  onGroupMemberSelection($event: any) {
+  onGroupMemberSelection($event: any, group_index: number) {
     const option = $event.option;
 
-    let initiator_index: number;
+    let luns: string[] = [];
+    if (!option.selected) {
+      const selectedDisks = this.groupDiskSelections[group_index].filter((value) => value.selected);
+      luns = selectedDisks.map((value) => value.name);
+    }
+
     this.initiators.controls.forEach((element, index) => {
       if (element.value.client_iqn === option.name) {
-        element.patchValue({ luns: [] });
+        element.patchValue({ luns: luns });
         element.get('cdIsInGroup').setValue(option.selected);
-        initiator_index = index;
-      }
-    });
 
-    // Members can only be at one group at a time, so when a member is selected
-    // in one group we need to disable its selection in other groups
-    _.forEach(this.groupMembersSelections, (group) => {
-      group[initiator_index].enabled = !option.selected;
+        // Members can only be at one group at a time, so when a member is selected
+        // in one group we need to disable its selection in other groups
+        _.forEach(this.groupMembersSelections, (group) => {
+          group[index].enabled = !option.selected;
+        });
+
+        this.imagesInitiatorSelections[index].forEach((image) => {
+          image.selected = luns.includes(image.name);
+        });
+      }
     });
   }
 
@@ -604,14 +622,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
     const name = group.getValue('members')[member_index];
     group.getValue('members').splice(member_index, 1);
 
-    this.groupMembersSelections[group_index].forEach((value) => {
-      if (value.name === name) {
-        value.selected = false;
-      }
-    });
-    this.groupMembersSelections[group_index] = [...this.groupMembersSelections[group_index]];
-
-    this.onGroupMemberSelection({ option: new SelectOption(false, name, '') });
+    this.onGroupMemberSelection({ option: new SelectOption(false, name, '') }, group_index);
   }
 
   removeGroupDisk(group: CdFormGroup, disk_index: number, group_index: number) {
