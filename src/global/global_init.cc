@@ -149,11 +149,6 @@ void global_pre_init(
   // command line (as passed by caller)
   conf.parse_argv(args);
 
-  if (conf->log_early &&
-      !cct->_log->is_started()) {
-    cct->_log->start();
-  }
-
   if (!cct->_log->is_started()) {
     cct->_log->start();
   }
