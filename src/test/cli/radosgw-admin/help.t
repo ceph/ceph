@@ -174,6 +174,7 @@
     subscription ack           ack (remove) an events in a pubsub subscription
   options:
      --tenant=<tenant>         tenant name
+     --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)
      --uid=<id>                user id
      --new-uid=<id>            new user id
      --subuser=<name>          subuser name

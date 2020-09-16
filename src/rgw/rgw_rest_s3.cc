@@ -4644,6 +4644,10 @@ int RGWHandler_REST_S3::postauth_init()
   rgw_parse_url_bucket(t->url_bucket, s->user->get_tenant(),
 		      s->bucket_tenant, s->bucket_name);
 
+  if (s->auth.identity->get_identity_type() == TYPE_ROLE) {
+    s->bucket_tenant = s->auth.identity->get_role_tenant();
+  }
+
   dout(10) << "s->object=" << s->object
            << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
 
