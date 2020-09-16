@@ -1081,6 +1081,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     break;
   }
 
+  auto bilog_entry = CLSRGWCompleteModifyOpBase::from_call(op).get_bilog_entry(
+    entry.meta.mtime,
+    entry.ver,
+    header.ver,
+    header.max_marker,
+    nullptr,
+    nullptr);
   if (op.log_op && !header.syncstopped) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
                              header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);

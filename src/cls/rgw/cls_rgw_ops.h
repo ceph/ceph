@@ -1496,6 +1496,35 @@ struct CLSRGWBilogOp {
   const rgw_zone_set* const zones_trace;
   const uint16_t bilog_flags;
   const enum RGWModifyOp op_type;
+
+  std::optional<rgw_bi_log_entry> get_bilog_entry(
+    const ceph::real_time& timestamp,
+    const rgw_bucket_entry_ver& ver,
+    const uint64_t index_ver,
+    const std::string& max_marker,
+    const std::string* owner,
+    const std::string* owner_display_name) const
+  {
+    if (log_op) {
+      return rgw_bi_log_entry{
+        std::string{}, // TODO: get_id() + max_marker,
+        this->key.name,
+        this->key.instance,
+        timestamp,
+        ver,
+        this->op_type,
+        CLS_RGW_STATE_COMPLETE,
+        index_ver,
+        this->op_tag,
+        this->bilog_flags,
+        owner,
+        owner_display_name,
+        this->zones_trace
+      };
+    } else {
+      return std::nullopt;
+    }
+  }
 };
 
 struct CLSRGWCompleteModifyOpBase : CLSRGWBilogOp {
