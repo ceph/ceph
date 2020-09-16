@@ -39,7 +39,7 @@ bool Cursor::is_end() const {
   }
 }
 
-const onode_key_t& Cursor::key() {
+const ghobject_t& Cursor::get_ghobj() {
   // TODO
   assert(false && "not implemented");
 }
@@ -98,9 +98,9 @@ Cursor Btree::end() {
 }
 
 btree_future<bool>
-Btree::contains(Transaction& t, const onode_key_t& key) {
+Btree::contains(Transaction& t, const ghobject_t& obj) {
   return seastar::do_with(
-    full_key_t<KeyT::HOBJ>(key),
+    full_key_t<KeyT::HOBJ>(obj),
     [this, &t](auto& key) -> btree_future<bool> {
       return get_root(t).safe_then([this, &t, &key](auto root) {
         // TODO: improve lower_bound()
@@ -113,9 +113,9 @@ Btree::contains(Transaction& t, const onode_key_t& key) {
 }
 
 btree_future<Cursor>
-Btree::find(Transaction& t, const onode_key_t& key) {
+Btree::find(Transaction& t, const ghobject_t& obj) {
   return seastar::do_with(
-    full_key_t<KeyT::HOBJ>(key),
+    full_key_t<KeyT::HOBJ>(obj),
     [this, &t](auto& key) -> btree_future<Cursor> {
       return get_root(t).safe_then([this, &t, &key](auto root) {
         // TODO: improve lower_bound()
@@ -132,9 +132,9 @@ Btree::find(Transaction& t, const onode_key_t& key) {
 }
 
 btree_future<Cursor>
-Btree::lower_bound(Transaction& t, const onode_key_t& key) {
+Btree::lower_bound(Transaction& t, const ghobject_t& obj) {
   return seastar::do_with(
-    full_key_t<KeyT::HOBJ>(key),
+    full_key_t<KeyT::HOBJ>(obj),
     [this, &t](auto& key) -> btree_future<Cursor> {
       return get_root(t).safe_then([this, &t, &key](auto root) {
         return root->lower_bound(get_context(t), key);
@@ -146,9 +146,9 @@ Btree::lower_bound(Transaction& t, const onode_key_t& key) {
 }
 
 btree_future<std::pair<Cursor, bool>>
-Btree::insert(Transaction& t, const onode_key_t& key, const onode_t& value) {
+Btree::insert(Transaction& t, const ghobject_t& obj, const onode_t& value) {
   return seastar::do_with(
-    full_key_t<KeyT::HOBJ>(key),
+    full_key_t<KeyT::HOBJ>(obj),
     [this, &t, &value](auto& key) -> btree_future<std::pair<Cursor, bool>> {
       return get_root(t).safe_then([this, &t, &key, &value](auto root) {
         return root->insert(get_context(t), key, value);
@@ -160,7 +160,7 @@ Btree::insert(Transaction& t, const onode_key_t& key, const onode_t& value) {
   );
 }
 
-btree_future<size_t> Btree::erase(Transaction& t, const onode_key_t& key) {
+btree_future<size_t> Btree::erase(Transaction& t, const ghobject_t& obj) {
   // TODO
   return btree_ertr::make_ready_future<size_t>(0u);
 }
