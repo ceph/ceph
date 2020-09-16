@@ -153,6 +153,7 @@ public:
     OP_COLL_SET_BITS = 42, // cid, bits
 
     OP_MERGE_COLLECTION = 43, // cid, destination
+    OP_RECLAIM_SPACE = 44,    // cid, oid
   };
 
   // Transaction hint type
@@ -421,6 +422,7 @@ public:
     case OP_ZERO:
     case OP_TRUNCATE:
     case OP_SETALLOCHINT:
+    case OP_RECLAIM_SPACE:
       ceph_assert(op->cid < cm.size());
       ceph_assert(op->oid < om.size());
       op->cid = cm[op->cid];
@@ -885,6 +887,14 @@ public:
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
     _op->off = off;
+    data.ops = data.ops + 1;
+  }
+  /// Discard all data in the object afore its removal.
+  void reclaim(const coll_t& cid, const ghobject_t& oid) {
+    Op* _op = _get_next_op();
+    _op->op = OP_RECLAIM_SPACE;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
     data.ops = data.ops + 1;
   }
   /// Remove an object. All four parts of the object are removed.

@@ -2488,6 +2488,11 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 			  flags);
       }
       break;
+    case Transaction::OP_RECLAIM_SPACE:
+      {
+	r = _truncate(txc, c, o, 0);
+      }
+      break;
 
     default:
       derr << "bad op " << op->op << dendl;
