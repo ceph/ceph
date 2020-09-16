@@ -9,6 +9,7 @@
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_types.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/tree_types.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -266,8 +267,6 @@ struct memory_range_t {
 };
 
 enum class ContainerType { ITERATIVE, INDEXABLE };
-
-struct onode_t;
 
 template <node_type_t> struct value_type;
 template<> struct value_type<node_type_t::INTERNAL> { using type = laddr_t; };
