@@ -1,0 +1,12 @@
+tasks:
+- s3tests:
+    client.0:
+      extra_attrs: ['sts_test']
+      force-branch: master
+      rgw_server: client.0
+overrides:
+  ceph:
+    conf:
+      client:
+              rgw sts key: abcdefghijklmnop
+              rgw s3 auth use sts: true
