@@ -345,7 +345,6 @@ int main(int argc, const char **argv)
     for (int i=0; i<n; i++) {
       osdmap.set_state(i, osdmap.get_state(i) | CEPH_OSD_UP);
       osdmap.set_weight(i, CEPH_OSD_IN);
-      osdmap.crush->adjust_item_weightf(g_ceph_context, i, 1.0);
     }
   }
 
@@ -354,7 +353,6 @@ int main(int argc, const char **argv)
     int id = marked_out;
     osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
     osdmap.set_weight(id, CEPH_OSD_OUT);
-    osdmap.crush->adjust_item_weightf(g_ceph_context, id, 1.0);
   }
 
   if (clear_temp) {
