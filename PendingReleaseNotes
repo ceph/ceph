@@ -11,3 +11,9 @@
   to be warned again if additional repairs are performed you can provide a value
   to the command and specify the value of ``mon_osd_warn_num_repaired``.
   This command will be replaced in future releases by the health mute/unmute feature.
+
+* It is now possible to specify the initial monitor to contact for Ceph tools
+  and daemons using the ``mon_host_override`` config option or
+  ``--mon-host-override <ip>`` command-line switch. This generally should only
+  be used for debugging and only affects initial communication with Ceph's
+  monitor cluster.
