@@ -8785,6 +8785,12 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_description("")
     .set_long_description(""),
 
+    Option("cephfs_mirror_restart_mirror_on_blocklist_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_min(0)
+    .set_description("")
+    .set_long_description(""),
+
     });
 }
 
