@@ -4,15 +4,14 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { DownloadButtonComponent } from 'app/shared/components/download-button/download-button.component';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { MgrModuleService } from '../../../shared/api/mgr-module.service';
-import { TelemetryService } from '../../../shared/api/telemetry.service';
 import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
-import { TextToDownloadService } from '../../../shared/services/text-to-download.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { TelemetryComponent } from './telemetry.component';
 
@@ -20,7 +19,6 @@ describe('TelemetryComponent', () => {
   let component: TelemetryComponent;
   let fixture: ComponentFixture<TelemetryComponent>;
   let mgrModuleService: MgrModuleService;
-  let telemetryService: TelemetryService;
   let options: any;
   let configs: any;
   let httpTesting: HttpTestingController;
@@ -58,7 +56,7 @@ describe('TelemetryComponent', () => {
         ToastrModule.forRoot()
       ]
     },
-    [LoadingPanelComponent]
+    [LoadingPanelComponent, DownloadButtonComponent]
   );
 
   describe('configForm', () => {
@@ -135,16 +133,10 @@ describe('TelemetryComponent', () => {
   });
 
   describe('previewForm', () => {
-    const reportText = {
-      testA: 'testA',
-      testB: 'testB'
-    };
-
     beforeEach(() => {
       fixture = TestBed.createComponent(TelemetryComponent);
       component = fixture.componentInstance;
       fixture.detectChanges();
-      telemetryService = TestBed.inject(TelemetryService);
       httpTesting = TestBed.inject(HttpTestingController);
       router = TestBed.inject(Router);
       spyOn(router, 'navigate');
@@ -152,16 +144,6 @@ describe('TelemetryComponent', () => {
 
     it('should create', () => {
       expect(component).toBeTruthy();
-    });
-
-    it('should call TextToDownloadService download function', () => {
-      spyOn(telemetryService, 'getReport').and.returnValue(observableOf(reportText));
-      component.ngOnInit();
-
-      const downloadSpy = spyOn(TestBed.inject(TextToDownloadService), 'download');
-      const filename = 'reportText.json';
-      component.download(reportText, filename);
-      expect(downloadSpy).toHaveBeenCalledWith(JSON.stringify(reportText, null, 2), filename);
     });
 
     it('should submit', () => {

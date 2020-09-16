@@ -26,6 +26,7 @@ import { ConfirmationModalComponent } from './confirmation-modal/confirmation-mo
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
+import { DownloadButtonComponent } from './download-button/download-button.component';
 import { FormModalComponent } from './form-modal/form-modal.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
@@ -87,7 +88,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     DateTimePickerComponent,
-    DocComponent
+    DocComponent,
+    DownloadButtonComponent
   ],
   providers: [],
   exports: [
@@ -110,7 +112,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     DateTimePickerComponent,
-    DocComponent
+    DocComponent,
+    DownloadButtonComponent
   ]
 })
 export class ComponentsModule {}
