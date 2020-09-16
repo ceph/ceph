@@ -51,6 +51,12 @@ class OsdTest(DashboardTestCase):
         self.assertStatus(200)
         self.assert_in_and_not_none(data, ['osd_metadata'])
 
+    def test_histogram(self):
+        data = self._get('/api/osd/0/histogram')
+        self.assertStatus(200)
+        self.assert_in_and_not_none(data['osd'], ['op_w_latency_in_bytes_histogram',
+                                                               'op_r_latency_out_bytes_histogram'])    
+
     def test_scrub(self):
         self._post('/api/osd/0/scrub?deep=False')
         self.assertStatus(200)
