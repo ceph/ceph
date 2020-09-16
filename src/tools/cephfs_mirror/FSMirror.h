@@ -32,7 +32,8 @@ public:
   void add_peer(const Peer &peer);
   void remove_peer(const Peer &peer);
 
-  bool is_stopping() const {
+  bool is_stopping() {
+    std::scoped_lock locker(m_lock);
     return m_stopping;
   }
 
