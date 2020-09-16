@@ -5,6 +5,7 @@
 
 #include <ostream>
 
+#include "common/hobject.h"
 #include "crimson/common/type_helpers.h"
 
 #include "fwd.h"
@@ -45,16 +46,15 @@ class Btree {
   btree_future<Cursor> begin(Transaction&);
   btree_future<Cursor> last(Transaction&);
   Cursor end();
-  // TODO: replace onode_key_t
-  btree_future<bool> contains(Transaction&, const onode_key_t&);
-  btree_future<Cursor> find(Transaction&, const onode_key_t&);
-  btree_future<Cursor> lower_bound(Transaction&, const onode_key_t&);
+  btree_future<bool> contains(Transaction&, const ghobject_t&);
+  btree_future<Cursor> find(Transaction&, const ghobject_t&);
+  btree_future<Cursor> lower_bound(Transaction&, const ghobject_t&);
 
   // modifiers
   // TODO: replace onode_t
   btree_future<std::pair<Cursor, bool>>
-  insert(Transaction&, const onode_key_t&, const onode_t&);
-  btree_future<size_t> erase(Transaction&, const onode_key_t& key);
+  insert(Transaction&, const ghobject_t&, const onode_t&);
+  btree_future<size_t> erase(Transaction&, const ghobject_t& key);
   btree_future<Cursor> erase(Cursor& pos);
   btree_future<Cursor> erase(Cursor& first, Cursor& last);
 
@@ -86,7 +86,7 @@ class Btree::Cursor {
   ~Cursor();
 
   bool is_end() const;
-  const onode_key_t& key();
+  const ghobject_t& get_ghobj();
   const onode_t* value() const;
   bool operator==(const Cursor& x) const;
   bool operator!=(const Cursor& x) const { return !(*this == x); }

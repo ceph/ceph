@@ -8,10 +8,21 @@
 #include <optional>
 #include <ostream>
 
+#include "common/hobject.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/tree_types.h"
 
 namespace crimson::os::seastore::onode {
+
+using shard_t = int8_t;
+using pool_t = int64_t;
+using crush_hash_t = uint32_t;
+using snap_t = uint64_t;
+using gen_t = uint64_t;
+static_assert(sizeof(shard_t) == sizeof(ghobject_t().shard_id.id));
+static_assert(sizeof(pool_t) == sizeof(ghobject_t().hobj.pool));
+static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_hash()));
+static_assert(sizeof(snap_t) == sizeof(ghobject_t().hobj.snap.val));
+static_assert(sizeof(gen_t) == sizeof(ghobject_t().generation));
 
 class NodeExtentMutable;
 class key_view_t;
@@ -285,34 +296,34 @@ inline std::ostream& operator<<(std::ostream& os, const ns_oid_view_t& ns_oid) {
 
 class key_hobj_t {
  public:
-  explicit key_hobj_t(const onode_key_t& key) : key{key} {}
+  explicit key_hobj_t(const ghobject_t& ghobj) : ghobj{ghobj} {}
 
   /*
    * common interface as full_key_t
    */
   shard_t shard() const {
-    return key.shard;
+    return ghobj.shard_id;
   }
   pool_t pool() const {
-    return key.pool;
+    return ghobj.hobj.pool;
   }
   crush_hash_t crush() const {
-    return key.crush;
+    return ghobj.hobj.get_hash();
   }
   const std::string& nspace() const {
-    return key.nspace;
+    return ghobj.hobj.nspace;
   }
   const std::string& oid() const {
-    return key.oid;
+    return ghobj.hobj.oid.name;
   }
   ns_oid_view_t::Type dedup_type() const {
     return _dedup_type;
   }
   snap_t snap() const {
-    return key.snap;
+    return ghobj.hobj.snap;
   }
   gen_t gen() const {
-    return key.gen;
+    return ghobj.generation;
   }
 
   bool operator==(const full_key_t<KeyT::VIEW>& o) const;
@@ -326,14 +337,27 @@ class key_hobj_t {
 
  private:
   ns_oid_view_t::Type _dedup_type = ns_oid_view_t::Type::STR;
-  onode_key_t key;
+  ghobject_t ghobj;
 };
 inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
-  return os << "key_hobj("
-            << (unsigned)key.shard() << ","
-            << key.pool() << "," << key.crush() << "; \""
-            << key.nspace() << "\",\"" << key.oid() << "\"; "
-            << key.snap() << "," << key.gen() << ")";
+  os << "key_hobj(" << (unsigned)key.shard() << ","
+     << key.pool() << "," << key.crush() << "; ";
+  if (key.nspace().size() <= 12) {
+    os << "\"" << key.nspace() << "\",";
+  } else {
+    os << "\"" << key.nspace().substr(0, 4) << ".."
+       << key.nspace().substr(key.nspace().size() - 2, 2)
+       << "/" << key.nspace().size() << "B\",";
+  }
+  if (key.oid().size() <= 12) {
+    os << "\"" << key.oid() << "\"; ";
+  } else {
+    os << "\"" << key.oid().substr(0, 4) << ".."
+       << key.oid().substr(key.oid().size() - 2, 2)
+       << "/" << key.oid().size() << "B\"; ";
+  }
+  os << key.snap() << "," << key.gen() << ")";
+  return os;
 }
 
 class key_view_t {
