@@ -33,19 +33,18 @@ void ObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool ObjectDispatch<I>::read(
-    uint64_t object_no, const Extents &extents, IOContext io_context,
+    uint64_t object_no, ReadExtents* extents, IOContext io_context,
     int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
-    int* object_dispatch_flags, DispatchResult* dispatch_result,
-    Context** on_finish, Context* on_dispatched) {
+    uint64_t* version, int* object_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << extents << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << *extents << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   auto req = new ObjectReadRequest<I>(m_image_ctx, object_no, extents,
                                       io_context, op_flags, read_flags,
-                                      parent_trace, read_data, extent_map,
-                                      version, on_dispatched);
+                                      parent_trace, version, on_dispatched);
   req->send();
   return true;
 }

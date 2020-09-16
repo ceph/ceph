@@ -197,6 +197,45 @@ using striper::LightweightObjectExtents;
 typedef std::pair<uint64_t,uint64_t> Extent;
 typedef std::vector<Extent> Extents;
 
+struct ReadExtent {
+    const uint64_t offset;
+    const uint64_t length;
+    const LightweightBufferExtents buffer_extents;
+    ceph::bufferlist bl;
+    Extents extent_map;
+
+    ReadExtent(uint64_t offset,
+               uint64_t length) : offset(offset), length(length) {};
+    ReadExtent(uint64_t offset,
+               uint64_t length,
+               const LightweightBufferExtents&& buffer_extents)
+               : offset(offset),
+                 length(length),
+                 buffer_extents(buffer_extents) {}
+    ReadExtent(uint64_t offset,
+               uint64_t length,
+               const LightweightBufferExtents&& buffer_extents,
+               ceph::bufferlist&& bl,
+               Extents&& extent_map) : offset(offset),
+                                       length(length),
+                                       buffer_extents(buffer_extents),
+                                       bl(bl),
+                                       extent_map(extent_map) {};
+
+    friend inline std::ostream& operator<<(
+            std::ostream& os,
+            const ReadExtent &extent) {
+      os << "offset=" << extent.offset << ", "
+         << "length=" << extent.length << ", "
+         << "buffer_extents=" << extent.buffer_extents << ", "
+         << "bl.length=" << extent.bl.length() << ", "
+         << "extent_map=" << extent.extent_map;
+      return os;
+    }
+};
+
+typedef std::vector<ReadExtent> ReadExtents;
+
 typedef std::map<uint64_t, uint64_t> ExtentMap;
 
 } // namespace io

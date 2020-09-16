@@ -106,7 +106,7 @@
 	const std::map<uint64_t, uint64_t>& bl_map, uint64_t bl_off,
 	const std::vector<std::pair<uint64_t,uint64_t> >& buffer_extents);
       void add_partial_sparse_result(
-	  CephContext *cct, ceph::buffer::list& bl,
+	  CephContext *cct, ceph::buffer::list&& bl,
 	  const std::vector<std::pair<uint64_t, uint64_t>>& bl_map,
           uint64_t bl_off,
           const striper::LightweightBufferExtents& buffer_extents);
