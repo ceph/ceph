@@ -5199,6 +5199,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
 
 AWSSignerV4::prepare_result_t
 AWSSignerV4::prepare(const std::string& access_key_id,
+                     const string& region,
                      const req_info& info,
                      bool s3_op) const
 {
@@ -5212,9 +5213,6 @@ AWSSignerV4::prepare(const std::string& access_key_id,
   map<string, string> extra_headers;
 
   std::string date = ceph::to_iso_8601_no_separators(timestamp, ceph::iso_8601_format::YMDhms);
-
-#warning FIXME region
-  string region = "us-east-2";
 
   std::string credential_scope = gen_v4_scope(timestamp, region);
 

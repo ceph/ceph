@@ -78,14 +78,17 @@ class RGWRESTGenerateHTTPHeaders : public DoutPrefix {
   CephContext *cct;
   RGWEnv *new_env;
   req_info *new_info;
+  string region;
   string method;
   string url;
   string resource;
 
 public:
   RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info);
-  void init(const string& method, const string& host, const string& resource_prefix,
-            const string& url, const string& resource, const param_vec_t& params);
+  void init(const string& region,
+            const string& method, const string& host,
+            const string& resource_prefix, const string& url,
+            const string& resource, const param_vec_t& params);
   void set_extra_headers(const map<string, string>& extra_headers);
   int set_obj_attrs(map<string, bufferlist>& rgw_attrs);
   void set_http_attrs(const map<string, string>& http_attrs);
