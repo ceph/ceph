@@ -64,7 +64,7 @@ private:
   utime_t ping_stamp;               ///< when the PING was sent
   ceph::signedspan mono_ping_stamp; ///< relative to sender's clock
   ceph::signedspan mono_send_stamp; ///< replier's send stamp
-  std::optional<ceph::time_detail::signedspan> delta_ub;  ///< ping sender
+  std::optional<ceph::signedspan> delta_ub;  ///< ping sender
   epoch_t up_from = 0;
 
   uint32_t min_message_size = 0;
@@ -75,7 +75,7 @@ private:
 	   ceph::signedspan mss,
 	   epoch_t upf,
 	   uint32_t min_message,
-	   std::optional<ceph::time_detail::signedspan> delta_ub = {})
+	   std::optional<ceph::signedspan> delta_ub = {})
     : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), map_epoch(e), op(o),
       ping_stamp(s),

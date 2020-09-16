@@ -23,7 +23,7 @@ class RGWCoroutine;
 struct rgw_raw_obj;
 
 // decode a timestamp as a uint64_t for CMPXATTR_MODE_U64
-ceph::real_time rgw_error_repo_decode_value(const bufferlist& bl);
+ceph::real_time rgw_error_repo_decode_value(const ceph::bufferlist& bl);
 
 // write an omap key iff the given timestamp is newer
 int rgw_error_repo_write(librados::ObjectWriteOperation& op,
