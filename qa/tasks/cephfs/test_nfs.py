@@ -1,3 +1,4 @@
+# NOTE: these tests are not yet compatible with vstart_runner.py.
 import errno
 import json
 import time
