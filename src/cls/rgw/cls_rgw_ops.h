@@ -1495,11 +1495,10 @@ struct CLSRGWBilogOp {
   const std::string& op_tag;
   const rgw_zone_set* const zones_trace;
   const uint16_t bilog_flags;
+  const enum RGWModifyOp op_type;
 };
 
 struct CLSRGWCompleteModifyOpBase : CLSRGWBilogOp {
-  const enum RGWModifyOp op_type;
-
   static CLSRGWCompleteModifyOpBase from_call(
     const rgw_cls_obj_complete_op& call);
 
@@ -1518,8 +1517,6 @@ struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
 };
 
 struct CLSRGWLinkOLHBase : CLSRGWBilogOp {
-  const enum RGWModifyOp op_type;
-
   static CLSRGWLinkOLHBase from_call(const rgw_cls_link_olh_op& call);
 
   static RGWModifyOp get_bilog_op_type(const bool delete_marker) {
@@ -1548,6 +1545,11 @@ struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
 };
 
 struct CLSRGWUnlinkInstance : CLSRGWBilogOp {
+  template <class... Args>
+  CLSRGWUnlinkInstance(Args&&... args)
+    : CLSRGWBilogOp { std::forward<Args>(args)..., get_bilog_op_type() } {
+  }
+
   constexpr static enum RGWModifyOp get_bilog_op_type() {
     return CLS_RGW_OP_UNLINK_INSTANCE;
   }
