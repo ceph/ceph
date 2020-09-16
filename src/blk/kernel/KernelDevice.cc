@@ -108,7 +108,7 @@ int KernelDevice::_lock()
     dout(1) << __func__ << " flock busy on " << path << dendl;
     if (const uint64_t max_retry =
 	cct->_conf.get_val<uint64_t>("bdev_flock_retry");
-        nr_tries++ == max_retry) {
+        max_retry > 0 && nr_tries++ == max_retry) {
       return -EAGAIN;
     }
     double retry_interval =
