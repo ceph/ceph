@@ -423,6 +423,8 @@ void FSMirror::mirror_status(Formatter *f) {
   f->open_object_section("status");
   if (m_init_failed) {
     f->dump_string("state", "failed");
+  } else if (is_blocklisted(locker)) {
+    f->dump_string("state", "blocklisted");
   } else {
     f->open_object_section("peers");
     for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {

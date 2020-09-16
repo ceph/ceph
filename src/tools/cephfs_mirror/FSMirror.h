@@ -42,10 +42,27 @@ public:
     return m_init_failed;
   }
 
+  bool is_blocklisted() {
+    std::scoped_lock locker(m_lock);
+    return is_blocklisted(locker);
+  }
+
   // admin socket helpers
   void mirror_status(Formatter *f);
 
 private:
+  bool is_blocklisted(const std::scoped_lock<ceph::mutex> &locker) const {
+    bool blocklisted = false;
+    if (m_instance_watcher) {
+      blocklisted = m_instance_watcher->is_blocklisted();
+    }
+    if (m_mirror_watcher) {
+      blocklisted |= m_mirror_watcher->is_blocklisted();
+    }
+
+    return blocklisted;
+  }
+
   struct SnapListener : public InstanceWatcher::Listener {
     FSMirror *fs_mirror;
 

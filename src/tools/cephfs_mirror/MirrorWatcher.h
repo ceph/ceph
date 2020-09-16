@@ -38,6 +38,12 @@ public:
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist& bl) override;
+  void handle_rewatch_complete(int r) override;
+
+  bool is_blocklisted() {
+    std::scoped_lock locker(m_lock);
+    return m_blocklisted;
+  }
 
 private:
   librados::IoCtx &m_ioctx;
@@ -49,6 +55,8 @@ private:
 
   Context *m_on_init_finish = nullptr;
   Context *m_on_shutdown_finish = nullptr;
+
+  bool m_blocklisted = false;
 
   void register_watcher();
   void handle_register_watcher(int r);
