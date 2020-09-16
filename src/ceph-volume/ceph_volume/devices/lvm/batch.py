@@ -418,7 +418,7 @@ class Batch(object):
             args = osd.get_args(defaults)
             if self.args.prepare:
                 p = Prepare([])
-                p.prepare(argparse.Namespace(**args))
+                p.safe_prepare(argparse.Namespace(**args))
             else:
                 c = Create([])
                 c.create(argparse.Namespace(**args))
