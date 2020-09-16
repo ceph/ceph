@@ -148,6 +148,10 @@ public:
     return get_config().get_osd_pool_default_min_size(*values, size);
   }
 
+  unsigned get_osd_pool_default_primary_write_size(uint8_t size, uint8_t min_size) const {
+    return get_config().get_osd_pool_default_primary_write_size(*values, size, min_size);
+  }
+
   seastar::future<>
   set_mon_vals(const std::map<std::string,std::string,std::less<>>& kv) {
     return do_change([kv, this](ConfigValues& values) {

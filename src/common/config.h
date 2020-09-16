@@ -346,6 +346,24 @@ public:
     return min_size ? std::min(min_size, size) : (size - size / 2);
   }
 
+  unsigned get_osd_pool_default_primary_write_size(const ConfigValues& values,
+                                                   uint8_t size, uint8_t min_size) const {
+    std::string osd_objectstore = get_val<std::string>(values, "osd_objectstore");
+    if (osd_objectstore != "bluestore") {
+      return size;
+    }
+
+    uint8_t primary_write_size = get_val<uint64_t>(values, "osd_pool_default_primary_write_size");
+    if (primary_write_size) {
+      primary_write_size = std::min(primary_write_size, size);
+      if (min_size > size)
+        return primary_write_size;
+      return std::max(primary_write_size, min_size);
+    } else {
+      return size;
+    }
+  }
+
   friend class test_md_config_t;
 };
 

@@ -2603,6 +2603,21 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_pool_default_size")
     .add_service("mon"),
 
+    Option("osd_pool_default_primary_write_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_min_max(0, 10)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("the number of how many osds have committed before the reply is sent to client")
+    .set_long_description("0 means this value is equal to osd_pool_default_size; "
+        "if this value is greater than osd_pool_default_size, it will be set to be equal to osd_pool_default_size; "
+        "if this value is less than osd_pool_default_min_size, it will be set to be equal to osd_pool_default_min_size. "
+        "PG will not send reply unless the primary osd have committed even though the number of committed osds is greater than this value. "
+        "This value will be set to be equal to osd_pool_default_size when using cache tier or object store is not bluestore.")
+    .add_see_also("osd_pool_default_size")
+    .add_see_also("osd_pool_default_min_size")
+    .add_see_also("osd_objectstore")
+    .add_service("mon"),
+
     Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(32)
     .set_description("number of PGs for new pools")

@@ -188,6 +188,9 @@ public:
   unsigned get_osd_pool_default_min_size(uint8_t size) const {
     return config.get_osd_pool_default_min_size(values, size);
   }
+  unsigned get_osd_pool_default_primary_write_size(uint8_t size, uint8_t min_size) const {
+    return config.get_osd_pool_default_primary_write_size(values, size, min_size);
+  }
   void early_expand_meta(std::string &val,
 			 std::ostream *oss) const {
     std::lock_guard l{lock};
