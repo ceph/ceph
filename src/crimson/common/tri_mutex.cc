@@ -3,6 +3,67 @@
 
 #include "tri_mutex.h"
 
+seastar::future<> read_lock::lock()
+{
+  return static_cast<tri_mutex*>(this)->lock_for_read();
+}
+
+void read_lock::unlock()
+{
+  static_cast<tri_mutex*>(this)->unlock_for_read();
+}
+
+seastar::future<> write_lock::lock()
+{
+  return static_cast<tri_mutex*>(this)->lock_for_write(false);
+}
+
+void write_lock::unlock()
+{
+  static_cast<tri_mutex*>(this)->unlock_for_write();
+}
+
+seastar::future<> excl_lock::lock()
+{
+  return static_cast<tri_mutex*>(this)->lock_for_excl();
+}
+
+void excl_lock::unlock()
+{
+  static_cast<tri_mutex*>(this)->unlock_for_excl();
+}
+
+seastar::future<> excl_lock_from_read::lock()
+{
+  static_cast<tri_mutex*>(this)->promote_from_read();
+  return seastar::make_ready_future<>();
+}
+
+void excl_lock_from_read::unlock()
+{
+  static_cast<tri_mutex*>(this)->demote_to_read();
+}
+
+seastar::future<> excl_lock_from_write::lock()
+{
+  static_cast<tri_mutex*>(this)->promote_from_write();
+  return seastar::make_ready_future<>();
+}
+
+void excl_lock_from_write::unlock()
+{
+  static_cast<tri_mutex*>(this)->demote_to_write();
+}
+
+seastar::future<> excl_lock_from_excl::lock()
+{
+  return seastar::make_ready_future<>();
+}
+
+void excl_lock_from_excl::unlock()
+{
+}
+
 seastar::future<> tri_mutex::lock_for_read()
 {
   if (try_lock_for_read()) {
@@ -28,6 +89,20 @@ void tri_mutex::unlock_for_read()
   if (--readers == 0) {
     wake();
   }
+}
+
+void tri_mutex::promote_from_read()
+{
+  assert(readers == 1);
+  --readers;
+  exclusively_used = true;
+}
+
+void tri_mutex::demote_to_read()
+{
+  assert(exclusively_used);
+  exclusively_used = false;
+  ++readers;
 }
 
 seastar::future<> tri_mutex::lock_for_write(bool greedy)
@@ -56,6 +131,20 @@ void tri_mutex::unlock_for_write()
   if (--writers == 0) {
     wake();
   }
+}
+
+void tri_mutex::promote_from_write()
+{
+  assert(writers == 1);
+  --writers;
+  exclusively_used = true;
+}
+
+void tri_mutex::demote_to_write()
+{
+  assert(exclusively_used);
+  exclusively_used = false;
+  ++writers;
 }
 
 // for exclusive users
