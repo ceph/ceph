@@ -5,6 +5,12 @@ p {
 }
 
 .card {
+  .btn-group {
+    margin-top: -45px;
+    position: absolute;
+    right: 0;
+  }
+
   div p {
     display: flex;
 

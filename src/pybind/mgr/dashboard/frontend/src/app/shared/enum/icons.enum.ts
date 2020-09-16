@@ -62,6 +62,8 @@ export enum Icons {
   download = 'fa fa-download', // Download
   upload = 'fa fa-upload', // Upload
   close = 'fa fa-times', // Close
+  json = 'fa fa-file-code-o', // JSON file
+  text = 'fa fa-file-text', // Text file
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger
