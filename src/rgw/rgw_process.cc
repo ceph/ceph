@@ -316,6 +316,18 @@ done:
     handler->put_op(op);
   rest->put_handler(handler);
 
+  if (s->cct->_conf->rgw_log_request_summary) {
+    dout(1) << "request summary: req=" << hex << req << dec
+            << " op_status=" << op_ret
+            << " http_status=" << s->err.http_ret
+            << " latency=" << s->time_elapsed()
+            << " op_method=" << s->info.method
+            << " op_target=" << s->info.request_uri
+            << " op_content_length=" << s->content_length
+            << " op_owner=" << s->user->get_id()
+            << dendl;
+  }
+
   dout(1) << "====== req done req=" << hex << req << dec
 	  << " op status=" << op_ret
 	  << " http_status=" << s->err.http_ret

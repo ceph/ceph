@@ -7144,6 +7144,14 @@ std::vector<Option> get_rgw_options() {
 	"but will default to FIFO if there isn't an existing log. Either of "
 	"the explicit options will cause startup to fail if the other log is "
 	"still around."),
+
+    Option("rgw_log_request_summary", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Log additional info about individual rgw requests")
+    .set_long_description(
+        "Additional logging information includes a line with HTTP Method, "
+        "target, content_length, and owner for each rgw request."),
+
   });
 }
 

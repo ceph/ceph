@@ -757,6 +757,15 @@ Logging Settings
 :Type: Boolean
 :Default: ``false``
 
+``rgw log request summary``
+
+:Description: Log additional info about individual rgw requests.
+              The additional log line includes the HTTP Method,
+              target, content_length, and owner for each rgw request.
+
+:Type: Boolean
+:Default: ``false``
+
 
 ``rgw usage max shards``
 
