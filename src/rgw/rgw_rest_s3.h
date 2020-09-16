@@ -1109,6 +1109,7 @@ public:
   };
 
   prepare_result_t prepare(const std::string& access_key_id,
+                           const string& region,
                            const req_info& info,
                            bool s3_op) const;
 };
