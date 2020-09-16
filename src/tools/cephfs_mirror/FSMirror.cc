@@ -50,12 +50,13 @@ private:
 
 class MirrorAdminSocketHook : public AdminSocketHook {
 public:
-  MirrorAdminSocketHook(CephContext *cct, std::string_view fs_name, FSMirror *fs_mirror)
+  MirrorAdminSocketHook(CephContext *cct, const Filesystem &filesystem, FSMirror *fs_mirror)
     : admin_socket(cct->get_admin_socket()) {
     int r;
     std::string cmd;
 
-    cmd = "fs mirror status " + std::string(fs_name);
+    // mirror status format is name@fscid
+    cmd = "fs mirror status " + stringify(filesystem.fs_name) + "@" + stringify(filesystem.fscid);
     r = admin_socket->register_command(
       cmd, this, "get filesystem mirror status");
     if (r == 0) {
@@ -83,14 +84,14 @@ private:
   Commands commands;
 };
 
-FSMirror::FSMirror(CephContext *cct, std::string_view fs_name, uint64_t pool_id,
+FSMirror::FSMirror(CephContext *cct, const Filesystem &filesystem, uint64_t pool_id,
                    std::vector<const char*> args, ContextWQ *work_queue)
-  : m_fs_name(fs_name),
+  : m_filesystem(filesystem),
     m_pool_id(pool_id),
     m_args(args),
     m_work_queue(work_queue),
     m_snap_listener(this),
-    m_asok_hook(new MirrorAdminSocketHook(cct, fs_name, this)) {
+    m_asok_hook(new MirrorAdminSocketHook(cct, filesystem, this)) {
 }
 
 FSMirror::~FSMirror() {

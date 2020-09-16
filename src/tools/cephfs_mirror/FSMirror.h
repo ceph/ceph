@@ -22,7 +22,7 @@ class MirrorAdminSocketHook;
 
 class FSMirror {
 public:
-  FSMirror(CephContext *cct, std::string_view fs_name, uint64_t pool_id,
+  FSMirror(CephContext *cct, const Filesystem &filesystem, uint64_t pool_id,
            std::vector<const char*> args, ContextWQ *work_queue);
   ~FSMirror();
 
@@ -90,7 +90,7 @@ private:
     }
   };
 
-  std::string m_fs_name;
+  Filesystem m_filesystem;
   uint64_t m_pool_id;
   std::vector<const char *> m_args;
   ContextWQ *m_work_queue;
