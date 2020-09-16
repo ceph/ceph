@@ -49,14 +49,22 @@ WebTokenEngine::is_applicable(const std::string& token) const noexcept
   return ! token.empty();
 }
 
-boost::optional<RGWOIDCProvider>
-WebTokenEngine::get_provider(const string& role_arn, const string& iss) const
+std::string
+WebTokenEngine::get_role_tenant(const string& role_arn) const
 {
   string tenant;
   auto r_arn = rgw::ARN::parse(role_arn);
   if (r_arn) {
     tenant = r_arn->account;
   }
+  return tenant;
+}
+
+boost::optional<RGWOIDCProvider>
+WebTokenEngine::get_provider(const string& role_arn, const string& iss) const
+{
+  string tenant = get_role_tenant(role_arn);
+
   string idp_url = iss;
   auto pos = idp_url.find("http://");
   if (pos == std::string::npos) {
@@ -333,7 +341,9 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
     if (role_session.empty()) {
       return result_t::deny(-EACCES);
     }
-    auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, *t);
+    string role_arn = s->info.args.get("RoleArn");
+    string role_tenant = get_role_tenant(role_arn);
+    auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t);
     return result_t::grant(std::move(apl));
   }
   return result_t::deny(-EACCES);

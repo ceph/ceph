@@ -355,6 +355,44 @@ string rgw::auth::WebIdentityApplier::get_idp_url() const
   return idp_url;
 }
 
+void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp,
+                                              const rgw_user& acct_user,
+                                              const string& display_name,
+                                              RGWUserInfo& user_info) const      /* out */
+{
+  user_info.user_id = acct_user;
+  user_info.display_name = display_name;
+  user_info.type = TYPE_WEB;
+
+  user_info.max_buckets =
+    cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
+  rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+
+  int ret = ctl->user->store_info(user_info, null_yield,
+                                  RGWUserCtl::PutParams().set_exclusive(true));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
+                  << user_info.user_id << " ret=" << ret << dendl;
+    throw ret;
+  }
+}
+
+void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const {
+  rgw_user federated_user;
+  federated_user.id = token_claims.sub;
+  federated_user.tenant = role_tenant;
+  federated_user.ns = "oidc";
+
+  if (ctl->user->get_info_by_uid(federated_user, &user_info, null_yield) >= 0) {
+    /* Succeeded. */
+    return;
+  }
+
+  ldpp_dout(dpp, 0) << "NOTICE: couldn't map oidc federated user " << federated_user << dendl;
+  create_account(dpp, federated_user, token_claims.user_name, user_info);
+}
+
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   s->info.args.append("sub", token_claims.sub);
@@ -698,7 +736,14 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
       }
     } else {
       string id = p.get_id();
-      if (user_id.id == id) {
+      string tenant = p.get_tenant();
+      string oidc_id;
+      if (user_id.ns.empty()) {
+        oidc_id = user_id.id;
+      } else {
+        oidc_id = user_id.ns + "$" + user_id.id;
+      }
+      if (oidc_id == id && user_id.tenant == tenant) {
         return true;
       }
     }
@@ -710,8 +755,6 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
 {
   /* Load the user id */
   user_info.user_id = this->user_id;
-
-  user_info.user_id.tenant = role.tenant;
 }
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
