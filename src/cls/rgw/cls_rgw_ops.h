@@ -85,6 +85,16 @@ struct rgw_cls_obj_prepare_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 
+struct cls_rgw_bi_log_related_op {
+  bool log_op;
+
+  cls_rgw_obj_key key;
+  std::string op_tag;
+  rgw_zone_set zones_trace;
+  uint16_t bilog_flags;
+  enum RGWModifyOp op;
+};
+
 struct rgw_cls_obj_complete_op
 {
   RGWModifyOp op;
@@ -1487,16 +1497,6 @@ struct cls_rgw_get_bucket_resharding_ret  {
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
-
-struct cls_rgw_bi_log_related_op {
-  const bool log_op;
-
-  const cls_rgw_obj_key key;
-  const std::string op_tag;
-  const rgw_zone_set* const zones_trace;
-  const uint16_t bilog_flags;
-  const enum RGWModifyOp op;
-};
 
 struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
   void complete_op(librados::ObjectWriteOperation& o,
