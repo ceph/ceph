@@ -16,7 +16,7 @@ except ImportError:
 from execnet.gateway_bootstrap import HostNotFound
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec
+    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
@@ -658,6 +658,28 @@ class TestCephadm(object):
                 api_user='user',
                 api_password='password'
             ), CephadmOrchestrator.apply_iscsi),
+            (CustomContainerSpec(
+                service_id='hello-world',
+                image='docker.io/library/hello-world:latest',
+                uid=65534,
+                gid=65534,
+                dirs=['foo/bar'],
+                files={
+                    'foo/bar/xyz.conf': 'aaa\nbbb'
+                },
+                bind_mounts=[[
+                    'type=bind',
+                    'source=lib/modules',
+                    'destination=/lib/modules',
+                    'ro=true'
+                ]],
+                volume_mounts={
+                    'foo/bar': '/foo/bar:Z'
+                },
+                args=['--no-healthcheck'],
+                envs=['SECRET=password'],
+                ports=[8080, 8443]
+            ), CephadmOrchestrator.apply_container),
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
