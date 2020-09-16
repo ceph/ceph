@@ -1534,6 +1534,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
+  f->dump_int("primary_write_size", get_primary_write_size());
   f->dump_int("crush_rule", get_crush_rule());
   f->dump_int("object_hash", get_object_hash());
   f->dump_string("pg_autoscale_mode",
@@ -1925,7 +1926,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 29;
+  uint8_t v = 30;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
@@ -2027,6 +2028,9 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   }
   if (v >= 29) {
     encode(last_pg_merge_meta, bl);
+  }
+  if (v >= 30) {
+    encode(primary_write_size, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2208,6 +2212,11 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     last_force_op_resend = last_force_op_resend_prenautilus;
     pg_autoscale_mode = pg_autoscale_mode_t::WARN;    // default to warn on upgrade
   }
+  if (struct_v >= 30) {
+    decode(primary_write_size, bl);
+  } else {
+    primary_write_size = size;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2291,6 +2300,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   }
   out << " size " << p.get_size()
       << " min_size " << p.get_min_size()
+      << " primary_write_size " << p.get_primary_write_size()
       << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
