@@ -106,5 +106,12 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
+  // make replica to be background daemon
+  if (g_conf()->daemonize) {
+    global_init_daemonize(g_ceph_context);
+  }
+  common_init_finish(g_ceph_context);
+  global_init_chdir(g_ceph_context);
+
   return 0;
 }
