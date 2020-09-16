@@ -628,6 +628,39 @@ struct rgw_bi_log_entry {
   std::string owner_display_name; /* only being set if it's a delete marker */
   rgw_zone_set zones_trace;
 
+  rgw_bi_log_entry(const std::string& id,
+                   const std::string& object,
+                   const std::string& instance,
+                   const ceph::real_time& timestamp,
+                   const rgw_bucket_entry_ver& ver,
+                   const RGWModifyOp op,
+                   const RGWPendingState& state,
+                   const uint64_t index_ver,
+                   const std::string& tag,
+                   const uint16_t bilog_flags,
+                   const std::string* owner,
+                   const std::string* owner_display_name,
+                   const rgw_zone_set* zones_trace)
+    : id(id),
+      object(object),
+      instance(instance),
+      timestamp(timestamp),
+      ver(ver),
+      op(op),
+      state(state),
+      index_ver(index_ver),
+      tag(tag),
+      bilog_flags(bilog_flags) {
+    if (owner) {
+      this->owner = *owner;
+    }
+    if (owner_display_name) {
+      this->owner_display_name = *owner_display_name;
+    }
+    if (zones_trace) {
+      this->zones_trace = *zones_trace;
+    }
+  }
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
