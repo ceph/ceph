@@ -88,14 +88,14 @@ public:
   /// pass the provided exception to any waiting consumers of this ObjectContext
   template<typename Exception>
   void interrupt(Exception ex) {
-    rwlock.abort(std::move(ex));
+    lock.abort(std::move(ex));
     if (recovery_read_marker) {
       drop_recovery_read();
     }
   }
 
 private:
-  tri_mutex rwlock;
+  tri_mutex lock;
   bool recovery_read_marker = false;
 
   const char *get_type_name() const final {
@@ -115,11 +115,11 @@ public:
   seastar::future<> get_lock_type(Operation *op, RWState::State type) {
     switch (type) {
     case RWState::RWWRITE:
-      return get_lock(op, rwlock.lock_for_write(false));
+      return get_lock(op, lock.lock_for_write(false));
     case RWState::RWREAD:
-      return get_lock(op, rwlock.lock_for_read());
+      return get_lock(op, lock.lock_for_read());
     case RWState::RWEXCL:
-      return get_lock(op, rwlock.lock_for_excl());
+      return get_lock(op, lock.lock_for_excl());
     case RWState::RWNONE:
       return seastar::make_ready_future<>();
     default:
@@ -130,11 +130,11 @@ public:
   void put_lock_type(RWState::State type) {
     switch (type) {
     case RWState::RWWRITE:
-      return rwlock.unlock_for_write();
+      return lock.unlock_for_write();
     case RWState::RWREAD:
-      return rwlock.unlock_for_read();
+      return lock.unlock_for_read();
     case RWState::RWEXCL:
-      return rwlock.unlock_for_excl();
+      return lock.unlock_for_excl();
     case RWState::RWNONE:
       return;
     default:
@@ -144,17 +144,17 @@ public:
 
   void degrade_excl_to(RWState::State type) {
     // assume we already hold an excl lock
-    rwlock.unlock_for_excl();
+    lock.unlock_for_excl();
     bool success = false;
     switch (type) {
     case RWState::RWWRITE:
-      success = rwlock.try_lock_for_write(false);
+      success = lock.try_lock_for_write(false);
       break;
     case RWState::RWREAD:
-      success = rwlock.try_lock_for_read();
+      success = lock.try_lock_for_read();
       break;
     case RWState::RWEXCL:
-      success = rwlock.try_lock_for_excl();
+      success = lock.try_lock_for_excl();
       break;
     case RWState::RWNONE:
       success = true;
@@ -167,21 +167,21 @@ public:
   }
 
   bool empty() const {
-    return !rwlock.is_acquired();
+    return !lock.is_acquired();
   }
   bool is_request_pending() const {
-    return rwlock.is_acquired();
+    return lock.is_acquired();
   }
 
   template <typename F>
   seastar::future<> get_write_greedy(Operation *op) {
     return get_lock(op, [this] {
-      return rwlock.lock_for_write(true);
+      return lock.lock_for_write(true);
     });
   }
 
   bool get_recovery_read() {
-    if (rwlock.try_lock_for_read()) {
+    if (lock.try_lock_for_read()) {
       recovery_read_marker = true;
       return true;
     } else {
@@ -189,17 +189,17 @@ public:
     }
   }
   seastar::future<> wait_recovery_read() {
-    return rwlock.lock_for_read().then([this] {
+    return lock.lock_for_read().then([this] {
       recovery_read_marker = true;
     });
   }
   void drop_recovery_read() {
     assert(recovery_read_marker);
-    rwlock.unlock_for_read();
+    lock.unlock_for_read();
     recovery_read_marker = false;
   }
   bool maybe_get_excl() {
-    return rwlock.try_lock_for_excl();
+    return lock.try_lock_for_excl();
   }
 };
 using ObjectContextRef = ObjectContext::Ref;
