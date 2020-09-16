@@ -39,6 +39,10 @@ public:
 private:
   static constexpr std::string_view MIRRORING_MODULE = "mirroring";
 
+  struct C_EnableMirroring;
+  struct C_DisableMirroring;
+  struct C_PeerUpdate;
+
   struct ClusterListener : ClusterWatcher::Listener {
     Mirror *mirror;
 
@@ -47,20 +51,26 @@ private:
     }
 
     void handle_mirroring_enabled(const FilesystemSpec &spec) override {
-      mirror->mirroring_enabled(spec.fs_name, spec.pool_id);
+      mirror->mirroring_enabled(spec.filesystem, spec.pool_id);
     }
 
-    void handle_mirroring_disabled(const std::string &fs_name) override {
-      mirror->mirroring_disabled(fs_name);
+    void handle_mirroring_disabled(const Filesystem &filesystem) override {
+      mirror->mirroring_disabled(filesystem);
     }
 
-    void handle_peers_added(const std::string &fs_name, const Peer &peer) override {
-      mirror->peer_added(fs_name, peer);
+    void handle_peers_added(const Filesystem &filesystem, const Peer &peer) override {
+      mirror->peer_added(filesystem, peer);
     }
 
-    void handle_peers_removed(const std::string &fs_name, const Peer &peer) override {
-      mirror->peer_removed(fs_name, peer);
+    void handle_peers_removed(const Filesystem &filesystem, const Peer &peer) override {
+      mirror->peer_removed(filesystem, peer);
     }
+  };
+
+  struct MirrorAction {
+    bool action_in_progress = false;
+    std::list<Context *> action_ctxs;
+    std::unique_ptr<FSMirror> fs_mirror;
   };
 
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::Mirror");
@@ -74,22 +84,37 @@ private:
 
   ContextWQ *m_work_queue = nullptr;
   SafeTimer *m_timer = nullptr;
+  ceph::mutex *m_timer_lock = nullptr;
+  Context *m_timer_task = nullptr;
 
   bool m_stopping = false;
   bool m_stopped = false;
   std::unique_ptr<ClusterWatcher> m_cluster_watcher;
-  std::map<std::string, std::unique_ptr<FSMirror>> m_fs_mirrors;
+  std::map<Filesystem, MirrorAction> m_mirror_actions;
 
   int init_mon_client();
 
-  void handle_mirroring_enabled(const std::string &fs_name, int r);
-  void mirroring_enabled(const std::string &fs_name, uint64_t local_pool_id);
-  void mirroring_disabled(const std::string &fs_name);
+  // called via listener
+  void mirroring_enabled(const Filesystem &filesystem, uint64_t local_pool_id);
+  void mirroring_disabled(const Filesystem &filesystem);
+  void peer_added(const Filesystem &filesystem, const Peer &peer);
+  void peer_removed(const Filesystem &filesystem, const Peer &peer);
 
-  void peer_added(const std::string &fs_name, const Peer &peer);
-  void peer_removed(const std::string &fs_name, const Peer &peer);
+  // mirror enable callback
+  void enable_mirroring(const Filesystem &filesystem, uint64_t local_pool_id,
+                        Context *on_finish);
+  void handle_enable_mirroring(const Filesystem &filesystem, int r);
 
-  void handle_shutdown(const std::string &fs_name, int r);
+  // mirror disable callback
+  void disable_mirroring(const Filesystem &filesystem, Context *on_finish);
+  void handle_disable_mirroring(const Filesystem &filesystem, int r);
+
+  // peer update callback
+  void add_peer(const Filesystem &filesystem, const Peer &peer);
+  void remove_peer(const Filesystem &filesystem, const Peer &peer);
+
+  void schedule_mirror_update_task();
+  void update_fs_mirrors();
 };
 
 } // namespace mirror
