@@ -3,7 +3,7 @@ build on MacOS
 
 Since we've switched to C++ 17, and the default clang shipped with Xcode 9 does not support all the C++ 17 language features, it's suggested to install clang using brew::
 
-  brew install --with-toolchain llvm
+  brew install llvm
 
 and install all the necessary bits::
 
