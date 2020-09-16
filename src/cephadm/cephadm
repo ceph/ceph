@@ -37,7 +37,6 @@ You can invoke cephadm in two ways:
 
        injected_stdin = '...'
 """
-
 import argparse
 import datetime
 import fcntl
@@ -64,6 +63,8 @@ try:
     from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
 except ImportError:
     pass
+
+import re
 import uuid
 
 from functools import wraps
@@ -232,17 +233,12 @@ class NFSGanesha(object):
         self.daemon_id = daemon_id
         self.image = image
 
-        def json_get(key, default=None, require=False):
-            if require and not key in config_json.keys():
-                raise Error('{} missing from config-json'.format(key))
-            return config_json.get(key, default)
-
         # config-json options
-        self.pool = json_get('pool', require=True)
-        self.namespace = json_get('namespace')
-        self.userid = json_get('userid')
-        self.extra_args = json_get('extra_args', [])
-        self.files = json_get('files', {})
+        self.pool = dict_get(config_json, 'pool', require=True)
+        self.namespace = dict_get(config_json, 'namespace')
+        self.userid = dict_get(config_json, 'userid')
+        self.extra_args = dict_get(config_json, 'extra_args', [])
+        self.files = dict_get(config_json, 'files', {})
 
         # validate the supplied args
         self.validate()
@@ -312,14 +308,6 @@ class NFSGanesha(object):
         # type: () -> List[str]
         return self.daemon_args + self.extra_args
 
-    def get_file_content(self, fname):
-        # type: (str) -> str
-        """Normalize the json file content into a string"""
-        content = self.files.get(fname)
-        if isinstance(content, list):
-            content = '\n'.join(content)
-        return content
-
     def create_daemon_dirs(self, data_dir, uid, gid):
         # type: (str, int, int) -> None
         """Create files under the container data dir"""
@@ -335,7 +323,7 @@ class NFSGanesha(object):
         # populate files from the config-json
         for fname in self.files:
             config_file = os.path.join(config_dir, fname)
-            config_content = self.get_file_content(fname)
+            config_content = dict_get_join(self.files, fname)
             logger.info('Write file: %s' % (config_file))
             with open(config_file, 'w') as f:
                 os.fchown(f.fileno(), uid, gid)
@@ -391,13 +379,8 @@ class CephIscsi(object):
         self.daemon_id = daemon_id
         self.image = image
 
-        def json_get(key, default=None, require=False):
-            if require and not key in config_json.keys():
-                raise Error('{} missing from config-json'.format(key))
-            return config_json.get(key, default)
-
         # config-json options
-        self.files = json_get('files', {})
+        self.files = dict_get(config_json, 'files', {})
 
         # validate the supplied args
         self.validate()
@@ -467,14 +450,6 @@ class CephIscsi(object):
             cname = '%s-%s' % (cname, desc)
         return cname
 
-    def get_file_content(self, fname):
-        # type: (str) -> str
-        """Normalize the json file content into a string"""
-        content = self.files.get(fname)
-        if isinstance(content, list):
-            content = '\n'.join(content)
-        return content
-
     def create_daemon_dirs(self, data_dir, uid, gid):
         # type: (str, int, int) -> None
         """Create files under the container data dir"""
@@ -488,7 +463,7 @@ class CephIscsi(object):
         # populate files from the config-json
         for fname in self.files:
             config_file = os.path.join(data_dir, fname)
-            config_content = self.get_file_content(fname)
+            config_content = dict_get_join(self.files, fname)
             logger.info('Write file: %s' % (config_file))
             with open(config_file, 'w') as f:
                 os.fchown(f.fileno(), uid, gid)
@@ -520,12 +495,165 @@ class CephIscsi(object):
 ##################################
 
 
+class CustomContainer(object):
+    """Defines a custom container"""
+    daemon_type = 'container'
+
+    def __init__(self, fsid: str, daemon_id: Union[int, str],
+                 config_json: Dict, image: str) -> None:
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.image = image
+
+        # config-json options
+        self.entrypoint = dict_get(config_json, 'entrypoint')
+        self.uid = dict_get(config_json, 'uid', 65534)  # nobody
+        self.gid = dict_get(config_json, 'gid', 65534)  # nobody
+        self.volume_mounts = dict_get(config_json, 'volume_mounts', {})
+        self.args = dict_get(config_json, 'args', [])
+        self.envs = dict_get(config_json, 'envs', [])
+        self.privileged = dict_get(config_json, 'privileged', False)
+        self.bind_mounts = dict_get(config_json, 'bind_mounts', [])
+        self.ports = dict_get(config_json, 'ports', [])
+        self.dirs = dict_get(config_json, 'dirs', [])
+        self.files = dict_get(config_json, 'files', {})
+
+    @classmethod
+    def init(cls, fsid: str, daemon_id: Union[int, str]) -> 'CustomContainer':
+        return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
+
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
+        """
+        Create dirs/files below the container data directory.
+        """
+        logger.info('Creating custom container configuration '
+                    'dirs/files in {} ...'.format(data_dir))
+
+        if not os.path.isdir(data_dir):
+            raise OSError('data_dir is not a directory: %s' % data_dir)
+
+        for dir_path in self.dirs:
+            logger.info('Creating directory: {}'.format(dir_path))
+            dir_path = os.path.join(data_dir, dir_path.strip('/'))
+            makedirs(dir_path, uid, gid, 0o755)
+
+        for file_path in self.files:
+            logger.info('Creating file: {}'.format(file_path))
+            content = dict_get_join(self.files, file_path)
+            file_path = os.path.join(data_dir, file_path.strip('/'))
+            with open(file_path, 'w', encoding='utf-8') as f:
+                os.fchown(f.fileno(), uid, gid)
+                os.fchmod(f.fileno(), 0o600)
+                f.write(content)
+
+    def get_daemon_args(self) -> List[str]:
+        return []
+
+    def get_container_args(self) -> List[str]:
+        return self.args
+
+    def get_container_envs(self) -> List[str]:
+        return self.envs
+
+    def get_container_mounts(self, data_dir: str) -> Dict[str, str]:
+        """
+        Get the volume mounts. Relative source paths will be located below
+        `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+
+        Example:
+        {
+            /foo/conf: /conf
+            foo/conf: /conf
+        }
+        becomes
+        {
+            /foo/conf: /conf
+            /var/lib/ceph/<cluster-fsid>/<daemon-name>/foo/conf: /conf
+        }
+        """
+        mounts = {}
+        for source, destination in self.volume_mounts.items():
+            source = os.path.join(data_dir, source)
+            mounts[source] = destination
+        return mounts
+
+    def get_container_binds(self, data_dir: str) -> List[List[str]]:
+        """
+        Get the bind mounts. Relative `source=...` paths will be located below
+        `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+
+        Example:
+        [
+            'type=bind',
+            'source=lib/modules',
+            'destination=/lib/modules',
+            'ro=true'
+        ]
+        becomes
+        [
+            ...
+            'source=/var/lib/ceph/<cluster-fsid>/<daemon-name>/lib/modules',
+            ...
+        ]
+        """
+        binds = self.bind_mounts.copy()
+        for bind in binds:
+            for index, value in enumerate(bind):
+                match = re.match(r'^source=(.+)$', value)
+                if match:
+                    bind[index] = 'source={}'.format(os.path.join(
+                        data_dir, match.group(1)))
+        return binds
+
+##################################
+
+
+def dict_get(d: Dict, key: str, default: Any = None, require: bool = False) -> Any:
+    """
+    Helper function to get a key from a dictionary.
+    :param d: The dictionary to process.
+    :param key: The name of the key to get.
+    :param default: The default value in case the key does not
+        exist. Default is `None`.
+    :param require: Set to `True` if the key is required. An
+        exception will be raised if the key does not exist in
+        the given dictionary.
+    :return: Returns the value of the given key.
+    :raises: :exc:`self.Error` if the given key does not exist
+        and `require` is set to `True`.
+    """
+    if require and key not in d.keys():
+        raise Error('{} missing from dict'.format(key))
+    return d.get(key, default)
+
+##################################
+
+
+def dict_get_join(d: Dict, key: str) -> Any:
+    """
+    Helper function to get the value of a given key from a dictionary.
+    `List` values will be converted to a string by joining them with a
+    line break.
+    :param d: The dictionary to process.
+    :param key: The name of the key to get.
+    :return: Returns the value of the given key. If it was a `list`, it
+        will be joining with a line break.
+    """
+    value = d.get(key)
+    if isinstance(value, list):
+        value = '\n'.join(map(str, value))
+    return value
+
+##################################
+
+
 def get_supported_daemons():
     # type: () -> List[str]
     supported_daemons = list(Ceph.daemons)
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
     supported_daemons.append(CephIscsi.daemon_type)
+    supported_daemons.append(CustomContainer.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -1583,6 +1711,9 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
         r += nfs_ganesha.get_daemon_args()
+    elif daemon_type == CustomContainer.daemon_type:
+        cc = CustomContainer.init(fsid, daemon_id)
+        r.extend(cc.get_daemon_args())
 
     return r
 
@@ -1599,6 +1730,7 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             os.fchown(f.fileno(), uid, gid)
             os.fchmod(f.fileno(), 0o600)
             f.write(config)
+
     if keyring:
         keyring_path = os.path.join(data_dir, 'keyring')
         with open(keyring_path, 'w') as f:
@@ -1607,7 +1739,7 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
-        config = get_parm(args.config_json) # type: ignore
+        config_json: Dict[str, Any] = get_parm(args.config_json)
         required_files = Monitoring.components[daemon_type].get('config-json-files', list())
 
         # Set up directories specific to the monitoring component
@@ -1633,24 +1765,24 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
 
         # populate the config directory for the component from the config-json
         for fname in required_files:
-            if 'files' in config: # type: ignore
-                if isinstance(config['files'][fname], list):  # type: ignore
-                    content = '\n'.join(config['files'][fname])  # type: ignore
-                else:
-                    content = config['files'][fname]  # type: ignore
-
+            if 'files' in config_json:  # type: ignore
+                content = dict_get_join(config_json['files'], fname)
                 with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
                     os.fchown(f.fileno(), uid, gid)
                     os.fchmod(f.fileno(), 0o600)
                     f.write(content)
 
-    if daemon_type == NFSGanesha.daemon_type:
+    elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
         nfs_ganesha.create_daemon_dirs(data_dir, uid, gid)
 
-    if daemon_type == CephIscsi.daemon_type:
+    elif daemon_type == CephIscsi.daemon_type:
         ceph_iscsi = CephIscsi.init(fsid, daemon_id)
         ceph_iscsi.create_daemon_dirs(data_dir, uid, gid)
+
+    elif daemon_type == CustomContainer.daemon_type:
+        cc = CustomContainer.init(fsid, daemon_id)
+        cc.create_daemon_dirs(data_dir, uid, gid)
 
 
 def get_parm(option):
@@ -1716,8 +1848,12 @@ def get_container_binds(fsid, daemon_type, daemon_id):
     binds = list()
 
     if daemon_type == CephIscsi.daemon_type:
-        assert daemon_id
         binds.extend(CephIscsi.get_container_binds())
+    elif daemon_type == CustomContainer.daemon_type:
+        assert daemon_id
+        cc = CustomContainer.init(fsid, daemon_id)
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+        binds.extend(cc.get_container_binds(data_dir))
 
     return binds
 
@@ -1803,14 +1939,25 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         log_dir = get_log_dir(fsid)
         mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
 
+    if daemon_type == CustomContainer.daemon_type:
+        assert daemon_id
+        cc = CustomContainer.init(fsid, daemon_id)
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+        mounts.update(cc.get_container_mounts(data_dir))
+
     return mounts
 
 
-def get_container(fsid, daemon_type, daemon_id,
-                  privileged=False,
-                  ptrace=False,
-                  container_args=None):
-    # type: (str, str, Union[int, str], bool, bool, Optional[List[str]]) -> CephContainer
+def get_container(fsid: str, daemon_type: str, daemon_id: Union[int, str],
+                  privileged: bool = False,
+                  ptrace: bool = False,
+                  container_args: Optional[List[str]] = None) -> 'CephContainer':
+    entrypoint: str = ''
+    name: str = ''
+    ceph_args: List[str] = []
+    envs: List[str] = []
+    host_network: bool = True
+
     if container_args is None:
         container_args = []
     if daemon_type in ['mon', 'osd']:
@@ -1830,21 +1977,23 @@ def get_container(fsid, daemon_type, daemon_id,
         name = '%s.%s' % (daemon_type, daemon_id)
     elif daemon_type in Monitoring.components:
         entrypoint = ''
-        name = ''
     elif daemon_type == NFSGanesha.daemon_type:
         entrypoint = NFSGanesha.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
+        envs.extend(NFSGanesha.get_container_envs())
     elif daemon_type == CephIscsi.daemon_type:
         entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
-    else:
-        entrypoint = ''
-        name = ''
+    elif daemon_type == CustomContainer.daemon_type:
+        cc = CustomContainer.init(fsid, daemon_id)
+        entrypoint = cc.entrypoint
+        host_network = False
+        envs.extend(cc.get_container_envs())
+        container_args.extend(cc.get_container_args())
 
-    ceph_args = []  # type: List[str]
     if daemon_type in Monitoring.components:
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         monitoring_args = [
@@ -1858,10 +2007,6 @@ def get_container(fsid, daemon_type, daemon_id,
         ceph_args = ['-n', name]
     elif daemon_type in Ceph.daemons:
         ceph_args = ['-n', name, '-f']
-
-    envs = []  # type: List[str]
-    if daemon_type == NFSGanesha.daemon_type:
-        envs.extend(NFSGanesha.get_container_envs())
 
     # if using podman, set -d, --conmon-pidfile & --cidfile flags
     # so service can have Type=Forking
@@ -1885,6 +2030,7 @@ def get_container(fsid, daemon_type, daemon_id,
         privileged=privileged,
         ptrace=ptrace,
         init=args.container_init,
+        host_network=host_network,
     )
 
 
@@ -2003,7 +2149,7 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
 def _write_container_cmd_to_bash(file_obj, container, comment=None, background=False):
     # type: (IO[str], CephContainer, Optional[str], Optional[bool]) -> None
     if comment:
-        # Sometimes adding a comment, espectially if there are multiple containers in one
+        # Sometimes adding a comment, especially if there are multiple containers in one
         # unit file, makes it easier to read and grok.
         file_obj.write('# ' + comment + '\n')
     # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
@@ -2014,6 +2160,7 @@ def _write_container_cmd_to_bash(file_obj, container, comment=None, background=F
 
     # container run command
     file_obj.write(' '.join(container.run_cmd()) + (' &' if background else '') + '\n')
+
 
 def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                         enable=True, start=True,
@@ -2341,19 +2488,19 @@ WantedBy=ceph-{fsid}.target
 
 class CephContainer:
     def __init__(self,
-                 image,
-                 entrypoint,
-                 args=[],
-                 volume_mounts={},
-                 cname='',
-                 container_args=[],
-                 envs=None,
-                 privileged=False,
-                 ptrace=False,
-                 bind_mounts=None,
-                 init=False,
-                 ):
-        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool, Optional[List[List[str]]], bool) -> None
+                 image: str,
+                 entrypoint: str,
+                 args: List[str] = [],
+                 volume_mounts: Dict[str, str] = {},
+                 cname: str = '',
+                 container_args: List[str] = [],
+                 envs: Optional[List[str]] = None,
+                 privileged: bool = False,
+                 ptrace: bool = False,
+                 bind_mounts: Optional[List[List[str]]] = None,
+                 init: bool = False,
+                 host_network: bool = True,
+                 ) -> None:
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
@@ -2365,84 +2512,87 @@ class CephContainer:
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
         self.init = init
+        self.host_network = host_network
 
-    def run_cmd(self):
-        # type: () -> List[str]
-        vols = []  # type: List[str]
-        envs = []  # type: List[str]
-        cname = []  # type: List[str]
-        binds = []  # type: List[str]
-        entrypoint = []  # type: List[str]
-        if self.entrypoint:
-            entrypoint = ['--entrypoint', self.entrypoint]
-
-        priv = []  # type: List[str]
-        if self.privileged:
-            priv = ['--privileged',
-                    # let OSD etc read block devs that haven't been chowned
-                    '--group-add=disk']
-        if self.ptrace:
-            priv.append('--cap-add=SYS_PTRACE')
-        init = ['--init'] if self.init else []
-        vols = sum(
-            [['-v', '%s:%s' % (host_dir, container_dir)]
-             for host_dir, container_dir in self.volume_mounts.items()], [])
-        binds = sum([['--mount', '{}'.format(','.join(bind))]
-                     for bind in self.bind_mounts],[])
-        envs = [
-            '-e', 'CONTAINER_IMAGE=%s' % self.image,
-            '-e', 'NODE_NAME=%s' % get_hostname(),
-        ]
-        if self.envs:
-            for e in self.envs:
-                envs.extend(['-e', e])
-        cname = ['--name', self.cname] if self.cname else []
-        return [
+    def run_cmd(self) -> List[str]:
+        cmd_args: List[str] = [
             str(container_path),
             'run',
             '--rm',
-            '--net=host',
             '--ipc=host',
-        ] + self.container_args + priv + \
-        cname + init + envs + \
-        vols + binds + entrypoint + \
-        [
-            self.image
-        ] + self.args # type: ignore
+        ]
+        envs: List[str] = [
+            '-e', 'CONTAINER_IMAGE=%s' % self.image,
+            '-e', 'NODE_NAME=%s' % get_hostname(),
+        ]
+        vols: List[str] = []
+        binds: List[str] = []
 
-    def shell_cmd(self, cmd):
-        # type: (List[str]) -> List[str]
-        priv = []  # type: List[str]
+        if self.host_network:
+            cmd_args.append('--net=host')
+        if self.entrypoint:
+            cmd_args.extend(['--entrypoint', self.entrypoint])
         if self.privileged:
-            priv = ['--privileged',
-                    # let OSD etc read block devs that haven't been chowned
-                    '--group-add=disk']
-        vols = []  # type: List[str]
+            cmd_args.extend([
+                '--privileged',
+                # let OSD etc read block devs that haven't been chowned
+                '--group-add=disk',
+            ])
+        if self.ptrace:
+            cmd_args.append('--cap-add=SYS_PTRACE')
+        if self.init:
+            cmd_args.append('--init')
+        if self.cname:
+            cmd_args.extend(['--name', self.cname])
+        if self.envs:
+            for env in self.envs:
+                envs.extend(['-e', env])
+
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
-        binds = [] # type: List[str]
         binds = sum([['--mount', '{}'.format(','.join(bind))]
                      for bind in self.bind_mounts], [])
-        envs = [
-            '-e', 'CONTAINER_IMAGE=%s' % self.image,
-            '-e', 'NODE_NAME=%s' % get_hostname(),
-        ]
-        if self.envs:
-            for e in self.envs:
-                envs.extend(['-e', e])
-        cmd_args = [] # type: List[str]
-        if cmd:
-            cmd_args = ['-c'] + cmd
-        return [
+
+        return cmd_args + self.container_args + envs + vols + binds + [
+                   self.image,
+               ] + self.args  # type: ignore
+
+    def shell_cmd(self, cmd: List[str]) -> List[str]:
+        cmd_args: List[str] = [
             str(container_path),
             'run',
             '--rm',
-            '--net=host',
             '--ipc=host',
-        ] + self.container_args + priv + envs + vols + binds + [
+        ]
+        envs: List[str] = [
+            '-e', 'CONTAINER_IMAGE=%s' % self.image,
+            '-e', 'NODE_NAME=%s' % get_hostname(),
+        ]
+        vols: List[str] = []
+        binds: List[str] = []
+
+        if self.host_network:
+            cmd_args.append('--net=host')
+        if self.privileged:
+            cmd_args.extend([
+                '--privileged',
+                # let OSD etc read block devs that haven't been chowned
+                '--group-add=disk',
+            ])
+        if self.envs:
+            for env in self.envs:
+                envs.extend(['-e', env])
+
+        vols = sum(
+            [['-v', '%s:%s' % (host_dir, container_dir)]
+             for host_dir, container_dir in self.volume_mounts.items()], [])
+        binds = sum([['--mount', '{}'.format(','.join(bind))]
+                     for bind in self.bind_mounts], [])
+
+        return cmd_args + self.container_args + envs + vols + binds + [
             '--entrypoint', cmd[0],
-            self.image
+            self.image,
         ] + cmd[1:]
 
     def exec_cmd(self, cmd):
@@ -2475,7 +2625,6 @@ class CephContainer:
 
     def run(self, timeout=DEFAULT_TIMEOUT):
         # type: (Optional[int]) -> str
-        logger.debug(self.run_cmd())
         out, _, _ = call_throws(
                 self.run_cmd(), desc=self.entrypoint, timeout=timeout)
         return out
@@ -3257,8 +3406,22 @@ def command_deploy():
                       config=config, keyring=keyring,
                       reconfig=args.reconfig,
                       ports=daemon_ports)
+
+    elif daemon_type == CustomContainer.daemon_type:
+        cc = CustomContainer.init(args.fsid, daemon_id)
+        if not args.reconfig and not redeploy:
+            daemon_ports.extend(cc.ports)
+        c = get_container(args.fsid, daemon_type, daemon_id,
+                          privileged=cc.privileged,
+                          ptrace=args.allow_ptrace)
+        deploy_daemon(args.fsid, daemon_type, daemon_id, c,
+                      uid=cc.uid, gid=cc.gid, config=None,
+                      keyring=None, reconfig=args.reconfig,
+                      ports=daemon_ports)
+
     else:
-        raise Error("{} not implemented in command_deploy function".format(daemon_type))
+        raise Error('daemon type {} not implemented in command_deploy function'
+                    .format(daemon_type))
 
 ##################################
 
@@ -3659,6 +3822,11 @@ def list_daemons(detail=True, legacy_dir=None):
                                        err.startswith('%s, version ' % cmd):
                                         version = err.split(' ')[2]
                                         seen_versions[image_id] = version
+                                elif daemon_type == CustomContainer.daemon_type:
+                                    # Because a custom container can contain
+                                    # everything, we do not know which command
+                                    # to execute to get the version.
+                                    pass
                                 else:
                                     logger.warning('version for unknown daemon type %s' % daemon_type)
                         else:

@@ -24,7 +24,8 @@ import subprocess
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
-    NFSServiceSpec, RGWSpec, ServiceSpec, PlacementSpec, assert_valid_host
+    NFSServiceSpec, RGWSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
+    CustomContainerSpec
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult
@@ -38,6 +39,7 @@ from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
     RbdMirrorService, CrashService, CephadmService
+from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
@@ -377,6 +379,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.node_exporter_service = NodeExporterService(self)
         self.crash_service = CrashService(self)
         self.iscsi_service = IscsiService(self)
+        self.container_service = CustomContainerService(self)
         self.cephadm_services = {
             'mon': self.mon_service,
             'mgr': self.mgr_service,
@@ -391,6 +394,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'node-exporter': self.node_exporter_service,
             'crash': self.crash_service,
             'iscsi': self.iscsi_service,
+            'container': self.container_service,
         }
 
         self.template = TemplateMgr(self)
@@ -654,6 +658,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         suffix = daemon_type not in [
             'mon', 'crash', 'nfs',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
+            'container'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1113,7 +1118,7 @@ To check that the host is reachable:
             self.log.exception(ex)
             raise
 
-    def _get_container_image(self, daemon_name: str) -> str:
+    def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         if daemon_type in CEPH_TYPES or \
                 daemon_type == 'nfs' or \
@@ -1133,6 +1138,11 @@ To check that the host is reachable:
             image = self.container_image_alertmanager
         elif daemon_type == 'node-exporter':
             image = self.container_image_node_exporter
+        elif daemon_type == CustomContainerService.TYPE:
+            # The image can't be resolved, the necessary information
+            # is only available when a container is deployed (given
+            # via spec).
+            image = None
         else:
             assert False, daemon_type
 
@@ -1669,7 +1679,7 @@ To check that the host is reachable:
         ).name()):
             return self._daemon_action(daemon_type, daemon_id, host, action)
 
-    def _daemon_action(self, daemon_type, daemon_id, host, action, image=None):
+    def _daemon_action(self, daemon_type, daemon_id, host, action, image=None) -> str:
         daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
             host=host,
             daemon_id=daemon_id,
@@ -1681,7 +1691,7 @@ To check that the host is reachable:
         if action == 'redeploy':
             if self.daemon_is_self(daemon_type, daemon_id):
                 self.mgr_service.fail_over()
-                return  # unreachable.
+                return ''  # unreachable
             # stop, recreate the container+unit, then restart
             return self._create_daemon(daemon_spec)
         elif action == 'reconfig':
@@ -1961,16 +1971,35 @@ To check that the host is reachable:
                 hostname=daemon_spec.host,
         ).service_id(), overwrite=True):
 
+            image = ''
             start_time = datetime.datetime.utcnow()
+            ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
+
+            if daemon_spec.daemon_type == 'container':
+                spec: Optional[CustomContainerSpec] = daemon_spec.spec
+                if spec is None:
+                    # Exit here immediately because the required service
+                    # spec to create a daemon is not provided. This is only
+                    # provided when a service is applied via 'orch apply'
+                    # command.
+                    msg = "Failed to {} daemon {} on {}: Required " \
+                          "service specification not provided".format(
+                              'reconfigure' if reconfig else 'deploy',
+                              daemon_spec.name(), daemon_spec.host)
+                    self.log.info(msg)
+                    return msg
+                image = spec.image
+                if spec.ports:
+                    ports.extend(spec.ports)
+
             cephadm_config, deps = self.cephadm_services[daemon_spec.daemon_type].generate_config(
                 daemon_spec)
 
-            daemon_spec.extra_args.extend(['--config-json', '-'])
-
             # TCP port to open in the host firewall
-            if daemon_spec.ports:
-                daemon_spec.extra_args.extend(
-                    ['--tcp-ports', ' '.join(map(str, daemon_spec.ports))])
+            if len(ports) > 0:
+                daemon_spec.extra_args.extend([
+                    '--tcp-ports', ' '.join(map(str, ports))
+                ])
 
             # osd deployments needs an --osd-uuid arg
             if daemon_spec.daemon_type == 'osd':
@@ -1990,6 +2019,8 @@ To check that the host is reachable:
                 self._registry_login(daemon_spec.host, self.registry_url,
                                      self.registry_username, self.registry_password)
 
+            daemon_spec.extra_args.extend(['--config-json', '-'])
+
             self.log.info('%s daemon %s on %s' % (
                 'Reconfiguring' if reconfig else 'Deploying',
                 daemon_spec.name(), daemon_spec.host))
@@ -1999,7 +2030,8 @@ To check that the host is reachable:
                 [
                     '--name', daemon_spec.name(),
                 ] + daemon_spec.extra_args,
-                stdin=json.dumps(cephadm_config))
+                stdin=json.dumps(cephadm_config),
+                image=image)
             if not code and daemon_spec.host in self.cache.daemons:
                 # prime cached service state with what we (should have)
                 # just created
@@ -2419,6 +2451,7 @@ To check that the host is reachable:
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
+                'container': PlacementSpec(count=1),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -2539,6 +2572,15 @@ To check that the host is reachable:
 
     @trivial_completion
     def apply_alertmanager(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @trivial_completion
+    def add_container(self, spec: ServiceSpec) -> List[str]:
+        return self._add_daemon('container', spec,
+                                self.container_service.prepare_create)
+
+    @trivial_completion
+    def apply_container(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     def _get_container_image_info(self, image_name) -> ContainerInspectInfo:

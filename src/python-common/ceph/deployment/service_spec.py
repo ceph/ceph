@@ -380,8 +380,9 @@ class ServiceSpec(object):
 
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw'.split()
+                          'node-exporter osd prometheus rbd-mirror rgw ' \
+                          'container'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container'.split()
 
     @classmethod
     def _cls(cls, service_type):
@@ -392,7 +393,8 @@ class ServiceSpec(object):
             'nfs': NFSServiceSpec,
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
-            'alertmanager': AlertManagerSpec
+            'alertmanager': AlertManagerSpec,
+            'container': CustomContainerSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
@@ -776,3 +778,67 @@ class AlertManagerSpec(ServiceSpec):
 
 
 yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
+
+
+class CustomContainerSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'container',
+                 service_id: str = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 image: str = None,
+                 entrypoint: Optional[str] = None,
+                 uid: Optional[int] = None,
+                 gid: Optional[int] = None,
+                 volume_mounts: Optional[Dict[str, str]] = {},
+                 args: Optional[List[str]] = [],
+                 envs: Optional[List[str]] = [],
+                 privileged: Optional[bool] = False,
+                 bind_mounts: Optional[List[List[str]]] = None,
+                 ports: Optional[List[int]] = [],
+                 dirs: Optional[List[str]] = [],
+                 files: Optional[Dict[str, Any]] = {},
+                 ):
+        assert service_type == 'container'
+        assert service_id is not None
+        assert image is not None
+
+        super(CustomContainerSpec, self).__init__(
+            service_type, service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only)
+
+        self.image = image
+        self.entrypoint = entrypoint
+        self.uid = uid
+        self.gid = gid
+        self.volume_mounts = volume_mounts
+        self.args = args
+        self.envs = envs
+        self.privileged = privileged
+        self.bind_mounts = bind_mounts
+        self.ports = ports
+        self.dirs = dirs
+        self.files = files
+
+    def config_json(self) -> Dict[str, Any]:
+        """
+        Helper function to get the value of the `--config-json` cephadm
+        command line option. It will contain all specification properties
+        that haven't a `None` value. Such properties will get default
+        values in cephadm.
+        :return: Returns a dictionary containing all specification
+            properties.
+        """
+        config_json = {}
+        for prop in ['image', 'entrypoint', 'uid', 'gid', 'args',
+                     'envs', 'volume_mounts', 'privileged',
+                     'bind_mounts', 'ports', 'dirs', 'files']:
+            value = getattr(self, prop)
+            if value is not None:
+                config_json[prop] = value
+        return config_json
+
+
+yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
