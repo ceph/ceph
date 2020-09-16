@@ -6277,12 +6277,16 @@ void Client::_unmount(bool abort)
    * any new comming "reader" and then try to wait all the in-flight
    * "readers" to finish.
    */
+  ldout(cct, 1) << __func__ << __LINE__ << "abort : " << abort << dendl;
   RWRef_t mref_writer(mount_state, CLIENT_UNMOUNTING, false);
   if (!mref_writer.is_first_writer())
     return;
+  ldout(cct, 1) << __func__ << __LINE__ << "abort : " << abort << dendl;
   mref_writer.wait_readers_done();
+  ldout(cct, 1) << __func__ << __LINE__ << "abort : " << abort << dendl;
 
   std::unique_lock lock{client_lock};
+  ldout(cct, 1) << __func__ << __LINE__ << "abort : " << abort << dendl;
 
   if (abort || blocklisted) {
     ldout(cct, 2) << "unmounting (" << (abort ? "abort)" : "blocklisted)") << dendl;
@@ -6441,6 +6445,7 @@ void Client::flush_cap_releases()
 void Client::renew_and_flush_cap_releases()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+  ldout(cct, 2) << "renew_and_flush_cap_releases" << dendl;
 
   if (!mount_aborted && mdsmap->get_epoch()) {
     // renew caps?
@@ -11754,53 +11759,71 @@ int Client::fremovexattr(int fd, const char *name, const UserPerm& perms)
 int Client::setxattr(const char *path, const char *name, const void *value,
 		     size_t size, int flags, const UserPerm& perms)
 {
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
   _setxattr_maybe_wait_for_osdmap(name, value, size);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
 
   std::scoped_lock lock(client_lock);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
   if (r < 0)
     return r;
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
   return _setxattr(in, name, value, size, flags, perms);
 }
 
 int Client::lsetxattr(const char *path, const char *name, const void *value,
 		      size_t size, int flags, const UserPerm& perms)
 {
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
   _setxattr_maybe_wait_for_osdmap(name, value, size);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
 
   std::scoped_lock lock(client_lock);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " path " << path << " name " << name << dendl;
   if (r < 0)
     return r;
+  ldout(cct, 1) << __func__ << " after RWRef, path " << path << " name " << name << dendl;
   return _setxattr(in, name, value, size, flags, perms);
 }
 
 int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
 		      int flags, const UserPerm& perms)
 {
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << dendl;
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << dendl;
 
   _setxattr_maybe_wait_for_osdmap(name, value, size);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << dendl;
 
   std::scoped_lock lock(client_lock);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << dendl;
 
   Fh *f = get_filehandle(fd);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << dendl;
   if (!f)
     return -EBADF;
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << dendl;
   return _setxattr(f->inode, name, value, size, flags, perms);
 }
 
@@ -12124,6 +12147,7 @@ void Client::_setxattr_maybe_wait_for_osdmap(const char *name, const void *value
   // For setting pool of layout, MetaRequest need osdmap epoch.
   // There is a race which create a new data pool but client and mds both don't have.
   // Make client got the latest osdmap which make mds quickly judge whether get newer osdmap.
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << " value " << value << dendl;
   if (strcmp(name, "ceph.file.layout.pool") == 0 || strcmp(name, "ceph.dir.layout.pool") == 0 ||
       strcmp(name, "ceph.file.layout") == 0 || strcmp(name, "ceph.dir.layout") == 0) {
     string rest(strstr(name, "layout"));
@@ -12134,7 +12158,9 @@ void Client::_setxattr_maybe_wait_for_osdmap(const char *name, const void *value
 
     if (r == -ENOENT) {
       bs::error_code ec;
+      ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << " value " << value << dendl;
       objecter->wait_for_latest_osdmap(ca::use_blocked[ec]);
+      ldout(cct, 1) << __func__ << ":" << __LINE__ << " name " << name << " value " << value << dendl;
     }
   }
 }
