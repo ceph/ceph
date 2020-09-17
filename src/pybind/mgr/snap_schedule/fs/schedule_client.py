@@ -104,6 +104,10 @@ class SnapSchedClient(CephfsClient):
         self.sqlite_connections = {}
         self.active_timers = {}
 
+    @property
+    def allow_minute_snaps(self):
+        return self.mgr.get_module_option('allow_m_granularity')
+
     def get_schedule_db(self, fs):
         if fs not in self.sqlite_connections:
             self.sqlite_connections[fs] = sqlite3.connect(
@@ -140,6 +144,18 @@ class SnapSchedClient(CephfsClient):
             ioctx.write_full(SNAP_DB_OBJECT_NAME,
                              '\n'.join(db_content).encode('utf-8'))
 
+    def _is_allowed_repeat(self, exec_row, path):
+        if Schedule.parse_schedule(exec_row['schedule'])[1] == 'M':
+            if self.allow_minute_snaps:
+                log.debug(f'Minute repeats allowed, scheduling snapshot on path {path}')
+                return True
+            else:
+                log.info(f'Minute repeats disabled, skipping snapshot on path {path}')
+                return False
+        else:
+            return True
+
+
     def refresh_snap_timers(self, fs, path):
         try:
             log.debug(f'SnapDB on {fs} changed for {path}, updating next Timer')
@@ -147,7 +163,8 @@ class SnapSchedClient(CephfsClient):
             rows = []
             with db:
                 cur = db.execute(Schedule.EXEC_QUERY, (path,))
-                rows = cur.fetchmany(1)
+                all_rows = cur.fetchall()
+                rows = [r for r in all_rows if self._is_allowed_repeat(r, path)][0:1]
             timers = self.active_timers.get((fs, path), [])
             for timer in timers:
                 timer.cancel()
@@ -238,6 +255,10 @@ class SnapSchedClient(CephfsClient):
     # TODO improve interface
     def store_snap_schedule(self, fs, path_, args):
         sched = Schedule(*args)
+        log.debug(f'repeat is {sched.repeat}')
+        if sched.parse_schedule(sched.schedule)[1] == 'M' and not self.allow_minute_snaps:
+            log.error('not allowed')
+            raise ValueError('no minute snaps allowed')
         log.debug(f'attempting to add schedule {sched}')
         db = self.get_schedule_db(fs)
         sched.store_schedule(db)

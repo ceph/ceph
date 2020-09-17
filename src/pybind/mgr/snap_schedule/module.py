@@ -12,6 +12,15 @@ from threading import Event
 
 
 class Module(MgrModule):
+    MODULE_OPTIONS = [
+        {
+            'name':    'allow_m_granularity',
+            'type':    'bool',
+            'default': False,
+            'desc':    'allow minute scheduled snapshots',
+            'runtime': True,
+        },
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
