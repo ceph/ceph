@@ -29,7 +29,8 @@ def available_clusters(mgr):
     completion = mgr.describe_service(service_type='nfs')
     mgr._orchestrator_wait([completion])
     orchestrator.raise_if_exception(completion)
-    return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result]
+    return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result
+            if cluster.spec.service_id]
 
 
 def export_cluster_checker(func):
