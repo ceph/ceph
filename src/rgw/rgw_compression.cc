@@ -5,6 +5,38 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+int rgw_compression_info_from_attr(const bufferlist& attr,
+                                   bool& need_decompress,
+                                   RGWCompressionInfo& cs_info)
+{
+  auto bliter = attr.cbegin();
+  try {
+    decode(cs_info, bliter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  if (cs_info.blocks.size() == 0) {
+    return -EIO;
+  }
+  if (cs_info.compression_type != "none")
+    need_decompress = true;
+  else
+    need_decompress = false;
+  return 0;
+}
+
+int rgw_compression_info_from_attrset(const map<string, bufferlist>& attrs,
+                                      bool& need_decompress,
+                                      RGWCompressionInfo& cs_info)
+{
+  auto value = attrs.find(RGW_ATTR_COMPRESSION);
+  if (value == attrs.end()) {
+    need_decompress = false;
+    return 0;
+  }
+  return rgw_compression_info_from_attr(value->second, need_decompress, cs_info);
+}
+
 //------------RGWPutObj_Compress---------------
 
 int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
