@@ -1,28 +1,28 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/cache/rwl/InitRequest.h"
+#include "librbd/cache/pwl/InitRequest.h"
 #include "librbd/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/asio/ContextWQ.h"
 
 #if defined(WITH_RBD_RWL)
-#include "librbd/cache/rwl/ImageCacheState.h"
-#include "librbd/cache/ReplicatedWriteLog.h"
+#include "librbd/cache/pwl/ImageCacheState.h"
+#include "librbd/cache/WriteLogCache.h"
 #endif // WITH_RBD_RWL
 
 #include "librbd/cache/Utils.h"
 #include "librbd/ImageCtx.h"
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl:InitRequest " \
+#define dout_prefix *_dout << "librbd::cache::pwl:InitRequest " \
                            << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
@@ -76,8 +76,8 @@ void InitRequest<I>::get_image_cache_state() {
   switch(cache_type) {
     case cache::IMAGE_CACHE_TYPE_RWL:
       m_image_ctx.image_cache =
-        new librbd::cache::ReplicatedWriteLog<I>(m_image_ctx,
-                                                 cache_state);
+        new librbd::cache::WriteLogCache<I>(m_image_ctx,
+                                            cache_state);
       break;
     default:
       delete cache_state;
@@ -164,8 +164,8 @@ void InitRequest<I>::finish() {
   delete this;
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::rwl::InitRequest<librbd::ImageCtx>;
+template class librbd::cache::pwl::InitRequest<librbd::ImageCtx>;

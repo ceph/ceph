@@ -3,7 +3,7 @@
 
 #include "librbd/cache/Types.h"
 #include "librbd/cache/Utils.h"
-#include "librbd/cache/rwl/ImageCacheState.h"
+#include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Operations.h"
 #include "common/environment.h"
@@ -12,14 +12,14 @@
 #include "common/ceph_json.h"
 
 #undef dout_subsys
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::ImageCacheState: " \
+#define dout_prefix *_dout << "librbd::cache::pwl::ImageCacheState: " \
                            <<  __func__ << ": "
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 namespace {
 bool get_json_format(const std::string& s, JSONFormattable *f) {
@@ -55,10 +55,10 @@ ImageCacheState<I>::ImageCacheState(
   clean = (bool)f["clean"];
   host = (string)f["rwl_host"];
   path = (string)f["rwl_path"];
-  uint64_t rwl_size;
+  uint64_t pwl_size;
   std::istringstream iss(f["rwl_size"]);
-  iss >> rwl_size;
-  size = rwl_size;
+  iss >> pwl_size;
+  size = pwl_size;
 
   // Others from config
   ConfigProxy &config = image_ctx->config;
@@ -93,9 +93,9 @@ void ImageCacheState<I>::dump(ceph::Formatter *f) const {
   ::encode_json("empty", empty, f);
   ::encode_json("clean", clean, f);
   ::encode_json("cache_type", (int)get_image_cache_type(), f);
-  ::encode_json("rwl_host", host, f);
-  ::encode_json("rwl_path", path, f);
-  ::encode_json("rwl_size", size, f);
+  ::encode_json("pwl_host", host, f);
+  ::encode_json("pwl_path", path, f);
+  ::encode_json("pwl_size", size, f);
 }
 
 template <typename I>
@@ -112,8 +112,8 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
                              IMAGE_CACHE_STATE, &cache_state_str);
   }
 
-  bool rwl_enabled = cache::util::is_rwl_enabled(*image_ctx);
-  bool cache_desired = rwl_enabled;
+  bool pwl_enabled = cache::util::is_pwl_enabled(*image_ctx);
+  bool cache_desired = pwl_enabled;
   cache_desired &= !image_ctx->read_only;
   cache_desired &= !image_ctx->test_features(RBD_FEATURE_MIGRATING);
   cache_desired &= !image_ctx->test_features(RBD_FEATURE_JOURNALING);
@@ -173,8 +173,8 @@ bool ImageCacheState<I>::is_valid() {
   return true;
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::rwl::ImageCacheState<librbd::ImageCtx>;
+template class librbd::cache::pwl::ImageCacheState<librbd::ImageCtx>;

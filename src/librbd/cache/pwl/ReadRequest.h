@@ -5,13 +5,13 @@
 #define CEPH_LIBRBD_CACHE_RWL_READ_REQUEST_H
 
 #include "include/Context.h"
-#include "librbd/cache/rwl/Types.h"
+#include "librbd/cache/pwl/Types.h"
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
-typedef std::vector<rwl::ImageExtentBuf> ImageExtentBufs;
+typedef std::vector<pwl::ImageExtentBuf> ImageExtentBufs;
 
 class C_ReadRequest : public Context {
 public:
@@ -38,7 +38,7 @@ private:
   PerfCounters *m_perfcounter;
 };
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 

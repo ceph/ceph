@@ -11,7 +11,7 @@ namespace librbd {
 class ImageCtx;
 
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 template<typename>
 class ImageCacheState;
@@ -72,10 +72,10 @@ private:
   }
 };
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::rwl::ShutdownRequest<librbd::ImageCtx>;
+extern template class librbd::cache::pwl::ShutdownRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_RWL_SHUTDOWN_REQUEST_H

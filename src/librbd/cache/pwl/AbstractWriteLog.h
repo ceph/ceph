@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
-#define CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
+#ifndef CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
+#define CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
 
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
@@ -12,9 +12,9 @@
 #include "librbd/Utils.h"
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/Types.h"
-#include "librbd/cache/rwl/LogOperation.h"
-#include "librbd/cache/rwl/Request.h"
-#include "librbd/cache/rwl/LogMap.h"
+#include "librbd/cache/pwl/LogOperation.h"
+#include "librbd/cache/pwl/Request.h"
+#include "librbd/cache/pwl/LogMap.h"
 #include <functional>
 #include <list>
 
@@ -27,7 +27,7 @@ struct ImageCtx;
 
 namespace cache {
 
-namespace rwl {
+namespace pwl {
 
 class SyncPointLogEntry;
 class GenericWriteLogEntry;
@@ -57,50 +57,49 @@ struct C_WriteRequest;
 
 using GenericLogOperations = std::list<GenericLogOperationSharedPtr>;
 
-} // namespace rwl
-
 
 template <typename ImageCtxT>
-class ReplicatedWriteLog : public ImageCache<ImageCtxT> {
+class AbstractWriteLog {
 public:
-  using typename ImageCache<ImageCtxT>::Extent;
-  using typename ImageCache<ImageCtxT>::Extents;
+  typedef io::Extent Extent;
+  typedef io::Extents Extents; 
 
-  ReplicatedWriteLog(ImageCtxT &image_ctx, librbd::cache::rwl::ImageCacheState<ImageCtxT>* cache_state);
-  ~ReplicatedWriteLog();
-  ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
-  ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
+  AbstractWriteLog(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
+  ~AbstractWriteLog();
+  AbstractWriteLog(const AbstractWriteLog&) = delete;
+  AbstractWriteLog &operator=(const AbstractWriteLog&) = delete;
 
-  /// client AIO methods
-  void aio_read(Extents&& image_extents, ceph::bufferlist *bl,
-                int fadvise_flags, Context *on_finish) override;
-  void aio_write(Extents&& image_extents, ceph::bufferlist&& bl,
-                 int fadvise_flags, Context *on_finish) override;
-  void aio_discard(uint64_t offset, uint64_t length,
-                   uint32_t discard_granularity_bytes,
-                   Context *on_finish) override;
-  void aio_flush(io::FlushSource flush_source, Context *on_finish) override;
-  void aio_writesame(uint64_t offset, uint64_t length,
-                     ceph::bufferlist&& bl,
-                     int fadvise_flags, Context *on_finish) override;
-  void aio_compare_and_write(Extents&& image_extents,
-                             ceph::bufferlist&& cmp_bl, ceph::bufferlist&& bl,
-                             uint64_t *mismatch_offset,int fadvise_flags,
-                             Context *on_finish) override;
+  /// IO methods
+  void read(Extents&& image_extents, ceph::bufferlist *bl,
+      int fadvise_flags, Context *on_finish);
+  void write(Extents&& image_extents, ceph::bufferlist&& bl,
+      int fadvise_flags,
+      Context *on_finish);
+  void discard(uint64_t offset, uint64_t length,
+      uint32_t discard_granularity_bytes,
+      Context *on_finish);
+  void flush(io::FlushSource flush_source, Context *on_finish);
+  void writesame(uint64_t offset, uint64_t length,
+      ceph::bufferlist&& bl,
+      int fadvise_flags, Context *on_finish);
+  void compare_and_write(Extents&& image_extents,
+      ceph::bufferlist&& cmp_bl, ceph::bufferlist&& bl,
+      uint64_t *mismatch_offset,int fadvise_flags,
+      Context *on_finish);
 
   /// internal state methods
-  void init(Context *on_finish) override;
-  void shut_down(Context *on_finish) override;
-  void invalidate(Context *on_finish) override;
-  void flush(Context *on_finish) override;
+  void init(Context *on_finish);
+  void shut_down(Context *on_finish);
+  void invalidate(Context *on_finish);
+  void flush(Context *on_finish);
 
-  using This = ReplicatedWriteLog<ImageCtxT>;
-  using C_WriteRequestT = rwl::C_WriteRequest<This>;
-  using C_BlockIORequestT = rwl::C_BlockIORequest<This>;
-  using C_FlushRequestT = rwl::C_FlushRequest<This>;
-  using C_DiscardRequestT = rwl::C_DiscardRequest<This>;
-  using C_WriteSameRequestT = rwl::C_WriteSameRequest<This>;
-  using C_CompAndWriteRequestT = rwl::C_CompAndWriteRequest<This>;
+  using This = AbstractWriteLog<ImageCtxT>;
+  using C_WriteRequestT = pwl::C_WriteRequest<This>;
+  using C_BlockIORequestT = pwl::C_BlockIORequest<This>;
+  using C_FlushRequestT = pwl::C_FlushRequest<This>;
+  using C_DiscardRequestT = pwl::C_DiscardRequest<This>;
+  using C_WriteSameRequestT = pwl::C_WriteSameRequest<This>;
+  using C_CompAndWriteRequestT = pwl::C_CompAndWriteRequest<This>;
 
   CephContext * get_context();
   void release_guarded_request(BlockGuardCell *cell);
@@ -108,18 +107,18 @@ public:
   bool alloc_resources(C_BlockIORequestT *req);
   template <typename V>
   void flush_pmem_buffer(V& ops);
-  void schedule_append(rwl::GenericLogOperationsVector &ops);
-  void schedule_append(rwl::GenericLogOperationSharedPtr op);
-  void schedule_flush_and_append(rwl::GenericLogOperationsVector &ops);
-  void flush_new_sync_point(C_FlushRequestT *flush_req, rwl::DeferredContexts &later);
-  std::shared_ptr<rwl::SyncPoint> get_current_sync_point() {
+  void schedule_append(pwl::GenericLogOperationsVector &ops);
+  void schedule_append(pwl::GenericLogOperationSharedPtr op);
+  void schedule_flush_and_append(pwl::GenericLogOperationsVector &ops);
+  void flush_new_sync_point(C_FlushRequestT *flush_req, pwl::DeferredContexts &later);
+  std::shared_ptr<pwl::SyncPoint> get_current_sync_point() {
     return m_current_sync_point;
   }
   bool get_persist_on_flush() {
     return m_persist_on_flush;
   }
   void inc_last_op_sequence_num() {
-    m_perfcounter->inc(l_librbd_rwl_log_ops, 1);
+    m_perfcounter->inc(l_librbd_pwl_log_ops, 1);
     ++m_last_op_sequence_num;
   }
   uint64_t get_last_op_sequence_num() {
@@ -134,24 +133,24 @@ public:
   uint32_t get_free_log_entries() {
     return m_free_log_entries;
   }
-  void add_into_log_map(rwl::GenericWriteLogEntries &log_entries);
-private:
-  typedef std::list<rwl::C_WriteRequest<This> *> C_WriteRequests;
-  typedef std::list<rwl::C_BlockIORequest<This> *> C_BlockIORequests;
+  void add_into_log_map(pwl::GenericWriteLogEntries &log_entries);
+protected:
+  typedef std::list<pwl::C_WriteRequest<This> *> C_WriteRequests;
+  typedef std::list<pwl::C_BlockIORequest<This> *> C_BlockIORequests;
 
-  BlockGuardCell* detain_guarded_request_helper(rwl::GuardedRequest &req);
-  BlockGuardCell* detain_guarded_request_barrier_helper(rwl::GuardedRequest &req);
+  BlockGuardCell* detain_guarded_request_helper(pwl::GuardedRequest &req);
+  BlockGuardCell* detain_guarded_request_barrier_helper(pwl::GuardedRequest &req);
   void detain_guarded_request(C_BlockIORequestT *request,
-                              rwl::GuardedRequestFunctionContext *guarded_ctx,
+                              pwl::GuardedRequestFunctionContext *guarded_ctx,
                               bool is_barrier);
 
-  librbd::cache::rwl::ImageCacheState<ImageCtxT>* m_cache_state = nullptr;
+  librbd::cache::pwl::ImageCacheState<ImageCtxT>* m_cache_state = nullptr;
 
   std::atomic<bool> m_initialized = {false};
   std::atomic<bool> m_shutting_down = {false};
   std::atomic<bool> m_invalidating = {false};
   PMEMobjpool *m_log_pool = nullptr;
-  const char* m_rwl_pool_layout_name;
+  const char* m_pwl_pool_layout_name;
 
   ImageCtxT &m_image_ctx;
 
@@ -172,7 +171,7 @@ private:
   std::atomic<bool> m_alloc_failed_since_retire = {false};
 
   ImageWriteback<ImageCtxT> m_image_writeback;
-  rwl::WriteLogGuard m_write_log_guard;
+  pwl::WriteLogGuard m_write_log_guard;
   /*
    * When m_first_free_entry == m_first_valid_entry, the log is
    * empty. There is always at least one free entry, which can't be
@@ -217,7 +216,7 @@ private:
   mutable ceph::mutex m_blockguard_lock;
 
   /* Use m_blockguard_lock for the following 3 things */
-  rwl::WriteLogGuard::BlockOperations m_awaiting_barrier;
+  pwl::WriteLogGuard::BlockOperations m_awaiting_barrier;
   bool m_barrier_in_progress = false;
   BlockGuardCell *m_barrier_cell = nullptr;
 
@@ -229,18 +228,18 @@ private:
 
   Contexts m_flush_complete_contexts;
 
-  rwl::GenericLogOperations m_ops_to_flush; /* Write ops needing flush in local log */
-  rwl::GenericLogOperations m_ops_to_append; /* Write ops needing event append in local log */
+  pwl::GenericLogOperations m_ops_to_flush; /* Write ops needing flush in local log */
+  pwl::GenericLogOperations m_ops_to_append; /* Write ops needing event append in local log */
 
-  rwl::WriteLogMap m_blocks_to_log_entries;
+  pwl::WriteLogMap m_blocks_to_log_entries;
 
   /* New entries are at the back. Oldest at the front */
-  rwl::GenericLogEntries m_log_entries;
-  rwl::GenericLogEntries m_dirty_log_entries;
+  pwl::GenericLogEntries m_log_entries;
+  pwl::GenericLogEntries m_dirty_log_entries;
 
   PerfCounters *m_perfcounter = nullptr;
 
-  std::shared_ptr<rwl::SyncPoint> m_current_sync_point = nullptr;
+  std::shared_ptr<pwl::SyncPoint> m_current_sync_point = nullptr;
   bool m_persist_on_flush = false; /* If false, persist each write before completion */
 
   int m_flush_ops_in_flight = 0;
@@ -250,7 +249,7 @@ private:
   /* Writes that have left the block guard, but are waiting for resources */
   C_BlockIORequests m_deferred_ios;
   /* Throttle writes concurrently allocating & replicating */
-  unsigned int m_free_lanes = rwl::MAX_CONCURRENT_WRITES;
+  unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
   unsigned int m_unpublished_reserves = 0;
 
   /* Initialized from config, then set false during shutdown */
@@ -270,45 +269,46 @@ private:
   void periodic_stats();
   void arm_periodic_stats();
 
-  void rwl_init(Context *on_finish, rwl::DeferredContexts &later);
+  void pwl_init(Context *on_finish, pwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
-  void load_existing_entries(rwl::DeferredContexts &later);
+  void load_existing_entries(pwl::DeferredContexts &later);
   void wake_up();
   void process_work();
 
   void flush_dirty_entries(Context *on_finish);
-  bool can_flush_entry(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
-  Context *construct_flush_entry_ctx(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
+  bool can_flush_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
+  Context *construct_flush_entry_ctx(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
   void persist_last_flushed_sync_gen();
-  bool handle_flushed_sync_point(std::shared_ptr<rwl::SyncPointLogEntry> log_entry);
-  void sync_point_writer_flushed(std::shared_ptr<rwl::SyncPointLogEntry> log_entry);
+  bool handle_flushed_sync_point(std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
+  void sync_point_writer_flushed(std::shared_ptr<pwl::SyncPointLogEntry> log_entry);
   void process_writeback_dirty_entries();
-  bool can_retire_entry(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
+  bool can_retire_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
   bool retire_entries(const unsigned long int frees_per_tx);
 
-  void init_flush_new_sync_point(rwl::DeferredContexts &later);
-  void new_sync_point(rwl::DeferredContexts &later);
-  rwl::C_FlushRequest<ReplicatedWriteLog<ImageCtxT>>* make_flush_req(Context *on_finish);
-  void flush_new_sync_point_if_needed(C_FlushRequestT *flush_req, rwl::DeferredContexts &later);
+  void init_flush_new_sync_point(pwl::DeferredContexts &later);
+  void new_sync_point(pwl::DeferredContexts &later);
+  pwl::C_FlushRequest<AbstractWriteLog<ImageCtxT>>* make_flush_req(Context *on_finish);
+  void flush_new_sync_point_if_needed(C_FlushRequestT *flush_req, pwl::DeferredContexts &later);
 
   void dispatch_deferred_writes(void);
   void alloc_and_dispatch_io_req(C_BlockIORequestT *write_req);
   void append_scheduled_ops(void);
   void enlist_op_appender();
-  void schedule_append(rwl::GenericLogOperations &ops);
+  void schedule_append(pwl::GenericLogOperations &ops);
   void flush_then_append_scheduled_ops(void);
   void enlist_op_flusher();
-  void alloc_op_log_entries(rwl::GenericLogOperations &ops);
-  void flush_op_log_entries(rwl::GenericLogOperationsVector &ops);
-  int append_op_log_entries(rwl::GenericLogOperations &ops);
-  void complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
-  void schedule_complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
+  void alloc_op_log_entries(pwl::GenericLogOperations &ops);
+  void flush_op_log_entries(pwl::GenericLogOperationsVector &ops);
+  int append_op_log_entries(pwl::GenericLogOperations &ops);
+  void complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
+  void schedule_complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
   void internal_flush(bool invalidate, Context *on_finish);
 };
 
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>;
+extern template class librbd::cache::pwl::AbstractWriteLog<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
+#endif // CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG

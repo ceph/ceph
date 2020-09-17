@@ -12,37 +12,37 @@
 class Context;
 
 enum {
-  l_librbd_rwl_first = 26500,
+  l_librbd_pwl_first = 26500,
 
   // All read requests
-  l_librbd_rwl_rd_req,           // read requests
-  l_librbd_rwl_rd_bytes,         // bytes read
-  l_librbd_rwl_rd_latency,       // average req completion latency
+  l_librbd_pwl_rd_req,           // read requests
+  l_librbd_pwl_rd_bytes,         // bytes read
+  l_librbd_pwl_rd_latency,       // average req completion latency
 
   // Read requests completed from RWL (no misses)
-  l_librbd_rwl_rd_hit_req,       // read requests
-  l_librbd_rwl_rd_hit_bytes,     // bytes read
-  l_librbd_rwl_rd_hit_latency,   // average req completion latency
+  l_librbd_pwl_rd_hit_req,       // read requests
+  l_librbd_pwl_rd_hit_bytes,     // bytes read
+  l_librbd_pwl_rd_hit_latency,   // average req completion latency
 
   // Reed requests with hit and miss extents
-  l_librbd_rwl_rd_part_hit_req,  // read ops
+  l_librbd_pwl_rd_part_hit_req,  // read ops
 
   // Per SyncPoint's LogEntry number and write bytes distribution
-  l_librbd_rwl_syncpoint_hist,
+  l_librbd_pwl_syncpoint_hist,
 
   // All write requests
-  l_librbd_rwl_wr_req,             // write requests
-  l_librbd_rwl_wr_req_def,         // write requests deferred for resources
-  l_librbd_rwl_wr_req_def_lanes,   // write requests deferred for lanes
-  l_librbd_rwl_wr_req_def_log,     // write requests deferred for log entries
-  l_librbd_rwl_wr_req_def_buf,     // write requests deferred for buffer space
-  l_librbd_rwl_wr_req_overlap,     // write requests detained for overlap
-  l_librbd_rwl_wr_req_queued,      // write requests queued for prior barrier
-  l_librbd_rwl_wr_bytes,           // bytes written
+  l_librbd_pwl_wr_req,             // write requests
+  l_librbd_pwl_wr_req_def,         // write requests deferred for resources
+  l_librbd_pwl_wr_req_def_lanes,   // write requests deferred for lanes
+  l_librbd_pwl_wr_req_def_log,     // write requests deferred for log entries
+  l_librbd_pwl_wr_req_def_buf,     // write requests deferred for buffer space
+  l_librbd_pwl_wr_req_overlap,     // write requests detained for overlap
+  l_librbd_pwl_wr_req_queued,      // write requests queued for prior barrier
+  l_librbd_pwl_wr_bytes,           // bytes written
 
   // Write log operations (1 .. n per request that appends to the log)
-  l_librbd_rwl_log_ops,            // log append ops
-  l_librbd_rwl_log_op_bytes,       // average bytes written per log op
+  l_librbd_pwl_log_ops,            // log append ops
+  l_librbd_pwl_log_op_bytes,       // average bytes written per log op
 
   /*
 
@@ -81,68 +81,68 @@ enum {
   */
 
   /* Request times */
-  l_librbd_rwl_req_arr_to_all_t,   // arrival to allocation elapsed time - same as time deferred in block guard
-  l_librbd_rwl_req_arr_to_dis_t,   // arrival to dispatch elapsed time
-  l_librbd_rwl_req_all_to_dis_t,   // Time spent allocating or waiting to allocate resources
-  l_librbd_rwl_wr_latency,         // average req (persist) completion latency
-  l_librbd_rwl_wr_latency_hist,    // Histogram of write req (persist) completion latency vs. bytes written
-  l_librbd_rwl_wr_caller_latency,  // average req completion (to caller) latency
+  l_librbd_pwl_req_arr_to_all_t,   // arrival to allocation elapsed time - same as time deferred in block guard
+  l_librbd_pwl_req_arr_to_dis_t,   // arrival to dispatch elapsed time
+  l_librbd_pwl_req_all_to_dis_t,   // Time spent allocating or waiting to allocate resources
+  l_librbd_pwl_wr_latency,         // average req (persist) completion latency
+  l_librbd_pwl_wr_latency_hist,    // Histogram of write req (persist) completion latency vs. bytes written
+  l_librbd_pwl_wr_caller_latency,  // average req completion (to caller) latency
 
   /* Request times for requests that never waited for space*/
-  l_librbd_rwl_nowait_req_arr_to_all_t,   // arrival to allocation elapsed time - same as time deferred in block guard
-  l_librbd_rwl_nowait_req_arr_to_dis_t,   // arrival to dispatch elapsed time
-  l_librbd_rwl_nowait_req_all_to_dis_t,   // Time spent allocating or waiting to allocate resources
-  l_librbd_rwl_nowait_wr_latency,         // average req (persist) completion latency
-  l_librbd_rwl_nowait_wr_latency_hist,    // Histogram of write req (persist) completion latency vs. bytes written
-  l_librbd_rwl_nowait_wr_caller_latency,  // average req completion (to caller) latency
+  l_librbd_pwl_nowait_req_arr_to_all_t,   // arrival to allocation elapsed time - same as time deferred in block guard
+  l_librbd_pwl_nowait_req_arr_to_dis_t,   // arrival to dispatch elapsed time
+  l_librbd_pwl_nowait_req_all_to_dis_t,   // Time spent allocating or waiting to allocate resources
+  l_librbd_pwl_nowait_wr_latency,         // average req (persist) completion latency
+  l_librbd_pwl_nowait_wr_latency_hist,    // Histogram of write req (persist) completion latency vs. bytes written
+  l_librbd_pwl_nowait_wr_caller_latency,  // average req completion (to caller) latency
 
   /* Log operation times */
-  l_librbd_rwl_log_op_alloc_t,      // elapsed time of pmemobj_reserve()
-  l_librbd_rwl_log_op_alloc_t_hist, // Histogram of elapsed time of pmemobj_reserve()
+  l_librbd_pwl_log_op_alloc_t,      // elapsed time of pmemobj_reserve()
+  l_librbd_pwl_log_op_alloc_t_hist, // Histogram of elapsed time of pmemobj_reserve()
 
-  l_librbd_rwl_log_op_dis_to_buf_t, // dispatch to buffer persist elapsed time
-  l_librbd_rwl_log_op_dis_to_app_t, // dispatch to log append elapsed time
-  l_librbd_rwl_log_op_dis_to_cmp_t, // dispatch to persist completion elapsed time
-  l_librbd_rwl_log_op_dis_to_cmp_t_hist, // Histogram of dispatch to persist completion elapsed time
+  l_librbd_pwl_log_op_dis_to_buf_t, // dispatch to buffer persist elapsed time
+  l_librbd_pwl_log_op_dis_to_app_t, // dispatch to log append elapsed time
+  l_librbd_pwl_log_op_dis_to_cmp_t, // dispatch to persist completion elapsed time
+  l_librbd_pwl_log_op_dis_to_cmp_t_hist, // Histogram of dispatch to persist completion elapsed time
 
-  l_librbd_rwl_log_op_buf_to_app_t, // data buf persist + append wait time
-  l_librbd_rwl_log_op_buf_to_bufc_t,// data buf persist / replicate elapsed time
-  l_librbd_rwl_log_op_buf_to_bufc_t_hist,// data buf persist time vs bytes histogram
-  l_librbd_rwl_log_op_app_to_cmp_t, // log entry append + completion wait time
-  l_librbd_rwl_log_op_app_to_appc_t, // log entry append / replicate elapsed time
-  l_librbd_rwl_log_op_app_to_appc_t_hist, // log entry append time (vs. op bytes) histogram
+  l_librbd_pwl_log_op_buf_to_app_t, // data buf persist + append wait time
+  l_librbd_pwl_log_op_buf_to_bufc_t,// data buf persist / replicate elapsed time
+  l_librbd_pwl_log_op_buf_to_bufc_t_hist,// data buf persist time vs bytes histogram
+  l_librbd_pwl_log_op_app_to_cmp_t, // log entry append + completion wait time
+  l_librbd_pwl_log_op_app_to_appc_t, // log entry append / replicate elapsed time
+  l_librbd_pwl_log_op_app_to_appc_t_hist, // log entry append time (vs. op bytes) histogram
 
-  l_librbd_rwl_discard,
-  l_librbd_rwl_discard_bytes,
-  l_librbd_rwl_discard_latency,
+  l_librbd_pwl_discard,
+  l_librbd_pwl_discard_bytes,
+  l_librbd_pwl_discard_latency,
 
-  l_librbd_rwl_aio_flush,
-  l_librbd_rwl_aio_flush_def,
-  l_librbd_rwl_aio_flush_latency,
-  l_librbd_rwl_ws,
-  l_librbd_rwl_ws_bytes, // Bytes modified by write same, probably much larger than WS payload bytes
-  l_librbd_rwl_ws_latency,
+  l_librbd_pwl_aio_flush,
+  l_librbd_pwl_aio_flush_def,
+  l_librbd_pwl_aio_flush_latency,
+  l_librbd_pwl_ws,
+  l_librbd_pwl_ws_bytes, // Bytes modified by write same, probably much larger than WS payload bytes
+  l_librbd_pwl_ws_latency,
 
-  l_librbd_rwl_cmp,
-  l_librbd_rwl_cmp_bytes,
-  l_librbd_rwl_cmp_latency,
-  l_librbd_rwl_cmp_fails,
+  l_librbd_pwl_cmp,
+  l_librbd_pwl_cmp_bytes,
+  l_librbd_pwl_cmp_latency,
+  l_librbd_pwl_cmp_fails,
 
-  l_librbd_rwl_flush,
-  l_librbd_rwl_invalidate_cache,
-  l_librbd_rwl_invalidate_discard_cache,
+  l_librbd_pwl_flush,
+  l_librbd_pwl_invalidate_cache,
+  l_librbd_pwl_invalidate_discard_cache,
 
-  l_librbd_rwl_append_tx_t,
-  l_librbd_rwl_retire_tx_t,
-  l_librbd_rwl_append_tx_t_hist,
-  l_librbd_rwl_retire_tx_t_hist,
+  l_librbd_pwl_append_tx_t,
+  l_librbd_pwl_retire_tx_t,
+  l_librbd_pwl_append_tx_t_hist,
+  l_librbd_pwl_retire_tx_t_hist,
 
-  l_librbd_rwl_last,
+  l_librbd_pwl_last,
 };
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 class ImageExtentBuf;
 typedef std::vector<ImageExtentBuf> ImageExtentBufs;
@@ -184,11 +184,11 @@ public:
 };
 
 /* Pmem structures */
-POBJ_LAYOUT_BEGIN(rbd_rwl);
-POBJ_LAYOUT_ROOT(rbd_rwl, struct WriteLogPoolRoot);
-POBJ_LAYOUT_TOID(rbd_rwl, uint8_t);
-POBJ_LAYOUT_TOID(rbd_rwl, struct WriteLogPmemEntry);
-POBJ_LAYOUT_END(rbd_rwl);
+POBJ_LAYOUT_BEGIN(rbd_pwl);
+POBJ_LAYOUT_ROOT(rbd_pwl, struct WriteLogPoolRoot);
+POBJ_LAYOUT_TOID(rbd_pwl, uint8_t);
+POBJ_LAYOUT_TOID(rbd_pwl, struct WriteLogPmemEntry);
+POBJ_LAYOUT_END(rbd_pwl);
 
 struct WriteLogPmemEntry {
   uint64_t sync_gen_number = 0;
@@ -286,7 +286,7 @@ public:
     return BlockExtent(first_image_byte, last_image_byte);
   }
   io::Extent image_extent() {
-    return librbd::cache::rwl::image_extent(block_extent());
+    return librbd::cache::pwl::image_extent(block_extent());
   }
 };
 
@@ -305,7 +305,7 @@ public:
     : io::Extent(extent), m_bl(bl) { }
 };
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 

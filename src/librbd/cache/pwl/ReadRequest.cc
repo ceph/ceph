@@ -3,14 +3,14 @@
 
 #include "ReadRequest.h"
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::ReadRequest: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::ReadRequest: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 void C_ReadRequest::finish(int r) {
   ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
@@ -50,19 +50,19 @@ void C_ReadRequest::finish(int r) {
   utime_t now = ceph_clock_now();
   ceph_assert((int)m_out_bl->length() == hit_bytes + miss_bytes);
   m_on_finish->complete(r);
-  m_perfcounter->inc(l_librbd_rwl_rd_bytes, hit_bytes + miss_bytes);
-  m_perfcounter->inc(l_librbd_rwl_rd_hit_bytes, hit_bytes);
-  m_perfcounter->tinc(l_librbd_rwl_rd_latency, now - m_arrived_time);
+  m_perfcounter->inc(l_librbd_pwl_rd_bytes, hit_bytes + miss_bytes);
+  m_perfcounter->inc(l_librbd_pwl_rd_hit_bytes, hit_bytes);
+  m_perfcounter->tinc(l_librbd_pwl_rd_latency, now - m_arrived_time);
   if (!misses) {
-    m_perfcounter->inc(l_librbd_rwl_rd_hit_req, 1);
-    m_perfcounter->tinc(l_librbd_rwl_rd_hit_latency, now - m_arrived_time);
+    m_perfcounter->inc(l_librbd_pwl_rd_hit_req, 1);
+    m_perfcounter->tinc(l_librbd_pwl_rd_hit_latency, now - m_arrived_time);
   } else {
     if (hits) {
-      m_perfcounter->inc(l_librbd_rwl_rd_part_hit_req, 1);
+      m_perfcounter->inc(l_librbd_pwl_rd_part_hit_req, 1);
     }
   }
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd

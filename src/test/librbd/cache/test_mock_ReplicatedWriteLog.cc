@@ -7,10 +7,10 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "include/rbd/librbd.hpp"
-#include "librbd/cache/rwl/ImageCacheState.h"
-#include "librbd/cache/rwl/Types.h"
+#include "librbd/cache/pwl/ImageCacheState.h"
+#include "librbd/cache/pwl/Types.h"
 #include "librbd/cache/ImageWriteback.h"
-#include "librbd/cache/ReplicatedWriteLog.h"
+#include "librbd/cache/WriteLogCache.h"
 
 
 namespace librbd {
@@ -36,12 +36,14 @@ inline ImageCtx *get_image_ctx(MockImageCtx *image_ctx) {
 } // namespace util
 } // namespace librbd
 
-#include "librbd/cache/ReplicatedWriteLog.cc"
+#include "librbd/cache/WriteLogCache.cc"
+#include "librbd/cache/pwl/AbstractWriteLog.cc"
+#include "librbd/cache/pwl/ReplicatedWriteLog.cc"
 
 // template definitions
 #include "librbd/cache/ImageWriteback.cc"
-#include "librbd/cache/rwl/ImageCacheState.cc"
-#include "librbd/cache/rwl/Request.cc"
+#include "librbd/cache/pwl/ImageCacheState.cc"
+#include "librbd/cache/pwl/Request.cc"
 
 namespace librbd {
 namespace cache {
@@ -52,8 +54,8 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 
 struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
-  typedef ReplicatedWriteLog<librbd::MockImageCtx> MockReplicatedWriteLog;
-  typedef librbd::cache::rwl::ImageCacheState<librbd::MockImageCtx> MockImageCacheStateRWL;
+  typedef WriteLogCache<librbd::MockImageCtx> MockReplicatedWriteLog;
+  typedef librbd::cache::pwl::ImageCacheState<librbd::MockImageCtx> MockImageCacheStateRWL;
 
   MockImageCacheStateRWL *get_cache_state(MockImageCtx& mock_image_ctx) {
     MockImageCacheStateRWL *rwl_state = new MockImageCacheStateRWL(&mock_image_ctx);

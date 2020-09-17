@@ -15,7 +15,7 @@ namespace ceph {
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 template <typename ImageCtxT = ImageCtx>
 class ImageCacheState {
@@ -53,10 +53,10 @@ public:
   bool is_valid();
 };
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::rwl::ImageCacheState<librbd::ImageCtx>;
+extern template class librbd::cache::pwl::ImageCacheState<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H

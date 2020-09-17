@@ -205,7 +205,7 @@ void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
       on_finish->complete(r);
     });
 
-  bool rwl_enabled = cache::util::is_rwl_enabled(m_image_ctx);
+  bool rwl_enabled = cache::util::is_pwl_enabled(m_image_ctx);
   if (m_image_ctx.clone_copy_on_read ||
       (features & RBD_FEATURE_JOURNALING) != 0 ||
       rwl_enabled) {

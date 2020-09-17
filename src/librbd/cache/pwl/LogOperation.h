@@ -5,12 +5,12 @@
 #define CEPH_LIBRBD_CACHE_RWL_LOG_OPERATION_H
 
 #include "include/utime.h"
-#include "librbd/cache/rwl/LogEntry.h"
-#include "librbd/cache/rwl/SyncPoint.h"
+#include "librbd/cache/pwl/LogEntry.h"
+#include "librbd/cache/pwl/SyncPoint.h"
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 struct WriteBufferAllocation;
 
 class WriteLogOperationSet;
@@ -224,7 +224,7 @@ public:
                                   const WriteSameLogOperation &op);
 };
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 

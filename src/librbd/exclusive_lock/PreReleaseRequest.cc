@@ -5,7 +5,7 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/cache/rwl/ShutdownRequest.h"
+#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
@@ -174,7 +174,7 @@ void PreReleaseRequest<I>::send_shut_down_image_cache() {
   Context *ctx = create_async_context_callback(m_image_ctx, create_context_callback<
       PreReleaseRequest<I>,
       &PreReleaseRequest<I>::handle_shut_down_image_cache>(this));
-  cache::rwl::ShutdownRequest<I> *req = cache::rwl::ShutdownRequest<I>::create(
+  cache::pwl::ShutdownRequest<I> *req = cache::pwl::ShutdownRequest<I>::create(
     m_image_ctx, ctx);
   req->send();
 }

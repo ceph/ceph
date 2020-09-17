@@ -4,14 +4,14 @@
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 
-#include "librbd/cache/rwl/LogMap.cc"
+#include "librbd/cache/pwl/LogMap.cc"
 
 void register_test_write_log_map() {
 }
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 struct TestLogEntry {
   uint64_t image_offset_bytes;
@@ -331,6 +331,6 @@ TEST_F(TestWriteLogMap, OverlapSplit) {
   ASSERT_EQ(8, found0.front().block_extent.block_end);
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
