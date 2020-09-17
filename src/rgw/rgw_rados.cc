@@ -3257,6 +3257,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw_obj obj;
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
+  bool try_etag_verify;
   boost::optional<RGWPutObj_ETagVerifier_Atomic> etag_verifier_atomic;
   boost::optional<RGWPutObj_ETagVerifier_MPU> etag_verifier_mpu;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
@@ -3265,6 +3266,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl, manifest_bl;
+  std::optional<RGWCompressionInfo> compression_info;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   SourceObjType obj_type{OBJ_TYPE_UNINIT};
@@ -3284,6 +3286,7 @@ public:
                        cct(cct),
                        filter(p),
                        compressor(compressor),
+                       try_etag_verify(cct->_conf->rgw_sync_obj_etag_verify),
                        plugin(plugin),
                        processor(p),
                        progress_cb(_progress_cb),
@@ -3300,9 +3303,28 @@ public:
 
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
-      src_attrs.erase(RGW_ATTR_COMPRESSION);
+      auto iter = src_attrs.find(RGW_ATTR_COMPRESSION);
+      if (iter != src_attrs.end()) {
+        const bufferlist bl = std::move(iter->second);
+        src_attrs.erase(iter); // don't preserve source compression info
+
+        if (try_etag_verify) {
+          // if we're trying to verify etags, we need to convert compressed
+          // ranges in the manifest back into logical multipart part offsets
+          RGWCompressionInfo info;
+          bool compressed = false;
+          int r = rgw_compression_info_from_attr(bl, compressed, info);
+          if (r < 0) {
+            ldout(cct, 4) << "failed to decode compression info, "
+                "disabling etag verification" << dendl;
+            try_etag_verify = false;
+          } else if (compressed) {
+            compression_info = std::move(info);
+          }
+        }
+      }
       /* We need the manifest to recompute the ETag for verification */
-      auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+      iter = src_attrs.find(RGW_ATTR_MANIFEST);
       if (iter != src_attrs.end()) {
         manifest_bl = std::move(iter->second);
         src_attrs.erase(iter);
@@ -3339,8 +3361,7 @@ public:
      * requested. We can enable simultaneous support once we have a mechanism
      * to know the sequence in which the filters must be applied.
      */
-    if (cct->_conf->rgw_sync_obj_etag_verify &&
-        src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+    if (try_etag_verify && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
 
       RGWObjManifest manifest;
 
@@ -3381,9 +3402,36 @@ public:
           part_ofs.push_back(cur_part_ofs);
         }
 
-        obj_type = OBJ_TYPE_MPU;
-        etag_verifier_mpu = boost::in_place(cct, std::move(part_ofs), filter);
-        filter = &*etag_verifier_mpu;
+        if (compression_info) {
+          // if the source object was compressed, the manifest is storing
+          // compressed part offsets. transform the compressed offsets back to
+          // their original offsets by finding the first block of each part
+          const auto& blocks = compression_info->blocks;
+          auto block = blocks.begin();
+          for (auto& ofs : part_ofs) {
+            // find the compression_block with new_ofs == ofs
+            constexpr auto less = [] (const compression_block& block, uint64_t ofs) {
+              return block.new_ofs < ofs;
+            };
+            block = std::lower_bound(block, blocks.end(), ofs, less);
+            if (block == blocks.end() || block->new_ofs != ofs) {
+              ldout(cct, 4) << "no match for compressed offset " << ofs
+                  << ", disabling etag verification" << dendl;
+              part_ofs.clear();
+              break;
+            }
+            ofs = block->old_ofs;
+            ldout(cct, 20) << "MPU Part uncompressed offset:" << ofs << dendl;
+          }
+        }
+
+        if (part_ofs.empty()) {
+          try_etag_verify = false;
+        } else {
+          obj_type = OBJ_TYPE_MPU;
+          etag_verifier_mpu = boost::in_place(cct, std::move(part_ofs), filter);
+          filter = &*etag_verifier_mpu;
+        }
       }
     }
 
