@@ -1488,15 +1488,21 @@ struct cls_rgw_get_bucket_resharding_ret  {
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
 
-struct CLSRGWBilogOp {
+struct cls_rgw_bi_log_related_op {
   const bool log_op;
 
-  const cls_rgw_obj_key& key;
-  const std::string& op_tag;
+  const cls_rgw_obj_key key;
+  const std::string op_tag;
   const rgw_zone_set* const zones_trace;
   const uint16_t bilog_flags;
   const enum RGWModifyOp op_type;
 
+  // prepare a BILog entry basing on two sources information:
+  //   1. the state cls_rgw_bi_log_related_op which is usually constructed
+  //      from data passed by the client;
+  //   2. parameters computed locally (in e.g. cls_rgw). They can be
+  //      problematic as client may have no access to it. Therefore,
+  //      the goal is to minimize the set / eradicate it entirelly.
   std::optional<rgw_bi_log_entry> get_bilog_entry(
     const ceph::real_time& timestamp,
     const rgw_bucket_entry_ver& ver,
@@ -1527,7 +1533,7 @@ struct CLSRGWBilogOp {
   }
 };
 
-struct CLSRGWCompleteModifyOpBase : CLSRGWBilogOp {
+struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
   static CLSRGWCompleteModifyOpBase from_call(
     const rgw_cls_obj_complete_op& call);
 
@@ -1545,7 +1551,7 @@ struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
   }
 };
 
-struct CLSRGWLinkOLHBase : CLSRGWBilogOp {
+struct CLSRGWLinkOLHBase : cls_rgw_bi_log_related_op {
   static CLSRGWLinkOLHBase from_call(const rgw_cls_link_olh_op& call);
 
   static RGWModifyOp get_bilog_op_type(const bool delete_marker) {
@@ -1573,10 +1579,10 @@ struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
   }
 };
 
-struct CLSRGWUnlinkInstance : CLSRGWBilogOp {
+struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
   template <class... Args>
   CLSRGWUnlinkInstance(Args&&... args)
-    : CLSRGWBilogOp { std::forward<Args>(args)..., get_bilog_op_type() } {
+    : cls_rgw_bi_log_related_op { std::forward<Args>(args)..., get_bilog_op_type() } {
   }
 
   constexpr static enum RGWModifyOp get_bilog_op_type() {
