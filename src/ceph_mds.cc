@@ -166,8 +166,7 @@ int main(int argc, const char **argv)
   std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
-				      Messenger::get_random_nonce(),
-				      Messenger::HAS_MANY_CONNECTIONS);
+				      Messenger::get_random_nonce());
   if (!msgr)
     forker.exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);

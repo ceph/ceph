@@ -105,7 +105,7 @@ class FailoverSuitePeer : public Dispatcher {
 
  private:
   void init(entity_addr_t test_peer_addr, SocketPolicy policy) {
-    peer_msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(4), "TestPeer", 4, 0));
+    peer_msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(4), "TestPeer", 4));
     dummy_auth.auth_registry.refresh_config();
     peer_msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     peer_msgr->set_default_policy(policy);
@@ -362,7 +362,7 @@ class FailoverTestPeer : public Dispatcher {
   }
 
   void init(entity_addr_t cmd_peer_addr) {
-    cmd_msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(3), "CmdSrv", 3, 0));
+    cmd_msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(3), "CmdSrv", 3));
     dummy_auth.auth_registry.refresh_config();
     cmd_msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     cmd_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
