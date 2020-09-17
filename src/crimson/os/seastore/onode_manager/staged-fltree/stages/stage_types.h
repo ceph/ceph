@@ -210,12 +210,11 @@ inline std::ostream& operator<<(std::ostream& os, const staged_position_t<STAGE_
 
 using search_position_t = staged_position_t<STAGE_TOP>;
 
-template <match_stage_t STAGE, typename = std::enable_if_t<STAGE == STAGE_TOP>>
-const search_position_t& cast_down(const search_position_t& pos) { return pos; }
-
-template <match_stage_t STAGE, typename = std::enable_if_t<STAGE != STAGE_TOP>>
+template <match_stage_t STAGE>
 const staged_position_t<STAGE>& cast_down(const search_position_t& pos) {
-  if constexpr (STAGE == STAGE_STRING) {
+  if constexpr (STAGE == STAGE_LEFT) {
+    return pos;
+  } else if constexpr (STAGE == STAGE_STRING) {
 #ifndef NDEBUG
     if (pos.is_end()) {
       assert(pos.nxt.is_end());
@@ -224,7 +223,7 @@ const staged_position_t<STAGE>& cast_down(const search_position_t& pos) {
     }
 #endif
     return pos.nxt;
-  } else if (STAGE == STAGE_RIGHT) {
+  } else if constexpr (STAGE == STAGE_RIGHT) {
 #ifndef NDEBUG
     if (pos.is_end()) {
       assert(pos.nxt.nxt.is_end());
@@ -235,7 +234,7 @@ const staged_position_t<STAGE>& cast_down(const search_position_t& pos) {
 #endif
     return pos.nxt.nxt;
   } else {
-    assert(false);
+    assert(false && "impossible path");
   }
 }
 
@@ -243,6 +242,22 @@ template <match_stage_t STAGE>
 staged_position_t<STAGE>& cast_down(search_position_t& pos) {
   const search_position_t& _pos = pos;
   return const_cast<staged_position_t<STAGE>&>(cast_down<STAGE>(_pos));
+}
+
+template <match_stage_t STAGE>
+staged_position_t<STAGE>& cast_down_fill_0(search_position_t& pos) {
+  if constexpr (STAGE == STAGE_LEFT) {
+    return pos;
+  } if constexpr (STAGE == STAGE_STRING) {
+    pos.index = 0;
+    return pos.nxt;
+  } else if constexpr (STAGE == STAGE_RIGHT) {
+    pos.index = 0;
+    pos.nxt.index = 0;
+    return pos.nxt.nxt;
+  } else {
+    assert(false && "impossible path");
+  }
 }
 
 inline search_position_t&& normalize(search_position_t&& pos) { return std::move(pos); }
