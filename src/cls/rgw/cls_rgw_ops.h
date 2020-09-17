@@ -1534,9 +1534,6 @@ struct cls_rgw_bi_log_related_op {
 };
 
 struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
-  static CLSRGWCompleteModifyOpBase from_call(
-    const rgw_cls_obj_complete_op& call);
-
   void complete_op(librados::ObjectWriteOperation& o,
                    const rgw_bucket_entry_ver& ver,
                    const rgw_bucket_dir_entry_meta& dir_meta,
@@ -1552,8 +1549,6 @@ struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
 };
 
 struct CLSRGWLinkOLHBase : cls_rgw_bi_log_related_op {
-  static CLSRGWLinkOLHBase from_call(const rgw_cls_link_olh_op& call);
-
   static RGWModifyOp get_bilog_op_type(const bool delete_marker) {
      return delete_marker ? CLS_RGW_OP_LINK_OLH_DM
                           : CLS_RGW_OP_LINK_OLH;
@@ -1588,8 +1583,6 @@ struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
   constexpr static enum RGWModifyOp get_bilog_op_type() {
     return CLS_RGW_OP_UNLINK_INSTANCE;
   }
-
-  static CLSRGWUnlinkInstance from_call(const rgw_cls_unlink_instance_op& call);
 
   void unlink_instance(librados::ObjectWriteOperation& op,
                        const std::string& olh_tag,
