@@ -1791,7 +1791,7 @@ struct cls_rgw_bi_log_related_op {
   const std::string op_tag;
   const rgw_zone_set* const zones_trace;
   const uint16_t bilog_flags;
-  const enum RGWModifyOp op_type;
+  const enum RGWModifyOp op;
 };
 
 struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {

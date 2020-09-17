@@ -106,7 +106,7 @@ void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
 {
   bufferlist in;
   rgw_cls_obj_complete_op call;
-  call.op = this->op_type;
+  call.op = this->op;
   call.op_tag = this->op_tag;
   call.key = this->key;
   call.ver = ver;
@@ -292,7 +292,7 @@ void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& op,
   call.key = this->key;
   call.olh_tag = std::string(olh_tag.c_str(), olh_tag.length());
   call.op_tag = this->op_tag;
-  call.delete_marker = this->op_type;
+  call.delete_marker = this->op;
   if (meta) {
     call.meta = *meta;
   }
