@@ -123,6 +123,54 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
   key.append(id);
 }
 
+// prepare a BILog entry basing on two sources of information:
+//   1. the state cls_rgw_bi_log_related_op which is solely constructed
+//      from data passed by a client;
+//   2. parameters computed locally (in cls_rgw). They can be
+//      problematic as client may have no access to it. Therefore,
+//      the goal is to minimize the set / eradicate it entirelly.
+static int log_index_operation(cls_method_context_t hctx,
+                               const cls_rgw_bi_log_related_op& op,
+                               const real_time& timestamp,
+                               const rgw_bucket_entry_ver& ver,
+                               uint64_t index_ver,
+                               string& max_marker, /* in out */
+                               const string *owner,
+                               const string *owner_display_name)
+{
+  bufferlist bl;
+
+  rgw_bi_log_entry entry;
+
+  entry.object = op.key.name;
+  entry.instance = op.key.instance;
+  entry.timestamp = timestamp;
+  entry.op = op.op;
+  entry.ver = ver;
+  entry.state = CLS_RGW_STATE_COMPLETE;
+  entry.index_ver = index_ver;
+  entry.tag = op.op_tag;
+  entry.bilog_flags = op.bilog_flags;
+  entry.zones_trace = op.zones_trace;
+  if (owner) {
+    entry.owner = *owner;
+  }
+  if (owner_display_name) {
+    entry.owner_display_name = *owner_display_name;
+  }
+
+  string key;
+  bi_log_index_key(hctx, key, entry.id, index_ver);
+
+  encode(entry, bl);
+
+  if (entry.id > max_marker)
+    max_marker = entry.id;
+
+  return cls_cxx_map_set_val(hctx, key, &bl);
+}
+
+// TODO: drop me
 static int log_index_operation(cls_method_context_t hctx,
                                const cls_rgw_obj_key& obj_key,
                                RGWModifyOp op,
@@ -1082,8 +1130,14 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   if (op.log_op && !header.syncstopped) {
-    rc = log_index_operation(hctx, op.key, op.op, op.op_tag, entry.meta.mtime, entry.ver,
-                             header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
+    rc = log_index_operation(hctx,
+                             op,
+                             entry.meta.mtime,
+                             entry.ver,
+                             header.ver,
+                             header.max_marker,
+                             nullptr,
+                             nullptr);
     if (rc < 0)
       return rc;
   }
