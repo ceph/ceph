@@ -102,6 +102,8 @@ public:
   virtual void init_mark_segment_closed(
     segment_id_t segment, segment_seq_t seq) {}
 
+  virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
+
   virtual ~JournalSegmentProvider() {}
 };
 
