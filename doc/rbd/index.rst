@@ -17,7 +17,9 @@ such as snapshotting, replication and consistency. Ceph's
 :abbr:`RADOS (Reliable Autonomic Distributed Object Store)` Block Devices (RBD)
 interact with OSDs using kernel modules or the ``librbd`` library.
 
-.. ditaa::  +------------------------+ +------------------------+
+.. ditaa::
+
+            +------------------------+ +------------------------+
             |     Kernel Module      | |        librbd          |
             +------------------------+-+------------------------+
             |                   RADOS Protocol                  |

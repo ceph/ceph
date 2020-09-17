@@ -21,7 +21,9 @@ will be serviced from the local cache.
 
 .. note:: RBD shared read-only parent image cache requires the Ceph Nautilus release or later.
 
-.. ditaa::  +--------------------------------------------------------+
+.. ditaa::
+
+            +--------------------------------------------------------+
             |                         QEMU                           |
             +--------------------------------------------------------+
             |                librbd (cloned images)                  |
