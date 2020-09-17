@@ -6140,8 +6140,14 @@ void RGWCompleteMultipart::execute()
 
       rgw_obj_index_key remove_key;
       src_obj.key.get_index_key(&remove_key);
-
       remove_objs.push_back(remove_key);
+
+      /* clean up from any prior uploads of this part--n.b., it
+       * doesn't matter if this complete attempt succeeds or fails */
+      cleanup_multipart_reuploads(store, s->cct,
+				  static_cast<RGWObjectCtx*>(s->obj_ctx),
+				  s->bucket->get_info(), obj_part,
+				  meta_obj->get_obj());
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;

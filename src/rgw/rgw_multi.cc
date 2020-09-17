@@ -204,11 +204,12 @@ static inline void cleanup_mp_part(
   rgw::sal::RGWRadosStore* store,
   RGWBucketInfo& bucket_info,
   RGWObjManifest& manifest,
-  rgw_obj& meta_obj,
+  const rgw_obj& meta_obj,
   cls_rgw_obj_chain& chain,
   list<rgw_obj_index_key>& remove_objs) {
   /* clean up an mp part */
-  store->getRados()->update_gc_chain(meta_obj, manifest, &chain);
+  store->getRados()->update_gc_chain(const_cast<rgw_obj&>(meta_obj), manifest,
+				     &chain);
   RGWObjManifest::obj_iterator oiter = manifest.obj_begin();
   if (oiter != manifest.obj_end()) {
     rgw_obj head;
@@ -220,6 +221,28 @@ static inline void cleanup_mp_part(
     remove_objs.push_back(key);
   }
 } /* cleanup_part */
+
+void cleanup_multipart_reuploads(rgw::sal::RGWRadosStore* store,
+				 CephContext *cct,
+				 RGWObjectCtx *obj_ctx,
+				 RGWBucketInfo& bucket_info,
+				 RGWUploadPartInfo& obj_part,
+				 const rgw_obj& meta_obj)
+{
+  /* cleanup obj_part.failed_prefixes arising from re-uploads
+   * of the current part (if any) */
+  cls_rgw_obj_chain chain;
+  list<rgw_obj_index_key> remove_objs;
+
+  for (const string& failed_prefix : obj_part.failed_prefixes)  {
+    /* cleanup_part relies on manifest obj iterator, so
+     * clone this one and back-form its prefix */
+    RGWObjManifest manifest(obj_part.manifest);
+    manifest.set_prefix(failed_prefix);
+    cleanup_mp_part(store, bucket_info, manifest, meta_obj, chain,
+		    remove_objs);
+  }
+} /* cleanup_multipart_reuploads */
 
 int abort_multipart_upload(rgw::sal::RGWRadosStore* store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
