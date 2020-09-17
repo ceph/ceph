@@ -171,6 +171,26 @@ public:
     Transaction &t,
     CachedExtentRef extent) = 0;
 
+  /**
+   * get_physical_extent_if_live
+   *
+   * Returns extent at addr/laddr if still live (if laddr
+   * still points at addr).  Extent must be an internal, physical
+   * extent.
+   *
+   * Returns a null CachedExtentRef if extent is not live.
+   */
+  using get_physical_extent_if_live_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using get_physical_extent_if_live_ret =
+    get_physical_extent_if_live_ertr::future<CachedExtentRef>;
+  virtual get_physical_extent_if_live_ret get_physical_extent_if_live(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t addr,
+    laddr_t laddr,
+    segment_off_t len) = 0;
+
   virtual void add_pin(LBAPin &pin) = 0;
 
   virtual ~LBAManager() {}

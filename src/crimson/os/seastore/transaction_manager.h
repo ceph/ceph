@@ -227,6 +227,14 @@ public:
     Transaction &t,
     CachedExtentRef extent) final;
 
+  using SegmentCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
+  get_extent_if_live_ret get_extent_if_live(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t addr,
+    laddr_t laddr,
+    segment_off_t len) final;
+
   ~TransactionManager();
 
 private:
