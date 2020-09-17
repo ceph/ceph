@@ -21,6 +21,12 @@ struct segment_info_t {
   // Will be non-null for any segments in the current journal
   segment_seq_t journal_segment_seq = NULL_SEG_SEQ;
 
+
+  bool is_in_journal(journal_seq_t tail_committed) const {
+    return journal_segment_seq != NULL_SEG_SEQ &&
+      tail_committed.segment_seq <= journal_segment_seq;
+  }
+
   bool is_empty() const {
     return state == Segment::segment_state_t::EMPTY;
   }
@@ -209,6 +215,12 @@ public:
     size_t target_journal_segments = 0;
     size_t max_journal_segments = 0;
 
+    double reclaim_ratio_hard_limit = 0;
+    // don't apply reclaim ratio with available space below this
+    double reclaim_ratio_usage_min = 0;
+
+    double available_ratio_hard_limit = 0;
+
     static config_t default_from_segment_manager(
       SegmentManager &manager) {
       return config_t{
@@ -216,7 +228,11 @@ public:
 	static_cast<size_t>(manager.get_segment_size()),
 	(size_t)manager.get_block_size(),
 	2,
-	4};
+	4,
+	.5,
+	.95,
+	.2
+	};
     }
   };
 
@@ -270,6 +286,26 @@ public:
       paddr_t addr,
       laddr_t laddr,
       segment_off_t len) = 0;
+
+    /**
+     * scan_extents
+     *
+     * Interface shim for Journal::scan_extents
+     */
+    using scan_extents_ret = Journal::scan_extents_ret;
+    virtual scan_extents_ret scan_extents(
+      paddr_t addr,
+      extent_len_t bytes_to_read) = 0;
+
+    /**
+     * release_segment
+     *
+     * Release segment.
+     */
+    using release_segment_ertr = SegmentManager::release_ertr;
+    using release_segment_ret = release_segment_ertr::future<>;
+    virtual release_segment_ret release_segment(
+      segment_id_t id) = 0;
   };
 
 private:
@@ -338,6 +374,14 @@ public:
     segments[segment].journal_segment_seq = seq;
   }
 
+  segment_seq_t get_seq(segment_id_t id) final {
+    return segments[id].journal_segment_seq;
+  }
+
+  void mark_segment_released(segment_id_t segment) {
+    return mark_empty(segment);
+  }
+
   void mark_space_used(
     paddr_t addr,
     extent_len_t len,
@@ -373,6 +417,26 @@ public:
       addr.offset,
       len);
     assert(ret >= 0);
+  }
+
+  segment_id_t get_next_gc_target() const {
+    segment_id_t ret = NULL_SEG_ID;
+    int64_t least_live_bytes = std::numeric_limits<int64_t>::max();
+    for (segment_id_t i = 0; i < segments.size(); ++i) {
+      if (segments[i].is_closed() &&
+	  !segments[i].is_in_journal(journal_tail_committed) &&
+	  space_tracker->get_usage(i) < least_live_bytes) {
+	ret = i;
+	least_live_bytes = space_tracker->get_usage(i);
+      }
+    }
+    if (ret != NULL_SEG_ID) {
+      crimson::get_logger(ceph_subsys_filestore).debug(
+	"SegmentCleaner::get_next_gc_target: segment {} seq {}",
+	ret,
+	segments[ret].journal_segment_seq);
+    }
+    return ret;
   }
 
   SpaceTrackerIRef get_empty_space_tracker() const {
@@ -425,6 +489,18 @@ private:
 
   // journal status helpers
 
+  /**
+   * rewrite_dirty
+   *
+   * Writes out dirty blocks dirtied earlier than limit.
+   */
+  using rewrite_dirty_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using rewrite_dirty_ret = rewrite_dirty_ertr::future<>;
+  rewrite_dirty_ret rewrite_dirty(
+    Transaction &t,
+    journal_seq_t limit);
+
   journal_seq_t get_dirty_tail() const {
     auto ret = journal_head;
     ret.segment_seq -= std::min(
@@ -440,6 +516,140 @@ private:
       config.max_journal_segments);
     return ret;
   }
+
+  // GC status helpers
+  paddr_t gc_current_pos = P_ADDR_NULL;
+
+  /**
+   * do_gc
+   *
+   * Performs bytes worth of gc work on t.
+   */
+  using do_gc_ertr = SegmentManager::read_ertr;
+  using do_gc_ret = do_gc_ertr::future<>;
+  do_gc_ret do_gc(
+    Transaction &t,
+    size_t bytes);
+
+  size_t get_bytes_used_current_segment() const {
+    assert(journal_head != journal_seq_t());
+    return journal_head.offset.offset;
+  }
+
+  size_t get_bytes_available_current_segment() const {
+    return config.segment_size - get_bytes_used_current_segment();
+  }
+
+  /**
+   * get_bytes_scanned_current_segment
+   *
+   * Returns the number of bytes from the current gc segment that
+   * have been scanned.
+   */
+  size_t get_bytes_scanned_current_segment() const {
+    if (gc_current_pos == P_ADDR_NULL)
+      return 0;
+
+    return gc_current_pos.offset;
+  }
+
+  size_t get_available_bytes() const {
+    return (empty_segments * config.segment_size) +
+      get_bytes_available_current_segment() +
+      get_bytes_scanned_current_segment();
+  }
+
+  size_t get_total_bytes() const {
+    return config.segment_size * config.num_segments;
+  }
+
+  size_t get_unavailable_bytes() const {
+    return get_total_bytes() - get_available_bytes();
+  }
+
+  /// Returns bytes currently occupied by live extents (not journal)
+  size_t get_used_bytes() const {
+    return used_bytes;
+  }
+
+  /// Returns the number of bytes in unavailable segments that are not live
+  size_t get_reclaimable_bytes() const {
+    return get_unavailable_bytes() - get_used_bytes();
+  }
+
+  /**
+   * get_reclaim_ratio
+   *
+   * Returns the ratio of unavailable space that is not currently used.
+   */
+  double get_reclaim_ratio() const {
+    if (get_unavailable_bytes() == 0) return 0;
+    return (double)get_reclaimable_bytes() / (double)get_unavailable_bytes();
+  }
+
+  /**
+   * get_available_ratio
+   *
+   * Returns ratio of available space to write to total space
+   */
+  double get_available_ratio() const {
+    return (double)get_available_bytes() / (double)get_total_bytes();
+  }
+
+  /**
+   * get_immediate_bytes_to_gc_for_reclaim
+   *
+   * Returns the number of bytes to gc in order to bring the
+   * reclaim ratio below reclaim_ratio_usage_min.
+   */
+  size_t get_immediate_bytes_to_gc_for_reclaim() const {
+    if (get_reclaim_ratio() < config.reclaim_ratio_hard_limit)
+      return 0;
+
+    const size_t unavailable_target = std::max(
+      get_used_bytes() / (1.0 - config.reclaim_ratio_hard_limit),
+      (1 - config.reclaim_ratio_usage_min) * get_total_bytes());
+
+    if (unavailable_target > get_unavailable_bytes())
+      return 0;
+
+    return (get_unavailable_bytes() - unavailable_target) / get_reclaim_ratio();
+  }
+
+  /**
+   * get_immediate_bytes_to_gc_for_available
+   *
+   * Returns the number of bytes to gc in order to bring the
+   * the ratio of available disk space to total disk space above
+   * available_ratio_hard_limit.
+   */
+  size_t get_immediate_bytes_to_gc_for_available() const {
+    if (get_available_ratio() > config.available_ratio_hard_limit) {
+      return 0;
+    }
+
+    const double ratio_to_make_available = config.available_ratio_hard_limit -
+      get_available_ratio();
+    return ratio_to_make_available * (double)get_total_bytes()
+      / get_reclaim_ratio();
+  }
+
+  /**
+   * get_immediate_bytes_to_gc
+   *
+   * Returns number of bytes to gc in order to restore any strict
+   * limits.
+   */
+  size_t get_immediate_bytes_to_gc() const {
+    // number of bytes to gc in order to correct reclaim ratio
+    size_t for_reclaim = get_immediate_bytes_to_gc_for_reclaim();
+
+    // number of bytes to gc in order to correct available_ratio
+    size_t for_available = get_immediate_bytes_to_gc_for_available();
+
+    return std::max(for_reclaim, for_available);
+  }
+
   void mark_closed(segment_id_t segment) {
     assert(segments.size() > segment);
     if (init_complete) {
