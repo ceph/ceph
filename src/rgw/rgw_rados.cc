@@ -3365,9 +3365,8 @@ public:
         etag_verifier_atomic = boost::in_place(cct, filter);
         filter = &*etag_verifier_atomic;
       } else {
-        obj_type = OBJ_TYPE_MPU;
-        etag_verifier_mpu = boost::in_place(cct, filter);
         uint64_t cur_part_ofs = UINT64_MAX;
+        std::vector<uint64_t> part_ofs;
 
         /*
          * We must store the offset of each part to calculate the ETAGs for each
@@ -3379,8 +3378,11 @@ public:
             continue;
           cur_part_ofs = mi.get_part_ofs();
           ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
-          etag_verifier_mpu->append_part_ofs(cur_part_ofs);
+          part_ofs.push_back(cur_part_ofs);
         }
+
+        obj_type = OBJ_TYPE_MPU;
+        etag_verifier_mpu = boost::in_place(cct, std::move(part_ofs), filter);
         filter = &*etag_verifier_mpu;
       }
     }

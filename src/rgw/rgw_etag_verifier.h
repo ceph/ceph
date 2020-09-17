@@ -60,12 +60,15 @@ class RGWPutObj_ETagVerifier_MPU : public RGWPutObj_ETagVerifier
   void process_end_of_MPU_part();
 
 public:
-  RGWPutObj_ETagVerifier_MPU(CephContext* cct_, rgw::putobj::DataProcessor *next)
-    : RGWPutObj_ETagVerifier(cct_, next) {}
+  RGWPutObj_ETagVerifier_MPU(CephContext* cct,
+                             std::vector<uint64_t> part_ofs,
+                             rgw::putobj::DataProcessor *next)
+    : RGWPutObj_ETagVerifier(cct, next),
+      part_ofs(std::move(part_ofs))
+  {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
-  void append_part_ofs(uint64_t ofs) { part_ofs.emplace_back(ofs); }
 
 }; /* RGWPutObj_ETagVerifier_MPU */
 
