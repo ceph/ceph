@@ -1186,63 +1186,6 @@ struct staged {
     }
   }
 
-  /*
-   * Lookup interfaces
-   */
-
-  static void lookup_largest_normalized(
-      const container_t& container,
-      search_position_t& position,
-      const value_t*& p_value) {
-    if constexpr (STAGE == STAGE_LEFT) {
-      lookup_largest(container, position, p_value);
-      return;
-    }
-    position.index = 0;
-    auto& pos_nxt = position.nxt;
-    if constexpr (STAGE == STAGE_STRING) {
-      lookup_largest(container, pos_nxt, p_value);
-      return;
-    }
-    pos_nxt.index = 0;
-    auto& pos_nxt_nxt = pos_nxt.nxt;
-    if constexpr (STAGE == STAGE_RIGHT) {
-      lookup_largest(container, pos_nxt_nxt, p_value);
-      return;
-    }
-    assert(false);
-  }
-
-  static lookup_result_t<NODE_TYPE> lower_bound_normalized(
-      const container_t& container,
-      const full_key_t<KeyT::HOBJ>& key,
-      MatchHistory& history) {
-    auto&& result = lower_bound(container, key, history);
-#ifndef NDEBUG
-    if (result.is_end()) {
-      assert(result.mstat == MSTAT_END);
-    } else {
-      full_key_t<KeyT::VIEW> index;
-      get_key_view(container, result.position, index);
-      assert_mstat(key, index, result.mstat);
-    }
-#endif
-    if constexpr (container_t::FIELD_TYPE == field_type_t::N0) {
-      // currently only internal node checks mstat
-      if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-        if (result.mstat == MSTAT_NE2) {
-          auto cmp = compare_to<KeyT::HOBJ>(
-              key, container[result.position.index].shard_pool);
-          assert(cmp != MatchKindCMP::PO);
-          if (cmp != MatchKindCMP::EQ) {
-            result.mstat = MSTAT_NE3;
-          }
-        }
-      }
-    }
-    return normalize(std::move(result));
-  }
-
   static std::ostream& dump(const container_t& container,
                             std::ostream& os,
                             const std::string& prefix,

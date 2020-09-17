@@ -178,7 +178,34 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         return lookup_result_t<NODE_TYPE>::end();
       }
     }
-    auto result = STAGE_T::lower_bound_normalized(node_stage, key, history);
+
+    auto result_raw = STAGE_T::lower_bound(node_stage, key, history);
+#ifndef NDEBUG
+    if (result_raw.is_end()) {
+      assert(result_raw.mstat == MSTAT_END);
+    } else {
+      full_key_t<KeyT::VIEW> index;
+      STAGE_T::get_key_view(node_stage, result_raw.position, index);
+      assert_mstat(key, index, result_raw.mstat);
+    }
+#endif
+
+    // calculate MSTAT_NE3
+    if constexpr (FIELD_TYPE == field_type_t::N0) {
+      // currently only internal node checks mstat
+      if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+        if (result_raw.mstat == MSTAT_NE2) {
+          auto cmp = compare_to<KeyT::HOBJ>(
+              key, node_stage[result_raw.position.index].shard_pool);
+          assert(cmp != MatchKindCMP::PO);
+          if (cmp != MatchKindCMP::EQ) {
+            result_raw.mstat = MSTAT_NE3;
+          }
+        }
+      }
+    }
+
+    auto result = normalize(std::move(result_raw));
     if (result.is_end()) {
       assert(node_stage.is_level_tail());
       assert(result.p_value == nullptr);
@@ -308,7 +335,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
    */
   void get_largest_value(search_position_t& pos, const onode_t*& p_value) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      STAGE_T::lookup_largest_normalized(extent.read(), pos, p_value);
+      STAGE_T::lookup_largest(extent.read(), cast_down_fill_0<STAGE>(pos), p_value);
     } else {
       assert(false && "impossible path");
     }
