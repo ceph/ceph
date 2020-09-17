@@ -77,6 +77,7 @@ public:
   bool is_osd() const { return type() == TYPE_OSD; }
   bool is_mon() const { return type() == TYPE_MON; }
   bool is_mgr() const { return type() == TYPE_MGR; }
+  bool is_replica() const { return type() == TYPE_REPLICA; }
 
   operator ceph_entity_name() const {
     ceph_entity_name n = { _type, ceph_le64(_num) };
@@ -105,6 +106,9 @@ public:
     } else if (strstr(start, "mgr.") == start) {
       _type = TYPE_MGR;
       start += 4;
+    } else if (strstr(start, "replica.") == start) {
+      _type = TYPE_REPLICA;
+      start += 8; // strlen("replica.")
     } else {
       return false;
     }

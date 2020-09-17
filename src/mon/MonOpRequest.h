@@ -56,6 +56,9 @@ struct MonOpRequest : public TrackedOp {
   void mark_mdsmon_event(const std::string &event) {
     mark_svc_event("mdsmap", event);
   }
+  void mark_replicamon_event(const std::string &event) {
+    mark_svc_event("replicamap", event);
+  }
   void mark_authmon_event(const std::string &event) {
     mark_svc_event("auth", event);
   }
