@@ -1322,6 +1322,7 @@ protected:
   bool is_remapped() const { return recovery_state.is_remapped(); }
   bool is_peered() const { return recovery_state.is_peered(); }
   bool is_recovering() const { return recovery_state.is_recovering(); }
+  bool is_backfilling() const { return recovery_state.is_backfilling(); }
   bool is_premerge() const { return recovery_state.is_premerge(); }
   bool is_repair() const { return recovery_state.is_repair(); }
   bool is_laggy() const { return state_test(PG_STATE_LAGGY); }

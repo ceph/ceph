@@ -15089,7 +15089,8 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   dout(10) << __func__ << " " << soid
 	   << " peers osd.{" << get_acting_recovery_backfill() << "}" << dendl;
 
-  if (!is_clean()) {
+  if (!is_clean() && !is_backfilling() && !is_recovering()) {
+    dout(20) << __func__ << " Blocked by PG state " << soid << dendl;
     block_for_clean(soid, op);
     return -EAGAIN;
   }
@@ -15112,15 +15113,25 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
 
-  ceph_assert(is_clean());
-  state_set(PG_STATE_REPAIR);
-  state_clear(PG_STATE_CLEAN);
-  queue_peering_event(
-      PGPeeringEventRef(
-	std::make_shared<PGPeeringEvent>(
-	get_osdmap_epoch(),
-	get_osdmap_epoch(),
-	PeeringState::DoRecovery())));
+  if (is_clean()) {
+    dout(20) << __func__ << " First read error starting recovery for " << soid << dendl;
+    state_set(PG_STATE_REPAIR);
+    state_clear(PG_STATE_CLEAN);
+    queue_peering_event(
+        PGPeeringEventRef(
+	  std::make_shared<PGPeeringEvent>(
+	  get_osdmap_epoch(),
+	  get_osdmap_epoch(),
+	  PeeringState::DoRecovery())));
+  } else {
+    // Set repair in case we are the first read error and we happen to be
+    // backfilling or recovering
+    state_set(PG_STATE_REPAIR);
+    // A prior error must have already cleared clean state and queued recovery
+    // or a map change has triggered re-peering.
+    // Not inlining the recovery by calling maybe_kick_recovery(soid);
+    dout(15) << __func__<< ": Read error on " << soid << ", but already seen errors" << dendl;
+  }
 
   return -EAGAIN;
 }
