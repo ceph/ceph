@@ -92,7 +92,7 @@ struct rgw_cls_obj_complete_op
   std::string locator;
   rgw_bucket_entry_ver ver;
   rgw_bucket_dir_entry_meta meta;
-  std::string tag;
+  std::string op_tag;
   bool log_op;
   uint16_t bilog_flags;
 
@@ -107,7 +107,7 @@ struct rgw_cls_obj_complete_op
     encode(c, bl);
     encode(ver.epoch, bl);
     encode(meta, bl);
-    encode(tag, bl);
+    encode(op_tag, bl);
     encode(locator, bl);
     encode(remove_objs, bl);
     encode(ver, bl);
@@ -127,7 +127,7 @@ struct rgw_cls_obj_complete_op
     }
     decode(ver.epoch, bl);
     decode(meta, bl);
-    decode(tag, bl);
+    decode(op_tag, bl);
     if (struct_v >= 2) {
       decode(locator, bl);
     }
