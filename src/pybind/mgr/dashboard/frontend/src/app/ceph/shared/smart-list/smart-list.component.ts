@@ -1,5 +1,6 @@
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, ViewChild } from '@angular/core';
 
+import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { HostService } from '../../../shared/api/host.service';
@@ -19,6 +20,9 @@ import {
   styleUrls: ['./smart-list.component.scss']
 })
 export class SmartListComponent implements OnInit, OnChanges {
+  @ViewChild('innerNav')
+  nav: NgbNav;
+
   @Input()
   osdId: number = null;
   @Input()
@@ -139,6 +143,10 @@ smartmontools is required to successfully retrieve data.`;
         }
       });
     }
+  }
+
+  isEmpty(value: any) {
+    return _.isEmpty(value);
   }
 
   ngOnInit() {
