@@ -122,7 +122,11 @@ bool RefreshImageDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  if (flush_source != FLUSH_SOURCE_USER) {
+  // The refresh state machine can initiate a flush and it can
+  // enable the exclusive-lock which will also attmept to flush.
+  if (flush_source == FLUSH_SOURCE_REFRESH ||
+      flush_source == FLUSH_SOURCE_EXCLUSIVE_LOCK_SKIP_REFRESH ||
+      flush_source == FLUSH_SOURCE_SHUTDOWN) {
     return false;
   }
 
