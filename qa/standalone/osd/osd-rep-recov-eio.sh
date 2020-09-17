@@ -459,6 +459,52 @@ function TEST_rep_read_unfound() {
     fi
 }
 
+# Test multiple read errors
+function TEST_rep_recovery_multi() {
+    local dir=$1
+    local objname=myobject
+    local lastobj=100
+    local testgroup=40
+
+    setup_osds 3 || return 1
+
+    local poolname=test-pool
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    rados_put $dir $poolname $objname || return 1
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local primary=$(get_primary $poolname $objname)
+
+    dd if=/dev/urandom of=${dir}/ORIGINAL bs=1024 count=4
+    for i in $(seq 1 $lastobj)
+    do
+      rados --pool $poolname put obj${i} $dir/ORIGINAL || return 1
+    done
+
+    # shard 0 is the primary osd not the osd id
+    for o in $(seq 1 $testgroup)
+    do
+      inject_eio rep data $poolname obj${o} $dir 0 || return 1
+    done
+
+    for i in $(seq 1 $lastobj)
+    do
+      rados --pool $poolname get obj${i} $dir/CHECK || return 1
+      diff -q $dir/ORIGINAL $dir/CHECK || return 1
+    done
+
+    wait_for_clean || return 1
+
+    # Make sure all objects happened in one recovery phase
+    test "1" = "$(grep "First read error starting recovery for" $dir/osd.${primary}.log | wc -l)" || return 1
+
+    rm -f ${dir}/ORIGINAL ${dir}/CHECK
+
+    delete_pool $poolname
+}
+
 main osd-rep-recov-eio.sh "$@"
 
 # Local Variables:
