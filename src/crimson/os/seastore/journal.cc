@@ -47,7 +47,7 @@ Journal::initialize_segment(Segment &segment)
   // write out header
   ceph_assert(segment.get_write_ptr() == 0);
   bufferlist bl;
-  segment_seq_t seq = current_journal_segment_seq++;
+  segment_seq_t seq = next_journal_segment_seq++;
   auto header = segment_header_t{
     seq,
     segment.get_segment_id(),
@@ -250,7 +250,7 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 		rt.second.journal_segment_seq;
 	    });
 
-	  current_journal_segment_seq =
+	  next_journal_segment_seq =
 	    segments.rbegin()->second.journal_segment_seq + 1;
 	  std::for_each(
 	    segments.begin(),

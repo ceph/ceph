@@ -220,15 +220,13 @@ private:
   JournalSegmentProvider *segment_provider = nullptr;
   SegmentManager &segment_manager;
 
-  segment_seq_t current_journal_segment_seq = 0;
+  segment_seq_t next_journal_segment_seq = 0;
 
   SegmentRef current_journal_segment;
   segment_off_t written_to = 0;
 
-  segment_id_t next_journal_segment_seq = NULL_SEG_ID;
-
   journal_seq_t get_journal_seq(paddr_t addr) {
-    return journal_seq_t{current_journal_segment_seq, addr};
+    return journal_seq_t{next_journal_segment_seq-1, addr};
   }
 
   /// prepare segment for writes, writes out segment header
