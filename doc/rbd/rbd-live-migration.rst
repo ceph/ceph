@@ -20,7 +20,9 @@ the image is updated to point to the new target image.
    kernel module does not support live-migration at this time.
 
 
-.. ditaa:: +-------------+               +-------------+
+.. ditaa::
+
+           +-------------+               +-------------+
            | {s} c999    |               | {s}         |
            |  Live       | Target refers |  Live       |
            |  migration  |<-------------*|  migration  |
