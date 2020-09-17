@@ -178,10 +178,6 @@ int RGWMetadataLogTrimCR::request_complete()
   return r;
 }
 
-RGWMetadataLogBE::RGWMetadataLogBE(CephContext* const cct, std::string prefix)
-    : cct(cct), prefix(prefix) {}
-RGWMetadataLogBE::~RGWMetadataLogBE() {}
-
 class RGWMetadataLogOmap final : public RGWMetadataLogBE {
   RGWSI_Cls& cls;
   std::vector<std::string> oids;
@@ -376,20 +372,300 @@ public:
   }
 };
 
-RGWMetadataLog::RGWMetadataLog(CephContext *cct,
-		 rgw::sal::RGWRadosStore* store,
-                 RGWSI_Zone *_zone_svc,
-                 RGWSI_Cls *_cls_svc,
-                 const std::string& period)
-    : cct(cct), store(store),
-      prefix(make_prefix(period)) {
-    svc.zone = _zone_svc;
-    svc.cls = _cls_svc;
-//    be = std::make_unique<RGWMetadataLogOmap>(cct, prefix, *svc.cls);
+class RGWMetadataLogFIFO final : public RGWMetadataLogBE {
+  std::vector<std::unique_ptr<rgw::cls::fifo::FIFO>> fifos;
+public:
+  RGWMetadataLogFIFO(CephContext* cct, std::string prefix,
+		     librados::Rados* rados, const rgw_pool& log_pool)
+    : RGWMetadataLogBE(cct, prefix) {
+    librados::IoCtx ioctx;
+    auto shards = cct->_conf->rgw_md_log_max_shards;
+    auto r = rgw_init_ioctx(rados, log_pool.name, ioctx,
+			    true, false);
+    if (r < 0) {
+      throw bs::system_error(ceph::to_error_code(r));
+    }
+    fifos.resize(shards);
+    for (auto i = 0; i < shards; ++i) {
+      r = rgw::cls::fifo::FIFO::create(ioctx, get_shard_oid(i),
+				       &fifos[i], null_yield);
+      if (r < 0) {
+	throw bs::system_error(ceph::to_error_code(r));
+      }
+    }
+    ceph_assert(fifos.size() == unsigned(shards));
+    ceph_assert(std::none_of(fifos.cbegin(), fifos.cend(),
+			     [](const auto& p) {
+			       return p == nullptr;
+			     }));
+  }
+  ~RGWMetadataLogFIFO() override = default;
+  static int exists(CephContext* cct, std::string prefix, librados::Rados* rados,
+		    const rgw_pool& log_pool, bool* exists, bool* has_entries) {
+    auto num_shards = cct->_conf->rgw_md_log_max_shards;
+    librados::IoCtx ioctx;
+    auto r = rgw_init_ioctx(rados, log_pool.name, ioctx,
+			    false, false);
+    if (r < 0) {
+      if (r == -ENOENT) {
+	return 0;
+      } else {
+	lderr(cct) << __PRETTY_FUNCTION__
+		   << ": rgw_init_ioctx failed: " << log_pool.name
+		   << ": " << cpp_strerror(-r) << dendl;
+	return r;
+      }
+    }
+    *exists = false;
+    *has_entries = false;
+    for (auto i = 0; i < num_shards; ++i) {
+      std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
+      auto oid = fmt::format("{}{}", prefix, i);
+      std::vector<rgw::cls::fifo::list_entry> log_entries;
+      bool more = false;
+      auto r = rgw::cls::fifo::FIFO::open(ioctx, oid,
+					  &fifo, null_yield);
+      if (r == -ENOENT || r == -ENODATA) {
+	continue;
+      } else if (r < 0) {
+	lderr(cct) << __PRETTY_FUNCTION__
+		   << ": unable to open FIFO: " << log_pool << "/" << oid
+		   << ": " << cpp_strerror(-r) << dendl;
+	return r;
+      }
+      *exists = true;
+      r = fifo->list(1, nullopt, &log_entries, &more,
+		     null_yield);
+
+      if ((r < 0) && (r != -ENOENT)) {
+	lderr(cct) << __PRETTY_FUNCTION__
+		   << ": unable to list entries: " << log_pool << "/" << oid
+		   << ": " << cpp_strerror(-r) << dendl;
+      } else if (!log_entries.empty()) {
+	*has_entries = true;
+	break;
+      }
+    }
+    return r;
+  }
+  int push(int index, std::vector<cls_log_entry>& items, librados::AioCompletion *&completion) override {
+    std::vector<ceph::buffer::list> c;
+    for (const auto& bs : items) {
+
+      bufferlist bl;
+      encode(bs, bl);
+
+      c.push_back(std::move(bl));
+    }
+
+    auto r = fifos[index]->push(c, completion);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": unable to push to FIFO: " << get_shard_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+    }
+    return r;
+  }
+  int push(int index, ceph::real_time now,
+	   const std::string& section,
+	   const std::string& key,
+	   ceph::buffer::list& bl) override {
+    cls_log_entry entry;
+    utime_t t(now);
+
+    entry.timestamp = t;
+    entry.section = section;
+    entry.name = key;
+    entry.data = bl;
+
+    bufferlist ble;
+    encode(entry, ble);
+
+    auto r = fifos[index]->push(std::move(ble), null_yield);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": unable to push to FIFO: " << get_shard_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+    }
+    return r;
+  }
+  int list(int index, int max_entries,
+	   std::vector<cls_log_entry>& e,
+	   std::string_view marker,
+	   std::string* out_marker, bool* truncated) override {
+    std::vector<rgw::cls::fifo::list_entry> log_entries;
+    bool more = false;
+    auto r = fifos[index]->list(max_entries, marker,
+		   		&log_entries, &more,
+				null_yield);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": unable to list FIFO: " << get_shard_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    for (const auto& entry : log_entries) {
+      auto liter = entry.data.cbegin();
+      cls_log_entry log_entry;
+      try {
+        decode(log_entry, liter);
+      } catch (const buffer::error& err) {
+	lderr(cct) << __PRETTY_FUNCTION__
+		   << ": failed to decode metadata changes log entry: "
+		   << err.what() << dendl;
+	return -EIO;
+      }
+      e.push_back(std::move(log_entry));
+    }
+    if (truncated)
+      *truncated = more;
+    if (out_marker && !log_entries.empty()) {
+      *out_marker = log_entries.back().marker;
+    }
+    return 0;
   }
 
+  int get_info(int index, RGWMetadataLogInfo *info) override {
+    auto& fifo = fifos[index];
+    auto r = fifo->read_meta(null_yield);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": unable to get FIFO metadata: " << get_shard_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    auto m = fifo->meta();
+    auto p = m.head_part_num;
+    if (p < 0) {
+      info->marker = rgw::cls::fifo::marker{}.to_string();
+      info->last_update = ceph::real_clock::zero();
+      return 0;
+    }
+    rgw::cls::fifo::part_info h;
+    r = fifo->get_part_info(p, &h, null_yield);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": unable to get part info: " << get_shard_oid(index) << "/" << p
+		 << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    info->marker = rgw::cls::fifo::marker{p, h.last_ofs}.to_string();
+    info->last_update = h.max_time;
+    return 0;
+  }
 
-int RGWMetadataLog::init()
+  int get_info_async(int index,
+		     RGWMetadataLogInfoCompletion *completion) override {
+    auto& fifo = fifos[index];
+    auto c = completion->get_completion();
+    auto r = fifo->get_head_info([completion](int p,
+					      rgw::cls::fifo::part_info* h) {
+      if (h) {
+	completion->get_header().max_marker =
+	  rgw::cls::fifo::marker{p, h->last_ofs}.to_string();
+	completion->get_header().max_time = utime_t(h->max_time);
+      } else {
+	completion->get_header().max_marker =
+	  rgw::cls::fifo::marker{}.to_string();
+	completion->get_header().max_time = utime_t{};
+      }
+    }, c);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": unable to get head info: " << get_shard_oid(index) << "/"
+		 << ": " << cpp_strerror(-r) << dendl;
+    }
+    return r;
+  }
+
+  int trim(int index, std::string_view marker, bool exclusive) override {
+    auto r = fifos[index]->trim(marker, exclusive, null_yield);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": unable to trim FIFO: " << get_shard_oid(index)
+		 << ": " << cpp_strerror(-r) << dendl;
+    }
+    return r;
+  }
+  int trim(int index, std::string_view marker,
+	   librados::AioCompletion* c, bool exclusive) override {
+    int r = 0;
+    if (marker == rgw::cls::fifo::marker(0, 0).to_string()) {
+      auto pc = c->pc;
+      pc->get();
+      pc->lock.lock();
+      pc->rval = 0;
+      pc->complete = true;
+      pc->lock.unlock();
+      auto cb_complete = pc->callback_complete;
+      auto cb_complete_arg = pc->callback_complete_arg;
+      if (cb_complete)
+	cb_complete(pc, cb_complete_arg);
+
+      auto cb_safe = pc->callback_safe;
+      auto cb_safe_arg = pc->callback_safe_arg;
+      if (cb_safe)
+	cb_safe(pc, cb_safe_arg);
+
+      pc->lock.lock();
+      pc->callback_complete = NULL;
+      pc->callback_safe = NULL;
+      pc->cond.notify_all();
+      pc->put_unlock();
+    } else {
+      r = fifos[index]->trim(marker, exclusive, c);
+      if (r < 0) {
+	lderr(cct) << __PRETTY_FUNCTION__
+		   << ": unable to trim FIFO: " << get_shard_oid(index)
+		   << ": " << cpp_strerror(-r) << dendl;
+      }
+    }
+    return r;
+  }
+  std::string_view max_marker() override {
+    static const std::string mm =
+      rgw::cls::fifo::marker::max().to_string();
+    return std::string_view(mm);
+  }
+};
+
+RGWMetadataLogBE::RGWMetadataLogBE(CephContext* const cct, std::string prefix)
+    : cct(cct), prefix(prefix) {}
+RGWMetadataLogBE::~RGWMetadataLogBE() {}
+
+int RGWMetadataLogBE::remove(CephContext* cct, std::string prefix,
+	       		     librados::Rados* rados, const rgw_pool& log_pool)
+{
+  auto num_shards = cct->_conf->rgw_md_log_max_shards;
+  librados::IoCtx ioctx;
+  auto r = rgw_init_ioctx(rados, log_pool.name, ioctx,
+			  false, false);
+  if (r < 0) {
+    if (r == -ENOENT) {
+      return 0;
+    } else {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": rgw_init_ioctx failed: " << log_pool.name
+		 << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+  }
+  for (auto i = 0; i < num_shards; ++i) {
+    std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
+    auto oid = fmt::format("{}{}", prefix, i);
+    librados::ObjectWriteOperation op;
+    op.remove();
+    auto r = rgw_rados_operate(ioctx, oid, &op, null_yield);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": remove failed: " << log_pool.name << "/" << oid
+		 << ": " << cpp_strerror(-r) << dendl;
+    }
+  }
+  return 0;
+}
+
+int RGWMetadataLog::init(librados::Rados* lr)
 {
   if (be) { // already initialized
     return 0;
@@ -407,12 +683,12 @@ int RGWMetadataLog::init()
 	       << cpp_strerror(-r) << dendl;
   }
   bool fifoexists = false, fifohasentries = false;
-  /*r = RGWMetadataLogFIFO::exists(cct, prefix, lr, log_pool, &fifoexists, &fifohasentries);
+  r = RGWMetadataLogFIFO::exists(cct, prefix, lr, log_pool, &fifoexists, &fifohasentries);
   if (r < 0) {
     lderr(cct) << __PRETTY_FUNCTION__
 	       << ": Error when checking for existing FIFO datalog backend: "
 	       << cpp_strerror(-r) << dendl;
-  }*/
+  }
 
   bool has_entries = omaphasentries || fifohasentries;
   bool remove = false;
@@ -455,7 +731,7 @@ int RGWMetadataLog::init()
     remove = true;
   }
 
-/*  if (remove) {
+  if (remove) {
     r = RGWMetadataLogBE::remove(cct, prefix, lr, log_pool);
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
@@ -465,13 +741,13 @@ int RGWMetadataLog::init()
     }
     omapexists = false;
     fifoexists = false;
-  } */
+  }
 
   try {
     if (backing == "omap" || (backing == "auto" && omapexists)) {
       be = std::make_unique<RGWMetadataLogOmap>(cct, prefix, *svc.cls);
     } else if (backing != "omap") {
-  //    be = std::make_unique<RGWMetadataLogFIFO>(cct, prefix, lr, log_pool);
+      be = std::make_unique<RGWMetadataLogFIFO>(cct, prefix, lr, log_pool);
     }
   } catch (bs::system_error& e) {
     lderr(cct) << __PRETTY_FUNCTION__

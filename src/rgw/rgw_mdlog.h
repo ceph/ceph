@@ -111,6 +111,8 @@ public:
   virtual int trim(int shard_id, std::string_view marker, bool exclusive) { return 0; };
   virtual int trim(int shard_id, std::string_view marker, librados::AioCompletion* c, bool exclusive) { return 0; };
   virtual std::string_view max_marker() { return NULL; };
+  static int remove(CephContext* cct, std::string prefix,
+	       		     librados::Rados* rados, const rgw_pool& log_pool);
 };
 
 class RGWMetadataLog {
@@ -139,19 +141,19 @@ public:
 		 rgw::sal::RGWRadosStore* store,
                  RGWSI_Zone *_zone_svc,
                  RGWSI_Cls *_cls_svc,
-                 const std::string& period);
-/*    : cct(cct), store(store),
+                 const std::string& period)
+    : cct(cct), store(store),
       prefix(make_prefix(period)) {
     svc.zone = _zone_svc;
     svc.cls = _cls_svc;
-  }*/
+  }
 
 
   std::string get_shard_oid(int id) const {
     return fmt::format("{}{}", prefix, id);
   }
 
-  int init();
+  int init(librados::Rados* lr);
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section,
 		const std::string& key, ceph::bufferlist& bl);

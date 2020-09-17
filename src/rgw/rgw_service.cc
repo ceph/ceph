@@ -158,7 +158,7 @@ int RGWServices_Def::init(CephContext *cct,
       return r;
     }
 
-    r = mdlog->init_log();
+    r = mdlog->init_log(rados->get_rados_handle());
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to init mdlog current log (" << cpp_strerror(-r) << dendl;
       return r;
