@@ -164,6 +164,7 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
+  logger().debug("Cache::duplicate_for_write: {} -> {}", *i, *ret);
   return ret;
 }
 
