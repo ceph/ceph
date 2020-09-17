@@ -186,13 +186,20 @@ TransactionManager::submit_transaction(
       return crimson::ct_error::eagain::make();
     }
 
-    return journal.submit_record(std::move(*record)).safe_then(
-      [this, t=std::move(t)](auto p) mutable {
-	auto [addr, journal_seq] = p;
-	segment_cleaner.set_journal_head(journal_seq);
-	cache.complete_commit(*t, addr, journal_seq, &segment_cleaner);
-	lba_manager.complete_transaction(*t);
-      },
+    return journal.submit_record(std::move(*record)
+    ).safe_then([this, t=std::move(t)](auto p) mutable {
+      auto [addr, journal_seq] = p;
+      segment_cleaner.set_journal_head(journal_seq);
+      cache.complete_commit(*t, addr, journal_seq, &segment_cleaner);
+      lba_manager.complete_transaction(*t);
+      auto to_release = t->get_segment_to_release();
+      if (to_release != NULL_SEG_ID) {
+	segment_cleaner.mark_segment_released(to_release);
+	return segment_manager.release(to_release);
+      } else {
+	return SegmentManager::release_ertr::now();
+      }
+    }).handle_error(
       submit_transaction_ertr::pass_further{},
       crimson::ct_error::all_same_way([](auto e) {
 	ceph_assert(0 == "Hit error submitting to journal");

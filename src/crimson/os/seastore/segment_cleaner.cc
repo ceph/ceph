@@ -3,6 +3,7 @@
 
 #include "crimson/common/log.h"
 
+#include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 
 namespace {
@@ -205,12 +206,44 @@ SegmentCleaner::do_immediate_work_ret SegmentCleaner::do_immediate_work(
     __func__,
     journal_tail_target,
     next_target);
-  if (journal_tail_target > next_target) {
-    return do_immediate_work_ertr::now();
-  }
 
+  logger().debug(
+    "SegmentCleaner::do_immediate_work gc total {}, available {}, unavailable {}, used {}  available_ratio {}, reclaim_ratio {}, bytes_to_gc_for_available {}, bytes_to_gc_for_reclaim {}",
+    get_total_bytes(),
+    get_available_bytes(),
+    get_unavailable_bytes(),
+    get_used_bytes(),
+    get_available_ratio(),
+    get_reclaim_ratio(),
+    get_immediate_bytes_to_gc_for_available(),
+    get_immediate_bytes_to_gc_for_reclaim());
+
+  auto dirty_fut = do_immediate_work_ertr::now();
+  if (journal_tail_target < next_target) {
+    dirty_fut = rewrite_dirty(t, next_target);
+  }
+  return dirty_fut.safe_then([=, &t] {
+    return do_gc(t, get_immediate_bytes_to_gc());
+  }).handle_error(
+    do_immediate_work_ertr::pass_further{},
+    crimson::ct_error::assert_all{}
+  );
+}
+
+SegmentCleaner::do_deferred_work_ret SegmentCleaner::do_deferred_work(
+  Transaction &t)
+{
+  return do_deferred_work_ret(
+    do_deferred_work_ertr::ready_future_marker{},
+    ceph::timespan());
+}
+
+SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
+  Transaction &t,
+  journal_seq_t limit)
+{
   return ecb->get_next_dirty_extents(
-    get_dirty_tail_limit()
+    limit
   ).then([=, &t](auto dirty_list) {
     if (dirty_list.empty()) {
       return do_immediate_work_ertr::now();
@@ -232,12 +265,74 @@ SegmentCleaner::do_immediate_work_ret SegmentCleaner::do_immediate_work(
   });
 }
 
-SegmentCleaner::do_deferred_work_ret SegmentCleaner::do_deferred_work(
-  Transaction &t)
+SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
+  Transaction &t,
+  size_t bytes)
 {
-  return do_deferred_work_ret(
-    do_deferred_work_ertr::ready_future_marker{},
-    ceph::timespan());
+  if (bytes == 0) {
+    return do_gc_ertr::now();
+  }
+
+  if (gc_current_pos == P_ADDR_NULL) {
+    gc_current_pos.segment = get_next_gc_target();
+    if (gc_current_pos == P_ADDR_NULL) {
+      // apparently there are no segments to gc
+      logger().debug(
+	"SegmentCleaner::do_gc: no segments to gc");
+      return do_gc_ertr::now();
+    }
+    logger().debug(
+      "SegmentCleaner::do_gc: starting gc on segment {}",
+      gc_current_pos.segment);
+    gc_current_pos.offset = 0;
+  }
+
+  return ecb->scan_extents(
+    gc_current_pos,
+    bytes
+  ).safe_then([=, &t](auto addrs) {
+    return seastar::do_with(
+      std::move(addrs),
+      [=, &t](auto &addrs) {
+	auto &[next, addr_list] = addrs;
+	return crimson::do_for_each(
+	  addr_list,
+	  [=, &t](auto &addr_pair) {
+	    auto &[addr, info] = addr_pair;
+	    logger().debug(
+	      "SegmentCleaner::do_gc: checking addr {}",
+	      addr);
+	    return ecb->get_extent_if_live(
+	      t,
+	      info.type,
+	      addr,
+	      info.addr,
+	      info.len
+	    ).safe_then([=, &t](CachedExtentRef ext) {
+	      if (!ext) {
+		logger().debug(
+		  "SegmentCleaner::do_gc: addr {} dead, skipping",
+		  addr);
+		return ExtentCallbackInterface::rewrite_extent_ertr::now();
+	      } else {
+		logger().debug(
+		  "SegmentCleaner::do_gc: addr {} alive, gc'ing {}",
+		  addr,
+		  *ext);
+	      }
+	      return ecb->rewrite_extent(
+		t,
+		ext);
+	    });
+	  }).safe_then([=, &t] {
+	    auto old_pos = std::exchange(gc_current_pos, next);
+	    if (gc_current_pos == P_ADDR_NULL) {
+	      t.mark_segment_to_release(old_pos.segment);
+	    }
+	    return ExtentCallbackInterface::release_segment_ertr::now();
+	  });
+      });
+  });
 }
 
 }

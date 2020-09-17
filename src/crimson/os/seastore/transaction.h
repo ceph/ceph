@@ -79,6 +79,15 @@ public:
     write_set.insert(*ref);
   }
 
+  void mark_segment_to_release(segment_id_t segment) {
+    assert(to_release == NULL_SEG_ID);
+    to_release = segment;
+  }
+
+  segment_id_t get_segment_to_release() const {
+    return to_release;
+  }
+
   const auto &get_fresh_block_list() {
     return fresh_block_list;
   }
@@ -117,6 +126,9 @@ private:
   std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
 
   pextent_set_t retired_set; ///< list of extents mutated by this transaction
+
+  ///< if != NULL_SEG_ID, release this segment after completion
+  segment_id_t to_release = NULL_SEG_ID;
 
   Transaction(bool weak) : weak(weak) {}
 };

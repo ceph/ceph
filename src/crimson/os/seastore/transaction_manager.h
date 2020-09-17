@@ -235,6 +235,21 @@ public:
     laddr_t laddr,
     segment_off_t len) final;
 
+  using scan_extents_ret =
+    SegmentCleaner::ExtentCallbackInterface::scan_extents_ret;
+  scan_extents_ret scan_extents(
+    paddr_t addr,
+    extent_len_t bytes_to_read) final {
+    return journal.scan_extents(addr, bytes_to_read);
+  }
+
+  using release_segment_ret =
+    SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
+  release_segment_ret release_segment(
+    segment_id_t id) {
+    return segment_manager.release(id);
+  }
+
   ~TransactionManager();
 
 private:
