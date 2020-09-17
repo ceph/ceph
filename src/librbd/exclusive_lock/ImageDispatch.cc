@@ -10,7 +10,6 @@
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/FlushTracker.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 
@@ -29,13 +28,7 @@ ImageDispatch<I>::ImageDispatch(I* image_ctx)
   : m_image_ctx(image_ctx),
     m_lock(ceph::make_shared_mutex(
       util::unique_lock_name("librbd::exclusve_lock::ImageDispatch::m_lock",
-                             this))),
-    m_flush_tracker(new io::FlushTracker<I>(image_ctx)) {
-}
-
-template <typename I>
-ImageDispatch<I>::~ImageDispatch() {
-  delete m_flush_tracker;
+                             this))) {
 }
 
 template <typename I>
@@ -51,8 +44,6 @@ void ImageDispatch<I>::shut_down(Context* on_finish) {
     ctx->complete(0);
   }
 
-  // ensure we don't have any pending flushes before deleting layer
-  m_flush_tracker->shut_down();
   on_finish->complete(0);
 }
 
@@ -125,7 +116,6 @@ bool ImageDispatch<I>::read(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
@@ -143,7 +133,6 @@ bool ImageDispatch<I>::write(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
@@ -161,7 +150,6 @@ bool ImageDispatch<I>::discard(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
@@ -179,7 +167,6 @@ bool ImageDispatch<I>::write_same(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
@@ -198,7 +185,6 @@ bool ImageDispatch<I>::compare_and_write(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
@@ -221,17 +207,7 @@ bool ImageDispatch<I>::flush(
     return true;
   }
 
-  *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  m_flush_tracker->flush(on_dispatched);
-  return true;
-}
-
-template <typename I>
-void ImageDispatch<I>::handle_finished(int r, uint64_t tid) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "tid=" << tid << dendl;
-
-  m_flush_tracker->finish_io(tid);
+  return false;
 }
 
 template <typename I>

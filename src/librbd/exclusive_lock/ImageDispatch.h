@@ -23,7 +23,6 @@ struct ImageCtx;
 
 namespace io {
 struct AioCompletion;
-template <typename> struct FlushTracker;
 }
 
 namespace exclusive_lock {
@@ -39,7 +38,6 @@ public:
   }
 
   ImageDispatch(ImageCtxT* image_ctx);
-  ~ImageDispatch() override;
 
   io::ImageDispatchLayer get_dispatch_layer() const override {
     return io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK;
@@ -85,7 +83,8 @@ public:
       std::atomic<uint32_t>* image_dispatch_flags,
       io::DispatchResult* dispatch_result, Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override;
+  void handle_finished(int r, uint64_t tid) override {
+  }
 
 private:
   typedef std::list<Context*> Contexts;
@@ -97,7 +96,6 @@ private:
   bool m_require_lock_on_read = false;
   bool m_require_lock_on_write = false;
 
-  io::FlushTracker<ImageCtxT>* m_flush_tracker = nullptr;
   Contexts m_on_dispatches;
 
   bool set_require_lock(io::Direction direction, bool enabled);
