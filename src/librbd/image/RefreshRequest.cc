@@ -1246,8 +1246,8 @@ Context *RefreshRequest<I>::send_flush_aio() {
     auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
     auto req = io::ImageDispatchSpec::create_flush(
-      m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-      io::FLUSH_SOURCE_INTERNAL, {});
+      m_image_ctx, io::IMAGE_DISPATCH_LAYER_REFRESH, aio_comp,
+      io::FLUSH_SOURCE_REFRESH, {});
     req->send();
     return nullptr;
   } else if (m_error_result < 0) {

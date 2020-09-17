@@ -72,7 +72,7 @@ void ImageDispatch<I>::set_require_lock(io::Direction direction,
     on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec::create_flush(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK, aio_comp,
-    io::FLUSH_SOURCE_INTERNAL, {});
+    io::FLUSH_SOURCE_EXCLUSIVE_LOCK, {});
   req->send();
 }
 

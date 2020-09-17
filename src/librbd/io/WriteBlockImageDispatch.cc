@@ -254,7 +254,7 @@ void WriteBlockImageDispatch<I>::flush_io(Context* on_finish) {
     on_finish, util::get_image_ctx(m_image_ctx), librbd::io::AIO_TYPE_FLUSH);
   auto req = ImageDispatchSpec::create_flush(
     *m_image_ctx, IMAGE_DISPATCH_LAYER_WRITE_BLOCK, aio_comp,
-    FLUSH_SOURCE_INTERNAL, {});
+    FLUSH_SOURCE_WRITE_BLOCK, {});
   req->send();
 }
 
