@@ -41,6 +41,7 @@ struct segment_header_t {
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
 
 struct record_header_t {
   // Fixed portion

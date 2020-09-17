@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <iostream>
+
 #include <boost/iterator/counting_iterator.hpp>
 
 #include "crimson/os/seastore/journal.h"
@@ -15,6 +17,15 @@ namespace {
 }
 
 namespace crimson::os::seastore {
+
+std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
+{
+  return out << "segment_header_t("
+	     << "segment_seq=" << header.journal_segment_seq
+	     << ", physical_segment_id=" << header.physical_segment_id
+	     << ", journal_tail=" << header.journal_tail
+	     << ")";
+}
 
 Journal::Journal(SegmentManager &segment_manager)
   : block_size(segment_manager.get_block_size()),
