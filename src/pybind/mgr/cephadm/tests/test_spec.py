@@ -1,3 +1,7 @@
+# Disable autopep8 for this file:
+
+# fmt: off
+
 import json
 
 import pytest

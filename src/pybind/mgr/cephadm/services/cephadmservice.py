@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Option
 from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
+from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
 
@@ -22,13 +23,13 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
     # typing.NamedTuple + Generic is broken in py36
     def __init__(self, host: str, daemon_id,
-                 spec: Optional[ServiceSpecs]=None,
-                 network: Optional[str]=None,
-                 keyring: Optional[str]=None,
-                 extra_args: Optional[List[str]]=None,
-                 extra_config: Optional[Dict[str, Any]]=None,
-                 daemon_type: Optional[str]=None,
-                 ports: Optional[List[int]]=None,):
+                 spec: Optional[ServiceSpecs] = None,
+                 network: Optional[str] = None,
+                 keyring: Optional[str] = None,
+                 extra_args: Optional[List[str]] = None,
+                 extra_config: Optional[Dict[str, Any]] = None,
+                 daemon_type: Optional[str] = None,
+                 ports: Optional[List[int]] = None,):
         """
         Used for
         * deploying new daemons. then everything is set
@@ -57,7 +58,6 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
 
         # TCP ports used by the daemon
         self.ports:  List[int] = ports or []
-
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -95,7 +95,6 @@ class CephadmService(metaclass=ABCMeta):
             host=daemon_spec.host,
             keyring=daemon_spec.keyring,
             extra_ceph_config=daemon_spec.extra_config.pop('config', ''))
-
 
         if daemon_spec.extra_config:
             cephadm_config.update({'files': daemon_spec.extra_config})
@@ -199,8 +198,6 @@ class CephadmService(metaclass=ABCMeta):
             except MonCommandFailed as e:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 
-
-
     def ok_to_stop(self, daemon_ids: List[str]) -> HandleCommandResult:
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'
@@ -230,6 +227,7 @@ class CephadmService(metaclass=ABCMeta):
         """
         pass
 
+
 class MonService(CephadmService):
     TYPE = 'mon'
 
@@ -253,10 +251,13 @@ class MonService(CephadmService):
                 extra_config += 'public network = %s\n' % network
             elif network.startswith('[v') and network.endswith(']'):
                 extra_config += 'public addrv = %s\n' % network
+            elif is_ipv6(network):
+                extra_config += 'public addr = %s\n' % unwrap_ipv6(network)
             elif ':' not in network:
                 extra_config += 'public addr = %s\n' % network
             else:
-                raise OrchestratorError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
+                raise OrchestratorError(
+                    'Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
         else:
             # try to get the public_network from the config
             ret, network, err = self.mgr.check_mon_command({
@@ -266,13 +267,15 @@ class MonService(CephadmService):
             })
             network = network.strip() if network else network
             if not network:
-                raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
+                raise OrchestratorError(
+                    'Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
             if '/' not in network:
-                raise OrchestratorError('public_network is set but does not look like a CIDR network: \'%s\'' % network)
+                raise OrchestratorError(
+                    'public_network is set but does not look like a CIDR network: \'%s\'' % network)
             extra_config += 'public network = %s\n' % network
 
-        daemon_spec.extra_config={'config': extra_config}
-        daemon_spec.keyring=keyring
+        daemon_spec.extra_config = {'config': extra_config}
+        daemon_spec.keyring = keyring
 
         return self.mgr._create_daemon(daemon_spec)
 
@@ -293,10 +296,11 @@ class MonService(CephadmService):
         new_mons = [m for m in mons if m != mon_id]
         new_quorum = [m for m in j['quorum_names'] if m != mon_id]
         if len(new_quorum) > len(new_mons) / 2:
-            logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' % (mon_id, new_quorum, new_mons))
+            logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' %
+                        (mon_id, new_quorum, new_mons))
             return
-        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
-
+        raise OrchestratorError(
+            'Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
 
     def pre_remove(self, daemon_id: str) -> None:
         self._check_safe_to_destroy(daemon_id)
@@ -328,7 +332,6 @@ class MgrService(CephadmService):
                      'mds', 'allow *'],
         })
 
-
         # Retrieve ports used by manager modules
         # In the case of the dashboard port and with several manager daemons
         # running in different hosts, it exists the possibility that the
@@ -338,12 +341,12 @@ class MgrService(CephadmService):
         ports = []
         config_ports = ''
         ret, mgr_services, err = self.mgr.check_mon_command({
-                'prefix': 'mgr services',
+            'prefix': 'mgr services',
         })
         if mgr_services:
             mgr_endpoints = json.loads(mgr_services)
             for end_point in mgr_endpoints.values():
-                port = re.search('\:\d+\/', end_point)
+                port = re.search(r'\:\d+\/', end_point)
                 if port:
                     ports.append(int(port[0][1:-1]))
 
@@ -353,14 +356,37 @@ class MgrService(CephadmService):
         daemon_spec.keyring = keyring
 
         return self.mgr._create_daemon(daemon_spec)
-    
+
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
-        active_mgr_str = self.mgr.get('mgr_map')['active_name']
         for daemon in daemon_descrs:
-            if daemon.daemon_id == active_mgr_str:
+            if self.mgr.daemon_is_self(daemon.daemon_type, daemon.daemon_id):
                 return daemon
         # if no active mgr found, return empty Daemon Desc
         return DaemonDescription()
+
+    def fail_over(self):
+        if not self.mgr_map_has_standby():
+            raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
+                'daemon', 'mgr' + self.mgr.get_mgr_id()))
+
+        self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
+                                   'INFO', 'Failing over to other MGR')
+        logger.info('Failing over to other MGR')
+
+        # fail over
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'mgr fail',
+            'who': self.mgr.get_mgr_id(),
+        })
+
+    def mgr_map_has_standby(self) -> bool:
+        """
+        This is a bit safer than asking our inventory. If the mgr joined the mgr map,
+        we know it joined the cluster
+        """
+        mgr_map = self.mgr.get('mgr_map')
+        num = len(mgr_map.get('standbys'))
+        return bool(num)
 
 
 class MdsService(CephadmService):
@@ -393,7 +419,7 @@ class MdsService(CephadmService):
         daemon_spec.keyring = keyring
 
         return self.mgr._create_daemon(daemon_spec)
-    
+
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         active_mds_strs = list()
         for fs in self.mgr.get('fs_map')['filesystems']:
@@ -446,8 +472,8 @@ class RgwService(CephadmService):
                 cert_data = spec.rgw_frontend_ssl_certificate
             else:
                 raise OrchestratorError(
-                        'Invalid rgw_frontend_ssl_certificate: %s'
-                        % spec.rgw_frontend_ssl_certificate)
+                    'Invalid rgw_frontend_ssl_certificate: %s'
+                    % spec.rgw_frontend_ssl_certificate)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
@@ -461,8 +487,8 @@ class RgwService(CephadmService):
                 key_data = spec.rgw_frontend_ssl_key
             else:
                 raise OrchestratorError(
-                        'Invalid rgw_frontend_ssl_key: %s'
-                        % spec.rgw_frontend_ssl_key)
+                    'Invalid rgw_frontend_ssl_key: %s'
+                    % spec.rgw_frontend_ssl_key)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
@@ -497,15 +523,15 @@ class RgwService(CephadmService):
         if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
             raise OrchestratorError('Health not ok, will try agin when health ok')
 
-        #get keyring needed to run rados commands and strip out just the keyring
-        keyring = self.get_keyring(rgw_id).split('key = ',1)[1].rstrip()
+        # get keyring needed to run rados commands and strip out just the keyring
+        keyring = self.get_keyring(rgw_id).split('key = ', 1)[1].rstrip()
 
         # We can call radosgw-admin within the container, cause cephadm gives the MGR the required keyring permissions
 
         def get_realms() -> List[str]:
             cmd = ['radosgw-admin',
-                   '--key=%s'%keyring,
-                   '--user', 'rgw.%s'%rgw_id,
+                   '--key=%s' % keyring,
+                   '--user', 'rgw.%s' % rgw_id,
                    'realm', 'list',
                    '--format=json']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -520,18 +546,18 @@ class RgwService(CephadmService):
 
         def create_realm():
             cmd = ['radosgw-admin',
-                   '--key=%s'%keyring,
-                   '--user', 'rgw.%s'%rgw_id,
+                   '--key=%s' % keyring,
+                   '--user', 'rgw.%s' % rgw_id,
                    'realm', 'create',
-                   '--rgw-realm=%s'%spec.rgw_realm,
+                   '--rgw-realm=%s' % spec.rgw_realm,
                    '--default']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self.mgr.log.info('created realm: %s'%spec.rgw_realm)
+            self.mgr.log.info('created realm: %s' % spec.rgw_realm)
 
         def get_zonegroups() -> List[str]:
             cmd = ['radosgw-admin',
-                   '--key=%s'%keyring,
-                   '--user', 'rgw.%s'%rgw_id,
+                   '--key=%s' % keyring,
+                   '--user', 'rgw.%s' % rgw_id,
                    'zonegroup', 'list',
                    '--format=json']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -546,8 +572,8 @@ class RgwService(CephadmService):
 
         def create_zonegroup():
             cmd = ['radosgw-admin',
-                   '--key=%s'%keyring,
-                   '--user', 'rgw.%s'%rgw_id,
+                   '--key=%s' % keyring,
+                   '--user', 'rgw.%s' % rgw_id,
                    'zonegroup', 'create',
                    '--rgw-zonegroup=default',
                    '--master', '--default']
@@ -561,8 +587,8 @@ class RgwService(CephadmService):
 
         def get_zones() -> List[str]:
             cmd = ['radosgw-admin',
-                   '--key=%s'%keyring,
-                   '--user', 'rgw.%s'%rgw_id,
+                   '--key=%s' % keyring,
+                   '--user', 'rgw.%s' % rgw_id,
                    'zone', 'list',
                    '--format=json']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -577,15 +603,14 @@ class RgwService(CephadmService):
 
         def create_zone():
             cmd = ['radosgw-admin',
-                   '--key=%s'%keyring,
-                   '--user', 'rgw.%s'%rgw_id,
+                   '--key=%s' % keyring,
+                   '--user', 'rgw.%s' % rgw_id,
                    'zone', 'create',
                    '--rgw-zonegroup=default',
-                   '--rgw-zone=%s'%spec.rgw_zone,
+                   '--rgw-zone=%s' % spec.rgw_zone,
                    '--master', '--default']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self.mgr.log.info('created zone: %s'%spec.rgw_zone)
-
+            self.mgr.log.info('created zone: %s' % spec.rgw_zone)
 
         changes = False
         realms = get_realms()
@@ -602,10 +627,10 @@ class RgwService(CephadmService):
         # update period if changes were made
         if changes:
             cmd = ['radosgw-admin',
-                   '--key=%s'%keyring,
-                   '--user', 'rgw.%s'%rgw_id,
+                   '--key=%s' % keyring,
+                   '--user', 'rgw.%s' % rgw_id,
                    'period', 'update',
-                   '--rgw-realm=%s'%spec.rgw_realm,
+                   '--rgw-realm=%s' % spec.rgw_realm,
                    '--commit']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.mgr.log.info('updated period')
