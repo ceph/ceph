@@ -58,6 +58,9 @@ function main() {
     if [ $WITH_SEASTAR ]; then
         cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
+    if [ $WITH_ZBD ]; then
+        cmake_opts += " -DWITH_ZBD=ON"
+    fi
     configure $cmake_opts $@
     build tests && echo "make check: successful build on $(git rev-parse HEAD)"
     run
