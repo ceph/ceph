@@ -243,6 +243,10 @@ struct rgw_cls_unlink_instance_op : cls_rgw_bi_log_related_op {
   uint64_t olh_epoch = 0;
   std::string olh_tag;
 
+  rgw_cls_unlink_instance_op() {
+    op = CLS_RGW_OP_UNLINK_INSTANCE;
+  }
+
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(3, 1, bl);
     encode(key, bl);
