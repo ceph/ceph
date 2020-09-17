@@ -95,7 +95,8 @@
                                        RBD_FEATURE_FAST_DIFF   | \
                                        RBD_FEATURE_OPERATIONS  | \
                                        RBD_FEATURE_MIGRATING   | \
-                                       RBD_FEATURE_NON_PRIMARY)
+                                       RBD_FEATURE_NON_PRIMARY | \
+                                       RBD_FEATURE_DIRTY_CACHE)
 
 /// features that cannot be controlled by the user
 #define RBD_FEATURES_INTERNAL         (RBD_FEATURE_OPERATIONS | \
