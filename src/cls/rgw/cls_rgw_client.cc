@@ -290,7 +290,7 @@ void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& op,
   call.key = this->key;
   call.olh_tag = std::string(olh_tag.c_str(), olh_tag.length());
   call.op_tag = this->op_tag;
-  call.delete_marker = this->op;
+  call.op = this->op;
   if (meta) {
     call.meta = *meta;
   }

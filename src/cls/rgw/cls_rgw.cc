@@ -1846,7 +1846,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   /* read instance entry */
   BIVerObjEntry obj(hctx, op.key);
-  int ret = obj.init(op.delete_marker);
+  int ret = obj.init(op.has_delete_marker());
 
   /* NOTE: When a delete is issued, a key instance is always provided,
    * either the one for which the delete is requested or a new random
@@ -1859,7 +1859,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
    * should be audited and possibly cleaned up. */
 
   bool existed = (ret == 0);
-  if (ret == -ENOENT && op.delete_marker) {
+  if (ret == -ENOENT && op.has_delete_marker()) {
     ret = 0;
   }
   if (ret < 0) {
@@ -1890,18 +1890,18 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
    */
   if (op.key.instance.empty()) {
     BIVerObjEntry other_obj(hctx, op.key);
-    ret = other_obj.init(!op.delete_marker); /* try reading the other
+    ret = other_obj.init(!op.has_delete_marker()); /* try reading the other
 					      * null versioned
 					      * entry */
     existed = (ret >= 0 && !other_obj.is_delete_marker());
-    if (ret >= 0 && other_obj.is_delete_marker() != op.delete_marker) {
+    if (ret >= 0 && other_obj.is_delete_marker() != op.has_delete_marker()) {
       ret = other_obj.unlink_list_entry(header);
       if (ret < 0) {
         return ret;
       }
     }
 
-    removing = existed && op.delete_marker;
+    removing = existed && op.has_delete_marker();
     if (!removing) {
       ret = other_obj.unlink(header, op.key);
       if (ret < 0) {
@@ -1909,10 +1909,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       }
     }
   } else {
-    removing = (existed && !obj.is_delete_marker() && op.delete_marker);
+    removing = (existed && !obj.is_delete_marker() && op.has_delete_marker());
   }
 
-  if (op.delete_marker) {
+  if (op.has_delete_marker()) {
     /* a deletion marker, need to initialize entry as such */
     obj.init_as_delete_marker(op.meta);
   }
@@ -1969,7 +1969,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
     olh.set_pending_removal(false);
   } else {
-    bool instance_only = (op.key.instance.empty() && op.delete_marker);
+    bool instance_only = (op.key.instance.empty() && op.has_delete_marker());
     cls_rgw_obj_key key(op.key.name);
     ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
     if (ret < 0) {
@@ -1983,13 +1983,13 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* update the olh log */
-  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
+  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.has_delete_marker());
   if (removing) {
     olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
   }
 
   if (promote) {
-    olh.update(op.key, op.delete_marker);
+    olh.update(op.key, op.has_delete_marker());
   }
   olh.set_exists(true);
 
@@ -2021,12 +2021,12 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   string *powner = NULL;
   string *powner_display_name = NULL;
 
-  if (op.delete_marker) {
+  if (op.has_delete_marker()) {
     powner = &entry.meta.owner;
     powner_display_name = &entry.meta.owner_display_name;
   }
 
-  ret = log_index_operation(hctx, op.key, link_olh_get_bilog_op_type(op.delete_marker), op.op_tag,
+  ret = log_index_operation(hctx, op.key, op.op, op.op_tag,
                             entry.meta.mtime, ver,
                             header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
                             powner, powner_display_name, &op.zones_trace);

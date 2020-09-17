@@ -172,17 +172,20 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
 struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
   std::string olh_tag;
-  bool delete_marker = 0;
   rgw_bucket_dir_entry_meta meta;
   uint64_t olh_epoch = 0;
   ceph::real_time unmod_since; /* only create delete marker if newer then this */
   bool high_precision_time = false;
 
+  bool has_delete_marker() const {
+    return op == CLS_RGW_OP_LINK_OLH_DM;
+  }
+
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(5, 1, bl);
     encode(key, bl);
     encode(olh_tag, bl);
-    encode(delete_marker, bl);
+    encode(bool { has_delete_marker() }, bl);
     encode(op_tag, bl);
     encode(meta, bl);
     encode(olh_epoch, bl);
@@ -200,7 +203,13 @@ struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
     DECODE_START(5, bl);
     decode(key, bl);
     decode(olh_tag, bl);
-    decode(delete_marker, bl);
+    {
+      // legacy
+      bool delete_marker;
+      decode(delete_marker, bl);
+      op = delete_marker ? CLS_RGW_OP_LINK_OLH_DM
+                         : CLS_RGW_OP_LINK_OLH;
+    }
     decode(op_tag, bl);
     decode(meta, bl);
     decode(olh_epoch, bl);
