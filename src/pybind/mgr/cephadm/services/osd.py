@@ -344,8 +344,8 @@ class RemoveUtil(object):
 
             if not osd.exists:
                 continue
-            self.mgr._remove_daemon(osd.fullname, osd.nodename)
-            logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.nodename}")
+            self.mgr._remove_daemon(osd.fullname, osd.hostname)
+            logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.hostname}")
             logger.debug(f"Removing {osd.osd_id} from the queue.")
 
         # self.mgr.to_remove_osds could change while this is processing (osds get added from the CLI)
@@ -470,7 +470,7 @@ class RemoveUtil(object):
         for k, v in self.mgr.get_store_prefix('osd_remove_queue').items():
             for osd in json.loads(v):
                 logger.debug(f"Loading osd ->{osd} from store")
-                osd_obj = OSD.from_json(json.loads(osd), ctx=self)
+                osd_obj = OSD.from_json(osd, ctx=self)
                 self.mgr.to_remove_osds.add(osd_obj)
 
 
@@ -524,7 +524,7 @@ class OSD:
         # If we wait for the osd to be drained
         self.force = force
         # The name of the node
-        self.nodename = hostname
+        self.hostname = hostname
         # The full name of the osd
         self.fullname = fullname
 
@@ -621,7 +621,7 @@ class OSD:
         out['stopped'] = self.stopped
         out['replace'] = self.replace
         out['force'] = self.force
-        out['nodename'] = self.nodename  # type: ignore
+        out['hostname'] = self.hostname  # type: ignore
 
         for k in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if getattr(self, k):
@@ -638,6 +638,9 @@ class OSD:
             if inp.get(date_field):
                 inp.update({date_field: datetime.strptime(inp.get(date_field, ''), DATEFMT)})
         inp.update({'remove_util': ctx})
+        if 'nodename' in inp:
+            hostname = inp.pop('nodename')
+            inp['hostname'] = hostname
         return cls(**inp)
 
     def __hash__(self):
@@ -649,7 +652,7 @@ class OSD:
         return self.osd_id == other.osd_id
 
     def __repr__(self) -> str:
-        return f"<OSD>(osd_id={self.osd_id}, is_draining={self.is_draining})"
+        return f"<OSD>(osd_id={self.osd_id}, draining={self.draining})"
 
 
 class OSDQueue(Set):
