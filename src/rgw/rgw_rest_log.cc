@@ -83,7 +83,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
 
   RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls,
       period};
-  auto r = meta_log.init();
+  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
   if (r < 0) {
     ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
     op_ret = -EINVAL;
@@ -161,7 +161,7 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
     }
   }
   RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init();
+  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
   if (r < 0) {
     ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
     op_ret = -EINVAL;
@@ -233,7 +233,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
     }
   }
   RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init();
+  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
   if (r < 0) {
     ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
     op_ret = -EINVAL;
@@ -279,7 +279,7 @@ void RGWOp_MDLog_Lock::execute(optional_yield y) {
   }
 
   RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init();
+  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
   if (r < 0) {
     ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
     op_ret = -EINVAL;
@@ -333,7 +333,7 @@ void RGWOp_MDLog_Unlock::execute(optional_yield y) {
   }
 
   RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init();
+  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
   if (r < 0) {
     ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
     op_ret = -EINVAL;
