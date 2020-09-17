@@ -363,7 +363,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_read
     def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None,
                      refresh=False):
-        return self._list_daemons(daemon_type, daemon_id, host, refresh)
+        return self._list_daemons(service_name=service_name,
+                                  daemon_type=daemon_type,
+                                  daemon_id=daemon_id,
+                                  host=host,
+                                  refresh=refresh)
 
     def _list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None,
                       refresh=False):
