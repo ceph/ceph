@@ -225,6 +225,10 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 		i);
 	      return find_replay_segments_ertr::now();
 	    }
+	    logger().debug(
+	      "find_replay_segments: segment {} header {}",
+	      i,
+	      header);
 	    segments.emplace_back(i, std::move(header));
 	    return find_replay_segments_ertr::now();
 	  }).handle_error(
@@ -271,6 +275,13 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	      [&replay_from](const auto &seg) -> bool {
 		return seg.first == replay_from.segment;
 	      });
+	    if (from->second.journal_segment_seq != journal_tail.segment_seq) {
+	      logger().error(
+		"find_replay_segments: journal_tail {} does not match {}",
+		journal_tail,
+		from->second);
+	      assert(0 == "invalid");
+	    }
 	  } else {
 	    replay_from = paddr_t{from->first, (segment_off_t)block_size};
 	  }
