@@ -23,7 +23,7 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
-| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* ] ...
+| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* ] ...
 
 | **ceph** **fsid**
 
@@ -385,6 +385,13 @@ Usage::
 
 	ceph fs rm <fs_name> {--yes-i-really-mean-it}
 
+Subcommand ``authorize`` creates a new client that will be authorized for the
+given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
+``<perms>`` below can be ``r``, ``rw`` or ``rwp``.
+
+Usage::
+
+    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
 
 fsid
 ----
