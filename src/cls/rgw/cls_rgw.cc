@@ -1133,10 +1133,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     return decode_ret;
   }
 
-  CLS_LOG(1, "rgw_bucket_complete_op(): request: op=%d name=%s instance=%s ver=%lu:%llu tag=%s\n",
+  CLS_LOG(1, "rgw_bucket_complete_op(): request: op=%d name=%s instance=%s ver=%lu:%llu op_tag=%s\n",
           op.op, op.key.name.c_str(), op.key.instance.c_str(),
           (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
-          op.tag.c_str());
+          op.op_tag.c_str());
 
   rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
@@ -1169,11 +1169,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
    * marker */
   entry.flags &= rgw_bucket_dir_entry::FLAG_VER;
 
-  if (op.tag.size()) {
-    auto pinter = entry.pending_map.find(op.tag);
+  if (op.op_tag.size()) {
+    auto pinter = entry.pending_map.find(op.op_tag);
     if (pinter == entry.pending_map.end()) {
       CLS_LOG_BITX(bitx_inst, 1,
-		   "ERROR: %s: couldn't find tag for pending operation with tag %s",
+		   "ERROR: %s: couldn't find op_tag for pending operation with tag %s",
 		   __func__, op.tag.c_str());
       return -EINVAL;
     }
@@ -1183,8 +1183,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.pending_map.erase(pinter);
   }
 
-  if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
-    CLS_LOG_BITX(bitx_inst, 20, "INFO: %s: op is cancel", __func__);
+  bool cancel = false;
+  bufferlist update_bl;
+
+  if (op.op_tag.size() && op.op == CLS_RGW_OP_CANCEL) {
+    CLS_LOG_BITX(bitx_inst, 1, "rgw_bucket_complete_op(): cancel requested\n");
+    cancel = true;
   } else if (op.ver.pool == entry.ver.pool &&
              op.ver.epoch && op.ver.epoch <= entry.ver.epoch) {
     CLS_LOG_BITX(bitx_inst, 20,
@@ -1196,6 +1200,19 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   const bool default_log_op = op.log_op && !header.syncstopped;
   // controls whether this operation is logged (depends on op.op and ondisk)
   bool log_op = default_log_op;
+  bufferlist op_bl;
+  if (cancel) {
+    if (op.op_tag.size()) {
+      bufferlist new_key_bl;
+      encode(entry, new_key_bl);
+      return cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+    }
+    return 0;
+  }
+
+  if (entry.exists) {
+    unaccount_entry(header, entry);
+  }
 
   entry.ver = op.ver;
   if (op.op == CLS_RGW_OP_CANCEL) {
@@ -1232,7 +1249,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.meta = meta;
       entry.key = op.key;
       entry.exists = true;
-      entry.tag = op.tag;
+      entry.tag = op.op_tag;
       stats.num_entries++;
       stats.total_size += meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
@@ -1318,7 +1335,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   "ERROR: %s: unable to set map value at key=%s, rc=%d",
 		   __func__, escape_str(idx).c_str(), rc);
   if (op.log_op && !header.syncstopped) {
-    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
+    rc = log_index_operation(hctx, op.key, op.op, op.op_tag, entry.meta.mtime, entry.ver,
                              header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
     if (rc < 0)
       return rc;
@@ -1350,7 +1367,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       return rc;
     if (op.log_op && !header.syncstopped) {
       ++header.ver; // increment index version, or we'll overwrite keys previously written
-      rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
+      rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.op_tag, remove_entry.meta.mtime,
                                remove_entry.ver, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
       if (rc < 0)
         continue;
