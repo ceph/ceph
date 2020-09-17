@@ -1495,7 +1495,7 @@ struct cls_rgw_bi_log_related_op {
   const std::string op_tag;
   const rgw_zone_set* const zones_trace;
   const uint16_t bilog_flags;
-  const enum RGWModifyOp op_type;
+  const enum RGWModifyOp op;
 
   // prepare a BILog entry basing on two sources information:
   //   1. the state cls_rgw_bi_log_related_op which is usually constructed
@@ -1518,7 +1518,7 @@ struct cls_rgw_bi_log_related_op {
         this->key.instance,
         timestamp,
         ver,
-        this->op_type,
+        this->op,
         CLS_RGW_STATE_COMPLETE,
         index_ver,
         this->op_tag,
