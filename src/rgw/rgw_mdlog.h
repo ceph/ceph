@@ -80,6 +80,39 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   }
 };
 
+class RGWMetadataLogBE {
+protected:
+  CephContext* const cct;
+private:
+  std::string prefix;
+ 
+public:
+  using entries = std::variant<std::list<cls_log_entry>,
+			       std::vector<ceph::buffer::list>>;
+
+  RGWMetadataLogBE(CephContext* const cct, std::string prefix);
+  virtual ~RGWMetadataLogBE();
+
+  std::string get_shard_oid(int id) const {
+    return fmt::format("{}{}", prefix, id);
+  }
+
+  virtual int push(int index, std::vector<cls_log_entry>& items, librados::AioCompletion *&completion) { return 0; };
+  virtual int push(int index, ceph::real_time now,
+		   const std::string& section,
+		   const std::string& key,
+		   ceph::buffer::list& bl) { return 0; };
+  virtual int list(int index, int max_entries,
+		   std::vector<cls_log_entry>& items,
+		   std::string_view marker,
+		   std::string* out_marker, bool* truncated) { return 0; };
+  virtual int get_info(int index, RGWMetadataLogInfo *info) { return 0; };
+  virtual int get_info_async(int index, RGWMetadataLogInfoCompletion *completion) { return 0; };
+  virtual int trim(int shard_id, std::string_view marker, bool exclusive) { return 0; };
+  virtual int trim(int shard_id, std::string_view marker, librados::AioCompletion* c, bool exclusive) { return 0; };
+  virtual std::string_view max_marker() { return NULL; };
+};
+
 class RGWMetadataLog {
   CephContext *cct;
   rgw::sal::RGWRadosStore* store;
@@ -100,17 +133,18 @@ class RGWMetadataLog {
   bc::flat_set<int> modified_shards;
 
   void mark_modified(int shard_id);
+  std::unique_ptr<RGWMetadataLogBE> be;
 public:
   RGWMetadataLog(CephContext *cct,
 		 rgw::sal::RGWRadosStore* store,
                  RGWSI_Zone *_zone_svc,
                  RGWSI_Cls *_cls_svc,
-                 const std::string& period)
-    : cct(cct), store(store),
+                 const std::string& period);
+/*    : cct(cct), store(store),
       prefix(make_prefix(period)) {
     svc.zone = _zone_svc;
     svc.cls = _cls_svc;
-  }
+  }*/
 
 
   std::string get_shard_oid(int id) const {
@@ -154,6 +188,7 @@ public:
   RGWCoroutine* master_trim_cr(int shard_id, const std::string& marker,
 	       			std::string* last_trim);
   RGWCoroutine* peer_trim_cr(int shard_id, std::string marker, bool exclusive);
+  std::string_view max_marker() const;
 };
 
 class RGWMetadataLogTrimCR : public RGWSimpleCoroutine {
@@ -166,8 +201,6 @@ class RGWMetadataLogTrimCR : public RGWSimpleCoroutine {
   std::string *last_trim_marker;
 
  public:
-  static constexpr const char* max_marker = "99999999";
-
   RGWMetadataLogTrimCR(CephContext *cct,
                        RGWMetadataLog *mdlog, const int shard_id,
                        const std::string& marker, bool exclusive,
