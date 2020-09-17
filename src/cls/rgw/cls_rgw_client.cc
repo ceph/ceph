@@ -186,18 +186,6 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& 
   o.exec(RGW_CLASS, RGW_BUCKET_PREPARE_OP, in);
 }
 
-CLSRGWCompleteModifyOpBase
-CLSRGWCompleteModifyOpBase::from_call(const rgw_cls_obj_complete_op& call)
-{
-  return { call.log_op,
-           call.key,
-           call.tag,
-           &call.zones_trace,
-           call.bilog_flags,
-           call.op
-  };
-}
-
 void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
                                              const rgw_bucket_entry_ver& ver,
                                              const rgw_bucket_dir_entry_meta& dir_meta,
@@ -382,18 +370,6 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-CLSRGWLinkOLHBase
-CLSRGWLinkOLHBase::from_call(const rgw_cls_link_olh_op& call)
-{
-  return { call.log_op,
-           call.key,
-           call.op_tag,
-           &call.zones_trace,
-           call.bilog_flags,
-           CLSRGWLinkOLHBase::get_bilog_op_type(call.delete_marker)
-  };
-}
-
 void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& op,
                                  ceph::bufferlist& olh_tag,
                                  const rgw_bucket_dir_entry_meta *meta,
@@ -418,17 +394,6 @@ void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& op,
   call.zones_trace = *this->zones_trace;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BUCKET_LINK_OLH, in);
-}
-
-CLSRGWUnlinkInstance
-CLSRGWUnlinkInstance::from_call(const rgw_cls_unlink_instance_op& call)
-{
-  return { call.log_op,
-           call.key,
-           call.op_tag,
-           &call.zones_trace,
-           call.bilog_flags
-  };
 }
 
 void CLSRGWUnlinkInstance::unlink_instance(librados::ObjectWriteOperation& op,
