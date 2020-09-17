@@ -101,6 +101,13 @@ public:
     Transaction &t,
     CachedExtentRef extent);
 
+  get_physical_extent_if_live_ret get_physical_extent_if_live(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t addr,
+    laddr_t laddr,
+    segment_off_t len) final;
+
   void add_pin(LBAPin &pin) final {
     auto *bpin = reinterpret_cast<BtreeLBAPin*>(&pin);
     pin_set.add_pin(bpin->pin);
