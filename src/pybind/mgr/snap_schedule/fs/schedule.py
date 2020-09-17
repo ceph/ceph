@@ -146,7 +146,8 @@ class Schedule(object):
                    table_row['last_pruned'],
                    table_row['created_count'],
                    table_row['pruned_count'],
-                   table_row['active'])
+                   table_row['active'],
+                  )
 
     def __str__(self):
         return f'''{self.path} {self.schedule} {dump_retention(self.retention)}'''
@@ -183,7 +184,7 @@ class Schedule(object):
         s.retention,
         sm.repeat - (strftime("%s", "now") - strftime("%s", sm.start)) %
         sm.repeat "until",
-        sm.start, sm.repeat
+        sm.start, sm.repeat, sm.schedule
         FROM schedules s
             INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
         WHERE
@@ -355,10 +356,13 @@ class Schedule(object):
         return json.dumps(dict(self.__dict__),
                           default=lambda o: o.strftime(SNAP_DB_TS_FORMAT))
 
+    @classmethod
+    def parse_schedule(cls, schedule):
+        return int(schedule[0:-1]), schedule[-1]
+
     @property
     def repeat(self):
-        mult = self.schedule[-1]
-        period = int(self.schedule[0:-1])
+        period, mult = self.parse_schedule(self.schedule)
         if mult == 'M':
             return period * 60
         elif mult == 'h':
