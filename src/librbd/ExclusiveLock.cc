@@ -75,9 +75,10 @@ bool ExclusiveLock<I>::accept_ops(const ceph::mutex &lock) const {
 }
 
 template <typename I>
-void ExclusiveLock<I>::set_require_lock(io::Direction direction,
+void ExclusiveLock<I>::set_require_lock(bool init_shutdown,
+                                        io::Direction direction,
                                         Context* on_finish) {
-  m_image_dispatch->set_require_lock(direction, on_finish);
+  m_image_dispatch->set_require_lock(init_shutdown, direction, on_finish);
 }
 
 template <typename I>
@@ -209,9 +210,9 @@ void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
   if (m_image_ctx.clone_copy_on_read ||
       (features & RBD_FEATURE_JOURNALING) != 0 ||
       rwl_enabled) {
-    m_image_dispatch->set_require_lock(io::DIRECTION_BOTH, on_finish);
+    m_image_dispatch->set_require_lock(true, io::DIRECTION_BOTH, on_finish);
   } else {
-    m_image_dispatch->set_require_lock(io::DIRECTION_WRITE, on_finish);
+    m_image_dispatch->set_require_lock(true, io::DIRECTION_WRITE, on_finish);
   }
 }
 

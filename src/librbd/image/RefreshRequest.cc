@@ -922,7 +922,7 @@ void RefreshRequest<I>::send_v2_open_journal() {
           send_v2_block_writes();
         });
       m_image_ctx.exclusive_lock->set_require_lock(
-        librbd::io::DIRECTION_BOTH, ctx);
+        true, librbd::io::DIRECTION_BOTH, ctx);
       return;
     }
 

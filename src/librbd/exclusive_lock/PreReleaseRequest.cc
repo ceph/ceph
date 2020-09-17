@@ -116,9 +116,11 @@ void PreReleaseRequest<I>::send_block_writes() {
   // queue to re-request the lock if any IO is queued
   if (m_image_ctx.clone_copy_on_read ||
       m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    m_image_dispatch->set_require_lock(io::DIRECTION_BOTH, ctx);
+    m_image_dispatch->set_require_lock(m_shutting_down,
+                                       io::DIRECTION_BOTH, ctx);
   } else {
-    m_image_dispatch->set_require_lock(io::DIRECTION_WRITE, ctx);
+    m_image_dispatch->set_require_lock(m_shutting_down,
+                                       io::DIRECTION_WRITE, ctx);
   }
 }
 

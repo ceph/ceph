@@ -157,8 +157,8 @@ public:
 
   void expect_set_require_lock(MockExclusiveLock &mock_exclusive_lock,
                                librbd::io::Direction direction) {
-    EXPECT_CALL(mock_exclusive_lock, set_require_lock(direction, _))
-      .WillOnce(WithArg<1>(Invoke([](Context* ctx) { ctx->complete(0); })));
+    EXPECT_CALL(mock_exclusive_lock, set_require_lock(true, direction, _))
+      .WillOnce(WithArg<2>(Invoke([](Context* ctx) { ctx->complete(0); })));
   }
 
   void expect_unset_require_lock(MockExclusiveLock &mock_exclusive_lock,
