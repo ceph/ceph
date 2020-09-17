@@ -9,37 +9,66 @@
 #include <string_view>
 
 #include "include/rados/librados.hpp"
+#include "mds/mdstypes.h"
 
 namespace cephfs {
 namespace mirror {
 
 static const std::string CEPHFS_MIRROR_OBJECT("cephfs_mirror");
 
+// distinct filesystem identifier
+struct Filesystem {
+  fs_cluster_id_t fscid;
+  std::string fs_name;
+
+  bool operator==(const Filesystem &rhs) const {
+    return (fscid == rhs.fscid &&
+            fs_name == rhs.fs_name);
+  }
+
+  bool operator!=(const Filesystem &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator<(const Filesystem &rhs) const {
+    if (fscid != rhs.fscid) {
+      return fscid < rhs.fscid;
+    }
+
+    return fs_name < rhs.fs_name;
+  }
+};
+
 // specification of a filesystem -- pool id the metadata pool id.
 struct FilesystemSpec {
   FilesystemSpec() = default;
-  FilesystemSpec(std::string_view fs_name, uint64_t pool_id)
-    : fs_name(fs_name),
+  FilesystemSpec(const Filesystem &filesystem, uint64_t pool_id)
+    : filesystem(filesystem),
+      pool_id(pool_id) {
+  }
+  FilesystemSpec(fs_cluster_id_t fscid, std::string_view fs_name, uint64_t pool_id)
+    : filesystem(Filesystem{fscid, std::string(fs_name)}),
       pool_id(pool_id) {
   }
 
-  std::string fs_name;
+  Filesystem filesystem;
   uint64_t pool_id;
 
   bool operator==(const FilesystemSpec &rhs) const {
-    return (fs_name == rhs.fs_name &&
+    return (filesystem == rhs.filesystem &&
             pool_id == rhs.pool_id);
   }
 
   bool operator<(const FilesystemSpec &rhs) const {
-    if (fs_name != rhs.fs_name) {
-      return fs_name < rhs.fs_name;
+    if (filesystem != rhs.filesystem) {
+      return filesystem < rhs.filesystem;
     }
 
     return pool_id < rhs.pool_id;
   }
 };
 
+std::ostream& operator<<(std::ostream& out, const Filesystem &filesystem);
 std::ostream& operator<<(std::ostream& out, const FilesystemSpec &spec);
 
 typedef std::shared_ptr<librados::Rados> RadosRef;
