@@ -101,6 +101,12 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
     return segment_manager->init().safe_then([this] {
       return tm->mkfs();
     }).safe_then([this] {
+      return tm->close();
+    }).safe_then([this] {
+      destroy();
+      static_cast<segment_manager::EphemeralSegmentManager*>(
+	&*segment_manager)->remount();
+      init();
       return tm->mount();
     }).handle_error(
       crimson::ct_error::all_same_way([] {
