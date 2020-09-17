@@ -121,7 +121,7 @@ if(WITH_RBD_RWL)
    set(unittest_librbd_srcs
      ${unittest_librbd_srcs}
      cache/test_mock_ReplicatedWriteLog.cc
-     cache/rwl/test_WriteLogMap.cc)
+     cache/pwl/test_WriteLogMap.cc)
 endif(WITH_RBD_RWL)
 
 add_executable(unittest_librbd

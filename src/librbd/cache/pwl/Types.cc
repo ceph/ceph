@@ -6,16 +6,16 @@
 #include "common/ceph_context.h"
 #include "include/Context.h"
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::Types: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::Types: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
 
 namespace cache {
 
-namespace rwl {
+namespace pwl {
 
 DeferredContexts::~DeferredContexts() {
   finish_contexts(nullptr, contexts, 0);
@@ -114,8 +114,8 @@ Context * override_ctx(int r, Context *ctx) {
   }
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::rwl::ExtentsSummary<librbd::io::Extents>;
+template class librbd::cache::pwl::ExtentsSummary<librbd::io::Extents>;

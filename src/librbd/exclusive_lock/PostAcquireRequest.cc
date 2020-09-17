@@ -7,8 +7,8 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/stringify.h"
-#include "librbd/cache/rwl/InitRequest.h"
-#include "librbd/cache/rwl/ShutdownRequest.h"
+#include "librbd/cache/pwl/InitRequest.h"
+#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -186,7 +186,7 @@ void PostAcquireRequest<I>::send_open_image_cache() {
   Context *ctx = create_async_context_callback(
     m_image_ctx, create_context_callback<
     klass, &klass::handle_open_image_cache>(this));
-  cache::rwl::InitRequest<I> *req = cache::rwl::InitRequest<I>::create(
+  cache::pwl::InitRequest<I> *req = cache::pwl::InitRequest<I>::create(
     m_image_ctx, ctx);
   req->send();
 }
@@ -216,7 +216,7 @@ void PostAcquireRequest<I>::send_close_image_cache() {
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_close_image_cache>(
     this);
-  cache::rwl::ShutdownRequest<I> *req = cache::rwl::ShutdownRequest<I>::create(
+  cache::pwl::ShutdownRequest<I> *req = cache::pwl::ShutdownRequest<I>::create(
     m_image_ctx, ctx);
   req->send();
 }

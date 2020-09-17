@@ -6,14 +6,14 @@
 
 #include "common/ceph_mutex.h"
 #include "librbd/Utils.h"
-#include "librbd/cache/rwl/Types.h"
+#include "librbd/cache/pwl/Types.h"
 #include <atomic>
 #include <memory>
 
 namespace librbd {
 namespace cache {
 class ImageWritebackInterface;
-namespace rwl {
+namespace pwl {
 
 class SyncPointLogEntry;
 class GenericWriteLogEntry;
@@ -158,12 +158,12 @@ public:
                 const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
       m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
-        "librbd::cache::rwl::WriteLogEntry::m_entry_bl_lock", this)))
+        "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
   WriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes),
       m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
-        "librbd::cache::rwl::WriteLogEntry::m_entry_bl_lock", this)))
+        "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
   ~WriteLogEntry() override {};
   WriteLogEntry(const WriteLogEntry&) = delete;
@@ -260,7 +260,7 @@ public:
                                   const WriteSameLogEntry &entry);
 };
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 

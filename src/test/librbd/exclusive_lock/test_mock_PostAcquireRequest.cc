@@ -11,8 +11,8 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
-#include "librbd/cache/rwl/InitRequest.h"
-#include "librbd/cache/rwl/ShutdownRequest.h"
+#include "librbd/cache/pwl/InitRequest.h"
+#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/exclusive_lock/PostAcquireRequest.h"
 #include "librbd/image/RefreshRequest.h"
 
@@ -63,7 +63,7 @@ RefreshRequest<librbd::MockTestImageCtx> *RefreshRequest<librbd::MockTestImageCt
 } // namespace image
 
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 template<>
 struct InitRequest<librbd::MockTestImageCtx> {
@@ -105,7 +105,7 @@ struct ShutdownRequest<librbd::MockTestImageCtx> {
 
 ShutdownRequest<librbd::MockTestImageCtx> *ShutdownRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
@@ -138,8 +138,8 @@ class TestMockExclusiveLockPostAcquireRequest : public TestMockFixture {
 public:
   typedef PostAcquireRequest<MockTestImageCtx> MockPostAcquireRequest;
   typedef librbd::image::RefreshRequest<MockTestImageCtx> MockRefreshRequest;
-  typedef librbd::cache::rwl::InitRequest<MockTestImageCtx> MockInitRequest;
-  typedef librbd::cache::rwl::ShutdownRequest<MockTestImageCtx> MockShutdownRequest;
+  typedef librbd::cache::pwl::InitRequest<MockTestImageCtx> MockInitRequest;
+  typedef librbd::cache::pwl::ShutdownRequest<MockTestImageCtx> MockShutdownRequest;
 
   void expect_test_features(MockTestImageCtx &mock_image_ctx, uint64_t features,
                             bool enabled) {

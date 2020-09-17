@@ -3,30 +3,30 @@
 
 #include "Request.h"
 #include "librbd/BlockGuard.h"
-#include "librbd/cache/rwl/LogEntry.h"
-#include "librbd/cache/ReplicatedWriteLog.h"
+#include "librbd/cache/pwl/LogEntry.h"
+#include "librbd/cache/pwl/ReplicatedWriteLog.h"
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::Request: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::Request: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 template <typename T>
-C_BlockIORequest<T>::C_BlockIORequest(T &rwl, const utime_t arrived, io::Extents &&extents,
+C_BlockIORequest<T>::C_BlockIORequest(T &pwl, const utime_t arrived, io::Extents &&extents,
                                       bufferlist&& bl, const int fadvise_flags, Context *user_req)
-  : rwl(rwl), image_extents(std::move(extents)),
+  : pwl(pwl), image_extents(std::move(extents)),
     bl(std::move(bl)), fadvise_flags(fadvise_flags),
     user_req(user_req), image_extents_summary(image_extents), m_arrived_time(arrived) {
-  ldout(rwl.get_context(), 99) << this << dendl;
+  ldout(pwl.get_context(), 99) << this << dendl;
 }
 
 template <typename T>
 C_BlockIORequest<T>::~C_BlockIORequest() {
-  ldout(rwl.get_context(), 99) << this << dendl;
+  ldout(pwl.get_context(), 99) << this << dendl;
   ceph_assert(m_cell_released || !m_cell);
 }
 
@@ -48,7 +48,7 @@ std::ostream &operator<<(std::ostream &os,
 
 template <typename T>
 void C_BlockIORequest<T>::set_cell(BlockGuardCell *cell) {
-  ldout(rwl.get_context(), 20) << this << " cell=" << cell << dendl;
+  ldout(pwl.get_context(), 20) << this << " cell=" << cell << dendl;
   ceph_assert(cell);
   ceph_assert(!m_cell);
   m_cell = cell;
@@ -56,19 +56,19 @@ void C_BlockIORequest<T>::set_cell(BlockGuardCell *cell) {
 
 template <typename T>
 BlockGuardCell *C_BlockIORequest<T>::get_cell(void) {
-  ldout(rwl.get_context(), 20) << this << " cell=" << m_cell << dendl;
+  ldout(pwl.get_context(), 20) << this << " cell=" << m_cell << dendl;
   return m_cell;
 }
 
 template <typename T>
 void C_BlockIORequest<T>::release_cell() {
-  ldout(rwl.get_context(), 20) << this << " cell=" << m_cell << dendl;
+  ldout(pwl.get_context(), 20) << this << " cell=" << m_cell << dendl;
   ceph_assert(m_cell);
   bool initial = false;
   if (m_cell_released.compare_exchange_strong(initial, true)) {
-    rwl.release_guarded_request(m_cell);
+    pwl.release_guarded_request(m_cell);
   } else {
-    ldout(rwl.get_context(), 5) << "cell " << m_cell << " already released for " << this << dendl;
+    ldout(pwl.get_context(), 5) << "cell " << m_cell << " already released for " << this << dendl;
   }
 }
 
@@ -76,27 +76,27 @@ template <typename T>
 void C_BlockIORequest<T>::complete_user_request(int r) {
   bool initial = false;
   if (m_user_req_completed.compare_exchange_strong(initial, true)) {
-    ldout(rwl.get_context(), 15) << this << " completing user req" << dendl;
+    ldout(pwl.get_context(), 15) << this << " completing user req" << dendl;
     m_user_req_completed_time = ceph_clock_now();
     user_req->complete(r);
     // Set user_req as null as it is deleted
     user_req = nullptr;
   } else {
-    ldout(rwl.get_context(), 20) << this << " user req already completed" << dendl;
+    ldout(pwl.get_context(), 20) << this << " user req already completed" << dendl;
   }
 }
 
 template <typename T>
 void C_BlockIORequest<T>::finish(int r) {
-  ldout(rwl.get_context(), 20) << this << dendl;
+  ldout(pwl.get_context(), 20) << this << dendl;
 
   complete_user_request(r);
   bool initial = false;
   if (m_finish_called.compare_exchange_strong(initial, true)) {
-    ldout(rwl.get_context(), 15) << this << " finishing" << dendl;
+    ldout(pwl.get_context(), 15) << this << " finishing" << dendl;
     finish_req(0);
   } else {
-    ldout(rwl.get_context(), 20) << this << " already finished" << dendl;
+    ldout(pwl.get_context(), 20) << this << " already finished" << dendl;
     ceph_assert(0);
   }
 }
@@ -110,17 +110,17 @@ void C_BlockIORequest<T>::deferred() {
 }
 
 template <typename T>
-C_WriteRequest<T>::C_WriteRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+C_WriteRequest<T>::C_WriteRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
                                   bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,
                                   PerfCounters *perfcounter, Context *user_req)
-  : C_BlockIORequest<T>(rwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, user_req),
+  : C_BlockIORequest<T>(pwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, user_req),
     m_perfcounter(perfcounter), m_lock(lock) {
-  ldout(rwl.get_context(), 99) << this << dendl;
+  ldout(pwl.get_context(), 99) << this << dendl;
 }
 
 template <typename T>
 C_WriteRequest<T>::~C_WriteRequest() {
-  ldout(rwl.get_context(), 99) << this << dendl;
+  ldout(pwl.get_context(), 99) << this << dendl;
 }
 
 template <typename T>
@@ -136,7 +136,7 @@ std::ostream &operator<<(std::ostream &os,
 
 template <typename T>
 void C_WriteRequest<T>::blockguard_acquired(GuardedRequestFunctionContext &guard_ctx) {
-  ldout(rwl.get_context(), 20) << __func__ << " write_req=" << this << " cell=" << guard_ctx.cell << dendl;
+  ldout(pwl.get_context(), 20) << __func__ << " write_req=" << this << " cell=" << guard_ctx.cell << dendl;
 
   ceph_assert(guard_ctx.cell);
   this->detained = guard_ctx.state.detained; /* overlapped */
@@ -146,11 +146,11 @@ void C_WriteRequest<T>::blockguard_acquired(GuardedRequestFunctionContext &guard
 
 template <typename T>
 void C_WriteRequest<T>::finish_req(int r) {
-  ldout(rwl.get_context(), 15) << "write_req=" << this << " cell=" << this->get_cell() << dendl;
+  ldout(pwl.get_context(), 15) << "write_req=" << this << " cell=" << this->get_cell() << dendl;
 
   /* Completed to caller by here (in finish(), which calls this) */
   utime_t now = ceph_clock_now();
-  rwl.release_write_lanes(this);
+  pwl.release_write_lanes(this);
   ceph_assert(m_resources.allocated);
   m_resources.allocated = false;
   this->release_cell(); /* TODO: Consider doing this in appending state */
@@ -190,7 +190,7 @@ void C_WriteRequest<T>::setup_buffer_resources(
 
 template <typename T>
 std::shared_ptr<WriteLogOperation> C_WriteRequest<T>::create_operation(uint64_t offset, uint64_t len) {
-  return std::make_shared<WriteLogOperation>(*op_set, offset, len, rwl.get_context());
+  return std::make_shared<WriteLogOperation>(*op_set, offset, len, pwl.get_context());
 }
 
 template <typename T>
@@ -198,8 +198,8 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   GenericWriteLogEntries log_entries;
   {
     std::lock_guard locker(m_lock);
-    std::shared_ptr<SyncPoint> current_sync_point = rwl.get_current_sync_point();
-    if ((!rwl.get_persist_on_flush() && current_sync_point->log_entry->writes_completed) ||
+    std::shared_ptr<SyncPoint> current_sync_point = pwl.get_current_sync_point();
+    if ((!pwl.get_persist_on_flush() && current_sync_point->log_entry->writes_completed) ||
         (current_sync_point->log_entry->writes > MAX_WRITES_PER_SYNC_POINT) ||
         (current_sync_point->log_entry->bytes > MAX_BYTES_PER_SYNC_POINT)) {
       /* Create new sync point and persist the previous one. This sequenced
@@ -213,17 +213,17 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
        * write (for writes observed here to have been in flight simultaneously)
        * at a time in persist-on-write mode.
        */
-      rwl.flush_new_sync_point(nullptr, on_exit);
-      current_sync_point = rwl.get_current_sync_point();
+      pwl.flush_new_sync_point(nullptr, on_exit);
+      current_sync_point = pwl.get_current_sync_point();
     }
-    uint64_t current_sync_gen = rwl.get_current_sync_gen();
+    uint64_t current_sync_gen = pwl.get_current_sync_gen();
     op_set =
       make_unique<WriteLogOperationSet>(this->m_dispatched_time,
                                         m_perfcounter,
                                         current_sync_point,
-                                        rwl.get_persist_on_flush(),
-                                        rwl.get_context(), this);
-    ldout(rwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get() << dendl;
+                                        pwl.get_persist_on_flush(),
+                                        pwl.get_context(), this);
+    ldout(pwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get() << dendl;
     ceph_assert(m_resources.allocated);
     /* op_set->operations initialized differently for plain write or write same */
     auto allocation = m_resources.buffers.begin();
@@ -234,16 +234,16 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
       this->op_set->operations.emplace_back(operation);
 
       /* A WS is also a write */
-      ldout(rwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get()
+      ldout(pwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get()
                                    << " operation=" << operation << dendl;
       log_entries.emplace_back(operation->log_entry);
       if (!op_set->persist_on_flush) {
-        rwl.inc_last_op_sequence_num();
+        pwl.inc_last_op_sequence_num();
       }
       operation->init(true, allocation, current_sync_gen,
-                      rwl.get_last_op_sequence_num(), this->bl, buffer_offset, op_set->persist_on_flush);
+                      pwl.get_last_op_sequence_num(), this->bl, buffer_offset, op_set->persist_on_flush);
       buffer_offset += operation->log_entry->write_bytes();
-      ldout(rwl.get_context(), 20) << "operation=[" << *operation << "]" << dendl;
+      ldout(pwl.get_context(), 20) << "operation=[" << *operation << "]" << dendl;
       allocation++;
     }
   }
@@ -255,7 +255,7 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   for (auto &operation : op_set->operations) {
     operation->copy_bl_to_pmem_buffer();
   }
-  rwl.add_into_log_map(log_entries);
+  pwl.add_into_log_map(log_entries);
 }
 
 template <typename T>
@@ -278,12 +278,12 @@ void C_WriteRequest<T>::schedule_append() {
   if (m_do_early_flush) {
     /* This caller is waiting for persist, so we'll use their thread to
      * expedite it */
-    rwl.flush_pmem_buffer(this->op_set->operations);
-    rwl.schedule_append(this->op_set->operations);
+    pwl.flush_pmem_buffer(this->op_set->operations);
+    pwl.schedule_append(this->op_set->operations);
   } else {
     /* This is probably not still the caller's thread, so do the payload
      * flushing/replicating later. */
-    rwl.schedule_flush_and_append(this->op_set->operations);
+    pwl.schedule_flush_and_append(this->op_set->operations);
   }
 }
 
@@ -298,7 +298,7 @@ void C_WriteRequest<T>::schedule_append() {
 template <typename T>
 bool C_WriteRequest<T>::alloc_resources() {
   this->allocated_time = ceph_clock_now();
-  return rwl.alloc_resources(this);
+  return pwl.alloc_resources(this);
 }
 
 /**
@@ -310,7 +310,7 @@ bool C_WriteRequest<T>::alloc_resources() {
 template <typename T>
 void C_WriteRequest<T>::dispatch()
 {
-  CephContext *cct = rwl.get_context();
+  CephContext *cct = pwl.get_context();
   DeferredContexts on_exit;
   utime_t now = ceph_clock_now();
   this->m_dispatched_time = now;
@@ -347,40 +347,40 @@ void C_WriteRequest<T>::dispatch()
 }
 
 template <typename T>
-C_FlushRequest<T>::C_FlushRequest(T &rwl, const utime_t arrived,
+C_FlushRequest<T>::C_FlushRequest(T &pwl, const utime_t arrived,
                                   io::Extents &&image_extents,
                                   bufferlist&& bl, const int fadvise_flags,
                                   ceph::mutex &lock, PerfCounters *perfcounter,
                                   Context *user_req)
-  : C_BlockIORequest<T>(rwl, arrived, std::move(image_extents), std::move(bl),
+  : C_BlockIORequest<T>(pwl, arrived, std::move(image_extents), std::move(bl),
                         fadvise_flags, user_req),
     m_lock(lock), m_perfcounter(perfcounter) {
-  ldout(rwl.get_context(), 20) << this << dendl;
+  ldout(pwl.get_context(), 20) << this << dendl;
 }
 
 template <typename T>
 void C_FlushRequest<T>::finish_req(int r) {
-  ldout(rwl.get_context(), 20) << "flush_req=" << this
+  ldout(pwl.get_context(), 20) << "flush_req=" << this
                                << " cell=" << this->get_cell() << dendl;
   /* Block guard already released */
   ceph_assert(!this->get_cell());
 
   /* Completed to caller by here */
   utime_t now = ceph_clock_now();
-  m_perfcounter->tinc(l_librbd_rwl_aio_flush_latency, now - this->m_arrived_time);
+  m_perfcounter->tinc(l_librbd_pwl_aio_flush_latency, now - this->m_arrived_time);
 }
 
 template <typename T>
 bool C_FlushRequest<T>::alloc_resources() {
-  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
                                << "req=[" << *this << "]" << dendl;
-  return rwl.alloc_resources(this);
+  return pwl.alloc_resources(this);
 }
 
 template <typename T>
 void C_FlushRequest<T>::dispatch() {
   utime_t now = ceph_clock_now();
-  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
                                << "req=[" << *this << "]" << dendl;
   ceph_assert(this->m_resources.allocated);
   this->m_dispatched_time = now;
@@ -389,10 +389,10 @@ void C_FlushRequest<T>::dispatch() {
                                                to_append,
                                                now,
                                                m_perfcounter,
-                                               rwl.get_context());
+                                               pwl.get_context());
 
-  m_perfcounter->inc(l_librbd_rwl_log_ops, 1);
-  rwl.schedule_append(op);
+  m_perfcounter->inc(l_librbd_pwl_log_ops, 1);
+  pwl.schedule_append(op);
 }
 
 template <typename T>
@@ -412,26 +412,26 @@ std::ostream &operator<<(std::ostream &os,
 }
 
 template <typename T>
-C_DiscardRequest<T>::C_DiscardRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+C_DiscardRequest<T>::C_DiscardRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
                                       uint32_t discard_granularity_bytes, ceph::mutex &lock,
                                       PerfCounters *perfcounter, Context *user_req)
-  : C_BlockIORequest<T>(rwl, arrived, std::move(image_extents), bufferlist(), 0, user_req),
+  : C_BlockIORequest<T>(pwl, arrived, std::move(image_extents), bufferlist(), 0, user_req),
   m_discard_granularity_bytes(discard_granularity_bytes),
   m_lock(lock),
   m_perfcounter(perfcounter) {
-  ldout(rwl.get_context(), 20) << this << dendl;
+  ldout(pwl.get_context(), 20) << this << dendl;
 }
 
 template <typename T>
 C_DiscardRequest<T>::~C_DiscardRequest() {
-  ldout(rwl.get_context(), 20) << this << dendl;
+  ldout(pwl.get_context(), 20) << this << dendl;
 }
 
 template <typename T>
 bool C_DiscardRequest<T>::alloc_resources() {
-  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
                                << "req=[" << *this << "]" << dendl;
-  return rwl.alloc_resources(this);
+  return pwl.alloc_resources(this);
 }
 
 template <typename T>
@@ -439,44 +439,44 @@ void C_DiscardRequest<T>::setup_log_operations() {
   std::lock_guard locker(m_lock);
   GenericWriteLogEntries log_entries;
   for (auto &extent : this->image_extents) {
-    op = std::make_shared<DiscardLogOperation>(rwl.get_current_sync_point(),
+    op = std::make_shared<DiscardLogOperation>(pwl.get_current_sync_point(),
                                                extent.first,
                                                extent.second,
                                                m_discard_granularity_bytes,
                                                this->m_dispatched_time,
                                                m_perfcounter,
-                                               rwl.get_context());
+                                               pwl.get_context());
     log_entries.emplace_back(op->log_entry);
     break;
   }
-  uint64_t current_sync_gen = rwl.get_current_sync_gen();
-  bool persist_on_flush = rwl.get_persist_on_flush();
+  uint64_t current_sync_gen = pwl.get_current_sync_gen();
+  bool persist_on_flush = pwl.get_persist_on_flush();
   if (!persist_on_flush) {
-    rwl.inc_last_op_sequence_num();
+    pwl.inc_last_op_sequence_num();
   }
   auto discard_req = this;
   Context *on_write_persist = new LambdaContext(
     [this, discard_req](int r) {
-      ldout(rwl.get_context(), 20) << "discard_req=" << discard_req
+      ldout(pwl.get_context(), 20) << "discard_req=" << discard_req
                                    << " cell=" << discard_req->get_cell() << dendl;
       ceph_assert(discard_req->get_cell());
       discard_req->complete_user_request(r);
       discard_req->release_cell();
     });
-  op->init(current_sync_gen, persist_on_flush, rwl.get_last_op_sequence_num(), on_write_persist);
-  rwl.add_into_log_map(log_entries);
+  op->init(current_sync_gen, persist_on_flush, pwl.get_last_op_sequence_num(), on_write_persist);
+  pwl.add_into_log_map(log_entries);
 }
 
 template <typename T>
 void C_DiscardRequest<T>::dispatch() {
   utime_t now = ceph_clock_now();
-  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
                                << "req=[" << *this << "]" << dendl;
   ceph_assert(this->m_resources.allocated);
   this->m_dispatched_time = now;
   setup_log_operations();
-  m_perfcounter->inc(l_librbd_rwl_log_ops, 1);
-  rwl.schedule_append(op);
+  m_perfcounter->inc(l_librbd_pwl_log_ops, 1);
+  pwl.schedule_append(op);
 }
 
 template <typename T>
@@ -496,7 +496,7 @@ void C_DiscardRequest<T>::setup_buffer_resources(
 
 template <typename T>
 void C_DiscardRequest<T>::blockguard_acquired(GuardedRequestFunctionContext &guard_ctx) {
-  ldout(rwl.get_context(), 20) << " cell=" << guard_ctx.cell << dendl;
+  ldout(pwl.get_context(), 20) << " cell=" << guard_ctx.cell << dendl;
 
   ceph_assert(guard_ctx.cell);
   this->detained = guard_ctx.state.detained; /* overlapped */
@@ -516,16 +516,16 @@ std::ostream &operator<<(std::ostream &os,
 }
 
 template <typename T>
-C_WriteSameRequest<T>::C_WriteSameRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+C_WriteSameRequest<T>::C_WriteSameRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
                                           bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,
                                           PerfCounters *perfcounter, Context *user_req)
-  : C_WriteRequest<T>(rwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, lock, perfcounter, user_req) {
-  ldout(rwl.get_context(), 20) << this << dendl;
+  : C_WriteRequest<T>(pwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, lock, perfcounter, user_req) {
+  ldout(pwl.get_context(), 20) << this << dendl;
 }
 
 template <typename T>
 C_WriteSameRequest<T>::~C_WriteSameRequest() {
-   ldout(rwl.get_context(), 20) << this << dendl;
+   ldout(pwl.get_context(), 20) << this << dendl;
 }
 
 template <typename T>
@@ -533,9 +533,9 @@ void C_WriteSameRequest<T>::update_req_stats(utime_t &now) {
   /* Write same stats excluded from most write stats
    * because the read phase will make them look like slow writes in
    * those histograms. */
-  ldout(rwl.get_context(), 20) << this << dendl;
+  ldout(pwl.get_context(), 20) << this << dendl;
   utime_t comp_latency = now - this->m_arrived_time;
-  this->m_perfcounter->tinc(l_librbd_rwl_ws_latency, comp_latency);
+  this->m_perfcounter->tinc(l_librbd_pwl_ws_latency, comp_latency);
 }
 
 /* Write sames will allocate one buffer, the size of the repeating pattern */
@@ -544,7 +544,7 @@ void C_WriteSameRequest<T>::setup_buffer_resources(
     uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
     uint64_t &number_lanes, uint64_t &number_log_entries,
     uint64_t &number_unpublished_reserves) {
-  ldout(rwl.get_context(), 20) << this << dendl;
+  ldout(pwl.get_context(), 20) << this << dendl;
   ceph_assert(this->image_extents.size() == 1);
   bytes_dirtied += this->image_extents[0].second;
   auto pattern_length = this->bl.length();
@@ -563,7 +563,7 @@ template <typename T>
 std::shared_ptr<WriteLogOperation> C_WriteSameRequest<T>::create_operation(uint64_t offset, uint64_t len) {
   ceph_assert(this->image_extents.size() == 1);
   return std::make_shared<WriteSameLogOperation>(*this->op_set.get(), offset, len,
-                                                 this->bl.length(), rwl.get_context());
+                                                 this->bl.length(), pwl.get_context());
 }
 
 template <typename T>
@@ -574,18 +574,18 @@ std::ostream &operator<<(std::ostream &os,
 }
 
 template <typename T>
-C_CompAndWriteRequest<T>::C_CompAndWriteRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+C_CompAndWriteRequest<T>::C_CompAndWriteRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
                                                 bufferlist&& cmp_bl, bufferlist&& bl, uint64_t *mismatch_offset,
                                                 int fadvise_flags, ceph::mutex &lock, PerfCounters *perfcounter,
                                                 Context *user_req)
-  : C_WriteRequest<T>(rwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, lock, perfcounter, user_req),
+  : C_WriteRequest<T>(pwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, lock, perfcounter, user_req),
   mismatch_offset(mismatch_offset), cmp_bl(std::move(cmp_bl)) {
-  ldout(rwl.get_context(), 20) << dendl;
+  ldout(pwl.get_context(), 20) << dendl;
 }
 
 template <typename T>
 C_CompAndWriteRequest<T>::~C_CompAndWriteRequest() {
-  ldout(rwl.get_context(), 20) << dendl;
+  ldout(pwl.get_context(), 20) << dendl;
 }
 
 template <typename T>
@@ -604,10 +604,10 @@ void C_CompAndWriteRequest<T>::update_req_stats(utime_t &now) {
    * stats because the read phase will make them look like slow writes in
    * those histograms. */
   if (!compare_succeeded) {
-    this->m_perfcounter->inc(l_librbd_rwl_cmp_fails, 1);
+    this->m_perfcounter->inc(l_librbd_pwl_cmp_fails, 1);
   }
   utime_t comp_latency = now - this->m_arrived_time;
-  this->m_perfcounter->tinc(l_librbd_rwl_cmp_latency, comp_latency);
+  this->m_perfcounter->tinc(l_librbd_pwl_cmp_latency, comp_latency);
 }
 
 template <typename T>
@@ -621,13 +621,13 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::rwl::C_BlockIORequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_WriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_FlushRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_DiscardRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_WriteSameRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_CompAndWriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::pwl::C_BlockIORequest<librbd::cache::pwl::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::pwl::C_WriteRequest<librbd::cache::pwl::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::pwl::C_FlushRequest<librbd::cache::pwl::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::pwl::C_DiscardRequest<librbd::cache::pwl::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::pwl::C_WriteSameRequest<librbd::cache::pwl::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::pwl::C_CompAndWriteRequest<librbd::cache::pwl::AbstractWriteLog<librbd::ImageCtx> >;
