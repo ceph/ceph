@@ -3932,7 +3932,6 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   std::optional<RGWCompressionInfo> compression_info;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
-  SourceObjType obj_type{OBJ_TYPE_UNINIT};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
@@ -4045,7 +4044,6 @@ public:
 
       if (rule.part_size == 0) {
         /* Atomic object */
-        obj_type = OBJ_TYPE_ATOMIC;
         etag_verifier_atomic = boost::in_place(cct, filter);
         filter = &*etag_verifier_atomic;
       } else {
@@ -4091,7 +4089,6 @@ public:
         if (part_ofs.empty()) {
           try_etag_verify = false;
         } else {
-          obj_type = OBJ_TYPE_MPU;
           etag_verifier_mpu = boost::in_place(cct, std::move(part_ofs), filter);
           filter = &*etag_verifier_mpu;
         }
@@ -4165,20 +4162,16 @@ public:
     return data_len;
   }
 
-  string get_calculated_etag() {
-    if (obj_type == OBJ_TYPE_ATOMIC) {
+  std::string get_verifier_etag() {
+    if (etag_verifier_atomic) {
       etag_verifier_atomic->calculate_etag();
       return etag_verifier_atomic->get_calculated_etag();
-    } else if (obj_type == OBJ_TYPE_MPU) {
+    } else if (etag_verifier_mpu) {
       etag_verifier_mpu->calculate_etag();
       return etag_verifier_mpu->get_calculated_etag();
     } else {
       return "";
     }
-  }
-
-  SourceObjType get_obj_type() {
-    return obj_type;
   }
 };
 
@@ -4663,17 +4656,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   /* Perform ETag verification is we have computed the object's MD5 sum at our end */
-  if (cb.get_obj_type() != OBJ_TYPE_UNINIT) {
+  if (const auto& verifier_etag = cb.get_verifier_etag();
+      !verifier_etag.empty()) {
     string trimmed_etag = etag;
 
     /* Remove the leading and trailing double quotes from etag */
     trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
       trimmed_etag.end());
 
-    if (cb.get_calculated_etag().compare(trimmed_etag)) {
+    if (verifier_etag != trimmed_etag) {
       ret = -EIO;
       ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
-        << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+        << trimmed_etag << " Computed etag:" << verifier_etag << dendl;
       goto set_err_state;
     }
   }
