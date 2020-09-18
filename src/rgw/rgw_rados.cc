@@ -3258,8 +3258,8 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
   bool try_etag_verify;
-  boost::optional<RGWPutObj_ETagVerifier_Atomic> etag_verifier_atomic;
-  boost::optional<RGWPutObj_ETagVerifier_MPU> etag_verifier_mpu;
+  boost::optional<rgw::putobj::ETagVerifier_Atomic> etag_verifier_atomic;
+  boost::optional<rgw::putobj::ETagVerifier_MPU> etag_verifier_mpu;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::putobj::ObjectProcessor *processor;
