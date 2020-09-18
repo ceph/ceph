@@ -413,14 +413,6 @@ bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
   return get_vdo_utilization(vdo_fd, total, avail);
 }
 
-int KernelDevice::choose_fd(bool buffered, int write_hint) const
-{
-  assert(write_hint >= WRITE_LIFE_NOT_SET && write_hint < WRITE_LIFE_MAX);
-  if (!enable_wrt)
-    write_hint = WRITE_LIFE_NOT_SET;
-  return buffered ? fd_buffereds[write_hint] : fd_directs[write_hint];
-}
-
 int KernelDevice::flush()
 {
   // protect flush with a mutex.  note that we are not really protecting

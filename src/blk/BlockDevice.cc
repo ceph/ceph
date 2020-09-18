@@ -52,14 +52,6 @@ std::ostream& operator<<(std::ostream& os, const FAMode buffered)
   os << (buffered == FAMode::BUFFERED ? " (buffered)" : " (direct)");
   return os;
 }
-inline FAMode buffermode(bool buffered)
-{
-  if (buffered)
-    return FAMode::BUFFERED;
-  else
-    return FAMode::DIRECT;
-}
-
 
 void IOContext::aio_wait()
 {
