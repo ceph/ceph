@@ -113,5 +113,26 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 
+  //whoami
+  char *end = nullptr;
+  const char *id = g_conf()->name.get_id().c_str();
+  int whoami = strtol(id, &end, 10);
+  if (*end || end == id || whoami < 0) {
+    cerr << "replica id should only be number" << std::endl;
+    exit(1);
+  }
+  // get public network messenger type
+  std::string public_msg_type = g_conf()->ms_public_type.empty() ?
+                                g_conf().get_val<std::string>("ms_type") :
+                                g_conf()->ms_public_type;
+  uint64_t nonce = Messenger::get_pid_nonce();
+  Messenger *msgr_public = Messenger::create(g_ceph_context, public_msg_type,
+                                             entity_name_t::REPLICA(whoami),
+                                             "replica_msgr",
+                                             nonce);
+  if (!msgr_public) {
+    exit(1);
+  }
+
   return 0;
 }
