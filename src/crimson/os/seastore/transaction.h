@@ -19,7 +19,7 @@ namespace crimson::os::seastore {
 class Transaction {
   friend class Cache;
 
-  RootBlockRef root;        ///< ref to root if mutated by transaction
+  RootBlockRef root;        ///< ref to root if read or written by transaction
 
   segment_off_t offset = 0; ///< relative offset of next block
 

@@ -99,6 +99,8 @@ CachedExtentRef Cache::duplicate_for_write(
 
   auto ret = i->duplicate_for_write();
   if (ret->get_type() == extent_types_t::ROOT) {
+    // root must be loaded before mutate
+    assert(t.root == i);
     t.root = ret->cast<RootBlock>();
   } else {
     ret->last_committed_crc = i->last_committed_crc;
@@ -246,8 +248,10 @@ void Cache::init() {
 
 Cache::mkfs_ertr::future<> Cache::mkfs(Transaction &t)
 {
-  duplicate_for_write(t, root);
-  return mkfs_ertr::now();
+  return get_root(t).safe_then([this, &t](auto croot) {
+    duplicate_for_write(t, croot);
+    return mkfs_ertr::now();
+  });
 }
 
 Cache::close_ertr::future<> Cache::close()
@@ -299,7 +303,8 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
       t.root);
   } else {
     auto ret = root;
-    return ret->wait_io().then([ret] {
+    return ret->wait_io().then([ret, &t] {
+      t.root = ret;
       return get_root_ret(
 	get_root_ertr::ready_future_marker{},
 	ret);
