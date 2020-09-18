@@ -228,7 +228,7 @@ Placement
 ---------
 
 A :ref:`orchestrator-cli-placement-spec` defines the placement of
-daemons of a specifc service.
+daemons of a specific service.
 
 In general, stateless services do not require any specific placement
 rules as they can run anywhere that sufficient system resources
@@ -285,7 +285,7 @@ OSD Replacement
 See :ref:`rados-replacing-an-osd` for the underlying process.
 
 Replacing OSDs is fundamentally a two-staged process, as users need to
-physically replace drives. The orchestrator therefor exposes this two-staged process.
+physically replace drives. The orchestrator therefore exposes this two-staged process.
 
 Phase one is a call to :meth:`Orchestrator.remove_daemons` with ``destroy=True`` in order to mark
 the OSD as destroyed.

@@ -414,7 +414,7 @@ you would look at increasing the ``rgw lc max worker`` value from the default va
 workload with a smaller number of buckets but higher number of objects (hundreds of thousands)
 per bucket you would look at tuning ``rgw lc max wp worker`` from the default value of 3.
 
-:NOTE: When looking to to tune either of these specific values please validate the
+:NOTE: When looking to tune either of these specific values please validate the
        current Cluster performance and Ceph Object Gateway utilization before increasing.
 
 Garbage Collection Settings

@@ -184,7 +184,7 @@ that should be pinned. For example:
 Would cause any directory loaded into cache or created under ``/tmp`` to be
 ephemerally pinned 50 percent of the time.
 
-It is recomended to only set this to small values, like ``.001`` or ``0.1%``.
+It is recommended to only set this to small values, like ``.001`` or ``0.1%``.
 Having too many subtrees may degrade performance. For this reason, the config
 ``mds_export_ephemeral_random_max`` enforces a cap on the maximum of this
 percentage (default: ``.01``). The MDS returns ``EINVAL`` when attempting to
