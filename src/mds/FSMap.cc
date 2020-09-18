@@ -1022,6 +1022,7 @@ int FSMap::parse_role(
     const std::vector<string> &filter) const
 {
   int r = parse_role(role_str, role, ss);
+  if (r < 0) return r;
 
   string_view fs_name = get_filesystem(role->fscid)->mds_map.get_fs_name();
 
