@@ -99,7 +99,7 @@ int KernelDevice::choose_fd(FAMode buffered, int write_hint) const
 
 int KernelDevice::_lock()
 {
-  dout(10) << __func__ << " " << fd_directs[WRITE_LIFE_NOT_SET] << dendl;
+  dout(10) << __func__ << " " << choose_fd(FAMode::DIRECT) << dendl;
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->bdev_flock_retry_interval);
 
@@ -107,7 +107,7 @@ int KernelDevice::_lock()
   // read some information and close it. Then a failure occurs here.
   // So we need to try again here.
   for (int i = 0; i < cct->_conf->bdev_flock_retry + 1; i++) {
-    int r = ::flock(fd_directs[WRITE_LIFE_NOT_SET], LOCK_EX | LOCK_NB);
+    int r = ::flock(choose_fd(FAMode::DIRECT), LOCK_EX | LOCK_NB);
     if (r < 0 && errno == EAGAIN) {
       dout(1) << __func__ << " flock busy on " << path << dendl;    
       sleeptime.sleep();
@@ -173,7 +173,7 @@ int KernelDevice::open(const string& p)
 
   // disable readahead as it will wreak havoc on our mix of
   // directio/aio and buffered io.
-  r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
+  r = posix_fadvise(choose_fd(FAMode::BUFFERED), 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
     derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
@@ -190,7 +190,7 @@ int KernelDevice::open(const string& p)
   }
 
   struct stat st;
-  r = ::fstat(fd_directs[WRITE_LIFE_NOT_SET], &st);
+  r = ::fstat(choose_fd(FAMode::DIRECT), &st);
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fstat got " << cpp_strerror(r) << dendl;
@@ -210,8 +210,8 @@ int KernelDevice::open(const string& p)
 
 
   {
-    BlkDev blkdev_direct(fd_directs[WRITE_LIFE_NOT_SET]);
-    BlkDev blkdev_buffered(fd_buffereds[WRITE_LIFE_NOT_SET]);
+    BlkDev blkdev_direct(choose_fd(FAMode::DIRECT));
+    BlkDev blkdev_buffered(choose_fd(FAMode::BUFFERED));
 
     if (S_ISBLK(st.st_mode)) {
       int64_t s;
@@ -345,14 +345,14 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   }
 
   struct stat st;
-  int r = ::fstat(fd_buffereds[WRITE_LIFE_NOT_SET], &st);
+  int r = ::fstat(choose_fd(FAMode::BUFFERED), &st);
   if (r < 0)
     return -errno;
   if (S_ISBLK(st.st_mode)) {
     (*pm)[prefix + "access_mode"] = "blk";
 
     char buffer[1024] = {0};
-    BlkDev blkdev{fd_buffereds[WRITE_LIFE_NOT_SET]};
+    BlkDev blkdev{choose_fd(FAMode::BUFFERED)};
     if (r = blkdev.partition(buffer, sizeof(buffer)); r) {
       (*pm)[prefix + "partition_path"] = "unknown";
     } else {
@@ -444,7 +444,7 @@ int KernelDevice::flush()
     _exit(1);
   }
   utime_t start = ceph_clock_now();
-  int r = ::fdatasync(fd_directs[WRITE_LIFE_NOT_SET]);
+  int r = ::fdatasync(choose_fd(FAMode::DIRECT));
   utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   if (r < 0) {
@@ -867,7 +867,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
 #ifdef HAVE_SYNC_FILE_RANGE
   if (buffered) {
     // initiate IO and wait till it completes
-    auto r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
+    auto r = ::sync_file_range(choose_fd(FAMode::BUFFERED), off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
     if (r < 0) {
       r = -errno;
       derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
@@ -1013,7 +1013,7 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
 	       << " 0x" << std::hex << offset << "~" << len << std::dec
 	       << dendl;
 
-      r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+      r = BlkDev{choose_fd(FAMode::DIRECT)}.discard((int64_t)offset, (int64_t)len);
   }
   return r;
 }
@@ -1031,8 +1031,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   auto start1 = mono_clock::now();
 
   auto p = ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len));
-  int r = ::pread(buffered ? fd_buffereds[WRITE_LIFE_NOT_SET] : fd_directs[WRITE_LIFE_NOT_SET],
-		  p->c_str(), len, off);
+  int r = ::pread(choose_fd(buffermode(buffered)), p->c_str(), len, off);
   auto age = cct->_conf->bdev_debug_aio_log_age;
   if (mono_clock::now() - start1 >= make_timespan(age)) {
     derr << __func__ << " stalled read "
@@ -1077,7 +1076,7 @@ int KernelDevice::aio_read(
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
+    ioc->pending_aios.push_back(aio_t(ioc, choose_fd(FAMode::DIRECT)));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     bufferptr p = ceph::buffer::create_small_page_aligned(len);
@@ -1105,7 +1104,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   int r = 0;
 
   auto start1 = mono_clock::now();
-  r = ::pread(fd_directs[WRITE_LIFE_NOT_SET], p.c_str(), aligned_len, aligned_off);
+  r = ::pread(choose_fd(FAMode::DIRECT), p.c_str(), aligned_len, aligned_off);
   auto age = cct->_conf->bdev_debug_aio_log_age;
   if (mono_clock::now() - start1 >= make_timespan(age)) {
     derr << __func__ << " stalled read "
@@ -1158,7 +1157,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     char *t = buf;
     uint64_t left = len;
     while (left > 0) {
-      r = ::pread(fd_buffereds[WRITE_LIFE_NOT_SET], t, left, off);
+      r = ::pread(choose_fd(FAMode::BUFFERED), t, left, off);
       if (r < 0) {
 	r = -errno;
         derr << __func__ << " 0x" << std::hex << off << "~" << left
@@ -1178,7 +1177,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     }
   } else {
     //direct and aligned read
-    r = ::pread(fd_directs[WRITE_LIFE_NOT_SET], buf, len, off);
+    r = ::pread(choose_fd(FAMode::DIRECT), buf, len, off);
     if (mono_clock::now() - start1 >= make_timespan(age)) {
       derr << __func__ << " stalled read "
 	   << " 0x" << std::hex << off << "~" << len << std::dec
@@ -1212,7 +1211,7 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
 	  << dendl;
   ceph_assert(off % block_size == 0);
   ceph_assert(len % block_size == 0);
-  int r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, POSIX_FADV_DONTNEED);
+  int r = posix_fadvise(choose_fd(FAMode::BUFFERED), off, len, POSIX_FADV_DONTNEED);
   if (r) {
     r = -r;
     derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
