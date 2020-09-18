@@ -42,6 +42,7 @@ add_executable(crimson-osd
   watch.cc
   )
 target_link_libraries(crimson-osd
+  crimson-admin
   crimson-common
   crimson-os
   crimson
