@@ -6147,7 +6147,7 @@ void RGWCompleteMultipart::execute()
       cleanup_multipart_reuploads(store, s->cct,
 				  static_cast<RGWObjectCtx*>(s->obj_ctx),
 				  s->bucket->get_info(), obj_part,
-				  meta_obj->get_obj());
+				  meta_obj->get_obj(), mp.get_upload_id());
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;

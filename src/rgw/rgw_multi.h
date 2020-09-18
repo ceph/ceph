@@ -86,7 +86,8 @@ extern void cleanup_multipart_reuploads(rgw::sal::RGWRadosStore *store,
 					RGWObjectCtx *obj_ctx,
 					RGWBucketInfo& bucket_info,
 					RGWUploadPartInfo& obj_part,
-					const rgw_obj& meta_obj);
+					const rgw_obj& meta_obj,
+					const std::string& upload_id);
 
 extern int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
 				  const string& prefix,
