@@ -134,6 +134,10 @@ struct string_key_view_t {
     }
   }
   size_t size() const { return length + sizeof(string_size_t); }
+  std::string_view to_string_view() const {
+    assert(type() == Type::STR);
+    return {p_key, length};
+  }
   bool operator==(const string_key_view_t& x) const {
     if (type() == x.type() && type() != Type::STR)
       return true;
@@ -431,6 +435,18 @@ class key_view_t {
   const snap_gen_t& snap_gen_packed() const {
     assert(has_snap_gen());
     return *p_snap_gen;
+  }
+
+  ghobject_t to_ghobj() const {
+    ghobject_t ghobj;
+    ghobj.shard_id.id = shard();
+    ghobj.hobj.pool = pool();
+    ghobj.hobj.set_hash(crush());
+    ghobj.hobj.nspace = nspace().to_string_view();
+    ghobj.hobj.oid.name = oid().to_string_view();
+    ghobj.hobj.snap = snap();
+    ghobj.generation = gen();
+    return ghobj;
   }
 
   void set(const crush_t& key) {

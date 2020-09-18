@@ -11,6 +11,7 @@
 #include "crimson/common/type_helpers.h"
 
 #include "node_extent_mutable.h"
+#include "stages/key_layout.h"
 #include "stages/stage_types.h"
 #include "super.h"
 #include "tree_types.h"
@@ -34,7 +35,6 @@ namespace crimson::os::seastore::onode {
  * LeafNode      --> tree_cursor_t*
  */
 
-struct key_hobj_t;
 class LeafNode;
 class InternalNode;
 
@@ -51,22 +51,26 @@ class tree_cursor_t final
   tree_cursor_t& operator=(tree_cursor_t&&) = delete;
 
   bool is_end() const { return position.is_end(); }
+  const key_view_t& get_key_view() const;
   const onode_t* get_p_value() const;
 
  private:
+  tree_cursor_t(Ref<LeafNode>, const search_position_t&);
   tree_cursor_t(Ref<LeafNode>, const search_position_t&,
-                const onode_t*, layout_version_t);
+                const key_view_t& key, const onode_t*, layout_version_t);
   // lookup reaches the end, contain leaf node for further insert
   tree_cursor_t(Ref<LeafNode>);
   const search_position_t& get_position() const { return position; }
   Ref<LeafNode> get_leaf_node() { return leaf_node; }
   void update_track(Ref<LeafNode>, const search_position_t&);
-  void update_p_value(const onode_t*, layout_version_t);
+  void update_kv(const key_view_t&, const onode_t*, layout_version_t) const;
+  void ensure_kv() const;
 
  private:
   Ref<LeafNode> leaf_node;
   search_position_t position;
   // cached information
+  mutable std::optional<key_view_t> key_view;
   mutable const onode_t* p_value;
   mutable layout_version_t node_version;
 
@@ -251,7 +255,7 @@ class LeafNode final : public Node {
 
   bool is_level_tail() const;
   layout_version_t get_layout_version() const { return layout_version; }
-  std::pair<const onode_t*, layout_version_t> get_p_value(
+  std::tuple<key_view_t, const onode_t*, layout_version_t> get_kv(
       const search_position_t&) const;
   void do_track_cursor(tree_cursor_t& cursor) {
     validate_cursor(cursor);
@@ -286,7 +290,8 @@ class LeafNode final : public Node {
  private:
   // XXX: extract a common tracker for InternalNode to track Node,
   // and LeafNode to track tree_cursor_t.
-  Ref<tree_cursor_t> get_or_track_cursor(const search_position_t&, const onode_t*);
+  Ref<tree_cursor_t> get_or_track_cursor(
+      const search_position_t&, const key_view_t&, const onode_t*);
   Ref<tree_cursor_t> track_insert(
       const search_position_t&, match_stage_t, const onode_t*);
   void track_split(const search_position_t&, Ref<LeafNode>);

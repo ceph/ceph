@@ -93,9 +93,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   key_view_t get_largest_key_view() const override {
-    key_view_t ret;
-    STAGE_T::lookup_largest_index(extent.read(), ret);
-    return ret;
+    key_view_t index_key;
+    STAGE_T::template lookup_largest_slot<false, true, false>(
+        extent.read(), nullptr, &index_key, nullptr);
+    return index_key;
   }
 
   std::ostream& dump(std::ostream& os) const override {
@@ -155,10 +156,11 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * Common
    */
-  const value_t* get_p_value(
-      const search_position_t& position, marker_t={}) const override {
+  const value_t* get_p_value(const search_position_t& position,
+                             key_view_t* index_key=nullptr, marker_t={}) const override {
     auto& node_stage = extent.read();
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      assert(!index_key);
       if (position.is_end()) {
         assert(is_level_tail());
         return node_stage.get_end_p_laddr();
@@ -166,11 +168,17 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       assert(!position.is_end());
     }
-    return STAGE_T::get_p_value(node_stage, cast_down<STAGE>(position));
+    if (index_key) {
+      return STAGE_T::template get_p_value<true>(
+          node_stage, cast_down<STAGE>(position), index_key);
+    } else {
+      return STAGE_T::get_p_value(node_stage, cast_down<STAGE>(position));
+    }
   }
 
   lookup_result_t<NODE_TYPE> lower_bound(
-      const key_hobj_t& key, MatchHistory& history, marker_t={}) const override {
+      const key_hobj_t& key, MatchHistory& history,
+      key_view_t* index_key=nullptr, marker_t={}) const override {
     auto& node_stage = extent.read();
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
       if (unlikely(node_stage.keys() == 0)) {
@@ -179,7 +187,20 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       }
     }
 
-    auto result_raw = STAGE_T::lower_bound(node_stage, key, history);
+    typename STAGE_T::result_t result_raw;
+    if (index_key) {
+      result_raw = STAGE_T::template lower_bound<true>(
+          node_stage, key, history, index_key);
+#ifndef NDEBUG
+      if (!result_raw.is_end()) {
+        full_key_t<KeyT::VIEW> index;
+        STAGE_T::get_key_view(node_stage, result_raw.position, index);
+        assert(index == *index_key);
+      }
+#endif
+    } else {
+      result_raw = STAGE_T::lower_bound(node_stage, key, history);
+    }
 #ifndef NDEBUG
     if (result_raw.is_end()) {
       assert(result_raw.mstat == MSTAT_END);
@@ -333,9 +354,11 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * LeafNodeImpl
    */
-  void get_largest_value(search_position_t& pos, const onode_t*& p_value) const override {
+  void get_largest_slot(search_position_t& pos,
+                        key_view_t& index_key, const onode_t** pp_value) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      STAGE_T::lookup_largest(extent.read(), cast_down_fill_0<STAGE>(pos), p_value);
+      STAGE_T::template lookup_largest_slot<true, true, true>(
+          extent.read(), &cast_down_fill_0<STAGE>(pos), &index_key, pp_value);
     } else {
       assert(false && "impossible path");
     }

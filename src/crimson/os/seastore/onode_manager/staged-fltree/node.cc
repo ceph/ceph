@@ -22,12 +22,18 @@ using node_future = Node::node_future<ValuesT...>;
  * tree_cursor_t
  */
 
-tree_cursor_t::tree_cursor_t(
-    Ref<LeafNode> node, const search_position_t& pos,
-    const onode_t* _p_value, layout_version_t v)
+tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
       : leaf_node{node}, position{pos} {
   assert(!is_end());
-  update_p_value(_p_value, v);
+  leaf_node->do_track_cursor(*this);
+}
+
+tree_cursor_t::tree_cursor_t(
+    Ref<LeafNode> node, const search_position_t& pos,
+    const key_view_t& key, const onode_t* _p_value, layout_version_t v)
+      : leaf_node{node}, position{pos} {
+  assert(!is_end());
+  update_kv(key, _p_value, v);
   leaf_node->do_track_cursor(*this);
 }
 
@@ -43,13 +49,13 @@ tree_cursor_t::~tree_cursor_t() {
   }
 }
 
+const key_view_t& tree_cursor_t::get_key_view() const {
+  ensure_kv();
+  return *key_view;
+}
+
 const onode_t* tree_cursor_t::get_p_value() const {
-  assert(!is_end());
-  if (!p_value || node_version != leaf_node->get_layout_version()) {
-    // NOTE: the leaf node is always present when we hold its reference.
-    std::tie(p_value, node_version) = leaf_node->get_p_value(position);
-  }
-  assert(p_value);
+  ensure_kv();
   return p_value;
 }
 
@@ -61,16 +67,28 @@ void tree_cursor_t::update_track(
   assert(!is_end());
   leaf_node = node;
   position = pos;
+  key_view.reset();
   p_value = nullptr;
   leaf_node->do_track_cursor(*this);
 }
 
-void tree_cursor_t::update_p_value(const onode_t* _p_value, layout_version_t v) {
+void tree_cursor_t::update_kv(
+    const key_view_t& key, const onode_t* _p_value, layout_version_t v) const {
   assert(!is_end());
   assert(_p_value);
-  assert(std::make_pair(_p_value, v) == leaf_node->get_p_value(position));
+  assert(std::make_tuple(key, _p_value, v) == leaf_node->get_kv(position));
+  key_view = key;
   p_value = _p_value;
   node_version = v;
+}
+
+void tree_cursor_t::ensure_kv() const {
+  assert(!is_end());
+  if (!p_value || node_version != leaf_node->get_layout_version()) {
+    // NOTE: the leaf node is always present when we hold its reference.
+    std::tie(key_view, p_value, node_version) = leaf_node->get_kv(position);
+  }
+  assert(p_value);
 }
 
 /*
@@ -489,9 +507,11 @@ bool LeafNode::is_level_tail() const {
   return impl->is_level_tail();
 }
 
-std::pair<const onode_t*, layout_version_t> LeafNode::get_p_value(
+std::tuple<key_view_t, const onode_t*, layout_version_t> LeafNode::get_kv(
     const search_position_t& pos) const {
-  return {impl->get_p_value(pos), layout_version};
+  key_view_t key_view;
+  auto p_value = impl->get_p_value(pos, &key_view);
+  return {key_view, p_value, layout_version};
 }
 
 node_future<Ref<tree_cursor_t>>
@@ -502,9 +522,10 @@ LeafNode::lookup_smallest(context_t) {
         new tree_cursor_t(this));
   }
   auto pos = search_position_t::begin();
-  auto p_value = impl->get_p_value(pos);
+  key_view_t index_key;
+  auto p_value = impl->get_p_value(pos, &index_key);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
-      get_or_track_cursor(pos, p_value));
+      get_or_track_cursor(pos, index_key, p_value));
 }
 
 node_future<Ref<tree_cursor_t>>
@@ -516,21 +537,23 @@ LeafNode::lookup_largest(context_t) {
   }
   search_position_t pos;
   const onode_t* p_value = nullptr;
-  impl->get_largest_value(pos, p_value);
+  key_view_t index_key;
+  impl->get_largest_slot(pos, index_key, &p_value);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
-      get_or_track_cursor(pos, p_value));
+      get_or_track_cursor(pos, index_key, p_value));
 }
 
 node_future<Node::search_result_t>
 LeafNode::lower_bound_tracked(
     context_t c, const key_hobj_t& key, MatchHistory& history) {
-  auto result = impl->lower_bound(key, history);
+  key_view_t index_key;
+  auto result = impl->lower_bound(key, history, &index_key);
   Ref<tree_cursor_t> cursor;
   if (result.position.is_end()) {
     assert(!result.p_value);
     cursor = new tree_cursor_t(this);
   } else {
-    cursor = get_or_track_cursor(result.position, result.p_value);
+    cursor = get_or_track_cursor(result.position, index_key, result.p_value);
   }
   return node_ertr::make_ready_future<search_result_t>(
       search_result_t{cursor, result.match()});
@@ -630,26 +653,31 @@ node_future<Ref<LeafNode>> LeafNode::allocate_root(
 }
 
 Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
-    const search_position_t& position, const onode_t* p_value) {
+    const search_position_t& position,
+    const key_view_t& key, const onode_t* p_value) {
   assert(!position.is_end());
   assert(p_value);
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
-    p_cursor = new tree_cursor_t(this, position, p_value, layout_version);
+    p_cursor = new tree_cursor_t(this, position, key, p_value, layout_version);
   } else {
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
     assert(p_cursor->get_position() == position);
-    p_cursor->update_p_value(p_value, layout_version);
+    p_cursor->update_kv(key, p_value, layout_version);
   }
   return p_cursor;
 }
 
 void LeafNode::validate_cursor(tree_cursor_t& cursor) const {
+#ifndef NDEBUG
   assert(this == cursor.get_leaf_node().get());
   assert(!cursor.is_end());
-  assert(impl->get_p_value(cursor.get_position()) == cursor.get_p_value());
+  auto [key, val, ver] = get_kv(cursor.get_position());
+  assert(key == cursor.get_key_view());
+  assert(val == cursor.get_p_value());
+#endif
 }
 
 Ref<tree_cursor_t> LeafNode::track_insert(
@@ -672,7 +700,9 @@ Ref<tree_cursor_t> LeafNode::track_insert(
   }
 
   // track insert
-  return new tree_cursor_t(this, insert_pos, p_onode, layout_version);
+  // TODO: getting key_view_t from stage::proceed_insert() and
+  // stage::append_insert() has not supported yet
+  return new tree_cursor_t(this, insert_pos);
 }
 
 void LeafNode::track_split(
