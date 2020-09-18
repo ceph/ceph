@@ -133,6 +133,18 @@ int main(int argc, const char **argv)
   if (!msgr_public) {
     exit(1);
   }
+  //default policy as client: lossy & only one connection
+  msgr_public->set_default_policy(Messenger::Policy::lossy_client(0));
+  //connect to monitor as the only one lossy client
+  msgr_public->set_policy(entity_name_t::TYPE_MON,
+                          Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
+                                                          CEPH_FEATURE_PGID64));
+  //standby connection with peer replica daemon
+  msgr_public->set_policy(entity_name_t::TYPE_REPLICA,
+                          Messenger::Policy::lossless_peer(CEPH_FEATURE_UID));
+  //server role as being connected with client
+  msgr_public->set_policy(entity_name_t::TYPE_CLIENT,
+                          Messenger::Policy::stateful_server(0));
 
   return 0;
 }
