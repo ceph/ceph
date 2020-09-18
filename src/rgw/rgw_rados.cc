@@ -3258,8 +3258,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
   bool try_etag_verify;
-  boost::optional<rgw::putobj::ETagVerifier_Atomic> etag_verifier_atomic;
-  boost::optional<rgw::putobj::ETagVerifier_MPU> etag_verifier_mpu;
+  rgw::putobj::etag_verifier_ptr etag_verifier;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::putobj::ObjectProcessor *processor;
@@ -3363,15 +3362,12 @@ public:
     if (try_etag_verify && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
       ret = rgw::putobj::create_etag_verifier(cct, filter, manifest_bl,
                                               compression_info,
-                                              etag_verifier_atomic,
-                                              etag_verifier_mpu);
+                                              etag_verifier);
       if (ret < 0) {
         ldout(cct, 4) << "failed to initial etag verifier, "
             "disabling etag verification" << dendl;
-      } else if (etag_verifier_atomic) {
-        filter = &*etag_verifier_atomic;
-      } else if (etag_verifier_mpu) {
-        filter = &*etag_verifier_mpu;
+      } else {
+        filter = etag_verifier.get();
       }
     }
 
@@ -3443,12 +3439,9 @@ public:
   }
 
   std::string get_verifier_etag() {
-    if (etag_verifier_atomic) {
-      etag_verifier_atomic->calculate_etag();
-      return etag_verifier_atomic->get_calculated_etag();
-    } else if (etag_verifier_mpu) {
-      etag_verifier_mpu->calculate_etag();
-      return etag_verifier_mpu->get_calculated_etag();
+    if (etag_verifier) {
+      etag_verifier->calculate_etag();
+      return etag_verifier->get_calculated_etag();
     } else {
       return "";
     }

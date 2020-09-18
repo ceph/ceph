@@ -10,8 +10,7 @@ namespace rgw::putobj {
 int create_etag_verifier(CephContext* cct, DataProcessor* filter,
                          const bufferlist& manifest_bl,
                          const std::optional<RGWCompressionInfo>& compression,
-                         boost::optional<ETagVerifier_Atomic>& etag_verifier_atomic,
-                         boost::optional<ETagVerifier_MPU>& etag_verifier_mpu)
+                         etag_verifier_ptr& verifier)
 {
   RGWObjManifest manifest;
 
@@ -32,8 +31,7 @@ int create_etag_verifier(CephContext* cct, DataProcessor* filter,
 
   if (rule.part_size == 0) {
     /* Atomic object */
-    etag_verifier_atomic = boost::in_place(cct, filter);
-    filter = &*etag_verifier_atomic;
+    verifier.emplace<ETagVerifier_Atomic>(cct, filter);
     return 0;
   }
 
@@ -75,7 +73,7 @@ int create_etag_verifier(CephContext* cct, DataProcessor* filter,
     }
   }
 
-  etag_verifier_mpu = boost::in_place(cct, std::move(part_ofs), filter);
+  verifier.emplace<ETagVerifier_MPU>(cct, std::move(part_ofs), filter);
   return 0;
 }
 
