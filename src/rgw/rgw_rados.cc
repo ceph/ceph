@@ -4024,74 +4024,17 @@ public:
      * to know the sequence in which the filters must be applied.
      */
     if (try_etag_verify && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
-
-      RGWObjManifest manifest;
-
-      auto miter = manifest_bl.cbegin();
-      try {
-        decode(manifest, miter);
-      } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
-        return -EIO;
-      }
-
-      RGWObjManifestRule rule;
-      bool found = manifest.get_rule(0, &rule);
-      if (!found) {
-        lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
-        return -EIO;
-      }
-
-      if (rule.part_size == 0) {
-        /* Atomic object */
-        etag_verifier_atomic = boost::in_place(cct, filter);
+      ret = rgw::putobj::create_etag_verifier(cct, filter, manifest_bl,
+                                              compression_info,
+                                              etag_verifier_atomic,
+                                              etag_verifier_mpu);
+      if (ret < 0) {
+        ldout(cct, 4) << "failed to initial etag verifier, "
+            "disabling etag verification" << dendl;
+      } else if (etag_verifier_atomic) {
         filter = &*etag_verifier_atomic;
-      } else {
-        uint64_t cur_part_ofs = UINT64_MAX;
-        std::vector<uint64_t> part_ofs;
-
-        /*
-         * We must store the offset of each part to calculate the ETAGs for each
-         * MPU part. These part ETags then become the input for the MPU object
-         * Etag.
-         */
-        for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
-          if (cur_part_ofs == mi.get_part_ofs())
-            continue;
-          cur_part_ofs = mi.get_part_ofs();
-          ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
-          part_ofs.push_back(cur_part_ofs);
-        }
-
-        if (compression_info) {
-          // if the source object was compressed, the manifest is storing
-          // compressed part offsets. transform the compressed offsets back to
-          // their original offsets by finding the first block of each part
-          const auto& blocks = compression_info->blocks;
-          auto block = blocks.begin();
-          for (auto& ofs : part_ofs) {
-            // find the compression_block with new_ofs == ofs
-            constexpr auto less = [] (const compression_block& block, uint64_t ofs) {
-              return block.new_ofs < ofs;
-            };
-            block = std::lower_bound(block, blocks.end(), ofs, less);
-            if (block == blocks.end() || block->new_ofs != ofs) {
-              ldout(cct, 4) << "no match for compressed offset " << ofs
-                  << ", disabling etag verification" << dendl;
-              part_ofs.clear();
-              break;
-            }
-            ofs = block->old_ofs;
-            ldout(cct, 20) << "MPU Part uncompressed offset:" << ofs << dendl;
-          }
-        }
-
-        if (part_ofs.empty()) {
-          try_etag_verify = false;
-        } else {
-          etag_verifier_mpu = boost::in_place(cct, std::move(part_ofs), filter);
-          filter = &*etag_verifier_mpu;
-        }
+      } else if (etag_verifier_mpu) {
+        filter = &*etag_verifier_mpu;
       }
     }
 
