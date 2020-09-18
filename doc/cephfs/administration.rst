@@ -302,7 +302,7 @@ is used by NFS-Ganesha.
     lazy_caps_wanted
 
 When a stale client resumes, if the client supports this feature, mds only needs
-to re-issue caps that are explictly wanted.
+to re-issue caps that are explicitly wanted.
 
 
 ::

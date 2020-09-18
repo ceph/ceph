@@ -191,7 +191,7 @@ It is advised to first check if rescue process would be successfull::
   ceph-bluestore-tool fsck --path *osd path* \
   --bluefs_replay_recovery=true --bluefs_replay_recovery_disable_compact=true
 
-If above fsck is successfull fix procedure can be applied.
+If above fsck is successful fix procedure can be applied.
 
 Availability
 ============
