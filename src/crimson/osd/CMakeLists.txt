@@ -47,6 +47,7 @@ target_link_libraries(crimson-osd
   crimson-os
   crimson
   fmt::fmt
+  Boost::MPL
   dmclock::dmclock)
 set_target_properties(crimson-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
