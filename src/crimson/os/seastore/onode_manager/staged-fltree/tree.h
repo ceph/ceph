@@ -86,7 +86,8 @@ class Btree::Cursor {
   ~Cursor();
 
   bool is_end() const;
-  const ghobject_t& get_ghobj();
+  // XXX: return key_view_t to avoid unecessary ghobject_t constructions
+  ghobject_t get_ghobj() const;
   const onode_t* value() const;
   bool operator==(const Cursor& x) const;
   bool operator!=(const Cursor& x) const { return !(*this == x); }

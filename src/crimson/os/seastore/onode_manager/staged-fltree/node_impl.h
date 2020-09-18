@@ -51,12 +51,14 @@ class InternalNodeImpl : public NodeImpl {
 
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const laddr_t* get_p_value(
-      const search_position_t&, internal_marker_t={}) const {
+      const search_position_t&,
+      key_view_t* = nullptr, internal_marker_t = {}) const {
     assert(false && "impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual lookup_result_t<node_type_t::INTERNAL> lower_bound(
-      const key_hobj_t&, MatchHistory&, internal_marker_t={}) const {
+      const key_hobj_t&, MatchHistory&,
+      key_view_t* = nullptr, internal_marker_t = {}) const {
     assert(false && "impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
@@ -96,12 +98,14 @@ class LeafNodeImpl : public NodeImpl {
 
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const onode_t* get_p_value(
-      const search_position_t&, leaf_marker_t={}) const {
+      const search_position_t&,
+      key_view_t* = nullptr, leaf_marker_t={}) const {
     assert(false && "impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual lookup_result_t<node_type_t::LEAF> lower_bound(
-      const key_hobj_t&, MatchHistory&, leaf_marker_t={}) const {
+      const key_hobj_t&, MatchHistory&,
+      key_view_t* = nullptr, leaf_marker_t = {}) const {
     assert(false && "impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
@@ -116,7 +120,8 @@ class LeafNodeImpl : public NodeImpl {
     assert(false && "impossible path");
   }
 
-  virtual void get_largest_value(search_position_t&, const onode_t*&) const = 0;
+  virtual void get_largest_slot(
+      search_position_t&, key_view_t&, const onode_t**) const = 0;
   virtual std::tuple<match_stage_t, node_offset_t> evaluate_insert(
       const key_hobj_t&, const onode_t&,
       const MatchHistory&, search_position_t&) const = 0;

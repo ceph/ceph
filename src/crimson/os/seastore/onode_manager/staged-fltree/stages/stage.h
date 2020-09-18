@@ -773,63 +773,88 @@ struct staged {
    * Lookup internals (hide?)
    */
 
-  static result_t smallest_result(const iterator_t& iter) {
+  template <bool GET_KEY>
+  static result_t smallest_result(
+      const iterator_t& iter, full_key_t<KeyT::VIEW>* index_key) {
     static_assert(!IS_BOTTOM);
     assert(!iter.is_end());
     auto pos_smallest = NXT_STAGE_T::position_t::begin();
     auto nxt_container = iter.get_nxt_container();
-    auto value_ptr = NXT_STAGE_T::get_p_value(nxt_container, pos_smallest);
+    auto value_ptr = NXT_STAGE_T::template get_p_value<GET_KEY>(
+        nxt_container, pos_smallest, index_key);
+    if constexpr (GET_KEY) {
+      index_key->set(iter.get_key());
+    }
     return result_t{{iter.index(), pos_smallest}, value_ptr, STAGE};
   }
 
+  template <bool GET_KEY>
   static result_t nxt_lower_bound(
-      const full_key_t<KeyT::HOBJ>& key, iterator_t& iter, MatchHistory& history) {
+      const full_key_t<KeyT::HOBJ>& key, iterator_t& iter,
+      MatchHistory& history, full_key_t<KeyT::VIEW>* index_key) {
     static_assert(!IS_BOTTOM);
     assert(!iter.is_end());
     auto nxt_container = iter.get_nxt_container();
-    auto nxt_result = NXT_STAGE_T::lower_bound(nxt_container, key, history);
+    auto nxt_result = NXT_STAGE_T::template lower_bound<GET_KEY>(
+        nxt_container, key, history, index_key);
     if (nxt_result.is_end()) {
       if (iter.is_last()) {
         return result_t::end();
       } else {
-        return smallest_result(++iter);
+        return smallest_result<GET_KEY>(++iter, index_key);
       }
     } else {
+      if constexpr (GET_KEY) {
+        index_key->set(iter.get_key());
+      }
       return result_t::from_nxt(iter.index(), nxt_result);
     }
   }
 
-  static void lookup_largest(
-      const container_t& container, position_t& position, const value_t*& p_value) {
+  template <bool GET_POS, bool GET_KEY, bool GET_VAL>
+  static void lookup_largest_slot(
+      const container_t& container, position_t* p_position,
+      full_key_t<KeyT::VIEW>* p_index_key, const value_t** pp_value) {
     auto iter = iterator_t(container);
     iter.seek_last();
-    position.index = iter.index();
+    if constexpr (GET_KEY) {
+      assert(p_index_key);
+      p_index_key->set(iter.get_key());
+    }
+    if constexpr (GET_POS) {
+      assert(p_position);
+      p_position->index = iter.index();
+    }
     if constexpr (IS_BOTTOM) {
-      p_value = iter.get_p_value();
+      if constexpr (GET_VAL) {
+        assert(pp_value);
+        *pp_value = iter.get_p_value();
+      }
     } else {
       auto nxt_container = iter.get_nxt_container();
-      NXT_STAGE_T::lookup_largest(nxt_container, position.nxt, p_value);
+      if constexpr (GET_POS) {
+        NXT_STAGE_T::template lookup_largest_slot<true, GET_KEY, GET_VAL>(
+            nxt_container, &p_position->nxt, p_index_key, pp_value);
+      } else {
+        NXT_STAGE_T::template lookup_largest_slot<false, GET_KEY, GET_VAL>(
+            nxt_container, nullptr, p_index_key, pp_value);
+      }
     }
   }
 
-  static void lookup_largest_index(
-      const container_t& container, full_key_t<KeyT::VIEW>& output) {
-    auto iter = iterator_t(container);
-    iter.seek_last();
-    output.set(iter.get_key());
-    if constexpr (!IS_BOTTOM) {
-      auto nxt_container = iter.get_nxt_container();
-      NXT_STAGE_T::lookup_largest_index(nxt_container, output);
-    }
-  }
-
+  template <bool GET_KEY = false>
   static const value_t* get_p_value(
-      const container_t& container, const position_t& position) {
+      const container_t& container, const position_t& position,
+      full_key_t<KeyT::VIEW>* index_key = nullptr) {
     auto iter = iterator_t(container);
     iter.seek_at(position.index);
+    if constexpr (GET_KEY) {
+      index_key->set(iter.get_key());
+    }
     if constexpr (!IS_BOTTOM) {
       auto nxt_container = iter.get_nxt_container();
-      return NXT_STAGE_T::get_p_value(nxt_container, position.nxt);
+      return NXT_STAGE_T::template get_p_value<GET_KEY>(
+          nxt_container, position.nxt, index_key);
     } else {
       return iter.get_p_value();
     }
@@ -838,20 +863,22 @@ struct staged {
   static void get_key_view(
       const container_t& container,
       const position_t& position,
-      full_key_t<KeyT::VIEW>& output) {
+      full_key_t<KeyT::VIEW>& index_key) {
     auto iter = iterator_t(container);
     iter.seek_at(position.index);
-    output.set(iter.get_key());
+    index_key.set(iter.get_key());
     if constexpr (!IS_BOTTOM) {
       auto nxt_container = iter.get_nxt_container();
-      return NXT_STAGE_T::get_key_view(nxt_container, position.nxt, output);
+      return NXT_STAGE_T::get_key_view(nxt_container, position.nxt, index_key);
     }
   }
 
+  template <bool GET_KEY = false>
   static result_t lower_bound(
       const container_t& container,
       const full_key_t<KeyT::HOBJ>& key,
-      MatchHistory& history) {
+      MatchHistory& history,
+      full_key_t<KeyT::VIEW>* index_key = nullptr) {
     bool exclude_last = false;
     if (history.get<STAGE>().has_value()) {
       if (*history.get<STAGE>() == MatchKindCMP::EQ) {
@@ -876,10 +903,10 @@ struct staged {
               test_key_equal = (cmp == MatchKindCMP::EQ);
             }
             if (test_key_equal) {
-              return nxt_lower_bound(key, iter, history);
+              return nxt_lower_bound<GET_KEY>(key, iter, history, index_key);
             } else {
               // key[stage] < index[stage][left-most]
-              return smallest_result(iter);
+              return smallest_result<GET_KEY>(iter, index_key);
             }
           }
         }
@@ -893,12 +920,16 @@ struct staged {
         } else {
           assert(compare_to<KeyT::HOBJ>(key, iter.get_key()) == MatchKindCMP::EQ);
         }
+        if constexpr (GET_KEY) {
+          index_key->set(iter.get_key());
+        }
         if constexpr (IS_BOTTOM) {
           auto value_ptr = iter.get_p_value();
           return result_t{{iter.index()}, value_ptr, MSTAT_EQ};
         } else {
           auto nxt_container = iter.get_nxt_container();
-          auto nxt_result = NXT_STAGE_T::lower_bound(nxt_container, key, history);
+          auto nxt_result = NXT_STAGE_T::template lower_bound<GET_KEY>(
+              nxt_container, key, history, index_key);
           // !history.is_PO<STAGE - 1>() means
           // key[stage+1 ...] <= index[stage+1 ...][*]
           assert(!nxt_result.is_end());
@@ -919,14 +950,17 @@ struct staged {
     history.set<STAGE>(bs_match == MatchKindBS::EQ ?
                        MatchKindCMP::EQ : MatchKindCMP::NE);
     if constexpr (IS_BOTTOM) {
+      if constexpr (GET_KEY) {
+        index_key->set(iter.get_key());
+      }
       auto value_ptr = iter.get_p_value();
       return result_t{{iter.index()}, value_ptr,
                       (bs_match == MatchKindBS::EQ ? MSTAT_EQ : MSTAT_NE0)};
     } else {
       if (bs_match == MatchKindBS::EQ) {
-        return nxt_lower_bound(key, iter, history);
+        return nxt_lower_bound<GET_KEY>(key, iter, history, index_key);
       } else {
-        return smallest_result(iter);
+        return smallest_result<GET_KEY>(iter, index_key);
       }
     }
   }
