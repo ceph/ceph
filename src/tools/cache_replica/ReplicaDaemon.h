@@ -10,4 +10,35 @@
 #ifndef CEPH_REPLICA_H
 #define CEPH_REPLICA_H
 
+#include <string_view>
+#include "msg/Dispatcher.h"
+#include "msg/Messenger.h"
+#include "mon/MonClient.h"
+#include "common/LogClient.h"
+#include "common/errno.h"
+
+class ReplicaDaemon : public Dispatcher {
+public:
+  ReplicaDaemon(std::string_view name,
+                Messenger* msgr_public,
+                MonClient *mon_client,
+                boost::asio::io_context& ioctx);
+  int init();
+  void ms_fast_dispatch(Message *m) override;
+  bool ms_dispatch(Message *m) override;
+
+protected:
+  std::string name;
+  Messenger *msgr_public;
+  MonClient *mon_client;
+  boost::asio::io_context& ioctx;
+  LogClient log_client;
+  LogChannelRef clog;
+
+private:
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
+};
+
 #endif // defined CEPH_REPLICA_H

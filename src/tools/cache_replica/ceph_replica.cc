@@ -62,6 +62,8 @@ static void usage()
   generic_server_usage();
 }
 
+ReplicaDaemon *cache_replica = nullptr;
+
 static void handle_replica_signal(int signum)
 {
   //TODO: deal with SIGINT & SIGTERM signal
@@ -187,11 +189,21 @@ int main(int argc, const char **argv)
     return r;
   }
 
+  // start cache replicadaemon
+  cache_replica = new ReplicaDaemon(g_conf()->name.get_id().c_str(),
+                                    msgr_public,
+                                    &mon_client,
+                                    ctxpool);
+
+  r = cache_replica->init();
+
   msgr_public->wait();
+
+  ctxpool.stop();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_replica_signal);
   unregister_async_signal_handler(SIGTERM, handle_replica_signal);
 
-  return 0;
+  return r;
 }
