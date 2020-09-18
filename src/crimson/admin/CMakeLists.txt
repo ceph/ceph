@@ -4,4 +4,5 @@ add_library(crimson-admin STATIC
   pg_commands.cc)
 
 target_link_libraries(crimson-admin
-  crimson::cflags)
+  crimson::cflags
+  Boost::MPL)
