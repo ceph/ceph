@@ -12083,7 +12083,6 @@ void PrimaryLogPG::on_activate_complete()
 	  PeeringState::RequestBackfill())));
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
-    eio_errors_to_process = false;
     queue_peering_event(
       PGPeeringEventRef(
 	std::make_shared<PGPeeringEvent>(
@@ -12446,7 +12445,6 @@ bool PrimaryLogPG::start_recovery_ops(
             PeeringState::RequestBackfill())));
     } else {
       dout(10) << "recovery done, no backfill" << dendl;
-      eio_errors_to_process = false;
       state_clear(PG_STATE_FORCED_BACKFILL);
       queue_peering_event(
         PGPeeringEventRef(
@@ -12460,7 +12458,6 @@ bool PrimaryLogPG::start_recovery_ops(
     state_clear(PG_STATE_FORCED_BACKFILL);
     state_clear(PG_STATE_FORCED_RECOVERY);
     dout(10) << "recovery done, backfill done" << dendl;
-    eio_errors_to_process = false;
     queue_peering_event(
       PGPeeringEventRef(
         std::make_shared<PGPeeringEvent>(
@@ -15115,23 +15112,15 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
 
-  if (!eio_errors_to_process) {
-    eio_errors_to_process = true;
-    ceph_assert(is_clean());
-    state_set(PG_STATE_REPAIR);
-    state_clear(PG_STATE_CLEAN);
-    queue_peering_event(
-        PGPeeringEventRef(
-	  std::make_shared<PGPeeringEvent>(
-	  get_osdmap_epoch(),
-	  get_osdmap_epoch(),
-	  PeeringState::DoRecovery())));
-  } else {
-    // A prior error must have already cleared clean state and queued recovery
-    // or a map change has triggered re-peering.
-    // Not inlining the recovery by calling maybe_kick_recovery(soid);
-    dout(5) << __func__<< ": Read error on " << soid << ", but already seen errors" << dendl;
-  }
+  ceph_assert(is_clean());
+  state_set(PG_STATE_REPAIR);
+  state_clear(PG_STATE_CLEAN);
+  queue_peering_event(
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	get_osdmap_epoch(),
+	get_osdmap_epoch(),
+	PeeringState::DoRecovery())));
 
   return -EAGAIN;
 }
