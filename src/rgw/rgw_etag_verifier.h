@@ -68,6 +68,12 @@ public:
 
 }; /* ETagVerifier_MPU */
 
+int create_etag_verifier(CephContext* cct, DataProcessor* filter,
+                         const bufferlist& manifest_bl,
+                         const std::optional<RGWCompressionInfo>& compression,
+                         boost::optional<ETagVerifier_Atomic>& etag_verifier_atomic,
+                         boost::optional<ETagVerifier_MPU>& etag_verifier_mpu);
+
 } // namespace rgw::putobj
 
 #endif /* CEPH_RGW_ETAG_VERIFIER_H */
