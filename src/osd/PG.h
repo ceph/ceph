@@ -15,11 +15,6 @@
 #ifndef CEPH_PG_H
 #define CEPH_PG_H
 
-#define BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
-#if !defined(BOOST_MPL_LIMIT_LIST_SIZE)
-#   define BOOST_MPL_LIMIT_LIST_SIZE 30
-#endif
-
 #include <boost/scoped_ptr.hpp>
 #include <boost/container/flat_set.hpp>
 #include "include/mempool.h"
