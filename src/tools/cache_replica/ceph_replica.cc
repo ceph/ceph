@@ -145,6 +145,20 @@ int main(int argc, const char **argv)
   //server role as being connected with client
   msgr_public->set_policy(entity_name_t::TYPE_CLIENT,
                           Messenger::Policy::stateful_server(0));
+  entity_addrvec_t public_addrs;
+  int r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs);
+  if (r < 0) {
+    derr << "Failed to pick public address" << dendl;
+    delete msgr_public;
+    msgr_public = nullptr;
+    return r;
+  }
+  if (msgr_public->bindv(public_addrs) < 0) {
+    r = -1;
+    delete msgr_public;
+    msgr_public = nullptr;
+    return r;
+  }
 
   return 0;
 }
