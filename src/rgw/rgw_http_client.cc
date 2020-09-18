@@ -557,6 +557,11 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
       h = curl_slist_append(h, "Expect:");
     }
   }
+
+  if (method == "HEAD") {
+    curl_easy_setopt(easy_handle, CURLOPT_NOBODY, 1L);
+  }
+
   if (h) {
     curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
