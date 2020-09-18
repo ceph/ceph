@@ -17,6 +17,7 @@
 
 #include "rgw_putobj.h"
 #include "rgw_op.h"
+#include "common/static_ptr.h"
 
 namespace rgw::putobj {
 
@@ -68,11 +69,16 @@ public:
 
 }; /* ETagVerifier_MPU */
 
-int create_etag_verifier(CephContext* cct, DataProcessor* filter,
+constexpr auto max_etag_verifier_size = std::max(
+    sizeof(ETagVerifier_Atomic),
+    sizeof(ETagVerifier_MPU)
+  );
+using etag_verifier_ptr = ceph::static_ptr<ETagVerifier, max_etag_verifier_size>;
+
+int create_etag_verifier(CephContext* cct, DataProcessor* next,
                          const bufferlist& manifest_bl,
                          const std::optional<RGWCompressionInfo>& compression,
-                         boost::optional<ETagVerifier_Atomic>& etag_verifier_atomic,
-                         boost::optional<ETagVerifier_MPU>& etag_verifier_mpu);
+                         etag_verifier_ptr& verifier);
 
 } // namespace rgw::putobj
 
