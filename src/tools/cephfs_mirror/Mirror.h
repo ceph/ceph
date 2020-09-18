@@ -42,6 +42,7 @@ private:
   struct C_EnableMirroring;
   struct C_DisableMirroring;
   struct C_PeerUpdate;
+  struct C_RestartMirroring;
 
   struct ClusterListener : ClusterWatcher::Listener {
     Mirror *mirror;
@@ -68,6 +69,11 @@ private:
   };
 
   struct MirrorAction {
+    MirrorAction(uint64_t pool_id) :
+      pool_id(pool_id) {
+    }
+
+    uint64_t pool_id; // for restarting blocklisted mirror instance
     bool action_in_progress = false;
     std::list<Context *> action_ctxs;
     std::unique_ptr<FSMirror> fs_mirror;
@@ -92,6 +98,8 @@ private:
   std::unique_ptr<ClusterWatcher> m_cluster_watcher;
   std::map<Filesystem, MirrorAction> m_mirror_actions;
 
+  utime_t m_last_blocklist_check;
+
   int init_mon_client();
 
   // called via listener
@@ -102,8 +110,9 @@ private:
 
   // mirror enable callback
   void enable_mirroring(const Filesystem &filesystem, uint64_t local_pool_id,
-                        Context *on_finish);
+                        Context *on_finish, bool is_restart=false);
   void handle_enable_mirroring(const Filesystem &filesystem, int r);
+  void handle_enable_mirroring(const Filesystem &filesystem, const Peers &peers, int r);
 
   // mirror disable callback
   void disable_mirroring(const Filesystem &filesystem, Context *on_finish);
