@@ -5,7 +5,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWPutObj_ETagVerifier_Atomic::process(bufferlist&& in, uint64_t logical_offset)
+namespace rgw::putobj {
+
+int ETagVerifier_Atomic::process(bufferlist&& in, uint64_t logical_offset)
 {
   bufferlist out;
   if (in.length() > 0)
@@ -14,7 +16,7 @@ int RGWPutObj_ETagVerifier_Atomic::process(bufferlist&& in, uint64_t logical_off
   return Pipe::process(std::move(in), logical_offset);
 }
 
-void RGWPutObj_ETagVerifier_Atomic::calculate_etag()
+void ETagVerifier_Atomic::calculate_etag()
 {
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -30,7 +32,7 @@ void RGWPutObj_ETagVerifier_Atomic::calculate_etag()
           << dendl;
 }
 
-void RGWPutObj_ETagVerifier_MPU::process_end_of_MPU_part()
+void ETagVerifier_MPU::process_end_of_MPU_part()
 {
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char calc_md5_part[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -50,7 +52,7 @@ void RGWPutObj_ETagVerifier_MPU::process_end_of_MPU_part()
   next_part_index++;
 }
 
-int RGWPutObj_ETagVerifier_MPU::process(bufferlist&& in, uint64_t logical_offset)
+int ETagVerifier_MPU::process(bufferlist&& in, uint64_t logical_offset)
 {
   uint64_t bl_end = in.length() + logical_offset;
 
@@ -87,7 +89,7 @@ done:
   return Pipe::process(std::move(in), logical_offset);
 }
 
-void RGWPutObj_ETagVerifier_MPU::calculate_etag()
+void ETagVerifier_MPU::calculate_etag()
 {
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE], mpu_m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -109,3 +111,5 @@ void RGWPutObj_ETagVerifier_MPU::calculate_etag()
   calculated_etag = final_etag_str;
   ldout(cct, 20) << "MPU calculated ETag:" << calculated_etag << dendl;
 }
+
+} // namespace rgw::putobj
