@@ -250,6 +250,40 @@ class TestCephadm(object):
 
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_daemon_check_extra_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+
+        with with_host(cephadm_module, 'test'):
+
+            # Also testing deploying mons without explicit network placement
+            cephadm_module.check_mon_command({
+                'prefix': 'config set',
+                'who': 'mon',
+                'name': 'public_network',
+                'value': '127.0.0.0/8'
+            })
+
+            cephadm_module.cache.update_host_devices_networks(
+                'test',
+                [],
+                {
+                    "127.0.0.0/8": [
+                        "127.0.0.1"
+                    ],
+                }
+            )
+
+            with with_service(cephadm_module, ServiceSpec(service_type='mon'), CephadmOrchestrator.apply_mon, 'test') as d_names:
+                [daemon_name] = d_names
+
+                cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
+
+                cephadm_module._check_daemons()
+
+                _run_cephadm.assert_called_with('test', 'mon.test', 'deploy', [
+                                                '--name', 'mon.test', '--config-json', '-', '--reconfig'], stdin='{"config": "\\n\\n[mon]\\nk=v\\n", "keyring": ""}')
+
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
@@ -801,6 +835,13 @@ class TestCephadm(object):
 
             assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
 
+            # set extra config and expect that we deploy another ceph.conf
+            cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
+            cephadm_module._refresh_hosts_and_daemons()
+            _check.assert_called_with(
+                ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'\n\n[mon]\nk=v\n')
+
+            # reload
             cephadm_module.cache.last_etc_ceph_ceph_conf = {}
             cephadm_module.cache.load()
 

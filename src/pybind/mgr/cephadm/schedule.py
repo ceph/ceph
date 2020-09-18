@@ -144,7 +144,7 @@ class HostAssignment(object):
             if self.filter_new_host:
                 old = others
                 others = [h for h in others if self.filter_new_host(h.hostname)]
-                logger.debug('filtered %s down to %s' % (old, candidates))
+                logger.debug('filtered %s down to %s' % (old, others))
 
             # ask the scheduler to return a set of hosts with a up to the value of <count>
             others = self.scheduler.place(others, need)

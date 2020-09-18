@@ -68,7 +68,7 @@ class IscsiService(CephService):
         igw_conf = self.mgr.template.render('services/iscsi/iscsi-gateway.cfg.j2', context)
 
         daemon_spec.keyring = keyring
-        daemon_spec.extra_config = {'iscsi-gateway.cfg': igw_conf}
+        daemon_spec.extra_files = {'iscsi-gateway.cfg': igw_conf}
 
         return daemon_spec
 
