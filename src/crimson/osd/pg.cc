@@ -832,28 +832,36 @@ PG::get_or_load_head_obc(hobject_t oid)
       oid);
     bool got = obc->maybe_get_excl();
     ceph_assert(got);
-    return backend->load_metadata(oid).safe_then(
-      [oid, obc=std::move(obc)](auto md) ->
-        load_obc_ertr::future<
-          std::pair<crimson::osd::ObjectContextRef, bool>>
-      {
-	logger().debug(
-	  "get_or_load_head_obc: loaded obs {} for {}", md->os.oi, oid);
-	if (!md->ss) {
-	  logger().error(
-	    "get_or_load_head_obc: oid {} missing snapset", oid);
-	  return crimson::ct_error::object_corrupted::make();
-	}
-	obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
-	  logger().debug(
-	    "get_or_load_head_obc: returning obc {} for {}",
-	    obc->obs.oi, obc->obs.oi.soid);
-	  return load_obc_ertr::make_ready_future<
-	    std::pair<crimson::osd::ObjectContextRef, bool>>(
-	      std::make_pair(obc, false)
-	    );
-      });
+    return load_head_obc(obc).safe_then([](auto obc) {
+      return load_obc_ertr::make_ready_future<
+        std::pair<crimson::osd::ObjectContextRef, bool>>(
+          std::make_pair(std::move(obc), false)
+        );
+    });
   }
+}
+
+PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
+PG::load_head_obc(ObjectContextRef obc)
+{
+  hobject_t oid = obc->get_oid();
+  return backend->load_metadata(oid).safe_then([obc=std::move(obc)](auto md)
+    -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
+    const hobject_t& oid = md->os.oi.soid;
+    logger().debug(
+      "get_or_load_head_obc: loaded obs {} for {}", md->os.oi, oid);
+    if (!md->ss) {
+      logger().error(
+        "get_or_load_head_obc: oid {} missing snapset", oid);
+      return crimson::ct_error::object_corrupted::make();
+    }
+    obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
+    logger().debug(
+      "get_or_load_head_obc: returning obc {} for {}",
+      obc->obs.oi, obc->obs.oi.soid);
+    return load_obc_ertr::make_ready_future<
+      crimson::osd::ObjectContextRef>(obc);
+  });
 }
 
 PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
