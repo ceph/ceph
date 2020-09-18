@@ -7,6 +7,78 @@
 
 namespace rgw::putobj {
 
+int create_etag_verifier(CephContext* cct, DataProcessor* filter,
+                         const bufferlist& manifest_bl,
+                         const std::optional<RGWCompressionInfo>& compression,
+                         boost::optional<ETagVerifier_Atomic>& etag_verifier_atomic,
+                         boost::optional<ETagVerifier_MPU>& etag_verifier_mpu)
+{
+  RGWObjManifest manifest;
+
+  try {
+    auto miter = manifest_bl.cbegin();
+    decode(manifest, miter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
+    return -EIO;
+  }
+
+  RGWObjManifestRule rule;
+  bool found = manifest.get_rule(0, &rule);
+  if (!found) {
+    lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
+    return -EIO;
+  }
+
+  if (rule.part_size == 0) {
+    /* Atomic object */
+    etag_verifier_atomic = boost::in_place(cct, filter);
+    filter = &*etag_verifier_atomic;
+    return 0;
+  }
+
+  uint64_t cur_part_ofs = UINT64_MAX;
+  std::vector<uint64_t> part_ofs;
+
+  /*
+   * We must store the offset of each part to calculate the ETAGs for each
+   * MPU part. These part ETags then become the input for the MPU object
+   * Etag.
+   */
+  for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
+    if (cur_part_ofs == mi.get_part_ofs())
+      continue;
+    cur_part_ofs = mi.get_part_ofs();
+    ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
+    part_ofs.push_back(cur_part_ofs);
+  }
+
+  if (compression) {
+    // if the source object was compressed, the manifest is storing
+    // compressed part offsets. transform the compressed offsets back to
+    // their original offsets by finding the first block of each part
+    const auto& blocks = compression->blocks;
+    auto block = blocks.begin();
+    for (auto& ofs : part_ofs) {
+      // find the compression_block with new_ofs == ofs
+      constexpr auto less = [] (const compression_block& block, uint64_t ofs) {
+        return block.new_ofs < ofs;
+      };
+      block = std::lower_bound(block, blocks.end(), ofs, less);
+      if (block == blocks.end() || block->new_ofs != ofs) {
+        ldout(cct, 4) << "no match for compressed offset " << ofs
+            << ", disabling etag verification" << dendl;
+        return -EIO;
+      }
+      ofs = block->old_ofs;
+      ldout(cct, 20) << "MPU Part uncompressed offset:" << ofs << dendl;
+    }
+  }
+
+  etag_verifier_mpu = boost::in_place(cct, std::move(part_ofs), filter);
+  return 0;
+}
+
 int ETagVerifier_Atomic::process(bufferlist&& in, uint64_t logical_offset)
 {
   bufferlist out;
