@@ -197,7 +197,7 @@ Remove an OSD
 -------------
 ::
 
-    ceph orch osd rm <svc_id(s)> [--replace] [--force]
+    ceph orch osd rm <osd_id(s)> [--replace] [--force]
 
 Evacuates PGs from an OSD and removes it from the cluster.
 
