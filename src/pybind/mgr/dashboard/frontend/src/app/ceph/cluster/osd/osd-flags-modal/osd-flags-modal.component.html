@@ -6,7 +6,8 @@
     <form name="osdFlagsForm"
           #formDir="ngForm"
           [formGroup]="osdFlagsForm"
-          novalidate>
+          novalidate
+          cdFormScope="osd">
       <div class="modal-body osd-modal">
         <div class="custom-control custom-checkbox"
              *ngFor="let flag of flags; let last = last">
