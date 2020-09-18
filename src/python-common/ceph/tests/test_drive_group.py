@@ -18,7 +18,9 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
                 'service_type': 'osd',
                 'service_id': 'testing_drivegroup',
                 'placement': {'host_pattern': 'hostname'},
-                'data_devices': {'paths': ['/dev/sda']}
+                'data_devices': {'paths': ['/dev/sda']},
+                'encrypted': True,
+                'encryption': True,
             }
         ]
     ),
@@ -27,6 +29,7 @@ def test_DriveGroup(test_input):
     dg = [DriveGroupSpec.from_json(inp) for inp in test_input][0]
     assert dg.placement.filter_matching_hostspecs([HostSpec('hostname')]) == ['hostname']
     assert dg.service_id == 'testing_drivegroup'
+    assert dg.encrypted is True
     assert all([isinstance(x, Device) for x in dg.data_devices.paths])
     assert dg.data_devices.paths[0].path == '/dev/sda'
 
@@ -43,6 +46,7 @@ placement:
   host_pattern: '*'
 data_devices:
   limit: 1
+encrypted: true
 """),
 
         yaml.safe_load("""
@@ -53,13 +57,13 @@ placement:
 data_devices:
   all: True
 filter_logic: XOR
+encrypted: true
 """)
     )
 ])
 def test_DriveGroup_fail(test_input):
     with pytest.raises(ServiceSpecValidationError):
         DriveGroupSpec.from_json(test_input)
-
 
 
 def test_drivegroup_pattern():

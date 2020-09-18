@@ -262,7 +262,8 @@ class DriveGroupSpec(ServiceSpec):
     @classmethod
     def _drive_group_spec_from_json(cls, json_drive_group: dict) -> dict:
         # replace key with alias key if an alias is present. Otherwise don't replace
-        json_drive_group = {k.replace(k, cls._aliases.get(k, k)): v for k, v in json_drive_group.items()}
+        json_drive_group = {k.replace(k, cls._aliases.get(k, k)): v
+                            for k, v in json_drive_group.items()}
 
         for applied_filter in list(json_drive_group.keys()):
             if applied_filter not in cls._supported_features:
