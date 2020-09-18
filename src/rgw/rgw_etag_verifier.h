@@ -18,7 +18,9 @@
 #include "rgw_putobj.h"
 #include "rgw_op.h"
 
-class RGWPutObj_ETagVerifier : public rgw::putobj::Pipe
+namespace rgw::putobj {
+
+class ETagVerifier : public rgw::putobj::Pipe
 {
 protected:
   CephContext* cct;
@@ -26,26 +28,26 @@ protected:
   string calculated_etag;
 
 public:
-  RGWPutObj_ETagVerifier(CephContext* cct_, rgw::putobj::DataProcessor *next)
+  ETagVerifier(CephContext* cct_, rgw::putobj::DataProcessor *next)
     : Pipe(next), cct(cct_) {}
 
   virtual void calculate_etag() = 0;
   string get_calculated_etag() { return calculated_etag;}
 
-}; /* RGWPutObj_ETagVerifier */
+}; /* ETagVerifier */
 
-class RGWPutObj_ETagVerifier_Atomic : public RGWPutObj_ETagVerifier
+class ETagVerifier_Atomic : public ETagVerifier
 {
 public:
-  RGWPutObj_ETagVerifier_Atomic(CephContext* cct_, rgw::putobj::DataProcessor *next)
-    : RGWPutObj_ETagVerifier(cct_, next) {}
+  ETagVerifier_Atomic(CephContext* cct_, rgw::putobj::DataProcessor *next)
+    : ETagVerifier(cct_, next) {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
 
-}; /* RGWPutObj_ETagVerifier_Atomic */
+}; /* ETagVerifier_Atomic */
 
-class RGWPutObj_ETagVerifier_MPU : public RGWPutObj_ETagVerifier
+class ETagVerifier_MPU : public ETagVerifier
 {
   std::vector<uint64_t> part_ofs;
   int cur_part_index{0}, next_part_index{1};
@@ -54,16 +56,18 @@ class RGWPutObj_ETagVerifier_MPU : public RGWPutObj_ETagVerifier
   void process_end_of_MPU_part();
 
 public:
-  RGWPutObj_ETagVerifier_MPU(CephContext* cct,
+  ETagVerifier_MPU(CephContext* cct,
                              std::vector<uint64_t> part_ofs,
                              rgw::putobj::DataProcessor *next)
-    : RGWPutObj_ETagVerifier(cct, next),
+    : ETagVerifier(cct, next),
       part_ofs(std::move(part_ofs))
   {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
 
-}; /* RGWPutObj_ETagVerifier_MPU */
+}; /* ETagVerifier_MPU */
+
+} // namespace rgw::putobj
 
 #endif /* CEPH_RGW_ETAG_VERIFIER_H */
