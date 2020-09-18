@@ -168,7 +168,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_prometheus',
-            'default': 'registry.suse.com/caasp/v5/prometheus-server:2.18.0',
+            'default': 'registry.suse.com/caasp/v4.5/prometheus-server:2.18.0',
             'desc': 'Prometheus container image',
         },
         {
@@ -178,12 +178,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_alertmanager',
-            'default': 'registry.suse.com/caasp/v5/prometheus-alertmanager:0.16.2',
+            'default': 'registry.suse.com/caasp/v4.5/prometheus-alertmanager:0.16.2',
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_node_exporter',
-            'default': 'registry.suse.com/caasp/v5/prometheus-node-exporter:0.17.0',
+            'default': 'registry.suse.com/caasp/v4.5/prometheus-node-exporter:0.18.1',
             'desc': 'Prometheus container image',
         },
         {
