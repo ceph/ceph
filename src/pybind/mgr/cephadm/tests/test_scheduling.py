@@ -85,21 +85,19 @@ def get_result(key, results):
     return [v for k, v in results
      if match(k)][0]
 
-def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
 
+def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
 
     if spec_section == 'hosts':
         mk_spec = lambda: ServiceSpec('mon', placement=PlacementSpec(
                     hosts=explicit,
                     count=count,
                 ))
-        mk_hosts = lambda _: hosts
     elif spec_section == 'label':
         mk_spec = lambda: ServiceSpec('mon', placement=PlacementSpec(
             label='mylabel',
             count=count,
         ))
-        mk_hosts = lambda l: [e for e in explicit if e in hosts] if l == 'mylabel' else hosts
     elif spec_section == 'host_pattern':
         pattern = {
             'e': 'notfound',
@@ -111,19 +109,18 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
                     host_pattern=pattern,
                     count=count,
                 ))
-        mk_hosts = lambda _: hosts
     else:
         assert False
-    def _get_hosts_wrapper(label=None, as_hostspec=False):
-        hosts = mk_hosts(label)
-        if as_hostspec:
-            return list(map(HostSpec, hosts))
-        return hosts
 
-    return mk_spec, _get_hosts_wrapper
+    hosts = [
+            HostSpec(h, labels=['mylabel']) if h in explicit else HostSpec(h)
+            for h in hosts
+        ]
+
+    return mk_spec, hosts
 
 
-def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_elems):
+def run_scheduler_test(results, mk_spec, hosts, get_daemons_func, key_elems):
     key = ' '.join('N' if e is None else str(e) for e in key_elems)
     try:
         assert_res = get_result(k(key), results)
@@ -132,7 +129,7 @@ def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_e
             spec = mk_spec()
             host_res = HostAssignment(
                 spec=spec,
-                get_hosts_func=get_hosts_func,
+                hosts=hosts,
                 get_daemons_func=get_daemons_func).place()
             if isinstance(host_res, list):
                 e = ', '.join(repr(h.hostname) for h in host_res)
@@ -146,7 +143,7 @@ def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_e
             spec = mk_spec()
             host_res = HostAssignment(
                 spec=spec,
-                get_hosts_func=get_hosts_func,
+                hosts=hosts,
                 get_daemons_func=get_daemons_func).place()
 
             assert_res(sorted([h.hostname for h in host_res]))
@@ -218,11 +215,11 @@ def test_explicit_scheduler(host_key, hosts,
                             count,
                             spec_section_key, spec_section):
 
-    mk_spec, mk_hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
+    mk_spec, hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
     run_scheduler_test(
         results=test_explicit_scheduler_results,
         mk_spec=mk_spec,
-        get_hosts_func=mk_hosts,
+        hosts=hosts,
         get_daemons_func=lambda _: [],
         key_elems=(host_key, explicit_key, count, spec_section_key)
     )
@@ -305,7 +302,7 @@ def test_scheduler_daemons(host_key, hosts,
                            count,
                            daemons_key, daemons,
                            spec_section_key, spec_section):
-    mk_spec, mk_hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
+    mk_spec, hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
     dds = [
         DaemonDescription('mon', d, d)
         for d in daemons
@@ -313,7 +310,7 @@ def test_scheduler_daemons(host_key, hosts,
     run_scheduler_test(
         results=test_scheduler_daemons_results,
         mk_spec=mk_spec,
-        get_hosts_func=mk_hosts,
+        hosts=hosts,
         get_daemons_func=lambda _: dds,
         key_elems=(host_key, explicit_key, count, daemons_key, spec_section_key)
     )
@@ -429,11 +426,6 @@ class NodeAssignmentTest(NamedTuple):
         ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
-    def get_hosts_func(label=None, as_hostspec=False):
-        if as_hostspec:
-            return [HostSpec(h) for h in hosts]
-        return hosts
-
     service_id = None
     if service_type == 'rgw':
         service_id = 'realm.zone'
@@ -444,7 +436,7 @@ def test_node_assignment(service_type, placement, hosts, daemons, expected):
 
     hosts = HostAssignment(
         spec=spec,
-        get_hosts_func=get_hosts_func,
+        hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
     assert sorted([h.hostname for h in hosts]) == sorted(expected)
 
@@ -520,14 +512,9 @@ class NodeAssignmentTest2(NamedTuple):
     ])
 def test_node_assignment2(service_type, placement, hosts,
                           daemons, expected_len, in_set):
-    def get_hosts_func(label=None, as_hostspec=False):
-        if as_hostspec:
-            return [HostSpec(h) for h in hosts]
-        return hosts
-
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
-        get_hosts_func=get_hosts_func,
+        hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
     assert len(hosts) == expected_len
     for h in [h.hostname for h in hosts]:
@@ -556,14 +543,9 @@ def test_node_assignment2(service_type, placement, hosts,
     ])
 def test_node_assignment3(service_type, placement, hosts,
                           daemons, expected_len, must_have):
-    def get_hosts_func(label=None, as_hostspec=False):
-        if as_hostspec:
-            return [HostSpec(h) for h in hosts]
-        return hosts
-
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
-        get_hosts_func=get_hosts_func,
+        hosts=[HostSpec(h) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
     assert len(hosts) == expected_len
     for h in must_have:
@@ -619,14 +601,10 @@ class NodeAssignmentTestBadSpec(NamedTuple):
         ),
     ])
 def test_bad_specs(service_type, placement, hosts, daemons, expected):
-    def get_hosts_func(label=None, as_hostspec=False):
-        if as_hostspec:
-            return [HostSpec(h) for h in hosts]
-        return hosts
     with pytest.raises(OrchestratorValidationError) as e:
         hosts = HostAssignment(
             spec=ServiceSpec(service_type, placement=placement),
-            get_hosts_func=get_hosts_func,
+            hosts=[HostSpec(h) for h in hosts],
             get_daemons_func=lambda _: daemons).place()
     assert str(e.value) == expected
 
@@ -768,10 +746,6 @@ class ActiveAssignmentTest(NamedTuple):
 
                          ])
 def test_active_assignment(service_type, placement, hosts, daemons, expected):
-    def get_hosts_func(label=None, as_hostspec=False):
-        if as_hostspec:
-            return [HostSpec(h) for h in hosts]
-        return hosts
 
     spec = ServiceSpec(service_type=service_type,
                        service_id=None,
@@ -779,6 +753,6 @@ def test_active_assignment(service_type, placement, hosts, daemons, expected):
 
     hosts = HostAssignment(
         spec=spec,
-        get_hosts_func=get_hosts_func,
+        hosts=[HostSpec(h) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
     assert sorted([h.hostname for h in hosts]) in expected

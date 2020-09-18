@@ -85,7 +85,7 @@ class Inventory:
                 else:
                     yield h
 
-    def spec_from_dict(self, info):
+    def spec_from_dict(self, info) -> HostSpec:
         hostname = info['hostname']
         return HostSpec(
             hostname,
@@ -94,8 +94,8 @@ class Inventory:
             status='Offline' if hostname in self.mgr.offline_hosts else info.get('status', ''),
         )
 
-    def all_specs(self) -> Iterator[HostSpec]:
-        return map(self.spec_from_dict, self._inventory.values())
+    def all_specs(self) -> List[HostSpec]:
+        return list(map(self.spec_from_dict, self._inventory.values()))
 
     def save(self):
         self.mgr.set_store('inventory', json.dumps(self._inventory))
@@ -434,6 +434,16 @@ class HostCache():
             return True
         return False
 
+    def host_had_daemon_refresh(self, host: str) -> bool:
+        """
+        ... at least once.
+        """
+        if host in self.last_daemon_update:
+            return True
+        if host not in self.daemons:
+            return False
+        return bool(self.daemons[host])
+
     def host_needs_device_refresh(self, host):
         # type: (str) -> bool
         if host in self.mgr.offline_hosts:
@@ -512,7 +522,7 @@ class HostCache():
         We're not checking for `host_needs_daemon_refresh`, as this might never be
         False for all hosts.
         """
-        return all((h in self.last_daemon_update or h in self.mgr.offline_hosts)
+        return all((self.host_had_daemon_refresh(h) or h in self.mgr.offline_hosts)
                    for h in self.get_hosts())
 
     def schedule_daemon_action(self, host: str, daemon_name: str, action: str):
