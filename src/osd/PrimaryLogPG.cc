@@ -1006,6 +1006,10 @@ void PrimaryLogPG::do_command(
     handle_query_state(f.get());
     f->close_section();
 
+    if (is_primary() && is_active()) {
+      scrubber.dump(f.get());
+    }
+
     f->open_object_section("agent_state");
     if (agent_state)
       agent_state->dump(f.get());
@@ -1115,6 +1119,9 @@ void PrimaryLogPG::do_command(
       }
       f->close_section();
     }
+    // Get possible locations of missing objects from pg information
+    PeeringState::QueryUnfound q(f.get());
+    recovery_state.handle_event(q, 0);
     f->dump_bool("more", p != needs_recovery_map.end());
     f->close_section();
   }

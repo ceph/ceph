@@ -3773,12 +3773,54 @@ void PG::handle_initialize(PeeringCtx &rctx)
   recovery_state.handle_event(evt, &rctx);
 }
 
+void PG::Scrubber::dump(Formatter *f)
+{
+  f->open_object_section("scrubber");
+  f->dump_stream("epoch_start") << epoch_start;
+  f->dump_bool("active", active);
+  if (active) {
+    f->dump_string("state", state_string(state));
+    f->dump_stream("start") << start;
+    f->dump_stream("end") << end;
+    f->dump_stream("max_end") << max_end;
+    f->dump_stream("subset_last_update") << subset_last_update;
+    f->dump_bool("deep", deep);
+    f->dump_bool("must_scrub", must_scrub);
+    f->dump_bool("must_deep_scrub", must_deep_scrub);
+    f->dump_bool("must_repair", must_repair);
+    f->dump_bool("need_auto", need_auto);
+    f->dump_bool("req_scrub", req_scrub);
+    f->dump_bool("time_for_deep", time_for_deep);
+    f->dump_bool("auto_repair", auto_repair);
+    f->dump_bool("check_repair", check_repair);
+    f->dump_bool("deep_scrub_on_error", deep_scrub_on_error);
+    f->dump_stream("scrub_reg_stamp") << scrub_reg_stamp; //utime_t
+    f->dump_stream("waiting_on_whom") << waiting_on_whom; //set<pg_shard_t>
+    f->dump_unsigned("priority", priority);
+    f->dump_int("shallow_errors", shallow_errors);
+    f->dump_int("deep_errors", deep_errors);
+    f->dump_int("fixed", fixed);
+    {
+      f->open_array_section("waiting_on_whom");
+      for (set<pg_shard_t>::iterator p = waiting_on_whom.begin();
+	   p != waiting_on_whom.end();
+	   ++p) {
+	f->dump_stream("shard") << *p;
+      }
+      f->close_section();
+    }
+  }
+  f->close_section();
+}
+
 void PG::handle_query_state(Formatter *f)
 {
   dout(10) << "handle_query_state" << dendl;
   PeeringState::QueryState q(f);
   recovery_state.handle_event(q, 0);
 
+  // This code has moved to after the close of recovery_state array.
+  // I don't think that scrub is a recovery state
   if (is_primary() && is_active()) {
     f->open_object_section("scrub");
     f->dump_stream("scrubber.epoch_start") << scrubber.epoch_start;
@@ -3798,6 +3840,7 @@ void PG::handle_query_state(Formatter *f)
       }
       f->close_section();
     }
+    f->dump_string("comment", "DEPRECATED - may be removed in the next release");
     f->close_section();
   }
 }
