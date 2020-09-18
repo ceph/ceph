@@ -822,7 +822,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
 {
   uint64_t len = bl.length();
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
-	  << std::dec << (buffered ? " (buffered)" : " (direct)") << dendl;
+	  << std::dec << buffermode(buffered) << dendl;
   if (cct->_conf->bdev_inject_crash &&
       rand() % cct->_conf->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
@@ -889,8 +889,7 @@ int KernelDevice::write(
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	   << (buffered ? " (buffered)" : " (direct)")
-	   << dendl;
+	   << buffermode(buffered) << dendl;
   ceph_assert(is_valid_io(off, len));
   if (cct->_conf->objectstore_blackhole) {
     lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
@@ -918,8 +917,7 @@ int KernelDevice::aio_write(
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	   << (buffered ? " (buffered)" : " (direct)")
-	   << dendl;
+	   << buffermode(buffered) << dendl;
   ceph_assert(is_valid_io(off, len));
   if (cct->_conf->objectstore_blackhole) {
     lderr(cct) << __func__ << " objectstore_blackhole=true, throwing out IO"
@@ -1025,8 +1023,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      bool buffered)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	  << (buffered ? " (buffered)" : " (direct)")
-	  << dendl;
+	  << buffermode(buffered) << dendl;
   ceph_assert(is_valid_io(off, len));
 
   _aio_log_start(ioc, off, len);
@@ -1040,7 +1037,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   if (mono_clock::now() - start1 >= make_timespan(age)) {
     derr << __func__ << " stalled read "
          << " 0x" << std::hex << off << "~" << len << std::dec
-         << (buffered ? " (buffered)" : " (direct)")
+         << buffermode(buffered) 
 	 << " since " << start1 << ", timeout is "
 	 << age
 	 << "s" << dendl;
@@ -1141,8 +1138,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
                        bool buffered)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-          << "buffered " << buffered
-	  << dendl;
+          << buffermode(buffered) << dendl;
   ceph_assert(len > 0);
   ceph_assert(off < size);
   ceph_assert(off + len <= size);
