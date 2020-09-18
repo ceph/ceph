@@ -356,7 +356,6 @@ private:
   void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first) override;
 
   void update_msgr_features();
-  int check_cluster_features(uint64_t features, std::stringstream &ss);
   /**
    * check if the cluster supports the features required by the
    * given crush map. Outputs the daemons which don't support it
@@ -412,6 +411,12 @@ private:
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
 public:
+  /**
+   * Make sure the existing (up) OSDs support the given features
+   * @return 0 on success, or an error code if any OSDs re missing features.
+   * @param ss Filled in with ane explanation of failure, if any
+   */
+  int check_cluster_features(uint64_t features, std::stringstream &ss);
   // @param req an optional op request, if the osdmaps are replies to it. so
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
@@ -781,6 +786,73 @@ public:
     }
   }
   void convert_pool_priorities(void);
+  /**
+   * Find the pools which are requested to be put into stretch mode,
+   * validate that they are allowed to be in stretch mode (eg, are replicated)
+   * and place copies of them in the pools set.
+   * This does not make any changes to the pools or state; it's just
+   * a safety-check-and-collect function.
+   */
+  void try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
+				     int *errcode,
+				     set<pg_pool_t*>* pools, const string& new_crush_rule);
+  /**
+   * Check validity of inputs and OSD/CRUSH state to
+   * engage stretch mode. Designed to be used with
+   * MonmapMonitor::try_enable_stretch_mode() where we call both twice,
+   * first with commit=false to validate.
+   * @param ss: a stringstream to write errors into
+   * @param okay: Filled to true if okay, false if validation fails
+   * @param errcode: filled with -errno if there's a problem
+   * @param commit: true if we should commit the change, false if just testing
+   * @param dividing_bucket: the bucket type (eg 'dc') that divides the cluster
+   * @param bucket_count: The number of buckets required in peering.
+   *  Currently must be 2.
+   * @param pools: The pg_pool_ts which are being set to stretch mode (obtained
+   *   from try_enable_stretch_mode_pools()).
+   * @param new_crush_rule: The crush rule to set the pools to.
+   */
+  void try_enable_stretch_mode(stringstream& ss, bool *okay,
+			       int *errcode, bool commit,
+			       const string& dividing_bucket,
+			       uint32_t bucket_count,
+			       const set<pg_pool_t*>& pools,
+			       const string& new_crush_rule);
+  /**
+   * Check the input dead_buckets mapping (buckets->dead monitors) to see
+   * if the OSDs are also down. If so, fill in really_down_buckets and
+   * really_down_mons and return true; else return false.
+   */
+  bool check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,
+				  set<int> *really_down_buckets,
+				  set<string> *really_down_mons);
+  /**
+   * Set degraded mode in the OSDMap, adding the given dead buckets to the dead set
+   * and using the live_zones (should presently be size 1)
+   */
+  void trigger_degraded_stretch_mode(const set<int>& dead_buckets,
+				     const set<string>& live_zones);
+  /**
+   * Set recovery stretch mode in the OSDMap, resetting pool size back to normal
+   */
+  void trigger_recovery_stretch_mode();
+  /**
+   * Tells the OSD there's a new pg digest, in case it's interested.
+   * (It's interested when in recovering stretch mode.)
+   */
+  void notify_new_pg_digest();
+  /**
+   * Check if we can exit recovery stretch mode and go back to normal.
+   * @param force If true, we will force the exit through once it is legal,
+   * without regard to the reported PG status.
+   */
+  void try_end_recovery_stretch_mode(bool force);
+  /**
+   * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
+   */
+  void trigger_healthy_stretch_mode();
+private:
+  utime_t stretch_recovery_triggered; // what time we committed a switch to recovery mode
 };
 
 #endif

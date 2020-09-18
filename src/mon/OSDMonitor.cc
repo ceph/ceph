@@ -712,6 +712,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   dout(15) << "update_from_paxos paxos e " << version
 	   << ", my e " << osdmap.epoch << dendl;
 
+  int prev_num_up_osd = osdmap.num_up_osd;
+
   if (mapping_job) {
     if (!mapping_job->is_done()) {
       dout(1) << __func__ << " mapping job "
@@ -900,6 +902,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->store->apply_transaction(t);
   }
 
+  bool marked_osd_down = false;
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
     if (osdmap.is_out(o))
       continue;
@@ -909,6 +912,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       if (found == down_pending_out.end()) {
         dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
         down_pending_out[o] = ceph_clock_now();
+	marked_osd_down = true;
       }
     } else {
       if (found != down_pending_out.end()) {
@@ -932,6 +936,33 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   if (!mon->is_leader()) {
     // will be called by on_active() on the leader, avoid doing so twice
     start_mapping();
+  }
+  if (osdmap.stretch_mode_enabled) {
+    dout(20) << "Stretch mode enabled in this map" << dendl;
+    mon->maybe_engage_stretch_mode();
+    if (osdmap.degraded_stretch_mode) {
+      dout(20) << "Degraded stretch mode set in this map" << dendl;
+      if (!osdmap.recovering_stretch_mode) {
+	mon->set_degraded_stretch_mode();
+	if (prev_num_up_osd < osdmap.num_up_osd &&
+	    (osdmap.num_up_osd / (double)osdmap.num_osd) >
+	    cct->_conf.get_val<double>("mon_stretch_cluster_recovery_ratio")) {
+	  // TODO: This works for 2-site clusters when the OSD maps are appropriately
+	  // trimmed and everything is "normal" but not if you have a lot of out OSDs
+	  // you're ignoring or in some really degenerate failure cases
+	  dout(10) << "Enabling recovery stretch mode in this map" << dendl;
+	  mon->go_recovery_stretch_mode();
+	}
+      }
+    }
+    if (marked_osd_down &&
+	(!osdmap.degraded_stretch_mode || osdmap.recovering_stretch_mode)) {
+      dout(20) << "Checking degraded stretch mode due to osd changes" << dendl;
+      mon->maybe_go_degraded_stretch_mode();
+    }
+    if (osdmap.recovering_stretch_mode && stretch_recovery_triggered.is_zero()) {
+      stretch_recovery_triggered = ceph_clock_now();
+    }
   }
 }
 
@@ -3472,6 +3503,14 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
 		      << " because 'pglog_hardlimit' osdmap flag is set and OSD lacks the OSD_PGLOG_HARDLIMIT feature";
+    goto ignore;
+  }
+
+  if (osdmap.stretch_mode_enabled &&
+      !(m->osd_features & CEPH_FEATUREMASK_STRETCH_MODE)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because stretch mode is on and OSD lacks support";
     goto ignore;
   }
 
@@ -7531,16 +7570,33 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  ostream *ss)
 {
   int err = 0;
+  bool set_min_size = false;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
+    if (osdmap.stretch_mode_enabled) {
+      if (repl_size == 0)
+	repl_size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
+      if (repl_size != g_conf().get_val<uint64_t>("mon_stretch_pool_size")) {
+	*ss << "prepare_pool_size: we are in stretch mode but size "
+	   << repl_size << " does not match!";
+	return -EINVAL;
+      }
+      *min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      set_min_size = true;
+    }
     if (repl_size == 0) {
       repl_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
     }
     *size = repl_size;
-    *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
+    if (!set_min_size)
+      *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
+      if (osdmap.stretch_mode_enabled) {
+	*ss << "prepare_pool_size: we are in stretch mode; cannot create EC pools!";
+	return -EINVAL;
+      }
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
@@ -7876,6 +7932,21 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
+  if (osdmap.stretch_mode_enabled) {
+    pi->peering_crush_bucket_count = osdmap.stretch_bucket_count;
+    pi->peering_crush_bucket_target = osdmap.stretch_bucket_count;
+    pi->peering_crush_bucket_barrier = osdmap.stretch_mode_bucket;
+    pi->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    if (osdmap.degraded_stretch_mode) {
+      pi->peering_crush_bucket_count = osdmap.degraded_stretch_mode;
+      pi->peering_crush_bucket_target = osdmap.degraded_stretch_mode;
+      // pi->peering_crush_bucket_mandatory_member = CRUSH_ITEM_NONE;
+      // TODO: drat, we don't record this ^ anywhere, though given that it
+      // necessarily won't exist elsewhere it likely doesn't matter
+      pi->min_size = pi->min_size / 2;
+      pi->size = pi->size / 2; // only support 2 zones now
+    }
+  }
 
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
         g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
@@ -13399,7 +13470,36 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-  } else {
+  } else if (prefix == "osd force_healthy_stretch_mode") {
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
+      ss << "This command will require peering across multiple CRUSH buckets "
+	"(probably two data centers or availability zones?) and may result in PGs "
+	"going inactive until backfilling is complete. Pass --yes-i-really-mean-it to proceed.";
+      err = -EPERM;
+      goto reply;
+    }
+    try_end_recovery_stretch_mode(true);
+    ss << "Triggering healthy stretch mode";
+    err = 0;
+    goto reply;
+  } else if (prefix == "osd force_recovery_stretch_mode") {
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
+      ss << "This command will increase pool sizes to try and spread them "
+	"across multiple CRUSH buckets (probably two data centers or "
+	"availability zones?) and should have happened automatically"
+	"Pass --yes-i-really-mean-it to proceed.";
+      err = -EPERM;
+      goto reply;
+    }
+    mon->go_recovery_stretch_mode();
+    ss << "Triggering recovery stretch mode";
+    err = 0;
+    goto reply;
+} else {
     err = -EINVAL;
   }
 
@@ -14123,4 +14223,271 @@ void OSDMonitor::convert_pool_priorities(void)
     pool.last_change = pending_inc.epoch;
     pending_inc.new_pools[pool_id] = pool;
   }
+}
+
+void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
+					       int *errcode,
+					       set<pg_pool_t*>* pools,
+					       const string& new_crush_rule)
+{
+  dout(20) << __func__ << dendl;
+  *okay = false;
+  int new_crush_rule_result = osdmap.crush->get_rule_id(new_crush_rule);
+  if (new_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << new_crush_rule_result;
+    *errcode = new_crush_rule_result;
+    return;
+  }
+  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  for (const auto& pooli : osdmap.pools) {
+    int64_t poolid = pooli.first;
+    const pg_pool_t *p = &pooli.second;
+    if (!p->is_replicated()) {
+      ss << "stretched pools must be replicated; '" << osdmap.pool_name[poolid] << "' is erasure-coded";
+      *errcode = -EINVAL;
+      return;
+    }
+    uint8_t default_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+    if ((p->get_size() != default_size ||
+	 (p->get_min_size() != g_conf().get_osd_pool_default_min_size(default_size))) &&
+	(p->get_crush_rule() != new_rule)) {
+      ss << "we currently require stretch mode pools start out with the"
+	" default size/min_size, which '" << osdmap.pool_name[poolid] << "' does not";
+      *errcode = -EINVAL;
+      return;
+    }
+    pg_pool_t *pp = pending_inc.get_new_pool(poolid, p);
+    // TODO: The part where we unconditionally copy the pools into pending_inc is bad
+    // the attempt may fail and then we have these pool updates...but they won't do anything
+    // if there is a failure, so if it's hard to change the interface, no need to bother
+    pools->insert(pp);
+  }
+  *okay = true;
+  return;
+}
+
+void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
+					 int *errcode, bool commit,
+					 const string& dividing_bucket,
+					 uint32_t bucket_count,
+					 const set<pg_pool_t*>& pools,
+					 const string& new_crush_rule)
+{
+  dout(20) << __func__ << dendl;
+  *okay = false;
+  CrushWrapper crush;
+  _get_pending_crush(crush);
+  int dividing_id;
+  int retval = crush.get_validated_type_id(dividing_bucket, &dividing_id);
+  if (retval == -1) {
+    ss << dividing_bucket << " is not a valid crush bucket type";
+    *errcode = -ENOENT;
+    ceph_assert(!commit || dividing_id != -1);
+    return;
+  }
+  vector<int> subtrees;
+  crush.get_subtree_of_type(dividing_id, &subtrees);
+  if (subtrees.size() != 2) {
+    ss << "there are " << subtrees.size() << dividing_bucket
+       << "'s in the cluster but stretch mode currently only works with 2!";
+    *errcode = -EINVAL;
+    ceph_assert(!commit || subtrees.size() == 2);
+    return;
+  }
+
+  int new_crush_rule_result = crush.get_rule_id(new_crush_rule);
+  if (new_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << new_crush_rule;
+    *errcode = new_crush_rule_result;
+    ceph_assert(!commit || new_crush_rule_result);
+    return;
+  }
+  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+
+  int weight1 = crush.get_item_weight(subtrees[0]);
+  int weight2 = crush.get_item_weight(subtrees[1]);
+  if (weight1 != weight2) {
+    // TODO: I'm really not sure this is a good idea?
+    ss << "the 2 " << dividing_bucket
+       << "instances in the cluster have differing weights "
+       << weight1 << " and " << weight2
+       <<" but stretch mode currently requires they be the same!";
+    *errcode = -EINVAL;
+    ceph_assert(!commit || (weight1 == weight2));
+    return;
+  }
+  if (bucket_count != 2) {
+    ss << "currently we only support 2-site stretch clusters!";
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
+  // TODO: check CRUSH rules for pools so that we are appropriately divided
+  if (commit) {
+    for (auto pool : pools) {
+      pool->crush_rule = new_rule;
+      pool->peering_crush_bucket_count = bucket_count;
+      pool->peering_crush_bucket_target = bucket_count;
+      pool->peering_crush_bucket_barrier = dividing_id;
+      pool->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+      pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
+      pool->min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+    }
+    pending_inc.change_stretch_mode = true;
+    pending_inc.stretch_mode_enabled = true;
+    pending_inc.new_stretch_bucket_count = bucket_count;
+    pending_inc.new_degraded_stretch_mode = 0;
+    pending_inc.new_stretch_mode_bucket = dividing_id;
+  }
+  *okay = true;
+  return;
+}
+
+bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,
+					    set<int> *really_down_buckets,
+					    set<string> *really_down_mons)
+{
+  dout(20) << __func__ << " with dead mon zones " << dead_buckets << dendl;
+  ceph_assert(is_readable());
+  if (dead_buckets.empty()) return false;
+  set<int> down_cache;
+  bool really_down = false;
+  for (auto dbi : dead_buckets) {
+    const string& bucket_name = dbi.first;
+    ceph_assert(osdmap.crush->name_exists(bucket_name));
+    int bucket_id = osdmap.crush->get_item_id(bucket_name);
+    dout(20) << "Checking " << bucket_name << " id " << bucket_id
+	     << " to see if OSDs are also down" << dendl;
+    bool subtree_down = osdmap.subtree_is_down(bucket_id, &down_cache);
+    if (subtree_down) {
+      dout(20) << "subtree is down!" << dendl;
+      really_down = true;
+      really_down_buckets->insert(bucket_id);
+      really_down_mons->insert(dbi.second.begin(), dbi.second.end());
+    }
+  }
+  dout(10) << "We determined CRUSH buckets " << *really_down_buckets
+	   << " and mons " << *really_down_mons << " are really down" << dendl;
+  return really_down;
+}
+
+void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
+					       const set<string>& live_zones)
+{
+  dout(20) << __func__ << dendl;
+  stretch_recovery_triggered.set_from_double(0); // reset this; we can't go clean now!
+  // update the general OSDMap changes
+  pending_inc.change_stretch_mode = true;
+  pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
+  pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
+  int new_site_count = osdmap.stretch_bucket_count - dead_buckets.size();
+  ceph_assert(new_site_count == 1); // stretch count 2!
+  pending_inc.new_degraded_stretch_mode = new_site_count;
+  pending_inc.new_recovering_stretch_mode = 0;
+  pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
+
+  // and then apply them to all the pg_pool_ts
+  ceph_assert(live_zones.size() == 1); // only support 2 zones now
+  const string& remaining_site_name = *(live_zones.begin());
+  ceph_assert(osdmap.crush->name_exists(remaining_site_name));
+  int remaining_site = osdmap.crush->get_item_id(remaining_site_name);
+  for (auto pgi : osdmap.pools) {
+    if (pgi.second.peering_crush_bucket_count) {
+      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
+      newp.peering_crush_bucket_count = new_site_count;
+      newp.peering_crush_mandatory_member = remaining_site;
+      newp.min_size = pgi.second.min_size / 2; // only support 2 zones now
+      newp.last_force_op_resend = pending_inc.epoch;
+    }
+  }
+  propose_pending();
+}
+
+void OSDMonitor::trigger_recovery_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  stretch_recovery_triggered.set_from_double(0); // reset this so we don't go full-active prematurely
+  pending_inc.change_stretch_mode = true;
+  pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
+  pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
+  pending_inc.new_degraded_stretch_mode = osdmap.degraded_stretch_mode;
+  pending_inc.new_recovering_stretch_mode = 1;
+  pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
+
+  for (auto pgi : osdmap.pools) {
+    if (pgi.second.peering_crush_bucket_count) {
+      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
+      newp.last_force_op_resend = pending_inc.epoch;
+    }
+  }
+  propose_pending();
+}
+
+void OSDMonitor::notify_new_pg_digest()
+{
+  dout(20) << __func__ << dendl;
+  if (!stretch_recovery_triggered.is_zero()) {
+    try_end_recovery_stretch_mode(false);
+  }
+}
+
+struct CMonExitRecovery : public Context {
+  OSDMonitor *m;
+  bool force;
+  CMonExitRecovery(OSDMonitor *mon, bool f) : m(mon), force(f) {}
+  void finish(int r) {
+    m->try_end_recovery_stretch_mode(force);
+  }
+};
+
+void OSDMonitor::try_end_recovery_stretch_mode(bool force)
+{
+  dout(20) << __func__ << dendl;
+  if (!mon->is_leader()) return;
+  if (!mon->is_degraded_stretch_mode()) return;
+  if (!mon->is_recovering_stretch_mode()) return;
+  if (!is_readable()) {
+    wait_for_readable_ctx(new CMonExitRecovery(this, force));
+    return;
+  }
+
+  if (osdmap.recovering_stretch_mode &&
+      ((!stretch_recovery_triggered.is_zero() &&
+	ceph_clock_now() - g_conf().get_val<double>("mon_stretch_recovery_min_wait") >
+	stretch_recovery_triggered) ||
+       force)) {
+    if (!mon->mgrstatmon()->is_readable()) {
+      mon->mgrstatmon()->wait_for_readable_ctx(new CMonExitRecovery(this, force));
+      return;
+    }
+    const PGMapDigest& pgd = mon->mgrstatmon()->get_digest();
+    double misplaced, degraded, inactive, unknown;
+    pgd.get_recovery_stats(&misplaced, &degraded, &inactive, &unknown);
+    if (force || (degraded == 0.0 && inactive == 0.0 && unknown == 0.0)) {
+      // we can exit degraded stretch mode!
+      mon->trigger_healthy_stretch_mode();
+    }
+  }
+}
+
+void OSDMonitor::trigger_healthy_stretch_mode()
+{
+  ceph_assert(is_writeable());
+  stretch_recovery_triggered.set_from_double(0);
+  pending_inc.change_stretch_mode = true;
+  pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
+  pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
+  pending_inc.new_degraded_stretch_mode = 0; // turn off degraded mode...
+  pending_inc.new_recovering_stretch_mode = 0; //...and recovering mode!
+  pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
+  for (auto pgi : osdmap.pools) {
+    if (pgi.second.peering_crush_bucket_count) {
+      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
+      newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
+      newp.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+      newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      newp.last_force_op_resend = pending_inc.epoch;
+    }
+  }
+  propose_pending();
 }
