@@ -475,6 +475,10 @@ Group:		System/Filesystems
 %endif
 Provides:	ceph-test:/usr/bin/ceph-monstore-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?weak_deps}
+Recommends:	nvme-cli
+Recommends:	smartmontools
+%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -751,6 +755,10 @@ Requires:	lvm2
 Requires:	sudo
 Requires:	libstoragemgmt
 Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?weak_deps}
+Recommends:	nvme-cli
+Recommends:	smartmontools
+%endif
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
