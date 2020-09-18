@@ -420,15 +420,15 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
 	session->is_killing()) {
       dout(20) << "  " << name << dendl;
       // Serialize K
-      std::ostringstream k;
-      k << name;
+      CachedStackStringStream css;
+      *css << name;
 
       // Serialize V
       bufferlist bl;
       session->info.encode(bl, mds->mdsmap->get_up_features());
 
       // Add to RADOS op
-      to_set[k.str()] = bl;
+      to_set[std::string(css->strv())] = bl;
 
       session->clear_dirty_completed_requests();
     } else {
@@ -444,9 +444,9 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
   for(std::set<entity_name_t>::const_iterator i = null_sessions.begin();
       i != null_sessions.end(); ++i) {
     dout(20) << "  " << *i << dendl;
-    std::ostringstream k;
-    k << *i;
-    to_remove.insert(k.str());
+    CachedStackStringStream css;
+    *css << *i;
+    to_remove.insert(css->str());
   }
   if (!to_remove.empty()) {
     op.omap_rm_keys(to_remove);
@@ -855,15 +855,15 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
     session->clear_dirty_completed_requests();
 
     // Serialize K
-    std::ostringstream k;
-    k << session_id;
+    CachedStackStringStream css;
+    *css << session_id;
 
     // Serialize V
     bufferlist bl;
     session->info.encode(bl, mds->mdsmap->get_up_features());
 
     // Add to RADOS op
-    to_set[k.str()] = bl;
+    to_set[css->str()] = bl;
 
     // Complete this write transaction?
     if (i == write_sessions.size() - 1
@@ -1099,7 +1099,7 @@ void SessionMap::update_average_session_age() {
 
 int SessionFilter::parse(
     const std::vector<std::string> &args,
-    std::stringstream *ss)
+    std::ostream *ss)
 {
   ceph_assert(ss != NULL);
 
