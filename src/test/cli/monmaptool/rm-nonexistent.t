@@ -19,6 +19,7 @@
   last_changed \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   min_mon_release 0 (unknown)
+  election_strategy: 1
   0: v1:2.3.4.5:6789/0 mon.foo
 
   $ NEW_FSID="$(monmaptool --print mymonmap|grep ^fsid)"

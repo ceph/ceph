@@ -56,6 +56,7 @@ struct MonSession : public RefCountedObject {
   xlist<MonSession*>::item item;
   std::set<uint64_t> routed_request_tids;
   MonCap caps;
+  bool validated_stretch_connection = false;
 
   bool authenticated = false;  ///< true if auth handshake is complete
 

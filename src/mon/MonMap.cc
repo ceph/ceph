@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "common/dout.h"
 #include "common/Clock.h"
+#include "mon/health_check.h"
 
 using std::list;
 using std::map;
@@ -37,13 +38,18 @@ using ceph::Formatter;
 
 void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
-  uint8_t v = 4;
+  uint8_t v = 5;
+  uint8_t min_v = 1;
+  if (!crush_loc.empty()) {
+    min_v = 5;
+  }
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 2;
   }
-  ENCODE_START(v, 1, bl);
+  ENCODE_START(v, min_v, bl);
   encode(name, bl);
   if (v < 3) {
+    ceph_assert(min_v == 1);
     auto a = public_addrs.legacy_addr();
     if (a != entity_addr_t()) {
       encode(a, bl, features);
@@ -59,12 +65,13 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   }
   encode(priority, bl);
   encode(weight, bl);
+  encode(crush_loc, bl);
   ENCODE_FINISH(bl);
 }
 
 void mon_info_t::decode(ceph::buffer::list::const_iterator& p)
 {
-  DECODE_START(4, p);
+  DECODE_START(5, p);
   decode(name, p);
   decode(public_addrs, p);
   if (struct_v >= 2) {
@@ -72,6 +79,9 @@ void mon_info_t::decode(ceph::buffer::list::const_iterator& p)
   }
   if (struct_v >= 4) {
     decode(weight, p);
+  }
+  if (struct_v >= 5) {
+    decode(crush_loc, p);
   }
   DECODE_FINISH(p);
 }
@@ -81,7 +91,8 @@ void mon_info_t::print(ostream& out) const
   out << "mon." << name
       << " addrs " << public_addrs
       << " priority " << priority
-      << " weight " << weight;
+      << " weight " << weight
+      << " crush location " << crush_loc;
 }
 
 namespace {
@@ -186,7 +197,8 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(7, 6, blist);
+  uint8_t new_compat_v = 0;
+  ENCODE_START(9, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -196,13 +208,23 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(mon_info, blist, con_features);
   encode(ranks, blist);
   encode(min_mon_release, blist);
-  ENCODE_FINISH(blist);
+  encode(removed_ranks, blist);
+  uint8_t t = strategy;
+  encode(t, blist);
+  encode(disallowed_leaders, blist);
+  encode(stretch_mode_enabled, blist);
+  encode(tiebreaker_mon, blist);
+  encode(stretch_marked_down_mons, blist);
+  if (stretch_mode_enabled) {
+    new_compat_v = 9;
+  }
+  ENCODE_FINISH_NEW_COMPAT(blist, new_compat_v);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(7, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(9, 3, 3, p);
   ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -243,6 +265,22 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     decode(min_mon_release, p);
   } else {
     min_mon_release = infer_ceph_release_from_mon_features(persistent_features);
+  }
+  if (struct_v >= 8) {
+    decode(removed_ranks, p);
+    uint8_t t;
+    decode(t, p);
+    strategy = static_cast<election_strategy>(t);
+    decode(disallowed_leaders, p);
+  }
+  if (struct_v >= 9) {
+    decode(stretch_mode_enabled, p);
+    decode(tiebreaker_mon, p);
+    decode(stretch_marked_down_mons, p);
+  } else {
+    stretch_mode_enabled = false;
+    tiebreaker_mon = "";
+    stretch_marked_down_mons.clear();
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -330,6 +368,7 @@ void MonMap::print(ostream& out) const
   out << "created " << created << "\n";
   out << "min_mon_release " << to_integer<unsigned>(min_mon_release)
       << " (" << min_mon_release << ")\n";
+  out << "election_strategy: " << strategy << "\n";
   unsigned i = 0;
   for (auto p = ranks.begin(); p != ranks.end(); ++p) {
     out << i++ << ": " << get_addrs(*p) << " mon." << *p << "\n";
@@ -344,6 +383,8 @@ void MonMap::dump(Formatter *f) const
   created.gmtime(f->dump_stream("created"));
   f->dump_unsigned("min_mon_release", to_integer<unsigned>(min_mon_release));
   f->dump_string("min_mon_release_name", to_string(min_mon_release));
+  f->dump_int ("election_strategy", strategy);
+  f->dump_stream("disallowed_leaders") << disallowed_leaders;
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
@@ -649,6 +690,28 @@ int MonMap::init_with_config_file(const ConfigProxy& conf,
   return 0;
 }
 
+void MonMap::check_health(health_check_map_t *checks) const
+{
+  if (stretch_mode_enabled) {
+    list<string> detail;
+    for (auto& p : mon_info) {
+      if (p.second.crush_loc.empty()) {
+	ostringstream ss;
+	ss << "mon " << p.first << " has no location set while in stretch mode";
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " monitor(s) have no location set while in stretch mode"
+	 << "; this may cause issues with failover, OSD connections, netsplit handling, etc";
+      auto& d = checks->add("MON_LOCATION_NOT_SET", HEALTH_WARN,
+			    ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
+}
+
 #ifdef WITH_SEASTAR
 
 using namespace seastar;
@@ -867,6 +930,7 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
     errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;
   }
+  strategy = static_cast<election_strategy>(conf.get_val<uint64_t>("mon_election_default_strategy"));
   created = ceph_clock_now();
   last_changed = created;
   calc_legacy_ranks();

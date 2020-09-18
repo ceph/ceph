@@ -1535,6 +1535,10 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
   f->dump_int("crush_rule", get_crush_rule());
+  f->dump_int("peering_crush_bucket_count", peering_crush_bucket_count);
+  f->dump_int("peering_crush_bucket_target", peering_crush_bucket_target);
+  f->dump_int("peering_crush_bucket_barrier", peering_crush_bucket_barrier);
+  f->dump_int("peering_crush_bucket_mandatory_member", peering_crush_mandatory_member);
   f->dump_int("object_hash", get_object_hash());
   f->dump_string("pg_autoscale_mode",
 		 get_pg_autoscale_mode_name(pg_autoscale_mode));
@@ -1925,7 +1929,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 29;
+  uint8_t v = 30;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
@@ -1938,6 +1942,8 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     v = 26;
   } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 27;
+  } else if (!is_stretch_pool()) {
+    v = 29;
   }
 
   ENCODE_START(v, 5, bl);
@@ -2028,12 +2034,18 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (v >= 29) {
     encode(last_pg_merge_meta, bl);
   }
+  if (v >= 30) {
+    encode(peering_crush_bucket_count, bl);
+    encode(peering_crush_bucket_target, bl);
+    encode(peering_crush_bucket_barrier, bl);
+    encode(peering_crush_mandatory_member, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(29, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(30, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2208,9 +2220,44 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     last_force_op_resend = last_force_op_resend_prenautilus;
     pg_autoscale_mode = pg_autoscale_mode_t::WARN;    // default to warn on upgrade
   }
+  if (struct_v >= 30) {
+    decode(peering_crush_bucket_count, bl);
+    decode(peering_crush_bucket_target, bl);
+    decode(peering_crush_bucket_barrier, bl);
+    decode(peering_crush_mandatory_member, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
+}
+
+bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
+				     std::ostream * out) const
+{
+  const uint32_t barrier_id = peering_crush_bucket_barrier;
+  const uint32_t barrier_count = peering_crush_bucket_count;
+  set<int> ancestors;
+  const shared_ptr<CrushWrapper>& crush = osdmap.crush;
+  for (int osdid : want) {
+    int ancestor = crush->get_parent_of_type(osdid, barrier_id,
+					     crush_rule);
+    ancestors.insert(ancestor);
+  }
+  if (ancestors.size() < barrier_count) {
+    if (out) {
+      *out << __func__ << ": not enough crush buckets with OSDs in want set "
+	   << want;
+    }
+    return false;
+  } else if (peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+	     !ancestors.count(peering_crush_mandatory_member)) {
+    if (out) {
+      *out << __func__ << ": missing mandatory crush bucket member "
+	   << peering_crush_mandatory_member;
+    }
+    return false;
+  }
+  return true;
 }
 
 void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
@@ -3927,6 +3974,14 @@ bool PastIntervals::is_new_interval(
   bool new_sort_bitwise,
   bool old_recovery_deletes,
   bool new_recovery_deletes,
+  uint32_t old_crush_count,
+  uint32_t new_crush_count,
+  uint32_t old_crush_target,
+  uint32_t new_crush_target,
+  uint32_t old_crush_barrier,
+  uint32_t new_crush_barrier,
+  int32_t old_crush_member,
+  int32_t new_crush_member,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -3946,7 +4001,11 @@ bool PastIntervals::is_new_interval(
     // merge target
     pgid.is_merge_target(old_pg_num, new_pg_num) ||
     old_sort_bitwise != new_sort_bitwise ||
-    old_recovery_deletes != new_recovery_deletes;
+    old_recovery_deletes != new_recovery_deletes ||
+    old_crush_count != new_crush_count ||
+    old_crush_target != new_crush_target ||
+    old_crush_barrier != new_crush_barrier ||
+    old_crush_member != new_crush_member;
 }
 
 bool PastIntervals::is_new_interval(
@@ -3991,6 +4050,10 @@ bool PastIntervals::is_new_interval(
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
 		    osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
+		    plast->peering_crush_bucket_count, pi->peering_crush_bucket_count,
+		    plast->peering_crush_bucket_target, pi->peering_crush_bucket_target,
+		    plast->peering_crush_bucket_barrier, pi->peering_crush_bucket_barrier,
+		    plast->peering_crush_mandatory_member, pi->peering_crush_mandatory_member,
 		    pgid);
 }
 
@@ -4093,6 +4156,8 @@ bool PastIntervals::check_new_interval(
     if (num_acting &&
 	i.primary != -1 &&
 	num_acting >= old_pg_pool.min_size &&
+	(!old_pg_pool.is_stretch_pool() ||
+	 old_pg_pool.stretch_set_can_peer(old_acting, *lastmap, out)) &&
         could_have_gone_active(old_acting_shards)) {
       if (out)
 	*out << __func__ << " " << i
@@ -4143,7 +4208,6 @@ bool PastIntervals::check_new_interval(
     return false;
   }
 }
-
 
 // true if the given map affects the prior set
 bool PastIntervals::PriorSet::affected_by_map(

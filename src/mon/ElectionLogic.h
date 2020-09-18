@@ -18,6 +18,7 @@
 
 #include <map>
 #include "include/types.h"
+#include "ConnectionTracker.h"
 
 class ElectionOwner {
 public:
@@ -65,8 +66,9 @@ public:
    * override a current one).
    *
    * @param e The election epoch of our proposal.
+   * @param bl A bufferlist containing data the logic wishes to share
    */
-  virtual void propose_to_peers(epoch_t e) = 0;
+  virtual void propose_to_peers(epoch_t e, bufferlist& bl) = 0;
   /**
    * The election has failed and we aren't sure what the state of the
    * quorum is, so reset the entire system as if from scratch.
@@ -82,8 +84,18 @@ public:
   /**
    * Ask the ElectionOwner for the size of the Paxos set. This includes
    * those monitors which may not be in the current quorum!
+   * The value returned by this function can change between elections,
+   * but not during them. (In practical terms, it can be updated
+   * by making a paxos commit, but not by injecting values while
+   * an election is ongoing.)
    */
   virtual unsigned paxos_size() const = 0;
+  /**
+   * Retrieve a set of ranks which are not allowed to become the leader.
+   * Like paxos_size(), This set can change between elections, but not
+   * during them.
+   */
+  virtual const set<int>& get_disallowed_leaders() const = 0;
   /**
    * Tell the ElectionOwner we have started a new election.
    *
@@ -127,6 +139,8 @@ public:
 
 class ElectionLogic {
   ElectionOwner *elector;
+  ConnectionTracker *peer_tracker;
+  
   CephContext *cct;
   /**
    * Latest epoch we've seen.
@@ -136,10 +150,36 @@ class ElectionLogic {
    */
   epoch_t epoch = 0;
   /**
+   * The last rank which won an election we participated in
+   */
+  int last_election_winner = -1;
+  /**
+   * Only used in the connectivity handler.
+   * The rank we voted for in the last election we voted in.
+   */
+  int last_voted_for = -1;
+  double ignore_propose_margin = 0.0001;
+  /**
+   * Only used in the connectivity handler.
+   * Points at a stable copy of the peer_tracker we use to keep scores
+   * throughout an election period.
+   */
+  std::unique_ptr<ConnectionTracker> stable_peer_tracker;
+  std::unique_ptr<ConnectionTracker> leader_peer_tracker;
+  /**
    * Indicates who we have acked
    */
   int leader_acked;
+  
 public:
+  enum election_strategy {
+			  // Keep in sync with MonMap.h!
+    CLASSIC = 1, // the original rank-based one
+    DISALLOW = 2, // disallow a set from being leader
+    CONNECTIVITY = 3 // includes DISALLOW, extends to prefer stronger connections
+  };
+  election_strategy strategy;
+    
   /**
    * Indicates if we are participating in the quorum.
    *
@@ -167,10 +207,25 @@ public:
    */
   std::set<int> acked_me;
 
-  ElectionLogic(ElectionOwner *e, CephContext *c) : elector(e), cct(c),
-						    leader_acked(-1),
-						    participating(true),
-						    electing_me(false) {}
+  ElectionLogic(ElectionOwner *e, election_strategy es, ConnectionTracker *t,
+		double ipm,
+		CephContext *c) : elector(e), peer_tracker(t), cct(c),
+				  last_election_winner(-1), last_voted_for(-1),
+				  ignore_propose_margin(ipm),
+				  stable_peer_tracker(),
+				  leader_peer_tracker(),
+				  leader_acked(-1),
+				  strategy(es),
+				  participating(true),
+				  electing_me(false) {}
+  /**
+   * Set the election strategy to use. If this is not consistent across the
+   * electing cluster, you're going to have a bad time.
+   * Defaults to CLASSIC.
+   */
+  void set_election_strategy(election_strategy es) {
+    strategy = es;
+  }
   /**
    * If there are no other peers in this Paxos group, ElectionOwner
    * can simply declare victory and we will make it so.
@@ -214,22 +269,23 @@ public:
    *  @li Ignore it because it's nothing more than an old proposal
    *  @li Start new elections if we verify that it was sent by a monitor from
    *	  outside the quorum; given its old state, it's fair to assume it just
-   *	  started, so we should start new elections so it may rejoin
+   *	  started, so we should start new elections so it may rejoin. (Some
+   *      handlers may choose to ignore even these, if they think it's flapping.)
    *
-   * If we did not ignore the received message, then we know that this message
-   * was sent by some other node proposing itself to become the Leader. So, we
-   * will take one of the following actions:
-   *
-   *  @li Ignore it because we already acked another node with higher rank
-   *  @li Ignore it and start a new election because we outrank it
-   *  @li Defer to it because it outranks us and the node we previously
-   *	  acked, if any
+   * We pass the propose off to a propose_*_handler function based
+   * on the election strategy we're using.
+   * Only the Connectivity strategy cares about the ConnectionTracker; it should
+   * be NULL if other strategies are in use. Otherwise, it will take ownership
+   * of the underlying data and delete it as needed.
    *
    * @pre   Message epoch is from the current or a newer epoch
    * @param mepoch The epoch of the proposal
    * @param from The rank proposing itself as leader
+   * @param ct Any incoming ConnectionTracker data sent with the message.
+   *  Callers are responsible for deleting this -- we will copy it if we want
+   *  to keep the data.
    */
-  void receive_propose(int from, epoch_t mepoch);
+  void receive_propose(int from, epoch_t mepoch, const ConnectionTracker *ct);
   /**
    * Handle a message from some other participant Acking us as the Leader.
    *
@@ -281,8 +337,8 @@ public:
    * @returns Our current epoch number
    */
   epoch_t get_epoch() const { return epoch; }
-  int get_acked_leader() { return leader_acked; }
-  
+  int get_election_winner() { return last_election_winner; }
+
 private:
   /**
    * Initiate the ElectionLogic class.
@@ -306,6 +362,42 @@ private:
    * @param e Epoch to which we will update our epoch
    */
   void bump_epoch(epoch_t e);
+  /**
+   * If the incoming proposal is newer, bump our own epoch; if
+   * it comes from an out-of-quorum peer, trigger a new eleciton.
+   * @returns true if you should drop this proposal, false otherwise.
+   */
+  bool propose_classic_prefix(int from, epoch_t mepoch);
+  /**
+   * Handle a proposal from another rank using the classic strategy.
+   * We will take one of the following actions:
+   *
+   *  @li Ignore it because we already acked another node with higher rank
+   *  @li Ignore it and start a new election because we outrank it
+   *  @li Defer to it because it outranks us and the node we previously
+   *	  acked, if any
+   */
+  void propose_classic_handler(int from, epoch_t mepoch);
+  /**
+   * Handle a proposal from another rank using our disallow strategy.
+   * This is the same as the classic strategy except we also disallow
+   * certain ranks from becoming the leader.
+   */
+  void propose_disallow_handler(int from, epoch_t mepoch);
+  /**
+   * Handle a proposal from another rank using the connectivity strategy.
+   * We will choose to defer or not based on the ordered criteria:
+   *
+   * @li Whether the other monitor (or ourself) is on the disallow list
+   * @li Whether the other monitor or ourself has the most connectivity to peers
+   * @li Whether the other monitor or ourself has the lower rank
+   */
+  void propose_connectivity_handler(int from, epoch_t mepoch, const ConnectionTracker *ct);
+  /**
+   * Helper function for connectivity handler. Combines the disallowed list
+   * with ConnectionTracker scores.
+   */
+  double connectivity_election_score(int rank);
   /**
    * Defer the current election to some other monitor.
    *
@@ -344,6 +436,24 @@ private:
    * @post  We invoked message_victory() on the ElectionOwner
    */
   void declare_victory();
+  /**
+   * This is just a helper function to validate that the victory claim we
+   * get from another rank makes any sense.
+   */
+  bool victory_makes_sense(int from);
+  /**
+   * Reset some data members which we only care about while we are in an election
+   * or need to be set consistently during stable states.
+   */
+  void clear_live_election_state();
+  void reset_stable_tracker();
+  /**
+   * Only for the connectivity handler, Bump the epoch
+   * when we get a message from a newer one and clear
+   * out leader and stable tracker
+   * data so that we can switch our allegiance.
+   */
+  void connectivity_bump_epoch_in_election(epoch_t mepoch);
 };
 
 #endif

@@ -14,6 +14,7 @@
 
 #include "MonmapMonitor.h"
 #include "Monitor.h"
+#include "OSDMonitor.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonJoin.h"
 
@@ -119,6 +120,8 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
     mon->store->write_meta("min_mon_release",
 			   stringify(ceph_release()));
   }
+
+  mon->notify_new_monmap();
 }
 
 void MonmapMonitor::create_pending()
@@ -145,6 +148,11 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_map.epoch == 1) {
     mon->prepare_new_fingerprint(t);
   }
+
+  //health
+  health_check_map_t next;
+  pending_map.check_health(&next);
+  encode_health(next, t);
 }
 
 class C_ApplyFeatures : public Context {
@@ -563,6 +571,23 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
+    vector<string> locationvec;
+    map<string, string> loc;
+    cmd_getval(cmdmap, "location", locationvec);
+    CrushWrapper::parse_loc_map(locationvec, &loc);
+
+    dout(10) << "mon add setting location for " << name << " to " << loc << dendl;
+
+    // TODO: validate location in crush map
+    if (monmap.stretch_mode_enabled && !loc.size()) {
+      ss << "We are in stretch mode and new monitors must have a location, but "
+	 << "could not parse your input location to anything real; " << locationvec
+	 << " turned into an empty map!";
+      err = -EINVAL;
+      goto reply;
+    }
+    // TODO: validate location against any existing stretch config
+
     entity_addrvec_t addrs;
     if (monmap.persistent_features.contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
@@ -628,6 +653,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     } while (false);
 
+    if (pending_map.stretch_mode_enabled) {
+      
+    }
+    
     /* Given there's no delay between proposals on the MonmapMonitor (see
      * MonmapMonitor::should_propose()), there is no point in checking for
      * a mismatch between name and addr on pending_map.
@@ -637,6 +666,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      */
 
     pending_map.add(name, addrs);
+    pending_map.mon_info[name].crush_loc = loc;
     pending_map.last_changed = ceph_clock_now();
     ss << "adding mon." << name << " at " << addrs;
     propose = true;
@@ -853,6 +883,214 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       }
     }
     err = 0;
+  } else if (prefix == "mon set election_strategy") {
+    if (!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support changing election strategies; please upgrade first!";
+      goto reply;
+    }
+    string strat;
+    MonMap::election_strategy strategy;
+    if (!cmd_getval(cmdmap, "strategy", strat)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (strat == "classic") {
+      strategy = MonMap::CLASSIC;
+    } else if (strat == "disallow") {
+      strategy = MonMap::DISALLOW;
+    } else if (strat == "connectivity") {
+      strategy = MonMap::CONNECTIVITY;
+    } else {
+      err = -EINVAL;
+      goto reply;
+    }
+    err = 0;
+    pending_map.strategy = strategy;
+    propose = true;
+  } else if (prefix == "mon add disallowed_leader") {
+    if (!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support changing election strategies; please upgrade first!";
+      goto reply;
+    }
+    string name;
+    if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (pending_map.strategy != MonMap::DISALLOW &&
+	pending_map.strategy != MonMap::CONNECTIVITY) {
+      ss << "You cannot disallow monitors in your current election mode";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (pending_map.disallowed_leaders.count(name)) {
+      ss << "mon." << name << " is already disallowed";
+      err = 0;
+      goto reply;
+    }
+    if (pending_map.disallowed_leaders.size() == pending_map.size() - 1) {
+      ss << "mon." << name << " is the only remaining allowed leader!";
+      err = -EINVAL;
+      goto reply;
+    }
+    pending_map.disallowed_leaders.insert(name);
+    err = 0;
+    propose = true;
+  } else if (prefix == "mon rm disallowed_leader") {
+    if (!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support changing election strategies; please upgrade first!";
+      goto reply;
+    }
+    string name;
+    if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (pending_map.strategy != MonMap::DISALLOW &&
+	pending_map.strategy != MonMap::CONNECTIVITY) {
+      ss << "You cannot disallow monitors in your current election mode";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (!pending_map.disallowed_leaders.count(name)) {
+      ss << "mon." << name << " is already allowed";
+      err = 0;
+      goto reply;
+    }
+    pending_map.disallowed_leaders.erase(name);
+    err = 0;
+    propose = true;
+  } else if (prefix == "mon set_location") {
+    string name;
+    if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+
+    if (!mon->osdmon()->is_readable()) {
+      mon->osdmon()->wait_for_readable(op, new Monitor::C_RetryMessage(mon, op));
+    }
+    CrushWrapper crush;
+    mon->osdmon()->_get_pending_crush(crush);
+    vector<string> argvec;
+    map<string, string> loc;
+    cmd_getval(cmdmap, "args", argvec);
+    CrushWrapper::parse_loc_map(argvec, &loc);
+
+    dout(10) << "mon set_location for " << name << " to " << loc << dendl;
+
+    // TODO: validate location in crush map
+    if (!loc.size()) {
+      ss << "We could not parse your input location to anything real; " << argvec
+	 << " turned into an empty map!";
+      err = -EINVAL;
+      goto reply;
+    }
+    // TODO: validate location against any existing stretch config
+    pending_map.mon_info[name].crush_loc = loc;
+    err = 0;
+    propose = true;
+  } else if (prefix == "mon enable_stretch_mode") {
+    if (!mon->osdmon()->is_writeable()) {
+      dout(1) << __func__
+	      << ":  waiting for osdmon writeable for stretch mode" << dendl;
+      mon->osdmon()->wait_for_writeable(op, new Monitor::C_RetryMessage(mon, op));
+      return false;
+    }
+    {
+      if (monmap.stretch_mode_enabled) {
+	ss << "stretch mode is already engaged";
+	err = -EINVAL;
+	goto reply;
+      }
+      if (pending_map.stretch_mode_enabled) {
+	ss << "stretch mode currently committing";
+	err = 0;
+	goto reply;
+      }
+      string tiebreaker_mon;
+      if (!cmd_getval(cmdmap, "tiebreaker_mon", tiebreaker_mon)) {
+	ss << "must specify a tiebreaker monitor";
+	err = -EINVAL;
+	goto reply;
+      }
+      string new_crush_rule;
+      if (!cmd_getval(cmdmap, "new_crush_rule", new_crush_rule)) {
+	ss << "must specify a new crush rule that spreads out copies over multiple sites";
+	err = -EINVAL;
+	goto reply;
+      }
+      string dividing_bucket;
+      if (!cmd_getval(cmdmap, "dividing_bucket", dividing_bucket)) {
+	ss << "must specify a dividing bucket";
+	err = -EINVAL;
+	goto reply;
+      }
+      //okay, initial arguments make sense, check pools and cluster state
+      err = mon->osdmon()->check_cluster_features(CEPH_FEATUREMASK_STRETCH_MODE, ss);
+      if (err)
+	goto reply;
+      struct Plugger {
+	Paxos *p;
+	Plugger(Paxos *p) : p(p) { p->plug(); }
+	~Plugger() { p->unplug(); }
+      } plugger(paxos);
+
+      set<pg_pool_t*> pools;
+      bool okay = false;
+      int errcode = 0;
+
+      mon->osdmon()->try_enable_stretch_mode_pools(ss, &okay, &errcode,
+						   &pools, new_crush_rule);
+      if (!okay) {
+	err = errcode;
+	goto reply;
+      }
+      try_enable_stretch_mode(ss, &okay, &errcode, false,
+			      tiebreaker_mon, dividing_bucket);
+      if (!okay) {
+	err = errcode;
+	goto reply;
+      }
+      mon->osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, false,
+					     dividing_bucket, 2, pools, new_crush_rule);
+      if (!okay) {
+	err = errcode;
+	goto reply;
+      }
+      // everything looks good, actually commit the changes!
+      try_enable_stretch_mode(ss, &okay, &errcode, true,
+			      tiebreaker_mon, dividing_bucket);
+      mon->osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, true,
+					     dividing_bucket,
+					     2, // right now we only support 2 sites
+					     pools, new_crush_rule);
+      ceph_assert(okay == true);
+    }
+    request_proposal(mon->osdmon());
+    err = 0;
+    propose = true;
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
@@ -863,6 +1101,97 @@ reply:
   mon->reply_command(op, err, rs, get_last_committed());
   // we are returning to the user; do not propose.
   return propose;
+}
+
+void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
+					    int *errcode, bool commit,
+					    const string& tiebreaker_mon,
+					    const string& dividing_bucket)
+{
+  dout(20) << __func__ << dendl;
+  *okay = false;
+  if (pending_map.strategy != MonMap::CONNECTIVITY) {
+    ss << "Monitors must use the connectivity strategy to enable stretch mode";
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
+  if (!pending_map.contains(tiebreaker_mon)) {
+    ss << "mon " << tiebreaker_mon << "does not seem to exist";
+    *errcode = -ENOENT;
+    ceph_assert(!commit);
+    return;
+  }
+  map<string,string> buckets;
+  for (const auto&mii : mon->monmap->mon_info) {
+    const auto& mi = mii.second;
+    const auto& bi = mi.crush_loc.find(dividing_bucket);
+    if (bi == mi.crush_loc.end()) {
+      ss << "Could not find location entry for " << dividing_bucket
+	 << " on monitor " << mi.name;
+      *errcode = -EINVAL;
+      ceph_assert(!commit);
+      return;
+    }
+    buckets[mii.first] = bi->second;
+  }
+  string bucket1, bucket2, tiebreaker_bucket;
+  for (auto& i : buckets) {
+    if (i.first == tiebreaker_mon) {
+      tiebreaker_bucket = i.second;
+      continue;
+    }
+    if (bucket1.empty()) {
+      bucket1 = i.second;
+    }
+    if (bucket1 != i.second &&
+	bucket2.empty()) {
+      bucket2 = i.second;
+    }
+    if (bucket1 != i.second &&
+	bucket2 != i.second) {
+      ss << "There are too many monitor buckets for stretch mode, found "
+	 << bucket1 << "," << bucket2 << "," << i.second;
+      *errcode = -EINVAL;
+      ceph_assert(!commit);
+      return;
+    }
+  }
+  if (bucket1.empty() || bucket2.empty()) {
+    ss << "There are not enough monitor buckets for stretch mode;"
+       << " must have at least 2 plus the tiebreaker but only found "
+       << (bucket1.empty() ? bucket1 : bucket2);
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
+  if (tiebreaker_bucket == bucket1 ||
+      tiebreaker_bucket == bucket2) {
+    ss << "The named tiebreaker monitor " << tiebreaker_mon
+       << " is in the same CRUSH bucket " << tiebreaker_bucket
+       << " as other monitors";
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
+  pending_map.disallowed_leaders.insert(tiebreaker_mon);
+  pending_map.tiebreaker_mon = tiebreaker_mon;
+  pending_map.stretch_mode_enabled = true;
+  *okay = true;
+}
+
+void MonmapMonitor::trigger_degraded_stretch_mode(const set<string>& dead_mons)
+{
+  dout(20) << __func__ << dendl;
+  pending_map.stretch_marked_down_mons.insert(dead_mons.begin(), dead_mons.end());
+  propose_pending();
+}
+
+void MonmapMonitor::trigger_healthy_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  pending_map.stretch_marked_down_mons.clear();
+  propose_pending();
 }
 
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
@@ -894,11 +1223,16 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   auto join = op->get_req<MMonJoin>();
   dout(0) << "adding/updating " << join->name
 	  << " at " << join->addrs << " to monitor cluster" << dendl;
+  map<string,string> existing_loc;
+  if (pending_map.contains(join->addrs)) {
+    string name = pending_map.get_name(join->addrs);
+    existing_loc = pending_map.mon_info[name].crush_loc;
+    pending_map.remove(name);
+  }
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
-  if (pending_map.contains(join->addrs))
-    pending_map.remove(pending_map.get_name(join->addrs));
   pending_map.add(join->name, join->addrs);
+  pending_map.mon_info[join->name].crush_loc = existing_loc;
   pending_map.last_changed = ceph_clock_now();
   return true;
 }
