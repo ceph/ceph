@@ -3,7 +3,7 @@ import fnmatch
 import re
 from collections import namedtuple, OrderedDict
 from functools import wraps
-from typing import Optional, Dict, Any, List, Union, Callable, Iterator
+from typing import Optional, Dict, Any, List, Union, Callable, Iterable
 
 import yaml
 
@@ -188,10 +188,11 @@ class PlacementSpec(object):
             self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
                           for x in hosts if x]
 
+    # deprecated
     def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
         return self.filter_matching_hostspecs(_get_hosts_func(as_hostspec=True))
 
-    def filter_matching_hostspecs(self, hostspecs: Iterator[HostSpec]) -> List[str]:
+    def filter_matching_hostspecs(self, hostspecs: Iterable[HostSpec]) -> List[str]:
         if self.hosts:
             all_hosts = [hs.hostname for hs in hostspecs]
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
@@ -205,7 +206,7 @@ class PlacementSpec(object):
             # get_host_selection_size
             return []
 
-    def get_host_selection_size(self, hostspecs: Iterator[HostSpec]):
+    def get_host_selection_size(self, hostspecs: Iterable[HostSpec]):
         if self.count:
             return self.count
         return len(self.filter_matching_hostspecs(hostspecs))
