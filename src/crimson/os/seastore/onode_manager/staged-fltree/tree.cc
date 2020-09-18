@@ -5,7 +5,7 @@
 
 #include "node.h"
 #include "node_extent_manager.h"
-#include "stages/key_layout.h" // full_key_t<KeyT::HOBJ>
+#include "stages/key_layout.h"
 #include "super.h"
 
 namespace crimson::os::seastore::onode {
@@ -39,9 +39,8 @@ bool Cursor::is_end() const {
   }
 }
 
-const ghobject_t& Cursor::get_ghobj() {
-  // TODO
-  assert(false && "not implemented");
+ghobject_t Cursor::get_ghobj() const {
+  return p_cursor->get_key_view().to_ghobj();
 }
 
 const onode_t* Cursor::value() const {

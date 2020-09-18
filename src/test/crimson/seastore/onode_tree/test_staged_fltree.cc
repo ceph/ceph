@@ -212,8 +212,9 @@ class Onodes {
   }
 
   static void validate_cursor(
-      const Btree::Cursor& cursor, const onode_t& onode) {
+      const Btree::Cursor& cursor, const ghobject_t& key, const onode_t& onode) {
     assert(!cursor.is_end());
+    assert(cursor.get_ghobj() == key);
     assert(cursor.value());
     assert(cursor.value() != &onode);
     assert(*cursor.value() == onode);
@@ -277,7 +278,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
       assert(success == true);
       insert_history.emplace_back(key, &value, cursor);
-      Onodes::validate_cursor(cursor, value);
+      Onodes::validate_cursor(cursor, key, value);
       auto cursor_ = tree.lower_bound(t, key).unsafe_get0();
       assert(cursor_.value() == cursor.value());
       return cursor.value();
@@ -303,7 +304,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       auto [cursor1_dup, ret1_dup] = tree.insert(
           t, key1, onode1_dup).unsafe_get0();
       assert(ret1_dup == false);
-      Onodes::validate_cursor(cursor1_dup, onode1);
+      Onodes::validate_cursor(cursor1_dup, key1, onode1);
     }
 
     // insert key2, onode2 to key1's left at STAGE_LEFT
@@ -376,8 +377,8 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       {make_ghobj(4, 4, 4, "ns3", "oid3", 2, 2), &onodes.pick()},
       {make_ghobj(4, 4, 4, "ns4", "oid4", 2, 2), &onodes.pick()},
       {make_ghobj(4, 4, 4, "ns4", "oid4", 4, 4), &onodes.pick()}};
-    auto& smallest_value = *kvs[0].second;
-    auto& largest_value = *kvs[kvs.size() - 1].second;
+    auto [smallest_key, smallest_value] = kvs[0];
+    auto [largest_key, largest_value] = kvs[kvs.size() - 1];
     std::random_shuffle(kvs.begin(), kvs.end());
     std::for_each(kvs.begin(), kvs.end(), [&f_validate_insert_new] (auto& kv) {
       f_validate_insert_new(kv.first, *kv.second);
@@ -388,16 +389,16 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     for (auto& [k, v, c] : insert_history) {
       // validate values in tree keep intact
       auto cursor = tree.lower_bound(t, k).unsafe_get0();
-      Onodes::validate_cursor(cursor, *v);
+      Onodes::validate_cursor(cursor, k, *v);
       // validate values in cursors keep intact
-      Onodes::validate_cursor(c, *v);
+      Onodes::validate_cursor(c, k, *v);
     }
     Onodes::validate_cursor(
-        tree.lower_bound(t, key_s).unsafe_get0(), smallest_value);
+        tree.lower_bound(t, key_s).unsafe_get0(), smallest_key, *smallest_value);
     Onodes::validate_cursor(
-        tree.begin(t).unsafe_get0(), smallest_value);
+        tree.begin(t).unsafe_get0(), smallest_key, *smallest_value);
     Onodes::validate_cursor(
-        tree.last(t).unsafe_get0(), largest_value);
+        tree.last(t).unsafe_get0(), largest_key, *largest_value);
 
     std::ostringstream oss;
     tree.dump(t, oss);
@@ -447,7 +448,7 @@ TEST_F(b_dummy_tree_test_t, 4_split_leaf_node)
       auto& value = onodes.create(120);
       auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
       assert(success == true);
-      Onodes::validate_cursor(cursor, value);
+      Onodes::validate_cursor(cursor, key, value);
       insert_history.emplace_back(key, &value, cursor);
     }
     assert(tree.height(t).unsafe_get0() == 1);
@@ -466,7 +467,7 @@ TEST_F(b_dummy_tree_test_t, 4_split_leaf_node)
       logger().info("insert {}:", key_hobj_t(key));
       auto [cursor, success] = tree_clone.insert(t_clone, key, value).unsafe_get0();
       assert(success == true);
-      Onodes::validate_cursor(cursor, value);
+      Onodes::validate_cursor(cursor, key, value);
 
       std::ostringstream oss;
       tree_clone.dump(t_clone, oss);
@@ -475,10 +476,10 @@ TEST_F(b_dummy_tree_test_t, 4_split_leaf_node)
 
       for (auto& [k, v, c] : insert_history) {
         auto result = tree_clone.lower_bound(t_clone, k).unsafe_get0();
-        Onodes::validate_cursor(result, *v);
+        Onodes::validate_cursor(result, k, *v);
       }
       auto result = tree_clone.lower_bound(t_clone, key).unsafe_get0();
-      Onodes::validate_cursor(result, value);
+      Onodes::validate_cursor(result, key, value);
     };
 
     auto& onode = onodes.create(1280);
