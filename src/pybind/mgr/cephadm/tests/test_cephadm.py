@@ -282,7 +282,9 @@ class TestCephadm(object):
                 cephadm_module._check_daemons()
 
                 _run_cephadm.assert_called_with('test', 'mon.test', 'deploy', [
-                                                '--name', 'mon.test', '--config-json', '-', '--reconfig'], stdin='{"config": "\\n\\n[mon]\\nk=v\\n", "keyring": ""}')
+                                                '--name', 'mon.test', '--reconfig', '--config-json', '-'],
+                                                stdin='{"config": "\\n\\n[mon]\\nk=v\\n", "keyring": ""}',
+                                                image='')
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
