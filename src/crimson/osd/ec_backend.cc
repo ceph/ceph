@@ -1,8 +1,3 @@
-#define BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
-#if !defined(BOOST_MPL_LIMIT_LIST_SIZE)
-#   define BOOST_MPL_LIMIT_LIST_SIZE 30
-#endif
-
 #include "ec_backend.h"
 
 #include "crimson/osd/shard_services.h"
