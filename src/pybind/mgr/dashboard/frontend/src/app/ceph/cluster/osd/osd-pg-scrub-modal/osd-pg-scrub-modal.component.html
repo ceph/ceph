@@ -5,7 +5,8 @@
   <ng-container class="modal-content">
     <form #formDir="ngForm"
           [formGroup]="osdPgScrubForm"
-          novalidate>
+          novalidate
+          cdFormScope="osd">
       <div class="modal-body osd-modal">
         <!-- Basic -->
         <cd-config-option [optionNames]="basicOptions"
