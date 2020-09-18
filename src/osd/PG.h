@@ -628,7 +628,6 @@ private:
 protected:
   OSDriver osdriver;
   SnapMapper snap_mapper;
-  bool eio_errors_to_process = false;
 
   virtual PGBackend *get_pgbackend() = 0;
   virtual const PGBackend* get_pgbackend() const = 0;
