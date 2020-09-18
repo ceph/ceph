@@ -106,7 +106,7 @@ class KernelDevice : public BlockDevice {
   void debug_aio_unlink(aio_t& aio);
 
   void _detect_vdo();
-  int choose_fd(bool buffered, int write_hint) const;
+  int choose_fd(FAMode buffered, int write_hint = WRITE_LIFE_NOT_SET) const;
 
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);

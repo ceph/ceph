@@ -64,6 +64,15 @@
 #define  WRITE_LIFE_MAX  	1
 #endif
 
+enum struct FAMode {            // to be used in the buffered parameter
+  DIRECT = false,
+  BUFFERED = true
+};
+std::ostream& operator<<(std::ostream& os, const FAMode buffered);
+inline FAMode buffermode(bool buffered) {
+	return buffered ? FAMode::BUFFERED : FAMode::DIRECT;
+}
+
 
 /// track in-flight io
 struct IOContext {

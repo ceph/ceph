@@ -82,6 +82,21 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   }
 }
 
+int KernelDevice::choose_fd(FAMode buffered, int write_hint) const
+{
+  assert(write_hint >= WRITE_LIFE_NOT_SET && write_hint < WRITE_LIFE_MAX);
+#if defined(F_SET_FILE_RW_HINT)
+  if (!enable_wrt)
+    write_hint = WRITE_LIFE_NOT_SET;
+#else
+  // Without WRITE_LIFE capabilities, only one file is used.
+  // And rocksdb sets this value also to > 0, so we need to catch this here
+  write_hint = WRITE_LIFE_NOT_SET;
+#endif
+  return buffered == FAMode::BUFFERED ? fd_buffereds[write_hint] 
+				      : fd_directs[write_hint];
+}
+
 int KernelDevice::_lock()
 {
   dout(10) << __func__ << " " << fd_directs[WRITE_LIFE_NOT_SET] << dendl;
@@ -830,7 +845,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
   auto o = off;
   size_t idx = 0;
   do {
-    auto r = ::pwritev(choose_fd(buffered, write_hint),
+    auto r = ::pwritev(choose_fd(buffermode(buffered), write_hint),
       &iov[idx], iov.size() - idx, o);
 
     if (r < 0) {
