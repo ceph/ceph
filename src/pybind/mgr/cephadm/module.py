@@ -3,6 +3,7 @@ import errno
 import logging
 import shlex
 from collections import defaultdict
+from configparser import ConfigParser
 from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory
@@ -48,7 +49,8 @@ from .schedule import HostAssignment, HostPlacementSpec
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
-from .utils import forall_hosts, CephadmNoImage, cephadmNoImage, is_repo_digest
+from .utils import forall_hosts, CephadmNoImage, cephadmNoImage, \
+    str_to_datetime, datetime_to_str, is_repo_digest
 
 try:
     import remoto
@@ -84,7 +86,6 @@ Host *
   ConnectTimeout=30
 """
 
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
@@ -1028,6 +1029,53 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     self.event.set()
         return 0, '%s (%s) ok' % (host, addr), err
 
+    @orchestrator._cli_write_command(
+        prefix='cephadm set-extra-ceph-conf',
+        desc="Text that is appended to all daemon's ceph.conf.\n"
+             "Mainly a workaround, till `config generate-minimal-conf` generates\n"
+             "a complete ceph.conf.\n\n"
+             "Warning: this is a dangerous operation.")
+    def _set_extra_ceph_conf(self, inbuf=None) -> HandleCommandResult:
+        if inbuf:
+            # sanity check.
+            cp = ConfigParser()
+            cp.read_string(inbuf, source='<infile>')
+
+        self.set_store("extra_ceph_conf", json.dumps({
+            'conf': inbuf,
+            'last_modified': datetime_to_str(datetime.datetime.utcnow())
+        }))
+        self.log.info('Set extra_ceph_conf')
+        self._kick_serve_loop()
+        return HandleCommandResult()
+
+    @orchestrator._cli_read_command(
+        'cephadm get-extra-ceph-conf',
+        desc='Get extra ceph conf that is appended')
+    def _get_extra_ceph_conf(self) -> HandleCommandResult:
+        return HandleCommandResult(stdout=self.extra_ceph_conf().conf)
+
+    class ExtraCephConf(NamedTuple):
+        conf: str
+        last_modified: Optional[datetime.datetime]
+
+    def extra_ceph_conf(self) -> 'CephadmOrchestrator.ExtraCephConf':
+        data = self.get_store('extra_ceph_conf')
+        if not data:
+            return CephadmOrchestrator.ExtraCephConf('', None)
+        try:
+            j = json.loads(data)
+        except ValueError:
+            self.log.exception('unable to laod extra_ceph_conf')
+            return CephadmOrchestrator.ExtraCephConf('', None)
+        return CephadmOrchestrator.ExtraCephConf(j['conf'], str_to_datetime(j['last_modified']))
+
+    def extra_ceph_conf_is_newer(self, dt: datetime.datetime) -> bool:
+        conf = self.extra_ceph_conf()
+        if not conf.last_modified:
+            return False
+        return conf.last_modified > dt
+
     def _get_connection(self, host: str):
         """
         Setup a connection for running commands on remote host.
@@ -1458,7 +1506,7 @@ To check that the host is reachable:
             for k in ['created', 'started', 'last_configured', 'last_deployed']:
                 v = d.get(k, None)
                 if v:
-                    setattr(sd, k, datetime.datetime.strptime(d[k], DATEFMT))
+                    setattr(sd, k, str_to_datetime(d[k]))
             sd.daemon_type = d['name'].split('.')[0]
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
             sd.hostname = host
@@ -1521,9 +1569,7 @@ To check that the host is reachable:
         return None
 
     def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
-        ret, config, err = self.check_mon_command({
-            "prefix": "config generate-minimal-conf",
-        })
+        config = self.get_minimal_ceph_conf()
 
         try:
             with self._remote_connection(host) as tpl:
@@ -1545,6 +1591,15 @@ To check that the host is reachable:
         except OrchestratorError as e:
             return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
+
+    def get_minimal_ceph_conf(self) -> str:
+        _, config, _ = self.check_mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+        extra = self.extra_ceph_conf().conf
+        if extra:
+            config += '\n\n' + extra.strip() + '\n'
+        return config
 
     def _invalidate_daemons_and_kick_serve(self, filter_host=None):
         if filter_host:
@@ -2300,6 +2355,10 @@ To check that the host is reachable:
                     self.last_monmap > last_config and \
                 dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
+                action = 'reconfig'
+            elif self.extra_ceph_conf_is_newer(last_config) and \
+                    dd.daemon_type in CEPH_TYPES:
+                self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
                 action = 'reconfig'
             if action:
                 if self.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
