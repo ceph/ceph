@@ -1910,9 +1910,9 @@ CDentry *CDir::_load_dentry(
       }
     }
   } else {
-    std::ostringstream oss;
-    oss << "Invalid tag char '" << type << "' pos " << pos;
-    throw buffer::malformed_input(oss.str());
+    CachedStackStringStream css;
+    *css << "Invalid tag char '" << type << "' pos " << pos;
+    throw buffer::malformed_input(css->str());
   }
 
   return dn;

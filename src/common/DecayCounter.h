@@ -17,6 +17,7 @@
 
 #include "include/buffer.h"
 #include "common/Formatter.h"
+#include "common/StackStringStream.h"
 #include "common/ceph_time.h"
 
 #include <cmath>
@@ -125,11 +126,11 @@ inline void decode(DecayCounter &c, ceph::buffer::list::const_iterator &p) {
 }
 
 inline std::ostream& operator<<(std::ostream& out, const DecayCounter& d) {
-  std::ostringstream oss;
-  oss.precision(2);
+  CachedStackStringStream css;
+  css->precision(2);
   double val = d.get();
-  oss << "[C " << std::scientific << val << "]";
-  return out << oss.str();
+  *css << "[C " << std::scientific << val << "]";
+  return out << css->strv();
 }
 
 #endif

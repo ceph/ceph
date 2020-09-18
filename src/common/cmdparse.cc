@@ -289,7 +289,7 @@ void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
  * false, ss is valid */
 
 bool
-cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, stringstream &ss)
+cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
 {
   json_spirit::mValue v;
 

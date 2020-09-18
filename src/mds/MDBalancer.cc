@@ -1400,7 +1400,7 @@ int MDBalancer::dump_loads(Formatter *f) const
   f->open_object_section("mds_load");
   {
 
-    auto dump_mds_load = [f](mds_load_t& load) {
+    auto dump_mds_load = [f](const mds_load_t& load) {
       f->dump_float("request_rate", load.req_rate);
       f->dump_float("cache_hit_rate", load.cache_hit_rate);
       f->dump_float("queue_length", load.queue_len);
@@ -1415,34 +1415,36 @@ int MDBalancer::dump_loads(Formatter *f) const
       f->close_section();
     };
 
-    for (auto p : mds_load) {
-      stringstream name;
-      name << "mds." << p.first;
-      f->open_object_section(name.str().c_str());
-      dump_mds_load(p.second);
+    for (const auto& [rank, load] : mds_load) {
+      CachedStackStringStream css;
+      *css << "mds." << rank;
+      f->open_object_section(css->strv());
+      dump_mds_load(load);
       f->close_section();
     }
   }
   f->close_section(); // mds_load
 
   f->open_object_section("mds_meta_load");
-  for (auto p : mds_meta_load) {
-    stringstream name;
-    name << "mds." << p.first;
-    f->dump_float(name.str().c_str(), p.second);
+  for (auto& [rank, mload] : mds_meta_load) {
+    CachedStackStringStream css;
+    *css << "mds." << rank;
+    f->dump_float(css->strv(), mload);
   }
   f->close_section(); // mds_meta_load
 
   f->open_object_section("mds_import_map");
-  for (auto p : mds_import_map) {
-    stringstream name1;
-    name1 << "mds." << p.first;
-    f->open_array_section(name1.str().c_str());
-    for (auto q : p.second) {
+  for (auto& [rank, imports] : mds_import_map) {
+    {
+      CachedStackStringStream css;
+      *css << "mds." << rank;
+      f->open_array_section(css->strv());
+    }
+    for (auto& [rank_from, mload] : imports) {
       f->open_object_section("from");
-      stringstream name2;
-      name2 << "mds." << q.first;
-      f->dump_float(name2.str().c_str(), q.second);
+      CachedStackStringStream css;
+      *css << "mds." << rank_from;
+      f->dump_float(css->strv(), mload);
       f->close_section();
     }
     f->close_section(); // mds.? array

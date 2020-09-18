@@ -467,9 +467,9 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     // Put the verbose JSON output into the MDS log for later inspection
     JSONFormatter f;
     result.dump(&f);
-    std::ostringstream out;
-    f.flush(out);
-    derr << __func__ << " scrub error on inode " << *in << ": " << out.str()
+    CachedStackStringStream css;
+    f.flush(*css);
+    derr << __func__ << " scrub error on inode " << *in << ": " << css->strv()
          << dendl;
   } else {
     dout(10) << __func__ << " scrub passed on inode " << *in << dendl;
@@ -583,33 +583,33 @@ void ScrubStack::scrub_status(Formatter *f) {
 
   f->open_object_section("result");
 
-  std::stringstream ss;
+  CachedStackStringStream css;
   bool have_more = false;
 
   if (state == STATE_IDLE) {
-    ss << "no active scrubs running";
+    *css << "no active scrubs running";
   } else if (state == STATE_RUNNING) {
     if (clear_inode_stack) {
-      ss << "ABORTING";
+      *css << "ABORTING";
     } else {
-      ss << "scrub active";
+      *css << "scrub active";
     }
-    ss << " (" << stack_size << " inodes in the stack)";
+    *css << " (" << stack_size << " inodes in the stack)";
   } else {
     if (state == STATE_PAUSING || state == STATE_PAUSED) {
       have_more = true;
-      ss << state;
+      *css << state;
     }
     if (clear_inode_stack) {
       if (have_more) {
-        ss << "+";
+        *css << "+";
       }
-      ss << "ABORTING";
+      *css << "ABORTING";
     }
 
-    ss << " (" << stack_size << " inodes in the stack)";
+    *css << " (" << stack_size << " inodes in the stack)";
   }
-  f->dump_string("status", ss.str());
+  f->dump_string("status", css->strv());
 
   f->open_object_section("scrubs");
   for (auto &inode : scrub_origins) {
@@ -621,26 +621,26 @@ void ScrubStack::scrub_status(Formatter *f) {
 
     f->dump_string("path", scrub_inode_path(inode));
 
-    std::stringstream optss;
+    CachedStackStringStream optcss;
     if (header->get_recursive()) {
-      optss << "recursive";
+      *optcss << "recursive";
       have_more = true;
     }
     if (header->get_repair()) {
       if (have_more) {
-        optss << ",";
+        *optcss << ",";
       }
-      optss << "repair";
+      *optcss << "repair";
       have_more = true;
     }
     if (header->get_force()) {
       if (have_more) {
-        optss << ",";
+        *optcss << ",";
       }
-      optss << "force";
+      *optcss << "force";
     }
 
-    f->dump_string("options", optss.str());
+    f->dump_string("options", optcss->strv());
     f->close_section(); // scrub id
   }
   f->close_section(); // scrubs

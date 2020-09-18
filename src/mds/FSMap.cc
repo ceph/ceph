@@ -29,9 +29,7 @@
 using std::list;
 using std::pair;
 using std::ostream;
-using std::ostringstream;
 using std::string;
-using std::stringstream;
 
 using ceph::bufferlist;
 using ceph::Formatter;
@@ -483,9 +481,9 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   if (standby_count_wanted) {
-    std::ostringstream oss;
-    oss << "insufficient standby daemons available: have " << standby_daemons.size() << "; want " << standby_count_wanted << " more";
-    summary.push_back(make_pair(HEALTH_WARN, oss.str()));
+    CachedStackStringStream css;
+    *css << "insufficient standby daemons available: have " << standby_daemons.size() << "; want " << standby_count_wanted << " more";
+    summary.push_back(make_pair(HEALTH_WARN, css->str()));
   }
 }
 
@@ -524,10 +522,10 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
       health_check_t& fscheck = checks->get_or_add(
         "FS_WITH_FAILED_MDS", HEALTH_WARN,
         "%num% filesystem%plurals% %hasorhave% a failed mds daemon", 1);
-      ostringstream ss;
-      ss << "fs " << fs->mds_map.fs_name << " has " << stuck_failed.size()
+      CachedStackStringStream css;
+      *css << "fs " << fs->mds_map.fs_name << " has " << stuck_failed.size()
          << " failed mds" << (stuck_failed.size() > 1 ? "s" : "");
-      fscheck.detail.push_back(ss.str()); }
+      fscheck.detail.push_back(css->str()); }
 
     checks->merge(fschecks);
     standby_count_wanted = std::max(
@@ -537,12 +535,12 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
 
   // MDS_INSUFFICIENT_STANDBY
   if (standby_count_wanted) {
-    std::ostringstream oss, dss;
-    oss << "insufficient standby MDS daemons available";
-    auto& d = checks->get_or_add("MDS_INSUFFICIENT_STANDBY", HEALTH_WARN, oss.str(), 1);
-    dss << "have " << standby_daemons.size() << "; want " << standby_count_wanted
-	<< " more";
-    d.detail.push_back(dss.str());
+    CachedStackStringStream css1, css2;
+    *css1 << "insufficient standby MDS daemons available";
+    auto& d = checks->get_or_add("MDS_INSUFFICIENT_STANDBY", HEALTH_WARN, css1->str(), 1);
+    *css2 << "have " << standby_daemons.size() << "; want " << standby_count_wanted
+	  << " more";
+    d.detail.push_back(css2->str());
   }
 }
 
