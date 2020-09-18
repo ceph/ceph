@@ -132,7 +132,6 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 static int log_index_operation(cls_method_context_t hctx,
                                const cls_rgw_bi_log_related_op& op,
                                const real_time& timestamp,
-                               const rgw_bucket_entry_ver& ver,
                                uint64_t index_ver,
                                string& max_marker, /* in out */
                                const string *owner,
@@ -146,7 +145,6 @@ static int log_index_operation(cls_method_context_t hctx,
   entry.instance = op.key.instance;
   entry.timestamp = timestamp;
   entry.op = op.op;
-  entry.ver = ver;
   entry.state = CLS_RGW_STATE_COMPLETE;
   entry.index_ver = index_ver;
   entry.tag = op.op_tag;
@@ -176,7 +174,7 @@ static int log_index_operation(cls_method_context_t hctx,
                                RGWModifyOp op,
                                const string& tag,
                                real_time& timestamp,
-                               rgw_bucket_entry_ver& ver, uint64_t index_ver,
+                               uint64_t index_ver,
                                string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name,
                                const rgw_zone_set *zones_trace)
 {
@@ -188,7 +186,6 @@ static int log_index_operation(cls_method_context_t hctx,
   entry.instance = obj_key.instance;
   entry.timestamp = timestamp;
   entry.op = op;
-  entry.ver = ver;
   entry.state = CLS_RGW_STATE_COMPLETE;
   entry.index_ver = index_ver;
   entry.tag = tag;
@@ -1133,7 +1130,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     rc = log_index_operation(hctx,
                              op,
                              entry.meta.mtime,
-                             entry.ver,
                              header.ver,
                              header.max_marker,
                              nullptr,
@@ -1164,7 +1160,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     if (op.log_op && !header.syncstopped) {
       ++header.ver; // increment index version, or we'll overwrite keys previously written
       rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.op_tag, remove_entry.meta.mtime,
-                               remove_entry.ver, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
+                               header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
       if (rc < 0)
         continue;
     }
@@ -1775,9 +1771,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   rgw_bucket_dir_entry& entry = obj.get_dir_entry();
 
-  rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
-
   string *powner = NULL;
   string *powner_display_name = NULL;
 
@@ -1787,7 +1780,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   ret = log_index_operation(hctx, op.key, op.op, op.op_tag,
-                            entry.meta.mtime, ver,
+                            entry.meta.mtime,
                             header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
                             powner, powner_display_name, &op.zones_trace);
   if (ret < 0)
@@ -1947,13 +1940,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return 0;
   }
 
-  rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
-
   real_time mtime = obj.mtime(); /* mtime has no real meaning in
                                   * instance removal context */
   ret = log_index_operation(hctx, op.key, op.op, op.op_tag,
-                            mtime, ver,
+                            mtime,
                             header.ver, header.max_marker,
                             op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
   if (ret < 0)
@@ -2219,7 +2209,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 	  return ret;
         if (log_op && cur_disk.exists && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_disk.key, CLS_RGW_OP_DEL, cur_disk.tag, cur_disk.meta.mtime,
-                                    cur_disk.ver, header.ver, header.max_marker, 0, NULL, NULL, NULL);
+                                    header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
             CLS_LOG(0, "ERROR: %s(): failed to log operation ret=%d", __func__, ret);
             return ret;
@@ -2243,7 +2233,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 	  return ret;
         if (log_op && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_change.key, CLS_RGW_OP_ADD, cur_change.tag, cur_change.meta.mtime,
-                                    cur_change.ver, header.ver, header.max_marker, 0, NULL, NULL, NULL);
+                                    header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
             CLS_LOG(0, "ERROR: %s(): failed to log operation ret=%d", __func__, ret);
             return ret;

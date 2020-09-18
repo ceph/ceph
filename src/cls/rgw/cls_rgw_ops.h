@@ -114,7 +114,6 @@ struct cls_rgw_bi_log_related_op {
         this->key.name,
         this->key.instance,
         timestamp,
-        ver,
         this->op,
         CLS_RGW_STATE_COMPLETE,
         index_ver,

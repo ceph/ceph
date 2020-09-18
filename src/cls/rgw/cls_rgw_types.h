@@ -618,7 +618,6 @@ struct rgw_bi_log_entry {
   std::string object;
   std::string instance;
   ceph::real_time timestamp;
-  rgw_bucket_entry_ver ver;
   RGWModifyOp op;
   RGWPendingState state;
   uint64_t index_ver;
@@ -632,7 +631,6 @@ struct rgw_bi_log_entry {
                    const std::string& object,
                    const std::string& instance,
                    const ceph::real_time& timestamp,
-                   const rgw_bucket_entry_ver& ver,
                    const RGWModifyOp op,
                    const RGWPendingState& state,
                    const uint64_t index_ver,
@@ -645,7 +643,6 @@ struct rgw_bi_log_entry {
       object(object),
       instance(instance),
       timestamp(timestamp),
-      ver(ver),
       op(op),
       state(state),
       index_ver(index_ver),
@@ -668,7 +665,6 @@ struct rgw_bi_log_entry {
     encode(id, bl);
     encode(object, bl);
     encode(timestamp, bl);
-    encode(ver, bl);
     encode(tag, bl);
     uint8_t c = (uint8_t)op;
     encode(c, bl);
@@ -687,7 +683,6 @@ struct rgw_bi_log_entry {
     decode(id, bl);
     decode(object, bl);
     decode(timestamp, bl);
-    decode(ver, bl);
     decode(tag, bl);
     uint8_t c;
     decode(c, bl);

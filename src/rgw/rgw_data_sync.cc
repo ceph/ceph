@@ -4092,15 +4092,11 @@ int RGWBucketShardIncrementalSyncCR::operate()
           if (!marker_tracker.start(cur_id, 0, entry->timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << cur_id << ". Duplicate entry?"));
           } else {
-            std::optional<uint64_t> versioned_epoch;
             rgw_bucket_entry_owner owner(entry->owner, entry->owner_display_name);
-            if (entry->ver.pool < 0) {
-              versioned_epoch = entry->ver.epoch;
-            }
             tn->log(20, SSTR("entry->timestamp=" << entry->timestamp));
             using SyncCR = RGWBucketSyncSingleEntryCR<string, rgw_obj_key>;
             spawn(new SyncCR(sc, sync_pipe, key,
-                             entry->is_versioned(), versioned_epoch,
+                             entry->is_versioned(), std::nullopt,
                              entry->timestamp, owner, entry->op, entry->state,
                              cur_id, &marker_tracker, entry->zones_trace, tn),
                   false);
