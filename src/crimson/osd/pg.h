@@ -499,6 +499,9 @@ public:
     std::pair<crimson::osd::ObjectContextRef, bool>>
   get_or_load_head_obc(hobject_t oid);
 
+  load_obc_ertr::future<crimson::osd::ObjectContextRef>
+  load_head_obc(ObjectContextRef obc);
+
   load_obc_ertr::future<ObjectContextRef> get_locked_obc(
     Operation *op,
     const hobject_t &oid,
