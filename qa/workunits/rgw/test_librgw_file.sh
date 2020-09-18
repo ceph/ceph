@@ -1,0 +1,10 @@
+#!/bin/sh -e
+
+ceph_test_librgw_file
+ceph_test_librgw_file_aw
+ceph_test_librgw_file_cd
+ceph_test_librgw_file_gp
+ceph_test_librgw_file_marker
+ceph_test_librgw_file_nfsns
+
+exit 0
