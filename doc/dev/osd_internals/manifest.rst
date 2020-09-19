@@ -284,7 +284,7 @@ This seems complicated, but it gets us two valuable properties:
    incrementing a ref
 2) We don't need to load the object_manifest_t for every clone
    to determine how to handle removing one -- just the ones
-   immediately preceeding and suceeding it.
+   immediately preceding and succeeding it.
 
 All clone operations will need to consider adjacent chunk_maps
 when adding or removing references.

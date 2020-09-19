@@ -106,7 +106,7 @@ Deploy the rook operator::
 
 .. note:: Nautilus release or latest Ceph image should be used.
 
-Before proceding check if the pods are running::
+Before proceeding check if the pods are running::
 
         kubectl -n rook-ceph get pod
 

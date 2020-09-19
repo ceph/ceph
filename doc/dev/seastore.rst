@@ -60,7 +60,7 @@ mixed on the underlying media.
 Persistent Memory
 -----------------
 
-As the intial sequential design above matures, we'll introduce
+As the initial sequential design above matures, we'll introduce
 persistent memory support for metadata and caching structures.
 
 Design

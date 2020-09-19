@@ -609,7 +609,7 @@ and ``=name`` specifies the name of the new monitor.
 Placement by labels
 -------------------
 
-Daemons can be explictly placed on hosts that match a specific label::
+Daemons can be explicitly placed on hosts that match a specific label::
 
     orch apply prometheus --placement="label:mylabel"
 

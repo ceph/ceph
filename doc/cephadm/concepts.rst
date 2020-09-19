@@ -106,7 +106,7 @@ This instructs cephadm to deploy three daemons on hosts labeled with
 ``myfs`` across the cluster.
 
 Then, in case there are less than three daemons deployed on the candidate 
-hosts, cephadm will then then randomly choose hosts for deploying new daemons.
+hosts, cephadm will then randomly choose hosts for deploying new daemons.
 
 In case there are more than three daemons deployed, cephadm will remove 
 existing daemons.

@@ -605,7 +605,7 @@ and adding the following line to the rule::
 
     step set_choose_tries 100
 
-The relevant part of of the ``crush.txt`` file should look something
+The relevant part of the ``crush.txt`` file should look something
 like::
 
      rule erasurepool {
