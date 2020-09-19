@@ -15,7 +15,9 @@ Config File Setup
 Client machines can generally get away with a smaller config file than
 a full-fledged cluster member. To generate a minimal config file, log
 into a host that is already configured as a client or running a cluster
-daemon, and then run::
+daemon, and then run
+
+.. code-block:: bash
 
     ceph config generate-minimal-conf
 
@@ -28,7 +30,9 @@ Keyring Setup
 Most Ceph clusters are run with authentication enabled, and the client will
 need keys in order to communicate with cluster machines. To generate a
 keyring file with credentials for `client.fs`, log into an extant cluster
-member and run::
+member and run
+
+.. code-block:: bash
 
     ceph auth get-or-create client.fs
 
