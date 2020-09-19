@@ -195,7 +195,9 @@ if (WITH_RADOSGW)
     rgw/cls_rgw.cc
     rgw/cls_rgw_ops.cc
     rgw/cls_rgw_types.cc
-    ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+    ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc
+    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_basic_types.cc)
+  add_definitions(-DCLS_RGW_COMPILE_ENV)
   add_library(cls_rgw SHARED ${cls_rgw_srcs})
   target_link_libraries(cls_rgw json_spirit)
   set_target_properties(cls_rgw PROPERTIES
@@ -204,13 +206,6 @@ if (WITH_RADOSGW)
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_rgw DESTINATION ${cls_dir})
-
-  set(cls_rgw_client_srcs
-    rgw/cls_rgw_client.cc
-    rgw/cls_rgw_types.cc
-    rgw/cls_rgw_ops.cc)
-  add_library(cls_rgw_client STATIC ${cls_rgw_client_srcs})
-
 endif (WITH_RADOSGW)
 
 # cls_cephfs

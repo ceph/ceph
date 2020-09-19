@@ -19,6 +19,37 @@ function(gperf_generate input output)
     )
 endfunction()
 
+# build cls_rgw_client as an object library in radosgw compile environment
+set(cls_rgw_client_srcs_internal
+  ${CMAKE_SOURCE_DIR}/src/cls/rgw/cls_rgw_client.cc
+  ${CMAKE_SOURCE_DIR}/src/cls/rgw/cls_rgw_types.cc
+  ${CMAKE_SOURCE_DIR}/src/cls/rgw/cls_rgw_ops.cc
+  # rgw_basic_types.cc intentionally omitted
+  )
+
+add_library(cls_rgw_client_internal OBJECT
+  ${cls_rgw_client_srcs_internal})
+
+add_library(cls_rgw_client STATIC
+  $<TARGET_OBJECTS:cls_rgw_client_internal>
+  rgw_basic_types.cc
+  rgw_obj_manifest.cc
+  rgw_xml.cc
+  )
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(cls_rgw_client PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
+set(test_rgw_a_src ${CMAKE_SOURCE_DIR}/src/test/rgw/test_rgw_common.cc)
+add_library(test_rgw_a STATIC ${test_rgw_a_src})
+target_link_libraries(test_rgw_a)
+
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(test_rgw_a PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+
 set(librgw_common_srcs
   services/svc_finisher.cc
   services/svc_bi_rados.cc
@@ -239,12 +270,17 @@ endif()
 
 target_link_libraries(rgw_a
   PRIVATE
-  librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
+  librados
+  cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client cls_cmpomap_client
-  cls_user_client cls_rgw_gc_client cls_2pc_queue_client ceph-common common_utf8 global
+  cls_user_client cls_rgw_gc_client cls_2pc_queue_client
+  ceph-common
+  common_utf8
+  global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
-  ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
+  ${OPENLDAP_LIBRARIES}
+  ${CRYPTO_LIBS}
   OATH::OATH)
 
 if(WITH_CURL_OPENSSL)
@@ -315,13 +351,19 @@ set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
 install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_executable(radosgwd radosgw.cc)
-target_link_libraries(radosgwd radosgw librados
-  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+target_link_libraries(radosgwd
+  radosgw
+  librados
+  $<TARGET_OBJECTS:cls_rgw_client_internal>
+  cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global
-  ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
+  ${FCGI_LIBRARY}
+  ${LIB_RESOLV}
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
 set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
 install(TARGETS radosgwd DESTINATION bin)
@@ -330,19 +372,28 @@ set(radosgw_admin_srcs
   rgw_admin.cc
   rgw_orphan.cc)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
-target_link_libraries(radosgw-admin ${rgw_libs} librados
+target_link_libraries(radosgw-admin
+  ${rgw_libs}
+  librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
-  global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  global
+  ${FCGI_LIBRARY}
+  ${LIB_RESOLV}
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
   rgw_es_main.cc)
 add_executable(radosgw-es ${radosgw_es_srcs})
-target_link_libraries(radosgw-es ${rgw_libs} librados
-  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+target_link_libraries(radosgw-es
+  ${rgw_libs}
+  librados
+  $<TARGET_OBJECTS:cls_rgw_client_internal>
+  cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
@@ -359,8 +410,10 @@ install(TARGETS radosgw-token DESTINATION bin)
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
-target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
-  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+target_link_libraries(radosgw-object-expirer
+  ${rgw_libs} librados
+  $<TARGET_OBJECTS:cls_rgw_client_internal>
+  cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
@@ -408,12 +461,14 @@ if(WITH_TESTS)
     rgw_jsonparser.cc)
   target_link_libraries(ceph_rgw_jsonparser
     ${rgw_libs}
+    cls_rgw_client
     global)
 
   add_executable(ceph_rgw_multiparser
     rgw_multiparser.cc)
   target_link_libraries(ceph_rgw_multiparser
     ${rgw_libs}
+    cls_rgw_client
     global)
 
   install(TARGETS

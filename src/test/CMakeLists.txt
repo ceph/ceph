@@ -199,6 +199,7 @@ if(${WITH_RADOSGW})
     librados
     ${rgw_libs}
     global
+    cls_rgw_client
     cls_version_client
     cls_log_client
     cls_refcount_client
@@ -225,6 +226,7 @@ if(${WITH_RADOSGW})
     librados
     ${rgw_libs}
     global
+    cls_rgw_client
     cls_version_client
     cls_log_client
     cls_refcount_client
