@@ -614,7 +614,12 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 
       if (blocklisted) {
 	dout(10) << "rejecting blocklisted client " << addr << dendl;
-	send_reject_message("blocklisted");
+	// This goes on the wire and the "blacklisted" substring is
+	// depended upon by the kernel client for detecting whether it
+	// has been blocklisted.  If mounted with recover_session=clean
+	// (since 5.4), it tries to automatically recover itself from
+	// blocklisting.
+	send_reject_message("blocklisted (blacklisted)");
 	session->clear();
 	break;
       }
