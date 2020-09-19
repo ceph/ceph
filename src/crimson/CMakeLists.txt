@@ -12,9 +12,6 @@ set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
-  admin/admin_socket.cc
-  admin/osd_admin.cc
-  admin/pg_commands.cc
   common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
@@ -184,5 +181,6 @@ target_link_libraries(crimson
   PUBLIC
     crimson-common
     crimson::cflags)
+add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)
