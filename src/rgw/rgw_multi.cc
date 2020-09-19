@@ -200,7 +200,28 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 			      next_marker, truncated, assume_unsorted);
 }
 
-int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
+static inline void cleanup_mp_part(
+  rgw::sal::RGWRadosStore* store,
+  RGWBucketInfo& bucket_info,
+  RGWObjManifest& manifest,
+  rgw_obj& meta_obj,
+  cls_rgw_obj_chain& chain,
+  list<rgw_obj_index_key>& remove_objs) {
+  /* clean up an mp part */
+  store->getRados()->update_gc_chain(meta_obj, manifest, &chain);
+  RGWObjManifest::obj_iterator oiter = manifest.obj_begin();
+  if (oiter != manifest.obj_end()) {
+    rgw_obj head;
+    rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
+    RGWSI_Tier_RADOS::raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
+
+    rgw_obj_index_key key;
+    head.key.get_index_key(&key);
+    remove_objs.push_back(key);
+  }
+} /* cleanup_part */
+
+int abort_multipart_upload(rgw::sal::RGWRadosStore* store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
 			   RGWMPObj& mp_obj)
 {
@@ -230,7 +251,6 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
 	 obj_iter != obj_parts.end();
 	 ++obj_iter) {
       RGWUploadPartInfo& obj_part = obj_iter->second;
-      /* XXXX cleanup obj_part.failed_prefixes */
       rgw_obj obj;
       if (obj_part.manifest.empty()) {
         string oid = mp_obj.get_part(obj_iter->second.num);
@@ -240,17 +260,19 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
-        store->getRados()->update_gc_chain(meta_obj, obj_part.manifest, &chain);
-        RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
-        if (oiter != obj_part.manifest.obj_end()) {
-          rgw_obj head;
-          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
-          RGWSI_Tier_RADOS::raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
-
-          rgw_obj_index_key key;
-          head.key.get_index_key(&key);
-          remove_objs.push_back(key);
-        }
+	/* cleanup obj_part.failed_prefixes arising from re-uploads
+	 * of the current part (if any) */
+	for (const string& failed_prefix : obj_part.failed_prefixes)  {
+	  /* cleanup_part relies on manifest obj iterator, so
+	   * clone this one and back-form its prefix */
+	  RGWObjManifest manifest(obj_part.manifest);
+	  manifest.set_prefix(failed_prefix);
+	  cleanup_mp_part(store, bucket_info, manifest, meta_obj, chain,
+			  remove_objs);
+	}
+	/* cleanup the final part */
+	cleanup_mp_part(store, bucket_info, obj_part.manifest, meta_obj,
+			chain, remove_objs);
       }
       parts_accounted_size += obj_part.accounted_size;
     }
