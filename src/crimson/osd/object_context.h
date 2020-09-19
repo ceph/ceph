@@ -112,6 +112,32 @@ private:
   }
 
 public:
+  template<typename Func>
+  auto with_lock(RWState::State type, Func&& func) {
+    switch (type) {
+    case RWState::RWWRITE:
+      return seastar::with_lock(lock.for_write(), std::forward<Func>(func));
+    case RWState::RWREAD:
+      return seastar::with_lock(lock.for_read(), std::forward<Func>(func));
+    case RWState::RWEXCL:
+      return seastar::with_lock(lock.for_excl(), std::forward<Func>(func));
+    default:
+      assert(0 == "noop");
+    }
+  }
+  template<typename Func>
+  auto with_promoted_lock(RWState::State type, Func&& func) {
+    switch (type) {
+    case RWState::RWWRITE:
+      return seastar::with_lock(lock.excl_from_write(), std::forward<Func>(func));
+    case RWState::RWREAD:
+      return seastar::with_lock(lock.excl_from_read(), std::forward<Func>(func));
+    case RWState::RWEXCL:
+      return seastar::with_lock(lock.excl_from_excl(), std::forward<Func>(func));
+     default:
+      assert(0 == "noop");
+    }
+  }
   seastar::future<> get_lock_type(Operation *op, RWState::State type) {
     switch (type) {
     case RWState::RWWRITE:
