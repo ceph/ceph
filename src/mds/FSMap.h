@@ -263,8 +263,6 @@ public:
 	mds_roles.erase(r.first);
       }
     }
-
-    legacy_client_fscid = filesystems.begin()->first;
   }
 
   void set_enable_multiple(const bool v)
