@@ -10,6 +10,8 @@
 #include "rgw_basic_types.h"
 #include "rgw_xml.h"
 #include "common/ceph_json.h"
+#include "cls/user/cls_user_types.h"
+#include "cls/rgw/cls_rgw_types.h"
 
 using std::string;
 using std::stringstream;

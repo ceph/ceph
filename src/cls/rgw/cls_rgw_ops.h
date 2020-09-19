@@ -5,6 +5,7 @@
 #define CEPH_CLS_RGW_OPS_H
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "rgw/rgw_basic_types.h"
 
 struct rgw_cls_tag_timeout_op
 {
