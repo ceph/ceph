@@ -6,6 +6,7 @@
 #include "rgw_user.h"
 
 #include "rgw_bucket.h"
+#include "rgw_quota.h"
 
 #include "services/svc_user.h"
 #include "services/svc_meta.h"
