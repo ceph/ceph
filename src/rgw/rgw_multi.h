@@ -6,8 +6,7 @@
 
 #include <map>
 #include "rgw_xml.h"
-#include "rgw_obj_manifest.h"
-#include "rgw_compression_types.h"
+#include "rgw_common.h"
 
 namespace rgw { namespace sal {
   class RGWRadosStore;
