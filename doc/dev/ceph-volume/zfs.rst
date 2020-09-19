@@ -33,7 +33,7 @@ in the context of zfs tags::
 
 Tags on filesystems are stored as property.
 Tags on a zpool are stored in the comment property as a concatenated list 
-seperated by ``;`` 
+separated by ``;`` 
 
 .. _ceph-volume-zfs-tags:
 
@@ -164,7 +164,7 @@ Example::
 
 ``compression``
 ---------------
-A compression-enabled device can allways be set using the native zfs settings on
+A compression-enabled device can always be set using the native zfs settings on
 a volume or filesystem. This will/can be activated during creation of the volume
 of filesystem. 
 When activated by ``ceph-volume zfs`` this tag will be created.

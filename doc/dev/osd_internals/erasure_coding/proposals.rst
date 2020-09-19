@@ -193,7 +193,7 @@ RADOS Client Acknowledgement Generation Optimization
 ====================================================
 
 Now that the recovery scheme is understood, we can discuss the
-generation of of the RADOS operation acknowledgement (ACK) by the
+generation of the RADOS operation acknowledgement (ACK) by the
 primary ("sufficient" from above). It is NOT required that the primary
 wait for all shards to complete their respective prepare
 operations. Using our example where the RADOS operations writes only

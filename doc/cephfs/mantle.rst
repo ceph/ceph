@@ -89,7 +89,7 @@ Mantle with `vstart.sh`
 
 
    Note that if you look at the last MDS (which could be a, b, or c -- it's
-   random), you will see an an attempt to index a nil value. This is because the
+   random), you will see an attempt to index a nil value. This is because the
    last MDS tries to check the load of its neighbor, which does not exist.
 
 5. Run a simple benchmark. In our case, we use the Docker mdtest image to

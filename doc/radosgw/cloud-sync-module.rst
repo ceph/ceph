@@ -153,7 +153,7 @@ For example: ``target_path = rgwx-${zone}-${sid}/${owner}/${bucket}``
 
 * ``acl_profiles`` (array)
 
-An array of of ``acl_profile``.
+An array of ``acl_profile``.
 
 * ``acl_profile`` (container)
  

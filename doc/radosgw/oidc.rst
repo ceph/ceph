@@ -86,7 +86,7 @@ Example::
 ListOpenIDConnectProviders
 --------------------------
 
-Lists infomation about all IDPs
+Lists information about all IDPs
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~

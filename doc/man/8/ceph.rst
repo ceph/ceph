@@ -1152,7 +1152,7 @@ Usage::
 
         ceph osd pool application rm <pool-name> <app> <key>
 
-Subcommand ``set`` assosciates or updates, if it already exists, a key-value
+Subcommand ``set`` associates or updates, if it already exists, a key-value
 pair with the given application for the given pool.
 
 Usage::

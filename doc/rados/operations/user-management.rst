@@ -652,7 +652,7 @@ and the user followed by the capabilities. For example::
 	sudo ceph-authtool /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx'
 
 To update the user to the Ceph Storage Cluster, you must update the user
-in the keyring to the user entry in the the Ceph Storage Cluster. ::
+in the keyring to the user entry in the Ceph Storage Cluster. ::
 
 	sudo ceph auth import -i /etc/ceph/ceph.keyring
 

@@ -44,7 +44,7 @@ Basic functionalities
     | **S3select** has a definite set of functionalities that should be implemented (if we wish to stay compliant with AWS), currently only a portion of it is implemented.
     
     | The implemented software architecture supports basic arithmetic expressions, logical and compare expressions, including nested function calls and casting operators, that alone enables the user reasonable flexibility. 
-    | review the bellow feature-table_.
+    | review the below feature-table_.
 
 
 Error Handling
