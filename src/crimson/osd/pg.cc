@@ -717,23 +717,24 @@ seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
   });
 }
 
-std::pair<hobject_t, RWState::State> PG::get_oid_and_lock(
-  const MOSDOp &m,
-  const OpInfo &op_info)
+hobject_t PG::get_oid(const MOSDOp &m)
 {
-  auto oid = m.get_snapid() == CEPH_SNAPDIR ?
-    m.get_hobj().get_head() : m.get_hobj();
+  return (m.get_snapid() == CEPH_SNAPDIR ?
+          m.get_hobj().get_head() :
+          m.get_hobj());
+}
 
-  RWState::State lock_type = RWState::RWNONE;
+RWState::State PG::get_lock_type(const OpInfo &op_info)
+{
+
   if (op_info.rwordered() && op_info.may_read()) {
-    lock_type = RWState::RWState::RWEXCL;
+    return RWState::RWEXCL;
   } else if (op_info.rwordered()) {
-    lock_type = RWState::RWState::RWWRITE;
+    return RWState::RWWRITE;
   } else {
     ceph_assert(op_info.may_read());
-    lock_type = RWState::RWState::RWREAD;
+    return RWState::RWREAD;
   }
-  return std::make_pair(oid, lock_type);
 }
 
 std::optional<hobject_t> PG::resolve_oid(
