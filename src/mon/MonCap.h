@@ -195,13 +195,22 @@ struct MonCap {
     return ret;
   }
 
-  bool fs_name_capable(string_view fs_name, __u8 mask) {
-    for (auto& g: grants) {
+  bool fs_name_capable(const EntityName& ename, string_view fs_name,
+		       __u8 mask) {
+    for (auto& g : grants) {
       if (g.is_allow_all()) {
 	return true;
       }
-      if (g.fs_name.empty() || g.fs_name == fs_name) {
-	if (mask & g.allow) {
+
+      if ((g.fs_name.empty() || g.fs_name == fs_name) && (mask & g.allow)) {
+	  return true;
+      }
+
+      g.expand_profile(ename);
+      for (auto& pg : g.profile_grants) {
+	if ((pg.service == "fs" || pg.service == "mds") &&
+	    (pg.fs_name.empty() || pg.fs_name == fs_name) &&
+	    (pg.allow & mask)) {
 	  return true;
 	}
       }
