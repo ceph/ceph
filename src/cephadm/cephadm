@@ -5436,7 +5436,7 @@ class CephadmDaemon():
                 try:
                     data = json.loads(facts.dump())
                 except json.decoder.JSONDecodeError:
-                    errors.append("host-facts received invalid JSON")
+                    errors.append("host-facts provided invalid JSON")
                     logger.warning(errors[-1])
                     data = {}
                 with self.cephadm_cache_lock:
@@ -5479,7 +5479,7 @@ class CephadmDaemon():
                     try:
                         data = json.loads(stdout)
                     except json.decoder.JSONDecodeError:
-                        errors.append("ceph-volume thread received bad json data")
+                        errors.append("ceph-volume thread provided bad json data")
                         logger.warning(errors[-1])
                         data = []
                 else:
@@ -5511,14 +5511,20 @@ class CephadmDaemon():
                 logger.debug("executing list-daemons scrape")
                 errors = []
                 s_time = time.time()
-                ld = list_daemons()
+
+                # list daemons should ideally be invoked with a fsid
+                data = list_daemons()
+                if not isinstance(data, list):
+                    errors.append("list-daemons didn't supply a list?")
+                    logger.warning(errors[-1])
+                    data = []
                 elapsed = time.time() - s_time
                 with self.cephadm_cache_lock:
                     self.cephadm_cache['daemons'] = {
                         "scrape_timestamp": s_time,
                         "scrape_duration_secs": elapsed,
                         "scrape_errors": errors,
-                        "data": ld,
+                        "data": data,
                     }
                 logger.debug(f"completed list-daemons scrape - {elapsed}s")
             
@@ -5588,14 +5594,16 @@ class CephadmDaemon():
             if ctr >= CephadmDaemon.thread_check_interval:
                 ctr = 0
                 for worker in self.workers:
+                    if self.cephadm_cache['health']['tasks'][worker.name] == 'inactive':
+                        continue
                     if not worker.is_alive():
                         logger.warning(f"{worker.name} thread not running")
                         stop_time = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
                         with self.cephadm_cache_lock:
-                            # update health in the cache
+                            # update health status in the cache
                             self.cephadm_cache['health']['tasks'][worker.name] = "inactive"
                             self.cephadm_cache['health']['errors'].append(f"{worker.name} stopped at {stop_time}")
-        
+
             time.sleep(CephadmDaemon.loop_delay)
             ctr += CephadmDaemon.loop_delay
 
