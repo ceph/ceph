@@ -26,6 +26,7 @@
 #include "rgw_acl.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_cors.h"
+#include "rgw_basic_types.h"
 #include "rgw_iam_policy.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"

@@ -12,6 +12,7 @@
 #include "include/compat.h"
 #include "common/ceph_time.h"
 #include "common/ceph_mutex.h"
+#include "rgw/rgw_basic_types.h"
 
 
 // Forward declaration

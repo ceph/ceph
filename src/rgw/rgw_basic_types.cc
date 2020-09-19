@@ -13,6 +13,8 @@
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
+#include "cls/user/cls_user_types.h"
+#include "cls/rgw/cls_rgw_types.h"
 
 using std::ostream;
 using std::string;
