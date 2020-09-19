@@ -15124,13 +15124,18 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
 	  get_osdmap_epoch(),
 	  PeeringState::DoRecovery())));
   } else {
+    // Save prior state
+    bool repairing = state_test(PG_STATE_REPAIR);
     // Set repair in case we are the first read error and we happen to be
     // backfilling or recovering
     state_set(PG_STATE_REPAIR);
     // A prior error must have already cleared clean state and queued recovery
     // or a map change has triggered re-peering.
     // Not inlining the recovery by calling maybe_kick_recovery(soid);
-    dout(15) << __func__<< ": Read error on " << soid << ", but already seen errors" << dendl;
+    dout(15) << __func__<< ": Read error on " << soid
+	     << (repairing ? ", but already seen errors" :
+			     ", recovery already in progress")
+	     << dendl;
   }
 
   return -EAGAIN;
