@@ -387,6 +387,13 @@ struct cls_rgw_obj_key {
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
+inline ostream& operator<<(ostream& out, const cls_rgw_obj_key &o) {
+  if (o.instance.empty()) {
+    return out << o.name;
+  } else {
+    return out << o.name << "[" << o.instance << "]";
+  }
+}
 
 struct rgw_bucket_dir_entry {
   /* a versioned object instance */

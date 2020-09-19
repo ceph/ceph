@@ -93,6 +93,24 @@ void decode_json_obj(rgw_zone_id& zid, JSONObj *obj)
   decode_json_obj(zid.id, obj);
 }
 
+rgw_obj_key::rgw_obj_key(const rgw_obj_index_key& k) {
+  parse_index_key(k.name, &name, &ns);
+  instance = k.instance;
+}
+
+bool rgw_obj_key::set(const rgw_obj_index_key& index_key) {
+  if (!parse_raw_oid(index_key.name, this)) {
+    return false;
+  }
+  instance = index_key.instance;
+  return true;
+}
+
+void rgw_obj_key::get_index_key(rgw_obj_index_key *key) const {
+  key->name = get_index_key_name();
+  key->instance = instance;
+}
+
 namespace rgw {
 namespace auth {
 ostream& operator <<(ostream& m, const Principal& p) {
