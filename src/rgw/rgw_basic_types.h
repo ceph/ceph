@@ -9,6 +9,7 @@
 
 #include "include/types.h"
 #include "common/Formatter.h"
+#include "rgw_compression_types.h" // needed for RGWUploadPartInfo
 
 class JSONObj;
 class cls_user_bucket;
