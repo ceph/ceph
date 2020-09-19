@@ -499,6 +499,74 @@ function TEST_rep_recovery_multi() {
 
     # Make sure all objects happened in one recovery phase
     test "1" = "$(grep "First read error starting recovery for" $dir/osd.${primary}.log | wc -l)" || return 1
+    # See message for all subsequent objects
+    test "$(($testgroup - 1))" = "$(grep ", but already seen errors" $dir/osd.${primary}.log | wc -l)" || return 1
+
+    rm -f ${dir}/ORIGINAL ${dir}/CHECK
+
+    delete_pool $poolname
+}
+
+# Test read errors with backfill already in progress
+function TEST_rep_backfill_in_progress() {
+    local dir=$1
+    local objname=myobject
+    # hopefully this is large enough that backfill is still
+    # going when we start reading the error objects
+    local lastobj=500
+    # The last testgroup number of objects to get read errors
+    local testgroup=10
+
+    export CEPH_ARGS
+    CEPH_ARGS+=' --osd_min_pg_log_entries=5 --osd_max_pg_log_entries=10'
+    setup_osds 4 || return 1
+
+    local poolname=test-pool
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    rados_put $dir $poolname $objname || return 1
+
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local primary=$(get_primary $poolname $objname)
+    local pgid=$(get_pg $poolname $objname)
+
+    dd if=/dev/urandom of=${dir}/ORIGINAL bs=1024 count=4
+    for i in $(seq 1 $lastobj)
+    do
+      rados --pool $poolname put obj${i} $dir/ORIGINAL || return 1
+    done
+
+    # shard 0 is the primary osd not the osd id
+    for o in $(seq $(($lastobj - $testgroup)) $lastobj)
+    do
+      inject_eio rep data $poolname obj${o} $dir 0 || return 1
+    done
+
+    ceph osd pool set $poolname size 4
+
+    for tmp in $(seq 1 100); do
+      state=$(get_state $pgid)
+      echo $state | grep backfilling
+      if [ "$?" = "0" ]; then
+        break
+      fi
+      echo "$state "
+      sleep 1
+    done
+
+    for i in $(seq $(($lastobj - $testgroup)) $lastobj)
+    do
+      rados --pool $poolname get obj${i} $dir/CHECK || return 1
+      diff -q $dir/ORIGINAL $dir/CHECK || return 1
+    done
+
+    wait_for_clean || return 1
+
+    # Make sure all objects happened in one recovery phase
+    test "1" = "$(grep "recovery already in progress" $dir/osd.${primary}.log | wc -l)" || return 1
+    # See message for all subsequent objects
+    test "$(($testgroup - 1))" = "$(grep ", but already seen errors" $dir/osd.${primary}.log | wc -l)" || return 1
 
     rm -f ${dir}/ORIGINAL ${dir}/CHECK
 
