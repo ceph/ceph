@@ -429,6 +429,12 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_STARTUP)
     .add_service("common"),
 
+    Option("mon_host_override", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("monitor(s) to use overriding the MonMap")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
+    .add_service("common"),
+
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")

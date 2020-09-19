@@ -128,6 +128,12 @@
   contain alphanumeric and ``-``, ``_`` and ``.`` characters. Some commands
   or CephX credentials may not work with old FSs with non-conformant names.
 
+* It is now possible to specify the initial monitor to contact for Ceph tools
+  and daemons using the ``mon_host_override`` config option or
+  ``--mon-host-override <ip>`` command-line switch. This generally should only
+  be used for debugging and only affects initial communication with Ceph's
+  monitor cluster.
+
 * `blacklist` has been replaced with `blocklist` throughout.  The following commands have changed:
 
   - ``ceph osd blacklist ...`` are now ``ceph osd blocklist ...``
