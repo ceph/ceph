@@ -13,17 +13,26 @@
  *
  */
 
+/* N.B., this header defines fundamental serialized types.  Do not
+ * introduce changes or include files which can only be compiled in
+ * radosgw or OSD contexts (e.g., rgw_sal.h, rgw_common.h)
+ */
+
 #pragma once
 
-#include "rgw_common.h"
-#include "rgw_compression_types.h"
-#include "rgw_sal.h"
-#include "rgw_zone.h"
+#include "rgw_zone_types.h"
+#include "rgw_bucket_types.h"
+#include "rgw_obj_types.h"
+#include "rgw_placement_types.h"
+
+#include "common/dout.h"
+#include "common/Formatter.h"
 
 class RGWSI_Zone;
 struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWRados;
+
 namespace rgw { namespace sal {
   class RadosStore;
 } };
