@@ -900,8 +900,8 @@ ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
-  // FIXME: bufferptr does not have a mempool
-  map<mempool::bluestore_cache_meta::string, ceph::buffer::ptr> attrs;
+  // mempool to be assigned to buffer::ptr manually
+  std::map<mempool::bluestore_cache_meta::string, ceph::buffer::ptr> attrs;
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
