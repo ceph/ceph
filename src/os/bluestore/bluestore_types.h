@@ -267,6 +267,9 @@ struct bluestore_blob_use_tracker_t {
   void clear() {
     if (num_au != 0) {
       delete[] bytes_per_au;
+      mempool::get_pool(
+        mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
+          adjust_count(-1, -sizeof(uint32_t) * num_au);
     }
     bytes_per_au = 0;
     au_size = 0;
@@ -906,6 +909,7 @@ std::ostream& operator<<(std::ostream& out, const bluestore_blob_t& o);
 
 /// shared blob state
 struct bluestore_shared_blob_t {
+  MEMPOOL_CLASS_HELPERS();
   uint64_t sbid;                       ///> shared blob id
   bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
 
