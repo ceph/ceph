@@ -23,7 +23,11 @@ function clean_up_after_myself() {
 function get_processors() {
     # get_processors() depends on coreutils nproc.
     if test -n "$NPROC" ; then
-        echo $NPROC
+        if test "$NPROC" -eq 0; then
+            nproc
+        else
+            echo $NPROC
+        fi
     else
         if test $(nproc) -ge 2 ; then
             expr $(nproc) / 2
