@@ -54,16 +54,11 @@ function main() {
     fi
     FOR_MAKE_CHECK=1 prepare
     # Init defaults after deps are installed.
-    local cmake_opts=" -DWITH_PYTHON3=3 -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
-    if [ $WITH_SEASTAR ]; then
-        cmake_opts+=" -DWITH_SEASTAR=ON"
-    fi
-    if [ $WITH_ZBD ]; then
-        cmake_opts+=" -DWITH_ZBD=ON"
-    fi
-    configure $cmake_opts $@
+    configure $@
     build tests && echo "make check: successful build on $(git rev-parse HEAD)"
     run
 }
 
-main "$@"
+if [ "$0" = "$BASH_SOURCE" ]; then
+    main "$@"
+fi
