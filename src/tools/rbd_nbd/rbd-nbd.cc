@@ -105,7 +105,7 @@ static void usage()
             << "  --max_part <limit>      Override for module param max_part\n"
             << "  --nbds_max <limit>      Override for module param nbds_max\n"
             << "  --quiesce               Use quiesce callbacks\n"
-            << "  --quiesce_hook <path>   Specify quiesce hook path\n"
+            << "  --quiesce-hook <path>   Specify quiesce hook path\n"
             << "                          (default: " << Config().quiesce_hook << ")\n"
             << "  --read-only             Map read-only\n"
             << "  --timeout <seconds>     Set nbd request timeout\n"
