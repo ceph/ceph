@@ -6,6 +6,7 @@ overrides:
       mgr:
         debug mgr: 20
         debug ms: 1
+        debug client: 20
       client:
         debug client: 20
         debug mgrc: 20
