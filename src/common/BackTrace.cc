@@ -52,10 +52,10 @@ std::string BackTrace::demangle(const char* name)
     // only demangle a C++ mangled name
     if (mangled.compare(0, 2, "_Z") == 0) {
       // let __cxa_demangle do the malloc
-      size_t len = 0;
-      if (char* demangled = abi::__cxa_demangle(mangled.c_str(), nullptr, &len, &status)) {
+      char* demangled = abi::__cxa_demangle(mangled.c_str(), nullptr, nullptr, &status);
+      if (!status) {
         std::string full_name{OPEN};
-        full_name += std::string_view(demangled, len);
+        full_name += demangled;
         full_name += end;
         // buf could be reallocated, so free(demangled) instead
         free(demangled);
