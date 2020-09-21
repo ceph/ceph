@@ -131,7 +131,7 @@ struct ImageDispatch<MockExclusiveLockImageCtx>
     return io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK;
   }
 
-  MOCK_METHOD2(set_require_lock, void(io::Direction, Context*));
+  MOCK_METHOD3(set_require_lock, void(bool, io::Direction, Context*));
   MOCK_METHOD1(unset_require_lock, void(io::Direction));
 
 };
@@ -254,34 +254,28 @@ public:
   }
 
   void expect_set_require_lock(MockImageDispatch &mock_image_dispatch,
-                               io::Direction direction) {
-    EXPECT_CALL(mock_image_dispatch, set_require_lock(direction, _))
-      .WillOnce(WithArg<1>(Invoke([](Context* ctx) { ctx->complete(0); })));
+                               bool init_shutdown, io::Direction direction) {
+    EXPECT_CALL(mock_image_dispatch, set_require_lock(init_shutdown,
+                                                      direction, _))
+      .WillOnce(WithArg<2>(Invoke([](Context* ctx) { ctx->complete(0); })));
   }
 
   void expect_set_require_lock(MockExclusiveLockImageCtx &mock_image_ctx,
-                               MockImageDispatch &mock_image_dispatch) {
+                               MockImageDispatch &mock_image_dispatch,
+                               bool init_shutdown) {
     if (mock_image_ctx.clone_copy_on_read ||
         (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0 ||
         is_rbd_rwl_enabled(mock_image_ctx.cct)) {
-      expect_set_require_lock(mock_image_dispatch, io::DIRECTION_BOTH);
+      expect_set_require_lock(mock_image_dispatch, init_shutdown,
+                              io::DIRECTION_BOTH);
     } else {
-      expect_set_require_lock(mock_image_dispatch, io::DIRECTION_WRITE);
+      expect_set_require_lock(mock_image_dispatch, init_shutdown,
+                              io::DIRECTION_WRITE);
     }
   }
 
   void expect_unset_require_lock(MockImageDispatch &mock_image_dispatch) {
     EXPECT_CALL(mock_image_dispatch, unset_require_lock(io::DIRECTION_BOTH));
-  }
-
-  void expect_block_writes(MockExclusiveLockImageCtx &mock_image_ctx,
-                           MockImageDispatch& mock_image_dispatch) {
-    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
-                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
-  }
-
-  void expect_unblock_writes(MockExclusiveLockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes());
   }
 
   void expect_register_dispatch(MockExclusiveLockImageCtx &mock_image_ctx) {
@@ -431,10 +425,8 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -502,10 +494,8 @@ TEST_F(TestMockExclusiveLock, TryLockAlreadyLocked) {
 
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -537,10 +527,8 @@ TEST_F(TestMockExclusiveLock, TryLockError) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -572,10 +560,8 @@ TEST_F(TestMockExclusiveLock, AcquireLockAlreadyLocked) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -610,10 +596,8 @@ TEST_F(TestMockExclusiveLock, AcquireLockBusy) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -648,10 +632,8 @@ TEST_F(TestMockExclusiveLock, AcquireLockError) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -684,10 +666,8 @@ TEST_F(TestMockExclusiveLock, PostAcquireLockError) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -720,10 +700,8 @@ TEST_F(TestMockExclusiveLock, PreReleaseLockError) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -754,10 +732,8 @@ TEST_F(TestMockExclusiveLock, ReacquireLock) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -811,10 +787,8 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
   MockImageDispatch mock_image_dispatch;
-  expect_block_writes(mock_image_ctx, mock_image_dispatch);
   expect_register_dispatch(mock_image_ctx);
-  expect_set_require_lock(mock_image_ctx, mock_image_dispatch);
-  expect_unblock_writes(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 

@@ -222,6 +222,19 @@ void IOContext::write_snap_context(
   }
 }
 
+bool operator ==(const IOContext& lhs, const IOContext& rhs) {
+  auto l = reinterpret_cast<const IOContextImpl*>(&lhs.impl);
+  auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
+  return (l->oloc == r->oloc &&
+          l->snap_seq == r->snap_seq &&
+          l->snapc.seq == r->snapc.seq &&
+          l->snapc.snaps == r->snapc.snaps);
+}
+
+bool operator !=(const IOContext& lhs, const IOContext& rhs) {
+  return !(lhs == rhs);
+}
+
 Op::Op() {
   static_assert(Op::impl_size >= sizeof(librados::TestObjectOperationImpl*));
   auto& o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);

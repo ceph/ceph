@@ -13,7 +13,6 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 #include <list>
-#include <set>
 
 struct Context;
 
@@ -49,58 +48,65 @@ public:
 
   bool read(
       AioCompletion* aio_comp, Extents &&image_extents,
-      ReadResult &&read_result, int op_flags,
+      ReadResult &&read_result, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
+    return false;
+  }
   bool write(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-      std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override;
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool discard(
       AioCompletion* aio_comp, Extents &&image_extents,
-      uint32_t discard_granularity_bytes,
+      uint32_t discard_granularity_bytes, IOContext io_context,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool write_same(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-      std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override;
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool compare_and_write(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&cmp_bl,
-      bufferlist &&bl, uint64_t *mismatch_offset, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      bufferlist &&bl, uint64_t *mismatch_offset, IOContext io_context,
+      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool flush(
       AioCompletion* aio_comp, FlushSource flush_source,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override;
-
-  void handle_finished(int r, uint64_t tid) override;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
 
 private:
   struct C_BlockedWrites;
 
   typedef std::list<Context*> Contexts;
-  typedef std::set<uint64_t> Tids;
 
   ImageCtxT* m_image_ctx;
 
   mutable ceph::shared_mutex m_lock;
   Contexts m_on_dispatches;
-  Tids m_in_flight_write_tids;
 
   uint32_t m_write_blockers = 0;
   Contexts m_write_blocker_contexts;
   Contexts m_unblocked_write_waiter_contexts;
+  uint64_t m_in_flight_writes = 0;
 
-  bool process_io(bool read_op, uint64_t tid, DispatchResult* dispatch_result,
-                  Context* on_dispatched);
+  void handle_finished(int r, uint64_t tid);
+
+  bool process_io(uint64_t tid, DispatchResult* dispatch_result,
+                  Context** on_finish, Context* on_dispatched);
   void flush_io(Context* on_finish);
 
   void handle_blocked_writes(int r);

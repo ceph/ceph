@@ -17,7 +17,6 @@
 #include "librbd/image/GetMetadataRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/RefreshParentRequest.h"
-#include "librbd/io/ImageDispatchSpec.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <arpa/inet.h>
@@ -103,32 +102,6 @@ RefreshParentRequest<MockRefreshImageCtx>* RefreshParentRequest<MockRefreshImage
 
 } // namespace image
 
-namespace io {
-
-template <>
-struct ImageDispatchSpec<librbd::MockRefreshImageCtx> {
-  static ImageDispatchSpec* s_instance;
-  AioCompletion *aio_comp = nullptr;
-
-  static ImageDispatchSpec* create_flush(
-      librbd::MockRefreshImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
-      AioCompletion *aio_comp, FlushSource flush_source,
-      const ZTracer::Trace &parent_trace) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->aio_comp = aio_comp;
-    return s_instance;
-  }
-
-  MOCK_CONST_METHOD0(send, void());
-
-  ImageDispatchSpec() {
-    s_instance = this;
-  }
-};
-
-ImageDispatchSpec<librbd::MockRefreshImageCtx>* ImageDispatchSpec<librbd::MockRefreshImageCtx>::s_instance = nullptr;
-
-} // namespace io
 namespace util {
 
 inline ImageCtx *get_image_ctx(librbd::MockRefreshImageCtx *image_ctx) {
@@ -169,7 +142,6 @@ public:
   typedef GetMetadataRequest<MockRefreshImageCtx> MockGetMetadataRequest;
   typedef RefreshRequest<MockRefreshImageCtx> MockRefreshRequest;
   typedef RefreshParentRequest<MockRefreshImageCtx> MockRefreshParentRequest;
-  typedef io::ImageDispatchSpec<librbd::MockRefreshImageCtx> MockIoImageDispatchSpec;
   typedef std::map<std::string, bufferlist> Metadata;
 
   void set_v1_migration_header(ImageCtx *ictx) {
@@ -185,8 +157,8 @@ public:
 
   void expect_set_require_lock(MockExclusiveLock &mock_exclusive_lock,
                                librbd::io::Direction direction) {
-    EXPECT_CALL(mock_exclusive_lock, set_require_lock(direction, _))
-      .WillOnce(WithArg<1>(Invoke([](Context* ctx) { ctx->complete(0); })));
+    EXPECT_CALL(mock_exclusive_lock, set_require_lock(true, direction, _))
+      .WillOnce(WithArg<2>(Invoke([](Context* ctx) { ctx->complete(0); })));
   }
 
   void expect_unset_require_lock(MockExclusiveLock &mock_exclusive_lock,
@@ -532,12 +504,15 @@ public:
                   .Times(1);
   }
 
-  void expect_image_flush(MockIoImageDispatchSpec &mock_image_request, int r) {
-    EXPECT_CALL(mock_image_request, send())
-      .WillOnce(Invoke([&mock_image_request, r]() {
-                  mock_image_request.aio_comp->set_request_count(1);
-                  mock_image_request.aio_comp->add_request();
-                  mock_image_request.aio_comp->complete_request(r);
+  void expect_image_flush(MockImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, send(_))
+      .WillOnce(Invoke([r](io::ImageDispatchSpec* spec) {
+                  ASSERT_TRUE(boost::get<io::ImageDispatchSpec::Flush>(
+                    &spec->request) != nullptr);
+                  spec->dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+                  spec->aio_comp->set_request_count(1);
+                  spec->aio_comp->add_request();
+                  spec->aio_comp->complete_request(r);
                 }));
   }
 

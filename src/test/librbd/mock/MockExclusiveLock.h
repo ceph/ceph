@@ -35,7 +35,8 @@ struct MockExclusiveLock {
   MOCK_METHOD0(accept_ops, bool());
   MOCK_METHOD0(get_unlocked_op_error, int());
 
-  MOCK_METHOD2(set_require_lock, void(io::Direction, Context*));
+  MOCK_METHOD3(set_require_lock, void(bool init_shutdown, io::Direction,
+                                      Context*));
   MOCK_METHOD1(unset_require_lock, void(io::Direction));
 
   MOCK_METHOD1(start_op, Context*(int*));

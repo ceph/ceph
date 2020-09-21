@@ -25,45 +25,45 @@ public:
   MOCK_METHOD1(shut_down, void(Context*));
 
   MOCK_METHOD8(execute_read,
-               bool(uint64_t, const Extents&, librados::snap_t,
+               bool(uint64_t, const Extents&, IOContext io_context,
                     ceph::bufferlist*, Extents*, uint64_t*,
                     DispatchResult*, Context*));
   bool read(
-      uint64_t object_no, const Extents& extents, librados::snap_t snap_id,
+      uint64_t object_no, const Extents& extents, IOContext io_context,
       int op_flags, const ZTracer::Trace& parent_trace,
       ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
       int* dispatch_flags, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
-    return execute_read(object_no, extents, snap_id, read_data, extent_map,
+    return execute_read(object_no, extents, io_context, read_data, extent_map,
                         version, dispatch_result, on_dispatched);
   }
 
   MOCK_METHOD9(execute_discard,
-               bool(uint64_t, uint64_t, uint64_t, const ::SnapContext &, int,
+               bool(uint64_t, uint64_t, uint64_t, IOContext, int,
                     int*, uint64_t*, DispatchResult*, Context*));
   bool discard(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      const ::SnapContext &snapc, int discard_flags,
+      IOContext io_context, int discard_flags,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
-    return execute_discard(object_no, object_off, object_len, snapc,
+    return execute_discard(object_no, object_off, object_len, io_context,
                            discard_flags, dispatch_flags, journal_tid,
                            dispatch_result, on_dispatched);
   }
 
   MOCK_METHOD10(execute_write,
                bool(uint64_t, uint64_t, const ceph::bufferlist&,
-                    const ::SnapContext &, int, std::optional<uint64_t>, int*,
+                    IOContext, int, std::optional<uint64_t>, int*,
                     uint64_t*, DispatchResult*, Context *));
   bool write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags, int write_flags,
+      IOContext io_context, int op_flags, int write_flags,
       std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override {
-    return execute_write(object_no, object_off, data, snapc, write_flags,
+    return execute_write(object_no, object_off, data, io_context, write_flags,
                          assert_version, dispatch_flags, journal_tid,
                          dispatch_result, on_dispatched);
   }
@@ -71,17 +71,17 @@ public:
   MOCK_METHOD10(execute_write_same,
                 bool(uint64_t, uint64_t, uint64_t,
                      const LightweightBufferExtents&,
-                     const ceph::bufferlist&, const ::SnapContext &, int*,
+                     const ceph::bufferlist&, IOContext, int*,
                      uint64_t*, DispatchResult*, Context *));
   bool write_same(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags,
+      IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context* *on_finish, Context* on_dispatched) override {
     return execute_write_same(object_no, object_off, object_len, buffer_extents,
-                              data, snapc, dispatch_flags, journal_tid,
+                              data, io_context, dispatch_flags, journal_tid,
                               dispatch_result, on_dispatched);
   }
 
@@ -91,7 +91,7 @@ public:
                     DispatchResult*, Context *));
   bool compare_and_write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
-      ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
+      ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
       int* dispatch_flags, uint64_t* journal_tid,
       DispatchResult* dispatch_result, Context** on_finish,

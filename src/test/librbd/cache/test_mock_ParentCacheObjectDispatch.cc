@@ -287,7 +287,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
 
   std::string temp_oid("12345");
   ceph::bufferlist temp_bl;
-  ::SnapContext *temp_snapc = nullptr;
+  IOContext io_context = mock_image_ctx.get_data_io_context();
   io::DispatchResult* temp_dispatch_result = nullptr;
   io::Extents temp_buffer_extents;
   int* temp_op_flags = nullptr;
@@ -297,17 +297,20 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
   ZTracer::Trace* temp_trace = nullptr;
   io::LightweightBufferExtents buffer_extents;
 
-  ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, *temp_snapc, 0, *temp_trace, temp_op_flags,
-            temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl), *temp_snapc, 0, 0, std::nullopt,
+  ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, io_context, 0,
             *temp_trace, temp_op_flags, temp_journal_tid, temp_dispatch_result,
             temp_on_finish, temp_on_dispatched), false);
+  ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl),
+            io_context, 0, 0, std::nullopt, *temp_trace, temp_op_flags,
+            temp_journal_tid, temp_dispatch_result, temp_on_finish,
+            temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->write_same(0, 0, 0, std::move(buffer_extents),
-            std::move(temp_bl), *temp_snapc, 0, *temp_trace, temp_op_flags,
+            std::move(temp_bl), io_context, 0, *temp_trace, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false );
   ASSERT_EQ(mock_parent_image_cache->compare_and_write(0, 0, std::move(temp_bl), std::move(temp_bl),
-            *temp_snapc, 0, *temp_trace, temp_journal_tid, temp_op_flags, temp_journal_tid,
-            temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
+            io_context, 0, *temp_trace, temp_journal_tid, temp_op_flags,
+            temp_journal_tid, temp_dispatch_result, temp_on_finish,
+            temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->flush(io::FLUSH_SOURCE_USER, *temp_trace, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->invalidate_cache(nullptr), false);
@@ -358,9 +361,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
   ceph::bufferlist read_data;
-  mock_parent_image_cache->read(0, {{0, 4096}}, CEPH_NOSNAP, 0, {}, &read_data,
-                                nullptr, nullptr, nullptr, &dispatch_result,
-                                nullptr, &on_dispatched);
+  mock_parent_image_cache->read(
+    0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, {}, &read_data,
+    nullptr, nullptr, nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
   mock_parent_image_cache->get_cache_client()->close();
@@ -411,9 +414,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read_dne) {
 
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
-  mock_parent_image_cache->read(0, {{0, 4096}}, CEPH_NOSNAP, 0, {}, nullptr,
-                                nullptr, nullptr, nullptr, &dispatch_result,
-                                nullptr, &on_dispatched);
+  mock_parent_image_cache->read(
+    0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, {}, nullptr,
+    nullptr, nullptr, nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
   mock_parent_image_cache->get_cache_client()->close();

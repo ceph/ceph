@@ -356,7 +356,8 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
                                      {{event.offset, event.length}},
-                                     event.discard_granularity_bytes, {});
+                                     event.discard_granularity_bytes,
+                                     m_image_ctx.get_data_io_context(), {});
   }
 
   if (flush_required) {
@@ -390,7 +391,8 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_write(&m_image_ctx, aio_comp,
                                    {{event.offset, event.length}},
-                                   std::move(data), 0, {});
+                                   std::move(data),
+                                   m_image_ctx.get_data_io_context(), 0, {});
   }
 
   if (flush_required) {
@@ -443,7 +445,9 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp,
                                        {{event.offset, event.length}},
-                                       std::move(data), 0, {});
+                                       std::move(data),
+                                       m_image_ctx.get_data_io_context(), 0,
+                                       {});
   }
 
   if (flush_required) {
@@ -477,7 +481,9 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
                                                {{event.offset, event.length}},
                                                std::move(cmp_data),
                                                std::move(write_data),
-                                               nullptr, 0, {});
+                                               nullptr,
+                                               m_image_ctx.get_data_io_context(),
+                                               0, {});
   }
 
   if (flush_required) {

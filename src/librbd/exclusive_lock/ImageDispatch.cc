@@ -10,7 +10,6 @@
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/FlushTracker.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 
@@ -29,13 +28,7 @@ ImageDispatch<I>::ImageDispatch(I* image_ctx)
   : m_image_ctx(image_ctx),
     m_lock(ceph::make_shared_mutex(
       util::unique_lock_name("librbd::exclusve_lock::ImageDispatch::m_lock",
-                             this))),
-    m_flush_tracker(new io::FlushTracker<I>(image_ctx)) {
-}
-
-template <typename I>
-ImageDispatch<I>::~ImageDispatch() {
-  delete m_flush_tracker;
+                             this))) {
 }
 
 template <typename I>
@@ -51,13 +44,12 @@ void ImageDispatch<I>::shut_down(Context* on_finish) {
     ctx->complete(0);
   }
 
-  // ensure we don't have any pending flushes before deleting layer
-  m_flush_tracker->shut_down();
   on_finish->complete(0);
 }
 
 template <typename I>
-void ImageDispatch<I>::set_require_lock(io::Direction direction,
+void ImageDispatch<I>::set_require_lock(bool init_shutdown,
+                                        io::Direction direction,
                                         Context* on_finish) {
   // pause any matching IO from proceeding past this layer
   set_require_lock(direction, true);
@@ -70,9 +62,11 @@ void ImageDispatch<I>::set_require_lock(io::Direction direction,
   // push through a flush for any in-flight writes at lower levels
   auto aio_comp = io::AioCompletion::create_and_start(
     on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_FLUSH);
-  auto req = io::ImageDispatchSpec<I>::create_flush(
+  auto req = io::ImageDispatchSpec::create_flush(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK, aio_comp,
-    io::FLUSH_SOURCE_INTERNAL, {});
+    (init_shutdown ?
+      io::FLUSH_SOURCE_EXCLUSIVE_LOCK_SKIP_REFRESH :
+      io::FLUSH_SOURCE_EXCLUSIVE_LOCK), {});
   req->send();
 }
 
@@ -111,10 +105,11 @@ bool ImageDispatch<I>::set_require_lock(io::Direction direction, bool enabled) {
 template <typename I>
 bool ImageDispatch<I>::read(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
-    io::ReadResult &&read_result, int op_flags,
+    io::ReadResult &&read_result, IOContext io_context, int op_flags,
     const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    io::DispatchResult* dispatch_result, Context* on_dispatched) {
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
@@ -122,16 +117,16 @@ bool ImageDispatch<I>::read(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
 template <typename I>
 bool ImageDispatch<I>::write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    io::DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -140,16 +135,17 @@ bool ImageDispatch<I>::write(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
 template <typename I>
 bool ImageDispatch<I>::discard(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
-    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
-    io::DispatchResult* dispatch_result, Context* on_dispatched) {
+    uint32_t discard_granularity_bytes, IOContext io_context,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -158,16 +154,16 @@ bool ImageDispatch<I>::discard(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
 template <typename I>
 bool ImageDispatch<I>::write_same(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    io::DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -176,7 +172,6 @@ bool ImageDispatch<I>::write_same(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
@@ -184,9 +179,10 @@ template <typename I>
 bool ImageDispatch<I>::compare_and_write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
     bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    io::DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -195,7 +191,6 @@ bool ImageDispatch<I>::compare_and_write(
     return true;
   }
 
-  m_flush_tracker->start_io(tid);
   return false;
 }
 
@@ -204,7 +199,8 @@ bool ImageDispatch<I>::flush(
     io::AioCompletion* aio_comp, io::FlushSource flush_source,
     const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    io::DispatchResult* dispatch_result, Context* on_dispatched) {
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
@@ -218,17 +214,7 @@ bool ImageDispatch<I>::flush(
     return true;
   }
 
-  *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  m_flush_tracker->flush(on_dispatched);
-  return true;
-}
-
-template <typename I>
-void ImageDispatch<I>::handle_finished(int r, uint64_t tid) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "tid=" << tid << dendl;
-
-  m_flush_tracker->finish_io(tid);
+  return false;
 }
 
 template <typename I>
@@ -309,11 +295,11 @@ void ImageDispatch<I>::handle_acquire_lock(int r) {
                << dendl;
     failed_dispatch = m_on_dispatches.front();
     m_on_dispatches.pop_front();
-  } else {
-    // re-test is lock is still required (i.e. it wasn't acquired) via a restart
-    // dispatch
-    std::swap(on_dispatches, m_on_dispatches);
   }
+
+  // re-test if lock is still required (i.e. it wasn't acquired/lost) via a
+  // restart dispatch
+  std::swap(on_dispatches, m_on_dispatches);
   locker.unlock();
 
   if (failed_dispatch != nullptr) {

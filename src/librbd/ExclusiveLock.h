@@ -30,7 +30,8 @@ public:
                       int *ret_val) const;
   bool accept_ops() const;
 
-  void set_require_lock(io::Direction direction, Context* on_finish);
+  void set_require_lock(bool init_shutdown, io::Direction direction,
+                        Context* on_finish);
   void unset_require_lock(io::Direction direction);
 
   void block_requests(int r);
@@ -107,7 +108,6 @@ private:
 
   bool accept_ops(const ceph::mutex &lock) const;
 
-  void handle_init_complete(int r, uint64_t features, Context* on_finish);
   void handle_post_acquiring_lock(int r);
   void handle_post_acquired_lock(int r);
 };

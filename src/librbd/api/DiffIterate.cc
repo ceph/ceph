@@ -249,7 +249,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
     std::shared_lock owner_locker{ictx->owner_lock};
     auto aio_comp = io::AioCompletion::create_and_start(&flush_ctx, ictx,
                                                         io::AIO_TYPE_FLUSH);
-    auto req = io::ImageDispatchSpec<I>::create_flush(
+    auto req = io::ImageDispatchSpec::create_flush(
       *ictx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
       aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
     req->send();
