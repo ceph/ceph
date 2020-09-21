@@ -5595,7 +5595,12 @@ class CephadmDaemon():
         return t
 
     def reload(self, *args):
-        logger.info("Reload request received")
+        """reload -HUP received
+        
+        This is a placeholder function only, and serves to provide the hook that could 
+        be exploited later if the exporter evolves to incorporate a config file
+        """
+        logger.info("Reload request received - ignoring, no action needed")
 
     def shutdown(self, *args):
         logger.info("Shutdown request received")
@@ -5653,7 +5658,7 @@ class CephadmDaemon():
     def unit_run(self):
         
         return """set -e 
-{py3} {bin_path} exporter --fsid {fsid} --port {port}""".format(
+{py3} {bin_path} exporter --fsid {fsid} --port {port} &""".format(
             py3 = shutil.which('python3'),
             bin_path=self.binary_path,
             fsid=self.fsid,
@@ -5672,8 +5677,9 @@ PartOf=ceph-{fsid}.target
 Before=ceph-{fsid}.target
 
 [Service]
-Type=simple
+Type=forking
 ExecStart=/bin/bash {daemon_path}/unit.run
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=10s
 
@@ -5717,7 +5723,7 @@ WantedBy=ceph-{fsid}.target
         unit_run = os.path.join(args.data_dir, fsid, f"{daemon_type}.{daemon_id}", "unit.run")
         try: 
             with open(unit_run, "r") as u:
-                contents = u.read().strip()
+                contents = u.read().strip(" &")
         except OSError:
             logger.warning(f"Unable to access the unit.run file @ {unit_run}")
             return
