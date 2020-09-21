@@ -379,7 +379,7 @@ public:
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
 
-    std::map<hobject_t, std::set<pg_shard_t>> obj_to_source;
+    HobjToShardSetMapping obj_to_source;
     std::map<pg_shard_t, std::set<hobject_t> > source_to_obj;
 
     void dump(ceph::Formatter *f) const;

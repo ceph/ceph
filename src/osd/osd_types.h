@@ -202,6 +202,8 @@ WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
 WRITE_CMP_OPERATORS_2(pg_shard_t, osd, shard)
 std::ostream& operator<<(std::ostream &lhs, const pg_shard_t &rhs);
 
+using HobjToShardSetMapping = std::map<hobject_t, std::set<pg_shard_t>>;
+
 class IsPGRecoverablePredicate {
 public:
   /**
