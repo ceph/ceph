@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-
 import uuid
 from contextlib import contextmanager
 
-try:
-    import mock
-except ImportError:
-    from unittest import mock
-from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec
-from ceph.deployment.service_spec import PlacementSpec
+from unittest import mock
+from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec  # type: ignore
+from ceph.deployment.service_spec import PlacementSpec  # type: ignore
 
 from . import ControllerTestCase
 from ..controllers.osd import Osd
@@ -17,18 +12,15 @@ from ..tools import NotificationQueue, TaskManager
 from .. import mgr
 from .helper import update_dict
 
-try:
-    from typing import List, Dict, Any  # pylint: disable=unused-import
-except ImportError:
-    pass  # Only requried for type hints
+from typing import Any, Dict, List, Optional  # pylint: disable=C0411
 
 
 class OsdHelper(object):
     DEFAULT_OSD_IDS = [0, 1, 2]
 
     @staticmethod
-    def _gen_osdmap_tree_node(node_id, node_type, children=None, update_data=None):
-        # type: (int, str, List[int], Dict[str, Any]) -> Dict[str, Any]
+    def _gen_osdmap_tree_node(node_id: int, node_type: str, children: Optional[List[int]] = None,
+                              update_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         assert node_type in ['root', 'host', 'osd']
         if node_type in ['root', 'host']:
             assert children is not None
@@ -69,8 +61,7 @@ class OsdHelper(object):
         return update_dict(node, update_data) if update_data else node
 
     @staticmethod
-    def _gen_osd_stats(osd_id, update_data=None):
-        # type: (int, Dict[str, Any]) -> Dict[str, Any]
+    def _gen_osd_stats(osd_id: int, update_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         stats = {
             'osd': osd_id,
             'up_from': 11,
@@ -112,8 +103,7 @@ class OsdHelper(object):
         return stats if not update_data else update_dict(stats, update_data)
 
     @staticmethod
-    def _gen_osd_map_osd(osd_id):
-        # type: (int) -> Dict[str, Any]
+    def _gen_osd_map_osd(osd_id: int) -> Dict[str, Any]:
         return {
             'osd': osd_id,
             'up': 1,
@@ -180,26 +170,22 @@ class OsdHelper(object):
         }
 
     @classmethod
-    def gen_osdmap(cls, ids=None):
-        # type: (List[int]) -> Dict[str, Any]
+    def gen_osdmap(cls, ids: Optional[List[int]] = None) -> Dict[str, Any]:
         return {str(i): cls._gen_osd_map_osd(i) for i in ids or cls.DEFAULT_OSD_IDS}
 
     @classmethod
-    def gen_osd_stats(cls, ids=None):
-        # type: (List[int]) -> List[Dict[str, Any]]
+    def gen_osd_stats(cls, ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
         return [cls._gen_osd_stats(i) for i in ids or cls.DEFAULT_OSD_IDS]
 
     @classmethod
-    def gen_osdmap_tree_nodes(cls, ids=None):
-        # type: (List[int]) -> List[Dict[str, Any]]
+    def gen_osdmap_tree_nodes(cls, ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
         return [
             cls._gen_osdmap_tree_node(-1, 'root', [-3]),
             cls._gen_osdmap_tree_node(-3, 'host', ids or cls.DEFAULT_OSD_IDS),
         ] + [cls._gen_osdmap_tree_node(node_id, 'osd') for node_id in ids or cls.DEFAULT_OSD_IDS]
 
     @classmethod
-    def gen_mgr_get_counter(cls):
-        # type: () -> List[List[int]]
+    def gen_mgr_get_counter(cls) -> List[List[int]]:
         return [[1551973855, 35], [1551973860, 35], [1551973865, 35], [1551973870, 35]]
 
 
@@ -328,3 +314,13 @@ class OsdTest(ControllerTestCase):
         }
         self._task_post('/api/osd', data)
         self.assertStatus(400)
+
+    @mock.patch('dashboard.controllers.osd.CephService')
+    def test_osd_mark_all_actions(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        action_list = ['OUT', 'IN', 'DOWN']
+        for action in action_list:
+            data = {'action': action}
+            self._task_put('/api/osd/1/mark', data)
+            self.assertStatus(200)
