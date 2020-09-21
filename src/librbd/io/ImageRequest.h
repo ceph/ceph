@@ -91,11 +91,6 @@ protected:
     m_trace.event("start");
   }
 
-  uint64_t get_total_length() const;
-
-  virtual int clip_request();
-  virtual bool finish_request_early();
-
   virtual void update_timestamp();
   virtual void send_request() = 0;
   virtual void send_image_cache_request() = 0;
@@ -115,8 +110,6 @@ public:
                    const ZTracer::Trace &parent_trace);
 
 protected:
-  int clip_request() override;
-
   void send_request() override;
   void send_image_cache_request() override;
 
@@ -150,8 +143,6 @@ protected:
 			      io_context, trace_name, parent_trace),
       m_synchronous(false) {
   }
-
-  bool finish_request_early() override;
 
   void send_request() override;
 
@@ -269,13 +260,6 @@ public:
 protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
 
-  int clip_request() override {
-    return 0;
-  }
-  bool finish_request_early() override {
-    return false;
-  }
-
   void update_timestamp() override {
   }
   void send_request() override;
@@ -387,11 +371,8 @@ public:
       SnapshotDelta* snapshot_delta, const ZTracer::Trace& parent_trace);
 
 protected:
-  int clip_request() override;
-
   void update_timestamp() override {}
   void send_request() override;
-  void send_image_cache_request() override;
 
   aio_type_t get_aio_type() const override {
     return AIO_TYPE_GENERIC;

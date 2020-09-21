@@ -6,6 +6,8 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "include/neorados/RADOS.hpp"
+#include "librbd/internal.h"
+#include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "osd/osd_types.h"
@@ -122,6 +124,30 @@ void read_parent(I *image_ctx, uint64_t object_no, const Extents &extents,
     image_ctx->parent->get_data_io_context(), 0, 0, trace);
 }
 
+template <typename I>
+int clip_request(I *image_ctx, Extents *image_extents) {
+  std::shared_lock image_locker{image_ctx->image_lock};
+  for (auto &image_extent : *image_extents) {
+    auto clip_len = image_extent.second;
+    int r = clip_io(librbd::util::get_image_ctx(image_ctx),
+                    image_extent.first, &clip_len);
+    if (r < 0) {
+      return r;
+    }
+
+    image_extent.second = clip_len;
+  }
+  return 0;
+}
+
+uint64_t extents_length(Extents &extents) {
+  uint64_t total_bytes = 0;
+  for (auto& image_extent : extents) {
+    total_bytes += image_extent.second;
+  }
+  return total_bytes;
+}
+
 } // namespace util
 } // namespace io
 } // namespace librbd
@@ -130,3 +156,5 @@ template void librbd::io::util::read_parent(
     librbd::ImageCtx *image_ctx, uint64_t object_no, const Extents &extents,
     librados::snap_t snap_id, const ZTracer::Trace &trace,
     ceph::bufferlist* data, Context* on_finish);
+template int librbd::io::util::clip_request(
+    librbd::ImageCtx *image_ctx, Extents *image_extents);
