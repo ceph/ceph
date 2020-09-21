@@ -26,7 +26,6 @@ class MockSafeTimer;
 
 namespace librbd {
 
-namespace cache { class MockImageCache; }
 namespace operation {
 template <typename> class ResizeRequest;
 }
@@ -294,8 +293,6 @@ struct MockImageCtx {
   io::MockImageDispatcher *io_image_dispatcher;
   io::MockObjectDispatcher *io_object_dispatcher;
   MockContextWQ *op_work_queue;
-
-  cache::MockImageCache *image_cache = nullptr;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;

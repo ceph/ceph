@@ -195,6 +195,7 @@ if(WITH_RBD_RWL)
     cache/pwl/Types.cc
     cache/pwl/ReplicatedWriteLog.cc
     cache/pwl/AbstractWriteLog.cc
+    cache/pwl/ImageDispatch.cc
     cache/WriteLogCache.cc)
 endif()
 
