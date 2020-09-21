@@ -4070,7 +4070,7 @@ std::vector<Option> get_global_options() {
     .set_default(0.1)
     .set_description("interval to retry the flock"),
     
-    Option("bdev_flock_retry", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("bdev_flock_retry", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
     .set_description("times to retry the flock"),
 
