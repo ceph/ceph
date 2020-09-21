@@ -616,7 +616,7 @@ class Filesystem(MDSCluster):
             self.data_pools = None
 
     def recreate(self):
-        self.destroy(reset_obj_attrs=False)
+        self.destroy()
 
         self.create()
         self.getinfo(refresh=True)
