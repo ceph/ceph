@@ -10,7 +10,13 @@ namespace librbd {
 
 class ImageCtx;
 
+namespace io { class ImageDispatchInterface; }
+
 namespace cache {
+
+template<typename>
+class WriteLogCache;
+
 namespace pwl {
 
 template<typename>
@@ -39,10 +45,10 @@ private:
    * INIT_IMAGE_CACHE
    *    |
    *    v
-   * SET_FEATURE_BIT
-   *    |
-   *    v
-   * <finish>
+   * SET_FEATURE_BIT * * * > CLOSE_IMAGE_CACHE
+   *    |                         |
+   *    v                         |
+   * <finish> <-------------------/
    *
    * @endverbatim
    */
@@ -50,6 +56,7 @@ private:
   InitRequest(ImageCtxT &image_ctx, Context *on_finish);
 
   ImageCtxT &m_image_ctx;
+  cache::WriteLogCache<ImageCtx> *m_image_cache;
   Context *m_on_finish;
 
   int m_error_result;
@@ -63,6 +70,9 @@ private:
 
   void set_feature_bit();
   void handle_set_feature_bit(int r);
+
+  void shutdown_image_cache();
+  void handle_shutdown_image_cache(int r);
 
   void finish();
 

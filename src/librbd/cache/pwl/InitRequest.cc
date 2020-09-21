@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/cache/pwl/InitRequest.h"
+#include "librbd/io/ImageDispatcher.h"
 #include "librbd/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -9,6 +10,7 @@
 
 #if defined(WITH_RBD_RWL)
 #include "librbd/cache/pwl/ImageCacheState.h"
+#include "librbd/cache/pwl/ImageDispatch.h"
 #include "librbd/cache/WriteLogCache.h"
 #endif // WITH_RBD_RWL
 
@@ -75,7 +77,7 @@ void InitRequest<I>::get_image_cache_state() {
   auto cache_type = cache_state->get_image_cache_type();
   switch(cache_type) {
     case cache::IMAGE_CACHE_TYPE_RWL:
-      m_image_ctx.image_cache =
+      m_image_cache =
         new librbd::cache::WriteLogCache<I>(m_image_ctx,
                                             cache_state);
       break;
@@ -98,7 +100,7 @@ void InitRequest<I>::init_image_cache() {
   using klass = InitRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_init_image_cache>(
     this);
-  m_image_ctx.image_cache->init(ctx);
+  m_image_cache->init(ctx);
 }
 
 template <typename I>
@@ -109,8 +111,8 @@ void InitRequest<I>::handle_init_image_cache(int r) {
   if (r < 0) {
     lderr(cct) << "failed to init image cache: " << cpp_strerror(r)
                << dendl;
-    delete m_image_ctx.image_cache;
-    m_image_ctx.image_cache = nullptr;
+    delete m_image_cache;
+    m_image_cache = nullptr;
     save_result(r);
     finish();
     return;
@@ -148,11 +150,47 @@ void InitRequest<I>::handle_set_feature_bit(int r) {
     lderr(cct) << "failed to set feature bit: " << cpp_strerror(r)
                << dendl;
     save_result(r);
-  } else if (m_image_ctx.discard_granularity_bytes) {
+
+    shutdown_image_cache();
+  }
+
+  if (m_image_ctx.discard_granularity_bytes) {
     ldout(cct, 1) << "RWL image cache is enabled and "
                   << "set discard_granularity_bytes = 0." << dendl;
     m_image_ctx.discard_granularity_bytes = 0;
   }
+
+  // Register RWL dispatch
+  auto image_dispatch = new cache::pwl::ImageDispatch<I>(&m_image_ctx, m_image_cache);
+
+  m_image_ctx.io_image_dispatcher->register_dispatch(image_dispatch);
+
+  finish();
+}
+
+template <typename I>
+void InitRequest<I>::shutdown_image_cache() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
+
+  using klass = InitRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_shutdown_image_cache>(
+    this);
+  m_image_cache->shut_down(ctx);
+}
+
+template <typename I>
+void InitRequest<I>::handle_shutdown_image_cache(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to close image cache: " << cpp_strerror(r)
+               << dendl;
+  }
+  delete m_image_cache;
+  m_image_cache = nullptr;
+
   finish();
 }
 

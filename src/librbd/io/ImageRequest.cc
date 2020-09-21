@@ -8,7 +8,6 @@
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
-#include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ObjectDispatchInterface.h"
@@ -313,12 +312,8 @@ void ImageRequest<I>::send() {
   ldout(cct, 20) << get_request_type() << ": ictx=" << &image_ctx << ", "
                  << "completion=" << aio_comp << dendl;
 
-  if (m_bypass_image_cache || m_image_ctx.image_cache == nullptr) {
-    update_timestamp();
-    send_request();
-  } else {
-    send_image_cache_request();
-  }
+  update_timestamp();
+  send_request();
 }
 
 template <typename I>
@@ -435,21 +430,6 @@ void ImageReadRequest<I>::send_request() {
 }
 
 template <typename I>
-void ImageReadRequest<I>::send_image_cache_request() {
-  I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_cache != nullptr);
-
-  AioCompletion *aio_comp = this->m_aio_comp;
-  aio_comp->set_request_count(1);
-
-  auto *req_comp = new io::ReadResult::C_ImageReadRequest(
-    aio_comp, this->m_image_extents);
-  image_ctx.image_cache->aio_read(std::move(this->m_image_extents),
-                                  &req_comp->bl, m_op_flags,
-                                  req_comp);
-}
-
-template <typename I>
 void AbstractImageWriteRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
@@ -550,18 +530,6 @@ uint64_t ImageWriteRequest<I>::append_journal_event(bool synchronous) {
 }
 
 template <typename I>
-void ImageWriteRequest<I>::send_image_cache_request() {
-  I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_cache != nullptr);
-
-  AioCompletion *aio_comp = this->m_aio_comp;
-  aio_comp->set_request_count(1);
-  C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-  image_ctx.image_cache->aio_write(std::move(this->m_image_extents),
-                                   std::move(m_bl), m_op_flags, req_comp);
-}
-
-template <typename I>
 ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, IOContext io_context,
     uint64_t journal_tid, bool single_extent, Context *on_finish) {
@@ -606,21 +574,6 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(bool synchronous) {
   }
 
   return tid;
-}
-
-template <typename I>
-void ImageDiscardRequest<I>::send_image_cache_request() {
-  I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_cache != nullptr);
-
-  AioCompletion *aio_comp = this->m_aio_comp;
-  aio_comp->set_request_count(this->m_image_extents.size());
-  for (auto &extent : this->m_image_extents) {
-    C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    image_ctx.image_cache->aio_discard(extent.first, extent.second,
-                                       this->m_discard_granularity_bytes,
-                                       req_comp);
-  }
 }
 
 template <typename I>
@@ -745,17 +698,6 @@ void ImageFlushRequest<I>::send_request() {
 }
 
 template <typename I>
-void ImageFlushRequest<I>::send_image_cache_request() {
-  I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_cache != nullptr);
-
-  AioCompletion *aio_comp = this->m_aio_comp;
-  aio_comp->set_request_count(1);
-  C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-  image_ctx.image_cache->aio_flush(m_flush_source, req_comp);
-}
-
-template <typename I>
 uint64_t ImageWriteSameRequest<I>::append_journal_event(bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
@@ -771,21 +713,6 @@ uint64_t ImageWriteSameRequest<I>::append_journal_event(bool synchronous) {
   }
 
   return tid;
-}
-
-template <typename I>
-void ImageWriteSameRequest<I>::send_image_cache_request() {
-  I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_cache != nullptr);
-
-  AioCompletion *aio_comp = this->m_aio_comp;
-  aio_comp->set_request_count(this->m_image_extents.size());
-  for (auto &extent : this->m_image_extents) {
-    C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    image_ctx.image_cache->aio_writesame(extent.first, extent.second,
-                                         std::move(m_data_bl), m_op_flags,
-                                         req_comp);
-  }
 }
 
 template <typename I>
@@ -848,19 +775,6 @@ void ImageCompareAndWriteRequest<I>::assemble_extent(
     sub_bl.substr_of(m_bl, q->first, q->second);
     bl->claim_append(sub_bl);
   }
-}
-
-template <typename I>
-void ImageCompareAndWriteRequest<I>::send_image_cache_request() {
-  I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_cache != nullptr);
-
-  AioCompletion *aio_comp = this->m_aio_comp;
-  aio_comp->set_request_count(1);
-  C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-  image_ctx.image_cache->aio_compare_and_write(
-    std::move(this->m_image_extents), std::move(m_cmp_bl), std::move(m_bl),
-    m_mismatch_offset, m_op_flags, req_comp);
 }
 
 template <typename I>
