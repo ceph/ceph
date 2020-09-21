@@ -701,10 +701,10 @@ int RGWSI_Zone::init_zg_from_period(bool *initialized, optional_yield y)
       }
     }
     const auto& endpoints = master->second.endpoints;
-    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints));
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name));
     if (!current_period->get_master_zonegroup().empty() &&
         zg.get_id() == current_period->get_master_zonegroup()) {
-      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), endpoints);
+      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name);
     }
   }
 
@@ -758,7 +758,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating
       }
     }
     const auto& endpoints = master->second.endpoints;
-    rest_master_conn = new RGWRESTConn(cct, this, zonegroup->get_id(), endpoints);
+    rest_master_conn = new RGWRESTConn(cct, this, zonegroup->get_id(), endpoints, zonegroup->api_name);
   }
 
   return 0;

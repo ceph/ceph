@@ -314,50 +314,6 @@ std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
   return out;
 }
 
-static string extract_region_name(string&& s)
-{
-  if (s == "s3") {
-      return "us-east-1";
-  }
-  if (boost::algorithm::starts_with(s, "s3-")) {
-    return s.substr(3);
-  }
-  return std::move(s);
-}
-
-
-std::optional<string> RGWHTTPClient::identify_region()
-{
-  if (!boost::algorithm::ends_with(host, "amazonaws.com")) {
-    ldout(cct, 20) << "NOTICE: cannot identify region for connection to: " << host << dendl;
-    return std::nullopt;
-  }
-
-  vector<string> vec;
-
-  get_str_vec(host, ".", vec);
-
-  for (auto iter = vec.begin(); iter != vec.end(); ++iter) {
-    auto& s = *iter;
-    if (s == "s3") {
-      ++iter;
-      if (iter == vec.end()) {
-        ldout(cct, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
-        return std::nullopt;
-      }
-      auto& next = *iter;
-      if (next == "amazonaws") {
-        return "us-east-1";
-      }
-      return next;
-    } else if (boost::algorithm::starts_with(s, "s3-")) {
-      return extract_region_name(std::move(s));
-    }
-  }
-
-  return std::nullopt;
-}
-
 void RGWHTTPClient::init()
 {
   auto pos = url.find("://");
@@ -381,9 +337,6 @@ void RGWHTTPClient::init()
   if (resource_prefix.size() > 0 && resource_prefix[resource_prefix.size() - 1] != '/') {
     resource_prefix.append("/");
   }
-
-  auto opt_region = identify_region();
-  region = opt_region.value_or(cct->_conf->rgw_zonegroup);
 }
 
 /*
