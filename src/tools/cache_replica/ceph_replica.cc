@@ -160,5 +160,9 @@ int main(int argc, const char **argv)
     return r;
   }
 
+  msgr_public->start();
+
+  msgr_public->wait();
+
   return 0;
 }
