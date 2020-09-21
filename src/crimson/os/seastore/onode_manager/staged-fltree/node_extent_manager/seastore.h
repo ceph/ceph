@@ -17,11 +17,8 @@ class SeastoreSuper final: public Super {
   laddr_t get_root_laddr() const override {
     return root_addr;
   }
-  void write_root_laddr(context_t c, laddr_t addr) override {
-    root_addr = addr;
-    //TODO
-    assert(false && "not implemented");
-  }
+  void write_root_laddr(context_t c, laddr_t addr) override;
+
   laddr_t root_addr;
   TransactionManager& tm;
 };
@@ -80,14 +77,20 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   }
 
   tm_future<Super::URef> get_super(Transaction& t, RootNodeTracker& tracker) {
-    // TODO
-    return tm_ertr::make_ready_future<Super::URef>(
-        Super::URef(new SeastoreSuper(t, tracker, L_ADDR_NULL, tm)));
+    return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
+      return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
+    });
   }
 
   TransactionManager& tm;
   const laddr_t addr_min;
 };
+
+inline void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr) {
+  root_addr = addr;
+  auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
+  nm->get_tm().write_onode_root(c.t, addr);
+}
 
 inline NodeExtentRef SeastoreNodeExtent::mutate(context_t c) {
   auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
