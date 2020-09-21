@@ -88,6 +88,10 @@ class RESTControllerTest(ControllerTestCase):
         TaskManager.init()
         cls.setup_controllers([FooResource])
 
+    @classmethod
+    def tearDownClass(cls):
+        NotificationQueue.stop()
+
     def test_no_exception(self):
         self._get('/foo/no_exception/a/b')
         self.assertStatus(200)
