@@ -16,6 +16,7 @@ from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient
 from ..services.orchestrator import OrchClient
 from ..rest_client import RequestException
+from ..tools import NotificationQueue, TaskManager
 
 
 class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
@@ -66,12 +67,18 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
 
     @classmethod
     def setup_server(cls):
+        NotificationQueue.start_queue()
+        TaskManager.init()
         OrchClient.instance().available = lambda: False
         mgr.rados.side_effect = None
         # pylint: disable=protected-access
         Iscsi._cp_config['tools.authenticate.on'] = False
         IscsiTarget._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Iscsi, IscsiTarget])
+
+    @classmethod
+    def tearDownClass(cls):
+        NotificationQueue.stop()
 
     def setUp(self):
         self.mock_kv_store()
