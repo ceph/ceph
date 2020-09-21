@@ -24,8 +24,7 @@ struct Server {
   Server(CephContext* cct, const entity_inst_t& entity)
     : dummy_auth(cct), dispatcher(cct)
   {
-    msgr.reset(Messenger::create(cct, "async",
-                                 entity.name, "pong", entity.addr.get_nonce(), 0));
+    msgr.reset(Messenger::create(cct, "async", entity.name, "pong", entity.addr.get_nonce()));
     dummy_auth.auth_registry.refresh_config();
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
@@ -84,9 +83,7 @@ struct Client {
   Client(CephContext *cct)
     : dummy_auth(cct), dispatcher(cct)
   {
-    msgr.reset(Messenger::create(cct, "async",
-                                 entity_name_t::CLIENT(-1), "ping",
-                                 getpid(), 0));
+    msgr.reset(Messenger::create(cct, "async", entity_name_t::CLIENT(-1), "ping", getpid()));
     dummy_auth.auth_registry.refresh_config();
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::lossy_client(0));

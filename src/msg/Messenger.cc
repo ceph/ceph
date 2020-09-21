@@ -15,7 +15,7 @@ Messenger *Messenger::create_client_messenger(CephContext *cct, std::string lnam
   std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
   auto nonce = get_random_nonce();
   return Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(),
-			   std::move(lname), nonce, 0);
+			   std::move(lname), nonce);
 }
 
 uint64_t Messenger::get_pid_nonce()
@@ -35,7 +35,7 @@ uint64_t Messenger::get_random_nonce()
 
 Messenger *Messenger::create(CephContext *cct, const std::string &type,
 			     entity_name_t name, std::string lname,
-			     uint64_t nonce, uint64_t cflags)
+			     uint64_t nonce)
 {
   int r = -1;
   if (type == "random") {
