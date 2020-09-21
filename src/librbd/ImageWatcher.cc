@@ -166,7 +166,7 @@ void ImageWatcher<I>::handle_async_complete(const AsyncRequestId &request,
   }
 
   std::unique_lock async_request_locker{m_async_request_lock};
-  mark_async_request_complete(request);
+  mark_async_request_complete(request, r);
   m_async_op_tracker.finish_op();
 }
 
@@ -497,7 +497,8 @@ bool ImageWatcher<I>::is_new_request(const AsyncRequestId &id) const {
 }
 
 template <typename I>
-bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id) {
+bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id,
+                                                  int r) {
   ceph_assert(ceph_mutex_is_locked(m_async_request_lock));
 
   bool found = m_async_pending.erase(id);
@@ -510,7 +511,7 @@ bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id) {
     it = m_async_complete_expiration.erase(it);
   }
 
-  if (m_async_complete.insert(id).second) {
+  if (m_async_complete.insert({id, r}).second) {
     auto expiration_time = now;
     expiration_time += 600;
     m_async_complete_expiration.insert({expiration_time, id});
@@ -607,6 +608,10 @@ int ImageWatcher<I>::prepare_async_request(const AsyncRequestId& async_request_i
       *ctx = new RemoteContext(*this, async_request_id, *prog_ctx);
     } else {
       *new_request = false;
+      auto it = m_async_complete.find(async_request_id);
+      if (it != m_async_complete.end()) {
+        return it->second;
+      }
     }
   }
   return 0;
