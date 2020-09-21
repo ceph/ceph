@@ -1720,6 +1720,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     trace.event("start");
   }
 
+  list<Context*> wait_for_reads;
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ++ex_it) {
@@ -1732,6 +1733,12 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     BufferHead *bh = o->map_write(*ex_it, wr->journal_tid);
     bool missing = bh->is_missing();
     bh->snapc = wr->snapc;
+
+    // readers that need to be woken up due to an overwrite
+    for (auto& [_, wait_for_read] : bh->waitfor_read) {
+      wait_for_reads.splice(wait_for_reads.end(), wait_for_read);
+    }
+    bh->waitfor_read.clear();
 
     bytes_written += ex_it->length;
     if (bh->is_tx()) {
@@ -1791,6 +1798,8 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 
   int r = _wait_for_write(wr, bytes_written, oset, &trace, onfreespace);
   delete wr;
+
+  finish_contexts(cct, wait_for_reads, 0);
 
   //verify_stats();
   trim();
