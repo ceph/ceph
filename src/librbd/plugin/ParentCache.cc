@@ -38,7 +38,8 @@ void ParentCache<I>::init(I* image_ctx, Api<I>& api, HookPoints* hook_points,
   m_image_ctx = image_ctx;
   bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
     "rbd_parent_cache_enabled");
-  if (m_image_ctx->child == nullptr || !parent_cache_enabled) {
+  if (m_image_ctx->child == nullptr || !parent_cache_enabled ||
+      !m_image_ctx->data_ctx.is_valid()) {
     on_finish->complete(0);
     return;
   }
