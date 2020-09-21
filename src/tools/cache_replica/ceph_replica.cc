@@ -24,6 +24,7 @@
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
 #include "common/Preforker.h"
+#include "common/async/context_pool.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -175,6 +176,16 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGTERM, handle_replica_signal);
 
   msgr_public->start();
+
+  //get monitor info(MonMap::mon_info) to construct MonClient::monmap(MonMap)
+  ceph::async::io_context_pool ctxpool(2);
+  MonClient mon_client(g_ceph_context, ctxpool);
+  r = mon_client.build_initial_monmap();
+  if (r < 0) {
+    delete msgr_public;
+    msgr_public = nullptr;
+    return r;
+  }
 
   msgr_public->wait();
 
