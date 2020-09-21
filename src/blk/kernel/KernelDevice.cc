@@ -86,11 +86,11 @@ int KernelDevice::_lock()
 {
   dout(10) << __func__ << " " << fd_directs[WRITE_LIFE_NOT_SET] << dendl;
   double retry_interval = cct->_conf.get_val<double>("bdev_flock_retry_interval");
-
+  uint64_t max_retry = cct->_conf.get_val<uint64_t>("bdev_flock_retry");
   // When the block changes, systemd-udevd will open the block,
   // read some information and close it. Then a failure occurs here.
   // So we need to try again here.
-  for (int i = 0; i < cct->_conf->bdev_flock_retry + 1; i++) {
+  for (uint64_t i = 0; i < max_retry + 1; i++) {
     int r = ::flock(fd_directs[WRITE_LIFE_NOT_SET], LOCK_EX | LOCK_NB);
     if (r < 0 && errno == EAGAIN) {
       dout(1) << __func__ << " flock busy on " << path << dendl;
