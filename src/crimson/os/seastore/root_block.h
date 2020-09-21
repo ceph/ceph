@@ -101,7 +101,7 @@ struct RootBlock : CachedExtent {
     ceph_abort_msg("Root is only written via deltas");
   }
 
-  root_t &get_lba_root() { return root; }
+  root_t &get_root() { return root; }
 };
 using RootBlockRef = RootBlock::Ref;
 
