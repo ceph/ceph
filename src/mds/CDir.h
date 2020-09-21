@@ -64,6 +64,7 @@ public:
 
     inodeno_t ino;
     unsigned char d_type;
+    mempool::mds_co::string alternate_name;
 
     bool snaprealm = false;
     sr_t srnode;

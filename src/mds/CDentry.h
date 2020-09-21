@@ -151,6 +151,9 @@ public:
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
   std::string_view get_name() const { return std::string_view(name); }
+  void set_alternate_name(std::string_view _alternate_name);
+  std::string_view get_alternate_name() const { return std::string_view(alternate_name); }
+  void decode_alternate_name(bufferlist::const_iterator &bl) { decode(alternate_name, bl); }
 
   __u32 get_hash() const { return hash; }
 
@@ -332,8 +335,11 @@ public:
   void print(std::ostream& out) override;
   void dump(ceph::Formatter *f) const;
 
-  static void encode_remote(inodeno_t& ino, unsigned char d_type, bufferlist &bl);
+  static void encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl);
   static void decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
                             ceph::buffer::list::const_iterator& bl);
 
   __u32 hash;
@@ -370,6 +376,7 @@ protected:
 
 private:
   mempool::mds_co::string name;
+  mempool::mds_co::string alternate_name;
 };
 
 std::ostream& operator<<(std::ostream& out, const CDentry& dn);

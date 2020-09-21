@@ -4390,6 +4390,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 				   req->head.args.open.mode | S_IFREG, &layout);
   ceph_assert(newi);
 
+  dn->set_alternate_name(req->get_alternate_name());
+
   // it's a file.
   dn->push_projected_linkage(newi);
 
@@ -6269,6 +6271,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode, &layout);
   ceph_assert(newi);
 
+  dn->set_alternate_name(req->get_alternate_name());
   dn->push_projected_linkage(newi);
 
   auto _inode = newi->_get_inode();
@@ -6357,6 +6360,8 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   CInode *newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
   ceph_assert(newi);
 
+  dn->set_alternate_name(req->get_alternate_name());
+
   // it's a directory.
   dn->push_projected_linkage(newi);
 
@@ -6432,6 +6437,8 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
     return;
 
   const cref_t<MClientRequest> &req = mdr->client_request;
+
+  dn->set_alternate_name(req->get_alternate_name());
 
   unsigned mode = S_IFLNK | 0777;
   CInode *newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
@@ -6518,6 +6525,8 @@ void Server::handle_client_link(MDRequestRef& mdr)
       respond_to_request(mdr, -EEXIST);
       return;
     }
+
+    destdn->set_alternate_name(req->get_alternate_name());
 
     targeti = ret.second->get_projected_linkage()->get_inode();
   }
@@ -7945,6 +7954,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     respond_to_request(mdr, -EINVAL);
     return;
   }
+
+  destdn->set_alternate_name(req->get_alternate_name());
 
   // is this a stray migration, reintegration or merge? (sanity checks!)
   if (mdr->reqid.name.is_mds() &&

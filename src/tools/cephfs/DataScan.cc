@@ -20,6 +20,7 @@
 
 #include "mds/CDentry.h"
 #include "mds/CInode.h"
+#include "mds/CDentry.h"
 #include "mds/InoTable.h"
 #include "mds/SnapServer.h"
 #include "cls/cephfs/cls_cephfs_client.h"
@@ -990,10 +991,13 @@ int DataScan::scan_links()
 	  }
 	  char dentry_type;
 	  decode(dentry_type, q);
+	  mempool::mds_co::string alternate_name;
 	  if (dentry_type == 'I' || dentry_type == 'i') {
 	    InodeStore inode;
             if (dentry_type == 'i') {
-	      DECODE_START(1, q);
+	      DECODE_START(2, q);
+              if (struct_v >= 2)
+                decode(alternate_name, q);
 	      inode.decode(q);
 	      DECODE_FINISH(q);
 	    } else {
@@ -1059,7 +1063,7 @@ int DataScan::scan_links()
 	  } else if (dentry_type == 'L' || dentry_type == 'l') {
 	    inodeno_t ino;
 	    unsigned char d_type;
-            CDentry::decode_remote(dentry_type, ino, d_type, q);
+            CDentry::decode_remote(dentry_type, ino, d_type, alternate_name, q);
 
 	    if (step == SCAN_INOS) {
 	      remote_links[ino]++;
@@ -1481,7 +1485,11 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
     decode(dentry_type, q);
     if (dentry_type == 'I' || dentry_type == 'i') {
       if (dentry_type == 'i') {
-        DECODE_START(1, q);
+        mempool::mds_co::string alternate_name;
+
+        DECODE_START(2, q);
+        if (struct_v >= 2)
+          decode(alternate_name, q);
         inode->decode(q);
         DECODE_FINISH(q);
       } else {

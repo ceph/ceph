@@ -1061,6 +1061,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   }
 
   update_dentry_lease(dn, dlease, from, session);
+  dn->alternate_name = std::move(dlease->alternate_name);
   return dn;
 }
 
@@ -1247,6 +1248,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	// new dn
 	dn = link(dir, dname, in, NULL);
       }
+      dn->alternate_name = std::move(dlease.alternate_name);
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       if (hash_order) {
