@@ -36,7 +36,8 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
         1,
         0,
         root_leaf->get_paddr(),
-        make_record_relative_paddr(0)};
+        make_record_relative_paddr(0),
+        L_ADDR_NULL};
     return mkfs_ertr::now();
   });
 }
