@@ -286,7 +286,7 @@ class Activate(object):
                 try:
                     self.activate(args)
                 except RuntimeError as e:
-                    terminal.warning(e)
+                    terminal.warning(e.message)
         else:
             if args.file:
                 json_config = args.file
