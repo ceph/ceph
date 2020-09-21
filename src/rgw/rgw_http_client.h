@@ -54,15 +54,11 @@ protected:
   string host;
   string resource_prefix;
 
-  std::string region;
-
   size_t send_len{0};
 
   param_vec_t headers;
 
   long  req_timeout{0L};
-
-  std::optional<std::string> identify_region();
 
   void init();
 

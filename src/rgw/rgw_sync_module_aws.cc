@@ -225,6 +225,7 @@ struct AWSSyncConfig_Connection {
   string connection_id;
   string endpoint;
   RGWAccessKey key;
+  std::optional<string> region;
   HostStyle host_style{PathStyle};
 
   bool has_endpoint{false};
@@ -240,6 +241,13 @@ struct AWSSyncConfig_Connection {
     endpoint = config["endpoint"];
 
     key = RGWAccessKey(config["access_key"], config["secret"]);
+
+    if (config.exists("region")) {
+      region = config["region"];
+    } else {
+      region.reset();
+    }
+
     string host_style_str = config["host_style"];
     if (host_style_str != "virtual") {
       host_style = PathStyle;
@@ -252,6 +260,7 @@ struct AWSSyncConfig_Connection {
     encode_json("id", connection_id, &jf);
     encode_json("endpoint", endpoint, &jf);
     string s = (host_style == PathStyle ? "path" : "virtual");
+    encode_json("region", region, &jf);
     encode_json("host_style", s, &jf);
 
     {
@@ -648,6 +657,7 @@ struct AWSSyncConfig {
                                            id,
                                            { root_conf->endpoint },
                                            root_conf->key,
+                                           root_conf->region,
                                            root_conf->host_style));
 
     for (auto i : explicit_profiles) {
@@ -658,6 +668,7 @@ struct AWSSyncConfig {
                                    id,
                                    { c->conn_conf->endpoint },
                                    c->conn_conf->key,
+                                   c->conn_conf->region,
                                    c->conn_conf->host_style));
     }
   }
