@@ -17,7 +17,10 @@ improvement with a second "cluster" network in a large cluster.
 
 It is possible to run a Ceph Storage Cluster with two networks: a public
 (front-side) network and a cluster (back-side) network.  However, this approach
-complicates network configuration (both hardware and software) and does not usually have a significant impact on overall performance.  For this reason, we generally recommend that dual-NIC systems either be configured with two IPs on the same network, or bonded.
+complicates network configuration (both hardware and software) and does not usually
+have a significant impact on overall performance.  For this reason, we recommend
+that for resilience and capacity dual-NIC systems either active/active bond
+these interfaces or implemebnt a layer 3 multipath strategy with eg. FRR.
 
 If, despite the complexity, one still wishes to use two networks, each
 :term:`Ceph Node` will need to have more than one NIC. See `Hardware
