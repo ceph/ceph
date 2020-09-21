@@ -241,8 +241,8 @@ Example configuration
 ---------------------
 
 This example shows a single node configuration running ceph-mgr and
-node_exporter on a server called ``senta04``. Note that this requires to add the
-appropriate instance label to every ``node_exporter`` target individually.
+node_exporter on a server called ``senta04``. Note that this requires one
+to add an appropriate and unique ``instance`` label to each ``node_exporter`` target.
 
 This is just an example: there are other ways to configure prometheus
 scrape targets and label rewrite rules.
