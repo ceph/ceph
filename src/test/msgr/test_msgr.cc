@@ -71,8 +71,8 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
   }
   void SetUp() override {
     lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
-    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
-    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid(), 0);
+    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
+    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid());
     server_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0));
     server_msgr->set_auth_client(&dummy_auth);
@@ -1787,7 +1787,7 @@ class SyntheticWorkload {
     char addr[64];
     for (int i = 0; i < servers; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0),
-                               "server", getpid()+i, 0);
+                               "server", getpid()+i);
       snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d",
 	       base_port+i);
       bind_addr.parse(addr);
@@ -1804,7 +1804,7 @@ class SyntheticWorkload {
 
     for (int i = 0; i < clients; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
-                               "client", getpid()+i+servers, 0);
+                               "client", getpid()+i+servers);
       if (cli_policy.standby) {
         snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d",
 		 base_port+i+servers);
@@ -2270,7 +2270,7 @@ class MarkdownDispatcher : public Dispatcher {
 
 // Markdown with external lock
 TEST_P(MessengerTest, MarkdownTest) {
-  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
+  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
   DummyAuthClientServer dummy_auth(g_ceph_context);
   dummy_auth.auth_registry.refresh_config();

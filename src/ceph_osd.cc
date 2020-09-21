@@ -538,30 +538,19 @@ flushjournal_out:
   cluster_msg_type = cluster_msg_type.empty() ? msg_type : cluster_msg_type;
   uint64_t nonce = Messenger::get_pid_nonce();
   Messenger *ms_public = Messenger::create(g_ceph_context, public_msg_type,
-					   entity_name_t::OSD(whoami), "client",
-					   nonce,
-					   Messenger::HAS_HEAVY_TRAFFIC |
-					   Messenger::HAS_MANY_CONNECTIONS);
+					   entity_name_t::OSD(whoami), "client", nonce);
   Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msg_type,
-					    entity_name_t::OSD(whoami), "cluster",
-					    nonce,
-					    Messenger::HAS_HEAVY_TRAFFIC |
-					    Messenger::HAS_MANY_CONNECTIONS);
+					    entity_name_t::OSD(whoami), "cluster", nonce);
   Messenger *ms_hb_back_client = Messenger::create(g_ceph_context, cluster_msg_type,
-					     entity_name_t::OSD(whoami), "hb_back_client",
-					     nonce, Messenger::HEARTBEAT);
+					     entity_name_t::OSD(whoami), "hb_back_client", nonce);
   Messenger *ms_hb_front_client = Messenger::create(g_ceph_context, public_msg_type,
-					     entity_name_t::OSD(whoami), "hb_front_client",
-					     nonce, Messenger::HEARTBEAT);
+					     entity_name_t::OSD(whoami), "hb_front_client", nonce);
   Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, cluster_msg_type,
-						   entity_name_t::OSD(whoami), "hb_back_server",
-						   nonce, Messenger::HEARTBEAT);
+						   entity_name_t::OSD(whoami), "hb_back_server", nonce);
   Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, public_msg_type,
-						    entity_name_t::OSD(whoami), "hb_front_server",
-						    nonce, Messenger::HEARTBEAT);
+						    entity_name_t::OSD(whoami), "hb_front_server", nonce);
   Messenger *ms_objecter = Messenger::create(g_ceph_context, public_msg_type,
-					     entity_name_t::OSD(whoami), "ms_objecter",
-					     nonce, 0);
+					     entity_name_t::OSD(whoami), "ms_objecter", nonce);
   if (!ms_public || !ms_cluster || !ms_hb_front_client || !ms_hb_back_client || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
     forker.exit(1);
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);

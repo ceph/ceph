@@ -118,14 +118,6 @@ public:
 #endif
 
   /**
-   * Various Messenger conditional config/type flags to allow
-   * different "transport" Messengers to tune themselves
-   */
-  static const int HAS_HEAVY_TRAFFIC    = 0x0001;
-  static const int HAS_MANY_CONNECTIONS = 0x0002;
-  static const int HEARTBEAT            = 0x0004;
-
-  /**
    *  The CephContext this Messenger uses. Many other components initialize themselves
    *  from this value.
    */
@@ -165,14 +157,12 @@ public:
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
    * @param features bits for the local connection
-   * @param cflags general std::set of flags to configure transport resources
    */
   static Messenger *create(CephContext *cct,
                            const std::string &type,
                            entity_name_t name,
 			   std::string lname,
-                           uint64_t nonce,
-			   uint64_t cflags);
+                           uint64_t nonce);
 
   static uint64_t get_random_nonce();
   static uint64_t get_pid_nonce();
