@@ -1,0 +1,5 @@
+Host plana* mira* burnupi* tala* saya* vpm* names* gitbuilder* teuthology gw* senta* vercoi* rex* magna*
+  ServerAliveInterval 360
+  StrictHostKeyChecking no
+  UserKnownHostsFile=/dev/null
+  User ubuntu

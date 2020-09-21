@@ -22,16 +22,10 @@
 #ifndef COMMON_BLOOM_FILTER_HPP
 #define COMMON_BLOOM_FILTER_HPP
 
-#include <cstddef>
-#include <algorithm>
 #include <cmath>
-#include <limits>
-#include <list>
-#include <string>
-#include <vector>
 
+#include "include/mempool.h"
 #include "include/encoding.h"
-#include "common/Formatter.h"
 
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 static const unsigned char bit_mask[bits_per_char] = {
@@ -45,6 +39,7 @@ static const unsigned char bit_mask[bits_per_char] = {
   0x80   //10000000
 };
 
+MEMPOOL_DECLARE_FACTORY(unsigned char, byte, bloom_filter);
 
 class bloom_filter
 {
@@ -80,7 +75,7 @@ public:
       target_element_count_(predicted_inserted_element_count),
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
-    assert(false_positive_probability > 0.0);
+    ceph_assert(false_positive_probability > 0.0);
     find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
 			    &salt_count_, &table_size_);
     init();
@@ -103,7 +98,7 @@ public:
   void init() {
     generate_unique_salt();
     if (table_size_) {
-      bit_table_ = new cell_type[table_size_];
+      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
       std::fill_n(bit_table_, table_size_, 0x00);
     } else {
       bit_table_ = NULL;
@@ -119,13 +114,15 @@ public:
   bloom_filter& operator = (const bloom_filter& filter)
   {
     if (this != &filter) {
+      if (bit_table_) {
+	mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
+      }
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
       insert_count_ = filter.insert_count_;
       target_element_count_ = filter.target_element_count_;
       random_seed_ = filter.random_seed_;
-      delete[] bit_table_;
-      bit_table_ = new cell_type[table_size_];
+      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
       std::copy(filter.bit_table_, filter.bit_table_ + table_size_, bit_table_);
       salt_ = filter.salt_;
     }
@@ -134,7 +131,7 @@ public:
 
   virtual ~bloom_filter()
   {
-    delete[] bit_table_;
+    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
   }
 
   inline bool operator!() const
@@ -159,7 +156,7 @@ public:
    * @param val integer value to insert
    */
   inline void insert(uint32_t val) {
-    assert(bit_table_);
+    ceph_assert(bit_table_);
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -172,7 +169,7 @@ public:
 
   inline void insert(const unsigned char* key_begin, const std::size_t& length)
   {
-    assert(bit_table_);
+    ceph_assert(bit_table_);
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -181,13 +178,6 @@ public:
       bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
     ++insert_count_;
-  }
-
-  template<typename T>
-  inline void insert(const T& t)
-  {
-    // Note: T must be a C++ POD type.
-    insert(reinterpret_cast<const unsigned char*>(&t),sizeof(T));
   }
 
   inline void insert(const std::string& key)
@@ -252,12 +242,6 @@ public:
       }
     }
     return true;
-  }
-
-  template<typename T>
-  inline bool contains(const T& t) const
-  {
-    return contains(reinterpret_cast<const unsigned char*>(&t),static_cast<std::size_t>(sizeof(T)));
   }
 
   inline bool contains(const std::string& key) const
@@ -522,9 +506,9 @@ protected:
   }
 
 public:
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(bloom_filter)
@@ -553,7 +537,7 @@ public:
     size_list.push_back(table_size_);
   }
 
-  inline virtual std::size_t size() const
+  inline std::size_t size() const override
   {
     return size_list.back() * bits_per_char;
   }
@@ -576,7 +560,7 @@ public:
       return false;
     }
 
-    cell_type* tmp = new cell_type[new_table_size];
+    cell_type* tmp = mempool::bloom_filter::alloc_byte.allocate(new_table_size);
     std::copy(bit_table_, bit_table_ + (new_table_size), tmp);
     cell_type* itr = bit_table_ + (new_table_size);
     cell_type* end = bit_table_ + (original_table_size);
@@ -589,7 +573,7 @@ public:
 	itr_tmp = tmp;
     }
 
-    delete[] bit_table_;
+    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
     bit_table_ = tmp;
     size_list.push_back(new_table_size);
     table_size_ = new_table_size;
@@ -597,7 +581,7 @@ public:
     return true;
   }
 
-  virtual inline double approx_unique_element_count() const {
+  inline double approx_unique_element_count() const override {
     // this is not a very good estimate; a better solution should have
     // some asymptotic behavior as density() approaches 1.0.
     //
@@ -607,7 +591,7 @@ public:
 
 private:
 
-  inline virtual void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const
+  inline void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const override
   {
     bit_index = hash;
     for (std::size_t i = 0; i < size_list.size(); ++i)
@@ -619,9 +603,9 @@ private:
 
   std::vector<std::size_t> size_list;
 public:
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::bufferlist& bl) const;
+  void decode(ceph::bufferlist::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<compressible_bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(compressible_bloom_filter)

@@ -1,0 +1,13 @@
+<ngb-alert class="no-margin-bottom"
+           type="{{ alertType }}"
+           *ngIf="displayNotification"
+           (close)="close($event)">
+  <div *ngIf="expirationDays === 0"
+       i18n>Your password will expire in <strong>less than 1</strong> day. Click
+    <a routerLink="/user-profile/edit"
+       class="alert-link">here</a> to change it now.</div>
+  <div *ngIf="expirationDays > 0"
+       i18n>Your password will expire in <strong>{{ expirationDays }}</strong> day(s). Click
+  <a routerLink="/user-profile/edit"
+     class="alert-link">here</a> to change it now.</div>
+</ngb-alert>

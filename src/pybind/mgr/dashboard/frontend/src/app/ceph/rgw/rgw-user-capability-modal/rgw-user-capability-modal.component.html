@@ -1,0 +1,71 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+        <!-- Type -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': !editing}"
+                 for="type"
+                 i18n>Type</label>
+          <div class="cd-col-form-input">
+            <input id="type"
+                   class="form-control"
+                   type="text"
+                   *ngIf="editing"
+                   [readonly]="true"
+                   formControlName="type">
+            <select id="type"
+                    class="form-control custom-select"
+                    formControlName="type"
+                    *ngIf="!editing"
+                    autofocus>
+              <option i18n
+                      *ngIf="types !== null"
+                      [ngValue]="null">-- Select a type --</option>
+              <option *ngFor="let type of types"
+                      [value]="type">{{ type }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('type', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Permission -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="perm"
+                 i18n>Permission</label>
+          <div class="cd-col-form-input">
+            <select id="perm"
+                    class="form-control custom-select"
+                    formControlName="perm">
+              <option i18n
+                      [ngValue]="null">-- Select a permission --</option>
+              <option *ngFor="let perm of ['read', 'write', '*']"
+                      [value]="perm">
+                {{ perm }}
+              </option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('perm', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="onSubmit()"
+                          i18n="form action button|Example: Create Pool@@formActionButton"
+                          [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"></cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

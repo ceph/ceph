@@ -16,9 +16,17 @@
 #define CEPH_GLOBAL_SIGNAL_HANDLER_H
 
 #include <signal.h>
-#include <string>
+#include "acconfig.h"
 
 typedef void (*signal_handler_t)(int);
+
+#ifdef HAVE_SIGDESCR_NP
+# define sig_str(signum) sigdescr_np(signum)
+#elif HAVE_REENTRANT_STRSIGNAL
+# define sig_str(signum) strsignal(signum)
+#else
+# define sig_str(signum) sys_siglist[signum]
+#endif
 
 void install_sighandler(int signum, signal_handler_t handler, int flags);
 

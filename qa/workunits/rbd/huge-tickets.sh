@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This is a test for http://tracker.ceph.com/issues/8979 and the fallout
 # from triaging it.  #8979 itself was random crashes on corrupted memory

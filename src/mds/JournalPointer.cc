@@ -18,10 +18,12 @@
 #include "common/Cond.h"
 #include "osdc/Objecter.h"
 #include "mds/mdstypes.h"
+#include "msg/Messenger.h"
 
 #include "mds/JournalPointer.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".journalpointer "
@@ -42,7 +44,7 @@ std::string JournalPointer::get_object_id() const
  */
 int JournalPointer::load(Objecter *objecter)
 {
-  assert(objecter != NULL);
+  ceph_assert(objecter != NULL);
 
   // Blocking read of data
   std::string const object_id = get_object_id();
@@ -55,7 +57,7 @@ int JournalPointer::load(Objecter *objecter)
 
   // Construct JournalPointer result, null or decoded data
   if (r == 0) {
-    bufferlist::iterator q = data.begin();
+    auto q = data.cbegin();
     try {
       decode(q);
     } catch (const buffer::error &e) {
@@ -75,9 +77,9 @@ int JournalPointer::load(Objecter *objecter)
  */
 int JournalPointer::save(Objecter *objecter) const
 {
-  assert(objecter != NULL);
+  ceph_assert(objecter != NULL);
   // It is not valid to persist a null pointer
-  assert(!is_null());
+  ceph_assert(!is_null());
 
   // Serialize JournalPointer object
   bufferlist data;
@@ -90,7 +92,9 @@ int JournalPointer::save(Objecter *objecter) const
 
   C_SaferCond waiter;
   objecter->write_full(object_t(object_id), object_locator_t(pool_id),
-      SnapContext(), data, ceph_clock_now(g_ceph_context), 0, NULL, &waiter);
+		       SnapContext(), data,
+		       ceph::real_clock::now(), 0,
+		       &waiter);
   int write_result = waiter.wait();
   if (write_result < 0) {
     derr << "Error writing pointer object '" << object_id << "': " << cpp_strerror(write_result) << dendl;
@@ -105,12 +109,14 @@ int JournalPointer::save(Objecter *objecter) const
  */
 void JournalPointer::save(Objecter *objecter, Context *completion) const
 {
-  assert(objecter != NULL);
+  ceph_assert(objecter != NULL);
 
   bufferlist data;
   encode(data);
 
   objecter->write_full(object_t(get_object_id()), object_locator_t(pool_id),
-      SnapContext(), data, ceph_clock_now(g_ceph_context), 0, NULL, completion);
+		       SnapContext(), data,
+		       ceph::real_clock::now(), 0,
+		       completion);
 }
 

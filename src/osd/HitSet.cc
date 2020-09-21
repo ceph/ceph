@@ -13,6 +13,11 @@
  */
 
 #include "HitSet.h"
+#include "common/Formatter.h"
+
+using std::ostream;
+using std::list;
+using ceph::Formatter;
 
 // -- HitSet --
 
@@ -36,33 +41,30 @@ HitSet::HitSet(const HitSet::Params& params)
     impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params.impl.get())));
     break;
 
-  case TYPE_NONE:
-    break;
-
   default:
     assert (0 == "unknown HitSet type");
   }
 }
 
-void HitSet::encode(bufferlist &bl) const
+void HitSet::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(sealed, bl);
+  encode(sealed, bl);
   if (impl) {
-    ::encode((__u8)impl->get_type(), bl);
+    encode((__u8)impl->get_type(), bl);
     impl->encode(bl);
   } else {
-    ::encode((__u8)TYPE_NONE, bl);
+    encode((__u8)TYPE_NONE, bl);
   }
   ENCODE_FINISH(bl);
 }
 
-void HitSet::decode(bufferlist::iterator &bl)
+void HitSet::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START(1, bl);
-  ::decode(sealed, bl);
+  decode(sealed, bl);
   __u8 type;
-  ::decode(type, bl);
+  decode(type, bl);
   switch ((impl_type_t)type) {
   case TYPE_EXPLICIT_HASH:
     impl.reset(new ExplicitHashHitSet);
@@ -77,7 +79,7 @@ void HitSet::decode(bufferlist::iterator &bl)
     impl.reset(NULL);
     break;
   default:
-    throw buffer::malformed_input("unrecognized HitMap type");
+    throw ceph::buffer::malformed_input("unrecognized HitMap type");
   }
   if (impl)
     impl->decode(bl);
@@ -109,15 +111,15 @@ void HitSet::generate_test_instances(list<HitSet*>& o)
   o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
 }
 
-HitSet::Params::Params(const Params& o)
+HitSet::Params::Params(const Params& o) noexcept
 {
   if (o.get_type() != TYPE_NONE) {
     create_impl(o.get_type());
     // it's annoying to write virtual operator= methods; use encode/decode
     // instead.
-    bufferlist bl;
+    ceph::buffer::list bl;
     o.impl->encode(bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     impl->decode(p);
   } // else we don't need to do anything
 }
@@ -128,22 +130,22 @@ const HitSet::Params& HitSet::Params::operator=(const Params& o)
   if (o.impl) {
     // it's annoying to write virtual operator= methods; use encode/decode
     // instead.
-    bufferlist bl;
+    ceph::buffer::list bl;
     o.impl->encode(bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     impl->decode(p);
   }
   return *this;
 }
 
-void HitSet::Params::encode(bufferlist &bl) const
+void HitSet::Params::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(1, 1, bl);
   if (impl) {
-    ::encode((__u8)impl->get_type(), bl);
+    encode((__u8)impl->get_type(), bl);
     impl->encode(bl);
   } else {
-    ::encode((__u8)TYPE_NONE, bl);
+    encode((__u8)TYPE_NONE, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -169,13 +171,13 @@ bool HitSet::Params::create_impl(impl_type_t type)
   return true;
 }
 
-void HitSet::Params::decode(bufferlist::iterator &bl)
+void HitSet::Params::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START(1, bl);
   __u8 type;
-  ::decode(type, bl);
+  decode(type, bl);
   if (!create_impl((impl_type_t)type))
-    throw buffer::malformed_input("unrecognized HitMap type");
+    throw ceph::buffer::malformed_input("unrecognized HitMap type");
   if (impl)
     impl->decode(bl);
   DECODE_FINISH(bl);
@@ -215,4 +217,40 @@ ostream& operator<<(ostream& out, const HitSet::Params& p) {
   }
   out << "}";
   return out;
+}
+
+
+void ExplicitHashHitSet::dump(Formatter *f) const {
+  f->dump_unsigned("insert_count", count);
+  f->open_array_section("hash_set");
+  for (ceph::unordered_set<uint32_t>::const_iterator p = hits.begin();
+       p != hits.end();
+       ++p)
+    f->dump_unsigned("hash", *p);
+  f->close_section();
+}
+
+void ExplicitObjectHitSet::dump(Formatter *f) const {
+  f->dump_unsigned("insert_count", count);
+  f->open_array_section("set");
+  for (ceph::unordered_set<hobject_t>::const_iterator p = hits.begin();
+       p != hits.end();
+       ++p) {
+    f->open_object_section("object");
+    p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void BloomHitSet::Params::dump(Formatter *f) const {
+  f->dump_float("false_positive_probability", get_fpp());
+  f->dump_int("target_size", target_size);
+  f->dump_int("seed", seed);
+}
+
+void BloomHitSet::dump(Formatter *f) const {
+  f->open_object_section("bloom_filter");
+  bloom.dump(f);
+  f->close_section();
 }

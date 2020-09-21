@@ -1,0 +1,16 @@
+---
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+version: 2
+formats: []
+build:
+  image: latest
+python:
+  version: 3
+  install:
+    - requirements: admin/doc-requirements.txt
+    - requirements: admin/doc-read-the-docs.txt
+sphinx:
+  builder: dirhtml
+  configuration: doc/conf.py

@@ -1,0 +1,123 @@
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <form name="roleForm"
+        #formDir="ngForm"
+        [formGroup]="roleForm"
+        novalidate>
+    <div class="card">
+      <div i18n="form title|Example: Create Pool@@formTitle"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+      <div class="card-body">
+
+        <!-- Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': mode !== roleFormMode.editing}"
+                 for="name"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Name..."
+                   id="name"
+                   name="name"
+                   formControlName="name"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="roleForm.showError('name', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="roleForm.showError('name', formDir, 'notUnique')"
+                  i18n>The chosen name is already in use.</span>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group row">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="description">Description</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Description..."
+                   id="description"
+                   name="description"
+                   formControlName="description">
+          </div>
+        </div>
+
+        <!-- Permissions -->
+        <div class="form-group row">
+          <label i18n
+                 class="cd-col-form-label">Permissions</label>
+          <div class="cd-col-form-input">
+            <cd-table [data]="scopes_permissions"
+                      [columns]="columns"
+                      columnMode="flex"
+                      [toolHeader]="false"
+                      [autoReload]="false"
+                      [autoSave]="false"
+                      [footer]="false"
+                      [limit]="0">
+            </cd-table>
+          </div>
+        </div>
+
+      </div>
+      <div class="card-footer">
+        <div class="text-right">
+          <cd-submit-button (submitAction)="submit()"
+                            i18n="form action button|Example: Create Pool@@formActionButton"
+                            [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<ng-template #cellScopeCheckboxTpl
+             let-column="column"
+             let-row="row"
+             let-value="value">
+  <div class="custom-control custom-checkbox">
+    <input class="custom-control-input"
+           id="scope_{{ row.scope }}"
+           type="checkbox"
+           [checked]="isRowChecked(row.scope)"
+           (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
+    <label class="datatable-permissions-scope-cell-label custom-control-label"
+           for="scope_{{ row.scope }}">{{ value }}</label>
+  </div>
+</ng-template>
+
+<ng-template #cellPermissionCheckboxTpl
+             let-column="column"
+             let-row="row"
+             let-value="value">
+  <div class="custom-control custom-checkbox">
+    <input class="custom-control-input"
+           type="checkbox"
+           [checked]="value"
+           [id]="row.scope + '-' + column.prop"
+           (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
+    <label class="custom-control-label"
+           [for]="row.scope + '-' + column.prop"></label>
+  </div>
+</ng-template>
+
+<ng-template #headerPermissionCheckboxTpl
+             let-column="column">
+  <div class="custom-control custom-checkbox">
+    <input class="custom-control-input"
+           id="header_{{ column.prop }}"
+           type="checkbox"
+           [checked]="isHeaderChecked(column.prop)"
+           (change)="onClickHeaderCheckbox(column.prop, $event)">
+    <label class="datatable-permissions-header-cell-label custom-control-label"
+           for="header_{{ column.prop }}">{{ column.name }}</label>
+  </div>
+</ng-template>

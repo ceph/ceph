@@ -2,6 +2,8 @@
  Messaging
 ===========
 
+General Settings
+================
 
 ``ms tcp nodelay``
 
@@ -81,3 +83,51 @@
 :Type: 64-bit Unsigned Integer
 :Required: No
 :Default: ``0``
+
+Async messenger options
+=======================
+
+
+``ms async transport type``
+
+:Description: Transport type used by Async Messenger. Can be ``posix``, ``dpdk``
+              or ``rdma``. Posix uses standard TCP/IP networking and is default. 
+              Other transports may be experimental and support may be limited.
+:Type: String
+:Required: No
+:Default: ``posix``
+
+
+``ms async op threads``
+
+:Description: Initial number of worker threads used by each Async Messenger instance.
+              Should be at least equal to highest number of replicas, but you can
+              decrease it if you are low on CPU core count and/or you host a lot of
+              OSDs on single server.
+:Type: 64-bit Unsigned Integer
+:Required: No
+:Default: ``3``
+
+
+``ms async max op threads``
+
+:Description: Maximum number of worker threads used by each Async Messenger instance. 
+              Set to lower values when your machine has limited CPU count, and increase 
+              when your CPUs are underutilized (i. e. one or more of CPUs are
+              constantly on 100% load during I/O operations).
+:Type: 64-bit Unsigned Integer
+:Required: No
+:Default: ``5``
+
+
+``ms async send inline``
+
+:Description: Send messages directly from the thread that generated them instead of
+              queuing and sending from Async Messenger thread. This option is known
+              to decrease performance on systems with a lot of CPU cores, so it's
+              disabled by default.
+:Type: Boolean
+:Required: No
+:Default: ``false``
+
+

@@ -15,30 +15,41 @@
 #ifndef CEPH_MDSFINDINOREPLY_H
 #define CEPH_MDSFINDINOREPLY_H
 
-#include "msg/Message.h"
 #include "include/filepath.h"
+#include "messages/MMDSOp.h"
 
-struct MMDSFindInoReply : public Message {
-  ceph_tid_t tid;
+class MMDSFindInoReply : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
+public:
+  ceph_tid_t tid = 0;
   filepath path;
 
-  MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
-  MMDSFindInoReply(ceph_tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
+protected:
+  MMDSFindInoReply() : MMDSOp{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSFindInoReply(ceph_tid_t t) : MMDSOp{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION}, tid(t) {}
+  ~MMDSFindInoReply() override {}
 
-  const char *get_type_name() const { return "findinoreply"; }
-  void print(ostream &out) const {
+public:
+  std::string_view get_type_name() const override { return "findinoreply"; }
+  void print(std::ostream &out) const override {
     out << "findinoreply(" << tid << " " << path << ")";
   }
-  
-  void encode_payload(uint64_t features) {
-    ::encode(tid, payload);
-    ::encode(path, payload);
+
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(tid, payload);
+    encode(path, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(tid, p);
-    ::decode(path, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(tid, p);
+    decode(path, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

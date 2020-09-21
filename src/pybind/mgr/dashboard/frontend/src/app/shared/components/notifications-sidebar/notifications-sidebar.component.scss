@@ -1,0 +1,55 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+:host {
+  bottom: 10px;
+  max-width: 90vw;
+  position: fixed;
+  right: -350px;
+  top: bd.$navbar-height + 10px;
+
+  transition: all 0.6s;
+
+  width: 350px;
+
+  z-index: 9;
+}
+
+:host.active {
+  right: 20px;
+}
+
+.card {
+  height: 100%;
+}
+
+.card-body {
+  padding-left: 5px;
+}
+
+ngx-simplebar {
+  height: calc(100% - 42.2px);
+}
+
+.separator {
+  background-color: bd.$gray-200;
+  color: bd.$gray-600;
+  font-size: 1rem;
+  padding: 5px 12px;
+}
+
+.btn-link .fa-trash-o {
+  color: bd.$black;
+}
+
+table {
+  width: 100%;
+}
+
+.row {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.fa-times {
+  margin-right: 10px;
+}

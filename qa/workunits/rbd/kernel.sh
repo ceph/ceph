@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 CEPH_SECRET_FILE=${CEPH_SECRET_FILE:-}
 CEPH_ID=${CEPH_ID:-admin}
@@ -9,35 +10,32 @@ fi
 
 TMP_FILES="/tmp/img1 /tmp/img1.small /tmp/img1.snap1 /tmp/img1.export /tmp/img1.trunc"
 
+function expect_false() {
+	if "$@"; then return 1; else return 0; fi
+}
+
 function get_device_dir {
 	local POOL=$1
 	local IMAGE=$2
 	local SNAP=$3
-	rbd showmapped | tail -n +2 | egrep "\s+$POOL\s+$IMAGE\s+$SNAP\s+" | awk '{print $1;}'
+	rbd device list | tail -n +2 | egrep "\s+$POOL\s+$IMAGE\s+$SNAP\s+" |
+	    awk '{print $1;}'
 }
 
 function clean_up {
-	udevadm settle
 	[ -e /dev/rbd/rbd/testimg1@snap1 ] &&
-		rbd unmap /dev/rbd/rbd/testimg1@snap1 || true
+		sudo rbd device unmap /dev/rbd/rbd/testimg1@snap1
 	if [ -e /dev/rbd/rbd/testimg1 ]; then
-		rbd unmap /dev/rbd/rbd/testimg1 || true
+		sudo rbd device unmap /dev/rbd/rbd/testimg1
 		rbd snap purge testimg1 || true
 	fi
-	udevadm settle
-	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
 	rbd ls | grep testimg1 > /dev/null && rbd rm testimg1 || true
 	sudo rm -f $TMP_FILES
 }
 
-[ -d /sys/bus/rbd ] || sudo modprobe rbd
-
 clean_up
 
 trap clean_up INT TERM EXIT
-
-# allow ubuntu user to map/unmap rbd devices
-sudo chown ubuntu /sys/bus/rbd/add /sys/bus/rbd/remove
 
 # create an image
 dd if=/bin/sh of=/tmp/img1 bs=1k count=1 seek=10
@@ -49,9 +47,7 @@ dd if=/dev/zero of=/tmp/img1 count=0 seek=150000
 
 # import
 rbd import /tmp/img1 testimg1
-rbd map testimg1 --user $CEPH_ID $SECRET_ARGS
-# wait for udev to catch up
-udevadm settle
+sudo rbd device map testimg1 --user $CEPH_ID $SECRET_ARGS
 
 DEV_ID1=$(get_device_dir rbd testimg1 -)
 echo "dev_id1 = $DEV_ID1"
@@ -63,9 +59,7 @@ cmp /tmp/img1 /tmp/img1.export
 
 # snapshot
 rbd snap create testimg1 --snap=snap1
-rbd map --snap=snap1 testimg1 --user $CEPH_ID $SECRET_ARGS
-# wait for udev to catch up
-udevadm settle
+sudo rbd device map --snap=snap1 testimg1 --user $CEPH_ID $SECRET_ARGS
 
 DEV_ID2=$(get_device_dir rbd testimg1 snap1)
 cat /sys/bus/rbd/devices/$DEV_ID2/size | grep 76800000
@@ -83,6 +77,10 @@ cp /tmp/img1 /tmp/img1.trunc
 truncate -s 41943040 /tmp/img1.trunc
 cmp /tmp/img1.trunc /tmp/img1.small
 
+# rollback expects an unlocked image
+# (acquire and) release the lock as a side effect
+rbd bench --io-type read --io-size 1 --io-threads 1 --io-total 1 testimg1
+
 # rollback and check data again
 rbd snap rollback --snap=snap1 testimg1
 cat /sys/bus/rbd/devices/$DEV_ID1/size | grep 76800000
@@ -94,8 +92,9 @@ cmp /tmp/img1 /tmp/img1.snap1
 sudo dd if=/dev/rbd/rbd/testimg1 of=/tmp/img1.export
 cmp /tmp/img1 /tmp/img1.export
 
-# remove snapshot and detect error from mapped snapshot
+# zeros are returned if an image or a snapshot is removed
+expect_false cmp -n 76800000 /dev/rbd/rbd/testimg1@snap1 /dev/zero
 rbd snap rm --snap=snap1 testimg1
-sudo dd if=/dev/rbd/rbd/testimg1@snap1 of=/tmp/img1.snap1 2>&1 | grep 'Input/output error'
+cmp -n 76800000 /dev/rbd/rbd/testimg1@snap1 /dev/zero
 
 echo OK

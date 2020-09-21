@@ -11,12 +11,14 @@
  * Foundation.  See file COPYING.
  *
  */
-#include <string>
 
 #ifndef CEPH_LIBRADOS_LISTOBJECTIMPL_H
 #define CEPH_LIBRADOS_LISTOBJECTIMPL_H
 
+#include <string>
 #include <include/rados/librados.hpp>
+
+#include "include/cmp.h"
 
 namespace librados {
 struct ListObjectImpl {
@@ -40,8 +42,6 @@ inline std::ostream& operator<<(std::ostream& out, const struct ListObjectImpl& 
   return out;
 }
 
-struct ObjListCtx;
-
 class NObjectIteratorImpl {
   public:
     NObjectIteratorImpl() {}
@@ -56,10 +56,6 @@ class NObjectIteratorImpl {
     NObjectIteratorImpl &operator++(); // Preincrement
     NObjectIteratorImpl operator++(int); // Postincrement
     const ListObject *get_listobjectp() { return &cur_obj; }
-    friend class IoCtx;
-    friend struct ListObjectImpl;
-    //friend class ListObject;
-    friend class NObjectIterator;
 
     /// get current hash position of the iterator, rounded to the current pg
     uint32_t get_pg_hash_position() const;
@@ -67,12 +63,17 @@ class NObjectIteratorImpl {
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /// move the iterator to a given cursor position
+    uint32_t seek(const librados::ObjectCursor& cursor);
+
+    /// get current cursor position
+    librados::ObjectCursor get_cursor();
+
     void set_filter(const bufferlist &bl);
 
-  private:
     NObjectIteratorImpl(ObjListCtx *ctx_);
     void get_next();
-    ceph::shared_ptr < ObjListCtx > ctx;
+    std::shared_ptr < ObjListCtx > ctx;
     ListObject cur_obj;
 };
 

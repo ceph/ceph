@@ -1,15 +1,8 @@
-#!/bin/sh -e
-
-branch="$1"
-if [ -z "$branch" ]; then branch="master"; fi
+#!/bin/sh -ex
 
 export COVDIR="$HOME/cov-analysis"
 if [ ! -d "$COVDIR" ]; then
     echo "missing $COVDIR; get that from coverity!"
-    exit 1
-fi
-if [ ! -e "$HOME/coverity_rsa" ]; then
-    echo "missing ssh key for results upload"
     exit 1
 fi
 if [ ! -e "$HOME/coverity.build.pass.txt" ]; then
@@ -19,14 +12,22 @@ fi
 
 export PATH="$COVDIR/bin:$PATH"
 
-git fetch
-git reset --hard origin/$branch
-cd ..
-git submodule update
-cd src
-rm -f project.tgz
-make project.tgz
-scp -i ~/coverity_rsa project.tgz sage@ceph.com:/home/ceph_site/ceph.com/coverity/`git describe`.tgz
-curl --data "project=ceph&password=`cat ~/coverity.build.pass.txt`&email=sage@newdream.net&url=http://ceph.com/coverity/`git describe`.tgz" http://scan5.coverity.com/cgi-bin/submit_build.py
+rm -rf build
+./do_cmake.sh
+cd build
+~/cov-analysis/bin/cov-build --dir cov-int make -j$(nproc)
+
+echo Sage Weil sage@newdream.net ceph >> README
+tar czvf project.tgz README cov-int
+rm -f README
+
+version=`git describe`
+token=`cat ~/coverity.build.pass.txt`
+curl --form token=$token \
+  --form email=sage@newdream.net \
+  --form file=@project.tgz \
+  --form version="$version" \
+  --form description="Automated Ceph build from `hostname`" \
+  https://scan.coverity.com/builds?project=ceph
 
 echo done.

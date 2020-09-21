@@ -12,8 +12,6 @@ sudo apt-get -y  purge ceph-fuse
 sudo apt-get -y  purge ceph-fuse-dbg
 sudo apt-get -y  purge ceph-common
 sudo apt-get -y  purge ceph-common-dbg
-sudo apt-get -y  purge ceph-fs-common
-sudo apt-get -y  purge ceph-fs-common-dbg
 sudo apt-get -y  purge ceph-resource-agents
 sudo apt-get -y  purge librados2
 sudo apt-get -y  purge librados2-dbg
@@ -21,8 +19,8 @@ sudo apt-get -y  purge librados-dev
 sudo apt-get -y  purge librbd1
 sudo apt-get -y  purge librbd1-dbg
 sudo apt-get -y  purge librbd-dev
-sudo apt-get -y  purge libcephfs1
-sudo apt-get -y  purge libcephfs1-dbg
+sudo apt-get -y  purge libcephfs2
+sudo apt-get -y  purge libcephfs2-dbg
 sudo apt-get -y  purge libcephfs-dev
 sudo apt-get -y  purge radosgw
 sudo apt-get -y  purge radosgw-dbg

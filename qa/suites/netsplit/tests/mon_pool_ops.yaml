@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        mon election default strategy: 3
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - mon/pool_ops.sh
+- netsplit.disconnect: [mon.a, mon.c]
+- workunit:
+    clients:
+      client.0:
+        - mon/pool_ops.sh
+- netsplit.reconnect: [mon.a, mon.c]
+- netsplit.disconnect: [mon.b, mon.c]
+- workunit:
+    clients:
+      client.0:
+        - mon/pool_ops.sh

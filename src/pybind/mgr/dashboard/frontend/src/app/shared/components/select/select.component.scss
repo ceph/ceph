@@ -1,0 +1,22 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.select-menu-item {
+  border-bottom: 1px solid bd.$datatable-divider-color;
+  cursor: pointer;
+  display: block;
+  font-size: 1rem;
+
+  &:hover {
+    background-color: bd.$gray-200;
+  }
+}
+
+.select-menu-item-icon {
+  float: left;
+  padding: 0.5em;
+  width: 3em;
+}
+
+.select-menu-item-content {
+  padding: 0.5em;
+}

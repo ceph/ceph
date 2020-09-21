@@ -15,26 +15,30 @@
 #ifndef CEPH_MMONMAP_H
 #define CEPH_MMONMAP_H
 
+#include "include/encoding.h"
 #include "include/ceph_features.h"
 #include "msg/Message.h"
+#include "msg/MessageRef.h"
 #include "mon/MonMap.h"
 
 class MMonMap : public Message {
 public:
-  bufferlist monmapbl;
+  ceph::buffer::list monmapbl;
 
-  MMonMap() : Message(CEPH_MSG_MON_MAP) { }
-  MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
-    monmapbl.claim(bl);
+  MMonMap() : Message{CEPH_MSG_MON_MAP} { }
+  explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {
+    monmapbl = std::move(bl);
   }
 private:
-  ~MMonMap() {}
+  ~MMonMap() override {}
 
 public:
-  const char *get_type_name() const { return "mon_map"; }
+  std::string_view get_type_name() const override { return "mon_map"; }
 
-  void encode_payload(uint64_t features) { 
-    if (monmapbl.length() && (features & CEPH_FEATURE_MONENC) == 0) {
+  void encode_payload(uint64_t features) override { 
+    if (monmapbl.length() &&
+	((features & CEPH_FEATURE_MONENC) == 0 ||
+	 (features & CEPH_FEATURE_MSG_ADDR2) == 0)) {
       // reencode old-format monmap
       MonMap t;
       t.decode(monmapbl);
@@ -42,12 +46,17 @@ public:
       t.encode(monmapbl, features);
     }
 
-    ::encode(monmapbl, payload);
+    using ceph::encode;
+    encode(monmapbl, payload);
   }
-  void decode_payload() { 
-    bufferlist::iterator p = payload.begin();
-    ::decode(monmapbl, p);
+  void decode_payload() override { 
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(monmapbl, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

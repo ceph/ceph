@@ -21,70 +21,51 @@
 
 
 class MOSDPGRemove : public Message {
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
-
-  epoch_t epoch;
+  epoch_t epoch = 0;
 
  public:
-  vector<spg_t> pg_list;
+  std::vector<spg_t> pg_list;
 
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
   MOSDPGRemove() :
-    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
-  MOSDPGRemove(epoch_t e, vector<spg_t>& l) :
-    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
+    Message{MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION} {}
+  MOSDPGRemove(epoch_t e, std::vector<spg_t>& l) :
+    Message{MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION} {
     this->epoch = e;
     pg_list.swap(l);
   }
 private:
-  ~MOSDPGRemove() {}
+  ~MOSDPGRemove() override {}
 
-public:  
-  const char *get_type_name() const { return "PGrm"; }
+public:
+  std::string_view get_type_name() const override { return "PGrm"; }
 
-  void encode_payload(uint64_t features) {
-    ::encode(epoch, payload);
-
-    vector<pg_t> _pg_list;
-    _pg_list.reserve(pg_list.size());
-    vector<shard_id_t> _shard_list;
-    _shard_list.reserve(pg_list.size());
-    for (vector<spg_t>::iterator i = pg_list.begin(); i != pg_list.end(); ++i) {
-      _pg_list.push_back(i->pgid);
-      _shard_list.push_back(i->shard);
-    }
-    ::encode(_pg_list, payload);
-    ::encode(_shard_list, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(pg_list, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    vector<pg_t> _pg_list;
-    ::decode(_pg_list, p);
-
-    vector<shard_id_t> _shard_list(_pg_list.size(), shard_id_t::NO_SHARD);
-    if (header.version >= 2) {
-      _shard_list.clear();
-      ::decode(_shard_list, p);
-    }
-    assert(_shard_list.size() == _pg_list.size());
-    pg_list.reserve(_shard_list.size());
-    for (unsigned i = 0; i < _shard_list.size(); ++i) {
-      pg_list.push_back(spg_t(_pg_list[i], _shard_list[i]));
-    }
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(pg_list, p);
   }
-  void print(ostream& out) const {
+  void print(std::ostream& out) const override {
     out << "osd pg remove(" << "epoch " << epoch << "; ";
-    for (vector<spg_t>::const_iterator i = pg_list.begin();
-         i != pg_list.end();
-         ++i) {
+    for (auto i = pg_list.begin(); i != pg_list.end(); ++i) {
       out << "pg" << *i << "; ";
     }
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -25,22 +25,17 @@
 
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
-#include "common/debug.h"
-#include "erasure-code/ErasureCodePlugin.h"
-#include "ErasureCodeIsaTableCache.h"
+#include "include/buffer.h"
+#include "ErasureCodePluginIsa.h"
 #include "ErasureCodeIsa.h"
 // -----------------------------------------------------------------------------
 
-class ErasureCodePluginIsa : public ErasureCodePlugin {
-public:
-  ErasureCodeIsaTableCache tcache;
-
-  virtual int factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
-                      ErasureCodeInterfaceRef *erasure_code,
-                      ostream *ss)
-  {
-    ErasureCodeIsa *interface;
+int ErasureCodePluginIsa::factory(const std::string &directory,
+                                  ceph::ErasureCodeProfile &profile,
+                                  ceph::ErasureCodeInterfaceRef *erasure_code,
+                                  std::ostream *ss)
+{
+  ErasureCodeIsa *interface;
     std::string t;
     if (profile.find("technique") == profile.end())
       profile["technique"] = "reed_sol_van";
@@ -66,10 +61,9 @@ public:
       delete interface;
       return r;
     }
-    *erasure_code = ErasureCodeInterfaceRef(interface);
+    *erasure_code = ceph::ErasureCodeInterfaceRef(interface);
     return 0;
-  }
-};
+}
 
 // -----------------------------------------------------------------------------
 
@@ -82,7 +76,7 @@ const char *__erasure_code_version()
 
 int __erasure_code_init(char *plugin_name, char *directory)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  auto& instance = ceph::ErasureCodePluginRegistry::instance();
 
   return instance.add(plugin_name, new ErasureCodePluginIsa());
 }

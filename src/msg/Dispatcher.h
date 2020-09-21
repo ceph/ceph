@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,24 +7,29 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
 #ifndef CEPH_DISPATCHER_H
 #define CEPH_DISPATCHER_H
 
-#include "Message.h"
-#include "common/config.h"
-#include "auth/Auth.h"
+#include <memory>
+#include "include/buffer_fwd.h"
+#include "include/ceph_assert.h"
+#include "include/common_fwd.h"
+#include "msg/MessageRef.h"
 
 class Messenger;
+class Connection;
+class CryptoKey;
+class KeyStore;
 
 class Dispatcher {
 public:
-  Dispatcher(CephContext *cct_)
+  explicit Dispatcher(CephContext *cct_)
     : cct(cct_)
   {
   }
@@ -54,7 +59,10 @@ public:
    * @param m The message we want to fast dispatch.
    * @returns True if the message can be fast dispatched; false otherwise.
    */
-  virtual bool ms_can_fast_dispatch(Message *m) const { return false;}
+  virtual bool ms_can_fast_dispatch(const Message *m) const { return false; }
+  virtual bool ms_can_fast_dispatch2(const MessageConstRef& m) const {
+    return ms_can_fast_dispatch(m.get());
+  }
   /**
    * This function determines if a dispatcher is included in the
    * list of fast-dispatch capable Dispatchers.
@@ -68,7 +76,14 @@ public:
    *
    * @param m The Message to fast dispatch.
    */
-  virtual void ms_fast_dispatch(Message *m) { assert(0); }
+  virtual void ms_fast_dispatch(Message *m) { ceph_abort(); }
+
+  /* ms_fast_dispatch2 because otherwise the child must define both */
+  virtual void ms_fast_dispatch2(const MessageRef &m) {
+    /* allow old style dispatch handling that expects a Message * with a floating ref */
+    return ms_fast_dispatch(MessageRef(m).detach()); /* XXX N.B. always consumes ref */
+  }
+
   /**
    * Let the Dispatcher preview a Message before it is dispatched. This
    * function is called on *every* Message, prior to the fast/regular dispatch
@@ -85,13 +100,33 @@ public:
    * @param m A message which has been received
    */
   virtual void ms_fast_preprocess(Message *m) {}
+
+  /* ms_fast_preprocess2 because otherwise the child must define both */
+  virtual void ms_fast_preprocess2(const MessageRef &m) {
+    /* allow old style dispatch handling that expects a Message* */
+    return ms_fast_preprocess(m.get());
+  }
+
   /**
    * The Messenger calls this function to deliver a single message.
    *
    * @param m The message being delivered. You (the Dispatcher)
    * are given a single reference count on it.
    */
-  virtual bool ms_dispatch(Message *m) = 0;
+  virtual bool ms_dispatch(Message *m) {
+    ceph_abort();
+  }
+
+  /* ms_dispatch2 because otherwise the child must define both */
+  virtual bool ms_dispatch2(const MessageRef &m) {
+    /* allow old style dispatch handling that expects a Message * with a floating ref */
+    MessageRef mr(m);
+    if (ms_dispatch(mr.get())) {
+      mr.detach(); /* dispatcher consumed ref */
+      return true;
+    }
+    return false;
+  }
 
   /**
    * This function will be called whenever a Connection is newly-created
@@ -130,7 +165,7 @@ public:
   virtual void ms_handle_fast_accept(Connection *con) {}
 
   /*
-   * this indicates that the ordered+reliable delivery semantics have 
+   * this indicates that the ordered+reliable delivery semantics have
    * been violated.  Messages may have been lost due to a fault
    * in the network connection.
    * Only called on lossy Connections.
@@ -150,45 +185,39 @@ public:
    * a reference to it.
    */
   virtual void ms_handle_remote_reset(Connection *con) = 0;
-  
+
+  /**
+   * This indicates that the connection is both broken and further
+   * connection attempts are failing because other side refuses
+   * it.
+   *
+   * @param con The Connection which broke. You are not granted
+   * a reference to it.
+   */
+  virtual bool ms_handle_refused(Connection *con) = 0;
+
   /**
    * @defgroup Authentication
    * @{
    */
+
   /**
-   * Retrieve the AuthAuthorizer for the given peer type. It might not
-   * provide one if it knows there is no AuthAuthorizer for that type.
+   * handle successful authentication (msgr2)
    *
-   * @param dest_type The peer type we want the authorizer for.
-   * @param a Double pointer to an AuthAuthorizer. The Dispatcher will fill
-   * in *a with the correct AuthAuthorizer, if it can. Make sure that you have
-   * set *a to NULL before calling in.
-   * @param force_new Force the Dispatcher to wait for a new set of keys before
-   * returning the authorizer.
+   * Authenticated result/state will be attached to the Connection.
    *
-   * @return True if this function call properly filled in *a, false otherwise.
+   * return 1 for success
+   * return 0 for no action (let another Dispatcher handle it)
+   * return <0 for failure (failure to parse caps, for instance)
    */
-  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a, bool force_new) { return false; }
-  /**
-   * Verify the authorizer for a new incoming Connection.
-   *
-   * @param con The new incoming Connection
-   * @param peer_type The type of the endpoint which initiated this Connection
-   * @param protocol The ID of the protocol in use (at time of writing, cephx or none)
-   * @param authorizer The authorization string supplied by the remote
-   * @param authorizer_reply Output param: The string we should send back to
-   * the remote to authorize ourselves. Only filled in if isvalid
-   * @param isvalid Output param: True if authorizer is valid, false otherwise
-   *
-   * @return True if we were able to prove or disprove correctness of
-   * authorizer, false otherwise.
-   */
-  virtual bool ms_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) { return false; }
+  virtual int ms_handle_authentication(Connection *con) {
+    return 0;
+  }
+
   /**
    * @} //Authentication
    */
+
 protected:
   CephContext *cct;
 private:

@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - but it is still running
+      - objects unfound and apparently lost
+tasks:
+- thrashosds:

@@ -20,14 +20,13 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "erasure-code/shec/ErasureCodeShec.h"
 #include "erasure-code/ErasureCodePlugin.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
@@ -49,7 +48,7 @@ TEST(ErasureCodeShec, init_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -62,8 +61,8 @@ TEST(ErasureCodeShec, init_1)
   EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("default", shec->rule_root.c_str());
+  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -81,8 +80,8 @@ TEST(ErasureCodeShec, init_2)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-root"] = "test";
-  (*profile)["ruleset-failure-domain"] = "host";
+  (*profile)["crush-root"] = "test";
+  (*profile)["crush-failure-domain"] = "host";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -96,8 +95,8 @@ TEST(ErasureCodeShec, init_2)
   EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("test", shec->ruleset_root.c_str());
-  EXPECT_STREQ("host", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("test", shec->rule_root.c_str());
+  EXPECT_STREQ("host", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -115,7 +114,7 @@ TEST(ErasureCodeShec, init_3)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -129,8 +128,8 @@ TEST(ErasureCodeShec, init_3)
   EXPECT_EQ(2, shec->c);
   EXPECT_EQ(16, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("default", shec->rule_root.c_str());
+  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -148,7 +147,7 @@ TEST(ErasureCodeShec, init_4)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -162,8 +161,8 @@ TEST(ErasureCodeShec, init_4)
   EXPECT_EQ(2, shec->c);
   EXPECT_EQ(32, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("default", shec->rule_root.c_str());
+  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -180,7 +179,7 @@ TEST(ErasureCodeShec, init_5)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   //plugin is not specified
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -203,7 +202,7 @@ TEST(ErasureCodeShec, init_6)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "jerasure";	//unexpected value
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -226,7 +225,7 @@ TEST(ErasureCodeShec, init_7)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "abc";	//unexpected value
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -249,7 +248,7 @@ TEST(ErasureCodeShec, init_8)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -272,8 +271,8 @@ TEST(ErasureCodeShec, init_9)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-root"] = "abc";	//unexpected value
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-root"] = "abc";	//unexpected value
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -296,7 +295,7 @@ TEST(ErasureCodeShec, init_10)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "abc";	//unexpected value
+  (*profile)["crush-failure-domain"] = "abc";	//unexpected value
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -319,7 +318,7 @@ TEST(ErasureCodeShec, init_11)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "abc";		//unexpected value
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -342,7 +341,7 @@ TEST(ErasureCodeShec, init_12)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "-1";	//unexpected value
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -364,7 +363,7 @@ TEST(ErasureCodeShec, init_13)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "abc";
+  (*profile)["crush-failure-domain"] = "abc";
   (*profile)["k"] = "0.1";	//unexpected value
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -386,7 +385,7 @@ TEST(ErasureCodeShec, init_14)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "a";		//unexpected value
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -408,7 +407,7 @@ TEST(ErasureCodeShec, init_15)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   //k is not specified
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -430,7 +429,7 @@ TEST(ErasureCodeShec, init_16)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "-1";		//unexpected value
   (*profile)["c"] = "2";
@@ -452,7 +451,7 @@ TEST(ErasureCodeShec, init_17)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "0.1";		//unexpected value
   (*profile)["c"] = "2";
@@ -474,7 +473,7 @@ TEST(ErasureCodeShec, init_18)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "a";		//unexpected value
   (*profile)["c"] = "2";
@@ -496,7 +495,7 @@ TEST(ErasureCodeShec, init_19)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   //m is not specified
   (*profile)["c"] = "2";
@@ -518,7 +517,7 @@ TEST(ErasureCodeShec, init_20)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "-1";		//unexpected value
@@ -540,7 +539,7 @@ TEST(ErasureCodeShec, init_21)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "0.1";		//unexpected value
@@ -562,7 +561,7 @@ TEST(ErasureCodeShec, init_22)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "a";		//unexpected value
@@ -584,7 +583,7 @@ TEST(ErasureCodeShec, init_23)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   //c is not specified
@@ -606,7 +605,7 @@ TEST(ErasureCodeShec, init_24)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -635,7 +634,7 @@ TEST(ErasureCodeShec, init_25)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -664,7 +663,7 @@ TEST(ErasureCodeShec, init_26)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -693,7 +692,7 @@ TEST(ErasureCodeShec, init_27)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -722,7 +721,7 @@ TEST(ErasureCodeShec, init_28)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "10";	//c > m
@@ -744,7 +743,7 @@ TEST(ErasureCodeShec, init_29)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   //k is not specified
   //m is not specified
   //c is not specified
@@ -771,7 +770,7 @@ TEST(ErasureCodeShec, init_30)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "12";
   (*profile)["m"] = "8";
   (*profile)["c"] = "8";
@@ -797,7 +796,7 @@ TEST(ErasureCodeShec, init_31)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "13";
   (*profile)["m"] = "7";
   (*profile)["c"] = "7";
@@ -819,7 +818,7 @@ TEST(ErasureCodeShec, init_32)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "7";
   (*profile)["m"] = "13";
   (*profile)["c"] = "13";
@@ -841,7 +840,7 @@ TEST(ErasureCodeShec, init_33)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "12";
   (*profile)["m"] = "9";
   (*profile)["c"] = "8";
@@ -863,7 +862,7 @@ TEST(ErasureCodeShec, init_34)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "8";
   (*profile)["m"] = "12";
   (*profile)["c"] = "12";
@@ -886,7 +885,7 @@ TEST(ErasureCodeShec, init2_4)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -899,8 +898,8 @@ TEST(ErasureCodeShec, init2_4)
   EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("default", shec->rule_root.c_str());
+  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -919,7 +918,7 @@ TEST(ErasureCodeShec, init2_5)
   ErasureCodeProfile *profile2 = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "host";
+  (*profile)["crush-failure-domain"] = "host";
   (*profile)["k"] = "10";
   (*profile)["m"] = "6";
   (*profile)["c"] = "5";
@@ -930,7 +929,7 @@ TEST(ErasureCodeShec, init2_5)
   //reexecute init
   (*profile2)["plugin"] = "shec";
   (*profile2)["technique"] = "";
-  (*profile2)["ruleset-failure-domain"] = "osd";
+  (*profile2)["crush-failure-domain"] = "osd";
   (*profile2)["k"] = "4";
   (*profile2)["m"] = "3";
   (*profile2)["c"] = "2";
@@ -941,13 +940,14 @@ TEST(ErasureCodeShec, init2_5)
   EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("default", shec->rule_root.c_str());
+  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
   delete profile;
+  delete profile2;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_8)
@@ -960,7 +960,7 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -978,8 +978,8 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
@@ -996,7 +996,7 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1014,8 +1014,8 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
@@ -1032,7 +1032,7 @@ TEST(ErasureCodeShec, minimum_to_decode_10)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1050,8 +1050,8 @@ TEST(ErasureCodeShec, minimum_to_decode_10)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EIO, r);
 
   delete shec;
@@ -1068,7 +1068,7 @@ TEST(ErasureCodeShec, minimum_to_decode_11)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1086,8 +1086,8 @@ TEST(ErasureCodeShec, minimum_to_decode_11)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_EQ(-EIO, r);
 
   delete shec;
@@ -1104,7 +1104,7 @@ TEST(ErasureCodeShec, minimum_to_decode_12)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1120,7 +1120,7 @@ TEST(ErasureCodeShec, minimum_to_decode_12)
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks, NULL);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks, NULL);
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
@@ -1137,7 +1137,7 @@ TEST(ErasureCodeShec, minimum_to_decode_13)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1152,14 +1152,14 @@ TEST(ErasureCodeShec, minimum_to_decode_13)
     want_to_decode.insert(i);
     available_chunks.insert(i);
   }
-  shec->minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
+  shec->_minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
   minimum = minimum_chunks;		//normal value
   for (int i = 100; i < 120; ++i) {
     minimum_chunks.insert(i);	//insert extra data
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(minimum, minimum_chunks);
@@ -1178,7 +1178,7 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1194,8 +1194,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   available_chunks.insert(1);
   available_chunks.insert(2);
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_TRUE(minimum_chunks.size());
@@ -1214,7 +1214,7 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1240,8 +1240,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
   }
   sleep(1);
   printf("*** test start ***\n");
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
+  int r = shec->_minimum_to_decode(want_to_decode, available_chunks,
+				   &minimum_chunks);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(want_to_decode, minimum_chunks);
@@ -1263,7 +1263,7 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1299,7 +1299,7 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1348,7 +1348,7 @@ TEST(ErasureCodeShec, encode_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1376,10 +1376,10 @@ TEST(ErasureCodeShec, encode_1)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
   decoded.clear();
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2),
-		   encoded,
-		   &decoded);
-  EXPECT_TRUE(shec->matrix != NULL);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2),
+		    encoded,
+		    &decoded);
+  EXPECT_NE(nullptr, shec->matrix);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
   EXPECT_EQ(32u, decoded[0].length());
@@ -1409,7 +1409,7 @@ TEST(ErasureCodeShec, encode_2)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1435,8 +1435,8 @@ TEST(ErasureCodeShec, encode_2)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1465,7 +1465,7 @@ TEST(ErasureCodeShec, encode_3)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1490,7 +1490,7 @@ TEST(ErasureCodeShec, encode_3)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
 		   &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -1522,7 +1522,7 @@ TEST(ErasureCodeShec, encode_4)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1549,8 +1549,8 @@ TEST(ErasureCodeShec, encode_4)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1581,7 +1581,7 @@ TEST(ErasureCodeShec, encode_8)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1615,7 +1615,7 @@ TEST(ErasureCodeShec, encode_9)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1653,7 +1653,7 @@ TEST(ErasureCodeShec, encode2_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1680,8 +1680,8 @@ TEST(ErasureCodeShec, encode2_1)
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1712,7 +1712,7 @@ TEST(ErasureCodeShec, encode2_3)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1751,8 +1751,8 @@ TEST(ErasureCodeShec, encode2_3)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -1783,7 +1783,7 @@ TEST(ErasureCodeShec, decode_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1813,8 +1813,8 @@ TEST(ErasureCodeShec, decode_1)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(7u, decoded.size());
@@ -1849,7 +1849,7 @@ TEST(ErasureCodeShec, decode_8)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1879,8 +1879,8 @@ TEST(ErasureCodeShec, decode_8)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7 }; //more than k+m
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 8), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 8), encoded,
+		    &decoded);
   EXPECT_EQ(0, r);
   EXPECT_EQ(7u, decoded.size());
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
@@ -1915,7 +1915,7 @@ TEST(ErasureCodeShec, decode_9)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -1950,8 +1950,8 @@ TEST(ErasureCodeShec, decode_9)
   buf.append("abc");
   encoded[100] = buf;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 10), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 10), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(7u, decoded.size());
@@ -1993,7 +1993,7 @@ TEST(ErasureCodeShec, decode_10)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2026,8 +2026,8 @@ TEST(ErasureCodeShec, decode_10)
     inchunks.insert(make_pair(i, encoded[i]));
   }
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), inchunks,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), inchunks,
+		    &decoded);
   EXPECT_EQ(-1, r);
 
   delete shec;
@@ -2044,7 +2044,7 @@ TEST(ErasureCodeShec, decode_11)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2076,8 +2076,8 @@ TEST(ErasureCodeShec, decode_11)
     inchunks.insert(make_pair(i, encoded[i]));
   }
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 5), inchunks,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 5), inchunks,
+		    &decoded);
   EXPECT_EQ(-1, r);
 
   delete shec;
@@ -2094,7 +2094,7 @@ TEST(ErasureCodeShec, decode_12)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2124,8 +2124,8 @@ TEST(ErasureCodeShec, decode_12)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
 
   //decoded = NULL
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
-		   NULL);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
+		    NULL);
   EXPECT_NE(0, r);
 
   delete shec;
@@ -2142,7 +2142,7 @@ TEST(ErasureCodeShec, decode_13)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2179,8 +2179,8 @@ TEST(ErasureCodeShec, decode_13)
     decoded[i] = buf;
   }
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
+		    &decoded);
   EXPECT_NE(0, r);
 
   delete shec;
@@ -2197,7 +2197,7 @@ TEST(ErasureCodeShec, decode2_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2227,8 +2227,8 @@ TEST(ErasureCodeShec, decode2_1)
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -2253,7 +2253,7 @@ TEST(ErasureCodeShec, decode2_3)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2291,8 +2291,8 @@ TEST(ErasureCodeShec, decode2_3)
   }
   sleep(1);
   printf("*** test start ***\n");
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		    &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   EXPECT_EQ(2u, decoded.size());
@@ -2320,7 +2320,7 @@ TEST(ErasureCodeShec, decode2_4)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2354,15 +2354,15 @@ TEST(ErasureCodeShec, decode2_4)
   map<int, bufferlist> degraded;
   degraded[0] = encoded[0];
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), degraded,
-		   &decoded);
+  r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2), degraded,
+		    &decoded);
   EXPECT_EQ(-1, r);
 
   delete shec;
   delete profile;
 }
 
-TEST(ErasureCodeShec, create_ruleset_1_2)
+TEST(ErasureCodeShec, create_rule_1_2)
 {
   //create ruleset
   CrushWrapper *crush = new CrushWrapper;
@@ -2398,21 +2398,21 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
-  //create_ruleset
+  //create_rule
   stringstream ss;
 
-  int r = shec->create_ruleset("myrule", *crush, &ss);
+  int r = shec->create_rule("myrule", *crush, &ss);
   EXPECT_EQ(0, r);
   EXPECT_STREQ("myrule", crush->rule_name_map[0].c_str());
 
-  //reexecute create_ruleset
-  r = shec->create_ruleset("myrule", *crush, &ss);
+  //reexecute create_rule
+  r = shec->create_rule("myrule", *crush, &ss);
   EXPECT_EQ(-EEXIST, r);
 
   delete shec;
@@ -2420,7 +2420,7 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
   delete crush;
 }
 
-TEST(ErasureCodeShec, create_ruleset_4)
+TEST(ErasureCodeShec, create_rule_4)
 {
   //create ruleset
   CrushWrapper *crush = new CrushWrapper;
@@ -2456,14 +2456,14 @@ TEST(ErasureCodeShec, create_ruleset_4)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
-  //create_ruleset
-  int r = shec->create_ruleset("myrule", *crush, NULL);	//ss = NULL
+  //create_rule
+  int r = shec->create_rule("myrule", *crush, NULL);	//ss = NULL
   EXPECT_EQ(0, r);
 
   delete shec;
@@ -2471,7 +2471,7 @@ TEST(ErasureCodeShec, create_ruleset_4)
   delete crush;
 }
 
-TEST(ErasureCodeShec, create_ruleset2_1)
+TEST(ErasureCodeShec, create_rule2_1)
 {
   //create ruleset
   CrushWrapper *crush = new CrushWrapper;
@@ -2507,16 +2507,16 @@ TEST(ErasureCodeShec, create_ruleset2_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
-  //create_ruleset
+  //create_rule
   stringstream ss;
 
-  int r = shec->create_ruleset("myrule", *crush, &ss);
+  int r = shec->create_rule("myrule", *crush, &ss);
   EXPECT_EQ(0, r);
   EXPECT_STREQ("myrule", crush->rule_name_map[0].c_str());
 
@@ -2530,7 +2530,7 @@ struct CreateRuleset2_3_Param_d {
   CrushWrapper *crush;
 };
 
-TEST(ErasureCodeShec, create_ruleset2_3)
+TEST(ErasureCodeShec, create_rule2_3)
 {
   //create ruleset
   CrushWrapper *crush = new CrushWrapper;
@@ -2566,13 +2566,13 @@ TEST(ErasureCodeShec, create_ruleset2_3)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
-  //create_ruleset
+  //create_rule
   stringstream ss;
 
   pthread_t tid;
@@ -2583,7 +2583,7 @@ TEST(ErasureCodeShec, create_ruleset2_3)
   }
   sleep(1);
   printf("*** test start ***\n");
-  int r = (shec->create_ruleset("myrule", *crush, &ss));
+  int r = (shec->create_rule("myrule", *crush, &ss));
   EXPECT_TRUE(r >= 0);
   printf("*** test end ***\n");
   g_flag = 0;
@@ -2604,7 +2604,7 @@ TEST(ErasureCodeShec, get_chunk_count_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2627,7 +2627,7 @@ TEST(ErasureCodeShec, get_data_chunk_count_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2650,7 +2650,7 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
   (*profile)["c"] = "2";
@@ -2664,20 +2664,6 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
 
   delete shec;
   delete profile;
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **) argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  g_conf->set_val("erasure_code_dir", ".libs", false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 void* thread1(void* pParam)
@@ -2696,7 +2682,7 @@ void* thread1(void* pParam)
   printf("*** thread loop start ***\n");
   g_flag = 1;
   while (g_flag == 1) {
-    shec->minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
+    shec->_minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
   }
   printf("*** thread loop end ***\n");
 
@@ -2732,7 +2718,7 @@ void* thread3(void* pParam)
 {
   ErasureCodeShec* shec = (ErasureCodeShec*) pParam;
 
-  CrushWrapper *crush = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> crush = std::make_unique<CrushWrapper>();
   crush->create();
   crush->set_type_name(2, "root");
   crush->set_type_name(1, "host");
@@ -2765,7 +2751,7 @@ void* thread3(void* pParam)
   g_flag = 1;
   while (g_flag == 1) {
     sprintf(name, "myrule%d", i);
-    shec->create_ruleset(name, *crush, &ss);
+    shec->create_rule(name, *crush, &ss);
     ++i;
   }
   printf("*** thread loop end ***\n");
@@ -2825,8 +2811,8 @@ void* thread5(void* pParam)
   printf("*** thread loop start ***\n");
   g_flag = 1;
   while (g_flag == 1) {
-    shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
-		 &decoded);
+    shec->_decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+		  &decoded);
     decoded.clear();
   }
   printf("*** thread loop end ***\n");

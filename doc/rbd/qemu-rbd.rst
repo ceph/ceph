@@ -14,7 +14,9 @@ virtual machines quickly, because the client doesn't have to download an entire
 image each time it spins up a new virtual machine.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                       QEMU                        |
             +---------------------------------------------------+
             |                      librbd                       |
@@ -141,7 +143,7 @@ configuration (like any Ceph configuration option) as part of the
 .. important:: If you set rbd_cache=true, you must set cache=writeback
    or risk data loss. Without cache=writeback, QEMU will not send
    flush requests to librbd. If QEMU exits uncleanly in this
-   configuration, filesystems on top of rbd can be corrupted.
+   configuration, file systems on top of rbd can be corrupted.
 
 .. _RBD caching: ../rbd-config-ref/#rbd-cache-config-settings
 
@@ -154,7 +156,7 @@ Enabling Discard/TRIM
 Since Ceph version 0.46 and QEMU version 1.1, Ceph Block Devices support the
 discard operation. This means that a guest can send TRIM requests to let a Ceph
 block device reclaim unused space. This can be enabled in the guest by mounting
-``ext4`` or XFS with the ``discard`` option.
+``ext4`` or ``XFS`` with the ``discard`` option.
 
 For this to be available to the guest, it must be explicitly enabled
 for the block device. To do this, you must specify a
@@ -171,7 +173,7 @@ edit`` to include the ``xmlns:qemu`` value. Then, add a ``qemu:commandline``
 block as a child of that domain. The following example shows how to set two
 devices with ``qemu id=`` to different ``discard_granularity`` values.
 
-.. code-block:: guess
+.. code-block:: xml
 
 	<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
 		<qemu:commandline>
@@ -203,12 +205,12 @@ None::
 
    rbd_cache = false
 
-QEMU's cache settings override Ceph's default settings (i.e., settings that are
-not explicitly set in the Ceph configuration file). If you  explicitly set `RBD
-Cache`_ settings in your Ceph configuration file, your Ceph settings override
-the QEMU cache settings. If you set cache settings on the QEMU command line, the
-QEMU command line settings override the Ceph configuration file settings.
+QEMU's cache settings override Ceph's cache settings (including settings that
+are explicitly set in the Ceph configuration file).
 
+.. note:: Prior to QEMU v2.4.0, if you explicitly set `RBD Cache`_ settings
+   in the Ceph configuration file, your Ceph settings override the QEMU cache
+   settings.
 
 .. _QEMU Open Source Processor Emulator: http://wiki.qemu.org/Main_Page
 .. _QEMU Manual: http://wiki.qemu.org/Manual

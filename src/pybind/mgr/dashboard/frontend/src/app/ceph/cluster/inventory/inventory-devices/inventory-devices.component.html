@@ -1,0 +1,16 @@
+<cd-table [data]="devices"
+          [columns]="columns"
+          identifier="uid"
+          [forceIdentifier]="true"
+          [selectionType]="selectionType"
+          columnMode="flex"
+          [autoReload]="false"
+          [searchField]="false"
+          (updateSelection)="updateSelection($event)"
+          (columnFiltersChanged)="onColumnFiltersChanged($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+</cd-table>

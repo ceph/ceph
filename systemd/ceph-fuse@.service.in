@@ -1,0 +1,30 @@
+[Unit]
+Description=Ceph FUSE client
+After=network-online.target local-fs.target time-sync.target
+Wants=network-online.target local-fs.target time-sync.target
+Conflicts=umount.target
+PartOf=ceph-fuse.target
+
+[Service]
+Environment=CLUSTER=ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+ExecStart=/usr/bin/ceph-fuse -f --cluster ${CLUSTER} %I
+LockPersonality=true
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+# ceph-fuse requires access to /dev fuse device
+PrivateDevices=no
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+Restart=on-failure
+RestrictSUIDSGID=true
+StartLimitBurst=3
+StartLimitInterval=30min
+TasksMax=infinity
+
+[Install]
+WantedBy=ceph-fuse.target

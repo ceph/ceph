@@ -15,40 +15,50 @@
 #ifndef CEPH_MEXPORTDIRPREPACK_H
 #define CEPH_MEXPORTDIRPREPACK_H
 
-#include "msg/Message.h"
 #include "include/types.h"
+#include "messages/MMDSOp.h"
 
-class MExportDirPrepAck : public Message {
+class MExportDirPrepAck : public MMDSOp {
+private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
+
   dirfrag_t dirfrag;
-  bool success;
+  bool success = false;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  
-  MExportDirPrepAck() {}
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+
+protected:
+  MExportDirPrepAck() :
+    MMDSOp{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
+    MMDSOp{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), success(s) {
     set_tid(tid);
   }
-private:
-  ~MExportDirPrepAck() {}
+  ~MExportDirPrepAck() override {}
 
 public:  
-  bool is_success() { return success; }
-  const char *get_type_name() const { return "ExPAck"; }
-  void print(ostream& o) const {
+  bool is_success() const { return success; }
+  std::string_view get_type_name() const override { return "ExPAck"; }
+  void print(std::ostream& o) const override {
     o << "export_prep_ack(" << dirfrag << (success ? " success)" : " fail)");
   }
 
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(success, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(dirfrag, p);
+    decode(success, p);
   }
-  void encode_payload(uint64_t features) {
-    ::encode(dirfrag, payload);
-    ::encode(success, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(success, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

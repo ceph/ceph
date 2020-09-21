@@ -97,7 +97,7 @@ If these conditions are not met, the op is either discarded or queued for later 
 CEPH_MSG_OSD_OP processing
 --------------------------
 
-ReplicatedPG::do_op handles CEPH_MSG_OSD_OP op and will queue it
+PrimaryLogPG::do_op handles CEPH_MSG_OSD_OP op and will queue it
 
   1. in wait_for_all_missing if it is a CEPH_OSD_OP_PGLS for a designated snapid and some object updates are still missing
   2. in waiting_for_active if the op may write but the scrubber is working
@@ -119,7 +119,7 @@ Peering messages are tagged with two epochs:
 These are the same in cases where there was no triggering message.  We discard
 a peering message if the message's query_epoch if the PG in question has entered
 a new epoch (See PG::old_peering_evt, PG::queue_peering_event).  Notifies,
-infos, notifies, and logs are all handled as PG::RecoveryMachine events and
+infos, notifies, and logs are all handled as PG::PeeringMachine events and
 are wrapped by PG::queue_* by PG::CephPeeringEvts, which include the created
 state machine event along with epoch_sent and query_epoch in order to
 generically check PG::old_peering_message upon insertion and removal from the

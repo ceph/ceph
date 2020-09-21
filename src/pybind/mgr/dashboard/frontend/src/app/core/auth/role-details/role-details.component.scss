@@ -1,0 +1,9 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.fa {
+  font-size: large;
+
+  &.fa-square-o {
+    color: bd.$gray-400;
+  }
+}

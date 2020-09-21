@@ -1,0 +1,5 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/krbd_stable_pages_required.sh

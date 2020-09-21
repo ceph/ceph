@@ -1,24 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "mds/mdstypes.h"
-#include "include/buffer.h"
-#include "include/rbd_types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "test/librados/test.h"
 
-#include "common/Cond.h"
-
 #include "gtest/gtest.h"
 #include <errno.h>
+#include <condition_variable>
 #include <map>
 #include <sstream>
 #include <string>
 
-using namespace librados;
-using ceph::buffer;
 using std::map;
 using std::ostringstream;
 using std::string;
@@ -49,25 +43,48 @@ TEST(LibRadosCmd, MonDescribe) {
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  cmd[0] = (char *)"{\"prefix\":\"mon_status\"}";
+  cmd[0] = (char *)"";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "{}", 2, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"abc\":\"something\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\"\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\"    \"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\";;;,,,;;,,\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\"extra command\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\"quorum_status\"}";
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);
   //ASSERT_LT(0u, stlen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
   rados_shutdown(cluster);
-}
-
-TEST(LibRadosCmd, MonDescribePP) {
-  Rados cluster;
-  ASSERT_EQ("", connect_cluster_pp(cluster));
-  bufferlist inbl, outbl;
-  string outs;
-  ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"get_command_descriptions\"}",
-				   inbl, &outbl, &outs));
-  ASSERT_LT(0u, outbl.length());
-  ASSERT_LE(0u, outs.length());
-  cluster.shutdown();
 }
 
 TEST(LibRadosCmd, OSDCmd) {
@@ -82,9 +99,13 @@ TEST(LibRadosCmd, OSDCmd) {
   // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
   cmd[0] = (char *)"asdfasdf";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"version";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"{\"prefix\":\"version\"}";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
@@ -113,6 +134,8 @@ TEST(LibRadosCmd, PGCmd) {
   // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
   int r = rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
 
   // make sure the pg exists on the osd before we query it
   rados_ioctx_t io;
@@ -138,13 +161,11 @@ TEST(LibRadosCmd, PGCmd) {
 
 struct Log {
   list<string> log;
-  Cond cond;
-  Mutex lock;
+  std::condition_variable cond;
+  std::mutex lock;
 
-  Log() : lock("l::lock") {}
-
-  bool contains(string str) {
-    Mutex::Locker l(lock);
+  bool contains(const string& str) {
+    std::lock_guard<std::mutex> l(lock);
     for (list<string>::iterator p = log.begin(); p != log.end(); ++p) {
       if (p->find(str) != std::string::npos)
 	return true;
@@ -159,9 +180,9 @@ void log_cb(void *arg,
 	     uint64_t seq, const char *level,
 	     const char *msg) {
   Log *l = static_cast<Log *>(arg);
-  Mutex::Locker locker(l->lock);
+  std::lock_guard<std::mutex> locker(l->lock);
   l->log.push_back(line);
-  l->cond.Signal();
+  l->cond.notify_all();
   cout << "got: " << line << std::endl;
 }
 
@@ -183,15 +204,11 @@ TEST(LibRadosCmd, WatchLog) {
   }
   ASSERT_TRUE(l.contains("onexx"));
 
-  /*
-    changing the subscribe level is currently broken.
-
   cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"twoxx\"]}";
   ASSERT_EQ(0, rados_monitor_log(cluster, "err", log_cb, &l));
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   sleep(2);
   ASSERT_FALSE(l.contains("twoxx"));
-  */
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", log_cb, &l));
   cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"threexx\"]}";

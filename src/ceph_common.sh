@@ -159,7 +159,8 @@ do_root_cmd_okfail() {
 get_local_daemon_list() {
     type=$1
     if [ -d "/var/lib/ceph/$type" ]; then
-	for i in `find -L /var/lib/ceph/$type -mindepth 1 -maxdepth 1 -type d -printf '%f\n'`; do
+	for p in `find -L /var/lib/ceph/$type -mindepth 1 -maxdepth 1 -type d`; do
+	    i=`basename $p` 
 	    if [ -e "/var/lib/ceph/$type/$i/sysvinit" ]; then
 		id=`echo $i | sed 's/[^-]*-//'`
 		local="$local $type.$id"
@@ -174,15 +175,21 @@ get_local_name_list() {
     get_local_daemon_list "mon"
     get_local_daemon_list "osd"
     get_local_daemon_list "mds"
+    get_local_daemon_list "mgr"
 }
 
 get_name_list() {
     orig="$*"
 
-    # extract list of monitors, mdss, osds defined in startup.conf
-    allconf="$local "`$CCONF -c $conf -l mon | egrep -v '^mon$' || true ; \
-	$CCONF -c $conf -l mds | egrep -v '^mds$' || true ; \
-	$CCONF -c $conf -l osd | egrep -v '^osd$' || true`
+    # extract list of monitors, mdss, osds, mgrs defined in startup.conf
+    allconf=$(for entity in \
+      $local \
+      `$CCONF -c $conf -l mon | egrep -v '^mon$' || true` \
+      `$CCONF -c $conf -l mds | egrep -v '^mds$' || true` \
+      `$CCONF -c $conf -l mgr | egrep -v '^mgr$' || true` \
+      `$CCONF -c $conf -l osd | egrep -v '^osd$' || true`; do
+      echo $entity
+    done | sort -u)
 
     if [ -z "$orig" ]; then
 	what="$allconf"
@@ -194,7 +201,7 @@ get_name_list() {
 	type=`echo $f | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
 	id=`echo $f | cut -c 4- | sed 's/\\.//'`
 	case $f in
-	    mon | osd | mds)
+	    mon | osd | mds | mgr)
 		for d in $allconf; do
 		    if echo $d | grep -q ^$type; then
 			what="$what $d"
@@ -220,10 +227,10 @@ get_conf() {
 
 	if [ -z "$1" ]; then
 	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -n $type.$id \"$key\""
-	    eval "$var=\"`$CCONF -c $conf -n $type.$id \"$key\" || eval echo -n \"$def\"`\""
+	    eval "$var=\"`$CCONF -c $conf -n $type.$id \"$key\" || printf \"$def\"`\""
 	else
 	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -s $1 \"$key\""
-	    eval "$var=\"`$CCONF -c $conf -s $1 \"$key\" || eval echo -n \"$def\"`\""
+	    eval "$var=\"`$CCONF -c $conf -s $1 \"$key\" || eval printf \"$def\"`\""
 	fi
 }
 

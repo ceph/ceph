@@ -17,22 +17,17 @@
 
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "erasure-code/ErasureCodePlugin.h"
+#include "ErasureCodePluginLrc.h"
 #include "ErasureCodeLrc.h"
-
-// re-include our assert
-#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-class ErasureCodePluginLrc : public ErasureCodePlugin {
-public:
-  virtual int factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
-		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss) {
+int ErasureCodePluginLrc::factory(const std::string &directory,
+				  ceph::ErasureCodeProfile &profile,
+				  ceph::ErasureCodeInterfaceRef *erasure_code,
+				  std::ostream *ss) {
     ErasureCodeLrc *interface;
     interface = new ErasureCodeLrc(directory);
     int r = interface->init(profile, ss);
@@ -40,15 +35,14 @@ public:
       delete interface;
       return r;
     }
-    *erasure_code = ErasureCodeInterfaceRef(interface);
+    *erasure_code = ceph::ErasureCodeInterfaceRef(interface);
     return 0;
-  }
 };
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
 int __erasure_code_init(char *plugin_name, char *directory)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  auto& instance = ceph::ErasureCodePluginRegistry::instance();
   return instance.add(plugin_name, new ErasureCodePluginLrc());
 }

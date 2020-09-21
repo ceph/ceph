@@ -1,9 +1,8 @@
-#include "include/rados/librados.h"
-#include "test/librados/test.h"
-
-#include "gtest/gtest.h"
 #include <errno.h>
 #include <vector>
+#include "gtest/gtest.h"
+#include "include/rados/librados.h"
+#include "test/librados/test.h"
 
 #define POOL_LIST_BUF_SZ 32768
 
@@ -15,11 +14,17 @@ TEST(LibRadosPools, PoolList) {
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   ASSERT_LT(rados_pool_list(cluster, buf, POOL_LIST_BUF_SZ), POOL_LIST_BUF_SZ);
 
+  // we can pass a null buffer too.
+  ASSERT_LT(rados_pool_list(cluster, NULL, POOL_LIST_BUF_SZ), POOL_LIST_BUF_SZ);
+
   bool found_pool = false;
+  int firstlen = 0;
   while (buf[0] != '\0') {
     if ((found_pool == false) && (strcmp(buf, pool_name.c_str()) == 0)) {
       found_pool = true;
     }
+    if (!firstlen)
+      firstlen = strlen(buf) + 1;
     buf += strlen(buf) + 1;
   }
   ASSERT_EQ(found_pool, true);
@@ -27,9 +32,9 @@ TEST(LibRadosPools, PoolList) {
   // make sure we honor the buffer size limit
   buf = pool_list_buf;
   memset(buf, 0, POOL_LIST_BUF_SZ);
-  ASSERT_LT(rados_pool_list(cluster, buf, 20), POOL_LIST_BUF_SZ);
+  ASSERT_LT(rados_pool_list(cluster, buf, firstlen), POOL_LIST_BUF_SZ);
   ASSERT_NE(0, buf[0]);  // include at least one pool name
-  ASSERT_EQ(0, buf[20]);  // but don't touch the stopping point
+  ASSERT_EQ(0, buf[firstlen]);  // but don't touch the stopping point
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
@@ -92,16 +97,6 @@ TEST(LibRadosPools, PoolCreateWithCrushRule) {
 			    pool2_name.c_str(), 0));
   ASSERT_EQ(0, rados_pool_delete(cluster, pool2_name.c_str()));
 
-  std::string pool3_name = get_temp_pool_name();
-  ASSERT_EQ(0, rados_pool_create_with_all(cluster, pool3_name.c_str(),
-					  456ull, 0));
-  rados_ioctx_t ioctx;
-  ASSERT_EQ(0, rados_ioctx_create(cluster, pool3_name.c_str(), &ioctx));
-  uint64_t auid;
-  ASSERT_EQ(0, rados_ioctx_pool_get_auid(ioctx, &auid));
-  ASSERT_EQ(456ull, auid);
-  ASSERT_EQ(0, rados_pool_delete(cluster, pool3_name.c_str()));
-  rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
@@ -130,7 +125,8 @@ TEST(LibRadosPools, PoolGetBaseTier) {
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 
   cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
-     tier_pool_name + "\", \"mode\":\"readonly\"}";
+     tier_pool_name + "\", \"mode\":\"readonly\"," +
+    " \"yes_i_really_mean_it\": true}";
   cmd[0] = (char *)cmdstr.c_str();
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 

@@ -1,0 +1,16 @@
+# fixed-1.yaml, but with client.0 on a separate target
+overrides:
+  ceph-deploy:
+    conf:
+      global:
+        osd pool default size: 2
+        osd crush chooseleaf type: 0
+        osd pool default pg num:  128
+        osd pool default pgp num:  128
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2]
+- [client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 10 # GB

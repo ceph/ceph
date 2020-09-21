@@ -15,16 +15,20 @@
  * calculate intervals/extents that vary between two snapshots
  */
 void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
-			librados::snap_t start,
-			librados::snap_t end,
-			interval_set<uint64_t> *diff, bool *end_exists)
+			librados::snap_t start, librados::snap_t end,
+			interval_set<uint64_t> *diff, uint64_t *end_size,
+                        bool *end_exists, librados::snap_t *clone_end_snap_id,
+                        bool *whole_object)
 {
   ldout(cct, 10) << "calc_snap_set_diff start " << start << " end " << end
 		 << ", snap_set seq " << snap_set.seq << dendl;
   bool saw_start = false;
   uint64_t start_size = 0;
   diff->clear();
+  *end_size = 0;
   *end_exists = false;
+  *clone_end_snap_id = 0;
+  *whole_object = false;
 
   for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
        r != snap_set.clones.end();
@@ -36,6 +40,12 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
       // head is valid starting from right after the last seen seq
       a = snap_set.seq + 1;
       b = librados::SNAP_HEAD;
+    } else if (r->snaps.empty()) {
+      ldout(cct, 1) << "clone " << r->cloneid
+                    << ": empty snaps, return whole object" << dendl;
+      diff->clear();
+      *whole_object = true;
+      return;
     } else {
       a = r->snaps[0];
       // note: b might be < r->cloneid if a snap has been trimmed.
@@ -44,7 +54,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     ldout(cct, 20) << " clone " << r->cloneid << " snaps " << r->snaps
 		   << " -> [" << a << "," << b << "]"
 		   << " size " << r->size << " overlap to next " << r->overlap << dendl;
-    
+
     if (b < start) {
       // this is before start
       ++r;
@@ -65,6 +75,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
       saw_start = true;
     }
 
+    *end_size = r->size;
     if (end < a) {
       ldout(cct, 20) << " past end " << end << ", end object does not exist" << dendl;
       *end_exists = false;
@@ -77,6 +88,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     if (end <= b) {
       ldout(cct, 20) << " end" << dendl;
       *end_exists = true;
+      *clone_end_snap_id = b;
       break;
     }
 

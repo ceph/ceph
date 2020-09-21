@@ -15,39 +15,50 @@
 #ifndef CEPH_MDSOPENINOREPLY_H
 #define CEPH_MDSOPENINOREPLY_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-struct MMDSOpenInoReply : public Message {
+class MMDSOpenInoReply : public MMDSOp {
+public:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
   inodeno_t ino;
-  vector<inode_backpointer_t> ancestors;
+  std::vector<inode_backpointer_t> ancestors;
   mds_rank_t hint;
   int32_t error;
 
-  MMDSOpenInoReply() : Message(MSG_MDS_OPENINOREPLY), error(0) {}
+protected:
+  MMDSOpenInoReply() : MMDSOp{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    Message(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
+    MMDSOp{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, ino(i), hint(h), error(e) {
     header.tid = t;
   }
 
-  const char *get_type_name() const { return "openinoreply"; }
-  void print(ostream &out) const {
+
+public:
+  std::string_view get_type_name() const override { return "openinoreply"; }
+  void print(std::ostream &out) const override {
     out << "openinoreply(" << header.tid << " "
 	<< ino << " " << hint << " " << ancestors << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(ino, payload);
-    ::encode(ancestors, payload);
-    ::encode(hint, payload);
-    ::encode(error, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(ino, payload);
+    encode(ancestors, payload);
+    encode(hint, payload);
+    encode(error, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(ancestors, p);
-    ::decode(hint, p);
-    ::decode(error, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(ancestors, p);
+    decode(hint, p);
+    decode(error, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

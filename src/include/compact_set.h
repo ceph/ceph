@@ -12,21 +12,22 @@
 #ifndef CEPH_COMPACT_SET_H
 #define CEPH_COMPACT_SET_H
 
+#include "buffer.h"
+#include "encoding.h"
+
+#include <memory>
 #include <set>
 
 template <class T, class Set>
 class compact_set_base {
 protected:
-  Set *set;
+  std::unique_ptr<Set> set;
   void alloc_internal() {
     if (!set)
-      set = new Set;
+      set.reset(new Set);
   }
   void free_internal() {
-    if (set) {
-      delete set;
-      set = 0;
-    }
+    set.reset();
   }
   template <class It>
   class iterator_base {
@@ -114,14 +115,14 @@ public:
       }
   };
 
-  compact_set_base() : set(0) {}
-  compact_set_base(const compact_set_base& o) : set(0) {
+  compact_set_base() {}
+  compact_set_base(const compact_set_base& o) {
     if (o.set) {
       alloc_internal();
       *set = *o.set;
     }
   }
-  ~compact_set_base() { delete set; }
+  ~compact_set_base() {}
 
 
   bool empty() const {
@@ -139,12 +140,18 @@ public:
   size_t count(const T& t) const {
     return set ? set->count(t) : 0;
   }
-  void erase (iterator p) {
+  iterator erase (iterator p) {
     if (set) {
-      assert(this == p.set);
-      set->erase(p.it);
-      if (set->empty())
-	free_internal();
+      ceph_assert(this == p.set);
+      auto it = set->erase(p.it);
+      if (set->empty()) {
+        free_internal();
+        return iterator(this);
+      } else {
+        return iterator(this, it);
+      }
+    } else {
+      return iterator(this);
     }
   }
   size_t erase (const T& t) {
@@ -152,16 +159,14 @@ public:
       return 0;
     size_t r = set->erase(t);
     if (set->empty())
-	free_internal();
+      free_internal();
     return r;
   }
   void clear() {
     free_internal();
   }
   void swap(compact_set_base& o) {
-    Set *tmp = set;
-    set = o.set;
-    o.set = tmp;
+    set.swap(o.set);
   }
   compact_set_base& operator=(const compact_set_base& o) {
     if (o.set) {
@@ -176,6 +181,13 @@ public:
     std::pair<typename Set::iterator,bool> r = set->insert(t);
     return std::make_pair(iterator(this, r.first), r.second);
   }
+  template <class... Args>
+  std::pair<iterator,bool> emplace ( Args&&... args ) {
+    alloc_internal();
+    auto em = set->emplace(std::forward<Args>(args)...);
+    return std::pair<iterator,bool>(iterator(this, em.first), em.second);
+  }
+
   iterator begin() {
    if (!set)
      return iterator(this);
@@ -246,44 +258,47 @@ public:
       return const_iterator(this);
     return const_iterator(this, set->upper_bound(t));
   }
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
+    using ceph::encode;
     if (set)
-      ::encode(*set, bl);
+      encode(*set, bl);
     else
-      ::encode((uint32_t)0, bl);
+      encode((uint32_t)0, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
+    using ceph::decode;
     uint32_t n;
-    ::decode(n, p);
+    decode(n, p);
     if (n > 0) {
       alloc_internal();
-      ::decode_nohead(n, *set, p);
+      ceph::decode_nohead(n, *set, p);
     } else
       free_internal();
   }
 };
 
 template<class T, class Set>
-inline void encode(const compact_set_base<T, Set>& m, bufferlist& bl) {
+inline void encode(const compact_set_base<T, Set>& m, ceph::buffer::list& bl) {
   m.encode(bl);
 }
 template<class T, class Set>
-inline void decode(compact_set_base<T, Set>& m, bufferlist::iterator& p) {
+inline void decode(compact_set_base<T, Set>& m, ceph::buffer::list::const_iterator& p) {
   m.decode(p);
 }
 
-template <class T>
-class compact_set : public compact_set_base<T, std::set<T> > {
+template <class T, class Compare = std::less<T>, class Alloc = std::allocator<T> >
+class compact_set : public compact_set_base<T, std::set<T, Compare, Alloc> > {
 };
 
-template <class T>
-inline std::ostream& operator<<(std::ostream& out, const compact_set<T>& s)
+template <class T, class Compare = std::less<T>, class Alloc = std::allocator<T> >
+inline std::ostream& operator<<(std::ostream& out, const compact_set<T,Compare,Alloc>& s)
 {
-  for (typename compact_set<T>::const_iterator it = s.begin();
-       it != s.end(); ++it) {
-    if (it != s.begin())
+  bool first = true;
+  for (auto &v : s) {
+    if (!first)
       out << ",";
-    out << it->first << "=" << it->second;
+    out << v;
+    first = false;
   }
   return out;
 }

@@ -1,18 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include "include/memory.h"
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
 #include <sys/types.h>
+#include <cstdlib>
 
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
 #include "osd/SnapMapper.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
+#include "common/Cond.h"
 
 #include "gtest/gtest.h"
-#include "stdlib.h"
 
 using namespace std;
 
@@ -42,11 +40,11 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
     virtual void operate(map<string, bufferlist> *store) = 0;
     virtual ~_Op() {}
   };
-  typedef ceph::shared_ptr<_Op> Op;
+  typedef std::shared_ptr<_Op> Op;
   struct Remove : public _Op {
     set<string> to_remove;
-    Remove(const set<string> &to_remove) : to_remove(to_remove) {}
-    void operate(map<string, bufferlist> *store) {
+    explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
+    void operate(map<string, bufferlist> *store) override {
       for (set<string>::iterator i = to_remove.begin();
 	   i != to_remove.end();
 	   ++i) {
@@ -56,8 +54,8 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Insert : public _Op {
     map<string, bufferlist> to_insert;
-    Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
-    void operate(map<string, bufferlist> *store) {
+    explicit Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
+    void operate(map<string, bufferlist> *store) override {
       for (map<string, bufferlist>::iterator i = to_insert.begin();
 	   i != to_insert.end();
 	   ++i) {
@@ -68,8 +66,8 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Callback : public _Op {
     Context *context;
-    Callback(Context *c) : context(c) {}
-    void operate(map<string, bufferlist> *store) {
+    explicit Callback(Context *c) : context(c) {}
+    void operate(map<string, bufferlist> *store) override {
       context->complete(0);
     }
   };
@@ -79,103 +77,102 @@ public:
     list<Op> ops;
     list<Op> callbacks;
   public:
-    void set_keys(const map<string, bufferlist> &i) {
+    void set_keys(const map<string, bufferlist> &i) override {
       ops.push_back(Op(new Insert(i)));
     }
-    void remove_keys(const set<string> &r) {
+    void remove_keys(const set<string> &r) override {
       ops.push_back(Op(new Remove(r)));
     }
-    void add_callback(Context *c) {
+    void add_callback(Context *c) override {
       callbacks.push_back(Op(new Callback(c)));
     }
   };
 private:
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("PausyAsyncMap");
   map<string, bufferlist> store;
 
   class Doer : public Thread {
     static const size_t MAX_SIZE = 100;
     PausyAsyncMap *parent;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("Doer lock");
+    ceph::condition_variable cond;
     int stopping;
     bool paused;
     list<Op> queue;
   public:
-    Doer(PausyAsyncMap *parent) :
-      parent(parent), lock("Doer lock"), stopping(0), paused(false) {}
-    virtual void *entry() {
+    explicit Doer(PausyAsyncMap *parent) :
+      parent(parent), stopping(0), paused(false) {}
+    void *entry() override {
       while (1) {
 	list<Op> ops;
 	{
-	  Mutex::Locker l(lock);
-	  while (!stopping && (queue.empty() || paused))
-	    cond.Wait(lock);
+	  std::unique_lock l{lock};
+	  cond.wait(l, [this] {
+            return stopping || (!queue.empty() && !paused);
+	  });
 	  if (stopping && queue.empty()) {
 	    stopping = 2;
-	    cond.Signal();
+	    cond.notify_all();
 	    return 0;
 	  }
-	  assert(!queue.empty());
-	  assert(!paused);
+	  ceph_assert(!queue.empty());
+	  ceph_assert(!paused);
 	  ops.swap(queue);
-	  cond.Signal();
+	  cond.notify_all();
 	}
-	assert(!ops.empty());
+	ceph_assert(!ops.empty());
 
 	for (list<Op>::iterator i = ops.begin();
 	     i != ops.end();
 	     ops.erase(i++)) {
 	  if (!(rand()%3))
 	    usleep(1+(rand() % 5000));
-	  Mutex::Locker l(parent->lock);
+	  std::lock_guard l{parent->lock};
 	  (*i)->operate(&(parent->store));
 	}
       }
     }
 
     void pause() {
-      Mutex::Locker l(lock);
+      std::lock_guard l{lock};
       paused = true;
-      cond.Signal();
+      cond.notify_all();
     }
 
     void resume() {
-      Mutex::Locker l(lock);
+      std::lock_guard l{lock};
       paused = false;
-      cond.Signal();
+      cond.notify_all();
     }
 
     void submit(list<Op> &in) {
-      Mutex::Locker l(lock);
-      while (queue.size() >= MAX_SIZE)
-	cond.Wait(lock);
+      std::unique_lock l{lock};
+      cond.wait(l, [this] { return queue.size() < MAX_SIZE;});
       queue.splice(queue.end(), in, in.begin(), in.end());
-      cond.Signal();
+      cond.notify_all();
     }
 
     void stop() {
-      Mutex::Locker l(lock);
+      std::unique_lock l{lock};
       stopping = 1;
-      cond.Signal();
-      while (stopping != 2)
-	cond.Wait(lock);
-      cond.Signal();
+      cond.notify_all();
+      cond.wait(l, [this] { return stopping == 2; });
+      cond.notify_all();
     }
   } doer;
 
 public:
-  PausyAsyncMap() : lock("PausyAsyncMap"), doer(this) {
-    doer.create();
+  PausyAsyncMap() : doer(this) {
+    doer.create("doer");
   }
-  ~PausyAsyncMap() {
+  ~PausyAsyncMap() override {
     doer.join();
   }
   int get_keys(
     const set<string> &keys,
-    map<string, bufferlist> *out) {
-    Mutex::Locker l(lock);
+    map<string, bufferlist> *out) override {
+    std::lock_guard l{lock};
     for (set<string>::const_iterator i = keys.begin();
 	 i != keys.end();
 	 ++i) {
@@ -187,8 +184,8 @@ public:
   }
   int get_next(
     const string &key,
-    pair<string, bufferlist> *next) {
-    Mutex::Locker l(lock);
+    pair<string, bufferlist> *next) override {
+    std::lock_guard l{lock};
     map<string, bufferlist>::iterator j = store.upper_bound(key);
     if (j != store.end()) {
       if (next)
@@ -204,30 +201,29 @@ public:
   }
 
   void flush() {
-    Mutex lock("flush lock");
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("flush lock");
+    ceph::condition_variable cond;
     bool done = false;
 
     class OnFinish : public Context {
-      Mutex *lock;
-      Cond *cond;
+      ceph::mutex *lock;
+      ceph::condition_variable *cond;
       bool *done;
     public:
-      OnFinish(Mutex *lock, Cond *cond, bool *done)
+      OnFinish(ceph::mutex *lock, ceph::condition_variable *cond, bool *done)
 	: lock(lock), cond(cond), done(done) {}
-      void finish(int) {
-	Mutex::Locker l(*lock);
+      void finish(int) override {
+	std::lock_guard l{*lock};
 	*done = true;
-	cond->Signal();
+	cond->notify_all();
       }
     };
     Transaction t;
     t.add_callback(new OnFinish(&lock, &cond, &done));
     submit(&t);
     {
-      Mutex::Locker l(lock);
-      while (!done)
-	cond.Wait(lock);
+      std::unique_lock l{lock};
+      cond.wait(l, [&] { return done; });
     }
   }
 
@@ -366,7 +362,7 @@ public:
       cur = next.first;
     }
   }
-  virtual void SetUp() {
+  void SetUp() override {
     driver.reset(new PausyAsyncMap());
     cache.reset(new MapCacher::MapCacher<string, bufferlist>(driver.get()));
     names.clear();
@@ -376,7 +372,7 @@ public:
       names.insert(random_string(1 + (random_size() % 10)));
     }
   }
-  virtual void TearDown() {
+  void TearDown() override {
     driver->stop();
     cache.reset();
     driver.reset();
@@ -391,7 +387,7 @@ TEST_F(MapCacherTest, Simple)
   set<string> truth_keys;
   string blah("asdf");
   bufferlist bl;
-  ::encode(blah, bl);
+  encode(blah, bl);
   truth[string("asdf")] = bl;
   truth_keys.insert(truth.begin()->first);
   {
@@ -440,12 +436,12 @@ TEST_F(MapCacherTest, Random)
 class MapperVerifier {
   PausyAsyncMap *driver;
   boost::scoped_ptr< SnapMapper > mapper;
-  map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> > snap_to_hobject;
-  map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator> hobject_to_snap;
+  map<snapid_t, set<hobject_t> > snap_to_hobject;
+  map<hobject_t, set<snapid_t>> hobject_to_snap;
   snapid_t next;
   uint32_t mask;
   uint32_t bits;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("lock");
 public:
 
   MapperVerifier(
@@ -453,9 +449,8 @@ public:
     uint32_t mask,
     uint32_t bits)
     : driver(driver),
-      mapper(new SnapMapper(driver, mask, bits, 0, shard_id_t(1))),
-             mask(mask), bits(bits),
-      lock("lock") {}
+      mapper(new SnapMapper(g_ceph_context, driver, mask, bits, 0, shard_id_t(1))),
+             mask(mask), bits(bits) {}
 
   hobject_t random_hobject() {
     return hobject_t(
@@ -467,8 +462,8 @@ public:
   }
 
   void choose_random_snaps(int num, set<snapid_t> *snaps) {
-    assert(snaps);
-    assert(!snap_to_hobject.empty());
+    ceph_assert(snaps);
+    ceph_assert(!snap_to_hobject.empty());
     for (int i = 0; i < num || snaps->empty(); ++i) {
       snaps->insert(rand_choose(snap_to_hobject)->first);
     }
@@ -480,7 +475,7 @@ public:
   }
 
   void create_object() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (snap_to_hobject.empty())
       return;
     hobject_t obj;
@@ -493,8 +488,8 @@ public:
     for (set<snapid_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j = snap_to_hobject.find(*i);
-      assert(j != snap_to_hobject.end());
+      map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(*i);
+      ceph_assert(j != snap_to_hobject.end());
       j->second.insert(obj);
     }
     {
@@ -505,56 +500,59 @@ public:
   }
 
   void trim_snap() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (snap_to_hobject.empty())
       return;
-    map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator snap =
+    map<snapid_t, set<hobject_t> >::iterator snap =
       rand_choose(snap_to_hobject);
-    set<hobject_t, hobject_t::BitwiseComparator> hobjects = snap->second;
+    set<hobject_t> hobjects = snap->second;
 
-    hobject_t hoid;
-    while (mapper->get_next_object_to_trim(snap->first, &hoid) == 0) {
-      assert(!hoid.is_max());
-      assert(hobjects.count(hoid));
-      hobjects.erase(hoid);
+    vector<hobject_t> hoids;
+    while (mapper->get_next_objects_to_trim(
+	     snap->first, rand() % 5 + 1, &hoids) == 0) {
+      for (auto &&hoid: hoids) {
+	ceph_assert(!hoid.is_max());
+	ceph_assert(hobjects.count(hoid));
+	hobjects.erase(hoid);
 
-      map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
-	hobject_to_snap.find(hoid);
-      assert(j->second.count(snap->first));
-      set<snapid_t> old_snaps(j->second);
-      j->second.erase(snap->first);
+	map<hobject_t, set<snapid_t>>::iterator j =
+	  hobject_to_snap.find(hoid);
+	ceph_assert(j->second.count(snap->first));
+	set<snapid_t> old_snaps(j->second);
+	j->second.erase(snap->first);
 
-      {
-	PausyAsyncMap::Transaction t;
-	mapper->update_snaps(
-	  hoid,
-	  j->second,
-	  &old_snaps,
-	  &t);
-	driver->submit(&t);
+	{
+	  PausyAsyncMap::Transaction t;
+	  mapper->update_snaps(
+	    hoid,
+	    j->second,
+	    &old_snaps,
+	    &t);
+	  driver->submit(&t);
+	}
+	if (j->second.empty()) {
+	  hobject_to_snap.erase(j);
+	}
+	hoid = hobject_t::get_max();
       }
-      if (j->second.empty()) {
-	hobject_to_snap.erase(j);
-      }
-      hoid = hobject_t::get_max();
+      hoids.clear();
     }
-    assert(hobjects.empty());
-
+    ceph_assert(hobjects.empty());
     snap_to_hobject.erase(snap);
   }
 
   void remove_oid() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
+    map<hobject_t, set<snapid_t>>::iterator obj =
       rand_choose(hobject_to_snap);
     for (set<snapid_t>::iterator i = obj->second.begin();
 	 i != obj->second.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j =
+      map<snapid_t, set<hobject_t> >::iterator j =
 	snap_to_hobject.find(*i);
-      assert(j->second.count(obj->first));
+      ceph_assert(j->second.count(obj->first));
       j->second.erase(obj->first);
     }
     {
@@ -568,14 +566,14 @@ public:
   }
 
   void check_oid() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
+    map<hobject_t, set<snapid_t>>::iterator obj =
       rand_choose(hobject_to_snap);
     set<snapid_t> snaps;
     int r = mapper->get_snaps(obj->first, &snaps);
-    assert(r == 0);
+    ceph_assert(r == 0);
     ASSERT_EQ(snaps, obj->second);
   }
 };
@@ -583,15 +581,15 @@ public:
 class SnapMapperTest : public ::testing::Test {
 protected:
   boost::scoped_ptr< PausyAsyncMap > driver;
-  map<pg_t, ceph::shared_ptr<MapperVerifier> > mappers;
+  map<pg_t, std::shared_ptr<MapperVerifier> > mappers;
   uint32_t pgnum;
 
-  virtual void SetUp() {
+  void SetUp() override {
     driver.reset(new PausyAsyncMap());
     pgnum = 0;
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     driver->stop();
     mappers.clear();
     driver.reset();
@@ -605,7 +603,7 @@ protected:
   void init(uint32_t to_set) {
     pgnum = to_set;
     for (uint32_t i = 0; i < pgnum; ++i) {
-      pg_t pgid(i, 0, -1);
+      pg_t pgid(i, 0);
       mappers[pgid].reset(
 	new MapperVerifier(
 	  driver.get(),
@@ -656,15 +654,4 @@ TEST_F(SnapMapperTest, More) {
 TEST_F(SnapMapperTest, MultiPG) {
   init(50);
   run();
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <algorithm>
+#include <sstream>
 #include <string.h>
 
 #include "rgw_loadgen.h"
@@ -11,47 +13,52 @@
 
 void RGWLoadGenRequestEnv::set_date(utime_t& tm)
 {
-  stringstream s;
-  tm.asctime(s);
-  date_str = s.str();
+  date_str = rgw_to_asctime(tm);
 }
 
 int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
 {
-  map<string, string> meta_map;
+  meta_map_t meta_map;
   map<string, string> sub_resources;
 
   string canonical_header;
   string digest;
 
   rgw_create_s3_canonical_header(request_method.c_str(),
-                                 NULL, /* const char *content_md5 */
+                                 nullptr, /* const char *content_md5 */
                                  content_type.c_str(),
                                  date_str.c_str(),
                                  meta_map,
+				                 meta_map_t{},
                                  uri.c_str(),
                                  sub_resources,
                                  canonical_header);
 
-  int ret = rgw_get_s3_header_digest(canonical_header, access_key.key, digest);
-  if (ret < 0) {
+  headers["HTTP_DATE"] = date_str;
+  try {
+    /* FIXME(rzarzynski): kill the dependency on g_ceph_context. */
+    const auto signature = static_cast<std::string>(
+      rgw::auth::s3::get_v2_signature(g_ceph_context, canonical_header,
+                                      access_key.key));
+    headers["HTTP_AUTHORIZATION"] = \
+      std::string("AWS ") + access_key.id + ":" + signature;
+  } catch (int ret) {
     return ret;
   }
-
-  headers["HTTP_DATE"] = date_str;
-  headers["HTTP_AUTHORIZATION"] = string("AWS ") + access_key.id + ":" + digest;
 
   return 0;
 }
 
-int RGWLoadGenIO::write_data(const char *buf, int len)
+size_t RGWLoadGenIO::write_data(const char* const buf,
+                                const size_t len)
 {
   return len;
 }
 
-int RGWLoadGenIO::read_data(char *buf, int len)
+size_t RGWLoadGenIO::read_data(char* const buf, const size_t len)
 {
-  int read_len = MIN(left_to_read, (uint64_t)len);
+  const size_t read_len = std::min(left_to_read,
+                                   static_cast<uint64_t>(len));
   left_to_read -= read_len;
   return read_len;
 }
@@ -60,12 +67,12 @@ void RGWLoadGenIO::flush()
 {
 }
 
-int RGWLoadGenIO::complete_request()
+size_t RGWLoadGenIO::complete_request()
 {
   return 0;
 }
 
-void RGWLoadGenIO::init_env(CephContext *cct)
+int RGWLoadGenIO::init_env(CephContext *cct)
 {
   env.init(cct);
 
@@ -90,24 +97,32 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", req->port);
   env.set("SERVER_PORT", port_buf);
+  return 0;
 }
 
-int RGWLoadGenIO::send_status(const char *status, const char *status_name)
+size_t RGWLoadGenIO::send_status(const int status,
+                                 const char* const status_name)
 {
   return 0;
 }
 
-int RGWLoadGenIO::send_100_continue()
+size_t RGWLoadGenIO::send_100_continue()
 {
   return 0;
 }
 
-int RGWLoadGenIO::complete_header()
+size_t RGWLoadGenIO::send_header(const std::string_view& name,
+                                 const std::string_view& value)
 {
   return 0;
 }
 
-int RGWLoadGenIO::send_content_length(uint64_t len)
+size_t RGWLoadGenIO::complete_header()
+{
+  return 0;
+}
+
+size_t RGWLoadGenIO::send_content_length(const uint64_t len)
 {
   return 0;
 }

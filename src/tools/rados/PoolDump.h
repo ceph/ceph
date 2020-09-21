@@ -16,16 +16,13 @@
 #ifndef POOL_DUMP_H_
 #define POOL_DUMP_H_
 
+#include "include/rados/librados_fwd.hpp"
 #include "tools/RadosDump.h"
-
-namespace librados {
-    class IoCtx;
-}
 
 class PoolDump : public RadosDump
 {
   public:
-    PoolDump(int file_fd_) : RadosDump(file_fd_, false) {}
+    explicit PoolDump(int file_fd_) : RadosDump(file_fd_, false) {}
     int dump(librados::IoCtx *io_ctx);
 };
 

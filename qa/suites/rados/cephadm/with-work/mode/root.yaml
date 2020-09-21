@@ -1,0 +1,3 @@
+overrides:
+  cephadm:
+    cephadm_mode: root

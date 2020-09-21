@@ -15,48 +15,62 @@
 #ifndef CEPH_MMDSFRAGMENTNOTIFY_H
 #define CEPH_MMDSFRAGMENTNOTIFY_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MMDSFragmentNotify : public Message {
-  inodeno_t ino;
-  frag_t basefrag;
-  int8_t bits;
+class MMDSFragmentNotify : public MMDSOp {
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
+
+  dirfrag_t base_dirfrag;
+  int8_t bits = 0;
+  bool ack_wanted = false;
 
  public:
-  inodeno_t get_ino() { return ino; }
-  frag_t get_basefrag() { return basefrag; }
-  int get_bits() { return bits; }
+  inodeno_t get_ino() const { return base_dirfrag.ino; }
+  frag_t get_basefrag() const { return base_dirfrag.frag; }
+  dirfrag_t get_base_dirfrag() const { return base_dirfrag; }
+  int get_bits() const { return bits; }
+  bool is_ack_wanted() const { return ack_wanted; }
+  void mark_ack_wanted() { ack_wanted = true; }
 
-  bufferlist basebl;
+  ceph::buffer::list basebl;
 
-  MMDSFragmentNotify() : Message(MSG_MDS_FRAGMENTNOTIFY) {}
-  MMDSFragmentNotify(dirfrag_t df, int b) :
-	Message(MSG_MDS_FRAGMENTNOTIFY),
-    ino(df.ino), basefrag(df.frag), bits(b) { }
+protected:
+  MMDSFragmentNotify() :
+    MMDSOp{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
+    MMDSOp{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
+    base_dirfrag(df), bits(b) {
+    set_tid(tid);
+  }
+  ~MMDSFragmentNotify() override {}
+
+public: 
+  std::string_view get_type_name() const override { return "fragment_notify"; }
+  void print(std::ostream& o) const override {
+    o << "fragment_notify(" << base_dirfrag << " " << (int)bits << ")";
+  }
+
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(base_dirfrag, payload);
+    encode(bits, payload);
+    encode(basebl, payload);
+    encode(ack_wanted, payload);
+  }
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(base_dirfrag, p);
+    decode(bits, p);
+    decode(basebl, p);
+    if (header.version >= 2)
+      decode(ack_wanted, p);
+  }
 private:
-  ~MMDSFragmentNotify() {}
-
-public:  
-  const char *get_type_name() const { return "fragment_notify"; }
-  void print(ostream& o) const {
-    o << "fragment_notify(" << ino << "." << basefrag
-      << " " << (int)bits << ")";
-  }
-
-  void encode_payload(uint64_t features) {
-    ::encode(ino, payload);
-    ::encode(basefrag, payload);
-    ::encode(bits, payload);
-    ::encode(basebl, payload);
-  }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(basefrag, p);
-    ::decode(bits, p);
-    ::decode(basebl, p);
-  }
-  
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);  
 };
 
 #endif

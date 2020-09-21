@@ -9,8 +9,6 @@ Dout has several log faculties, which can be set at various log
 levels using the configuration management system. So it is possible to enable
 debugging just for the messenger, by setting debug_ms to 10, for example.
 
-Dout is implemented mainly in common/DoutStreambuf.cc
-
 The dout macro avoids even generating log messages which are not going to be
 used, by enclosing them in an "if" statement. What this means is that if you
 have the debug level set at 0, and you run this code::

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import os
 import sys
 import time
@@ -8,11 +8,15 @@ from rbd import (RBD,
                  Image,
                  ImageNotFound,
                  RBD_FEATURE_EXCLUSIVE_LOCK,
-                 RBD_FEATURE_LAYERING)
+                 RBD_FEATURE_LAYERING,
+                 RBD_FEATURE_OBJECT_MAP,
+                 RBD_FEATURE_FAST_DIFF,
+                 RBD_FLAG_OBJECT_MAP_INVALID)
 
 POOL_NAME='rbd'
 PARENT_IMG_NAME='test_notify_parent'
 CLONE_IMG_NAME='test_notify_clone'
+CLONE_IMG_RENAME='test_notify_clone2'
 IMG_SIZE = 16 << 20
 IMG_ORDER = 20
 
@@ -39,13 +43,17 @@ def get_features():
     if features is not None:
         features = int(features)
     else:
-        features = int(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_LAYERING)
+        features = int(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_LAYERING |
+                       RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF)
     assert((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0)
     assert((features & RBD_FEATURE_LAYERING) != 0)
+    assert((features & RBD_FEATURE_OBJECT_MAP) != 0)
+    assert((features & RBD_FEATURE_FAST_DIFF) != 0)
     return features
 
 def master(ioctx):
     print("starting master")
+    safe_delete_image(ioctx, CLONE_IMG_RENAME)
     safe_delete_image(ioctx, CLONE_IMG_NAME)
     safe_delete_image(ioctx, PARENT_IMG_NAME)
 
@@ -56,6 +64,7 @@ def master(ioctx):
         image.create_snap('snap1')
         image.protect_snap('snap1')
 
+    features = features & ~(RBD_FEATURE_FAST_DIFF)
     RBD().clone(ioctx, PARENT_IMG_NAME, 'snap1', ioctx, CLONE_IMG_NAME,
                 features=features)
     with Image(ioctx, CLONE_IMG_NAME) as image:
@@ -65,15 +74,17 @@ def master(ioctx):
         while offset < IMG_SIZE:
             image.write(data, offset)
             offset += (1 << IMG_ORDER)
+        image.write(b'1', IMG_SIZE - 1)
         assert(image.is_exclusive_lock_owner())
 
         print("waiting for slave to complete")
         while image.is_exclusive_lock_owner():
             time.sleep(5)
 
-    delete_image(ioctx, CLONE_IMG_NAME)
+    safe_delete_image(ioctx, CLONE_IMG_RENAME)
+    safe_delete_image(ioctx, CLONE_IMG_NAME)
     delete_image(ioctx, PARENT_IMG_NAME)
-    print ("finished")
+    print("finished")
 
 def slave(ioctx):
     print("starting slave")
@@ -81,39 +92,75 @@ def slave(ioctx):
     while True:
         try:
             with Image(ioctx, CLONE_IMG_NAME) as image:
-                if image.list_lockers() != []:
+                if (image.list_lockers() != [] and
+                    image.read(IMG_SIZE - 1, 1) == b'1'):
                     break
         except Exception:
             pass
 
-    with Image(ioctx, CLONE_IMG_NAME) as image:
-        print("detected master")
+    print("detected master")
 
+    print("rename")
+    RBD().rename(ioctx, CLONE_IMG_NAME, CLONE_IMG_RENAME);
+
+    with Image(ioctx, CLONE_IMG_RENAME) as image:
         print("flatten")
         image.flatten()
         assert(not image.is_exclusive_lock_owner())
 
         print("resize")
-        image.resize(IMG_SIZE / 2)
+        image.resize(IMG_SIZE // 2)
         assert(not image.is_exclusive_lock_owner())
-        assert(image.stat()['size'] == IMG_SIZE / 2)
+        assert(image.stat()['size'] == IMG_SIZE // 2)
 
         print("create_snap")
         image.create_snap('snap1')
         assert(not image.is_exclusive_lock_owner())
-        assert('snap1' in map(lambda snap: snap['name'], image.list_snaps()))
+        assert(any(snap['name'] == 'snap1'
+                   for snap in image.list_snaps()))
+
+        print("protect_snap")
+        image.protect_snap('snap1')
+        assert(not image.is_exclusive_lock_owner())
+        assert(image.is_protected_snap('snap1'))
+
+        print("unprotect_snap")
+        image.unprotect_snap('snap1')
+        assert(not image.is_exclusive_lock_owner())
+        assert(not image.is_protected_snap('snap1'))
+
+        print("rename_snap")
+        image.rename_snap('snap1', 'snap1-new')
+        assert(not image.is_exclusive_lock_owner())
+        assert(any(snap['name'] == 'snap1-new'
+                   for snap in image.list_snaps()))
 
         print("remove_snap")
-        image.remove_snap('snap1')
+        image.remove_snap('snap1-new')
         assert(not image.is_exclusive_lock_owner())
         assert(list(image.list_snaps()) == [])
+
+        print("update_features")
+        assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
+        image.update_features(RBD_FEATURE_OBJECT_MAP, False)
+        assert(not image.is_exclusive_lock_owner())
+        assert((image.features() & RBD_FEATURE_OBJECT_MAP) == 0)
+        image.update_features(RBD_FEATURE_OBJECT_MAP, True)
+        assert(not image.is_exclusive_lock_owner())
+        assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
+        assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) != 0)
+
+        print("rebuild object map")
+        image.rebuild_object_map()
+        assert(not image.is_exclusive_lock_owner())
+        assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) == 0)
 
         print("write")
         data = os.urandom(512)
         image.write(data, 0)
         assert(image.is_exclusive_lock_owner())
 
-        print("finished")
+    print("finished")
 
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ['master', 'slave']:

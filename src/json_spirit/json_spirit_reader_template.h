@@ -17,7 +17,7 @@
 
 #define BOOST_SPIRIT_THREADSAFE  // uncomment for multithreaded use, requires linking to boost.thread
 
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/function.hpp>
 #include <boost/version.hpp>
 
@@ -36,6 +36,8 @@
     #include <boost/spirit/iterator/position_iterator.hpp>
     #define spirit_namespace boost::spirit
 #endif
+
+#include "include/ceph_assert.h"
 
 namespace json_spirit
 {
@@ -177,7 +179,7 @@ namespace json_spirit
     String_type get_str_( typename String_type::const_iterator begin, 
                        typename String_type::const_iterator end )
     {
-        assert( end - begin >= 2 );
+        ceph_assert( end - begin >= 2 );
 
         typedef typename String_type::const_iterator Iter_type;
 
@@ -209,6 +211,8 @@ namespace json_spirit
         return get_str( tmp.begin(), tmp.end() );
     }
 
+    using namespace boost::placeholders;
+
     // this class's methods get called by the spirit parse resulting
     // in the creation of a JSON object or array
     //
@@ -233,35 +237,35 @@ namespace json_spirit
 
         void begin_obj( Char_type c )
         {
-            assert( c == '{' );
+            ceph_assert( c == '{' );
 
             begin_compound< Object_type >();
         }
 
         void end_obj( Char_type c )
         {
-            assert( c == '}' );
+            ceph_assert( c == '}' );
 
             end_compound();
         }
 
         void begin_array( Char_type c )
         {
-            assert( c == '[' );
+            ceph_assert( c == '[' );
      
             begin_compound< Array_type >();
         }
 
         void end_array( Char_type c )
         {
-            assert( c == ']' );
+            ceph_assert( c == ']' );
 
             end_compound();
         }
 
         void new_name( Iter_type begin, Iter_type end )
         {
-            assert( current_p_->type() == obj_type );
+            ceph_assert( current_p_->type() == obj_type );
 
             name_ = get_str< String_type >( begin, end );
         }
@@ -273,21 +277,21 @@ namespace json_spirit
 
         void new_true( Iter_type begin, Iter_type end )
         {
-            assert( is_eq( begin, end, "true" ) );
+            ceph_assert( is_eq( begin, end, "true" ) );
 
             add_to_current( true );
         }
 
         void new_false( Iter_type begin, Iter_type end )
         {
-            assert( is_eq( begin, end, "false" ) );
+            ceph_assert( is_eq( begin, end, "false" ) );
 
             add_to_current( false );
         }
 
         void new_null( Iter_type begin, Iter_type end )
         {
-            assert( is_eq( begin, end, "null" ) );
+            ceph_assert( is_eq( begin, end, "null" ) );
 
             add_to_current( Value_type() );
         }
@@ -314,7 +318,7 @@ namespace json_spirit
 
         Value_type* add_first( const Value_type& value )
         {
-            assert( current_p_ == 0 );
+            ceph_assert( current_p_ == 0 );
 
             value_ = value;
             current_p_ = &value_;
@@ -361,7 +365,7 @@ namespace json_spirit
                 return &current_p_->get_array().back(); 
             }
             
-            assert( current_p_->type() == obj_type );
+            ceph_assert( current_p_->type() == obj_type );
 
             return &Config_type::add( current_p_->get_obj(), name_, value );
         }
@@ -386,7 +390,7 @@ namespace json_spirit
        throw reason;
     }
 
-    // the spirit grammer 
+    // the spirit grammar 
     //
     template< class Value_type, class Iter_type >
     class Json_grammer : public spirit_namespace::grammar< Json_grammer< Value_type, Iter_type > >
@@ -463,7 +467,7 @@ namespace json_spirit
                 Int_action    new_int    ( boost::bind( &Semantic_actions_t::new_int,     &self.actions_, _1 ) );
                 Uint64_action new_uint64 ( boost::bind( &Semantic_actions_t::new_uint64,  &self.actions_, _1 ) );
 
-                // actual grammer
+                // actual grammar
 
                 json_
                     = value_ | eps_p[ &throw_not_value ]
@@ -586,7 +590,7 @@ namespace json_spirit
 
         if( !info.hit )
         {
-            assert( false ); // in theory exception should already have been thrown
+            ceph_assert( false ); // in theory exception should already have been thrown
             throw_error( info.stop, "error" );
         }
 

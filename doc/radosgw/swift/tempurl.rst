@@ -10,14 +10,32 @@ initially the value of `X-Account-Meta-Temp-URL-Key` and optionally
 functionality relies on a HMAC-SHA1 signature against these secret
 keys.
 
+.. note:: If you are planning to expose Temp URL functionality for the
+	  Swift API, it is strongly recommended to include the Swift
+	  account name in the endpoint definition, so as to most
+	  closely emulate the behavior of native OpenStack Swift. To
+	  do so, set the ``ceph.conf`` configuration option ``rgw
+	  swift account in url = true``, and update your Keystone
+	  endpoint to the URL suffix ``/v1/AUTH_%(tenant_id)s``
+	  (instead of just ``/v1``).
+
+
 POST Temp-URL Keys
 ==================
 
-A ``POST`` request to the swift account with the required Key will set
-the secret temp url key for the account against which temporary url
+A ``POST`` request to the Swift account with the required key will set
+the secret temp URL key for the account, against which temporary URL
 access can be provided to accounts. Up to two keys are supported, and
 signatures are checked against both the keys, if present, so that keys
-can be rotated without invalidating the temporary urls.
+can be rotated without invalidating the temporary URLs.
+
+.. note:: Native OpenStack Swift also supports the option to set
+          temporary URL keys at the container level, issuing a
+          ``POST`` or ``PUT`` request against a container that sets
+          ``X-Container-Meta-Temp-URL-Key`` or
+          ``X-Container-Meta-Temp-URL-Key-2``. This functionality is
+          not supported in radosgw; temporary URL keys can only be set
+          and used at the account level.
 
 Syntax
 ~~~~~~
@@ -68,18 +86,17 @@ A sample python script to demonstrate the above is given below:
    from time import time
 
    method = 'GET'
-   host = 'https://objectstore.example.com'
+   host = 'https://objectstore.example.com/swift'
    duration_in_seconds = 300  # Duration for which the url is valid
    expires = int(time() + duration_in_seconds)
    path = '/v1/your-bucket/your-object'
    key = 'secret'
    hmac_body = '%s\n%s\n%s' % (method, expires, path)
-   hmac_body = hmac.new(key, hmac_body, sha1).hexdigest()
    sig = hmac.new(key, hmac_body, sha1).hexdigest()
    rest_uri = "{host}{path}?temp_url_sig={sig}&temp_url_expires={expires}".format(
 		host=host, path=path, sig=sig, expires=expires)
    print rest_uri
 
    # Example Output
-   # https://objectstore.example.com/v1/your-bucket/your-object?temp_url_sig=ff4657876227fc6025f04fcf1e82818266d022c6&temp_url_expires=1423200992
+   # https://objectstore.example.com/swift/v1/your-bucket/your-object?temp_url_sig=ff4657876227fc6025f04fcf1e82818266d022c6&temp_url_expires=1423200992
 

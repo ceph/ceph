@@ -1,0 +1,280 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+/* ---------------------------------------------------
+    NAVBAR STYLE
+--------------------------------------------------- */
+
+::ng-deep cd-navigation .cd-navbar-top {
+  .cd-navbar-brand {
+    background: bd.$secondary;
+    border-top: 4px solid bd.$primary;
+
+    &.isPwdDisplayed {
+      top: bd.$top-notification-height;
+    }
+
+    .navbar-brand,
+    .navbar-brand:hover {
+      color: bd.$gray-200;
+      height: auto;
+      padding: 0;
+    }
+
+    .navbar-brand > img {
+      height: 25px;
+    }
+
+    .navbar-toggler {
+      border: 0;
+
+      &:focus,
+      &:hover {
+        outline: 0;
+      }
+
+      .fa-navicon {
+        color: bd.$gray-200;
+      }
+    }
+
+    .navbar-collapse {
+      padding: 0;
+    }
+
+    .cd-navbar-utility > .active > a {
+      background-color: bd.$primary;
+      color: bd.$gray-200;
+    }
+
+    .cd-navbar-utility > li > .open > a,
+    .cd-navbar-utility > li > .open > a:focus,
+    .cd-navbar-utility > li > .open > a:hover {
+      background-color: transparent;
+      border-color: transparent;
+      color: bd.$gray-200;
+    }
+  }
+
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a,
+  .navbar-nav > li > .cd-navbar > a,
+  .navbar-nav > li > a {
+    color: bd.$gray-200;
+    display: block;
+    line-height: 1;
+    padding: 13.5px 18px !important;
+    position: relative;
+    text-decoration: none;
+  }
+
+  .navbar-nav .nav-link,
+  .navbar-nav .nav-link:hover {
+    color: bd.$gray-200;
+  }
+
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a:hover,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown].open > a,
+  .navbar-nav > li > .cd-navbar > a:hover,
+  .navbar-nav > li > a:hover,
+  .navbar-nav > li:hover {
+    background-color: bd.$primary;
+  }
+
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a:hover,
+  .navbar-nav > .open > .cd-navbar > a,
+  .navbar-nav > .open > .cd-navbar > a:focus,
+  .navbar-nav > .open > .cd-navbar > a:hover,
+  .navbar-nav > .open > .cd-navbar > li > a:focus,
+  .navbar-nav > .open > a,
+  .navbar-nav > .open > a:focus,
+  .navbar-nav > .open > a:hover {
+    background-color: transparent;
+    border-color: transparent;
+    color: bd.$gray-200;
+  }
+
+  @media (min-width: bd.$screen-md-min) {
+    .cd-navbar-utility {
+      border-bottom: 0;
+      font-size: 1.1rem;
+      position: absolute;
+      right: 0;
+      top: 0;
+    }
+  }
+
+  @media (max-width: bd.$screen-sm-max) {
+    .navbar-nav {
+      margin: 0;
+
+      .fa {
+        margin-right: 0.5em;
+      }
+
+      .open .dropdown-menu {
+        background-color: bd.$primary;
+        border: 0;
+        padding-bottom: 0;
+        padding-top: 0;
+      }
+
+      .open .dropdown-menu > li > a {
+        color: bd.$gray-200;
+        padding: 5px 15px 5px 35px;
+      }
+
+      .open .dropdown-menu > .active > a {
+        background-color: bd.$primary;
+      }
+    }
+
+    .navbar-nav > li > a:hover {
+      background-color: bd.$primary;
+    }
+  }
+}
+
+/* ---------------------------------------------------
+    SIDEBAR STYLE
+--------------------------------------------------- */
+
+$sidebar-width: 200px;
+
+.cd-navbar-primary .active > a,
+.cd-navbar-primary > .active > a:focus,
+.cd-navbar-primary > .active > a:hover {
+  background-color: bd.$primary !important;
+  border: 0 !important;
+  color: bd.$gray-200 !important;
+}
+
+.wrapper {
+  display: flex;
+  width: 100%;
+
+  #sidebar {
+    background: bd.$secondary;
+    bottom: 0;
+    color: bd.$white;
+    left: 0;
+    overflow-y: auto;
+    position: fixed;
+    top: bd.$navbar-height;
+    transition: all 0.3s;
+    width: $sidebar-width;
+    z-index: 999;
+
+    &.active {
+      margin-left: -$sidebar-width;
+    }
+
+    ul {
+      &.component {
+        margin: 0;
+        padding: 20px 0;
+      }
+
+      p {
+        color: bd.$white;
+        padding: 10px;
+      }
+
+      li a {
+        color: bd.$white;
+        display: block;
+        font-size: 1.1em;
+        padding: 10px;
+        padding-left: 27px;
+
+        text-decoration: none;
+
+        &:hover {
+          background: bd.$primary;
+          color: bd.$white;
+        }
+
+        > .badge {
+          margin-left: 5px;
+        }
+      }
+
+      li.active > a,
+      li > a a[aria-expanded='true'] {
+        color: bd.$white;
+      }
+    }
+  }
+
+  a.dropdown-toggle {
+    position: relative;
+
+    &::after {
+      border: 0;
+      content: '\f054';
+      font-family: 'ForkAwesome';
+      font-size: 1rem;
+      position: absolute;
+      right: 20px;
+      transition: transform 0.3s ease-in-out;
+    }
+
+    &[aria-expanded='true']::after {
+      transform: rotate(90deg);
+    }
+  }
+
+  ul ul a {
+    background: lighten(bd.$secondary, 10);
+    font-size: 0.9em !important;
+    padding-left: 40px !important;
+  }
+
+  .cd-navbar-primary a:focus {
+    outline: none;
+  }
+
+  ngx-simplebar {
+    height: 100%;
+  }
+}
+
+/* ---------------------------------------------------
+    CONTENT STYLE
+--------------------------------------------------- */
+
+#content {
+  bottom: 0;
+  position: absolute;
+  right: 0;
+  top: bd.$navbar-height;
+  transition: all 0.3s;
+  width: calc(100% - #{$sidebar-width});
+
+  &.active {
+    width: 100vw;
+  }
+}
+
+/* ---------------------------------------------------
+    topNotification settings
+--------------------------------------------------- */
+
+@for $i from 1 through 2 {
+  :host.top-notification-#{$i} {
+    .cd-navbar-top .cd-navbar-brand {
+      top: bd.$top-notification-height * $i;
+    }
+
+    #sidebar {
+      top: bd.$navbar-height + bd.$top-notification-height * $i;
+    }
+
+    #content {
+      top: bd.$navbar-height + bd.$top-notification-height * $i;
+    }
+
+    cd-notifications-sidebar {
+      top: bd.$navbar-height + bd.$top-notification-height * $i + 10px;
+    }
+  }
+}

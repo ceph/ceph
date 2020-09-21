@@ -1,0 +1,4794 @@
+commit 5dc1e4c05cb68dbf62ae6fce3f0700e4654fdbbe
+Author: Jenkins Build Slave User <ceph-release-team@redhat.com>
+Date:   Wed Oct 4 14:17:25 2017 +0000
+
+    10.2.10
+
+commit 951609bd3033f20560230d1d3514b535cffc0fde
+Merge: c4aa7c3df2 c6846df53c
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Oct 3 15:58:17 2017 -0400
+
+    Merge pull request #18100 from ceph/wip-yuriw-fix-clients-jewel
+    
+    tests: Added openstack.yaml bits to enable runs on ovh nodes
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit c6846df53c311ae5640a0bc28fbd752e38a745f3
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Oct 3 12:50:24 2017 -0700
+
+    tests - Added openstack.yaml bits to enable runs on ovh nodes
+    
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit c4aa7c3df2ead7d76aee9ed29d090c4433274af6
+Merge: 16110b985c add06614ab
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Mon Oct 2 08:39:01 2017 -0700
+
+    Merge pull request #18044 from ceph/wip-yuriw-fix-clients-jewel
+    
+    qa: Changed distros symlink to point to supported OSs
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit add06614ab1b8f4a99feece1225a9c2e1cde1279
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Sep 29 12:29:32 2017 -0700
+
+    Changed distros symlink to point to supported OSs
+    
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 16110b985c4278b12f6884537a176cd85cfd0060
+Merge: 750e67cab8 06e8f38d21
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 29 10:19:25 2017 -0700
+
+    Merge pull request #18027 from ceph/wip-yuriw-fix-clients-jewel
+    
+    tests - Added suit to test upgraded clients against jewel ceph clusters
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 06e8f38d216c049db4339bc291f7a495f2187d78
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Thu Sep 28 14:37:03 2017 -0700
+
+    tests - Added suit to test upgraded clients against jewel ceph clusters
+    
+    Replaces https://github.com/ceph/ceph/pull/17981
+    We need to run this suite using suite-branch option in
+    order to use jewel workloads agains ceph cluster luminous+ branches
+    
+    Added 'libcephfs1' to exclude_packages in upgrade_workload
+    
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 750e67cab8fd0498ca6d843f25007904041d49cd
+Merge: 189f0c6f27 8398a8a033
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Sep 22 22:23:51 2017 +0200
+
+    Merge pull request #17892 from smithfarm/wip-p2p-s3-test
+    
+    jewel: tests: fix upgrade/jewel-x/point-to-point-x
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+    Reviewed-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 8398a8a0334718c68b9d9a04c820a875f7ec0056
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Sep 21 22:50:06 2017 +0200
+
+    qa: point-to-point-x: upgrade client.1 to -x along with cluster nodes
+    
+    The client.1 rgw in workload_x had not been upgraded to -x.
+    
+    Fixes: http://tracker.ceph.com/issues/21499
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit afc5a7d3208071b65c0d76d124bfc47a099a446c)
+
+commit d377266df600586d8889ca9ab4a6b7b110fcf0dc
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Sep 21 17:50:28 2017 +0200
+
+    tests: use special branch of ceph/s3-tests with pre-10.2.10
+    
+    Jewel v10.2.10 introduces a fix for S3 ACL code, for which a new test was added
+    to ceph/s3-tests.git (ceph-jewel branch). Since the jewel point-to-point-x
+    upgrade test runs s3-tests on 10.2.7, modify the test to use a special
+    ceph/s3-tests branch (ceph-jewel-10-2-7) that omits the new test.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 189f0c6f2703758a6be917a3c4086f6a26e42366
+Merge: 0ffa38ee4d de00e2bb5b
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Tue Sep 19 18:03:29 2017 -0700
+
+    Merge pull request #17780 from smithfarm/wip-rh-74-jewel
+    
+    tests: CentOS 7.4 is now the latest
+    
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit 0ffa38ee4d074922737485cdd28d101449560107
+Merge: 94009032a8 0cd7df3649
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 19 14:22:52 2017 +0200
+
+    Merge pull request #16297 from smithfarm/wip-20518-jewel
+    
+    jewel: rbd: cli: map with cephx disabled results in error message
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 94009032a87026099fa2cf781e421508a061eb76
+Merge: d8aa3c502e d7d988d1f3
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 19 13:33:42 2017 +0200
+
+    Merge pull request #17781 from smithfarm/wip-drop-11429
+    
+    tests: Removed 11429 config
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit d7d988d1f3befc4443415931ee3f5c6fcb03b11a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Sep 21 09:14:09 2016 -0700
+
+    tests: Removed 11429 config
+    
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+    (cherry picked from fde4d3bb96abc0c0ca5bca213a0a2423f95e91a2)
+    
+    Conflicts:
+        Cherry-picked manually because, nowadays, we have the entire ceph-qa-suite
+        under qa/ in ceph/ceph.git
+
+commit de00e2bb5b3c5f4026fd2d63c3799572655cd73a
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Mon Sep 18 18:01:17 2017 +0200
+
+    tests: CentOS 7.4 is now the latest
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 2311b64025cdb6131035aaf01e7c97486da12e15)
+    
+    Conflicts
+        qa/distros/supported/centos_latest.yaml (renamed from centos_7.3.yaml)
+
+commit d8aa3c502e63462ab6a18eaed103eddfdf753855
+Merge: 2a525df77b f86dc69844
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Sep 18 11:05:28 2017 -0700
+
+    Merge pull request #16473 from smithfarm/wip-20723-jewel
+    
+    jewel: osd: rados ls on pool with no access returns no error
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit 2a525df77b91f5b9fdc62fa84677651e1b694bf4
+Merge: 955213635f 833c28e94f
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Sep 18 11:04:46 2017 -0700
+
+    Merge pull request #17626 from badone/wip-jewel-ceph-osd-flush-segfault
+    
+    jewel: core: kv: let ceph_logger destructed after db reset
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 955213635f1dd84b966a67e930e99a93d7880b51
+Merge: a536aa9878 c9b42c84e1
+Author: Sage Weil <sage@newdream.net>
+Date:   Tue Sep 12 15:50:42 2017 -0500
+
+    Merge pull request #17677 from mslovy/wip-disable-kstore-test
+    
+    jewel: qa: disable kstore to fix false positive case
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit a536aa98789f1c22e7d5aad241d1090ceb62f9dc
+Merge: 5c5085c7fc 0215989814
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:12:13 2017 +0200
+
+    Merge pull request #17597 from smithfarm/wip-21186-jewel
+    
+    jewel: rgw: rgw_file:  incorrect lane lock behavior in evict_block()
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 5c5085c7fc1309dc1678b520d88b6b0a9d246116
+Merge: 7429f50bb5 81810c1c7a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:11:33 2017 +0200
+
+    Merge pull request #17287 from smithfarm/wip-21109-jewel
+    
+    jewel: rgw: send data-log list infinitely
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 7429f50bb54c57356b98d103ae58aa85229c38c3
+Merge: adf2f8a5c9 9ab2e5fde0
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:10:42 2017 +0200
+
+    Merge pull request #17285 from smithfarm/wip-20820-jewel
+    
+    jewel: rgw: Segmentation fault when exporting rgw bucket in nfs-ganesha
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit adf2f8a5c9bd9eb7ee30234e83893eea647753ff
+Merge: 694363a928 3c227e3f08
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:09:25 2017 +0200
+
+    Merge pull request #17281 from smithfarm/wip-20818-jewel
+    
+    jewel: rgw hangs in RGWRealmReloader::reload on SIGHUP
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 694363a928da9e0da3a284217a65c435fb44975d
+Merge: 9ac6c52bca cf65d63827
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:08:36 2017 +0200
+
+    Merge pull request #17280 from smithfarm/wip-20815-jewel
+    
+    jewel: rgw: uninitialized memory is accessed during creation of bucket's metadata
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 9ac6c52bca7624ac9ec39b6f233ee86efe76fc11
+Merge: 6180494692 442911ebad
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:07:48 2017 +0200
+
+    Merge pull request #17279 from smithfarm/wip-20813-jewel
+    
+    jewel: rgw: usage logging on tenated buckets causes invalid memory reads
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 618049469271eba8c819743688281e02e5009f08
+Merge: 4b37232d69 881bed7862
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:06:55 2017 +0200
+
+    Merge pull request #17277 from smithfarm/wip-20726-jewel
+    
+    jewel: rgw: user quota did not work well on multipart upload
+    
+    Reviewed-by: Daniel Gryniewicz <dang@redhat.com>
+
+commit 4b37232d69083d506ba5b7d3fc00b6e91a5cde31
+Merge: c1449b9a34 443e167b91
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 12 16:05:16 2017 -0400
+
+    Merge pull request #17649 from dillaman/wip-21346
+    
+    jewel: qa/workunits/rbd: relax greps to support upgrade formatting change
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit c1449b9a34687f873a6000f7787d047cfb3be447
+Merge: 9084ce8805 1516e24c85
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:04:20 2017 +0200
+
+    Merge pull request #17166 from smithfarm/wip-20719-jewel
+    
+    jewel: rgw: Truncated objects
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 9084ce88053d5b256c175e0712f4a619002de742
+Merge: 89b00a8e16 c47e5abd0f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:03:30 2017 +0200
+
+    Merge pull request #17165 from smithfarm/wip-20715-jewel
+    
+    jewel: rgw: radosgw-admin data sync run crash
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 89b00a8e1699cebc016286a528173f04faa01573
+Merge: 568cc0c25b 9b5b21def2
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:02:29 2017 +0200
+
+    Merge pull request #17164 from smithfarm/wip-20712-jewel
+    
+    jewel: rgw: not initialized pointer cause rgw crash with ec data pool
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 568cc0c25b1d5e047338e49aa7085c45ab0fbf3e
+Merge: 5b1e1cfae8 73c9d33ac0
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:01:38 2017 +0200
+
+    Merge pull request #17159 from smithfarm/wip-20709-jewel
+    
+    jewel: rgw: radosgw-admin: bucket rm with --bypass-gc and without --purge-data doesn't throw error message
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 5b1e1cfae89d31bf33b47ba79fb9b75d451e34cd
+Merge: fbae1127a6 e76198751c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 22:00:54 2017 +0200
+
+    Merge pull request #17156 from smithfarm/wip-20673-jewel
+    
+    jewel: rgw: multisite: RGWRadosRemoveOmapKeysCR::request_complete return val is wrong
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit fbae1127a6e7a9f4dd0822a91c8a06e5b95e3c52
+Merge: f64a82ad4d 26541c07b4
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 21:58:54 2017 +0200
+
+    Merge pull request #17148 from smithfarm/wip-20292-jewel
+    
+    jewel: rgw: multisite: log_meta on secondary zone causes continuous loop of metadata sync
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit f64a82ad4d931978a8cf53ca81190434da8017f6
+Merge: bd918be29c 38718ace48
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 21:56:44 2017 +0200
+
+    Merge pull request #17147 from smithfarm/wip-20290-jewel
+    
+    jewel: rgw: rgw_file: prevent conflict of mkdir between restarts
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit bd918be29cd31f0ef6dac64edbfaf40f38ae2e07
+Merge: 37dec0227a ff67388e24
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 21:55:14 2017 +0200
+
+    Merge pull request #16856 from prallabh/wip-20895
+    
+    jewel: rgw: bucket index check in radosgw-admin removes valid index
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 37dec0227a9522e730baabb9c7428f007ba9c202
+Merge: f4734fada4 5a7ea2790c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 21:53:38 2017 +0200
+
+    Merge pull request #16767 from linuxbox2/jewel-rgw-mpart-race
+    
+    jewel: rgw : fix race in RGWCompleteMultipart
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit c9b42c84e1f6850adea1cb9ba52f4a2a39fe8619
+Author: Ning Yao <yaoning@unitedstack.com>
+Date:   Tue Sep 12 18:16:29 2017 +0000
+
+    qa: disable kstore to fix false positive case
+    
+    Signed-off-by: Ning Yao <yaoning@unitedstack.com>
+
+commit f4734fada49ee6c2d4db9cd3e1e07d6bffe54071
+Merge: d3388d4601 3e70f3d662
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 18:18:40 2017 +0200
+
+    Merge pull request #17574 from smithfarm/wip-21297-jewel
+    
+    jewel: libradosstriper processes arbitrary printf placeholders in user input
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit c47e5abd0f6583bb6cf2a676e6b1194d29a96780
+Author: lu.shasha <lu.shasha@eisoo.com>
+Date:   Tue Jun 27 10:53:30 2017 +0800
+
+    rgw: fix radosgw-admin data sync run crash
+    
+    If sync thread have run before, then run data sync init. sync_status is still remain in rados pool. so no matter sync_status exists or not, if state is StateInit, sync_status.sync_info.num_shards should be updated.
+    
+    Fixes: http://tracker.ceph.com/issues/20423
+    
+    Signed-off-by: Shasha Lu <lu.shasha@eisoo.com>
+    (cherry picked from commit c307910d7131fc290f00bb8e33876e667afb72ec)
+    
+    Conflicts:
+        src/rgw/rgw_data_sync.cc (no data_sync_module or instance_id in jewel)
+
+commit d3388d4601d12c7c1e1187251c7221bbd8b58fbb
+Merge: 0277feb7d7 0a3227876c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 09:36:50 2017 +0200
+
+    Merge pull request #16299 from smithfarm/wip-20262-jewel
+    
+    jewel: rgw: datalog trim can't work as expected
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 0277feb7d74a91ad7e32a7b42e3bf98d5072e72e
+Merge: a683b04589 c90969031f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 09:34:36 2017 +0200
+
+    Merge pull request #17167 from smithfarm/wip-20720-jewel
+    
+    jewel: multisite: RGWPeriodPuller does not call RGWPeriod::reflect() on new period
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit f86dc698443bbaa6e2ad263875a17d0bccdff336
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Sep 12 09:30:37 2017 +0200
+
+    tests: use XFS explicitly in singleton-nomsgr/pool-access.yaml
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit a7e1ee22b03abc40188f3745ad86534df78d757e
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed May 24 16:46:00 2017 -0400
+
+    qa/suites/rados/singleton-nomsgr: fix syntax
+    
+    This parsed out as
+    
+      tasks:
+      - install: null
+      - ceph:
+          conf:
+            osd: osd max object name len = 400 osd max object namespace len = 64
+      - workunit:
+          clients:
+            all:
+            - rados/test_health_warnings.sh
+    
+    which is clearly not correct.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from 85e2f3f31d25dbfd9770cc3b1f232025df53b628)
+    
+    Conflicts:
+        applied changes to pool-access.yaml instead of health-warnings.yaml
+
+commit a683b04589763681553078bc31e7a838614bb910
+Merge: 12fa3ec34e 7966b846a8
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 09:25:22 2017 +0200
+
+    Merge pull request #15556 from cbodley/wip-19847
+    
+    jewel: rgw: multisite: fixes for meta sync across periods
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 12fa3ec34e61e43525a013920ff89757a48bb0f2
+Merge: 151c9da33d 71262f1fae
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 09:24:34 2017 +0200
+
+    Merge pull request #17155 from smithfarm/wip-20641-jewel
+    
+    jewel: rgw: multisite: lock is not released when RGWMetaSyncShardCR::full_sync() fails to write marker
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 151c9da33db8c59e5a9b5d7a0a97dd517322ceb1
+Merge: c049777c74 8b52105701
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Sep 12 09:23:43 2017 +0200
+
+    Merge pull request #17278 from smithfarm/wip-20728-jewel
+    
+    jewel: rgw: multipart parts on versioned bucket create versioned bucket index entries
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 26541c07b4d107fa7b89e2ea7da821d1aacf22ca
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Jun 22 13:06:13 2017 +0300
+
+    rgw: we no longer use log_meta
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit ac8b0077c1f53ff0037c4163489b838eebf8c247)
+
+commit 63df57807486a3b2fd6c4ec154f2d70fa9e88948
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Jun 22 10:17:37 2017 +0300
+
+    rgw: is_single_zonegroup doesn't use store or cct
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 0b0090cee249c5380efa4bb416d724a7e2dbfc08)
+
+commit 3eb913e488c914d86eca2a4d31b050ea18914fa2
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Wed Jun 21 12:37:21 2017 +0300
+
+    rgw: log_meta only for more than one zone
+    
+    Fixes: http://tracker.ceph.com/issues/20357
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 088dba03ccc65609ef1c51306389ebcf1126ec8c)
+
+commit 381d85d14dc48bcea83fd10010ea1080af0e5c55
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Sat Jun 10 18:12:52 2017 -0400
+
+    rgw: only log metadata on metadata master zone
+    
+    Fixes: http://tracker.ceph.com/issues/20244
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit b8272f3607074a2f7cbfd08f7bbc82f22cf120ba)
+
+commit c049777c74710bf342379e8995b31ee02282b61d
+Merge: 9afc62a7cc 787ba33e5d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 11 23:05:04 2017 +0200
+
+    Merge pull request #16296 from smithfarm/wip-20267-jewel
+    
+    jewel: rbd: api: is_exclusive_lock_owner shouldn't return -EBUSY
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 9afc62a7cc124dc92872779b18356aec85736f61
+Merge: dd0ead4815 475dda114a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 11 23:04:09 2017 +0200
+
+    Merge pull request #17385 from dillaman/wip-19957
+    
+    jewel: librbd: reacquire lock should update lock owner client id
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit dd0ead48154bbe8c0775ab2d35dec00f22c15990
+Merge: 18085bd997 c755a0fccd
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 11 23:03:29 2017 +0200
+
+    Merge pull request #17402 from dillaman/wip-20515
+    
+    jewel: librbd: fail IO request when exclusive lock cannot be obtained
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 18085bd9973fb2f0d0eb2b2e2209e9e193270536
+Merge: ac27f23fa6 f9acf56dce
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 11 23:02:49 2017 +0200
+
+    Merge pull request #17412 from dillaman/wip-18704
+    
+    jewel: librbd: prevent self-blacklisting during break lock
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 443e167b91cec0d5c7ed51ce686d6bb3ccd8d036
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Sep 7 08:55:27 2017 -0400
+
+    qa/workunits/rbd: relax greps to support upgrade formatting change
+    
+    Fixes: http://tracker.ceph.com/issues/21181
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 273c84578b06905229a7c6eae7b1a12bbe60de95)
+    
+    Conflicts:
+            qa/workunits/rbd/import_export.sh: trivial resolution
+
+commit a0755a760a2d5017604564389240a9c975408b30
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon May 22 12:53:51 2017 -0400
+
+    qa/suites/rados/singleton-nomsgr/pool-access: behave on ext4
+    
+    We may land on an ext4 root partition.
+    
+    Fixes: http://tracker.ceph.com/issues/20043
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from 657453d34914832f6e8012fbd69200e9680bd9ff)
+    
+    Conflicts:
+        applied the changes to pool-access.yaml instead of health-warnings.yaml
+        to address a specific test failure in the jewel branch
+
+commit a2fd5279992770f111710edd55e323afd5803445
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Sep 11 12:13:35 2017 +0800
+
+    tasks/ceph: construct CephManager earlier
+    
+    Previously, if errors occurred during healthy(), then
+    the finally block would invoke osd_scrub_pgs, which relies
+    on CephManager being constructed, and it would die, hiding
+    the original exception.
+    
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit c444db12d455a1901da8041e92f5eff1a9875170)
+    
+    Conflicts:
+            qa/tasks/ceph.py: the `tasks` directory was moved into
+                    `qa` after the cherry-picked change was merged.
+                    so apply the change manually to the ceph.py
+                    under `qa` directory.
+    (cherry picked from commit bc71dabb4e311bd2461489e98e9b95d5b635effc)
+
+commit 833c28e94f9a71ddfdc8afbdfacc9627a1e476d6
+Author: wumingqiao <wumingqiao@inspur.com>
+Date:   Tue Jul 25 14:45:09 2017 +0800
+
+    kv: let ceph_logger destructed after db reset
+    
+    if ceph_logger is deleted earlier than db, it may still be used by db, which cause a segment fault.
+    
+    Signed-off-by: wumingqiao <wumingqiao@inspur.com>
+    (cherry picked from commit a5cd03c643d6cb9074dfd2952cde83435de1b9dd)
+
+commit ac27f23fa697c7ad9be897efc04af95e3908b5b3
+Merge: bcc85d178e 72379a4930
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sun Sep 10 21:38:15 2017 +0200
+
+    Merge pull request #15189 from mslovy/wip-19996-jewel
+    
+    jewel: osd: fix infinite loops in fiemap
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit bcc85d178e5900acbe1eaaf28de43ca53dadbb7e
+Merge: 2203d42ec6 314952c589
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sun Sep 10 21:15:35 2017 +0200
+
+    Merge pull request #16711 from cbodley/wip-20346
+    
+    jewel: rgw: meta sync thread crash at RGWMetaSyncShardCR
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 2203d42ec656b12c23de50874b36289354338aaa
+Merge: f212b361df 2d64d090c0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Sep 8 14:05:18 2017 -0400
+
+    Merge pull request #17552 from dillaman/wip-21279
+    
+    jewel: test/cls_rbd: mask newer feature bits to support upgrade tests
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 02159898147053fa492ec597bceb9096d160be08
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Fri Aug 25 17:55:11 2017 -0400
+
+    rgw_file:  fix LRU lane lock in evict_block()
+    
+    Found by "Supriti Singh" <Supriti.Singh@suse.com>.
+    
+    Fixes http://tracker.ceph.com/issues/21141
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 3301596734adcbda1e8e76a742935efdeb7518fd)
+
+commit f212b361dfaed7f67e4b994b1f22b3c9897eeab2
+Merge: 26db2e7ff9 5adfc653dc
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 18:54:17 2017 +0200
+
+    Merge pull request #17514 from smithfarm/wip-21232-jewel
+    
+    jewel: core: interval_set: optimize intersect_of insert operations
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 26db2e7ff93eb351e0963e8ae25548367e2f63ff
+Merge: f4a0d00032 1bd4df1d7f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 18:39:58 2017 +0200
+
+    Merge pull request #16293 from smithfarm/wip-20460-jewel
+    
+    jewel: core: test_envlibrados_for_rocksdb.yaml fails on crypto restart
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit c755a0fccd007f95d709f124e931ab9758a6c93d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 16:20:26 2017 -0400
+
+    qa/suites/rbd: fixed cache override
+    
+    Fixes: http://tracker.ceph.com/issues/21251
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 98061bb3d7ce6309ddb04ea4d7e9d44a7ecd09c6)
+
+commit 3e70f3d662e3c051352e342fe89cd3b2186f4cb5
+Author: Jesse Williamson <jwilliamson@suse.de>
+Date:   Tue Jun 13 12:31:16 2017 -0700
+
+    libradosstriper: remove format injection vulnerability
+    
+    Fixes: http://tracker.ceph.com/issues/20240
+    
+    Signed-off-by: Stan K <redrampage@selectel.ru>
+    (cherry picked from commit e94d3b9661d287e500cdf4e6c102d2e3bb04475e)
+
+commit f4a0d000322992b9c67f51830a8396269a5caa1e
+Merge: 00d09fce6a 1415ecbd7d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 17:41:58 2017 +0200
+
+    Merge pull request #17084 from badone/wip-ceph-disk-dmcrypt-key-jewel
+    
+    jewel: ceph-disk: Use stdin for 'config-key put' command
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 00d09fce6a81bf7c8cd62caa5e0a3de44bd0ad84
+Merge: b014f3995d cd848c1e98
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 17:40:34 2017 +0200
+
+    Merge pull request #17008 from asheplyakov/19182-bp-jewel
+    
+    jewel: mon: fix force_pg_create pg stuck in creating bug
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit a4c3ef5276eb7d232f5706e6fe07b0808ee581d4
+Author: Brad Hubbard <bhubbard@redhat.com>
+Date:   Mon May 29 19:25:43 2017 +1000
+
+    osd: Reverse order of op_has_sufficient_caps and do_pg_op
+    
+    Fixes: http://tracker.ceph.com/issues/19790
+    
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+    (cherry picked from commit a921882e7c676d68ed67b54301b49fd9bed42945)
+    
+    Conflicts:
+            qa/suites/rados/singleton-nomsgr/all/pool-access.yaml - drop mgr.x
+                role, which is not needed in jewel and might even cause the test to
+                fail
+            src/osd/PrimaryLogPG.cc - this file doesn't exist in jewel, so apply
+                the change manually to ReplicatedPG.cc (i.e., by moving the
+                op->includes_pg_op() conditional below the
+                !op_has_sufficient_caps(op) conditional)
+
+commit b014f3995d7913fe5266c2e7d06f93f296e98991
+Merge: c3623149ef 53e97da166
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Thu Sep 7 22:51:10 2017 +0800
+
+    Merge pull request #17133 from smithfarm/wip-21035-jewel
+    
+    jewel: ceph-disk: systemd unit timesout too quickly
+    
+    Reviewed-by: David Disseldorp <ddiss@suse.de>
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit c3623149efc2b25a3509ec26b671d835a81b8c28
+Merge: 3aede767bd 713a88a5c9
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 16:33:08 2017 +0200
+
+    Merge pull request #16316 from smithfarm/wip-20362-jewel
+    
+    jewel: rgw: VersionIdMarker and NextVersionIdMarker are not returned when listing object versions
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 72379a4930edfc917a15ea1ce5ba67ec5093fd96
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Sep 15 17:29:45 2016 -0400
+
+    ceph_test_objectstore: disable filestore_fiemap
+    
+    This very reliably triggers a test failure for
+    ObjectStore/StoreTest.Synthetic/1.
+    
+    FIEMAP is bad!  Do not use it!
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 2d64d090c05be7792c934d8a3e060e48e68da129
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 21:37:16 2017 -0400
+
+    test/cls_rbd: mask newer feature bits to support upgrade tests
+    
+    Fixes: http://tracker.ceph.com/issues/21217
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit aeb8f29d21625f3570e2f3e6dd26594d1a6df810)
+
+commit 3aede767bdc391fe6521066aade80369081d23cc
+Merge: b2accb83ac e35c938208
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 10:21:10 2017 +0200
+
+    Merge pull request #16703 from ddiss/wip-20837-jewel
+    
+    jewel: ceph-disk: don't activate suppressed journal devices
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit b2accb83ac46a54669c4d0a603464ff117a66f06
+Merge: d7cc49d995 96de9d9078
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 09:47:41 2017 +0200
+
+    Merge pull request #17396 from smithfarm/wip-21113-jewel
+    
+    jewel: cephfs: get_quota_root sends lookupname op for every buffered write
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit d7cc49d9950917e7afb6c14b4b063b51e7e136b5
+Merge: ae480caf68 3adbc35205
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 09:46:00 2017 +0200
+
+    Merge pull request #17009 from dreamhost/wip-16463-jewel
+    
+    jewel: rgw: aws4: add rgw_s3_auth_aws4_force_boto2_compat conf option
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit ae480caf68db8e6793c8f3db663e94215c9f75ea
+Merge: d4797bf193 3242b2b562
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 09:42:54 2017 +0200
+
+    Merge pull request #16963 from smithfarm/wip-20972-jewel
+    
+    jewel: cephfs: ceph-fuse segfaults at mount time, assert in ceph::log::Log::stop
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit d4797bf193354199a3182cc2c07ac46c76d506ba
+Merge: 02fef5c436 788cfa89dd
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 09:41:19 2017 +0200
+
+    Merge pull request #16952 from dreamhost/wip-20966-jewel
+    
+    jewel: rgw: radosgw-admin: fix bucket limit check argparse, div(0)
+    
+    Reviewed-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 02fef5c43687437a4b085b9f31d2e3eb982e637c
+Merge: d5e77009ac 6bd2dae193
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 09:34:52 2017 +0200
+
+    Merge pull request #16951 from linuxbox2/jewel-aws4-plus
+    
+    jewel: rgw: replace '+' with "%20" in canonical query string for s3 v4 auth
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit d5e77009acf009f1280d352ef6d0f8b6731fd3e8
+Merge: 7bdbd075a1 37b37e78f8
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 09:33:25 2017 +0200
+
+    Merge pull request #16880 from linuxbox2/jewel-rgw-dir-suggest
+    
+    jewel: rgw: Fix up to 1000 entries at a time in check_bad_index_multipart
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 7bdbd075a11b9a8cd05eb0fd55d4787c554ac9a6
+Merge: 18e5db07f1 187e9eaa30
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Sep 7 09:28:03 2017 +0200
+
+    Merge pull request #16720 from prallabh/wip-jewel-20821
+    
+    jewel: rgw: Do not decrement stats cache when the cache values are zero
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 5adfc653dc201ec4faa60a5f78431ab68f0f4e19
+Author: Zac Medico <zmedico@gmail.com>
+Date:   Sun Aug 27 05:25:01 2017 -0700
+
+    interval_set: optimize intersect_of for identical spans
+    
+    Optimize comparisons for identical spans of intervals.
+    When this patch is combined with the previous map insert
+    optimization, a benchmark using 400000 identical
+    intervals shows a 7 times performance improvement in
+    comparison to without the patches.
+    
+    Signed-off-by: Zac Medico <zmedico@gmail.com>
+    (cherry picked from commit b6a035666c2765f8895ee9991348dbc025613ed7)
+
+commit 54dfe8733b32401a5a561bf544d91f44a41e378f
+Author: Zac Medico <zmedico@gmail.com>
+Date:   Fri Aug 25 09:41:07 2017 -0700
+
+    interval_set: optimize intersect_of insert operations
+    
+    Use the std::map insert method with hint iterator to optimize
+    inserts. This increases performance more than 3.5 times for
+    large numbers of intervals. This will help performance
+    especially in the PGPool::update method, where profiling data
+    has shown that intersection operations are a hot spot. The
+    following benchmark data is for 400000 intervals:
+    
+        4 +-+--+----+----+----+----+----+----+----+----+--+-+
+    P     +    +    +    +    +    +    +    +  *************
+    E     |                             ********            |
+    R 3.5 +-+                       ****                  +-+
+    F     |                   ******                        |
+    O     |                 **                              |
+    R   3 +-+           ****                              +-+
+    M     |          ***                                    |
+    A     |        **                                       |
+    N 2.5 +-+     *                                       +-+
+    C     |     **                                          |
+    E     |     *                                           |
+        2 +-+ **                                          +-+
+    R     |  **                                             |
+    A     | **                                              |
+    T 1.5 +**                                             +-+
+    I     |**                                               |
+    O     +*   +    +    +    +    +    +    +    +    +    +
+        1 +*+--+----+----+----+----+----+----+----+----+--+-+
+          0   0.1  0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9
+    
+                            SET SIZE RATIO
+    
+    The above chart was generated using benchmark results
+    from the following program:
+    
+    #include <iostream>
+    #include <sys/timeb.h>
+    #include "include/interval_set.h"
+    
+    int main(int argc, char *argv[])
+    {
+      const int interval_count = std::stoi(argv[1]);
+      const int interval_distance = 4;
+      const int interval_size = 2;
+      const int sample_count = 8;
+      const int max_offset = interval_count * interval_distance;
+      interval_set<int> a, b, intersection;
+    
+      for (int i = 0; i < max_offset; i+=interval_distance) {
+        a.insert(i, interval_size);
+      }
+    
+      for (int m = 1; m < 100; m++) {
+        float ratio = 1 / float(m);
+    
+        for (int i = 0; i < max_offset; i+=interval_distance*m) {
+          b.insert(i, interval_size);
+        }
+    
+        struct timeb start, end;
+        int ms = 0;
+        for (int i = 0; i < sample_count; i++) {
+          ftime(&start);
+          intersection.intersection_of(a, b);
+          ftime(&end);
+          ms += (int) (1000.0 * (end.time - start.time)
+            + (end.millitm - start.millitm));
+          intersection.clear();
+        }
+        b.clear();
+    
+        std::cout << ratio << "\t" << ms << std::endl << std::flush;
+      }
+    }
+    
+    Signed-off-by: Zac Medico <zmedico@gmail.com>
+    (cherry picked from commit 32bc0430f70b057d1bba623252e92ab9f279028d)
+
+commit 18e5db07f1e81eec8a2c8483c7bcc876be0d19c9
+Merge: 44cd2b19b5 178245d543
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Sep 6 09:36:13 2017 +0200
+
+    Merge pull request #15966 from prallabh/jewel
+    
+    jewel: rgw: Custom data header support
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 44cd2b19b5ee603a96b53e8286cfc0cbd6e1fc76
+Merge: c93d2c6cd6 d90b1b3395
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Sep 6 09:03:50 2017 +0200
+
+    Merge pull request #16144 from smithfarm/wip-20364-jewel
+    
+    jewel: mon: osd crush set crushmap need sanity check
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 1bd4df1d7f16b6cca02abb791acc298a1e6ec592
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Sat Jun 24 00:50:40 2017 +0800
+
+    osdc/Objecter: release message if it is not handled
+    
+    Fixes: http://tracker.ceph.com/issues/19741
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 5c2774234c20d809d56d005b4db34070f3029684)
+    
+    Conflicts:
+       src/osdc/Objecter.h (in master, ms_fast_dispatch function declaration has an
+                           "override" specifier; in jewel, this specifier is missing)
+
+commit 4e4b62b4c9ec8dc5eea025af31ae5761fdd127dd
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Wed Jun 21 14:25:01 2017 +0800
+
+    crypto: allow PK11 module to load even if it's already initialized
+    
+    there is chance that other pieces of application loads PK11 module
+    already and does not finalize it before calling common_init_finish().
+    
+    also, upon fork, PK11 module resets its entire status including `nsc_init`,
+    by which PK11 module tell if it is initialized or not. so the behavior
+    of NSS_InitContext() could be different before and after fork. that's
+    another reason to ignore CKR_CRYPTOKI_ALREADY_INITIALIZED error (see
+    NSS_GetError()).
+    
+    Fixes: http://tracker.ceph.com/issues/19741
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit fcc3effd8b447ef0c54b4c806b8f6e996d7467dd)
+
+commit c93d2c6cd65273eef4e9187269e5d44622af9a1c
+Merge: e9eda5aa28 92eb6836bf
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Tue Sep 5 11:13:53 2017 -0700
+
+    Merge pull request #17210 from dzafman/wip-20730-jewel
+    
+    jewel: core: disable skewed utilization warning by default
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit e9eda5aa285ebf989c598b248c2c8d4fc660c6fa
+Merge: e4f02b2bef 153f775441
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Tue Sep 5 11:12:23 2017 -0700
+
+    Merge pull request #16405 from dzafman/wip-20041-jewel
+    
+    jewel: osd: scrub_to specifies clone ver, but transaction include head write ver
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit e4f02b2befa9203a51c7f146c85539180953e451
+Merge: baa5183c52 97fdaa753e
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Tue Sep 5 11:11:21 2017 -0700
+
+    Merge pull request #16169 from Vicente-Cheng/wip-20511-jewel
+    
+    jewel: osd: ReplicatedPG: solve cache tier osd high memory consumption
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit baa5183c524fc7af83dd46645a48e24464ab7c6e
+Merge: 81097b6fa1 f49c9c777f
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Tue Sep 5 10:55:32 2017 -0700
+
+    Merge pull request #16167 from Vicente-Cheng/wip-20492-jewel
+    
+    jewel: osd: omap threadpool heartbeat is only reset every 100 values
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 81097b6fa1543e332f0da7cd9857cb4877c8eee1
+Merge: d639aa9136 932342c1e3
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 4 21:10:57 2017 +0200
+
+    Merge pull request #16151 from Vicente-Cheng/wip-20349-jewel
+    
+    jewel: cephfs: df reports negative disk "used" value when quota exceed
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit d639aa91369c6af4956a5186dd11bfb903f01421
+Merge: b6b08b72f0 6b6620ffef
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 4 21:09:55 2017 +0200
+
+    Merge pull request #16150 from Vicente-Cheng/wip-20403-jewel
+    
+    jewel: mds: save  projected path into inode_t::stray_prior_path
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit b6b08b72f0516b74f502bcc98ad98d01b2012f7d
+Merge: bab324815d dac0ca797c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 4 12:54:34 2017 +0200
+
+    Merge pull request #16141 from smithfarm/wip-20270-jewel
+    
+    jewel: tests: LibRadosMiscConnectFailure.ConnectFailure hang
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit bab324815da63ec395a4c036d451c7d3bb45fa99
+Merge: ecc5e960a0 3105f118bc
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Sep 2 17:16:57 2017 +0200
+
+    Merge pull request #16285 from smithfarm/wip-18137-jewel
+    
+    jewel: rbd-mirror: image sync should send NOCACHE advise flag
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit ecc5e960a0fdbcf9c0de7453626369938154d29c
+Merge: 0d53a36ea1 f9e87fef6a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Sep 2 17:16:08 2017 +0200
+
+    Merge pull request #16295 from smithfarm/wip-20265-jewel
+    
+    jewel: rbd: cli: ensure positional arguments exist before casting
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 0d53a36ea1b547f85172b79b84a61229af69d658
+Merge: 445833be4e 24bd60136e
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Sep 2 13:12:17 2017 +0200
+
+    Merge pull request #16276 from smithfarm/wip-19563-jewel
+    
+    jewel: rgw: folders starting with _ underscore are not in bucket index
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 445833be4e941e5eea106d558f02afa6dc201db2
+Merge: 182a578157 39b2b0b39a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Sep 2 13:09:46 2017 +0200
+
+    Merge pull request #16268 from cbodley/wip-16072-jewel
+    
+    jewel: rgw: rgw_common.cc: modify the end check in RGWHTTPArgs::sys_get
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 182a5781575183fd74f6262b3d0f5137c356ec0c
+Merge: f61c562894 f16fa4b252
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Sep 2 13:08:21 2017 +0200
+
+    Merge pull request #16266 from cbodley/wip-20408
+    
+    jewel: rgw: multipart copy-part remove '/' for s3 java sdk request header
+    
+    Reviewed-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit f61c5628944f9b2b612f080d73296678a4a7da14
+Merge: 5d3c80eef4 00a7999552
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Sep 2 12:50:50 2017 +0200
+
+    Merge pull request #15988 from cbodley/wip-jewel-15983
+    
+    jewel: rgw: fix infinite loop in rest api for log list
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 5d3c80eef428b93edc7559709d4a2de7bd2750c1
+Merge: 6484a3bdab d3b34d3f9f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Sep 2 12:48:00 2017 +0200
+
+    Merge pull request #15449 from smithfarm/wip-19720-jewel
+    
+    jewel: rgw: rgw_file: fix size and (c|m)time unix attrs in write_finish
+    
+    Reviewed-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 6484a3bdab941b077ae942ae207b11ac679aeedc
+Merge: bd2a0c80ab d0492ea07a
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 1 14:27:31 2017 -0500
+
+    Merge pull request #17351 from liewegas/wip-prune-past-intervals-jewel
+    
+    osd: add osd_hack_prune_past_intervals
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit f9acf56dce26bb031cddb6676b2834b6bd426ae2
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Aug 31 21:30:47 2017 -0400
+
+    librbd: prevent self-blacklisting during break lock
+    
+    (derived from commit 5c590acaec4dd66a9a8c3aa0ec8ab904dd350216)
+    
+    Fixes: http://tracker.ceph.com/issues/18704
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit d90b1b339542408fb053571b64e705be208cb3be
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sat Mar 18 10:04:20 2017 +0100
+
+    mon: osd crush set crushmap need sanity check
+    
+    The sanity check verifying the new crushmap does not remove crush rules
+    that are in use is not exclusive to ceph setcrushmap.
+    
+    Fixes: http://tracker.ceph.com/issues/19302
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit ed760457bf154c10adf75c6df046eecab7eb8e4b)
+
+commit 2e7ddedf8acdd7a19753a0c376e9f29535329843
+Author: songbaisen <song.baisen@zte.com.cn>
+Date:   Thu Mar 31 11:39:44 2016 +0800
+
+     crush: when take place the crush map should consider the rule is in used
+    
+     Signed-off-by: song baisen song.baisen@zte.com.cn
+    
+    (cherry picked from commit 09bf6f2858d09c8c314a8c242a9c70d2834718dc)
+
+commit 26984b0b0506958da340b94e3a05eac348f20f2a
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Aug 31 08:03:03 2017 -0400
+
+    librbd: fix missing write block validation in IO work queue
+    
+    (derived from commit 8e76ebd93fd7525f6909a7da178e9b92c98e1ebe)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 79f220d08063077b08cda3acc447f30790ee9dfd
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 27 14:05:58 2017 -0400
+
+    qa/suites/rbd: test dynamic features with cache disabled
+    
+    The journaling logic follows different paths depending on the
+    cache configuration.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 57a507d845339e9052122755bd460eb6d61d6060)
+
+commit 412f75a8f8203f236c1eb9f52da8876e476a052f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 27 14:03:34 2017 -0400
+
+    qa/tasks/qemu: rbd cache is enabled by default
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit fdc4c9221f2c54d5fb55e74491ebc5165f73e776)
+
+commit edf8b584f0856f6181579aa1b531963ad06ebbea
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Aug 31 09:48:47 2017 -0400
+
+    test: unit tests for librbd IO work queue failure path
+    
+    (derived from commit 6e23ef358f29ca65a2a6b08b133416415e117b06)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 1c8bd5f44a0a006094235254504772ae8eb90547
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Aug 31 09:31:02 2017 -0400
+
+    librbd: cleanup interface between IO work queue and IO requests
+    
+    This will help mock the testing of the IO work queue
+    
+    (derived from commit e0834d12e91bf085a5c9503f1c69a2bee2d21edf)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 75f0bb9e7bbdea0fa6d15d253139f0583be6abea
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 22 13:31:10 2017 -0400
+
+    common: improve the ability to mock PointerWQ classes
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 2d90bd8fdb30705d05569d242fc0cc4e36a2c7db)
+    
+    Conflicts:
+            src/common/WorkQueue.h: trivial resolution
+            src/librbd/AioImageRequestWQ.cc: file renamed
+
+commit fbfafb75c70a1455e102bf09623e1f1d8cf2074f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Aug 31 07:51:37 2017 -0400
+
+    librbd: exclusive lock failures should bubble up to IO
+    
+    (derived from commit 048d475127b600b6a40bd5e0c3a0daf8133294f4)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 8fb8eb61dd8b2e44cb10da9b28fa334267784e2f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Aug 30 22:08:15 2017 -0400
+
+    librbd: directly inform IO work queue when locks are required
+    
+    Due to lock dependency issues between librbd locks and the the thread
+    pool lock, it's impossible to directly determine if the lock is
+    required within the _void_dequeue method. Therefore, this state needs
+    to be internally tracked by the work queue.
+    
+    (derived from commit 4a525671b3541a0a208dd039ac96f42bc8fca2cc)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 4509765fee20aab082dfbb2ba02cf76f796d6292
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Aug 30 21:16:56 2017 -0400
+
+    librbd: clean up variable naming in IO work queue
+    
+    (derived from commit 9d8ae624858beb6fdc8ee2674b8e8d9b9cf14cbe)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 08c63b3d0c8a3c68f68ded0b9122c5e094d362ef
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Aug 31 08:25:29 2017 -0400
+
+    librbd: convert ImageRequestWQ to template
+    
+    (derived from commit b9569585fab5654b6c29552c5eb009dcddfaaa3b)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 42780a8228da1440d7f3f44a09cddf3b88b90223
+Author: Ning Yao <yaoning@unitedstack.com>
+Date:   Mon Aug 28 15:48:50 2017 +0000
+
+    os:kstore fix unittest for FiemapHole
+    
+    kstore always return [0, object_size] regardless of offset and length
+    
+    Signed-off-by: Ning Yao <yaoning@unitedstack.com>
+    (cherry picked from commit dddae89fa7956fdfca1c09910b4e5b42ecbd22cf)
+
+commit 96de9d9078e5f638c74fdc68322ac4a199011597
+Author: Dan van der Ster <daniel.vanderster@cern.ch>
+Date:   Thu Aug 10 11:33:46 2017 +0200
+
+    client: skip lookupname if writing to unlinked file
+    
+    When a client writes to an unlinked file, get_quota_root tries to
+    resolve the filename via an MDS lookupname op. The op always results in
+    -13 permission denied for path-restricted caps or -2 no such file or
+    directory otherwise. More importantly, the repeated lookupname ops slow
+    down buffered writes significantly.
+    
+    Don't do the lookupname for unlinked files; use the root_ancentor's
+    quota instead.
+    
+    Fixes: http://tracker.ceph.com/issues/20945
+    Backport: jewel, luminous
+    Signed-off-by: Dan van der Ster <daniel.vanderster@cern.ch>
+    (cherry picked from commit 1d617eee2e8c32f7300cb2cb8dd37b3714a4699f)
+
+commit bd2a0c80ab1827f1ecdb349b6ebc65c4ad519322
+Merge: 05df53404b e9e7850b51
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 31 10:24:21 2017 +0200
+
+    Merge pull request #16059 from vumrao/wip-vumrao-20353
+    
+    jewel: osd: Add heartbeat message for Jumbo Frames (MTU 9000)
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 05df53404b0e05cefe46d30174df71b53714f7f2
+Merge: 1b3c3c7f65 0068d9f333
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 31 10:23:00 2017 +0200
+
+    Merge pull request #15726 from asheplyakov/20314-bp-jewel
+    
+    jewel: mon: fail to form large quorum; msg/async busy loop
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Haomai Wang <haomai@xsky.com>
+
+commit 475dda114a7e25b43dc9066b9808a64fc0c6dc89
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Aug 30 20:59:20 2017 -0400
+
+    librbd: reacquire lock should update lock owner client id
+    
+    (derived from commit 21ce5e16703776cbae20ac981dff4ec7cc2bc9c8)
+    
+    Fixes: http://tracker.ceph.com/issues/19957
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit d0492ea07abcc8652f9c713deaae792ef68dc491
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Nov 24 18:08:49 2016 -0500
+
+    osd: add osd_hack_prune_past_intervals
+    
+    Last ditch (but dangerous) method of reducing memory usage for
+    past_intervals, which can help very very unhappy clusters recovery.
+    A properly implemented version of this is in luminous.  This hacky
+    version was used successfully to recover multiple jewel-based clusters,
+    but is still only recommended for use when the OSD is otherwise unable
+    to recover.
+    
+    This change is not cherry-picked from master because luminous implements
+    a more sophisticated version of this that changes the past intervals
+    representation entirely, but it is too invasive to backport.  This
+    workaround to prune just on startup should be sufficient for emergencies.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 1b3c3c7f655b53b205a81d48d3fa5e6072d4cec5
+Merge: 4fcd7eea45 4be3db5973
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 18:51:27 2017 +0200
+
+    Merge pull request #15719 from Vicente-Cheng/wip-20146-jewel
+    
+    jewel: rgw: 'gc list --include-all' command infinite loop the first 1000 items
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 4fcd7eea45bc5158fd04b3b2bd8da717a59932b5
+Merge: ed19fdfc1c b786f7815b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 18:50:21 2017 +0200
+
+    Merge pull request #15477 from smithfarm/wip-19767-jewel
+    
+    jewel: rgw: Delete non-empty bucket in slave zonegroup
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit ed19fdfc1ce39f9cf127748e607ed0439a209f7c
+Merge: da648d66eb 7bf8b854ab
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 13:32:21 2017 +0200
+
+    Merge pull request #16015 from asheplyakov/19208-bp-jewel
+    
+    jewel: osd: osd_internal_types: wake snaptrimmer on put_read lock, too
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit da648d66eb67b608d7812d6b75c77df403c21fae
+Merge: 879a650f20 52a00b3bff
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 13:31:05 2017 +0200
+
+    Merge pull request #15762 from smithfarm/wip-17385-jewel
+    
+    jewel: ceph cli: Rados object in state configuring race
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 879a650f20ae74df389dfc58720c119bd6ee7330
+Merge: 2a8e0f6695 21b00c3ec0
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 13:28:29 2017 +0200
+
+    Merge pull request #15474 from smithfarm/wip-19559-jewel
+    
+    jewel: osd: objecter full_try behavior not consistent with osd
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 2a8e0f6695c3f32c6e2a4c1230dce1db037a355a
+Merge: c40316e9d3 3fa277b479
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 09:15:37 2017 +0200
+
+    Merge pull request #15947 from asheplyakov/20428-bp-jewel
+    
+    jewel: osd: unlock sdata_op_ordering_lock with sdata_lock hold to avoid missing wakeup signal
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Liu-Chunmei <chunmei.liu@intel.com>
+    Reviewed-by: Xie Xingguo <xie.xingguo@zte.com.cn>
+
+commit c40316e9d3c4c230da234ffdeac6e4a3307a9243
+Merge: 3ec5cd9c61 648dfa1e93
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 09:04:24 2017 +0200
+
+    Merge pull request #15475 from tchaikov/wip-16239-jewel
+    
+    qa: add a sleep after restarting osd before "tell"ing it
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 3ec5cd9c61294a4b5ed4d17357f60b1544beb532
+Merge: 0916352610 5adc66bc2a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 29 08:56:01 2017 +0200
+
+    Merge pull request #15473 from smithfarm/wip-20080-jewel
+    
+    jewel: build/ops: rpm: set subman cron attributes in spec file
+    
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+    Reviewed-by: Thomas Serlin <tserlin@redhat.com>
+
+commit 0916352610200ddd2a9b6bbe2dbba5d8ca4d470a
+Merge: 988559b4e2 36b1a35a44
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Aug 28 22:34:52 2017 +0200
+
+    Merge pull request #15460 from smithfarm/wip-17843-jewel
+    
+    jewel: rbd: object-map: batch updates during trim operation
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 988559b4e286360b3cc10ac0c6aa9238b98884dd
+Merge: 5d8ea26ebb b9ce1aa618
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Aug 28 22:33:13 2017 +0200
+
+    Merge pull request #15488 from dillaman/wip-20023-jewel
+    
+    jewel: rbd: rbd-mirror: ensure missing images are re-synced when detected
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 5d8ea26ebb51656ef435b3ae932bb172af9407f7
+Merge: 9d1b08e619 5c53ae3f9a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Aug 28 22:32:04 2017 +0200
+
+    Merge pull request #15602 from tchaikov/wip-20175-jewel
+    
+    jewel: tests: decouple ceph_test_librbd_api from libceph-common
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 9d1b08e6191d55027e9573ab721a320a67453d24
+Merge: cccacd7e0f 61f132078a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Aug 28 22:31:09 2017 +0200
+
+    Merge pull request #16124 from smithfarm/wip-19174-jewel
+    
+    jewel: rbd: rbd_clone_copy_on_read ineffective with exclusive-lock
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 178245d543d680bbdc7f2da07c431fc745da1143
+Author: Pavan Rallabhandi <PRallabhandi@walmartlabs.com>
+Date:   Fri Apr 14 21:42:45 2017 +0530
+
+    rgw: add a field to store generic user data in the bucket index,
+    that can be populated/fetched via a configurable custom http header
+    
+    Signed-off-by: Pavan Rallabhandi <prallabhandi@walmartlabs.com>
+    (cherry picked from commit abca7a86c3cfbb58fafb5d057d9d6f5017a53704)
+    
+    Conflicts:
+            src/rgw/rgw_op.cc
+                    Number of arguments to RGWPutObjProcessor_Multipart::do_complete has been changed in master with an extra field accounted_size added, which is not required in Jewel.
+                    Number of arguments for the processor->complete() has been changed in master, which is not required in Jewel.
+    
+            src/rgw/rgw_op.h
+                    A new member field `crypt_http_responses` is added in the class `RGWPutObj` in master, which is not required in Jewel.
+    
+            src/rgw/rgw_rados.cc
+                    In the function RGWPutObjProcessor::complete() there is an extra argument to do_complete() in master, which is not required in Jewel.
+                    In the function RGWPutObjProcessor_Atomic::do_complete, a call to obj_op.write_meta has accounted_size, which is not required in Jewel.
+                    There is an extra argument accounted_size in RGWRados::Bucket::UpdateIndex::complete in master, which is not required in Jewel.
+                    In RGWRados::Bucket::UpdateIndex::complete, RGWObjEnt has been removed in master, which has to be retained in Jewel.
+                    In RGWRados::cls_obj_complete_op, user_data is added to the rgw_bucket_dir_entry_meta structure.
+                    In RGWRados::cls_bucket_list, the user_data field of RGWObjEnt is populated.
+    
+            src/rgw/rgw_rados.h
+                    In UpdateIndex::complete(), remove_objs is of type rgw_obj_key in Jewel instead of rgw_obj_index_key
+                    Corrected various function declarations as appropriate.
+                    RGWPutObjProcessor_Multipart is not part of this file in Jewel.
+    
+            src/rgw/rgw_rest_swift.cc
+                    In RGWListBucket_ObjStore_SWIFT::send_response(), accounted_size is not required in Jewel.
+    
+            src/rgw/rgw_common.h
+                    Add user_data field in RGWObjEnt structure.
+    
+            src/rgw/rgw_json_enc.cc
+                    Add user_data field while dumping RGWObjEnt.
+
+commit cccacd7e0fb7422e18020b919ad10bac8152b9e8
+Merge: 006804ab68 c2137f2f72
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Aug 28 11:03:32 2017 +0200
+
+    Merge pull request #15760 from smithfarm/wip-20325-jewel
+    
+    libradosstriper silently fails to delete empty objects in jewel
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 006804ab68818e73bdf822aa5994346b40cc6add
+Merge: 14a52865da 2efd7cd6f3
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Aug 28 10:50:27 2017 +0200
+
+    Merge pull request #16061 from weiqiaomiao/wqm-wip-ceph-disk-jewel
+    
+    jewel: ceph-disk: remove the special check to bcache devices
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+    Reviewed-by: Zhu Shangzhong <zhu.shangzhong@zte.com.cn>
+
+commit 14a52865da4de99b445560356533d7128df382d6
+Merge: d9bbf8c6e6 a3c487448b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Aug 28 10:47:59 2017 +0200
+
+    Merge pull request #15503 from Vicente-Cheng/wip-20011-jewel
+    
+    jewel: tools: ceph-disk: separate ceph-osd --check-needs-* logs
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 187e9eaa30514c93cd8e982ff67ddb6502810af9
+Author: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+Date:   Mon Aug 21 17:04:45 2017 +0300
+
+    rgw: Prevent overflow of stats cached values
+    
+    Signed-off-by: Pavan Rallabhandi <PRallabhandi@walmartlabs.com>
+    Fixes: http://tracker.ceph.com/issues/20934
+    Signed-off-by: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+    (cherry picked from commit 634215eea1ddd4e4f5dc0066c4a2e745cfc20475)
+    
+    Conflicts:
+            src/rgw/rgw_quota.cc
+                           Have the quota stats structures to reflect rounded values in KB and honor the signed integer values
+
+commit 59854a158e8df803013ba1266d414af67feebac1
+Author: Pavan Rallabhandi <PRallabhandi@walmartlabs.com>
+Date:   Tue Jul 18 14:40:04 2017 +0530
+
+    rgw: Do not decrement stats cache when the cache values are zero
+    
+    With RGWs configured in a load balancer, there is a possibility of
+    having the cached values going unbound, when PUT/DELETE operations
+    do not land up on the same RGW. To avoid such cases, make sure the
+    decrement of stats happen only when the cached values are sane.
+    
+    Fixes: http://tracker.ceph.com/issues/20661
+    Signed-off-by: Pavan Rallabhandi <PRallabhandi@walmartlabs.com>
+    (cherry picked from commit 3903e213c7ac7624e3452f5f3b1ca1c339bf2ca2)
+    
+    Conflicts:
+            src/rgw/rgw_quota.cc
+
+commit 81810c1c7aa03a353975db500abeb1163e38fde7
+Author: fang.yuxiang <fang.yuxiang@eisoo.com>
+Date:   Wed Aug 9 11:48:53 2017 +0800
+
+    rgw: break sending data-log list infinitely
+    
+    radosgw send data-log list infinitely when opposite end trimmed the data-log and in quiescence.
+    Fixes: http://tracker.ceph.com/issues/20951
+    
+    Signed-off-by: fang yuxiang fang.yuxiang@eisoo.com
+    (cherry picked from commit 40db1fdbc7b24d56b2c7b463238e6b96f2d4bbd9)
+
+commit 9ab2e5fde02b705658d4e763519282cad3f0b173
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Thu Jul 20 08:18:22 2017 -0400
+
+    rgw_file: properly & |'d flags
+    
+    Found by "Supriti Singh" <Supriti.Singh@suse.com>.
+    
+    Fixes http://tracker.ceph.com/issues/20663
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 5f838c05c72ad46ce01884a916f81275ef43dacd)
+
+commit d3b34d3f9fece0d12c19132852dcb2c9b38e29d5
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Tue Apr 18 09:19:13 2017 -0400
+
+    rgw_file:  pre-compute unix attrs in write_finish()
+    
+    New serialized Unix attrs need to reflect the change being made,
+    and should be reverted if the change fails.
+    
+    Fixes: http://tracker.ceph.com/issues/19653
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit ed91d23ccaaac4e72a4c28a58e77485395949f04)
+    
+    Conflicts:
+        src/rgw/rgw_file.cc (processor->complete() takes different arguments in
+            jewel than in master)
+
+commit d9bbf8c6e6d6c2a8b978a5f31cdb0c5c52184d0f
+Merge: de27247717 ab2d3582f4
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sun Aug 27 18:10:39 2017 +0200
+
+    Merge pull request #14874 from ceph/wip-19805-jewel
+    
+    jewel: rbd: default features should be negotiated with the OSD
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit de2724771785b190cff88996bb09097413a08e84
+Merge: d3677e9f50 618a82e11e
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sun Aug 27 18:09:03 2017 +0200
+
+    Merge pull request #14977 from dillaman/wip-19873-jewel
+    
+    jewel: rbd: rbd-mirror: failover and failback of unmodified image results in split-brain
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit d3677e9f5054362b70f9569a47967930b954a67c
+Merge: d47a2e05cf b63b7886dc
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sun Aug 27 17:53:15 2017 +0200
+
+    Merge pull request #15461 from smithfarm/wip-19795-jewel
+    
+    jewel: tests: test_notify.py: assert(not image.is_exclusive_lock_owner()) on line 147
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit d47a2e05cf4004bb4d7ea2a1c20642d17e2f3b14
+Merge: 27fd5ec473 5c0986153e
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sun Aug 27 17:51:35 2017 +0200
+
+    Merge pull request #15463 from smithfarm/wip-20017-jewel
+    
+    jewel: rbd: rbd-nbd: kernel reported invalid device size (0, expected 1073741824)
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 27fd5ec4739b87e260bd337ddfe9593943b5f802
+Merge: 2b759d2f74 bc8c5d6c77
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sun Aug 27 17:49:36 2017 +0200
+
+    Merge pull request #15464 from smithfarm/wip-20153-jewel
+    
+    jewel: rbd: Potential IO hang if image is flattened while read request is in-flight
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 3c227e3f086cbfbfff23d11515d9261906c7219d
+Author: fang.yuxiang <fang.yuxiang@eisoo.com>
+Date:   Wed Jul 19 18:49:11 2017 +0800
+
+    rgw: fix rgw hang when do RGWRealmReloader::reload after go SIGHUP
+    
+    Quota async processer reference count err when bucket has no explicit shard
+    
+    Fixes: http://tracker.ceph.com/issues/20686
+    
+    Signed-off-by: fang yuxiang fang.yuxiang@eisoo.com
+    (cherry picked from commit 957b9bdee2024723da240e488b17d777942ac77d)
+    
+    Conflicts:
+        src/rgw/rgw_rados.cc - master has diverged from jewel; applied change
+            manually to the RGWGetBucketStatsContext ctor call
+
+commit cf65d638277b8cb36e70a0eae96dfbd47ca0bf37
+Author: Radoslaw Zarzynski <rzarzyns@redhat.com>
+Date:   Wed Jul 26 08:16:11 2017 -0400
+
+    rgw: rgw_website.h doesn't assume inclusion of the std namespace anymore.
+    
+    Signed-off-by: Radoslaw Zarzynski <rzarzyns@redhat.com>
+    (cherry picked from commit 06f18c163ec843f1fc852f078f539e1821644506)
+
+commit c348ec29947c034779937d6611f4d15545fd3e44
+Author: Radoslaw Zarzynski <rzarzyns@redhat.com>
+Date:   Wed Jul 26 08:12:30 2017 -0400
+
+    rgw: never let http_redirect_code of RGWRedirectInfo to stay uninitialized.
+    
+    Fixes: http://tracker.ceph.com/issues/20774
+    Signed-off-by: Radoslaw Zarzynski <rzarzyns@redhat.com>
+    (cherry picked from commit 6318b4990fe7fe8f25fff4755eee64fef069dee9)
+
+commit 442911ebad8a4b6f69fb9caa2e1f7e44486de166
+Author: Radoslaw Zarzynski <rzarzyns@redhat.com>
+Date:   Wed Jul 26 09:25:36 2017 -0400
+
+    rgw: fix the UTF8 check on bucket entry name in rgw_log_op().
+    
+    Fixes: http://tracker.ceph.com/issues/20779
+    Signed-off-by: Radoslaw Zarzynski <rzarzyns@redhat.com>
+    (cherry picked from commit e9a787163080474a1d1a3b8db4db824161326982)
+
+commit 8b52105701e8bbc5e3eb2cc1b251e739376540df
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Thu Apr 13 17:14:48 2017 +0800
+
+    rgw: fix the bug that part's index can't be removed after completing
+    multipart upload when the bucket versioning is enabled.
+    
+    Fixes: http://tracker.ceph.com/issues/19604
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit decc01e2b1be9e4f809ff052149e1e6377c35047)
+
+commit 881bed78620a2c55c9530abefab433c7341895b9
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Wed Nov 16 10:52:54 2016 +0800
+
+    rgw: Fix a bug that multipart upload may exceed quota ...
+    
+    ... because of improperly operation to the cache.
+    
+    Fixes: http://tracker.ceph.com/issues/19602
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit ffe95d3c11f05937109b72e8e54c0cfb7dc09a36)
+    
+    Conflicts:
+        src/rgw/rgw_rados.cc - jewel does not have 885606c76cf8009570098cde48c0a23a21e6020d
+            so use state->size instead of state->accounted_size
+
+commit 2b759d2f74f3870c96c33de62d304b703141beb2
+Merge: f024855cae 89a2f6476d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Aug 26 19:43:55 2017 +0200
+
+    Merge pull request #15455 from smithfarm/wip-19838-jewel
+    
+    jewel: rgw: reduce log level of 'storing entry at' in cls_log
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit f024855cae7c41c3ef61365333672932369ff409
+Merge: ccf9d7109a 938e5b0728
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Aug 26 19:42:23 2017 +0200
+
+    Merge pull request #15456 from smithfarm/wip-20003-jewel
+    
+    jewel: rgw: rgw_file:  v3 write timer does not close open handles
+    
+    Reviewed-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit ccf9d7109a74875107736c017999437d233814d4
+Merge: 9302a44a69 8cf3f18c7a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Aug 26 19:38:29 2017 +0200
+
+    Merge pull request #15457 from smithfarm/wip-20018-jewel
+    
+    jewel: rgw: multisite: memory leak on failed lease in RGWDataSyncShardCR
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 9302a44a69eb29d27b184eba76b9c9df613e6e3e
+Merge: dea17eaa1a 0897afe74d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Aug 26 19:33:42 2017 +0200
+
+    Merge pull request #15459 from smithfarm/wip-20144-jewel
+    
+    jewel: rgw: rgw_file: cannot delete bucket w/uxattrs
+    
+    Reviewed-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit dea17eaa1ab5cdc712b18567c1fed702ee655c2f
+Merge: e335808d26 2e278d821d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Sat Aug 26 19:32:40 2017 +0200
+
+    Merge pull request #15465 from smithfarm/wip-20155-jewel
+    
+    jewel: rgw: fix crash caused by shard id out of range when listing data log
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 36b1a35a449d7d1e0b3e506e021fc6bdb274750c
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Aug 26 10:06:25 2017 +0200
+
+    librbd: clean up object map update interface, revisited
+    
+    In master, the "batch update" change [1] was merged before the "order
+    concurrent updates" [2], while in jewel the latter is already
+    backported [3]. A backport of [1] to jewel was attempted, and was
+    necessarily applied on top of [3] - i.e. in the reverse order compared
+    to how the commits went into master. This reverse ordering caused the
+    automated cherry-pick to miss some parts of [1] which this commit is
+    adding manually.
+    
+    [1] https://github.com/ceph/ceph/pull/11510
+    [2] https://github.com/ceph/ceph/pull/12420
+    [3] https://github.com/ceph/ceph/pull/12909
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit ca5577853cacb76ee46d50d644884102353caa21
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Sat Oct 15 17:18:30 2016 +0530
+
+    librbd: batch ObjectMap updations upon trim
+    
+    Shrinking a clone which has snapshots and does not share
+    majority of objects with its parent (i.e., there are less
+    objects to be copied up) involves huge number of object
+    map updates -- two (pre, post) per object. This results
+    in lots of requests to be send to OSDs especially when
+    trimming a gigantus image. This situation can be optimized
+    by sending batch ObjectMap updates for an object range
+    thereby significantly cutting down OSD traffic resulting
+    in faster trim times.
+    
+    Fixes: http://tracker.ceph.com/issues/17356
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    (cherry picked from commit 05653b7c512334533b801013f7e426363237301b)
+
+commit e335808d267435414dc1351e0f2e99e773fce805
+Merge: 47e3ff8408 244a2ae6a9
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Aug 25 14:26:21 2017 -0700
+
+    Merge PR #16248 into jewel
+    
+    * refs/remotes/upstream/pull/16248/head:
+            client: don't re-send interrupted flock request
+            mds/flock: properly remove item from global_waiting_locks
+            mds/flock: properly update ceph_lock_state_t::client_waiting_lock_counts
+            mds/flock: don't import ceph_lock_state_t::waiting_locks
+    
+    Reviewed-by: Zheng Yan <zyan@redhat.com>
+
+commit 47e3ff8408af027fe60f1260c3c46c7ac7f8135b
+Merge: aec54d8ecd 01890abd95
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Aug 25 20:09:58 2017 +0200
+
+    Merge pull request #15454 from smithfarm/wip-19775-jewel
+    
+    jewel: rgw: multisite: realm rename does not propagate to other clusters
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit aec54d8ecdf3bfdb39b3f03a9e3971f78c13d4d4
+Merge: 494c634c23 a36211c84d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Aug 25 20:09:15 2017 +0200
+
+    Merge pull request #15453 from smithfarm/wip-19768-jewel
+    
+    jewel: rgw: multisite: operating bucket's acl&cors is not restricted on slave zone
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 494c634c236dff709b1d6856b5f25c419a0ec067
+Merge: 0da1195f5f afd036cb67
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Aug 25 20:08:26 2017 +0200
+
+    Merge pull request #15452 from smithfarm/wip-19765-jewel
+    
+    jewel: rgw: when uploading objects continuously into a versioned bucket, some objects will not sync
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 0da1195f5f2f6d272c6da5ed4583f11246da07c4
+Merge: beb6e229b4 50f140768d
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Aug 25 20:06:37 2017 +0200
+
+    Merge pull request #15451 from smithfarm/wip-19764-jewel
+    
+    jewel: rgw: set latest object's acl failed
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit beb6e229b48d4d9f8c4feb18fa0868aa03109f0c
+Merge: 88126f86bf 61df8eaa02
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Fri Aug 25 20:05:54 2017 +0200
+
+    Merge pull request #15450 from smithfarm/wip-19758-jewel
+    
+    jewel: rgw: multisite: after CreateBucket is forwarded to master, local bucket may use different value for bucket index shards
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 92eb6836bfb3350f11fcc2d55a4710be45a34e4f
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Aug 23 15:31:50 2017 -0700
+
+    config: disable skewed utilization warning by default
+    
+    This has a few problems:
+    
+    1- It does not do it's analysis over CRUSH rule roots/classes, which
+    means that an innocent user of classes will see skewed usage (bc hdds are
+    more full than ssds, say)
+    
+    2- It does not take degraded clusters into account, which means the warning
+    will appear when a fresh OSD is added.
+    
+    See http://tracker.ceph.com/issues/20730
+    
+    Based on master commit 7832c53 but we've decided not to remove the code
+    in the older releases so it can be used if appropriate for a
+    particular cluster configuration.  Also, 7832c53 won't cleanly
+    cherry-pick so this is easier.
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+
+commit 88126f86bf240db8bd4573832a75709a8ae8ddba
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 24 10:27:22 2017 -0400
+
+    qa/workunits/rados/test-upgrade-v11.0.0: skip ListObjectsError
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 8199f3998f01ae31c4ae88fda7cd0b4704ae7c8e
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 24 10:20:00 2017 -0400
+
+    qa/workunits/rados/test-upgrade-v11.0.0: skip more tests
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 55cd3d90f8f3cd1d54df922badaf818acdcf140b
+Merge: b0814346f3 f965bdd013
+Author: Sage Weil <sage@newdream.net>
+Date:   Thu Aug 24 09:16:19 2017 -0500
+
+    Merge pull request #16870 from liewegas/wip-20929-jewel
+    
+    jewel: ceph-disk: dmcrypt cluster must default to ceph
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit b0814346f3e7553654a999b27ba12ea7985a2ff3
+Merge: d79618b004 cd8c51569b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 24 10:15:57 2017 +0200
+
+    Merge pull request #14659 from asheplyakov/19473-jewel
+    
+    jewel: rgw: add the remove-x-delete feature to cancel swift object expiration
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit d79618b004bdb9270cbd50b98e37d69721004bce
+Merge: 14804ad5c6 01abfed8f2
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 24 09:13:23 2017 +0200
+
+    Merge pull request #15322 from gregsfortytwo/jewel-19931-snaptrim-shutdown
+    
+    jewel: osd: Reset() snaptrimmer on shutdown and do not default-abort on leaked pg refs
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 14804ad5c6c4e4a8ea7951e2e7be562f2ac46d53
+Merge: 03fb91cfef 328e2cc71a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 24 09:11:52 2017 +0200
+
+    Merge pull request #15236 from asheplyakov/20036-bp-jewel
+    
+    jewel: mon: factor mon_osd_full_ratio into MAX AVAIL calc
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 03fb91cfef5b75baecc56d795f64a47793974c56
+Merge: a07f4d3a90 644bb1e81c
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 24 09:07:08 2017 +0200
+
+    Merge pull request #14346 from ceph/wip-ceph-disk-fix-jewel
+    
+    jewel: build/ops: Add fix subcommand to ceph-disk, fix SELinux denials, and speed up upgrade from non-SELinux enabled ceph to an SELinux enabled one
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit a07f4d3a90f0dd9a30801f813c91183f77e5eb6c
+Merge: 3e75beb162 e3cba06bd0
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Aug 24 09:04:49 2017 +0200
+
+    Merge pull request #15083 from asheplyakov/19926-bp-jewel
+    
+    jewel: mon: crash on shutdown, lease_ack_timeout event
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 3e75beb1624046759694823b3406ce4e451bd5c5
+Merge: 6c51a81a82 e6582c43be
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 20:56:38 2017 +0200
+
+    Merge pull request #14663 from smithfarm/wip-19228-jewel
+    
+    jewel: rbd: Enabling mirroring for a pool with clones may fail
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 6c51a81a822408ac5b45706b888e22a02e3e99ca
+Merge: 9502460f7f 03ca042248
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 20:52:04 2017 +0200
+
+    Merge pull request #15050 from asheplyakov/19265-bp-jewel
+    
+    jewel: core: an OSD was seen getting ENOSPC even with osd_failsafe_full_ratio passed
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit 9502460f7f15e6ef9a79a09ccdb0463966aabb83
+Merge: a70259a441 9ec5d8b1a5
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 20:50:01 2017 +0200
+
+    Merge pull request #15065 from asheplyakov/19915-bp-jewel
+    
+    jewel: osd: PrimaryLogPG: do not call on_shutdown() if (pg.deleting)
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit a70259a44173adeb1046a01e9c3d40b71052b3bd
+Merge: fd197dcbeb 09f076ed96
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 20:48:38 2017 +0200
+
+    Merge pull request #14943 from shinobu-x/wip-18293-jewel
+    
+    jewel: osd: leaked MOSDMap
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit fd197dcbeb4c416ad903a7795ce91ac3ffd0f296
+Merge: 5dc3b45b92 3776d960e0
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 20:12:01 2017 +0200
+
+    Merge pull request #14699 from smithfarm/wip-19679-jewel
+    
+    jewel: mds: damage reporting by ino number is useless
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 5dc3b45b92e9fb4b7025d3373dfd85c5867b6b60
+Merge: 8581349c8b a4c181fa7a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 20:10:07 2017 +0200
+
+    Merge pull request #14673 from smithfarm/wip-19466-jewel
+    
+    jewel: mds: log rotation doesn't work if mds has respawned
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 8581349c8b1b1e06522707d0b6a3bd2d0c3e35b1
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Aug 23 13:53:48 2017 -0400
+
+    qa/workunits/rados/test-upgrade-v11.0.0.sh: more tests skipped
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit c90969031f8f0c49a974c3e001fc44b1544547d7
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue May 2 12:16:45 2017 -0400
+
+    rgw: call update_latest_epoch() on all period updates
+    
+    when updating the period, callers use the atomic result of
+    update_latest_epoch() to determine whether they need to call
+    RGWPeriod::reflect() and RGWRealm::notify_new_period()
+    
+    this adds a missing call to RGWPeriod::reflect() to RGWPeriodPuller,
+    which was previously not safe to do without atomic updates to
+    latest_epoch
+    
+    Fixes: http://tracker.ceph.com/issues/19817
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit d825b9d854864b815890cf9204d7e72e1e1a9ada)
+
+commit 6c8a7ca22bffc334032ae93953cc2b7ad47a363d
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue May 2 11:45:39 2017 -0400
+
+    rgw: remove set_latest_epoch from RGWPeriod::store_info
+    
+    split the latest_epoch update out of RGWPeriod::store_info(), so callers
+    that need to call the atomic update_latest_epoch() can do so and
+    interpret its result separately
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit c1731dd2d3de5a337903004f835045d609a731cf)
+    
+    Conflicts:
+            src/rgw/rgw_rados.cc (trivial resolution)
+
+commit 03cf10aefb9dcc253170472b3c95c829fb68cc40
+Merge: 1f9693be5e c49e249fb5
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 08:41:55 2017 +0200
+
+    Merge pull request #15442 from Vicente-Cheng/wip-20025-jewel
+    
+    jewel: cephfs: osdc/Filer: truncate large file party by party
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit 1f9693be5ef8c64c7d58ccf08ef27cf2d7cb7cdb
+Merge: 198f7fac8f 0bb08832c0
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Aug 23 08:40:20 2017 +0200
+
+    Merge pull request #14691 from smithfarm/wip-19571-jewel
+    
+    jewel: tests: upgrade:client-upgrade/firefly-client-x: drop CentOS
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit ab2d3582f42a45b5d3cf63e00007e0ca65df1c2f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Apr 28 12:52:18 2017 -0400
+
+    librbd: default features should be negotiated with the OSD
+    
+    Derived from f066ce8f80bce929edc209590efd47cce2196ae2
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 5b5468189ea74da5db63bcba0ae6450d83cc99f7
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Sat Nov 5 22:44:33 2016 +0200
+
+    cls/rbd: add get_all_features on client side
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 84f6d5c109911923c25414de639308921983e438)
+    
+    Conflicts:
+            src/cls/rbd/cls_rbd_client.h: trivial resolution
+
+commit ff312a4e6fb08dc93311e6969ef16d621388c395
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue May 2 10:44:20 2017 -0400
+
+    rgw: add atomic RGWPeriod::update_latest_epoch
+    
+    update_latest_epoch() uses RGWObjVersionTracker to implement atomic
+    updates to the period's latest_epoch, returning -EEXIST if we already
+    have an epoch >= the one given
+    
+    Fixes: http://tracker.ceph.com/issues/19816
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 55000d7fb3d4ab1ba4c19f3b3730823b5b056b67)
+
+commit e91a3945afa4ca27678c6adf8d1c792333b6b554
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue May 2 09:47:57 2017 -0400
+
+    rgw: period latest_epoch ops take optional objv tracker
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit b855c39656d7556c7895850d12177ca6c1db01af)
+
+commit c864d5cac25d77307e9fa429c4d9a4f3f5f9df56
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue May 2 09:46:44 2017 -0400
+
+    rgw: remove unused RGWPeriod::use_next_epoch
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 5770a01ebe8b5913cb5446bd4fd09d8029ac1381)
+
+commit 1516e24c8583237bc75c4185b416cd3fd4ec3df1
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Jun 13 11:23:37 2017 -0700
+
+    cls/refcount: store and use list of retired tags
+    
+    Fixes: http://tracker.ceph.com/issues/20107
+    
+    Keep around the list of retired tags, make sure we don't
+    drop a refcount using the same tag.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 2c4fb020a13333bba6d3c29318c8a87099d915db)
+
+commit 9b5b21def271b1b85834fb32b762a0c0dc688d12
+Author: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+Date:   Thu Jul 6 11:27:42 2017 +0300
+
+    rgw: fix not initialized pointer which cause rgw crash with ec data pool
+    
+    In RGWPutObjProcessor_Atomic::complete_writing_data()
+    with pending_data_bl.length() > 0 and next_part_ofs==data_ofs
+    not initialized void *handle leads to invalid pointer librados::AioCompletion::pc
+    which leads to rgw crash.
+    
+    Fixes: http://tracker.ceph.com/issues/20542
+    Signed-off-by: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+    (cherry picked from commit 3e938dd9fe681fa8652dc4b0ec1dc56781d884c0)
+    
+    Conflicts:
+            src/rgw/rgw_rados.cc (trivial resolution)
+
+commit 7d199110fb0a46796bfe8422ee103b837deb964f
+Author: fang yuxiang <fang.yuxiang@eisoo.com>
+Date:   Wed May 3 13:46:50 2017 +0800
+
+    rgw: don't do unneccesary write if buffer with zero length
+    
+    Don't do unneccesary write if buffer with zero length,
+    or there will be one more shadow stripe rados object with size 0
+    
+    Signed-off-by: fang yuxiang <fang.yuxiang@eisoo.com>
+    (cherry picked from commit 4e21f7ea2167be7793273f31faeb0aa95f0fa30a)
+
+commit 73c9d33ac0d761ef0b616a4beae56dc15c7c3f5e
+Author: Abhishek Varshney <abhishek.varshney@flipkart.com>
+Date:   Wed Jul 19 11:57:08 2017 +0000
+
+    rgw: fix error message in removing bucket with --bypass-gc flag
+    
+    Fixes: http://tracker.ceph.com/issues/20688
+    
+    Signed-off-by: Abhishek Varshney <abhishek.varshney@flipkart.com>
+    (cherry picked from commit 596b4bc05f167baca3ae6e3ed9bed5b04d27409e)
+
+commit e76198751cf876ee1137194e6cdb1aa761b31d21
+Author: lu.shasha <lu.shasha@eisoo.com>
+Date:   Fri Jul 7 11:09:02 2017 +0800
+
+    rgw:multisite: fix RGWRadosRemoveOmapKeysCR
+    
+    RGWRadosRemoveOmapKeysCR::request_complete return val is wrong. The return val should get from completion.  Some member variables is not used, clear up those variables.
+    
+    Fixes:http://tracker.ceph.com/issues/20539
+    
+    Signed-off-by: Shasha Lu <lu.shasha@eisoo.com>
+    (cherry picked from commit 82a0b6ac2130a7f326473e5f376c214f59f50829)
+    
+    Conflicts:
+            src/rgw/rgw_cr_rados.cc (trivial resolution)
+            src/rgw/rgw_cr_rados.h (master does not have IoCtx, jewel does not have override)
+
+commit 71262f1faeaa26481cec15e2fe3894a1ab2a3f3f
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Tue Nov 29 08:57:30 2016 +0800
+
+    rgw: lock is not released when set sync marker is failed.
+    
+    Fixes: http://tracker.ceph.com/issues/18077
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit 65ef596ce1d83515338367f69b1bf0ce0ab96ae5)
+
+commit 198f7fac8f67b5e2996f2b53420c6c58854e54b3
+Merge: ed53df2bb9 7e3db1519e
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 22 16:25:14 2017 +0200
+
+    Merge pull request #15448 from smithfarm/wip-19615-jewel
+    
+    jewel: rgw: multisite: bucket zonegroup redirect not working
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 38718ace488d2f1ca93c50b2d6474d6095b1f544
+Author: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+Date:   Tue Jun 13 14:39:14 2017 +0800
+
+    rgw_file: prevent conflict of mkdir between restarts
+    
+    Fixes: http://tracker.ceph.com/issues/20275
+    
+    Signed-off-by: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+    (cherry picked from commit 87cec5ff9a2f516321543076f536fcfff433c03b)
+
+commit 0bb08832c0ba20cc85a50d9dfbc4efc0f083b7ae
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Apr 20 19:15:29 2017 +0200
+
+    tests: upgrade:client-upgrade/firefly-client-x: drop CentOS
+    
+    The RBD suite needs ceph-cm-ansible to install qemu-kvm on CentOS, but doing
+    that breaks the firefly install on CentOS because:
+    
+    1. the qemu-kvm that gets installed is from hammer (0.94.5)
+    2. qemu-kvm brings in librados2, librbd1 as dependencies
+    
+    As a result, the hammer librados2 and librbd1 are installed on the test nodes
+    even before the teuthology install task starts. When it does start and tries
+    to install firefly, it fails because firefly librados2 and librbd1 cannot be
+    installed over their hammer versions.
+    
+    Fixes: http://tracker.ceph.com/issues/19571
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit ed53df2bb9d9fed42f47f73168f77c7346942601
+Merge: 7a599849d3 66c17ff10b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 22 13:47:21 2017 +0200
+
+    Merge pull request #15197 from smithfarm/wip-20007-jewel
+    
+    jewel: rgw: remove unnecessary 'error in read_id for object name: default'
+    
+    Reviewed-by: Jos Collin <jcollin@redhat.com>
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 53e97da166c6e36c6808063f90c4a2cef2d52a77
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Jun 8 22:29:48 2017 +0200
+
+    ceph-disk: set the default systemd unit timeout to 3h
+    
+    There needs to be a timeout to prevent ceph-disk from hanging
+    forever. But there is no good reason to set it to a value that is less
+    than a few hours.
+    
+    Each OSD activation needs to happen in sequence and not in parallel,
+    reason why there is a global activation lock.
+    
+    It would be possible, when an OSD is using a device that is not
+    otherwise used by another OSD (i.e. they do not share an SSD journal
+    device etc.), to run all activations in parallel. It would however
+    require a more extensive modification of ceph-disk to avoid any chances
+    of races.
+    
+    Fixes: http://tracker.ceph.com/issues/20229
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit a9eb52e0a4c06a80e5dbfaac394aac940edf4c68)
+
+commit 7a599849d3f62c4e6001e2c7e3973b5c368d85d1
+Merge: c79524153c 592293cdfb
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 22 10:00:07 2017 +0200
+
+    Merge pull request #15051 from asheplyakov/19910-bp-jewel
+    
+    jewel: build/ops: extended, customizable systemd ceph-disk timeout
+    
+    Reviewed-by: David Disseldorp <ddiss@suse.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit c79524153cb52b1022dba0102aaef942f81d6fd9
+Merge: 161cba9cea 6b99bc9c60
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 22 09:54:12 2017 +0200
+
+    Merge pull request #15428 from smithfarm/wip-20162-jewel
+    
+    jewel: build/ops: deb: Fix logrotate packaging
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 161cba9cea5d83911e1ee7d42d58004ec327b9bb
+Merge: 1f0549ca49 9a5425d5de
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 22 09:52:49 2017 +0200
+
+    Merge pull request #15447 from smithfarm/wip-19613-jewel
+    
+    jewel: rgw: multisite: rest api fails to decode large period on "period commit"
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit e6582c43bebac315ef2d76fded92373c7b1300be
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 27 16:21:33 2017 -0400
+
+    test: remove hard-coded image name from RBD metadata test
+    
+    Fixes: http://tracker.ceph.com/issues/19798
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 8f72e745e157cc12d76ca6babe956c5698ee297f)
+
+commit 8f23ea4fc0938c35998193ea76d7a029422b89b0
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Thu Mar 2 17:18:18 2017 +0100
+
+    librbd: relax "is parent mirrored" check when enabling mirroring for pool
+    
+    If the parent is in the same pool and has the journaling feature enabled
+    we can assume the mirroring will eventually be enabled for it.
+    
+    Fixes: http://tracker.ceph.com/issues/19130
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit fe31bca22f90ce02f461d6421a4f66539db888d3)
+
+commit 1f0549ca49cc60ed62f52ae5ee22d1044f70aab0
+Merge: 648fabaa9f 00ce80b52f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 22 09:31:04 2017 +0200
+
+    Merge pull request #15196 from smithfarm/wip-20006-jewel
+    
+    jewel: build/ops: rpm: fix python-Sphinx package name for SUSE
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+    Reviewed-by: Abhishek Lekshmanan <abhishek@suse.com>
+
+commit 1415ecbd7de21ed2ab0c8f6e20f707cbe4f1390c
+Author: Brad Hubbard <bhubbard@redhat.com>
+Date:   Mon Aug 21 14:06:13 2017 +1000
+
+    ceph-disk: Use stdin for 'config-key put' command
+    
+    The 'osd new' command is not available in jewel so backport support for
+    stdin '-i -' and use it for the 'config-key put' command in order to
+    not log the dmcrypt key.
+    
+    Fixes: http://tracker.ceph.com/issues/21059
+    
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit 28cfb01dddab94b849a8d8bce8d8bd27c3818e25
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 17 09:38:52 2017 -0400
+
+    ceph: allow '-' with -i and -o for stdin/stdout
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3a4931b0e467e3b64a2637b96d7a3cab9add1c80)
+    
+    Conflicts:
+            qa/workunits/cephtool/test.sh (post-jewel functions removed)
+            src/ceph.in
+
+commit a6da22fcf646ff9db45a01a43fa719982bf9bca4
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Jun 8 19:00:05 2017 +0200
+
+    ceph-disk: implement command_with_stdin
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 597393d5d09c52170b7db6f609ce142edfd4d8fe)
+
+commit 3adbc35205f663c8c312476f3694d2c14294c5d0
+Author: Javier M. Mellid <jmunhoz@igalia.com>
+Date:   Mon Aug 1 21:00:28 2016 +0200
+
+    rgw: aws4: add rgw_s3_auth_aws4_force_boto2_compat conf option
+    
+    Runtime bugfix to handle presigned urls computed with canonical requests using
+    the port number once.
+    
+    Boto2 computes canonical requests using the port number twice although it
+    should be used once only. This behaviour is a bug supported by AWS S3. Boto2 is
+    used in RGW S3 as reference implementation.
+    
+    The client-side tools not supporting this boto2 bug will fail although they
+    should work too.
+    
+    In order to support both presigned url implementations this patch adds a config
+    option to compute a second signature. With this option disabled, the code will
+    compute two signatures when the first signature is not valid. The aws4 auth
+    succeed if some of the two signatures is valid.
+    
+    The config option rgw_s3_auth_aws4_force_boto2_compat, is enabled by default so
+    one signature, working with boto2, is computed only.
+    
+    Fixes: http://tracker.ceph.com/issues/16463
+    
+    Signed-off-by: Javier M. Mellid <jmunhoz@igalia.com>
+    (cherry picked from commit 078c513b6bc6b1d1da50db1d51fbbb65bddd44b9)
+
+commit cd848c1e9852c89a06e3baa669314cba2fdef965
+Author: Alexey Sheplyakov <asheplyakov@yandex.ru>
+Date:   Sun Aug 13 16:33:00 2017 +0400
+
+    jewel: mon: fix force_pg_create pg stuck in creating bug
+    
+    Register the creating PG through the common path to get the PG mapped to an OSD.
+    Adapted from 9a41a0b7289fa59f4b747a63e152e88af6e8abd5
+    
+    Fixes: http://tracker.ceph.com/issues/19182
+    
+    Signed-off-by: Alexey Sheplyakov <asheplyakov@yandex.ru>
+
+commit 648fabaa9fc1e78aa808a3a2c7c91dee464dbc76
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Aug 12 09:00:22 2017 -0400
+
+    qa/workunits/rados/test/test-upgrade-v11.0.0: skip Quota test
+    
+    This makes a pool go full which confounds the wait for healthy check
+    during restarts.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 37b37e78f858a2d981698de2e9e1aafef7953642
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon Jul 31 14:45:25 2017 +0300
+
+    rgw: Fix up to 1000 entries at a time in check_bad_index_multipart
+    
+    Fixes: http://tracker.ceph.com/issues/20772
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 25cef9a09721e1a67d217535d4d624ab60adca02)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 6bd2dae1934f5f2a752b2c0edaa937b5a4163c36
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Wed Aug 9 13:51:40 2017 -0400
+
+    rgw: replace '+' with "%20" in canonical query string for s3 v4 auth.
+    
+    Fixes: http://tracker.ceph.com/issues/20501
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit 416bc51101b4ae5da569c9bc3d8d738eeadc25a6)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 3242b2b5629b951acfe90011a3c07533db1ab0a3
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Tue Dec 6 15:07:19 2016 -0800
+
+    ceph-fuse: start up log on parent process before shutdown
+    
+    Otherwise, we hit an assert in the Ceph context and logging teardown.
+    
+    Fixes: http://tracker.ceph.com/issues/18157
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit cbf18b1d80d214e4203e88637acf4b0a0a201ee7)
+
+commit ff67388e24c93ca16553839c16f51030fa322917
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Tue Jan 10 16:36:13 2017 +0800
+
+    rgw: bucket index check in radosgw-admin removes valid index.
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit a786252ed9c0e1ba08a88a43902f7aa1e91c10cd)
+    Signed-off-by: Pavan Rallabhandi <PRallabhandi@walmartlabs.com>
+    
+    Conflicts:
+            src/rgw/rgw_bucket.cc
+                    Jewel has RGWObjEnt, honor the same while populating obj oid
+
+commit 788cfa89dd2abc3db8dc35803e275d4c2fbb6837
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Fri May 26 12:41:40 2017 -0400
+
+    rgw-admin: fix bucket limit check argparse, div(0)
+    
+    1. normalize arg parsing for "bucket limit check"
+    1.1 s/buckets/bucket/
+    
+    2. avoid dividing by num_shards when it is 0
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit fb8e2fa61f0b4621b5fdc83048467982a7ca2961)
+    Fixes: http://tracker.ceph.com/issues/20966
+
+commit e6f86ba31d3092dbb45bdd35f344aba7b2c5a61b
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Aug 9 09:56:21 2017 -0400
+
+    qa/workunits/rados/test-upgrade-v11.0.0: skip api_io *CmpExt*
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 5a7ea2790c391544a3a8ea4369ac8e46a0b3c4ec
+Author: Abhishek Varshney <abhishek.varshney@flipkart.com>
+Date:   Tue Aug 1 14:46:52 2017 +0000
+
+    rgw : fix race in RGWCompleteMultipart
+    
+    Fixes : http://tracker.ceph.com/issues/20861
+    
+    Signed-off-by: Abhishek Varshney <abhishek.varshney@flipkart.com>
+    (cherry picked from commit dd7dc62eaddb47447c01c03c87ad56cd7690693e)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 6d5ef4b27d0fad62646ddf82b59d9c277179d293
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Aug 7 14:01:58 2017 -0400
+
+    qa/workunits/rados/test-upgrade-11.0.0: skip RoundTrip3
+    
+    This does the crc op, which isn't in jewel.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit d4fa37323596394feadaed6168b49ccbaf6fc089
+Merge: 5776904626 d3e81588ee
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Aug 7 10:07:13 2017 -0400
+
+    Merge pull request #16343 from dillaman/wip-20630-jewel
+    
+    jewel: tests: qa/tasks: rbd-mirror daemon not properly run in foreground mode
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit f965bdd0134cbc3d947ac83bf96e5ce08541a198
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Aug 3 10:56:24 2017 +0200
+
+    ceph-disk: dmcrypt cluster must default to ceph
+    
+    If ceph_fsid is not found, which is the case for legacy dmcrypted OSD,
+    the cluster must default to ceph, as it was before support for non
+    standard cluster names was introduced.
+    
+    Fixes: http://tracker.ceph.com/issues/20893
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit ed22159fdd7071a110e81cd7b63d7e0f2296761b)
+
+commit 5776904626e17fd1ed73bcebeee742655523e833
+Merge: 8db71d796e 10636ef77f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 1 13:06:54 2017 +0200
+
+    Merge pull request #13507 from shinobu-x/wip-18468-jewel
+    
+    jewel: mon: Disallow enabling 'hashpspool' option to a pool without some kind of --i-understand-this-will-remap-all-pgs flag
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit c49e249fb5a5232dc25b8250f4b7d2b4e3d47bef
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Tue Apr 25 16:21:24 2017 +0800
+
+    osdc/Filer: truncate large file party by party
+    
+    Fixes: http://tracker.ceph.com/issues/19755
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 5fab215e461e5ecc36c0f9d9ea867f6c45e80263)
+    
+    Conflicts:
+            src/osdc/Filer.h
+            src/osdc/Filer.cc
+                - add parameter to fit _modify (need onack parameter)
+            src/mds/MDCache.cc
+                - make truncate() consistency
+
+commit 314952c58993e6ea6a3fa1bb3b6f9a7118c52ea4
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 6 20:17:49 2017 +0200
+
+    rgw: lease_stack: use reset method instead of assignment
+    
+    It seems that the intent of 45877d38fd9a385b2f8b13e90be94d784898b0b3 was to
+    change all instances of "lease_stack = ..." to "lease_stack.reset(...)", but
+    this one was missed.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit fc425afeb2e2a6ba3c98c612b3977aea619c9f73)
+
+commit 0930eb07d1c983412e27f7c42836a319a3161c7a
+Author: fang.yuxiang <fang.yuxiang@eisoo.com>
+Date:   Tue Jun 13 16:40:16 2017 +0800
+
+    rgw: meta sync thread crash at RGWMetaSyncShardCR
+    
+    Fixes: http://tracker.ceph.com/issues/20251
+    
+    Signed-off-by: fang yuxiang fang.yuxiang@eisoo.com
+    (cherry picked from commit 45877d38fd9a385b2f8b13e90be94d784898b0b3)
+
+commit e35c938208a7e265387ba01cde9d84d08ec55ec0
+Author: David Disseldorp <ddiss@suse.de>
+Date:   Wed Jul 5 16:23:37 2017 +0200
+
+    ceph-disk: don't activate suppressed journal devices
+    
+    Multipath device activation currently requires that devices representing
+    individual paths making up a multipath device are suppressed, to avoid
+    errors such as:
+      ceph_disk.main.Error: Error: /dev/sda1 is not a multipath block device
+    
+    Activation of suppressed OSD devices is currently handled by checks in
+    main_activate() and main_activate_space(). However, suppressed journal
+    and block devices are not detected.
+    
+    (Along with udev change) Fixes: http://tracker.ceph.com/issues/19489
+    
+    Signed-off-by: David Disseldorp <ddiss@suse.de>
+    (cherry picked from commit c729627450d4032ede7932f4c1b57a6d0cff73b2)
+
+commit 153f77544118613e19d5e88c030c3901234cf950
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Jul 18 15:08:14 2017 -0700
+
+    osd: scrub_to specifies clone ver, but transaction include head write ver
+    
+    Fixes: http://tracker.ceph.com/issues/20041
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit fd598a0d23d61c645633ae774c3404a43d035e3c)
+    
+    Conflicts:
+            src/osd/ReplicatedPG.cc (trivial)
+
+commit 2efd7cd6f32aa780fea5d26c8314c48cae734793
+Author: weiqiaomiao <wei.qiaomiao@zte.com.cn>
+Date:   Mon Jul 3 09:34:08 2017 +0800
+
+    jewel:ceph-disk:remove the special check to bcache devices
+    
+    if we skip partition when coming cross the bcache device in ceph-disk,
+    the udev can't detect the osd in such devices when we reboot the osd's host,
+    so the osd who deploy in bcache device can't auto start when the host restart.
+    
+    And partition is now supported by bcache devices (https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git/commit/drivers/md/bcache?id=b8c0d911ac5285e6be8967713271a51bdc5a936a),
+    we can remove this special check now.
+    
+    This cannot be cherry-picked from master because 'accept bcache devices as data disks' [21f0216](https://github.com/ceph/ceph/commit/21f0216287485e6cce8811f324fee804ef733524)
+    is a jewel-only feature not present in master.
+    
+    Signed-off-by: Wei Qiaomiao <wei.qiaomiao@zte.com.cn>
+
+commit 03ca042248586d1e7612f4d026551891701048c3
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Jul 7 10:53:41 2017 -0700
+
+    jewel: mon: Fix status output warning for mon_warn_osd_usage_min_max_delta
+    
+    Fixes: http://tracker.ceph.com/issues/20544
+    
+    Caued by: 489e810c37ed6fb9d32d1015634041a577501ee4
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 56f9808016ab289bdc0ce7cfbb0503c78b509593)
+    
+    Conflicts:
+            apply changes to src/mon/PGMonitor.cc instead of src/mon/PGMap.cc
+
+commit 8db71d796e50bcdbb6bd711feba6e4fdbecfcd29
+Merge: 2ee413f771 8885f3ab6a
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Thu Jul 20 15:00:32 2017 -0400
+
+    Merge pull request #16289 from cbodley/wip-20513
+    
+    jewel: rgw: cls: ceph::timespan tag_timeout wrong units
+
+commit e9e7850b51c824a50dde96332e9f47fd3a62e60b
+Author: Piotr Dałek <piotr.dalek@corp.ovh.com>
+Date:   Fri Jun 16 13:34:19 2017 +0200
+
+    messages/MOSDPing: optimize encode and decode of dummy payload
+    
+    The dummy payload doesn't need to be processed, we can just skip over
+    it when decoding and we can use a single bufferptr instead of entire
+    bufferlist to encode it.
+    
+    Signed-off-by: Piotr Dałek <piotr.dalek@corp.ovh.com>
+    (cherry picked from commit 15ce0772841f913d1eef1daebad0834e5f862383)
+
+commit 8acfd7189a4a2fe937e06d12132df55af5d90fcb
+Author: Piotr Dałek <piotr.dalek@corp.ovh.com>
+Date:   Fri Jun 16 13:10:36 2017 +0200
+
+    messages/MOSDPing: fix the inflation amount calculation
+    
+    If user specifies a min_message_size small enough (or zero to disable
+    it altogether), OSDs will crash and burn while trying to allocate
+    almost 4GB of payload (both min_message_size and payload.length() are
+    unsigned, so it'll roll over back to 4GB and MAX(4GB, 0) will use 4GB).
+    If the size of dummy payload is 0, don't bother constructing bufferptr
+    and bufferlist, then encoding that.
+    
+    Signed-off-by: Piotr Dałek <piotr.dalek@corp.ovh.com>
+    (cherry picked from commit d959735a7d684018df564573a2ff88092d870fc1)
+
+commit 52f221b2103333facbc4ead30adc0eba8063983d
+Author: Piotr Dałek <piotr.dalek@corp.ovh.com>
+Date:   Fri Jun 16 13:05:10 2017 +0200
+
+    OSD: mark two heartbeat config opts as observed
+    
+    "osd heartbeat min size" and "osd heartbeat interval" can be changed
+    at runtime, because their values, when used, are always taken from
+    global Ceph configuration. Mark them as observed, so the message
+    the user sees once they're changed doesn't confuse them.
+    
+    Signed-off-by: Piotr Dałek <piotr.dalek@corp.ovh.com>
+    (cherry picked from commit 44b7839c788b20e0b9da76bc3838ae10d3ad2f89)
+
+commit f840864a5100dc65bb09a49e91fe4db776f69413
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jun 15 22:18:08 2017 -0400
+
+    messages/MOSDPing: initialize MOSDPing padding
+    
+    This memory must be initialized or else valgrind will be very unhappy.
+    
+    Avoid the cost of zeroing (or even allocating) the buffer for normal
+    padding values by (re)using a static zero buffer.
+    
+    Fixes: http://tracker.ceph.com/issues/20323
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9beaf5efd74daa8c15e50b42583264d1252a85f5)
+
+commit 71645604b6e07369f45034112710661167db052f
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Mon Jun 5 13:33:14 2017 -0700
+
+    osd: heartbeat with packets large enough to require working jumbo frames.
+    
+    We get periodic reports that users somehow misconfigure one of their switches
+    so that it drops jumbo frames, yet the servers are still passing them along. In
+    that case, MOSDOp messages generally don't get through because they are much
+    larger than the 1500-byte non-jumbo limit, but the MOSDPing messages have kept
+    going (as they are very small and dispatched independently, even when the
+    server is willing to make jumbo frames). This means peer OSDs won't mark down
+    the ones behind the broken switch, despite all IO hanging.
+    Push the MOSDPing message size over the 1500-byte limit so that anybody in
+    this scenario will see the OSDs stuck behind a bad switch get marked down.
+    
+    Fixes: http://tracker.ceph.com/issues/20087
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit 2096113d9e1589c571d96e34dd9cd841308a2567)
+    
+     Conflicts:
+            src/messages/MOSDPing.h
+             - Changed HEAD_VERSION to 3 and kept COMPAT_VERSION to 1.
+             - In class MOSDPing removed following line:
+                   if (header.version >= 2)
+             - To keep ::decode(stamp, p) without condition because HEAD_Version
+               is already 3 now and this condition is removed in the backport commit.
+
+commit d3e81588eef9a3745d2cc27382b3a26b12bc8005
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jul 14 10:32:28 2017 -0400
+
+    qa/tasks: rbd-mirror daemon not properly run in foreground mode
+    
+    Fixes: http://tracker.ceph.com/issues/20630
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 4fa1918717b25a5ffafbf649eedcfe7d5ab829c2)
+
+commit 713a88a5c9ec8e1140227ddcf0df8badfd96706d
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Tue May 9 16:39:39 2017 +0800
+
+    rgw: VersionIdMarker and NextVersionIdMarker should be returned when listing
+    object versions if necessary.
+    
+    Fixes: http://tracker.ceph.com/issues/19886
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit f805c3e08948e379b7d2c4f2faf9e7f550e4cb23)
+
+commit 0a3227876c3142d60d137ef351cf91795227883a
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Tue Jun 6 15:43:20 2017 +0800
+
+    rgw: datalog trim and mdlog trim handles the result returned by osd
+    incorrectly.
+    
+    Fixes: http://tracker.ceph.com/issues/20190
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit 7fd6e031e5b0b1f3eca70c5b459d50f6f214171f)
+
+commit 0cd7df3649d7486d444a61cab89c48a89ddd3e8d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 29 14:54:40 2017 -0400
+
+    rbd: do not attempt to load key if auth is disabled
+    
+    Fixes: http://tracker.ceph.com/issues/19035
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 8b9c8df6d7f0b75c5451953bb322bc1f9afb6299)
+
+commit 787ba33e5dba285dff874955a8f0d7aabd3f87fe
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 5 08:17:05 2017 -0400
+
+    librbd: filter expected error codes from is_exclusive_lock_owner
+    
+    Fixes: http://tracker.ceph.com/issues/20182
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d4daaf54e6bc42cd4fb2111ea20b2042941b0c31)
+
+commit f9e87fef6a4771545cc23fe94c9cb9656ca5b773
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 5 13:17:19 2017 -0400
+
+    rbd: properly decode features when using image name optional
+    
+    Fixes: http://tracker.ceph.com/issues/20185
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f1b05a2b062a59ec1b6682f7683bfd816433a931)
+
+commit 9a5425d5de16045b57c1307cb3b8263c739909b1
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Apr 5 14:20:20 2017 -0400
+
+    rgw: allow larger payload for period commit
+    
+    testing with 3 zonegroups and 3 zones each, the period json grew larger
+    than 4k and caused decode failures on period commit
+    
+    updated to use the new config variable rgw_max_put_param_size
+    
+    Fixes: http://tracker.ceph.com/issues/19505
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 7f2871fe59d933b03f37fde40f1781b2320d0d50)
+    
+    Conflicts:
+        src/rgw/rgw_rest_realm.cc - in RGWOp_Period_Post::execute(), set max_size
+            explicitly instead of backporting rgw_max_put_param_size
+
+commit 61df8eaa02d3fcdc814568be20631933c34aa8a3
+Author: lu.shasha <lu.shasha@eisoo.com>
+Date:   Tue May 9 15:05:03 2017 +0800
+
+    rgw: when create_bucket use the same num_shards with info.num_shards
+    
+    pr #14388 only fix the num_shards in BucketInfo, "init_bucket_index" function still use local num_shards
+    
+    Fixes: http://tracker.ceph.com/issues/19745
+    
+    Signed-off-by: Shasha Lu <lu.shasha@eisoo.com>
+    (cherry picked from commit 4ce64a190b4ff36985e785e574c077d39796feea)
+    
+    Conflicts:
+            src/rgw/rgw_rados.cc: init_bucket_index() called earlier
+
+commit 93799374a97e5acec00737bb7fd46dce314ec19a
+Author: lu.shasha <lu.shasha@eisoo.com>
+Date:   Fri Apr 7 15:34:27 2017 +0800
+
+    rgw: using the same bucket num_shards as master zg when create bucket in secondary zg
+    
+    create bucket in secondary zonegroup will forward to master. The master may have different num_shards option.
+    So when create bucket in local, should use master's num_shards instead of local num_shards option.
+    
+    Fixes: http://tracker.ceph.com/issues/19745
+    
+    Signed-off-by: Shasha Lu <lu.shasha@eisoo.com>
+    (cherry picked from commit a34c4b8fb13dd5590eb3c6ecb5e55207ed8e3ee8)
+    
+    Conflicts:
+        src/rgw/rgw_op.cc
+        - different argument list of store->create_bucket() in jewel, compared to
+          master
+        - no RGWBulkUploadOp:: in jewel; modifications to
+          RGWBulkUploadOp::handle_dir() omitted
+
+commit 8885f3ab6a529c451581046fb3c8f72fceec6e80
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Thu Jun 29 15:19:36 2017 -0400
+
+    rgw: cls: ceph::timespan tag_timeout wrong units
+    
+    In rgw_dir_suggest(), the ceph::timespan tag_timeout is intended
+    to be a value in seconds, but has been taken as something much
+    smaller (millis?).  The incorrect time scale likely induces a race
+    condition with object deletes.
+    
+    Fixes: http://tracker.ceph.com/issues/20380
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit e6763ebd6124c1b4736c5c7850077df7644bc8f5)
+
+commit 3105f118bccb5ae9209cb289cec5ccdba6d9d7b6
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Fri Dec 2 13:38:29 2016 +0200
+
+    rbd-mirror: set SEQUENTIAL and NOCACHE advise flags on image sync
+    
+    Fixes: http://tracker.ceph.com/issues/17127
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 1167865e3b4c5284938cb1797ebeff15974f7260)
+    
+    Conflicts:
+        src/tools/rbd_mirror/image_sync/ObjectCopyRequest.cc (sparse reads are not
+            being backported to jewel)
+
+commit 24bd60136e033f14a556f8e6220cf4ea49520598
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon Jun 26 14:28:21 2017 +0300
+
+    rgw: fix next marker to pass test_bucket_list_prefix in s3test
+    
+    Fixes: http://tracker.ceph.com/issues/19432
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 8fff351d7607c6183b77acc29057c9d55b11f9de)
+
+commit 28f0a8dba36a20b482a70e42241e4e5ee4771e5f
+Author: Giovani Rinaldi <gr.gigio@terra.com.br>
+Date:   Wed Apr 5 16:46:14 2017 -0300
+
+    rgw: fix listing of objects that start with underscore
+    
+    Current marker and prefix search utilized in rgw's function list_objects should respect index key name in order to correctly list objects which have names starting with underscore.
+    
+    Fixes: http://tracker.ceph.com/issues/19432
+    
+    Signed-off-by: Giovani Rinaldi <giovani.rinaldi@azion.com>
+    (cherry picked from commit c1a1539af596e97dc412a505d5411ee6cfdd3980)
+    
+    Conflicts:
+        src/rgw/rgw_rados.cc - in jewel, the call to cur_marker.name.find() is in a
+            conditional block; not so in master
+
+commit 39b2b0b39aedea1c7ee5eab66ca7fb6c59a41e45
+Author: zhaokun <jswps2011@163.com>
+Date:   Mon May 16 09:30:48 2016 +0800
+
+    rgw/rgw_common.cc: modify the end check in RGWHTTPArgs::sys_get
+    
+    Fixes: http://tracker.ceph.com/issues/16072
+    
+    Signed-off-by: zhao kun <jswps2011@163.com>
+    (cherry picked from commit 7e91c81702284f1eb68567fc5d9385ce22405e69)
+
+commit f16fa4b252b1601b00149f17ed1516bc90cbedf3
+Author: root <root@dlp-dev01.novalocal>
+Date:   Tue May 23 13:56:59 2017 +0800
+
+    rgw: multipart copy-part remove '/' for s3 java sdk request header.
+    
+    Fixes: http://tracker.ceph.com/issues/20075
+    Signed-off-by: donglinpeng@cmss.chinamobile.com
+    (cherry picked from commit d60ddddfaf6964364faed40f45b18eb88a841023)
+
+commit 244a2ae6a91e2f288cf1ef8c930dec712b588e37
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Jun 3 12:33:36 2017 +0800
+
+    client: don't re-send interrupted flock request
+    
+    don't re-send interrupted flock request in cases of mds failover
+    and receiving request forward.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 044fabd669fdc8287f5cab0f38a82dfbfe41f0cd)
+    
+     Conflicts:
+            src/client/Client.cc: UserPerms not in jewel
+
+commit 93c8ca6450146cc2a3e50597d91f29455b42c742
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Jun 3 12:06:10 2017 +0800
+
+    mds/flock: properly remove item from global_waiting_locks
+    
+    ceph_lock_state_t::remove_waiting() uses wrong key to search
+    global_waiting_locks. It should use item in waiting_locks as
+    key.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 0d71c6120e61f31b803c3fb6488fc7e97134e348)
+
+commit e795086776e9dfc8d9068161b6e96e79e8c8f193
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Jun 3 12:01:27 2017 +0800
+
+    mds/flock: properly update ceph_lock_state_t::client_waiting_lock_counts
+    
+    no item is added to waiting_locks when deadlock check fails
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit a6b01939a199833568961ae4d30d8540a25a7740)
+
+commit 917240a291c6366b55ddab1a381e23e77b3264c1
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Jun 3 11:42:12 2017 +0800
+
+    mds/flock: don't import ceph_lock_state_t::waiting_locks
+    
+    Item in waiting_locks is associated with flock mds request in
+    exporter mds. If client re-sends the flock mds request to the
+    importer, the importer starts a new MDRequest. The new one's
+    'flock_was_waiting' is false.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 8d777c4855b0c8e58a8d6966371698b8b7721a42)
+
+commit 644bb1e81ca29e244cf2962bc1c06bdecaac427a
+Author: Boris Ranto <branto@redhat.com>
+Date:   Fri Jul 7 12:37:55 2017 +0200
+
+    rpm: Fix undefined FIRST_ARG
+    
+    If FIRST_ARG is undefined, the rpms will show an error on upgrade
+    because the condition in the postun script gets broken.
+    
+    This was a regression introduced by commit for issue 20077 that moved
+    ceph-disk unit files to ceph-base.
+    
+    Fixes: http://tracker.ceph.com/issues/20077
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 562816914ccca8e4e7d9c31f333db2f0da6f7c99)
+
+commit e9608e0c4097caa3c2e344fc3456ac3d6c816d5e
+Author: Boris Ranto <branto@redhat.com>
+Date:   Mon Jun 5 18:44:18 2017 +0200
+
+    selinux: Install ceph-base before ceph-selinux
+    
+    We need to have ceph-base installed before ceph-selinux to use ceph-disk
+    in %post script. The default ordering is random and so the installation
+    randomly failed to relabel the files.
+    
+    Fixes: http://tracker.ceph.com/issues/20184
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit e69086645d3411a2ed781609b670eb5f16ac4810)
+    Conflicts:
+            ceph.spec.in: No _epoch_prefix in jewel
+
+commit 5c53ae3f9ac03445a99e84796f1b50ae32a365f2
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Jun 12 11:55:36 2017 +0800
+
+    test/librbd: decouple ceph_test_librbd_api from libceph-common
+    
+    Fixes: http://tracker.ceph.com/issues/20175
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit b7287fdc4d70c5ecedda78ae367b98e5d8f61c5b)
+    
+    Conflicts: master has switched from autotools to cmake, so this is
+      somewhat an equivalent in automake to the cherry-picked change on
+      CMakeLists.txt
+
+commit 14fcdb7b699185e6e4ca1f158d34b47c63f6563b
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Jun 12 11:55:04 2017 +0800
+
+    test/librados: extract functions using libcommon in test.cc into test_common.cc
+    
+    Fixes: http://tracker.ceph.com/issues/20175
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    
+    (cherry picked from commit 82a848c2053ea69ebc6d3ec1003e18921e2d08d2)
+    
+    Conflicts: since master has switched to cmake. the changes in this
+      commit on .am files are ported from counterpart of CMakeLists.txt.
+
+commit 7d959e02f79ed3c268b03bf6fdf689cbe73063dc
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Jun 12 11:01:06 2017 +0800
+
+    test/librbd: replace libcommon classes using standard library
+    
+    so ceph_test_librbd_api has less dependencies on libcommon
+    
+    Fixes: http://tracker.ceph.com/issues/20175
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    
+    (cherry picked from commit bc8fa0193c8b2fb4b749ce9976bf6efbea833e96)
+
+commit 61f132078a535d10d10d2feb0688853855319ece
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 6 18:01:33 2017 +0200
+
+    tests: librbd: adapt test_mock_RefreshRequest for jewel
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 97fdaa753e812dfeb5256ced3af1dbe5adfff95d
+Author: Peng Xie <peng.hse@xtaotech.com>
+Date:   Thu Jun 29 18:48:27 2017 +0800
+
+    osd/PrimaryLogPG solve cache tier osd high memory consumption
+    
+    during cache tier dirty data flushing, cache tier osd memroy consumption
+    will get increasing due to the accumulative pg log which will not be trimmed
+    
+    Fixes: http://tracker.ceph.com/issues/20464
+    
+    Signed-off-by: Peng Xie <peng.hse@xtaotech.com>
+    (cherry picked from commit da605aa35e2d0897597a0ab6e19be70d94e6da24)
+    
+    Conflicts:
+            src/osd/PrimaryLogPG.cc
+                - should modify on ReplicatedPG.cc
+
+commit f49c9c777ffca31fa4c338dd22154ae6ad4e2ecf
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Jun 21 15:05:49 2017 -0700
+
+    osd/ReplicatedBackend: reset thread heartbeat after every omap entry in deep-scrub
+    
+    Doing this every 100 entries could be after 100MB of reads. There's
+    little cost to reset this, so remove the option for configuring it.
+    
+    This reduces the likelihood of crashing the osd due to too many omap
+    values on an object.
+    
+    Fixes: http://tracker.ceph.com/issues/20375
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 15ce60830aed7c4c2a0b10d2cb69d8daef418d20)
+    
+    Conflicts:
+            src/osd/ReplicatedBackend.cc
+                - remain the iterator checker (do not check status)
+
+commit 932342c1e3d704201dc4b4b42513c32a73ef0adf
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Jun 5 11:30:45 2017 +0100
+
+    client: avoid returning negative space available
+    
+    ...when a quota is set and the used bytes exceed
+    the quota.
+    
+    Fixes: http://tracker.ceph.com/issues/20178
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 0144fde1b1639a6917e487f78490f2b84dceeae6)
+
+commit 6b6620ffefc6481d629e19cd9a6c50b39dba222c
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Jun 21 15:48:54 2017 +0800
+
+    mds: save  projected path into inode_t::stray_prior_path
+    
+    Otherwise, path string like #10000000000/xxx may get saved into
+    inode_t::stray_prior_path.
+    
+    Fixes: http://tracker.ceph.com/issues/20340
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit ba7472cbf2a3147136a31b611f7b88f883be5f6d)
+    
+    Conflicts:
+            src/mds/Server.cc
+              - remove counter `change_attr` because it does not involved
+
+commit dac0ca797cada404b4d5eeb29039b8eac84ce7d6
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jun 6 15:13:50 2017 -0400
+
+    ceph_test_rados_api_misc: fix LibRadosMiscConnectFailure.ConnectFailure retry
+    
+    Fixes: http://tracker.ceph.com/issues/19901
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 087dff80cac707ee9bcb5bcfc98cb3ec047bd49f)
+
+commit ab70ffc815e23e4bffa1e563ade21a0e1e84b8bf
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Mon Feb 20 12:04:10 2017 +0530
+
+    librbd: acquire exclusive-lock during copy on read
+    
+    Fixes: http://tracker.ceph.com/issues/18888
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    (cherry picked from commit 7dba5311b12011a4a6e8564e68150e54c5af5ddd)
+    
+    Conflicts:
+        src/librbd/AioImageRequestWQ.h:
+          - in master this file has morphed into src/librbd/io/ImageRequestWQ.h
+          - jewel has AioImageRequest<ImageCtx> instead of ImageRequest<ImageCtx>
+        src/librbd/image/RefreshRequest.cc:
+          - rename image context element to "aio_work_queue" (from "io_work_queue")
+            because jewel doesn't have de95d862f57b56738e04d77f2351622f83f17f4a
+        src/test/librbd/image/test_mock_RefreshRequest.cc:
+          - rename image context element to "aio_work_queue" (from "io_work_queue")
+            because jewel doesn't have de95d862f57b56738e04d77f2351622f83f17f4a
+
+commit 7bf8b854ab573016bba10fe2904b4d4f4e9b1ee1
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Mar 2 15:03:57 2017 -0600
+
+    osd/osd_internal_types: wake snaptrimmer on put_read lock, too
+    
+    The snaptrimmer can block taking a write lock, which might happen due to
+    a conficting EC read.  When the EC read completes, we need to wake up the
+    snaptrimmer.
+    
+    Fixes: http://tracker.ceph.com/issues/19131
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 993179870ef7eece47cb9ccfb7275c29bf8536eb)
+    
+    Conflicts:
+            src/osd/osd_internal_types.h: ObjectContext::put_lock_type() is
+              defined in src/osd/osd_types.h in Jewel, patch that file
+
+commit 00a79995523ae3b9ed6753b645188cb6759c1d07
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jun 28 13:32:35 2017 -0400
+
+    rgw: rest handlers for mdlog and datalog list dont loop
+    
+    the do-while loops are unnecessary, because cls_log_list() will already
+    give us the requested number of entries, unless truncated. and these
+    rest operations return the truncated flag and last_marker, which the
+    client side is already using to run the same loop
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit d75e6b967d2ddf84d6e82c78a53061578129294a)
+
+commit e89036abb20d33df60c9a7dc7db4c8cd9825c068
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jun 28 12:19:52 2017 -0400
+
+    rgw: fix RGWMetadataLog::list_entries() for null last_marker
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit dd2893ba05c1095405b3a5edc16b3b1c7916cd7d)
+
+commit e5902f442bf87d7ed319f8e74b2f1e85791a39b9
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jun 28 12:18:33 2017 -0400
+
+    rgw: RGWMetadataLog::list_entries() no longer splices
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 112464483ecb407ef1388ba8a3f8d29cb0725594)
+
+commit 6f597f073fa2b4ad0941351606405d79d0899b67
+Author: Xie Rui <jerry.xr86@gmail.com>
+Date:   Thu Jun 22 17:12:30 2017 +0800
+
+    fix infinite loop in rest api for log list
+    
+    as max_entries_str is empty, it will be infinite loop when log is more than MAX_ENTRIES(1000) from marker.
+    and max_entries maybe overflow if use it to count the left entries.
+    
+    Fixes: http://tracker.ceph.com/issues/20386
+    Signed-off-by: xierui <jerry.xr86@gmail.com>
+    (cherry picked from commit 9fbc5378d2737d38e2ac915f20b44d308e18bc68)
+
+commit 3fa277b479d69699bf5a6875cd4a5efcf9ae0788
+Author: Alexey Sheplyakov <asheplyakov@mirantis.com>
+Date:   Tue Jun 27 16:07:01 2017 +0400
+
+    jewel: osd: unlock sdata_op_ordering_lock with sdata_lock hold to avoid missing wakeup signal
+    
+    Based on commit bc683385819146f3f6f096ceec97e1226a3cd237. The OSD code has
+    been refactored a lot since Jewel, hence cherry-picking that patch introduces
+    a lot of unrelated changes, and is much more difficult than reusing the idea.
+    
+    Fixes: http://tracker.ceph.com/issues/20428
+    
+    Signed-off-by: Alexey Sheplyakov <asheplyakov@mirantis.com>
+
+commit a36211c84d8c475c88820f33a467936e0b270420
+Author: lu.shasha <lu.shasha@eisoo.com>
+Date:   Wed May 24 16:06:07 2017 +0800
+
+    rgw: update bucket cors in secondary zonegroup should forward to master
+    
+    pr#14082 is incomplete, cors should be redirect to master
+    
+    Fixes: http://tracker.ceph.com/issues/16888
+    
+    Signed-off-by: Shasha Lu <lu.shasha@eisoo.com>
+    (cherry picked from commit 7dd099588a47024b410d513cb8ea919731718fa7)
+    
+    Conflicts:
+            src/rgw/rgw_op.cc (jewel does not have 5fff6371d8e)
+            src/test/rgw/rgw_multi/tests.py (jewel does not have this file)
+
+commit fa419a87b64f7c88a302ac594af81e07eb0ea430
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Thu Apr 6 13:13:54 2017 -0400
+
+    rgw: fix for EINVAL errors on forwarded bucket put_acl requests
+    
+    PutACL rejects request that include both a canned_acl and a request
+    body. when forwarding requests with canned_acls, we were also including
+    the generated policy in the body
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 1c863a78ed73cf1d89f05276627c7f0bde53ec9a)
+
+commit 1d7bd61d3f5f07a3f6d30faa9325f93c89800ade
+Author: Guo Zhandong <guozhandong@cmss.chinamobile.com>
+Date:   Wed Mar 22 18:00:37 2017 +0800
+
+    rgw: enable to update acl of bucket created in slave zonegroup
+    
+    Fixes: http://tracker.ceph.com/issues/16888
+    
+    Signed-off-by: Guo Zhandong <guozhandong@cmss.chinamobile.com>
+    (cherry picked from commit 5f89d37506adab0aa59e7a8a46eb962030565c72)
+
+commit a3c487448bbded31c98e752ff1c9518aa76c2e67
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue May 9 12:32:51 2017 +0200
+
+    ceph-disk: separate ceph-osd --check-needs-* logs
+    
+    It is using the OSD id zero but have nothing to do with OSD zero and
+    this is confusing to the user. The log themselves do not need to be kept
+    around and are stored in the run directory so that they can be disposed
+    of after reboot.
+    
+    Fixes: http://tracker.ceph.com/issues/19888
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit c7b3c46bd63b78475868e405bf20d9c142f0336a)
+
+commit a4c181fa7ab6ced676b9ff4f1381555215d77152
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Mar 16 21:45:46 2017 -0400
+
+    mds: set ceph-mds name uncond for external tools
+    
+    External tools like logrotate which use killall rely on the "ceph-mds" name to
+    find it in /proc/*/comm. This is normally the case but when ceph-mds respawns
+    using /proc/self/exe (on Linux), its name will change to "exe". This makes
+    logrotate fail to signal ceph-mds the log needs to be reopened and will lead to
+    the log growing until the disk is full.
+    
+    This patch unconditionally sets the name so on respawn the name is correct (and
+    in any other possible scenario, such as a misnamed executable).  Note, there is
+    still a very small race between execve and ceph_pthread_setname where the
+    process name is wrong.
+    
+    Problem was introduced by 66a122025f6cf023cf7b2f3d8fbe4964fb7568a7.
+    
+    Fixes: http://tracker.ceph.com/issues/19291
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 4f177bb6b72cf9c8eb363051b27496c026b345f0)
+    
+    Conflicts:
+        src/ceph_mds.cc - use pthread_setname_np() instead of
+            ceph_pthread_setname(), drop compat.h include
+
+commit 3776d960e07570727cea9c6ef8516ffa9953b54e
+Author: John Spray <john.spray@redhat.com>
+Date:   Thu Sep 29 17:14:54 2016 +0100
+
+    suites: update log whitelist for scrub msg
+    
+    Fixes: http://tracker.ceph.com/issues/16016
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 795094628b65eb9c3f5d51c6c895fe1443c5f4cf)
+    
+    Conflicts:
+            suites/fs/recovery/tasks/forward-scrub.yaml (file does not exist in jewel)
+
+commit d9234d47a9abc290475a317bb3fd070192df1840
+Author: John Spray <john.spray@redhat.com>
+Date:   Thu Mar 23 09:07:32 2017 -0400
+
+    mds: include advisory `path` field in damage
+    
+    This will just be whatever path we were looking
+    at at the point that damage was notified -- no
+    intention whatsoever of providing any up to date
+    path or resolution when there are multiple paths
+    to an inode.
+    
+    Fixes: http://tracker.ceph.com/issues/18509
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit c0bff51ef409eb6e4b2fc248e06e5a7e43faf51e)
+    
+    Conflicts:
+        src/mds/CDir.cc - omit dout(10) because jewel does not have cb86740a
+        src/mds/ScrubStack.cc - jewel does not have 7b456109 which changed
+           in->make_path_string_projected() call to in->make_path_string() but
+           it's moot because that line is dropped
+
+commit 7675e41c88a38e107e9478bde32e0ece564f8878
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Sep 19 20:25:58 2016 +0100
+
+    mds: populate DamageTable from scrub and log more quietly
+    
+    Fixes: http://tracker.ceph.com/issues/16016
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 9c82040b1a762a3498c6794a29a43b3866f30dab)
+
+commit 88605fc76bc943697ca5b4e235d82f439766d14c
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Sep 19 18:26:42 2016 +0100
+
+    mds: tidy up ScrubHeader
+    
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 111d2cf2d8504cd4486180a95e52f253018364b3)
+    
+    Conflicts:
+            src/mds/CInode.cc (jewel does not have 5259683e7819c22c14b21b1dd678a33e14574f21)
+
+commit c15fce6e50eb5775687feb121da5ed59df34e28b
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Sep 19 17:35:54 2016 +0100
+
+    mds: remove redundant checks for null ScrubHeader
+    
+    This was originally optional but now all the paths
+    that kick off a scrub should be going through
+    enqueue_scrub and thereby getting a header set.
+    
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 0c890282699f877f42870408d674ec1e9f9322a3)
+    
+    Conflicts:
+            src/mds/CInode.cc (jewel does not have 5259683e7819c22c14b21b1dd678a33e14574f21)
+
+commit c17e3c1b7b6961f3fb866af76aa2d798cdb97c9f
+Author: Michal Jarzabek <stiopa@gmail.com>
+Date:   Tue Oct 11 21:23:57 2016 +0100
+
+    mds/DamageTable: move classes to .cc file
+    
+    Signed-off-by: Michal Jarzabek <stiopa@gmail.com>
+    (cherry picked from commit 96018b0a85d0bc7eec285398dd596ee01d16fae7)
+
+commit 52a00b3bffc2db22c15d0e5b1e9580f9bc593555
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Sep 16 10:56:51 2016 +0200
+
+    test: timeout verification that mon is unreachable
+    
+    Without a timeout on the command, it may hang for a very long time,
+    hunting for new mons. If it hangs for more than 60 seconds, it is
+    safe to assume the mon is indeed down.
+    
+    Fixes: http://tracker.ceph.com/issues/16477
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit a5e5119bd138a97f35737c2b50d1e621fa8286d6)
+
+commit 3b5f9924b3db66fae952cf67331b69789045916f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Sep 15 10:42:24 2016 +0200
+
+    cli: retry when the mon is not configured
+    
+    The mon may return on error if a command is sent to it while it is
+    still in configuring state.
+    
+    Fixes: http://tracker.ceph.com/issues/16477
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit d5a3c8d6844ba632767baf3c2c790fa4d947a95e)
+    
+    Conflicts:
+            src/pybind/ceph_argparse.py (trivial resolution; jewel does not have
+                8fc67075c6d7d4443747f53687e498439f80b57a)
+
+commit 00ce80b52f6f231125cc165ab477544238ed3a02
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue May 9 11:42:58 2017 +0200
+
+    build/ops: rpm: fix python-Sphinx package name for SUSE
+    
+    This commit moves "BuildRequires: python-sphinx" down to the RH/CentOS/Fedora
+    distro conditional and adds a "BuildRequires: python-Sphinx" to the SUSE
+    conditional.
+    
+    Signed-off-by: Jan Matejek <jmatejek@suse.com>
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 0688f57d1c35692cdddf219d9ac3571d03dbb8e0)
+
+commit 66c17ff10b1703d0d9098d0ddcaf34a644ff5fbe
+Author: weiqiaomiao <wei.qiaomiao@zte.com.cn>
+Date:   Tue Jun 14 15:34:08 2016 +0800
+
+    rgw: remove unnecessary output
+    
+    a lot of radosgw-admin command will output
+    "error in read_id for object name: default : (2) No such file or directory"
+    when the zone named 'default' is not exist:
+    
+    Signed-off-by: weiqiaomiao <wei.qiaomiao@zte.com.cn>
+    (cherry picked from commit 4e9c7be08b9828db2795536ce170a675d25bc1ed)
+
+commit b786f7815b94e7659a07778a6318ffe5e5079fc0
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Mon Mar 20 15:19:22 2017 +0800
+
+    rgw: delete non-empty buckets in slave zonegroup returns error but the
+    buckets have actually been deleted.
+    
+    Fixes: http://tracker.ceph.com/issues/19313
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit 4714b17f53a9f30f7f155a69cfbfc682f809b4e4)
+    
+    Conflicts:
+            src/rgw/rgw_op.cc - first argument to delete_bucket() and
+                check_bucket_empty() is "s->bucket" in jewel (master:
+                "s->bucket_info")
+            src/rgw/rgw_rados.cc - RGWRados::delete_bucket() takes bucket instead
+                of bucket_info; adapt RGWRados::check_bucket_empty() to take bucket
+                instead of bucket_info as well
+            src/rgw/rgw_rados.h - ditto
+
+commit 7e3db1519e40ecdde5d7e83798a35f3fca7e5cd8
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Apr 4 10:42:44 2017 -0400
+
+    rgw: fix for zonegroup redirect url
+    
+    local dest_url variable was shadowing the one in the enclosing scope, so
+    the changes were not applied and no Location header was written on redirect
+    
+    Fixes: http://tracker.ceph.com/issues/19488
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 542e188a40f0495720b48308372366951ae41e62)
+
+commit 45f0396cffe528a752fb8330d2323e1de8d8b8ac
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Apr 4 10:41:51 2017 -0400
+
+    rgw: use zonegroup's master zone endpoints for bucket redirect
+    
+    if no zonegroup endpoints are set, fall back to master zone endpoints
+    
+    Fixes: http://tracker.ceph.com/issues/19488
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 92f63c6392bdc4633a2e57cb3867051bb1a3fd55)
+
+commit 50f140768d56d7813efac7ab2def3619e9639b4c
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Tue Jan 24 15:20:32 2017 +0800
+
+    rgw: put object's acl can't work well on the latest object when versioning
+    is enabled.
+    
+    Reported-by: Liu Hong <liuhong@cmss.chinamobile.com>
+    
+    Fixes: http://tracker.ceph.com/issues/18649
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit fe5f95fff30cc872484de6efb6cba1dd48b09316)
+    
+    Conflicts:
+         src/rgw/rgw_op.cc: read_op.prepare() takes no arguments in master; replace
+             this with read_op.prepare(NULL, NULL) to make jewel happy
+
+commit 01890abd953881ab1529652d148f7a19d171e18c
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Fri Apr 21 15:04:48 2017 -0400
+
+    radosgw-admin: warn that 'realm rename' does not update other clusters
+    
+    Fixes: http://tracker.ceph.com/issues/19746
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 8a459c768ffecd689a53a79dfe33eb8f1bbc318f)
+
+commit 89a2f6476d81bd233d76771915e080fce66ff228
+Author: Willem Jan Withagen <wjw@digiware.nl>
+Date:   Sat Apr 29 13:36:07 2017 +0200
+
+    cls/log/cls_log.cc: reduce logging noise
+    
+     - The other reference in the source as already at 20.
+          ./src/cls/timeindex/cls_timeindex.cc:85:
+            CLS_LOG(20, "storing entry at %s", index.c_str());
+    
+       And we need not always know where in the log items are stored.
+       So it looks like a leftover debug feature.
+    
+    Fixes: http://tracker.ceph.com/issues/19835
+    Signed-off-by: Willem Jan Withagen <wjw@digiware.nl>
+    (cherry picked from commit d76010900bf9012f2e66335787710531772766b7)
+
+commit 938e5b0728c07997abf09d30c670ffe1737a65ab
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Mon May 15 17:30:29 2017 -0400
+
+    rgw_file: v3: fix write-timer action
+    
+    For now, unify with v4 write-on-close path, by calling
+    RGWFileHandle::close() on write-timer expire, since it will
+    call write_finish() as a side-effect.
+    
+    Fixes: http://tracker.ceph.com/issues/19932
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit ce6ecb553b85ea158af28c22827b93135a75d159)
+
+commit 0897afe74d381c19a9b1bc1c2b398f93568a86fe
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Tue Mar 7 09:48:57 2017 -0500
+
+    rgw_file:  fix fs_inst progression
+    
+    Reported by Gui Hecheng<guimark@126.com>.  This change is a
+    variation on proposed fix by Dan Gryniewicz<dang@redhat.com>
+    to take root_fh.state.dev as fs_inst for new handles.
+    
+    Fixes: http://tracker.ceph.com/issues/19214
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 0e988edfb6ab9085d6d37cfc444d46e8a2841943)
+
+commit a54e6ccba31109d59abd8e7b9ba1f8fada30ecda
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Mon May 22 17:37:11 2017 -0400
+
+    rgw_file:  remove post-unlink lookup check
+    
+    This could induce asserts in multi-nfs-gateway scenarios.
+    
+    Fixes: http://tracker.ceph.com/issues/20047
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit b3db617ddd6fa2477726b54828b6410b36989ac7)
+
+commit 7042733db61e8a773969d3ce5fc24a1df6ae417b
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Tue May 23 15:05:45 2017 -0400
+
+    rgw_file: release rgw_fh lock and ref on ENOTEMPTY
+    
+    An early return in new unlink bucket num_entries check was
+    missing a conditional unlock and unref.
+    
+    Fixes: http://tracker.ceph.com/issues/20061
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 51c25593dd741b4df2e839fcef82b143f8c8cfca)
+
+commit 4a32ef856554921dab503d70257bd4922159831d
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Mon May 22 14:51:19 2017 -0400
+
+    rgw_file: remove hidden uxattr objects from buckets on delete
+    
+    If a setattr (e.g., chown) has been performed on a bucket, then like
+    any directory it has a hidden object storing its attributes. This must
+    be deleted before attempting bucket delete, otherwise, actually empty
+    buckets will not be removable via NFS.
+    
+    Fixes: http://tracker.ceph.com/issues/20045
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 01e15c3ec6cf43a7a7c4e2d13aad5f385c9f9748)
+    
+    Conflicts:
+            src/rgw/rgw_file.cc (jewel does not have
+                    "inline int valid_fs_bucket_name()" and
+                    "inline int valid_fs_object_name()")
+
+commit b63b7886dc1fb704f8baa9749a20e09faa93c1d1
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Mon Apr 24 16:23:21 2017 +0200
+
+    test/librbd/test_notify.py: don't disable feature in slave
+    
+    On jewel it will have stolen the exclusive lock. Instead, ensure that
+    object map and fast diff are already disabled on the clone before the
+    start of the test.
+    
+    Fixes: http://tracker.ceph.com/issues/19716
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit e009e1bdd4b3997462feb9a050bd2eb201e028ba)
+
+commit 5c0986153e79d7ec4bc165e497689319bd95ada9
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Fri May 5 15:59:44 2017 +0200
+
+    rbd-nbd: relax size check for newer kernel versions
+    
+    Fixes: http://tracker.ceph.com/issues/19871
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 8e912b9a0564a57f1b761e9e567771197bd0fb98)
+
+commit bc8c5d6c77880d21248c683609c3814145008f36
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Tue May 23 12:07:45 2017 +0200
+
+    librbd: potential read IO hang when image is flattened
+    
+    Fixes: http://tracker.ceph.com/issues/19832
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from 10d58618e7c632ef01b9537492239e0a042dc17e)
+    
+    Conflicts:
+        src/librbd/AioObjectRequest.cc: manual backport because the master changes
+            are in a different file (src/librbd/io/ObjectRequest.cc)
+
+commit 2e278d821d1e5992f77e6ac1f0b3e1c7fcba7e12
+Author: redickwang <redickwang@tencent.com>
+Date:   Fri May 19 15:08:12 2017 +0800
+
+    rgw: segment fault when shard id out of range
+    
+    Fixes: http://tracker.ceph.com/issues/19732
+    
+    Signed-off-by: redickwang <redickwang@tencent.com>
+    (cherry picked from commit ff4c40fc2e3c092d17a218ae6132de4e6034c8ee)
+
+commit 5adc66bc2abe5b8d58111d52b23619edfbebbc7f
+Author: Thomas Serlin <tserlin@redhat.com>
+Date:   Wed May 24 12:07:41 2017 -0400
+
+    Set subman cron attributes in spec file
+    
+    Fixes: http://tracker.ceph.com/issues/20074
+    
+    Signed-off-by: Thomas Serlin <tserlin@redhat.com>
+    (cherry picked from commit a9eb6ecea7b9512722e2283e5acb4fc6a1b7b734)
+
+commit 21b00c3ec0ae60848f6677b5fe23e6321b0f8de8
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Mar 30 13:50:41 2017 -0400
+
+    osd/PrimaryLogPG: do not expect FULL_TRY ops to get resent
+    
+    The objecter will not resend FULL_TRY requests that were sent prior to
+    becoming full, so we should not discard them.
+    
+    Fixes: http://tracker.ceph.com/issues/19430
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3f7acdbc9a942fd18937dbcf07fbc7b752c50ba3)
+
+commit afd036cb6725f9e91cfd38995d6536d92deb934d
+Author: lvshuhua <lvshuhua@cmss.chinamobile.com>
+Date:   Wed Dec 7 15:47:47 2016 +0800
+
+    rgw: fix versioned bucket data sync fail when upload is busy
+    
+    Fixes: http://tracker.ceph.com/issues/18208
+    
+    Signed-off-by: lvshuhua <lvshuhua@cmss.chinamobile.com>
+    (cherry picked from commit ce7d00ac1642d84c1d9111156a544c37801c5adf)
+    
+    Conflicts:
+            src/rgw/rgw_data_sync.cc (in jewel, inc_marker is declared to be of
+                type rgw_bucket_shard_inc_sync_marker, while in master it is of
+                type rgw_bucket_shard_inc_sync_marker& - i.e. reference to
+                rgw_bucket_shard_inc_sync_marker)
+
+commit c2137f2f725d8536066b6b495f8565b126a720ed
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Mon Jun 19 13:51:50 2017 +0200
+
+    libradosstriper: delete striped objects of zero length
+    
+    This patch fixes the bug: "libradosstriper fails to delete striped objects of
+    zero length without returning any kind of error"
+    
+    N.B.: This is not cherry picked from master because
+    7a50ea479e7e5c2909d899d89d33d3fb082257f8, which fixes the issue in master, is
+    too complicated to backport.
+    
+    Fixes: http://tracker.ceph.com/issues/20325
+    Signed-off-by: Stan K <redrampage@selectel.ru>
+
+commit fb79932be69545b286497d0ee24c96d5e466344b
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Apr 18 13:54:56 2017 -0400
+
+    mon/PGMonitor: clean up min/max span warning
+    
+    Clean up option naming.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 489e810c37ed6fb9d32d1015634041a577501ee4)
+    
+    Conflicts:
+            src/common/config_opts.h: Jewel's options are quite different from ones of master,
+              s/mon_warn_osd_usage_percent/mon_warn_osd_usage_min_max_delta/
+
+commit 8180f1612a3dfac6ba5e8914f9e6a3faa8cf0297
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Feb 16 22:23:06 2017 -0800
+
+    osd: Round fullness in message to correspond to df -h
+    
+    This really only works after journal drains because
+    we adjust for the journal.
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 26dcb591f9af01ed444aa758c3d601e7f67261b2)
+
+commit 728097af06e1e49b5f02111887ce6716d3729213
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Feb 16 17:25:12 2017 -0800
+
+    filestore: Account for dirty journal data in statfs
+    
+    Fixes: http://tracker.ceph.com/issues/16878
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 78adb70c21c6b8e6a9191b76917919b125a9490f)
+    
+    Conflicts:
+            src/os/filestore/FileStore.cc: adapt the code to use struct
+              statfs to keep changes minimal
+
+commit c6e4fff5e3f5c5a45b3c4fb647548bd2a2dfea0c
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Feb 14 16:37:07 2017 -0800
+
+    mon: Add warning if diff in OSD usage > config mon_warn_osd_usage_percent (10%)
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit c8004e6558359fb542e45bb4b483a6c91afdc0b4)
+    
+    Conflicts:
+            src/common/config_opts.h: some options in the original patch hunk
+              are not supported in Jewel, manually add the new `mon_warn_osd_usage_percent'
+              option.
+
+commit 0412bf2adaf07e527ac6659c9bce0d406edeca93
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Feb 14 14:40:05 2017 -0800
+
+    mon: Bump min in ratio to 75%
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 830cc7aa7be1ccd8f54f056b6a58e923cadd1c2b)
+
+commit 21e2a0337092d57f3e23d282b02b99146ed50a63
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Feb 14 14:38:53 2017 -0800
+
+    osd: Fix ENOSPC crash message text
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 50cfe03fcba253c8380b21043ed03879134d6836)
+    
+    Conflicts:
+            src/os/bluestore/BlueStore.cc: leave bluestore code as is,
+              bluestore users should use Kraken or Luminous
+
+commit 0068d9f3335fc8d6b7bfb5c29aa8cba87c0d01f2
+Author: Haomai Wang <haomai@xsky.com>
+Date:   Tue Jun 13 10:19:55 2017 +0800
+
+    msg/async: go to open new session when existing already closed
+    
+    Fixes: http://tracker.ceph.com/issues/20230
+    Signed-off-by: Haomai Wang <haomai@xsky.com>
+    (cherry picked from commit 99f580a3959240f99061a9ad48ec591b39a9fd46)
+    
+    Changes: src/msg/async/AsyncConnection.cc: Mutex::Unlock() in Jewel
+               versus mutex::unlock() in master
+
+commit 28aa104c0c8f9d6c556aeab881231034191b55d1
+Author: Haomai Wang <haomai@xsky.com>
+Date:   Tue Jun 13 10:16:47 2017 +0800
+
+    msg/async: fix accept_conn not remove entry in conns when lazy delete
+    
+    Signed-off-by: Haomai Wang <haomai@xsky.com>
+    (cherry picked from commit bf98babb3289a7714543ff3cbd3872d80f0dc196)
+
+commit 9212d62007394d9219a1c629d875610aa9aeab4b
+Author: Michal Jarzabek <stiopa@gmail.com>
+Date:   Sun Jun 19 16:01:31 2016 +0100
+
+    msg/AsyncMessenger.h:remove unneeded use of count
+    
+    Signed-off-by: Michal Jarzabek <stiopa@gmail.com>
+    (cherry picked from commit b9ccc756614870142ba878ffdf82c7c7c89e49a2)
+
+commit 8cf3f18c7af3a096da4f2e40f6c273c3e39c7e8f
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed May 3 11:32:34 2017 -0400
+
+    rgw: RGWPeriodPusher spawns http thread before cr thread
+    
+    Fixes: http://tracker.ceph.com/issues/19834
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 21a943da45032a276997a0a885e869e2c2bc321d)
+
+commit 730c88e800ceedea51c92d9f3a59aeba709b692d
+Author: weiqiaomiao <wei.qiaomiao@zte.com.cn>
+Date:   Mon Jun 27 19:40:13 2016 +0800
+
+    rgw: should delete in_stream_req if conn->get_obj(...) return not zero value
+    
+    Signed-off-by: weiqiaomiao <wei.qiaomiao@zte.com.cn>
+    (cherry picked from commit 494fbe9ce595b0b59597bd426cc3bc4d14ba6644)
+
+commit 9b12fe08098a686afe96f7965b24ee331c7902ab
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Thu Apr 20 16:33:32 2017 -0400
+
+    rgw: dont spawn error_repo until lease is acquired
+    
+    if RGWDataSyncShardCR fails to acquire its lease, it doesn't call
+    error_repo->finish() to stop the coroutine. wait until the lease
+    succeeds before spawning the error_repo
+    
+    Fixes: http://tracker.ceph.com/issues/19446
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 1524a5eb249113fed8da1d47a4f92dec98db4566)
+    
+    Conflicts:
+            src/rgw/rgw_data_sync.cc (different argument list of RGWOmapAppend()
+                function in jewel, compared to master)
+
+commit 6b99bc9c6083190e65825f2fd4a2d18e7f03a4ec
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Fri Jun 2 09:45:06 2017 +0200
+
+    build/ops: deb: fix logrotate packaging
+    
+    This minimal jewel-only fix is not cherry-picked from master because
+    the Debian packaging was refactored between jewel and master and the
+    master fix is totally different.
+    
+    Fixes: http://tracker.ceph.com/issues/20316
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 4be3db597321fd61caa202af49f8c2d941db552d
+Author: lu.shasha <lu.shasha@eisoo.com>
+Date:   Thu Jan 5 11:50:42 2017 +0800
+
+    rgw: fix 'gc list --include-all' command infinite loop the first 1000 items
+    
+    When the items to gc over 1000, 'gc list --include-all' command will infinite loop the first 1000 items.
+    Add next_marker to move to the next 1000 items.
+    
+    Fixes: http://tracker.ceph.com/issues/19978
+    
+    Signed-off-by: fang yuxiang <fang.yuxiang@eisoo.com>
+    Signed-off-by: Shasha Lu <lu.shasha@eisoo.com>
+    (cherry picked from commit fc29f52ebca63104a05515484088ff136dfb0b15)
+
+commit 7966b846a875c60b5272f32baec648a719a10b9e
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jun 7 12:58:05 2017 -0400
+
+    test/rgw: wait for realm reload after set_master_zone
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 5cc99db52423f9ee98a549b215559c677f178f48)
+
+commit 97ffe49defb213c26288744ed572fbb5b158583a
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jun 7 12:56:20 2017 -0400
+
+    test/rgw: fixes for test_multi_period_incremental_sync()
+    
+    test was only creating objects in subsequent periods, which wasn't
+    adding any entries to the mdlog. this wasn't correctly testing
+    incremental metadata sync across periods
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 2976fd36cded95f68766f8ba485d43f932e97db2)
+
+commit 7c19e375be379cd8366097b57adea9f6010d783c
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jun 7 12:00:15 2017 -0400
+
+    test/rgw: meta checkpoint compares realm epoch
+    
+    avoid marker comparisons between different periods
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 20df35ad94aea0c03be0c2c9739bd239354a46d8)
+
+commit cb957226083f7644db5b5826a3d7ab21c47def8e
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Mar 21 12:19:01 2017 -0400
+
+    rgw: remove rgw_realm_reconfigure_delay
+    
+    when the master zone is changed, this config variable was increasing the
+    window of time where the old master zone would continue to handle
+    requests to modify metadata. those changes would not be reflected by the
+    new metadata master zone, and would be lost to the cluster
+    
+    it was an attempt to optimize for the unlikely case of multiple period
+    changes in a short period of time, but the logic in reload() handles this
+    case correctly as is
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit f422d4f1841e15a4ecf2d9304aa77021e8bd8626)
+
+commit 48d596df141f5014ae5ca9ab4e8955a6c6ba755e
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Mar 21 16:10:27 2017 -0400
+
+    rgw: require --yes-i-really-mean-it to promote zone with stale metadata
+    
+    if a zone is promoted to master before it has a chance to sync from the
+    previous master zone, any metadata entries after its sync position will
+    be lost
+    
+    print an error if 'period commit' is trying to promote a zone that is
+    more than one period behind the current master, and only allow the
+    commit to proceed if the --yes-i-really-mean-it flag is provided
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 721e3d6ee5917b19cfc15e3e9582d23623b8cca7)
+
+commit 81ced03d203ec00376fef5a143e4cac24aa65093
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon Mar 20 16:13:03 2017 -0400
+
+    rgw: period commit uses sync status markers
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit bb49e2fbed3a87de837329cfa0c11f8d97633a94)
+    
+    Conflicts:
+            src/rgw/rgw_rados.cc: RGWPeriod::update removed
+
+commit a9830dbdd43572995b3e8e157ecbc706d6481fac
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon Aug 1 15:21:52 2016 -0400
+
+    rgw: use RGWShardCollectCR for RGWReadSyncStatusCoroutine
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit a4bf014b8642073f3eac226a93f6360cdd9cee25)
+    
+    Conflicts:
+            src/rgw/rgw_sync.cc: rgw_pool, rgw_raw_obj
+
+commit 0ab8e0ab5db988724bb0e26c88a279d099d3b8cd
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon Aug 1 14:35:53 2016 -0400
+
+    rgw: change metadata read_sync_status interface
+    
+    makes the same change to read_sync_status() in RGWMetaSyncStatusManager,
+    needed to support multiple concurrent readers for the rest interface
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 0372df20be86cb616600626ee4c755b31032f134)
+
+commit ac9045abba05818108655c75ecb57cdf065f56e8
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Fri Mar 17 09:55:47 2017 -0400
+
+    rgw: store realm epoch with sync status markers
+    
+    sync status markers can't be compared between periods, so we need to
+    record the current period's realm epoch with its markers. when the
+    rgw_meta_sync_info.realm_epoch is more recent than the marker's
+    realm_epoch, we must treat the marker as empty
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 574ff5f5df62a0a1e9a8ff7e4a87cd65cc952d7e)
+    
+    Conflicts:
+            src/rgw/rgw_sync.cc: rgw_pool
+
+commit 013d349c791318a03cf7bd0bbbe6d4bec708359d
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon Feb 27 15:19:54 2017 -0500
+
+    rgw: RGWBackoffControlCR only retries until success
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit a898fb76a4179add68ccb526f2917768736ac52b)
+
+commit 237368752b013ad639581b506fdb46e2119f155a
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Mar 7 12:28:33 2017 -0500
+
+    rgw: clean up RGWInitDataSyncStatusCoroutine
+    
+    RGWInitDataSyncStatusCoroutine operates on a given rgw_data_sync_status
+    pointer, which saves us from having to read it back from rados
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 69be410d0e29cd8b4cf5171800e4a7fa938eb8c6)
+    
+    Conflicts:
+            src/rgw/rgw_data_sync.cc: rgw_pool, rgw_raw_obj
+
+commit 67011e51a7ba1538ad2c5f426311ae71bb5f8c34
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Mar 7 11:16:43 2017 -0500
+
+    rgw: fix marker comparison to detect end of mdlog period
+    
+    Fixes: http://tracker.ceph.com/issues/18639
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 7c23713b1a3c14b135f8eb6fdb36d113ea860e4e)
+
+commit c19c72058e9a09ccfc316ebe0c53348be1e2ba32
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon Aug 22 22:06:15 2016 -0400
+
+    rgw: add == and != operators for period history cursor
+    
+    RGWMetaSyncCR was using operator== but it always returned true!
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 09c847ff790f55004871fb7304361ae6c9845b1a)
+
+commit 1c344e254efcd802e417cc45b6678989c871ad0a
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jun 8 09:37:26 2016 -0400
+
+    rgw: add empty_on_enoent flag to RGWSimpleRadosReadCR
+    
+    RGWSimpleRadosReadCR won't currently fail with ENOENT, but instead
+    passes an empty object to handle_data(). add an empty_on_enoent flag to
+    the constructor, defaulting to true, to make this behavior optional for
+    callers that do want to fail on ENOENT
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit c5c95e7f225d59a8bdd8eda3742053b77492c40c)
+
+commit bf973c8400db08dd541152812d42379cf113755d
+Author: Boris Ranto <branto@redhat.com>
+Date:   Fri May 26 09:52:25 2017 +0200
+
+    rpm: Move ceph-disk to ceph-base
+    
+    The SELinux package now requires the ceph-disk binary but that one was
+    part of the ceph-osd package. The ceph-disk python library is already
+    packaged in ceph-base so moving ceph-disk to ceph-base seems like a
+    reasonable next step.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 6991764f3bff7b8f6be699603927aff882377878)
+    
+    Conflicts:
+            ceph.spec.in: we have ceph-disk-udev in jewel
+            ceph.spec.in: few if conditions were different in jewel
+
+commit 6ca61b1b478f5dbbd33ddf87e0fc1af999ed75cb
+Author: Boris Ranto <branto@redhat.com>
+Date:   Thu May 25 14:36:13 2017 +0200
+
+    ceph-disk: Fix the file ownership, skip missing
+    
+    This commit fixes the file ownership for the /usr/bin/ and /etc/ceph
+    files and skips missing files as some of the files that we do specify
+    now can be missing from the system (not installed, e.f. radosgw).
+    
+    Fixes: http://tracker.ceph.com/issues/20077
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 077038b4393a28ccbd38ca4a90105dbd4c1ffcd5)
+
+commit 7d6eea0440f9856894570af80a14ba6c19a3c910
+Author: Boris Ranto <branto@redhat.com>
+Date:   Fri Apr 28 12:29:46 2017 +0200
+
+    selinux: Do parallel relabel on package install
+    
+    We can take advantage of ceph-disk fix subcommand when doing a package
+    install. We will keep using the differential fixfiles command otherwise.
+    
+    We also need to add relabel for /usr/bin/ daemons so that we could use
+    this.
+    
+    Fixes: http://tracker.ceph.com/issues/20077
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 1cecddf031991f1c64ea203f173189624f11940e)
+
+commit b9ce1aa618d1f488f91f349bed8c87a421fcd5ba
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 3 21:36:21 2017 -0400
+
+    rbd-mirror: ensure missing images are re-synced when detected
+    
+    Fixes: http://tracker.ceph.com/issues/19811
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 74bd4f230a0cb7b709f2cb5c6db3dc79f0d8dede)
+    
+    Conflicts:
+            src/test/rbd_mirror/image_replayer/test_mock_BootstrapRequest.cc: trivial resolution
+            src/tools/rbd_mirror/image_replayer/BootstrapRequest.h: trivial resolution
+
+commit 648dfa1e939fa65ef629b7e4a31f2eda2b0b55c0
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Jun 5 15:40:10 2017 +0800
+
+    qa: add a sleep after restarting osd before "tell"ing it
+    
+    without the fast-fail feature, the monitor does not mark osd down after
+    a grace time. so we cannot truest the "healthy()" in ceph.restart task.
+    
+    also, "restart" task wait-for-healthy by default, so no need to do it
+    explicitly.
+    
+    Fixes: http://tracker.ceph.com/issues/16239
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    Conflicts: this change is not cherry-picked from master. because, in
+               master we have the fast-fail feature, but we have'not
+               backport it to jewel. so adding a timeout would help to
+               make sure that the OSD is back online even "restart"
+               waits for "healthy" already.
+
+commit 01abfed8f26eab70dc3242aeaa4c44599f542af2
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Thu May 25 22:32:01 2017 -0700
+
+    osd: do not default-abort on leaked pg refs
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit 4caf2df0c380a1281db9509b3feb342705512b58)
+    
+    Conflicts:
+            qa/clusters/fixed-4.yaml
+            src/osd/OSD.cc
+    
+    Fixes: http://tracker.ceph.com/issues/20084
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 967d6a54055b438d6730ab7b7c1fc1a1b980c5e2
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Thu May 25 21:52:49 2017 -0700
+
+    osd: Reset() the snaptrimmer on shutdown
+    
+    We were failing to exit various wait states which held PGRefs. Error!
+    
+    Fixes: http://tracker.ceph.com/issues/19931
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit b0e9deeea8a8e90f6d7e9d56b6b4aed890e01d7b)
+    
+    Conflicts:
+            src/osd/ReplicatedPG.cc
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 328e2cc71aaefa07a04381a7f752dac46b566da0
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Feb 3 10:08:33 2017 -0500
+
+    mon/PGMap: factor mon_osd_full_ratio into MAX AVAIL calc
+    
+    If we only fill OSDs to 95%, we should factor that into
+    the MAX AVAIL calculation for the pool.
+    
+    Fixes: http://tracker.ceph.com/issues/18522
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f223ac92917f4bc18e5b9b3ad61afa155e4d088a)
+    
+    Conflicts:
+            src/mon/PGMap.cc: get_rule_avail() is a method of the PGMonitor
+              class in Jewel (and osd_stat is pg_map.osd_stat)
+
+commit b52bfe6b443f0ff88c8614441752102058063699
+Author: Ning Yao <yaoning@unitedstack.com>
+Date:   Thu Apr 6 11:12:04 2017 +0000
+
+    os/filestore: fix infinit loops in fiemap()
+    
+    since fiemap can get extents based on offset --> len
+    but we should consider last extents is retrieved when len == 0
+    even though it is not last fiemap extents
+    
+    Signed-off-by: Ning Yao <yaoning@unitedstack.com>
+    (cherry picked from commit 36f6b668a8910d76847674086cbc86910c78faee)
+
+commit e3cba06bd02b1fca07414c987cf147f1ded99b68
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri May 5 12:02:05 2017 +0800
+
+    mon: check is_shutdown() in timer callbacks
+    
+    introduce a helper class: C_MonContext, and initialize all timer events
+    using it, to ensure that they do check is_shutdown() before doing their
+    work.
+    
+    Fixes: http://tracker.ceph.com/issues/19825
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 561cbded0c7e28231b1c7ce18663b8d7d40aad6d)
+    
+    Conflicts:
+            src/mon/MgrMonitor.cc: no such service in Jewel
+
+commit ef5265f107858d37bbdeea165cec571db614b4a3
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu May 4 22:49:04 2017 +0800
+
+    mon/Elector: call cancel_timer() in shutdown()
+    
+    instead of doing it manually.
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 12139ae529a49b6caedea89f910d034ddca094b6)
+
+commit 9693b6bd1685f3ff1a3a44972b7e7f0e03d5da12
+Author: Alexey Sheplyakov <asheplyakov@mirantis.com>
+Date:   Wed May 17 17:50:10 2017 +0400
+
+    jewel: mon: add override annotation to callback classes
+    
+    The only purpose of this patch is to avoid merge conflicts while
+    cherry-picking commit 561cbded0c7e28231b1c7ce18663b8d7d40aad6d.
+    Alternatively one could cherry-pick 1effdfe19bf9fd6d546620b96eaf452e889b15dc,
+    but that one brings a lot of unrelated changes.
+    
+    Signed-off-by: Alexey Sheplyakov <asheplyakov@mirantis.com>
+
+commit ea1b21d9604f19a48edeacc68ebabf8716143c2e
+Author: Michal Jarzabek <stiopa@gmail.com>
+Date:   Mon Aug 1 16:52:46 2016 +0100
+
+    mon/PaxosService: move classes to cc file
+    
+    Signed-off-by: Michal Jarzabek <stiopa@gmail.com>
+    (cherry picked from commit a4e979a41c7d3649cf70f9d0768015d7ff4aca8a)
+
+commit 1869ed9b2d4225e2bf0f366baf75e0e14f202aea
+Author: Michal Jarzabek <stiopa@gmail.com>
+Date:   Fri Sep 23 19:43:56 2016 +0100
+
+    mon/Paxos: move classes to .cc file
+    
+    Signed-off-by: Michal Jarzabek <stiopa@gmail.com>
+    (cherry picked from commit d21357a7e042424754d9ab41c134cae9e89945f9)
+
+commit 18cf302377aa7a09ad4922c07c64fefc047f2bdb
+Author: Michal Jarzabek <stiopa@gmail.com>
+Date:   Sun Jul 24 10:51:54 2016 +0100
+
+    mon/Elector:move C_ElectionExpire class to cc file
+    
+    Signed-off-by: Michal Jarzabek <stiopa@gmail.com>
+    (cherry picked from commit c819596e59fd5f66b3258fedd1d10b20cf70f0a9)
+
+commit fa33e7600b0205ca9113a1c5be535516886a0701
+Author: Michal Jarzabek <stiopa@gmail.com>
+Date:   Sat Jul 30 09:58:30 2016 +0100
+
+    mon/Monitor: move C_Scrub, C_ScrubTimeout to .cc
+    
+    Signed-off-by: Michal Jarzabek <stiopa@gmail.com>
+    (cherry picked from commit e58750127cbe8728f4047411904af3890966490f)
+
+commit 9ec5d8b1a5ea7fa437b161a49d246a7f0ff653c8
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu May 11 13:13:39 2017 +0800
+
+    osd/PrimaryLogPG: do not call on_shutdown() if (pg.deleting)
+    
+    when a callback is called, it could be facing a PG already shut down by
+    OSD. but if that callback wants to shut that PG down. it should check
+    the PG's status first.
+    
+    Fixes: http://tracker.ceph.com/issues/19902
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit f3c44a0dfc859f6f625a92e727e0e521ed4a9207)
+
+commit 592293cdfb397337c2808117ae9b06d5dc77f7f2
+Author: Alexey Sheplyakov <asheplyakov@mirantis.com>
+Date:   Tue Jan 31 13:54:38 2017 +0400
+
+    systemd/ceph-disk: make it possible to customize timeout
+    
+    When booting a server with 20+ HDDs udev has to process a *lot* of
+    events (especially if dm-crypt is used), and 2 minutes might be not
+    enough for that. Make it possible to override the timeout (via systemd
+    drop-in files), and use a longer timeout (5 minutes) by default.
+    
+    Fixes: http://tracker.ceph.com/issues/18740
+    Signed-off-by: Alexey Sheplyakov <asheplyakov@mirantis.com>
+    (cherry picked from commit 22332f6bae57a6975a99523a115eb70608f26331)
+
+commit 3828c1443b0a580fa23680da6d0b624d76a6de2a
+Author: Boris Ranto <branto@redhat.com>
+Date:   Wed Mar 8 09:38:39 2017 +0100
+
+    ceph-disk: Add --system option for fix command
+    
+    This adds the ability to restore the labels of the underlying system
+    data in addition to ceph data.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 8d81af42fd507c7b92c8279eb114b0a733ac1da6)
+
+commit 5b4132266cc8a4d53f9e045bc4b21706a9eeabc1
+Author: Boris Ranto <branto@redhat.com>
+Date:   Thu Feb 16 11:34:27 2017 +0100
+
+    ceph-disk: Add more fix targets
+    
+    It turns out I forgot several more directories that needs to be fixed by
+    this script. We need to fix /var/log/ceph, /var/run/ceph and /etc/ceph
+    as well.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit ae139307d6b2bfba47e21d29d6dbd3c8dc01b5b5)
+
+commit 7341ee445829114e3dfb57a61ca3a0e02b666a6e
+Author: Boris Ranto <branto@redhat.com>
+Date:   Thu Feb 9 19:17:12 2017 +0100
+
+    ceph-disk: Add unit test for fix command
+    
+    This will simulate the command* functions to not actually run anything
+    thus excercising the python code directly. It also checks that the
+    proper (sub-strings) are in the output.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 1ec53dee9a690134936bdc3a09c9a02fecf13a9d)
+
+commit 3122fa8ca37475fb1cbab296b89c5904ea7b6f76
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue Jan 31 13:19:33 2017 +0100
+
+    ceph-disk: Add fix subcommand
+    
+    This subcommand will fix the SELinux labels and/or file permissions on
+    ceph data (/var/lib/ceph).
+    
+    The command is also optimized to run the commands in parallel (per
+    sub-dir in /var/lib/ceph) and do restorecon and chown at the same time
+    to take advantage of the caching mechanisms.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 6d5d30f6ed7538271579cc2ef4e2e364f01a4a6f)
+    
+    Conflicts:
+            doc/man/8/ceph-disk.rst: whitespacing changed
+            src/ceph-disk/ceph_disk/main.py: command_check_call changed type
+
+commit 618a82e11e53cf2f1d5d306a2eb330cdf5e459ca
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 4 17:56:22 2017 -0400
+
+    librbd: add no-op event when promoting an image
+    
+    The rbd-mirror process needs an event in the journal
+    to properly detect the transition between primary and
+    non-primary state between peers.
+    
+    Fixes: http://tracker.ceph.com/issues/19858
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 4031555dda7597d24e9eb04b9ff29173909586f7)
+    
+    Conflicts:
+            src/librbd/journal/DemoteRequest.cc: logic exists in Journal.cc
+    
+    (cherry picked from commit 7970ec586bebd26b1ca4955136ad8f48bb833af6)
+    
+    Conflicts:
+            src/librbd/journal/PromoteRequest.[h|cc]: logic exists in Journal.cc
+            src/librbd/journal/Types.[h|cc]: trivial resolution
+            src/test/librbd/journal/test_mock_PromoteRequest.cc: does not exist
+
+commit 7ec6e8bc50b62b43f27cf572c9d267c1a5f9520e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 4 17:57:34 2017 -0400
+
+    rbd-mirror: prevent infinite loop when computing replay status
+    
+    If the image had a non-primary predecessor epoch whose tag tid
+    duplicates an epoch within its own journal, an infinite loop
+    would result.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3f179bf86216540d8e25aad469c604f96f6aecd8)
+
+commit 09f076ed968209507b1f8a27388c3959cb91c82b
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Apr 14 13:21:38 2017 -0400
+
+    osd: fix occasional MOSDMap leak
+    
+    _committed_osd_maps() may return early (without putting
+    the ref) on shutdown.
+    
+    Fixes: http://tracker.ceph.com/issues/18293
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a74632f964e10a57fb8065aec90dc7b69bddba5b)
+
+commit cd8c51569baaccf3ea57507f427db373c415934e
+Author: Alexey Sheplyakov <asheplyakov@mirantis.com>
+Date:   Thu Apr 20 12:13:13 2017 +0400
+
+    rgw: add the remove-x-delete feature to cancel swift object expiration
+    
+    In openstack swift, it also support the feature to cancel the object expiration,
+    which could be found at last point in
+    https://docs.openstack.org/user-guide/cli-swift-set-object-expiration.html. we
+    can remove the object expiration by set 'X-Remove-Delete-At:'.
+    
+    This patch also could fix the bug that when we set the object expiration and
+    then upload the same object to the container again. The previous object expiration
+    also works, which is not compatible with the openstack swift.
+    
+    Fixes: http://tracker.ceph.com/issues/19074
+    Signed-off-by: Jing Wenjun <jingwenjun@cmss.chinamobile.com>
+    (cherry picked from commit 230429ebc4ac9b5840bb93c7e0eeb5edbb949106)
+    
+    Conflicts:
+            src/rgw/rgw_file.cc:
+              - processor->complete() has no object_size argument
+                (compression is not supported in Jewel)
+            src/rgw/rgw_op.cc:
+              - processor->complete() has no object_size argument
+                (compression is not supported in Jewel)
+              - RGWPostObj::execute(): the code changed a lot in master,
+                adjust delete_at manually (patch(1) tries to apply
+                the corresponding hunk to a different function)
+            src/rgw/rgw_rest_swift.cc:
+              - trivial: STREAM_IO in Jewel versus dump_header in master
+
+commit 10636ef77f7327b85d9128c3ba0c0f05829ee821
+Author: Vikhyat Umrao <vumrao@redhat.com>
+Date:   Sat Jan 21 01:44:31 2017 +0530
+
+    osd/Pool: Disallow enabling 'hashpspool' option to a pool without
+              '--yes-i-really-mean-it'
+    
+    Fixes: http://tracker.ceph.com/issues/18468
+    
+    Signed-off-by: Vikhyat Umrao <vumrao@redhat.com>
+    (cherry picked from commit 3715362883acf9b8a477eb058a9ad6ee6d81ae01)

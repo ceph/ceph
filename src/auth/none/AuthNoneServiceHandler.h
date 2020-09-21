@@ -15,26 +15,38 @@
 #ifndef CEPH_AUTHNONESERVICEHANDLER_H
 #define CEPH_AUTHNONESERVICEHANDLER_H
 
-#include "../AuthServiceHandler.h"
-#include "../Auth.h"
-
-class CephContext;
+#include "auth/AuthServiceHandler.h"
+#include "auth/Auth.h"
+#include "include/common_fwd.h"
 
 class AuthNoneServiceHandler  : public AuthServiceHandler {
 public:
-  AuthNoneServiceHandler(CephContext *cct_) 
+  explicit AuthNoneServiceHandler(CephContext *cct_)
     : AuthServiceHandler(cct_) {}
-  ~AuthNoneServiceHandler() {}
+  ~AuthNoneServiceHandler() override {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) {
+  int start_session(const EntityName& name,
+		    size_t connection_secret_required_length,
+		    ceph::buffer::list *result_bl,
+		    AuthCapsInfo *caps,
+		    CryptoKey *session_key,
+		    std::string *connection_secret) override {
     entity_name = name;
-    caps.allow_all = true;
-    return CEPH_AUTH_NONE;
+    caps->allow_all = true;
+    return 1;
   }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) {
+  int handle_request(ceph::buffer::list::const_iterator& indata,
+		     size_t connection_secret_required_length,
+		     ceph::buffer::list *result_bl,
+		     uint64_t *global_id,
+		     AuthCapsInfo *caps,
+		     CryptoKey *session_key,
+		     std::string *connection_secret) override {
     return 0;
   }
-  void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
+  void build_cephx_response_header(int request_type, int status,
+				   ceph::buffer::list& bl) {
+  }
 };
 
 #endif

@@ -1,0 +1,6 @@
+tasks:
+- qemu:
+    all:
+      clone: true
+      test: qa/workunits/suites/bonnie.sh
+exclude_arch: armv7l

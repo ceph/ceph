@@ -12,14 +12,12 @@
 
 void TestOp::begin()
 {
-  //if (stat) stat->begin(this);
   _begin();
 }
 
 void TestOp::finish(TestOp::CallbackInfo *info)
 {
   _finish(info);
-  //if (stat && finished()) stat->end(this);
 }
 
 void read_callback(librados::completion_t comp, void *arg) {

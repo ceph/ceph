@@ -1,19 +1,15 @@
 #include "gtest/gtest.h"
 #include "global/global_context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/common_init.h"
 
 #include "osdc/Striper.h"
 
 TEST(Striper, Stripe1)
 {
-  ceph_file_layout l;
-  memset(&l, 0, sizeof(l));
+  file_layout_t l;
 
-  l.fl_object_size = 262144;
-  l.fl_stripe_unit = 4096;
-  l.fl_stripe_count = 3;
+  l.object_size = 262144;
+  l.stripe_unit = 4096;
+  l.stripe_count = 3;
 
   vector<ObjectExtent> ex;
   Striper::file_to_extents(g_ceph_context, 1, &l, 5006035, 46419, 5006035, ex);
@@ -28,12 +24,11 @@ TEST(Striper, Stripe1)
 
 TEST(Striper, EmptyPartialResult)
 {
-  ceph_file_layout l;
-  memset(&l, 0, sizeof(l));
+  file_layout_t l;
 
-  l.fl_object_size = 4194304;
-  l.fl_stripe_unit = 4194304;
-  l.fl_stripe_count = 1;
+  l.object_size = 4194304;
+  l.stripe_unit = 4194304;
+  l.stripe_count = 1;
 
   vector<ObjectExtent> ex;
   Striper::file_to_extents(g_ceph_context, 1, &l, 725549056, 131072, 72554905600, ex);
@@ -59,12 +54,11 @@ TEST(Striper, EmptyPartialResult)
 
 TEST(Striper, GetNumObj)
 {
-  ceph_file_layout l;
-  memset(&l, 0, sizeof(l));
+  file_layout_t l;
 
-  l.fl_object_size = 262144;
-  l.fl_stripe_unit = 4096;
-  l.fl_stripe_count = 3;
+  l.object_size = 262144;
+  l.stripe_unit = 4096;
+  l.stripe_count = 3;
   uint64_t size,numobjs;
   size = 6999;
   numobjs = Striper::get_num_objects(l, size);
@@ -77,17 +71,17 @@ TEST(Striper, GetNumObj)
   ASSERT_EQ(6u, numobjs);
 }
 
-
-int main(int argc, char **argv)
+TEST(Striper, GetFileOffset)
 {
-  ::testing::InitGoogleTest(&argc, argv);
+  file_layout_t l;
 
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
+  l.object_size = 262144;
+  l.stripe_unit = 4096;
+  l.stripe_count = 3;
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  return RUN_ALL_TESTS();
+  uint64_t object_no = 100;
+  uint64_t object_off = 200000;
+  uint64_t file_offset = Striper::get_file_offset(
+          g_ceph_context, &l, object_no, object_off);
+  ASSERT_EQ(26549568u, file_offset);
 }

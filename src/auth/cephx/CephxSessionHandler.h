@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,44 +7,38 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
-#include "../AuthSessionHandler.h"
-#include "../Auth.h"
+#include "auth/AuthSessionHandler.h"
+#include "auth/Auth.h"
+#include "include/common_fwd.h"
 
-class CephContext;
+class Message;
 
 class CephxSessionHandler  : public AuthSessionHandler {
+  CephContext *cct;
+  int protocol;
+  CryptoKey key;                // per mon authentication
   uint64_t features;
-
-public:
-  CephxSessionHandler(CephContext *cct_, CryptoKey session_key, uint64_t features)
-    : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key),
-      features(features) {}
-  ~CephxSessionHandler() {}
-  
-  bool no_security() {
-    return false;
-  }
 
   int _calc_signature(Message *m, uint64_t *psig);
 
-  int sign_message(Message *m);
-  int check_message_signature(Message *m) ;
-
-  // Cephx does not currently encrypt messages, so just return 0 if called.  PLR
-
-  int encrypt_message(Message *m) {
-    return 0;
+public:
+  CephxSessionHandler(CephContext *cct,
+		      const CryptoKey& session_key,
+		      const uint64_t features)
+    : cct(cct),
+      protocol(CEPH_AUTH_CEPHX),
+      key(session_key),
+      features(features) {
   }
+  ~CephxSessionHandler() override = default;
 
-  int decrypt_message(Message *m) {
-    return 0;
-  }
-
+  int sign_message(Message *m) override;
+  int check_message_signature(Message *m) override ;
 };
 

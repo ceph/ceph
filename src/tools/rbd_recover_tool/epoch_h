@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # file: epoch_h
 #
 # Copyright (C) 2015 Ubuntu Kylin
@@ -42,7 +42,7 @@ function get_infos_seq()
   local infos_key=`get_map_header_key $keyword`
 
   if [ "$infos_key"x = ""x ];then
-    echo "$func: keyword not input or infos_key not exisits"
+    echo "$func: keyword not input or infos_key not exists"
     exit 
   fi
   local prefix=`get_map_header_prefix`
@@ -63,6 +63,30 @@ function get_pg_epoch()
     echo "$func: no pgid input"
     exit
   fi
+
+  get_pg_epoch_firefly "$1"
+  if [ "$pg_epoch"x != ""x ]; then
+    # echo "Epoch for $1: $pg_epoch (firefly)"
+    return
+  fi
+
+  get_pg_epoch_hammer "$1"
+  if [ "$pg_epoch"x != ""x ]; then
+    # echo "Epoch for $1: $pg_epoch (hammer)"
+    return
+  fi
+
+  echo "$func: Couldn't find epoch for $1"
+  exit
+}
+
+function get_pg_epoch_firefly()
+{
+  local func="get_pg_epoch_firefly"
+  if [ "$1"x = ""x ];then
+    echo "$func: no pgid input"
+    exit
+  fi
   local pgid=$1
   local key=$pgid"_epoch"
 
@@ -73,8 +97,23 @@ function get_pg_epoch()
   local prefix="_USER_"$infos_seq"_USER_"
 
   pg_epoch=`get_header_kv $prefix $key int`
-  if [ "$pg_epoch"x = ""x ];then
-    echo "$func: $key not exisits"
+}
+
+function get_pg_epoch_hammer()
+{
+  local func="get_pg_epoch_hammer"
+  if [ "$1"x = ""x ];then
+    echo "$func: no pgid input"
     exit
   fi
+  local pgid="$1"
+  local hkey_prefix="$(get_map_header_prefix)"
+  local hkey="$(printf '...head.%x.%08X' "$(echo "$pgid"|cut -d'.' -f1)" "$((0x$(echo "$pgid"|cut -d'.' -f2)))")"
+
+  local infos_seq="$(get_header_seq "$hkey_prefix" "$hkey")"
+  local infos_seq=`printf "%016d" $infos_seq`
+  local prefix="_USER_"$infos_seq"_USER_"
+  local key="_epoch"
+
+  pg_epoch=`get_header_kv $prefix $key int`
 }

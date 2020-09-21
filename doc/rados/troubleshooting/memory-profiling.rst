@@ -6,7 +6,7 @@ Ceph MON, OSD and MDS can generate heap profiles using
 ``tcmalloc``. To generate heap profiles, ensure you have
 ``google-perftools`` installed::
 
-	sudo apt-get google-perftools
+	sudo apt-get install google-perftools
 
 The profiler dumps output to your ``log file`` directory (i.e.,
 ``/var/log/ceph``). See `Logging and Debugging`_ for details.
@@ -139,4 +139,4 @@ For example::
 	ceph tell osd.0 heap stop_profiler
 
 .. _Logging and Debugging: ../log-and-debug
-.. _Google Heap Profiler: http://google-perftools.googlecode.com/svn/trunk/doc/heapprofile.html
+.. _Google Heap Profiler: http://goog-perftools.sourceforge.net/doc/heap_profiler.html

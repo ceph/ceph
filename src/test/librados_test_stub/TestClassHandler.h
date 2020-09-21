@@ -23,8 +23,11 @@ public:
   ~TestClassHandler();
 
   struct MethodContext {
+    ~MethodContext();
+
     TestIoCtxImpl *io_ctx_impl;
     std::string oid;
+    uint64_t snap_id;
     SnapContext snapc;
   };
   typedef boost::shared_ptr<MethodContext> SharedMethodContext;
@@ -34,9 +37,11 @@ public:
   };
   typedef boost::shared_ptr<Method> SharedMethod;
   typedef std::map<std::string, SharedMethod> Methods;
+  typedef std::map<std::string, cls_cxx_filter_factory_t> Filters;
 
   struct Class {
     Methods methods;
+    Filters filters;
   };
   typedef boost::shared_ptr<Class> SharedClass;
 
@@ -50,7 +55,11 @@ public:
                                    const std::string &method);
   SharedMethodContext get_method_context(TestIoCtxImpl *io_ctx_impl,
                                          const std::string &oid,
+                                         uint64_t snap_id,
                                          const SnapContext &snapc);
+
+  int create_filter(cls_handle_t hclass, const std::string& filter_name,
+		    cls_cxx_filter_factory_t fn);
 
 private:
 
@@ -59,6 +68,7 @@ private:
 
   Classes m_classes;
   ClassHandles m_class_handles;
+  Filters m_filters;
 
   void open_class(const std::string& name, const std::string& path);
 

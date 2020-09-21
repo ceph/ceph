@@ -1,9 +1,8 @@
 #include "acconfig.h"
-#include "include/int_types.h"
 #include "common/crc32c_intel_baseline.h"
 
-extern unsigned int crc32_iscsi_00(unsigned char const *buffer, int len, unsigned int crc);
-extern unsigned int crc32_iscsi_zero_00(unsigned char const *buffer, int len, unsigned int crc);
+extern unsigned int crc32_iscsi_00(unsigned char const *buffer, uint64_t len, uint64_t crc) asm("crc32_iscsi_00");
+extern unsigned int crc32_iscsi_zero_00(unsigned char const *buffer, uint64_t len, uint64_t crc) asm("crc32_iscsi_zero_00");
 
 #ifdef HAVE_GOOD_YASM_ELF64
 
@@ -12,9 +11,10 @@ uint32_t ceph_crc32c_intel_fast(uint32_t crc, unsigned char const *buffer, unsig
 	uint32_t v;
 	unsigned left;
 
-
 	if (!buffer)
-		return crc32_iscsi_zero_00(buffer, len, crc);
+	{
+	  return crc32_iscsi_zero_00(buffer, len, crc);
+	}
 
 	/*
 	 * the crc32_iscsi_00 method reads past buffer+len (because it

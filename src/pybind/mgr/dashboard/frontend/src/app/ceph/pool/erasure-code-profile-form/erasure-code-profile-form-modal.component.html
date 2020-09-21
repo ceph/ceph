@@ -1,0 +1,345 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="form"
+          novalidate>
+      <div class="modal-body">
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="name"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input type="text"
+                   id="name"
+                   name="name"
+                   class="form-control"
+                   placeholder="Name..."
+                   formControlName="name"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', frm, 'required')"
+                  i18n>This field is required!</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', frm, 'pattern')"
+                  i18n>The name can only consist of alphanumeric characters, dashes and underscores.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', frm, 'uniqueName')"
+                  i18n>The chosen erasure code profile name is already in use.</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="plugin"
+                 class="cd-col-form-label">
+            <span class="required"
+                  i18n>Plugin</span>
+            <cd-helper [html]="tooltips.plugins[plugin].description">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="plugin"
+                    name="plugin"
+                    formControlName="plugin">
+              <option *ngIf="!plugins"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngFor="let plugin of plugins"
+                      [ngValue]="plugin">
+                {{ plugin }}
+              </option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', frm, 'required')"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="k"
+                 class="cd-col-form-label">
+            <span class="required"
+                  i18n>Data chunks (k)</span>
+            <cd-helper [html]="tooltips.k">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="k"
+                   name="k"
+                   class="form-control"
+                   ng-model="$ctrl.erasureCodeProfile.k"
+                   placeholder="Data chunks..."
+                   formControlName="k">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'required')"
+                  i18n>This field is required!</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'min')"
+                  i18n>Must be equal to or greater than 2.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'max')"
+                  i18n>Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'unequal')"
+                  i18n>For an equal distribution k has to be a multiple of (k+m)/l.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'kLowerM')"
+                  i18n>K has to be equal to or greater than m in order to recover data correctly through c.</span>
+            <span *ngIf="plugin === 'lrc'"
+                  class="form-text text-muted"
+                  i18n>Distribution factor: {{lrcMultiK}}</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="m"
+                 class="cd-col-form-label">
+            <span class="required"
+                  i18n>Coding chunks (m)</span>
+            <cd-helper [html]="tooltips.m">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="m"
+                   name="m"
+                   class="form-control"
+                   placeholder="Coding chunks..."
+                   formControlName="m">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('m', frm, 'required')"
+                  i18n>This field is required!</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('m', frm, 'min')"
+                  i18n>Must be equal to or greater than 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('m', frm, 'max')"
+                  i18n>Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.</span>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="plugin === 'shec'">
+          <label for="c"
+                 class="cd-col-form-label">
+            <span class="required"
+                  i18n>Durability estimator (c)</span>
+            <cd-helper [html]="tooltips.plugins.shec.c">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="c"
+                   name="c"
+                   class="form-control"
+                   placeholder="Coding chunks..."
+                   formControlName="c">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('c', frm, 'min')"
+                  i18n>Must be equal to or greater than 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('c', frm, 'cGreaterM')"
+                  i18n>C has to be equal to or lower than m as m defines the amount of chunks that can be used.</span>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="plugin === PLUGIN.LRC">
+          <label class="cd-col-form-label"
+                 for="l">
+            <span class="required"
+                  i18n>Locality (l)</span>
+            <cd-helper [html]="tooltips.plugins.lrc.l">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="l"
+                   name="l"
+                   class="form-control"
+                   placeholder="Coding chunks..."
+                   formControlName="l">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('l', frm, 'required')"
+                  i18n>This field is required!</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('l', frm, 'min')"
+                  i18n>Must be equal to or greater than 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('l', frm, 'unequal')"
+                  i18n>Can't split up chunks (k+m) correctly with the current locality.</span>
+            <span class="form-text text-muted"
+                  i18n>Locality groups: {{lrcGroups}}</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="crushFailureDomain"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush failure domain</ng-container>
+            <cd-helper [html]="tooltips.crushFailureDomain">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="crushFailureDomain"
+                    name="crushFailureDomain"
+                    formControlName="crushFailureDomain">
+              <option *ngIf="!failureDomains"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngFor="let domain of failureDomainKeys"
+                      [ngValue]="domain">
+                {{ domain }} ( {{failureDomains[domain].length}} )
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="plugin === PLUGIN.LRC">
+          <label for="crushLocality"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush Locality</ng-container>
+            <cd-helper [html]="tooltips.plugins.lrc.crushLocality">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="crushLocality"
+                    name="crushLocality"
+                    formControlName="crushLocality">
+              <option *ngIf="!failureDomains"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngIf="failureDomainKeys.length > 0"
+                      ngValue=""
+                      i18n>None</option>
+              <option *ngFor="let domain of failureDomainKeys"
+                      [ngValue]="domain">
+                {{ domain }} ( {{failureDomains[domain].length}} )
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="[PLUGIN.JERASURE, PLUGIN.ISA].includes(plugin)">
+          <label for="technique"
+                 class="cd-col-form-label">
+            <ng-container i18n>Technique</ng-container>
+            <cd-helper [html]="tooltips.plugins[plugin].technique">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="technique"
+                    name="technique"
+                    formControlName="technique">
+              <option *ngFor="let technique of techniques"
+                      [ngValue]="technique">
+                {{ technique }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="plugin === PLUGIN.JERASURE">
+          <label for="packetSize"
+                 class="cd-col-form-label">
+            <ng-container i18n>Packetsize</ng-container>
+            <cd-helper [html]="tooltips.plugins.jerasure.packetSize">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="packetSize"
+                   name="packetSize"
+                   class="form-control"
+                   placeholder="Packetsize..."
+                   formControlName="packetSize">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('packetSize', frm, 'min')"
+                  i18n>Must be equal to or greater than 1.</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="crushRoot"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush root</ng-container>
+            <cd-helper [html]="tooltips.crushRoot">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="crushRoot"
+                    name="crushRoot"
+                    formControlName="crushRoot">
+              <option *ngIf="!buckets"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngFor="let bucket of buckets"
+                      [ngValue]="bucket">
+                {{ bucket.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="crushDeviceClass"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush device class</ng-container>
+            <cd-helper [html]="tooltips.crushDeviceClass">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="crushDeviceClass"
+                    name="crushDeviceClass"
+                    formControlName="crushDeviceClass">
+              <option ngValue=""
+                      i18n>Let Ceph decide</option>
+              <option *ngFor="let deviceClass of devices"
+                      [ngValue]="deviceClass">
+                {{ deviceClass }}
+              </option>
+            </select>
+            <span class="form-text text-muted"
+                  i18n>Available OSDs: {{deviceCount}}</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="directory"
+                 class="cd-col-form-label">
+            <ng-container i18n>Directory</ng-container>
+            <cd-helper [html]="tooltips.directory">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="text"
+                   id="directory"
+                   name="directory"
+                   class="form-control"
+                   placeholder="Path..."
+                   formControlName="directory">
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="onSubmit()"
+                          i18n="form action button|Example: Create Pool@@formActionButton"
+                          [form]="frm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"></cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

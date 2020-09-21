@@ -22,7 +22,7 @@
 #include "include/utime.h"
 #include "include/types.h"
 #include "include/encoding.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "global/global_context.h"
@@ -32,7 +32,6 @@
 #include <sstream>
 #include <stdarg.h>
 
-using namespace std;
 using ceph::bufferlist;
 
 enum {
@@ -105,14 +104,14 @@ struct key_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(raw_key, bl);
-    ::encode(prefix, bl);
+    encode(raw_key, bl);
+    encode(prefix, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(raw_key, p);
-    ::decode(prefix, p);
+    decode(raw_key, p);
+    decode(prefix, p);
     DECODE_FINISH(p);
   }
 };
@@ -176,24 +175,24 @@ struct object_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(min_kdata, bl);
-    ::encode(max_kdata, bl);
-    ::encode(name, bl);
-    ::encode(omap, bl);
-    ::encode(unwritable, bl);
-    ::encode(version, bl);
-    ::encode(size, bl);
+    encode(min_kdata, bl);
+    encode(max_kdata, bl);
+    encode(name, bl);
+    encode(omap, bl);
+    encode(unwritable, bl);
+    encode(version, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(min_kdata, p);
-    ::decode(max_kdata, p);
-    ::decode(name, p);
-    ::decode(omap, p);
-    ::decode(unwritable, p);
-    ::decode(version, p);
-    ::decode(size, p);
+    decode(min_kdata, p);
+    decode(max_kdata, p);
+    decode(name, p);
+    decode(omap, p);
+    decode(unwritable, p);
+    decode(version, p);
+    decode(size, p);
     DECODE_FINISH(p);
   }
 };
@@ -232,16 +231,16 @@ struct create_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(min, bl);
-    ::encode(max, bl);
-    ::encode(obj, bl);
+    encode(min, bl);
+    encode(max, bl);
+    encode(obj, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(min, p);
-    ::decode(max, p);
-    ::decode(obj, p);
+    decode(min, p);
+    decode(max, p);
+    decode(obj, p);
     DECODE_FINISH(p);
   }
 };
@@ -279,18 +278,18 @@ struct delete_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(min, bl);
-    ::encode(max, bl);
-    ::encode(obj, bl);
-    ::encode(version, bl);
+    encode(min, bl);
+    encode(max, bl);
+    encode(obj, bl);
+    encode(version, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(min, p);
-    ::decode(max, p);
-    ::decode(obj, p);
-    ::decode(version, p);
+    decode(min, p);
+    decode(max, p);
+    decode(obj, p);
+    decode(version, p);
     DECODE_FINISH(p);
   }
 };
@@ -355,24 +354,24 @@ struct index_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(prefix, bl);
-    ::encode(min_kdata, bl);
-    ::encode(kdata, bl);
-    ::encode(ts, bl);
-    ::encode(to_create, bl);
-    ::encode(to_delete, bl);
-    ::encode(obj, bl);
+    encode(prefix, bl);
+    encode(min_kdata, bl);
+    encode(kdata, bl);
+    encode(ts, bl);
+    encode(to_create, bl);
+    encode(to_delete, bl);
+    encode(obj, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(prefix, p);
-    ::decode(min_kdata, p);
-    ::decode(kdata, p);
-    ::decode(ts, p);
-    ::decode(to_create, p);
-    ::decode(to_delete, p);
-    ::decode(obj, p);
+    decode(prefix, p);
+    decode(min_kdata, p);
+    decode(kdata, p);
+    decode(ts, p);
+    decode(to_create, p);
+    decode(to_delete, p);
+    decode(obj, p);
     DECODE_FINISH(p);
   }
 
@@ -519,9 +518,9 @@ protected:
   bool verbose;//if true, display lots of debug output
 
   //shared variables protected with mutexes
-  Mutex client_index_lock;
+  ceph::mutex client_index_lock = ceph::make_mutex("client_index_lock");
   int client_index; //names of new objects are client_name.client_index
-  Mutex icache_lock;
+  ceph::mutex icache_lock = ceph::make_mutex("icache_lock");
   IndexCache icache;
   friend struct index_data;
 
@@ -749,15 +748,15 @@ public:
   /**
    * returns 0
    */
-  int nothing();
+  int nothing() override;
   /**
    * 10% chance of waiting wait_ms seconds
    */
-  int wait();
+  int wait() override;
   /**
    * 10% chance of killing the client.
    */
-  int suicide();
+  int suicide() override;
 
 KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
     bool verb)
@@ -772,9 +771,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
     cache_size(cache),
     cache_refresh(cache_r),
     verbose(verb),
-    client_index_lock("client_index_lock"),
     client_index(0),
-    icache_lock("icache_lock"),
     icache(cache)
   {}
 
@@ -813,20 +810,20 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
   /**
    * sets this kvba to call inject before every ObjectWriteOperation.
    * If inject is wait and wait_time is set, wait will have a 10% chance of
-   * sleeping for waite_time miliseconds.
+   * sleeping for waite_time milliseconds.
    */
-  void set_inject(injection_t inject, int wait_time);
+  void set_inject(injection_t inject, int wait_time) override;
 
   /**
    * sets up the rados and io_ctx of this KvFlatBtreeAsync. If the don't already
    * exist, creates the index and max object.
    */
-  int setup(int argc, const char** argv);
+  int setup(int argc, const char** argv) override;
 
   int set(const string &key, const bufferlist &val,
-        bool update_on_existing);
+        bool update_on_existing) override;
 
-  int remove(const string &key);
+  int remove(const string &key) override;
 
   /**
    * returns true if all of the following are true:
@@ -840,23 +837,23 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    *
    * @pre: no operations are in progress
    */
-  bool is_consistent();
+  bool is_consistent() override;
 
   /**
    * returns an ASCII representation of the index and sub objects, showing
    * stats about each object and all omaps. Don't use if you have more than
    * about 10 objects.
    */
-  string str();
+  string str() override;
 
-  int get(const string &key, bufferlist *val);
+  int get(const string &key, bufferlist *val) override;
 
   //async versions of these methods
   void aio_get(const string &key, bufferlist *val, callback cb,
-      void *cb_args, int * err);
+      void *cb_args, int * err) override;
   void aio_set(const string &key, const bufferlist &val, bool exclusive,
-      callback cb, void * cb_args, int * err);
-  void aio_remove(const string &key, callback cb, void *cb_args, int * err);
+      callback cb, void * cb_args, int * err) override;
+  void aio_remove(const string &key, callback cb, void *cb_args, int * err) override;
 
   //these methods that deal with multiple keys at once are efficient, but make
   //no guarantees about atomicity!
@@ -866,7 +863,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * attempt to do this safely - make sure this is the only operation running
    * when it is called!
    */
-  int remove_all();
+  int remove_all() override;
 
   /**
    * This does not add prefixes to the index and therefore DOES NOT guarantee
@@ -890,10 +887,10 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * * The keys are distributed across the range of keys in the store
    * * there is a small number of keys compared to k
    */
-  int set_many(const map<string, bufferlist> &in_map);
+  int set_many(const map<string, bufferlist> &in_map) override;
 
-  int get_all_keys(std::set<string> *keys);
-  int get_all_keys_and_values(map<string,bufferlist> *kv_map);
+  int get_all_keys(std::set<string> *keys) override;
+  int get_all_keys_and_values(map<string,bufferlist> *kv_map) override;
 
 };
 

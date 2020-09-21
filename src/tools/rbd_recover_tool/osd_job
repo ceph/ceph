@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # file: osd_job
 #
 # Copyright (C) 2015 Ubuntu Kylin

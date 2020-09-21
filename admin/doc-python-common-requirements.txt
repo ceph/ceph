@@ -1,0 +1,3 @@
+pcpp
+Jinja2
+-e../src/python-common

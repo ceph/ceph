@@ -1,4 +1,4 @@
-.TH  "ceph_selinux"  "8"  "15-06-17" "ceph" "SELinux Policy ceph"
+.TH  "ceph_selinux"  "8"  "16-02-11" "ceph" "SELinux Policy ceph"
 .SH "NAME"
 ceph_selinux \- Security Enhanced Linux Policy for the ceph processes
 .SH "DESCRIPTION"
@@ -18,7 +18,7 @@ The ceph_t SELinux type can be entered via the \fBceph_exec_t\fP file type.
 
 The default entrypoint paths for the ceph_t domain are the following:
 
-/usr/bin/ceph-mon, /usr/bin/ceph-mds, /usr/bin/ceph-osd
+/usr/bin/radosgw, /usr/bin/ceph-mon, /usr/bin/ceph-mds, /usr/bin/ceph-osd
 .SH PROCESS TYPES
 SELinux defines process types (domains) for each process running on the system
 .PP
@@ -145,6 +145,22 @@ If you want to allow confined applications to use nscd shared memory, you must t
 
 .EE
 
+.SH NSSWITCH DOMAIN
+
+.PP
+If you want to allow users to resolve user passwd entries directly from ldap rather then using a sssd server for the ceph_t, you must turn on the authlogin_nsswitch_use_ldap boolean.
+
+.EX
+.B setsebool -P authlogin_nsswitch_use_ldap 1
+.EE
+
+.PP
+If you want to allow confined applications to run with kerberos for the ceph_t, you must turn on the kerberos_enabled boolean.
+
+.EX
+.B setsebool -P kerberos_enabled 1
+.EE
+
 .SH "MANAGED FILES"
 
 The SELinux process type ceph_t can manage files labeled with the following file types.  The paths listed are the default paths for these file types.  Note the processes UID still need to have DAC permissions.
@@ -153,6 +169,8 @@ The SELinux process type ceph_t can manage files labeled with the following file
 .B ceph_log_t
 
 	/var/log/ceph(/.*)?
+.br
+	/var/log/radosgw(/.*)?
 .br
 
 .br
@@ -216,11 +234,81 @@ The SELinux process type ceph_t can manage files labeled with the following file
 .br
 
 .br
+.B fsadm_var_run_t
+
+	/var/run/blkid(/.*)?
+.br
+
+.br
+.B initrc_tmp_t
+
+
+.br
+.B mnt_t
+
+	/mnt(/[^/]*)?
+.br
+	/mnt(/[^/]*)?
+.br
+	/rhev(/[^/]*)?
+.br
+	/media(/[^/]*)?
+.br
+	/media(/[^/]*)?
+.br
+	/media/\.hal-.*
+.br
+	/var/run/media(/[^/]*)?
+.br
+	/net
+.br
+	/afs
+.br
+	/rhev
+.br
+	/misc
+.br
+
+.br
 .B root_t
 
 	/
 .br
 	/initrd
+.br
+
+.br
+.B tmp_t
+
+	/sandbox(/.*)?
+.br
+	/tmp
+.br
+	/usr/tmp
+.br
+	/var/tmp
+.br
+	/tmp-inst
+.br
+	/var/tmp-inst
+.br
+	/var/tmp/vi\.recover
+.br
+
+.br
+.B var_run_t
+
+	/run/.*
+.br
+	/var/run/.*
+.br
+	/run
+.br
+	/var/run
+.br
+	/var/run
+.br
+	/var/spool/postfix/pid
 .br
 
 .SH FILE CONTEXTS
@@ -238,7 +326,7 @@ SELinux ceph policy is very flexible allowing users to setup their ceph processe
 SELinux defines the file context types for the ceph, if you wanted to
 store files with these types in a diffent paths, you need to execute the semanage command to sepecify alternate labeling and then use restorecon to put the labels on disk.
 
-.B semanage fcontext -a -t ceph_var_run_t '/srv/myceph_content(/.*)?'
+.B semanage fcontext -a -t ceph_exec_t '/srv/ceph/content(/.*)?'
 .br
 .B restorecon -R -v /srv/myceph_content
 
@@ -257,7 +345,7 @@ Note: SELinux often uses regular expressions to specify labels that match multip
 .br
 .TP 5
 Paths:
-/usr/bin/ceph-mon, /usr/bin/ceph-mds, /usr/bin/ceph-osd
+/usr/bin/radosgw, /usr/bin/ceph-mon, /usr/bin/ceph-mds, /usr/bin/ceph-osd
 
 .EX
 .PP
@@ -266,6 +354,10 @@ Paths:
 
 - Set files with the ceph_initrc_exec_t type, if you want to transition an executable to the ceph_initrc_t domain.
 
+.br
+.TP 5
+Paths:
+/etc/rc\.d/init\.d/ceph, /etc/rc\.d/init\.d/radosgw
 
 .EX
 .PP
@@ -274,6 +366,10 @@ Paths:
 
 - Set files with the ceph_log_t type, if you want to treat the data as ceph log data, usually stored under the /var/log directory.
 
+.br
+.TP 5
+Paths:
+/var/log/ceph(/.*)?, /var/log/radosgw(/.*)?
 
 .EX
 .PP

@@ -20,22 +20,22 @@
 #include "msg/Message.h"
 
 class MCommand : public Message {
- public:
+public:
   uuid_d fsid;
-  std::vector<string> cmd;
+  std::vector<std::string> cmd;
 
   MCommand()
-    : Message(MSG_MON_COMMAND) {}
+    : Message{MSG_COMMAND} {}
   MCommand(const uuid_d &f)
-    : Message(MSG_COMMAND),
+    : Message{MSG_COMMAND},
       fsid(f) { }
 
 private:
-  ~MCommand() {}
+  ~MCommand() override {}
 
-public:  
-  const char *get_type_name() const { return "command"; }
-  void print(ostream& o) const {
+public:
+  std::string_view get_type_name() const override { return "command"; }
+  void print(std::ostream& o) const override {
     o << "command(tid " << get_tid() << ": ";
     for (unsigned i=0; i<cmd.size(); i++) {
       if (i) o << ' ';
@@ -44,14 +44,16 @@ public:
     o << ")";
   }
   
-  void encode_payload(uint64_t features) {
-    ::encode(fsid, payload);
-    ::encode(cmd, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(cmd, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(cmd, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(cmd, p);
   }
 };
 

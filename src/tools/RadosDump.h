@@ -67,16 +67,18 @@ struct super_header {
   super_header() : magic(0), version(0), header_size(0), footer_size(0) { }
 
   void encode(bufferlist& bl) const {
-    ::encode(magic, bl);
-    ::encode(version, bl);
-    ::encode(header_size, bl);
-    ::encode(footer_size, bl);
+    using ceph::encode;
+    encode(magic, bl);
+    encode(version, bl);
+    encode(header_size, bl);
+    encode(footer_size, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(magic, bl);
-    ::decode(version, bl);
-    ::decode(header_size, bl);
-    ::decode(footer_size, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(magic, bl);
+    decode(version, bl);
+    decode(header_size, bl);
+    decode(footer_size, bl);
   }
 };
 
@@ -90,16 +92,16 @@ struct header {
   void encode(bufferlist& bl) const {
     uint32_t debug_type = (type << 24) | (type << 16) | shortmagic;
     ENCODE_START(1, 1, bl);
-    ::encode(debug_type, bl);
-    ::encode(size, bl);
+    encode(debug_type, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     uint32_t debug_type;
     DECODE_START(1, bl);
-    ::decode(debug_type, bl);
+    decode(debug_type, bl);
     type = debug_type >> 24;
-    ::decode(size, bl);
+    decode(size, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -110,12 +112,12 @@ struct footer {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(magic, bl);
+    encode(magic, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(magic, bl);
+    decode(magic, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -133,20 +135,20 @@ struct pg_begin {
     // shard will be NO_SHARD for a replicated pool.  This means
     // that we allow the decode by struct_v 2.
     ENCODE_START(3, 2, bl);
-    ::encode(pgid.pgid, bl);
-    ::encode(superblock, bl);
-    ::encode(pgid.shard, bl);
+    encode(pgid.pgid, bl);
+    encode(superblock, bl);
+    encode(pgid.shard, bl);
     ENCODE_FINISH(bl);
   }
   // NOTE: New super_ver prevents decode from ver 1
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(3, bl);
-    ::decode(pgid.pgid, bl);
+    decode(pgid.pgid, bl);
     if (struct_v > 1) {
-      ::decode(superblock, bl);
+      decode(superblock, bl);
     }
     if (struct_v > 2) {
-      ::decode(pgid.shard, bl);
+      decode(pgid.shard, bl);
     } else {
       pgid.shard = shard_id_t::NO_SHARD;
     }
@@ -161,7 +163,7 @@ struct object_begin {
   // of object processing.
   object_info_t oi;
 
-  object_begin(const ghobject_t &hoid): hoid(hoid) { }
+  explicit object_begin(const ghobject_t &hoid): hoid(hoid) { }
   object_begin() { }
 
   // If superblock doesn't include CEPH_FS_FEATURE_INCOMPAT_SHARDS then
@@ -169,24 +171,24 @@ struct object_begin {
   // pool.  This means we will allow the decode by struct_v 1.
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
-    ::encode(hoid.hobj, bl);
-    ::encode(hoid.generation, bl);
-    ::encode(hoid.shard_id, bl);
-    ::encode(oi, bl);
+    encode(hoid.hobj, bl);
+    encode(hoid.generation, bl);
+    encode(hoid.shard_id, bl);
+    encode(oi, bl, -1);  /* FIXME: we always encode with full features */
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(3, bl);
-    ::decode(hoid.hobj, bl);
+    decode(hoid.hobj, bl);
     if (struct_v > 1) {
-      ::decode(hoid.generation, bl);
-      ::decode(hoid.shard_id, bl);
+      decode(hoid.generation, bl);
+      decode(hoid.shard_id, bl);
     } else {
       hoid.generation = ghobject_t::NO_GEN;
       hoid.shard_id = shard_id_t::NO_SHARD;
     }
     if (struct_v > 2) {
-      ::decode(oi, bl);
+      decode(oi, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -202,29 +204,29 @@ struct data_section {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(offset, bl);
-    ::encode(len, bl);
-    ::encode(databl, bl);
+    encode(offset, bl);
+    encode(len, bl);
+    encode(databl, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(offset, bl);
-    ::decode(len, bl);
-    ::decode(databl, bl);
+    decode(offset, bl);
+    decode(len, bl);
+    decode(databl, bl);
     DECODE_FINISH(bl);
   }
 };
 
 struct attr_section {
   map<string,bufferlist> data;
-  attr_section(const map<string,bufferlist> &data) : data(data) { }
-  attr_section(map<string, bufferptr> &data_)
+  explicit attr_section(const map<string,bufferlist> &data) : data(data) { }
+  explicit attr_section(map<string, bufferptr> &data_)
   {
     for (std::map<std::string, bufferptr>::iterator i = data_.begin();
          i != data_.end(); ++i) {
       bufferlist bl;
-      bl.push_front(i->second);
+      bl.push_back(i->second);
       data[i->first] = bl;
     }
   }
@@ -233,47 +235,47 @@ struct attr_section {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(data, bl);
+    encode(data, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(data, bl);
+    decode(data, bl);
     DECODE_FINISH(bl);
   }
 };
 
 struct omap_hdr_section {
   bufferlist hdr;
-  omap_hdr_section(bufferlist hdr) : hdr(hdr) { }
+  explicit omap_hdr_section(bufferlist hdr) : hdr(hdr) { }
   omap_hdr_section() { }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(hdr, bl);
+    encode(hdr, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(hdr, bl);
+    decode(hdr, bl);
     DECODE_FINISH(bl);
   }
 };
 
 struct omap_section {
   map<string, bufferlist> omap;
-  omap_section(const map<string, bufferlist> &omap) :
+  explicit omap_section(const map<string, bufferlist> &omap) :
     omap(omap) { }
   omap_section() { }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(omap, bl);
+    encode(omap, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(omap, bl);
+    decode(omap, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -284,45 +286,53 @@ struct metadata_section {
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
-  map<epoch_t,pg_interval_t> past_intervals;
+  PastIntervals past_intervals;
   OSDMap osdmap;
   bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
   map<eversion_t, hobject_t> divergent_priors;
+  pg_missing_t missing;
 
-  metadata_section(__u8 struct_ver, epoch_t map_epoch, const pg_info_t &info,
-		   const pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
-		   map<eversion_t, hobject_t> &divergent_priors)
+  metadata_section(
+    __u8 struct_ver,
+    epoch_t map_epoch,
+    const pg_info_t &info,
+    const pg_log_t &log,
+    const PastIntervals &past_intervals,
+    const pg_missing_t &missing)
     : struct_ver(struct_ver),
       map_epoch(map_epoch),
       info(info),
       log(log),
       past_intervals(past_intervals),
-      divergent_priors(divergent_priors) { }
+      missing(missing) {}
   metadata_section()
     : struct_ver(0),
       map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
-    ::encode(struct_ver, bl);
-    ::encode(map_epoch, bl);
-    ::encode(info, bl);
-    ::encode(log, bl);
-    ::encode(past_intervals, bl);
+    ENCODE_START(6, 6, bl);
+    encode(struct_ver, bl);
+    encode(map_epoch, bl);
+    encode(info, bl);
+    encode(log, bl);
+    encode(past_intervals, bl);
     // Equivalent to osdmap.encode(bl, features); but
     // preserving exact layout for CRC checking.
     bl.append(osdmap_bl);
-    ::encode(divergent_priors, bl);
+    encode(divergent_priors, bl);
+    encode(missing, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(4, bl);
-    ::decode(struct_ver, bl);
-    ::decode(map_epoch, bl);
-    ::decode(info, bl);
-    ::decode(log, bl);
-    if (struct_v > 1) {
-      ::decode(past_intervals, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(6, bl);
+    decode(struct_ver, bl);
+    decode(map_epoch, bl);
+    decode(info, bl);
+    decode(log, bl);
+    if (struct_v >= 6) {
+      decode(past_intervals, bl);
+    } else if (struct_v > 1) {
+      cout << "NOTICE: Older export with classic past_intervals" << std::endl;
     } else {
       cout << "NOTICE: Older export without past_intervals" << std::endl;
     }
@@ -332,7 +342,10 @@ struct metadata_section {
       cout << "WARNING: Older export without OSDMap information" << std::endl;
     }
     if (struct_v > 3) {
-      ::decode(divergent_priors, bl);
+      decode(divergent_priors, bl);
+    }
+    if (struct_v > 4) {
+      decode(missing, bl);
     }
     DECODE_FINISH(bl);
   }

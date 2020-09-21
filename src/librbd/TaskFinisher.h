@@ -3,63 +3,89 @@
 #ifndef LIBRBD_TASK_FINISHER_H
 #define LIBRBD_TASK_FINISHER_H
 
-#include "include/int_types.h"
+#include "include/common_fwd.h"
 #include "include/Context.h"
+#include "common/ceph_context.h"
 #include "common/Finisher.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include <map>
 #include <utility>
 
-class CephContext;
-class Context;
 
 namespace librbd {
 
-template <typename Task>
-class TaskFinisher {
-public:
-  TaskFinisher(CephContext &cct)
-    : m_cct(cct), m_lock("librbd::TaskFinisher::m_lock"),
-      m_finisher(new Finisher(&cct)),
-      m_safe_timer(new SafeTimer(&cct, m_lock, false))
-  {
-    m_finisher->start();
-    m_safe_timer->init();
+struct TaskFinisherSingleton {
+  ceph::mutex m_lock = ceph::make_mutex("librbd::TaskFinisher::m_lock");
+  SafeTimer *m_safe_timer;
+  Finisher *m_finisher;
+
+  static TaskFinisherSingleton& get_singleton(CephContext* cct) {
+    return cct->lookup_or_create_singleton_object<
+      TaskFinisherSingleton>("librbd::TaskFinisherSingleton", false, cct);
   }
 
-  ~TaskFinisher() {
+  explicit TaskFinisherSingleton(CephContext *cct) {
+    m_safe_timer = new SafeTimer(cct, m_lock, false);
+    m_safe_timer->init();
+    m_finisher = new Finisher(cct, "librbd::TaskFinisher::m_finisher", "taskfin_librbd");
+    m_finisher->start();
+  }
+  virtual ~TaskFinisherSingleton() {
     {
-      Mutex::Locker l(m_lock);
+      std::lock_guard l{m_lock};
       m_safe_timer->shutdown();
       delete m_safe_timer;
     }
-
     m_finisher->wait_for_empty();
     m_finisher->stop();
     delete m_finisher;
   }
 
-  void cancel(const Task& task) {
-    Mutex::Locker l(m_lock);
-    typename TaskContexts::iterator it = m_task_contexts.find(task);
-    if (it != m_task_contexts.end()) {
-      delete it->second.first;
-      m_task_contexts.erase(it);
-    }
+  void queue(Context* ctx, int r) {
+    m_finisher->queue(ctx, r);
+  }
+};
+
+
+template <typename Task>
+class TaskFinisher {
+public:
+  TaskFinisher(CephContext &cct) : m_cct(cct) {
+    auto& singleton = TaskFinisherSingleton::get_singleton(&cct);
+    m_lock = &singleton.m_lock;
+    m_safe_timer = singleton.m_safe_timer;
+    m_finisher = singleton.m_finisher;
   }
 
-  void cancel_all() {
-    Mutex::Locker l(m_lock);
-    for (typename TaskContexts::iterator it = m_task_contexts.begin();
-         it != m_task_contexts.end(); ++it) {
-      delete it->second.first;
+  bool cancel(const Task& task) {
+    std::lock_guard l{*m_lock};
+    typename TaskContexts::iterator it = m_task_contexts.find(task);
+    if (it == m_task_contexts.end()) {
+      return false;
     }
-    m_task_contexts.clear();
+    delete it->second.first;
+    bool canceled = m_safe_timer->cancel_event(it->second.second);
+    ceph_assert(canceled);
+    m_task_contexts.erase(it);
+    return true;
+  }
+
+  void cancel_all(Context *comp) {
+    {
+      std::lock_guard l{*m_lock};
+      for (typename TaskContexts::iterator it = m_task_contexts.begin();
+           it != m_task_contexts.end(); ++it) {
+        delete it->second.first;
+        m_safe_timer->cancel_event(it->second.second);
+      }
+      m_task_contexts.clear();
+    }
+    m_finisher->queue(comp);
   }
 
   bool add_event_after(const Task& task, double seconds, Context *ctx) {
-    Mutex::Locker l(m_lock);
+    std::lock_guard l{*m_lock};
     if (m_task_contexts.count(task) != 0) {
       // task already scheduled on finisher or timer
       delete ctx;
@@ -72,16 +98,30 @@ public:
     return true;
   }
 
-  void queue(Context *ctx) {
-    m_finisher->queue(ctx);
+  bool reschedule_event_after(const Task& task, double seconds) {
+    std::lock_guard l{*m_lock};
+    auto it = m_task_contexts.find(task);
+    if (it == m_task_contexts.end()) {
+      return false;
+    }
+    bool canceled = m_safe_timer->cancel_event(it->second.second);
+    ceph_assert(canceled);
+    auto timer_ctx = new C_Task(this, task);
+    it->second.second = timer_ctx;
+    m_safe_timer->add_event_after(seconds, timer_ctx);
+    return true;
+  }
+
+  void queue(Context *ctx, int r = 0) {
+    m_finisher->queue(ctx, r);
   }
 
   bool queue(const Task& task, Context *ctx) {
-    Mutex::Locker l(m_lock);
+    std::lock_guard l{*m_lock};
     typename TaskContexts::iterator it = m_task_contexts.find(task);
     if (it != m_task_contexts.end()) {
       if (it->second.second != NULL) {
-        assert(m_safe_timer->cancel_event(it->second.second));
+        ceph_assert(m_safe_timer->cancel_event(it->second.second));
         delete it->second.first;
       } else {
         // task already scheduled on the finisher
@@ -89,7 +129,7 @@ public:
         return false;
       }
     }
-    m_task_contexts[task] = std::make_pair(ctx, reinterpret_cast<Context *>(NULL));
+    m_task_contexts[task] = std::make_pair(ctx, reinterpret_cast<Context *>(0));
 
     m_finisher->queue(new C_Task(this, task));
     return true;
@@ -103,7 +143,7 @@ private:
     {
     }
   protected:
-    virtual void finish(int r) {
+    void finish(int r) override {
       m_task_finisher->complete(m_task);
     }
   private:
@@ -113,7 +153,7 @@ private:
 
   CephContext &m_cct;
 
-  Mutex m_lock;
+  ceph::mutex *m_lock;
   Finisher *m_finisher;
   SafeTimer *m_safe_timer;
 
@@ -123,7 +163,7 @@ private:
   void complete(const Task& task) {
     Context *ctx = NULL;
     {
-      Mutex::Locker l(m_lock);
+      std::lock_guard l{*m_lock};
       typename TaskContexts::iterator it = m_task_contexts.find(task);
       if (it != m_task_contexts.end()) {
         ctx = it->second.first;

@@ -1,0 +1,3737 @@
+commit 3e7492b9ada8bdc9a5cd0feafd42fbca27f9c38e
+Author: Jenkins Build Slave User <ceph-release-team@redhat.com>
+Date:   Tue Sep 26 16:27:07 2017 +0000
+
+    12.2.1
+
+commit bf5f5ec7cf0e06125515866acedcc04c393f90b9
+Merge: 63ce514631 d1a6631fc4
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 26 11:53:56 2017 -0400
+
+    Merge pull request #17970 from idryomov/wip-pr-17346-luminous
+    
+    luminous: qa/suites/krbd: rbd_xfstests job overhaul
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit d1a6631fc4f7eaf563377f52dcc6fdb5833c0dd1
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Fri Aug 18 17:49:03 2017 +0200
+
+    qa/suites/krbd: new rbd_xfstests job definition
+    
+    ext4 seems to be a better choice for our purposes -- less test churn,
+    rather small and reliable exclude list.
+    
+    All excluded tests but generic/050 fail with no krbd in the mix, most
+    have popped up on linux-ext4 list at least once.
+    
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit 6647c65ebe0688283cc8b9da9f638a4d6ffb75de)
+
+commit 902422c71d2e2322fa05dca2cf8d71e49033005c
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Thu Aug 17 15:35:42 2017 +0200
+
+    qa/tasks/rbd.xfstests: take exclude list from yaml
+    
+    Different filesystems (and further, different configurations of the
+    same filesystem) need different exclude lists.  Hard coding the list in
+    a wrapper script is inflexible.
+    
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit 01914be5a3b35479037054293b85d96596cb870b)
+    
+    Conflicts:
+            qa/run_xfstests_krbd.sh [ trivial, caused by commit
+              3aae5ca6fda8 ("scripts: fix bash path in shebangs") ]
+
+commit 49284c671b335887244fcd06a3667952068cf5f2
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Wed Aug 16 11:47:19 2017 +0200
+
+    qa/run_xfstests.sh: quit building xfstests on test nodes
+    
+    xfstests is a pain to build on trusty, xenial and centos7 with a single
+    script.  It is also very sensitive to dependencies, which again need to
+    be managed on all those distros -- different sets of supported commands
+    and switches, some versions have known bugs, etc.
+    
+    Download a pre-built, statically linked tarball and use it instead.
+    The tarball was generated using xfstests-bld by Ted Ts'o, with a number
+    of tweaks by myself (mostly concerning the build environment).
+    
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit 1a982fea53c30fb246c2ab28822af6a69165ffea)
+
+commit e318dbd19883118885e8eb6c7375d0ca8a3699f6
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Wed Aug 16 11:47:19 2017 +0200
+
+    qa/run_xfstests.sh: drop *_MKFS_OPTIONS variables
+    
+    AFAICT ./check doesn't query EXT4_MKFS_OPTIONS or BTRFS_MKFS_OPTIONS,
+    We don't need anything special for xfs, so remove all of them to avoid
+    confusion.
+    
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit 7a0e45046d556c6624e0225ff006c31d8dbae2a8)
+
+commit b5aeb7921d86452b5b19ac144685b3a199707751
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Wed Aug 16 11:47:19 2017 +0200
+
+    qa/run_xfstests.sh: kill FS_TYPE variable
+    
+    ./check expects FSTYP, so use that throughout.
+    
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit ca99f1e8406c14e5899d393ab0bb503061c47b9b)
+
+commit 63ce514631ab0106ebd242f0ece43409dc83f479
+Merge: 9f8d66ebc5 b335066f81
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 25 22:40:05 2017 +0200
+
+    Merge pull request #17945 from batrick/i21540
+    
+    luminous: qa whitelist fixes
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 9f8d66ebc5fb9ad48bdca4c56d54618a7a592415
+Merge: 35a23b861a 1dda4227a5
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 25 22:32:17 2017 +0200
+
+    Merge pull request #17821 from smithfarm/wip-21472-luminous
+    
+    luminous: tests: kcephfs: ignorable MDS cache too large warning
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit 1dda4227a5c8e2953c645c634e0b77dc6a0515a3
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Mon Aug 28 11:47:29 2017 -0700
+
+    qa: whitelist expected MDS_CACHE_OVERSIZED
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 71f0066f6ec32be18abc0c220a49e203ac3b9786)
+    
+    Conflicts:
+       qa/suites/kcephfs/recovery/tasks/client-limits.yaml - fix
+          already applied by some other commit
+
+commit b335066f81a0f990fb87b84f69c34dda037ba9cf
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Mon Aug 28 11:52:36 2017 -0700
+
+    qa: whitelist expected rstat warning
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit c53d091e5110011866aa85495ff4e5abe0442d71)
+
+commit 35a23b861a037ca0e0bc77952c413b46e95141d4
+Merge: b6f38c4fcd d94b3ca2ae
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Sep 25 15:43:06 2017 +0200
+
+    Merge pull request #17922 from batrick/kcephfs-backports
+    
+    luminous: qa: kcephfs whitelist fixes
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit b6f38c4fcd0643fd24644bf0d0ad249112727a5e
+Merge: 793b89dc80 16c5e4f0c3
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 22 13:25:59 2017 -0700
+
+    Merge pull request #17855 from smithfarm/wip-21490-luminous
+    
+    luminous: tests: test_rebuild_simple_altpool triggers MDS assertion
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 16c5e4f0c3f365f22e5cd79021f55c2927347a26
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Sep 20 15:44:40 2017 -0700
+
+    qa: get config only on running MDS
+    
+    Fixes: http://tracker.ceph.com/issues/21466
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 8a535d9c72965c79692dccc6ff418b46fb86c3eb)
+
+commit d94b3ca2ae04ff05937cb48a81901187212370a6
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:44:43 2017 -0700
+
+    qa: whitelist cache too large in client-limits
+    
+    Fixes: http://tracker.ceph.com/issues/21510
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 87039eb30a25158a192ab7099fa81fbb9ce02953)
+
+commit 018331f26c079c5d728a7009db24560e00407feb
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:42:06 2017 -0700
+
+    qa: whitelist failover log warnings
+    
+    Fixes: http://tracker.ceph.com/issues/21509
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 37a7737712f36422b5f035a0e02bab25ae2da890)
+
+commit dbad9455f956a6e7ebd731b68c50cbb96038542f
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:38:59 2017 -0700
+
+    qa: ignore evicted client in client-recovery
+    
+    Fixes: http://tracker.ceph.com/issues/21508
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 8ecef57bb10a83587f02ce087b657d303ae7c589)
+
+commit 793b89dc80c82a0f3027210d894dd1b4be6cc12b
+Merge: e8a6c0cfdf 4bb1d89373
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:53:43 2017 -0700
+
+    Merge PR #17878 into luminous
+    
+    * refs/remotes/upstream/pull/17878/head:
+            qa/cephfs: Fix error in test_filtered_df
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Amit Kumar <amitkuma@redhat.com>
+
+commit e8a6c0cfdf1a5ac2505afa7ca1814a9f356647d5
+Merge: 6f6a98619e b0cacf2684
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:53:41 2017 -0700
+
+    Merge PR #17877 into luminous
+    
+    * refs/remotes/upstream/pull/17877/head:
+            client: Delete onsafe
+            client: add mountedness check inside client_lock
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 6f6a98619e9e121fea20d1604fa97122209a6a72
+Merge: 71b3f31cad 7a84f943ed
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:53:39 2017 -0700
+
+    Merge PR #17870 into luminous
+    
+    * refs/remotes/upstream/pull/17870/head:
+            mds: reset Formatter on error
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Amit Kumar <amitkuma@redhat.com>
+
+commit 71b3f31cad17a735ee0c278de04c88338b78b746
+Merge: 26beaa6667 69f0422310
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:53:37 2017 -0700
+
+    Merge PR #17854 into luminous
+    
+    * refs/remotes/upstream/pull/17854/head:
+            mds: void sending cap import message when inode is frozen
+            client: fix message order check in handle_cap_export()
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 26beaa6667fbf95a371a2cf0d5130d8ff30327d9
+Merge: fc9043a2f5 97ab78548d
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:53:35 2017 -0700
+
+    Merge PR #17852 into luminous
+    
+    * refs/remotes/upstream/pull/17852/head:
+            mds: check ongoing catter-gather process before capping log
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit fc9043a2f5ee3d641cb5710675fa43c44784fe87
+Merge: 5ae7723f80 13f0c9f534
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Sep 22 09:53:33 2017 -0700
+
+    Merge PR #17822 into luminous
+    
+    * refs/remotes/upstream/pull/17822/head:
+            qa/cephfs: kill mount if it gets evicted by mds
+            qa/cephfs: fix test_evict_client
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Zheng Yan <zyan@redhat.com>
+
+commit 5ae7723f8028a888df93b71252ce3b31fc77da8d
+Merge: 653c332507 8d18150560
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 22 09:44:54 2017 -0700
+
+    Merge pull request #17817 from smithfarm/wip-21464-luminous
+    
+    luminous: qa: ignorable MDS_READ_ONLY warning
+    
+    Reviewed-by: Yan, Zheng <ukernel@gmail.com>
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit 653c332507c6642a4f8167d022ba452c91315c92
+Merge: 8681be5725 105f82d550
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 22 09:41:18 2017 -0700
+
+    Merge pull request #17879 from smithfarm/wip-21449-luminous
+    
+    luminous: tests: test_misc creates metadata pool with dummy object resulting in WRN: POOL_APP_NOT_ENABLED
+    
+    Reviewed-by: Amit Kumar amitkuma@redhat.com
+    Reviewed-by: Yan, Zheng <ukernel@gmail.com>
+
+commit 8681be5725b7a9a1256e338600dd2050e1ddf2f7
+Merge: 09451bc47b f4b4467f8e
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 22 09:40:46 2017 -0700
+
+    Merge pull request #17886 from smithfarm/wip-21486-luminous
+    
+    luminous: tests: [kcephfs] test_client_pin times out waiting for dentry release from kernel
+    
+    Reviewed-by: Amit Kumar amitkuma@redhat.com
+    Reviewed-by: Yan, Zheng <ukernel@gmail.com>
+
+commit 09451bc47bd1d061c022d098d462206f1dac83ac
+Merge: 1700dc4f14 c902ebe7e8
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 22 09:39:26 2017 -0700
+
+    Merge pull request #17887 from smithfarm/wip-21487-luminous
+    
+    luminous: cephfs: MDS rank add/remove log messages say wrong number of ranks
+    
+    Reviewed-by: Amit Kumar amitkuma@redhat.com
+    Reviewed-by: Yan, Zheng <ukernel@gmail.com>
+
+commit 1700dc4f1409bbc8202b420deadfc494aaaaed74
+Merge: a931cf6812 f09786d294
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 22 09:37:42 2017 -0700
+
+    Merge pull request #17888 from smithfarm/wip-21488-luminous
+    
+    luminous: tests: failures from pjd fstest
+    
+    Reviewed-by: Amit Kumar amitkuma@redhat.com
+    Reviewed-by: Yan, Zheng <ukernel@gmail.com>
+
+commit a931cf68120d99661b785cc794e2b6965d621f06
+Merge: 0132a275aa 875f1c2519
+Author: Sage Weil <sage@newdream.net>
+Date:   Thu Sep 21 10:56:16 2017 -0500
+
+    Merge pull request #17812 from liewegas/wip-21410-luminous
+    
+    Revert "osd/OSDMap: allow bidirectional swap of pg-upmap-items"
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: xie xingguo <xie.xingguo@zte.com.cn>
+
+commit f09786d2940ca5532f6f59464be4fdf29a4d75b3
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sun Sep 17 16:51:04 2017 +0800
+
+    ceph: do link/rename semantic checks after srcdn is readable
+    
+    For hard link, source inode must not be directory. For rename,
+    types of source/destination inodes must match. If srcdn is replica
+    and we do these checks while it's not readble, it's possible that
+    wrong source inode is used in these checks.
+    
+    Fixes: http://tracker.ceph.com/issues/21383
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 46962b253563a867707e7c5d7887abf2060cc4d7)
+
+commit c902ebe7e89130f7aceaaf664074d74760b30926
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Sep 18 13:16:40 2017 -0400
+
+    mon/MDSMonitor: fix clog msgs on MDS rank add/rm
+    
+    Because these were generated before the actual
+    change, the get_num_in values did not make sense.
+    
+    Fixes: http://tracker.ceph.com/issues/21421
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 511439b515414ae93d791f54a187e44d5fdffa7b)
+
+commit f4b4467f8edc30f33c56e2bc22fb509061d814b6
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Tue Sep 19 14:38:13 2017 +0800
+
+    client: set client_try_dentry_invalidate to false by default
+    
+    By default, ceph-fuse uses side effect of 'dentry invalidation' to
+    trim kernel dcache if it runs on kernel < 3.18. The implemention of
+    kernel function d_invalidate() changed in 3.18 kernel, the method no
+    longer works for upstream kernel >= 3.18.
+    
+    RHEL 3.10 kernel includes backport of patches that change implemention
+    of d_invalidate(). So checking kernel version to decide if 'dentry
+    invalidation' method works is unreliable.
+    
+    Fixes: http://tracker.ceph.com/issues/21423
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 69adaabface27880dd6c8dbfdeeb06cf3f3d346a)
+
+commit 105f82d5502deb3cabb87d8fdd83a98e880fd6e2
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Tue Sep 12 13:22:09 2017 -0400
+
+    qa/tasks/cephfs: Whitelist POOL_APP_NOT_ENABLED for test_misc
+    
+    test_misc verifies that ceph fs new will not create a filesystem
+    on a pool that already contains objects. As part of the test, it
+    inserts a dummy object into a pool and then attempts to use it for
+    CephFS. This triggers POOL_APP_NOT_ENABLED. Setting the application
+    metadata for the pool (and having ceph fs new fail because of the
+    existing metadata) would then exercise a different failure case.
+    
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit eba01c48ca8b3113b1faf353990533a5ae39232c)
+
+commit 4bb1d893739e33fc35ae57ac0290606b5cf8b918
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Wed Sep 13 14:00:20 2017 -0400
+
+    qa/cephfs: Fix error in test_filtered_df
+    
+    ceph df accounts for pool size, so there is no need to do it in the test.
+    
+    Fixes: http://tracker.ceph.com/issues/21381
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit b059cb6290d81df07bd8ec4e1ec9ef0be24892a2)
+
+commit b0cacf2684bfe8c55282bb7defd54053dc7fa2e8
+Author: Jos Collin <jcollin@redhat.com>
+Date:   Thu Sep 7 12:41:40 2017 +0530
+
+    client: Delete onsafe
+    
+    Variable "onsafe" going out of scope leaks the storage it points to. This fixes the Coverity
+    Scan CID 1417473.
+    
+    Signed-off-by: Jos Collin <jcollin@redhat.com>
+    (cherry picked from commit e24a91e9189587c800ef5709c78f1bc0e0ac8419)
+
+commit f146b9f51da11e5698c7c4c9021635961b2790ad
+Author: Jeff Layton <jlayton@redhat.com>
+Date:   Fri Aug 25 08:31:47 2017 -0400
+
+    client: add mountedness check inside client_lock
+    
+    Currently we check for mountedness in the high level wrappers, but those
+    checks are lockless. It's possible to have a call that races with
+    ceph_unmount(). It could pass one of the is_mounted() checks in the
+    wrapper, and then block on the client_lock while the unmount is actually
+    running. Eventually it picks up and runs after the unmount returns, with
+    questionable results -- possibly even a crash in some cases.
+    
+    For now, we can explain this away with a simple admonition that
+    applications should ensure that no calls are running when ceph_unmount
+    is called. In the future though, we may need to forcibly shut down the
+    mount when certain events occur (not returning a lease or delegation in
+    time, for instance).
+    
+    Sprinkle in a bunch of "unmounting" checks after taking the client_lock,
+    and simply have the functions return errors (or sensible values in some
+    cases) when the Client is being downed. With that, we ensure that this
+    sort of race can't occur, even when the unmount is not being driven by
+    userland. Note too that in some places I've replaced assertions in the
+    code with error returns, as that's nicer behavior for libraries.
+    
+    Note that this can't replace the ->is_mounted() checks in the lockless
+    wrappers as those are needed to determine whether the client pointer in
+    the ceph_mount_info is still valid. The admonition not to allow
+    ceph_unmount to race with other calls is therefore still necessary.
+    
+    Signed-off-by: Jeff Layton <jlayton@redhat.com>
+    (cherry picked from commit efca340596ef4da2b254ff1c64ec4c462d7b95a5)
+
+commit 7a84f943edcdabd013b8ee4eb701e04062ad931a
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Tue Sep 5 14:44:49 2017 -0700
+
+    mds: reset Formatter on error
+    
+    This prevents partial results from concatenating with the error message.
+    
+    Fixes: http://tracker.ceph.com/issues/21252
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 2b2b3d2035a700a65c3c469eedae69ad31023cf6)
+
+commit 847cb76968bb225e4f3713cdfc0a5c38c4047e4e
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Wed Jul 12 10:48:42 2017 -0500
+
+    qa/cephfs: Refactor alternate pool test
+    
+    Remove the alternate pool recovery test from test_data_scan. Newer
+    commits will place the test in its own file.
+    
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit 47318f8ac4391148a1394846dd77c8452b7cf5ae)
+
+commit 3342ba0c6853fda90cf2c8c9bec9d523c9269855
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Wed Jul 12 10:45:13 2017 -0500
+
+    qa/cephfs: test CephFS recovery pools
+    
+    Test recovering metadata in to a separate RADOS pool with
+    cephfs_data_scan and friends.
+    
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit 6af2ae80d327e564ad17f2caeded9c8142becf29)
+
+commit 5ac721394770de88a6218dd3f9bedbdbc9982232
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Wed Jul 12 10:43:39 2017 -0500
+
+    qa/cephfs: support CephFS recovery pools
+    
+    Add support for testing recovery of CephFS metadata into an alternate
+    RADOS pool, useful as a disaster recovery mechanism that avoids
+    modifying the metadata in-place.
+    
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit 8f9a25202093339afb5308051d354d3ae79c6b2d)
+
+commit 0f5f99c1de5484e7563b5c5c9fa481200e1d00c6
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Wed Jul 26 13:05:59 2017 -0400
+
+    qa/cephfs: Allow deferred fs creation
+    
+    Permit Filesystem objects to be created and settings modified before
+    calling Filesystem.create().
+    
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit 5fafc03cb9e6d5f39ce494375ea28c89b896e2f5)
+
+commit 47e485e5ccedce3977b30503e05b743e09fc7c77
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Wed Jul 12 10:41:11 2017 -0500
+
+    qa/ceph_test_case: support CephFS recovery pools
+    
+    Add support for testing recovery of CephFS metadata into an alternate
+    RADOS pool, useful as a disaster recovery mechanism that avoids
+    modifying the metadata in-place.
+    
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit c85562c94a80b8a18975b8d0ee6a7fbd932cf024)
+
+commit 69f042231056071dee16ed49aad95eaa3b0447f6
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Tue Aug 29 11:35:56 2017 +0800
+
+    mds: void sending cap import message when inode is frozen
+    
+    To export an inode to other mds, mds need to:
+    
+    - Freeze the inode (stop issuing caps to clients)
+    - Flush client sessions (ensure client have received all cap messages)
+    - Send cap export message
+    
+    These steps guarantee that clients receive cap import/export messages
+    in proper order (In the case that inode gets exported servel times
+    within a short time)
+    
+    When inode is frozen, mds may have already flushed client sessions.
+    So mds shouldn't send cap import messages.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 48a9e695e58ac15f1e494977e0db7a164bb2fe98)
+
+commit 25def78ceb4cb17c97ae911203a62fb410cd9399
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Aug 28 17:13:31 2017 +0800
+
+    client: fix message order check in handle_cap_export()
+    
+    If importer mds' cap already exists, but cap ID mismatches, client
+    should have received corresponding import message (the imported caps
+    got released later). Because cap ID does not change as long as client
+    holds the caps.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 3c31256a4addcc4eca30c62109e33f77224258c2)
+
+commit 97ab78548d26f980ead8dc5c986304d2cfd3568d
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Sep 21 10:56:07 2017 +0800
+
+    mds: check ongoing catter-gather process before capping log
+    
+    When deactivating mds, MDLog::trim() may start scatter-gather
+    process on mdsdir inode. Locker::scatter_writebehind() submits
+    log entry. So mds should make sure there is no scatter-gather
+    before capping log.
+    
+    Fixes: http://tracker.ceph.com/issues/21467
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+
+commit 0132a275aa86ca80bf1dcacd9905243257317e6c
+Merge: 1befcbebcb bc4095ee44
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Sep 20 08:08:14 2017 -0700
+
+    Merge pull request #17829 from jdurgin/wip-21428-luminous
+    
+    osd/PrimaryLogPG: request osdmap update in the right block
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit bc4095ee44f8c060a43470c29c08767517b4d749
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Sep 20 01:18:35 2017 -0400
+
+    osd/PrimaryLogPG: request osdmap update in the right block
+    
+    Fixes: http://tracker.ceph.com/issues/21428
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit afc6624f768ea3c6e2d155122797db5cce8836f7)
+
+commit 13f0c9f534d0a9df362bb86ab546648fa046c104
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Sep 13 16:34:40 2017 +0800
+
+    qa/cephfs: kill mount if it gets evicted by mds
+    
+    otherwise, teardown() hange at umount
+    
+    Fixes: http://tracker.ceph.com/issues/21275
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 98d86a075242f0c4576814db15cc3f8fd8e06017)
+
+commit 651280281ab1347fb7d0e3114cf87b74398dbc87
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Sep 13 16:15:31 2017 +0800
+
+    qa/cephfs: fix test_evict_client
+    
+    executing mount_a.kill() twice, then executing mount_b.kill_cleanup()
+    twice do not make sense.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 8433ced84733da86d545ccacc06ddea3a0282071)
+
+commit 1befcbebcbcedf398b782adfcc165038d13fc3da
+Merge: ddf84249fa a6ce7bfcf3
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Tue Sep 19 16:45:40 2017 -0700
+
+    Merge pull request #17796 from jdurgin/wip-21428-luminous
+    
+    osd: request new map from PG when needed
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 8d18150560bbf0c41f4d62b17b642449b3610660
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Tue Sep 5 17:09:32 2017 +0800
+
+    qa: whitelist expected MDS_READ_ONLY for kcephfs test
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 584241285f52fc420ebc4a6a6455497a3ed4d45a)
+
+commit a6ce7bfcf3ab00046f220a00ef2c283c3aa0bb31
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Sep 18 22:31:10 2017 -0400
+
+    osd: request new map from PG when needed
+    
+    The fast dispatch refactor in 3cc48278bf0ee5c9535d04b60a661f988c50063b
+    eliminated the osdmap subscription in the ms_fast_dispatch path, which
+    meant ops could reach a PG without having the latest map. In a cluster
+    with few osdmap updates, where the monitor fails to send a new map to
+    an osd (it tries one random osd), this can result in indefinitely
+    blocked requests.
+    
+    Fix this by adding an OSDService mechanism for scheduling a new osdmap
+    subscription request.
+    
+    Fixes: http://tracker.ceph.com/issues/21428
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit dd33360e5a4ed06228af552edadee88e66c5aba9)
+
+commit 875f1c2519c15a94b4f4ccfa3ae0b0b191cfb1dc
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Sep 15 16:52:28 2017 -0400
+
+    Revert "osd/OSDMap: allow bidirectional swap of pg-upmap-items"
+    
+    This reverts commit 09af9b8afb40cc8aa629501582a75e03edf0bf2e.
+    
+    We need to prevent duplicates in the final result.  For example, we
+    can currently take
+     [1,2,3] and apply [(1,2)] and get [2,2,3]
+    or
+     [1,2,3] and apply [(3,2)] and get [1,2,2]
+    
+    The rest of the system is not prepared to handle duplicates in the
+    result set like this.
+    
+    The reverted commit was intended to allow
+    
+     [1,2,3] and [(1,2),(2,1)] to get [2,1,3]
+    
+    to reorder primaries.  First, this bidirectional swap is hard to implement
+    in a way that also prevents dups.  For example,
+     [1,2,3] and [(1,4),(2,3),(3,4)] would give [4,3,4]
+    but would we just drop the last step we'd have [4,3,3] which
+    is also invalid, etc.  Simpler to just not handle bidirectional
+    swaps.  In practice, they are not needed: if you just want to choose
+    a different primary then use primary_affinity, or pg_upmap
+    (not pg_upmap_items).
+    
+    Fixes: http://tracker.ceph.com/issues/21410
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9c73305e3ad11177d58632eba6ece5d2c0e701da)
+
+commit ddf84249fa8a8ec3655c39bac5331ab81c0307b1
+Merge: d324411744 4c16e1b36b
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 22:46:27 2017 +0200
+
+    Merge pull request #17724 from theanalyst/wip-21374-luminous
+    
+    luminous: incorrect erasure-code space in command ceph df
+    
+    Reviewed-By: Josh Durgin <jdurgin@redhat.com>
+
+commit d32441174440b7e639658a9218d7004ebe604b62
+Merge: df73cdcdfe 381ed45b49
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Fri Sep 15 13:35:36 2017 -0700
+
+    Merge pull request #17745 from tchaikov/wip-luminous-20529
+    
+    luminous: rocksdb,cmake:  build portable binaries
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit df73cdcdfec8263d5f1cd0af98d51928aa7659f3
+Merge: 24c5b9bfb7 e7158e8e41
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:58:05 2017 +0200
+
+    Merge pull request #17635 from smithfarm/wip-21342-luminous
+    
+    luminous: ceph mgr versions shows active mgr as Unknown
+    
+    Reviewed-By: Josh Durgin <jdurgin@redhat.com>
+
+commit 24c5b9bfb72461005585329f82a14b994c8546e4
+Merge: 57e798bc55 b10311dc73
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:57:54 2017 +0200
+
+    Merge pull request #17634 from smithfarm/wip-21341-luminous
+    
+    luminous: mon/OSDMonitor: deleting pool while pgs are being created leads to assert(p != pools.end) in update_creating_pgs()
+    
+    Reviewed-By: Josh Durgin <jdurgin@redhat.com>
+
+commit 57e798bc55ed5d1ae44d2279e2bba349abc88e76
+Merge: 9fc9577df0 fe2fe20100
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:57:13 2017 +0200
+
+    Merge pull request #17624 from tchaikov/wip-luminous-pr-17599
+    
+    luminous: encoding: reset optional<> if it is uninitialized
+    
+    Reviewed-By: Josh Durgin <jdurgin@redhat.com>
+
+commit 9fc9577df0c91f8ee3c55464e57f31fb20060853
+Merge: 0c28640ba0 91dd0fe479
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:55:41 2017 +0200
+
+    Merge pull request #17487 from smithfarm/wip-21231-luminous
+    
+    luminous: core: interval_set: optimize intersect_of insert operations
+    
+    Reviewed-By: Josh Durgin <jdurgin@redhat.com>
+
+commit 0c28640ba09cd1035ae5b4103833ef6bd172ae6c
+Merge: f52c6dcd60 24fe250bb5
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:49:37 2017 +0200
+
+    Merge pull request #17712 from batrick/bp21221
+    
+    luminous: MDCache::try_subtree_merge() may print N^2 lines of debug message
+    
+    Reviewed-By: Yan Zhen <zyan@redhat.com>
+
+commit f52c6dcd60ea352f8762d98e2b2c245abed5c0fc
+Merge: c9f0a6bd2e 9f65be2feb
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:45:04 2017 +0200
+
+    Merge pull request #17623 from liewegas/wip-pr-17572-luminous
+    
+    tools/ceph_objectstore_tool: fix 'dup' unable to duplicate meta PG
+    
+    Reviewed-By: Josh Durgin <jdurgin@redhat.com>
+
+commit c9f0a6bd2ec55b308de28b8ddf1d1658887d263b
+Merge: ece893d1e8 80d848f069
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:43:22 2017 +0200
+
+    Merge pull request #17584 from jdurgin/wip-recovery-delete-encoding-luminous
+    
+    osd/PGBackend, MOSDPGRecoveryDelete[Reply]: handle incompatible encoding
+    
+    Reviewed-By: Sage Weil <sage@redhat.com>
+
+commit ece893d1e8ee7df9f0ee6413628aa2aeda311364
+Merge: dfc8a0fe47 eb6a0bf22e
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:39:49 2017 +0200
+
+    Merge pull request #17686 from ukernel/luminous-21070
+    
+    luminous: mds: fix 'dirfrag end' check in Server::handle_client_readdir
+    
+    Reviewed-By: Patrick Donnelly <pdonelly@redhat.com>
+
+commit dfc8a0fe47b950155eab2bdbe98f42645c3f6140
+Merge: 0be1e868f1 a1be6c9647
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:38:36 2017 +0200
+
+    Merge pull request #17711 from batrick/bp20594
+    
+    luminous: mds: support limiting cache by memory
+    
+    Reviewed-By: Yan Zheng <zyan@redhat.com>
+
+commit 0be1e868f10601df3f293af58a173702db6efed0
+Merge: b0b4d07663 e7e3d8977b
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:36:00 2017 +0200
+
+    Merge pull request #17714 from batrick/bp21222
+    
+    luminous: MDS: standby-replay mds should avoid initiating subtree export
+    
+    Reviewed-By: Yan, Zheng <zyan@redhat.com>
+
+commit b0b4d0766345ffcc552a841be16101f4b80dcf55
+Merge: c69673d955 73ef8de0bf
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:25:56 2017 +0200
+
+    Merge pull request #17570 from theanalyst/wip-luminous-21233
+    
+    luminous: rgw: memory leak in MetadataHandlers
+    
+    Reviewed-By: Casey Bodley <cbodley@redhat.com>
+
+commit c69673d955d784ca580fc283228b881b30065ff6
+Merge: 671740533e ccb3c1edc0
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:25:31 2017 +0200
+
+    Merge pull request #17642 from theanalyst/wip-21350-luminous
+    
+    luminous: rgw: data encryption sometimes fails to follow AWS settings
+    
+    Reviewed-By: Casey Bodley <cbodley@redhat.com>
+
+commit 671740533e71ac742259d32b86102fa807ea7fee
+Merge: 87d3d3419e 665c3a6397
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:23:01 2017 +0200
+
+    Merge pull request #17674 from theanalyst/luminous-rgw-reshard-enable
+    
+    luminous: rgw: reshard enable
+    
+    Reviewed-By: Orit Wasserman <owasserm@redhat.com>
+
+commit 87d3d3419ebb9370aeb14496901c55c2a01fdf1e
+Merge: 4bb174db3a 2be6c63f1b
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Fri Sep 15 21:22:05 2017 +0200
+
+    Merge pull request #17479 from smithfarm/wip-21139-luminous
+    
+    luminous: rgw: put lifecycle configuration fails if Prefix is not set
+    
+    Reviewed-By: Daniel Gryniewicz <dang@redhat.com>
+
+commit 381ed45b491fecd9254c2b8ee3da89064cfe8c1a
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri Sep 15 10:30:16 2017 +0800
+
+    cmake: do not pass $SIMD_COMPILE_FLAGS to rocksdb cmake
+    
+    which enables SSE42 globally in rocksdb. and we will end up with a
+    binary not portable on non-SSE42 enabled machines.
+    
+    Fixes: http://tracker.ceph.com/issues/20529
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    
+    Conflicts:
+            this change is not cherry-picked from master. because the
+    PR targeting master (https://github.com/ceph/ceph/pull/17388) is
+    still pending on review. and the cmake changes is different if
+    we want to use a recent commit of rocksdb, as it's doing differently
+    in cmake to address the portability issues.
+
+commit 9216086795a6a9c7b33000d44bea8ec9c62d41bb
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri Sep 15 10:23:47 2017 +0800
+
+    rocksdb: pick up portable fixes
+    
+    to pick up the the fix to disable SSE42 globally, and only enable it on
+    crc32c. this change is pushed to ceph/rocksdb:luminous.
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    Conflicts:
+            this change is not cherry-picked from master, as the master PR
+    (https://github.com/ceph/ceph/pull/17388) is still pending on review.
+    and the latest rocksdb's cmake was revised to address the portability
+    issues. so the fix on ceph side is different if we want to use a
+    recent rocksdb's commit.
+
+commit 73ef8de0bf147a3ca670ab8a4b04ddaaf0ed5bfd
+Author: Luo Kexue <luo.kexue@zte.com.cn>
+Date:   Wed Aug 30 09:32:18 2017 +0800
+
+    rgw: fix resource leak in rgw_bucket.cc and rgw_user.cc
+    
+    Fixes: http://tracker.ceph.com/issues/21214
+    
+    Signed-off-by: Luo Kexue <luo.kexue@zte.com.cn>
+    (cherry picked from commit 1f23976adab74e25ce06941692a881521885c6ee)
+
+commit 34548611d2d0394499e907ff7dd4b43cf53cd2cc
+Author: Jos Collin <jcollin@redhat.com>
+Date:   Fri Aug 25 15:32:56 2017 +0530
+
+    rgw: add missing override in list_keys_init()
+    
+    Added missing override in list_keys_init().
+    
+    Signed-off-by: Jos Collin <jcollin@redhat.com>
+    (cherry picked from commit bfc999f1db96293e6a2188922074031fa0b40ecc)
+
+commit 4bb174db3a3cc18b544d7282516289075763a1f3
+Merge: e8e4f1fd6d 98a53f929e
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Thu Sep 14 11:32:28 2017 +0200
+
+    Merge pull request #17612 from smithfarm/wip-qemu-cleanup
+    
+    build/ops: rpm: do not create librbd.so.1 symlink in /usr/lib64/qemu
+    
+    Reviewed-By: Ken Dreyer <kdreyer@redhat.com>
+
+commit e8e4f1fd6d82540451be2896626e959e1b1bdaa8
+Merge: ad534c0d7a ce2a181834
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Thu Sep 14 11:31:40 2017 +0200
+
+    Merge pull request #17478 from smithfarm/wip-21138-luminous
+    
+    luminous: rgw: object copied from remote src acl permission become full-control issue
+    
+    Reviewed-By: Orit Wasserman <owasserm@redhat.com>
+
+commit ad534c0d7adaa83b3b219592de5a7b1213cb6317
+Merge: f05328733a 07a15984c6
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Thu Sep 14 11:31:23 2017 +0200
+
+    Merge pull request #17445 from smithfarm/wip-21110-luminous
+    
+    luminous: rgw: send data-log list infinitely
+    
+    Reviewed-By: Orit Wasserman <owasserm@redhat.com>
+
+commit 4c16e1b36b60028e9b6877dea7abcfe872b2e753
+Author: liuchang0812 <liuchang0812@gmail.com>
+Date:   Wed Sep 6 11:50:17 2017 +0800
+
+    mon: incorrect MAX AVAIL in "ceph df"
+    
+    Fixes: http://tracker.ceph.com/issues/21243
+    
+    Signed-off-by: liuchang0812 <liuchang0812@gmail.com>
+    (cherry picked from commit 365558571c59dd42cf0934e6c31c7b4bf2c65026)
+
+commit f05328733a04acf454d229f73d79015292bd5fdf
+Merge: 8d292af09f cac29c9618
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Thu Sep 14 10:33:29 2017 +0200
+
+    Merge pull request #17488 from smithfarm/wip-21241-luminous
+    
+    luminous: rgw: usage of --inconsistent-index should require user confirmation and print a warning
+    
+    Reviewed-By: Casey Bodley <cbodley@redhat.com>
+
+commit 8d292af09f663a49d935011a7bebec096c77b04e
+Merge: 038dc170c7 24803b76c8
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Thu Sep 14 10:28:16 2017 +0200
+
+    Merge pull request #17484 from smithfarm/wip-21184-luminous
+    
+    luminous: tests: NameError: global name 'name' is not defined
+    
+    Reviewed-By: Orit Wasserman <owasserm@redhat.com>
+
+commit 038dc170c7928a415b0d08536be64b9eebd17511
+Merge: 67e87bff24 39b3b132f2
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Thu Sep 14 10:26:12 2017 +0200
+
+    Merge pull request #17474 from smithfarm/wip-21114-luminous
+    
+    luminous: cephfs: tests: FS_DEGRADED spurious health warnings in some sub-suites
+    
+    Reviewed-By: Patrick Donelly <pdonelly@redhat.com>
+
+commit 67e87bff24424a3e233a9a89bbdef1e1545c0df4
+Merge: ba746cd14d 25a651e100
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Thu Sep 14 10:25:51 2017 +0200
+
+    Merge pull request #17471 from smithfarm/wip-21107-luminous
+    
+    luminous: cephfs: client/mds has wrong check to clear S_ISGID on chown
+    
+    Reviewed-By: Patrick Donelly <pdonelly@redhat.com>
+
+commit e7e3d8977b4e46db7a370880d54094e7b7915826
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Sep 13 11:27:18 2017 +0800
+
+    ceph: fix "stopping mds can't export subtree"
+    
+    caused by commit
+    790c34138f "Make standby-replay mds avoid initiating subtree export"
+    
+    Fixes: http://tracker.ceph.com/issues/21378
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit c294051987de1ff79540060a0563fa02c8f03f91)
+
+commit a0693c8ca4ea54950d44e9b5b2da0219d46ea5a6
+Author: Jianyu Li <joannyli@foxmail.com>
+Date:   Mon Sep 4 21:49:26 2017 +0800
+
+    Make standby-replay mds not migrate empty subtree when trimming cache
+    
+    Signed-off-by: Jianyu Li <joannyli@tencent.com>
+    (cherry picked from commit 178ca58fec2d820f61724d223addac1c4fa67086)
+
+commit 70e814cf60c533fe2e850e451a7607ed5ffe7ed9
+Author: Jianyu Li <joannyli@foxmail.com>
+Date:   Mon Sep 4 18:03:30 2017 +0800
+
+    Make standby-replay mds avoid initiating subtree export
+    
+    Signed-off-by: Jianyu Li <joannyli@tencent.com>
+    (cherry picked from commit 790c34138fbdf995c72e558057b9e64c882b522b)
+
+commit 24fe250bb5fbb8546f5fb280cca10162e3aabb2f
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Mon Sep 4 11:36:00 2017 -0700
+
+    mds: print subtrees only after merge
+    
+    During up:resolve, the MDS tries to merge each subtree with its parent. During
+    testing, QE found that many thousands of subtrees in a directory (made possible
+    using pins) would cause the MDS to spend minutes printing out subtree maps to
+    the debug log. This causes the heartbeat code to consider the MDS as stalled so
+    beacons are no longer sent to the mons resulting in the MDS being removed from
+    the rank.
+    
+    A more complete solution to this problem is to selectively print subtrees
+    relating to the operation (e.g. the subtree and its parents).
+    
+    Fixes: http://tracker.ceph.com/issues/21221
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1485783
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit d0747a37fd06053b2206bb9a952f7ab77f0db2f0)
+
+commit a1be6c96470b843d46754ffda08c524a3c7b9a59
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Sep 13 15:55:46 2017 +0800
+
+    mds: optimize MDCache::rejoin_scour_survivor_replicas()
+    
+    avoid iterating dentries if dirfrag is non-auth
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit d32a2376047bc1363b9f7a2ed09060ec84c78b97)
+
+commit fb3afeb1e7572cda45966fa925102767dcd2f1b7
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Sep 13 15:54:45 2017 +0800
+
+    mds: fix MDSCacheObject::clear_replica_map
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit fd447405bef347da80ed5611331b211021b1628b)
+
+commit 179bf1831c6c4e88eb13ed689293a677ef5d2983
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Mon Sep 11 15:21:52 2017 -0700
+
+    mds: support limiting cache by memory
+    
+    This introduces two config parameters:
+    
+        mds_cache_memory_limit: Sets the soft maximum of the cache to the given
+        byte count. (Like mds_cache_size, this doesn't actually limit the maximum
+        size of the cache. It just dictates the steady-state size.)
+    
+        mds_cache_reservation: This replaces mds_health_cache_threshold everywhere
+        except the Beacon heartbeat sent to the mons. The idea here is to specify a
+        reservation of memory (5% by default) for operations and the MDS tries to
+        always maintain that reservation. So, the MDS will recall caps from clients
+        when it begins dipping into its reservation of memory.
+    
+    mds_cache_size still limits the cache by Inode count but is now by-default 0
+    (i.e. unlimited). The new preferred way of specifying cache limits is by memory
+    size. The default is 1GB.
+    
+    Fixes: http://tracker.ceph.com/issues/20594
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1464976
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 06c94de584e6cd7d347bcdfb79d9fef4fed0d277)
+    
+     Conflicts:
+            PendingReleaseNotes
+            src/mds/MDCache.cc
+
+commit c4d393e6d0b4497e94ab88a8f61436c6271e2ab8
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Sep 7 21:01:31 2017 -0700
+
+    common: refactor of lru
+    
+    Avoids an unnecessary "max" size of the LRU which was used to calculate the
+    midpoint. Instead, just dynamically move the LRUObjects between top and bottom
+    on-the-fly.
+    
+    This change is necessary for a cache which which does not limit by the number
+    of objects but by some other metric. (In this case, memory.)
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 12d615b3c546211b48ee75921f0e06371dd62dae)
+
+commit 009d3ab0bc3cb5248701a4383e58a86337ee4982
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Tue Sep 12 13:40:17 2017 -0700
+
+    mds: resolve unsigned coercion compiler warning
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 0c2032c2876c3e2cd0d23ab883fc72375731cadf)
+
+commit e25881b1e8c02dd1262c5b2b41eb353b293e1e37
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Sep 7 20:51:56 2017 -0700
+
+    common: use safer uint64_t for list size
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 0ddd260a32e781ff6bfa49c1a01d6b2d80e5dcd3)
+
+commit f21d2fa7e57e18f368c2c62534eba2cc9d0c80fb
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Sun Jul 30 16:09:32 2017 -0700
+
+    common: add bytes2str pretty print function
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 7fff24e10e9cacc94ec320b87e60c7735ff028b6)
+
+commit 97fdc68e029ed1567eff7c5d13a6c1c29bfe5d33
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Tue Sep 12 14:31:18 2017 -0700
+
+    mds: check if waiting is allocated before use
+    
+    This prevents accidental allocation of the map.
+    
+    Also, privatize the variable to protect from this in child classes.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 055020ce80b1f08d258b4c023bf5465ed7a46034)
+
+commit d50f2c735ac40b9ccfbd8d3423fd817f76de9c3c
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Tue Sep 12 14:29:49 2017 -0700
+
+    mds: go back to compact_map for replicas
+    
+    Zheng observed that an alloc_ptr doesn't really work in this case since any
+    call to get_replicas() will cause the map to be allocated, nullifying the
+    benefit. Use a compact_map until a better solution can be written. (This means
+    that the map will be allocated outside the mempool.)
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 5d67b5cc57ac803e60c2921f554cd0507ed4848e)
+
+commit 2ef222a58c3801eaac5a6d52dda2de1ffe37407b
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Jul 27 17:21:54 2017 -0700
+
+    mds: use mempool for cache objects
+    
+    The purpose of this is to allow us to track memory usage by cached objects so
+    we can limit cache size based on memory available/allocated to the MDS.
+    
+    This commit is a first step: it adds CInode, CDir, and CDentry to the mempool
+    but not all of the containers in these classes (e.g. std::map). However,
+    MDSCacheObject has been changed to allocate its containers through the mempool
+    by converting compact_* containers to the std versions offered through mempool
+    via the new alloc_ptr.
+    
+    (A compact_* class simply wraps a pointer to the std:: version to reduce memory
+    usage of an object when the container is only occasionally used. The alloc_ptr
+    allows us to achieve the same thing explicitly with only a little handholding:
+    when all entries in the wrapped container are deleted, the caller must call
+    alloc_ptr.release().)
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit e035b64fcb0482c3318656e1680d683814f494fe)
+
+commit f26412883c390b78df132e32d99afa5a14c525f3
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Jul 27 12:06:23 2017 -0700
+
+    mds: cleanup replica_map access
+    
+    The gymnastics protecting the map failed as the code evolved. Just expose it
+    normally with a getter.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit d1b6cadd6c1514aeacfbacec253305e1a715c387)
+
+commit 1bf3b1939ccdf30c4645009887c93fcb03d029e8
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Jul 27 12:10:14 2017 -0700
+
+    common: add alloc_ptr smart pointer
+    
+    This ptr is like a unique_ptr except it allocates the underlying object on
+    access. The idea being that we can save memory if the object is only needed
+    sometimes.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 5fa557d2713558038af7579de8a3ca56d58b8d90)
+
+commit 44e206f351297fc9092577a9280fabdadd993cc6
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Jul 27 12:04:04 2017 -0700
+
+    common: add warning on base class use of mempool
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit c0d0fa804ee0fa775ae18f9b7bde2317bb6af52d)
+
+commit 8c82de6a32bcbc8df0f6dadb7aacd7c41bcf77d8
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Jul 27 12:03:15 2017 -0700
+
+    common: use atomic uin64_t for counter
+    
+    Making this interface thread-safe...
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 59b5931a2f47f90fced779fb89e06868c739c688)
+
+commit ba746cd14ddd70a4f24a734f83ff9d276dd327d1
+Merge: 138acd38a6 21b9659cdd
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Wed Sep 13 23:13:03 2017 +0200
+
+    Merge pull request #17646 from theanalyst/wip-luminous-multifixes
+    
+    luminous: rgw fixes for multisite tests in luminous
+    
+    Reviewed-By: Casey Bodley <cbodley@redhat.com>
+
+commit eb6a0bf22e5777b3977226d831380f5e68ae3739
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Aug 28 11:24:13 2017 +0800
+
+    mds: fix 'dirfrag end' check in Server::handle_client_readdir
+    
+    The 'dirfrag end' check can be wrong when not reading from beginning
+    of dirfrag.
+    
+    Fixes: http://tracker.ceph.com/issues/21070
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 88332c0f2f0a7a99639d1de237d5bb68edddbe70)
+
+commit 138acd38a67bad303fb6804c1f5be0b4e5c4c47f
+Merge: 6753d98d90 e2dda02e02
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 12 16:04:54 2017 -0400
+
+    Merge pull request #17647 from dillaman/wip-21345
+    
+    luminous: qa/workunits/rbd: relax greps to support upgrade formatting change
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 2be6c63f1bf910562ecca8ffd70206b605f1fe07
+Author: lu.shasha <lu.shasha@eisoo.com>
+Date:   Tue Sep 12 11:19:44 2017 +0800
+
+    rgw: LCFilter_S3::to_xml the second "prefix" missed "/"
+    
+    Signed-off-by: Shasha Lu <lu.shasha@eisoo.com>
+    (cherry picked from commit dcef8555e1bf2656aeb5316c4b78f1facf2ae172)
+
+commit 21b9659cdd6c0dae63609ee58915fe1166487bbc
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Aug 30 11:16:25 2017 -0400
+
+    test/rgw: fix test_encrypted_object_sync for 3+ zones
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 8762c4b29051b2b49bfd8c1e0ceaa1aee6417a74)
+
+commit 665c3a6397ed43d4dde0a0ad22483fc964ab61c8
+Author: Abhishek Lekshmanan <abhishek@suse.com>
+Date:   Tue Sep 12 18:07:01 2017 +0200
+
+    luminous: rgw: re enable dynamic resharding
+    
+    Signed-off-by: Abhishek Lekshmanan <abhishek@suse.com>
+
+commit 6753d98d90c65961e4abbea43f70acb938753f7a
+Merge: 4102a50c0d 64fc7cf105
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Sep 12 08:01:43 2017 -0400
+
+    Merge pull request #17653 from ceph/backport-wip-bz1478598
+    
+    luminous: ceph-volume allow filtering by `uuid`, do not require osd id
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit 4102a50c0ddc969b7f58642f2f67b67e0f671b23
+Merge: 7ca6156003 63c9382eaf
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Tue Sep 12 13:02:35 2017 +0200
+
+    Merge pull request #17485 from smithfarm/wip-21185-luminous
+    
+    luminous: rgw: rgw_file:  incorrect lane lock behavior in evict_block()
+    
+    Reviewed-By: Orit Wasserman <oritwas@redhat.com>
+
+commit 7ca615600393a8337426818fbe0390117752f0ef
+Merge: ab9650b929 e171fa6a6d
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Tue Sep 12 12:40:44 2017 +0200
+
+    Merge pull request #17476 from smithfarm/wip-21135-luminous
+    
+    luminous: rgw: bucket index sporadically reshards to 65521 shards
+    
+    Reviewed-By: Orit Wasserman <owasserm@redhat.com>
+
+commit ab9650b929320320b6f88f31a39575e16d69c05d
+Merge: 31dbc795cd 18442e1585
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Tue Sep 12 11:06:05 2017 +0200
+
+    Merge pull request #17470 from smithfarm/wip-21104-luminous
+    
+    luminous: build/ops: ceph-fuse RPM should require fusermount
+    
+    Reviewed-By: Ken Dreyer <ktdreyer@redhat.com>
+    Reviewed-By: Kefu Chai <kchai@redhat.com>
+
+commit 31dbc795cd1b71f572f99ba8bf5936de19fa9fb8
+Merge: 39385a7512 17626e01d8
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Tue Sep 12 11:05:14 2017 +0200
+
+    Merge pull request #17477 from smithfarm/wip-21137-luminous
+    
+    luminous: mgr: 500 error when attempting to view filesystem data
+    
+    Reviewed-By: John Spray <jcsp@redhat.com>
+
+commit 39385a7512112570c98c95b40c1215f6d4aa19d9
+Merge: 75db027e25 d57399c9da
+Author: Sage Weil <sage@newdream.net>
+Date:   Mon Sep 11 16:09:01 2017 -0500
+
+    Merge pull request #17495 from smithfarm/wip-21235-luminous
+    
+    luminous: tests: thrashosds read error injection doesn't take live_osds into account
+
+commit 75db027e25b07e93f8cdf62316dd51ed6e305df2
+Merge: 975af9c2a4 ca7e48c62e
+Author: Sage Weil <sage@newdream.net>
+Date:   Mon Sep 11 16:07:22 2017 -0500
+
+    Merge pull request #17483 from smithfarm/wip-21183-luminous
+    
+    luminous: mgr: Crash in MonCommandCompletion
+
+commit 975af9c2a48394c04852b142ea9d5ffa98b12db1
+Merge: b755445f84 8e9b52ee88
+Author: Sage Weil <sage@newdream.net>
+Date:   Mon Sep 11 16:06:42 2017 -0500
+
+    Merge pull request #17486 from smithfarm/wip-21188-luminous
+    
+    luminous: pybind: dashboard usage graph getting bigger and bigger
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit b755445f8443b2cd7bb31027996be6a6daef96a4
+Merge: e763746bbf 2a1ae18fa7
+Author: Sage Weil <sage@newdream.net>
+Date:   Mon Sep 11 16:05:24 2017 -0500
+
+    Merge pull request #17350 from liewegas/wip-pr-17334-luminous
+    
+    os/bluestore: reshard-fix wrong shard length
+    
+    Reviewed-by: Amit Kumar <amitkuma@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit e763746bbffd6139e49bb035b2c5763bc28dcd9c
+Merge: 69552ed435 00ed756ae8
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 22:31:14 2017 +0200
+
+    Merge pull request #17473 from smithfarm/wip-21112-luminous
+    
+    luminous: cephfs: get_quota_root sends lookupname op for every buffered write
+    
+    Reviewed-By: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 69552ed4352e25d90574da8e802f2c9572ea2529
+Merge: 71814348c2 a74b3267ee
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 22:29:32 2017 +0200
+
+    Merge pull request #17465 from smithfarm/wip-21045-luminous
+    
+    luminous: rbd: TestMirroringWatcher.ModeUpdated: periodic failure due to injected message failures
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit 71814348c28071e14ebda8ac6bf257e9cbf08a79
+Merge: 2142746fe1 1e9983ac83
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 22:28:59 2017 +0200
+
+    Merge pull request #17565 from theanalyst/wip-21278-luminous
+    
+    luminous: the standbys are not updated via ceph tell mds.* command
+    
+    Reviewed-By: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 2142746fe14f5717062b2e1f9931b36e12896336
+Merge: be9331252a 0ec531240a
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 22:28:06 2017 +0200
+
+    Merge pull request #17566 from theanalyst/wip-21267-luminous
+    
+    luminous: Incorrect grammar in FS message 1 filesystem is have a failed mds daemon
+    
+    Reviewed-By: Patrick Donnelly <pdonnell@redhat.com>
+
+commit be9331252ae966a9d7ec1e5ce9321d8806061d6a
+Merge: cfbd752f6d 22208c8237
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 22:23:50 2017 +0200
+
+    Merge pull request #17557 from theanalyst/wip-21269-luminous
+    
+    luminous: some generic options can not be passed by rbd-nbd
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit cfbd752f6d46fa96307d3529022524279c4896fe
+Merge: b9ec9193d7 3f0ee2aa39
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 21:43:48 2017 +0200
+
+    Merge pull request #17448 from smithfarm/wip-21118-luminous
+    
+    luminous: rgw: need to stream metadata full sync init
+    
+    Reviewed-By: Casey Bodley <cbodley@redhat.com>
+
+commit b9ec9193d7b49e44de3d34674f9dc2b8815f99df
+Merge: 5f0ff20aca 5f0ba1353b
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 21:37:26 2017 +0200
+
+    Merge pull request #17464 from smithfarm/wip-20964-luminous
+    
+    luminous: rbd: switch to new config option getter methods
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit 64fc7cf105ec4cdeacb6e2af3060b914ba47abeb
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Sep 11 12:32:08 2017 -0400
+
+    ceph-volume lvm.trigger just split the osd_id once
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit ecd5af88da2815603283742c661d27e2a48f9f7e)
+
+commit 7cdf1772d69e85646a55202c4faac1d0aaace5c4
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Sep 11 12:30:34 2017 -0400
+
+    ceph-volume tests catch improper parsing of osd uuid
+    
+    When the osd ID existed in the UUID in the same format (e.g. '1-') the
+    parsing would break returning a bogus UUID that is impossible to find
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 5392697121ef150f0edac05df14d116cf0148593)
+
+commit 944e69863347bb11450874980e4f64807d9e6e87
+Author: Andrew Schoen <aschoen@redhat.com>
+Date:   Fri Sep 8 15:32:15 2017 -0500
+
+    tests: remove 'ceph-' prefix from test node hostnames
+    
+    This updates our Vagrantfile to match the changes in ceph-ansible
+    introduced by https://github.com/ceph/ceph-ansible/commit/298a63c43
+    
+    Signed-off-by: Andrew Schoen <aschoen@redhat.com>
+    (cherry picked from commit f41d359ebaec8762ed1a7b8cfd85c23f351a5070)
+
+commit f1b92868fa775ab4c210b3fd02e9a4913485db3a
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Sep 8 12:25:57 2017 -0400
+
+    ceph-volume lvm.api PVolumes should filter by all matching tags, not just one
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit b8613c1d7bf56c49d1b7f1c41a37073b8739bbc3)
+
+commit 54cdf1805a12fd691bd9da0441dab186446aef76
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Sep 8 12:25:31 2017 -0400
+
+    ceph-volume tests pv API should also match all pv_tags
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 120fd6a196045c8511c3eaafec37de43003bf450)
+
+commit 6a1189d1eb74d9c3d7653f4f32c480158d260901
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Sep 8 11:47:09 2017 -0400
+
+    ceph-volume tests prove all volume tags have to match in vgs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit fe2a7106decb586e83f5b60d6c18c454afe4883e)
+
+commit f4930e0b8327e5dcd6aafaac7cd51c1933b95456
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Sep 8 11:46:34 2017 -0400
+
+    ceph-volume lvm.api all vg tags should match, not just one
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 6d679855aa077e2de3f20316625d478a3697c78f)
+
+commit fafc161e1f6c825930c0848c32fa06b1d5edc849
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Sep 7 17:00:22 2017 -0400
+
+    ceph-volume tests prove all tags have to match in lvs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 80e401ca970066541ae7255be1caf42883048df4)
+
+commit cdba58264732a648425dd1f78e75a91ea6a5198d
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Sep 7 16:59:53 2017 -0400
+
+    ceph-volume lvm.api all lv tags should match, not just one
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit dbaf30c3e4d921df2a92812383c8805a77eb8f5b)
+
+commit 12d638afea087189a1d3f350dd87185b0ade6617
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Sep 7 16:56:55 2017 -0400
+
+    ceph-volume lvm.activate allow not using osd_id
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 99a8a719695591558da29b3d16a347d5bff8bf3d)
+
+commit a50dc9647282c7b7455774502532f5281ae2aece
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Sep 7 16:54:19 2017 -0400
+
+    ceph-volume tests prove missing args.osd_id is fine
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 8d1a1a885fd65073308c205949bc70b41805f92f)
+
+commit 834d4c0eabf18fe1219f52a70e3bf78235f51f62
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Sep 7 16:51:43 2017 -0400
+
+    ceph-volume tests add is_root and lv fixtures to conftest
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit d18d5e139be82de36e1a60340525adbf79fdedd9)
+
+commit 5f0ff20aca1bb25f8758d6533f0aa38b3614c954
+Merge: 90fbef808e 5d229d18ec
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 21:22:44 2017 +0200
+
+    Merge pull request #17446 from smithfarm/wip-21115-luminous
+    
+    luminous: rgw multisite: objects encrypted with SSE-KMS are stored unencrypted in target zone
+    
+    Reviewed-By: Casey Bodley <cbodley@redhat.com>
+
+commit 90fbef808eb84f3cdc72172a8e4690f8857c960c
+Merge: a05e676a6a a1a3c07ba4
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 21:22:05 2017 +0200
+
+    Merge pull request #17468 from smithfarm/wip-21052-luminous
+    
+    luminous: build/ops: RHEL 7.3 Selinux denials at OSD start
+    
+    Reviewed-By: Ken Dreyer <ktdreyer@redhat.com>
+
+commit a05e676a6a619327929d1000e22a557e77c1dc6f
+Merge: 16ccc2084c 7c3a82225e
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 21:19:17 2017 +0200
+
+    Merge pull request #17444 from smithfarm/wip-20968-luminous
+    
+    luminous: rgw: bytes_send and bytes_recv in the msg of usage show returning is 0 in master branch
+    
+    Reviewed-By: Casey Bodley <cbodley@redhat.com>
+
+commit 16ccc2084c7d477af362e2d99a409f7c929268ac
+Merge: c0c79fd74d 4f7c155c2e
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 21:16:40 2017 +0200
+
+    Merge pull request #17555 from theanalyst/wip-21270-luminous
+    
+    luminous: rgw: shadow objects are sometimes not removed
+    
+    Reviewed-By: Orit Wasserman <owasserm@redhat.com>
+
+commit c0c79fd74df79c0746ee31ef0590dd60d586946c
+Merge: 7b69aefc30 40d46c01b7
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 21:00:36 2017 +0200
+
+    Merge pull request #17558 from theanalyst/wip-21277-luminous
+    
+    luminous: [cls] metadata_list API function does not honor `max_return` parameter.
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit 7b69aefc30d11fd4cc3ea2bb9911761a5d0b7770
+Merge: 893ca2493a 3ac5343841
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 20:59:53 2017 +0200
+
+    Merge pull request #17556 from theanalyst/wip-21265-luminous
+    
+    luminous: [cli] rename of non-existent image results in seg fault
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit 893ca2493aa19b18859064a25034b77642f18fe6
+Merge: 8d180e4386 6468ddf8fc
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 20:59:28 2017 +0200
+
+    Merge pull request #17560 from theanalyst/wip-21288-luminous
+    
+    luminous: [test] various teuthology errors
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit 8d180e4386f6385b2c76976de8e73ca4d93a5c08
+Merge: 06f566fd07 7989da7da6
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 20:58:52 2017 +0200
+
+    Merge pull request #17561 from theanalyst/wip-21289-luminous
+    
+    luminous: [rbd] image-meta list does not return all entries
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit e2dda02e02d25b3785c7355abffdad98a1242482
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Sep 7 08:55:27 2017 -0400
+
+    qa/workunits/rbd: relax greps to support upgrade formatting change
+    
+    Fixes: http://tracker.ceph.com/issues/21181
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 273c84578b06905229a7c6eae7b1a12bbe60de95)
+    
+    Conflicts:
+            qa/workunits/rbd/import_export.sh: trivial resolution
+
+commit 06f566fd073c25c674f0441f83e3ce8f4396e1d5
+Merge: 5e5002d993 9cd6899346
+Author: Abhishek L <abhishek.lekshmanan@gmail.com>
+Date:   Mon Sep 11 20:08:14 2017 +0200
+
+    Merge pull request #17336 from tchaikov/wip-luminous-pr-16774
+    
+    luminous: mgr/dashboard: fix rbd's pool sub menu
+    
+    Reviewed-By: Jason Dillaman <jdillaman@redhat.com>
+
+commit ccb3c1edc0a45dfaadb5c4a4aa6700d0b8c8d92f
+Author: hechuang <hechuang@xsky.com>
+Date:   Thu Jun 29 10:38:23 2017 +0800
+
+    rgw: Data encryption is not follow the AWS agreement
+    
+    Encryption request headers should not be sent for GET requests and HEAD
+    requests if your object uses SSE-KMS/SSE-S3 or you’ll get an HTTP 400
+    BadRequest error.
+    
+    Signed-off-by: hechuang <hechuang@xsky.com>
+    (cherry picked from commit dfe1a7c1e6c470d623c70d83c32cc5b7a921bbc5)
+
+commit e7158e8e41e89eb845ecd7a888a5bfc6a008cc75
+Author: John Spray <john.spray@redhat.com>
+Date:   Thu Sep 7 09:44:36 2017 -0400
+
+    mon: fix dropping mgr metadata for active mgr
+    
+    drop_standby() was killing it and it was only getting added
+    back in certain locations.  Instead, make the metadata
+    drop conditional and only do it in the places we're
+    really dropping the daemon, not when we're promoting
+    it to active.
+    
+    Fixes: http://tracker.ceph.com/issues/21260
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 29c6f9adf178f6611a625740f395e397cad9147b)
+
+commit f5ff82d8ff4c45aee345b271ef4a3d1b95f83237
+Author: John Spray <john.spray@redhat.com>
+Date:   Thu Sep 7 09:42:29 2017 -0400
+
+    qa/tasks/mgr: regression test for 21260
+    
+    (aka http://tracker.ceph.com/issues/21260)
+    
+    Fixes: http://tracker.ceph.com/issues/21260
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 28cb4bb2e68298a8a307eb2de6121b60db43cb86)
+
+commit b10311dc730edfbd622a5a2ee7fe45293887b61a
+Author: Joao Eduardo Luis <joao@suse.de>
+Date:   Fri Sep 8 12:48:12 2017 +0100
+
+    mon/OSDMonitor: don't create pgs if pool was deleted
+    
+    A pool may be deleted while in the process of creating pgs. If that
+    happens, we should not queue additional pgs from that pool to be
+    created.
+    
+    Fixes: http://tracker.ceph.com/issues/21309
+    
+    Signed-off-by: Joao Eduardo Luis <joao@suse.de>
+    (cherry picked from commit 7a8a88032ec0bf7f1b485419a11646d7441faf2c)
+
+commit f847b164fda0e54a725e4a805124b78a61e545bf
+Author: Joao Eduardo Luis <joao@suse.de>
+Date:   Thu Sep 7 18:10:18 2017 +0100
+
+    mon/OSDMonitor: fix typo
+    
+    Signed-off-by: Joao Eduardo Luis <joao@suse.de>
+    (cherry picked from commit bc5fe2e9099dbb560c2153d3ac85f38b46593a77)
+
+commit fe2fe20100f7f5349d7101bc718f040f5e45bde1
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri Sep 8 19:28:09 2017 +0800
+
+    encoding: reset optional<> if it is uninitialized
+    
+    * should reset it, in case we reuse it after initializing it.
+    * initialize the value of `p` using the C++11 style initializer, so it
+      is zero-initialized.
+    * revert 2a83ef3c which disables a warning of:
+     ./include/encoding.h:317:7: warning: 't' may be used uninitialized in
+        this function [-Wmaybe-uninitialized]
+     where the `t` is the temporary variable for initializing the value of
+     `p`.
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 0363236dc754180a0215a818d58587943f84fb53)
+
+commit 9f65be2feb0186276e2b91fc58e6573779921970
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Wed Sep 6 17:31:16 2017 +0800
+
+    tools/ceph_objectstore_tool: fix 'dup' unable to duplicate meta PG
+    
+    Recently we plan to bring a Jewel cluster into Luminous.
+    After that is done, which turns out to be a big success,
+    we then try to transform all FileStore osds into BlueStore ones
+    offline but with no luck. The ceph_objectstore_tool keeps complaining:
+    --------------------------------------------------------------------
+    dup from filestore: /var/lib/ceph/osd/ceph-20.old
+          to bluestore: /var/lib/ceph/osd/ceph-20
+    fsid d444b253-337d-4d15-9d63-86ae134ec9ac
+    65 collections
+    1/65 meta
+    cannot get bit count for collection meta: (61) No data available
+    --------------------------------------------------------------------
+    
+    The root cause is that for FileStore Luminous will always try to rewrite
+    pg "bits" as a file attribute on "Load" if that is not available.
+    But since meta pg is never loaded (we skip it during OSD::load_pgs()),
+    we actually never get the chance to do so; hence making the
+    dup method from ceph_objectstore_tool very unhappy since it always
+    expects to see such a attribute from underlying store.
+    
+    Fix the above problem by manually skipping loading the "bits" attribute
+    if underlying OS is FileStore for dup.
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    
+    (cherry picked from commit af2c4847e42945a878e2864319185d795b0664a5)
+
+commit 5e5002d99360cc2a3c956aeee43ab4fb25a6eef9
+Merge: ec8fe46855 68f48c7af8
+Author: Sage Weil <sage@newdream.net>
+Date:   Sun Sep 10 14:16:20 2017 -0500
+
+    Merge pull request #17622 from liewegas/wip-more-lum-pi
+    
+    osd: update info only if new_interval
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit ec8fe46855979e999f0e518f73ddd18ba40a23c6
+Merge: 6957c220ed 4683108903
+Author: Sage Weil <sage@newdream.net>
+Date:   Sun Sep 10 14:01:27 2017 -0500
+
+    Merge pull request #17564 from theanalyst/wip-21283-luminous
+    
+    qa/objectstore/bluestore*: less debug output
+
+commit 68f48c7af89fd5d8b224d52c8f60cfd2cdaf2df8
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Sep 4 13:51:34 2017 +0800
+
+    osd: update info only if new_interval
+    
+    refactor OSD::build_initial_pg_history() so we update the info only if a
+    new interval is identified. also, this is consistent with
+    OSD::build_past_intervals_parallel().
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 4ae053439e526fab0451d1502576dce89eb6b44f)
+
+commit 6957c220edc5c1bab7d41fa0d3ca06f02ec268d5
+Merge: 462fc906e1 e2e81403f8
+Author: Sage Weil <sage@newdream.net>
+Date:   Sun Sep 10 13:59:45 2017 -0500
+
+    Merge pull request #17496 from smithfarm/wip-21236-luminous
+    
+    luminous: osd: build_initial_pg_history doesn't update up/acting/etc
+
+commit 462fc906e14bc994667f015f8dd1ece923861c0d
+Merge: 0832adaaa7 a32f6a2e3a
+Author: Sage Weil <sage@newdream.net>
+Date:   Sun Sep 10 13:56:51 2017 -0500
+
+    Merge pull request #17601 from liewegas/wip-21171-luminous
+    
+    os/bluestore: fix deferred write deadlock, aio short return handling
+
+commit 98a53f929ef92ac6c68f34e30df929eca3f323bc
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Aug 29 00:19:24 2017 +0200
+
+    build/ops: rpm: do not create librbd.so.1 symlink in /usr/lib64/qemu
+    
+    As reported by Ademar de Souza Reis Jr <areis@redhat.com>:
+    
+    This symlink should not be necessary anymore. QEMU is properly linked to
+    ceph/librbd these days (look at the qemu-block-rbd sub-package in Fedora and
+    the respective package in RHEL).
+    
+    The symlink was a hack from a time when librbd was distributed and supported by
+    ceph and the rbd driver would be enabled at runtime only when/if the symlink
+    was present.
+    
+    So the right fix is to actually get rid of the symlink altogether and never
+    touch (much less own) /usr/lib64/qemu.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit be4d6b1a74a0612621c3ad2cedebaa1fa40ffbab)
+
+commit 0832adaaa7e7faaf60ff7a51d18229bfc6eebf76
+Merge: aba1e7cd34 d769b077b1
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Sep 8 14:04:14 2017 -0400
+
+    Merge pull request #17551 from dillaman/wip-21280
+    
+    luminous: test/cls_rbd: mask newer feature bits to support upgrade tests
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 80d848f069b9c5c97a720972f62bbb8eda1d3573
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Tue Sep 5 14:16:57 2017 -0700
+
+    osd/PGBackend, MOSDPGRecoveryDelete[Reply]: handle incompatible encoding
+    
+    Handle a pre-luminous encoding without min_epoch for both these
+    messages.  Bump the header version, so the simple path of inline
+    decoding works for the future.  For 12.2.0 and pre-luminous, we can
+    check the SERVER_LUMINOUS flag on the connection to tell which
+    encoding to use.
+    
+    This is not a cherry-pick from master since all upgrades must stop at
+    luminous, and will use the existing encoding before continuing.
+    
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+
+commit aba1e7cd34bebca60187bed3fc8fcd75a18642b4
+Merge: 28e5f64ec3 ce434ac24f
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 10:58:39 2017 -0500
+
+    Merge pull request #17467 from smithfarm/wip-21046-luminous
+    
+    luminous: common: adding line break at end of some cli results
+
+commit 28e5f64ec3fc946bad8472c342c73c5d3bafb17f
+Merge: 3a270224a5 e2cc9ef48a
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 10:57:33 2017 -0500
+
+    Merge pull request #17472 from smithfarm/wip-21108-luminous
+    
+    luminous: mon: OSDMonitor: osd pool application get support
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 3a270224a5a1e75eddcc74adc8e6effc39674e2d
+Merge: 79750eab64 a656a38d28
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 10:56:56 2017 -0500
+
+    Merge pull request #17475 from smithfarm/wip-21133-luminous
+    
+    luminous: osd: PrimaryLogPG: sparse read won't trigger repair correctly
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 79750eab642eca2b4d6227dfdf28932edcae1256
+Merge: fb1a23d974 0c75157a91
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 10:55:55 2017 -0500
+
+    Merge pull request #17481 from smithfarm/wip-21182-luminous
+    
+    luminous: core: osd crush rule rename not idempotent
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit fb1a23d974cae62ea9effc10f25a03e616f863ac
+Merge: e5885fae2f 927b19ff77
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 10:55:37 2017 -0500
+
+    Merge pull request #17494 from smithfarm/wip-21234-luminous
+    
+    luminous: bluestore: asyn cdeferred_try_submit deadlock
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit e5885fae2ff8215d6c06acf23edb69d02e59ce46
+Merge: e22b3a9410 daacbfd90f
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 8 08:51:33 2017 -0700
+
+    Merge pull request #17469 from smithfarm/wip-21103-luminous
+    
+    luminous: cephfs: client: missing space in some client debug log messages
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit e22b3a941098cd54f4986b8bea8019483fefb214
+Merge: bcd492a062 dd5f9e5333
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Sep 8 08:48:05 2017 -0700
+
+    Merge pull request #17562 from theanalyst/wip-21276-luminous
+    
+    luminous: os/bluestore/BlueFS.cc: 1255: FAILED assert(!log_file->fnode.extents.empty())
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit bcd492a062875c71047faaae58e77568dbaa4c41
+Merge: d48762a858 2c7fbc463c
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:28:35 2017 -0500
+
+    Merge pull request #17345 from liewegas/wip-pr-17311-luminous
+    
+    mon: use ceph_clock_now if message is self-generated
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit d48762a858f87177a7834f6ebab6a4be8f8a3d82
+Merge: 7c347e82e9 43ffb7c897
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:28:17 2017 -0500
+
+    Merge pull request #17344 from liewegas/wip-pr-17330-luminous
+    
+    mon/OSDMonitor: make 'osd crush class rename' idempotent
+
+commit 7c347e82e9919bc8c72022b3b101e197089428de
+Merge: 92ea7eb529 7b3ab3252f
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:27:55 2017 -0500
+
+    Merge pull request #17527 from liewegas/wip-pr-17510-luminous
+    
+    crush: fix fast rule lookup when uniform
+
+commit 92ea7eb529d915a17826dc69f0a266112ad2d0f3
+Merge: 2e60c1711d 81bf6cbfd4
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:27:31 2017 -0500
+
+    Merge pull request #17511 from liewegas/wip-stupid-luminous
+    
+    os/bluestore: default to stupid allocator
+    
+    Reviewed-by: Brad Hubbard <bhubbard@redhat.com>
+
+commit 2e60c1711da79e687b5002e40bfe4183ccee5f0a
+Merge: 70c0d2ebf7 ac4cb6dd41
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:26:27 2017 -0500
+
+    Merge pull request #17501 from smithfarm/wip-21242-luminous
+    
+    luminous: osd: osd/PG: discard msgs from down peers
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 70c0d2ebf79307ab4e42555672579dc5dfca4592
+Merge: 3ade14114d 8a0d7aa073
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:25:37 2017 -0500
+
+    Merge pull request #17500 from smithfarm/wip-21240-luminous
+    
+    luminous: mon: rate limit on health check update logging
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 3ade14114da0798b05b59842a31c9630f0393269
+Merge: 9437427b3e 4c0073d20b
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:24:50 2017 -0500
+
+    Merge pull request #17498 from smithfarm/wip-21238-luminous
+    
+    luminous: osd: subscribe to new osdmap while waiting_for_healthy
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 9437427b3e7f544bbd02eeb698198ed6154983f0
+Merge: a06f09ea3f 3806293b1e
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:22:49 2017 -0500
+
+    Merge pull request #17497 from smithfarm/wip-21237-luminous
+    
+    luminous: bluestore: osd crash when change option bluestore_csum_type from none to CRC32
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit a06f09ea3f63ffc7874f12a29539201abfce8be8
+Merge: 0fd1035a6f 33dc4e65b2
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Sep 8 09:22:23 2017 -0500
+
+    Merge pull request #17378 from jan--f/wip-21187-luminous
+    
+    luminous: core: osd/PGLog: write only changed dup entries
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit a32f6a2e3a46c1709e5a3e0443d8b45df4bd9c99
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Sep 7 16:28:59 2017 -0400
+
+    os/bluestore/aio: handle short return from io_submit
+    
+    io_submit may return a value less than nr, indicating that only some of
+    the provided iocbs were queued.  If that happens we should loop, not
+    return and silently drop those aios on the floor.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit dc17dfd9ff05b5676488c2b1bca53026b2ca6244)
+
+commit accd582d59efa2ba8349e6ad58775e1ca619d821
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Aug 30 17:18:18 2017 -0400
+
+    os/bluestore: more deferred debugging
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 11ac691dcc86aeed4ccb692a79ade4be04c5ef2f)
+
+commit e9b89c8b011fbbeeb128553b1b12708155a52628
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Aug 29 16:15:52 2017 -0400
+
+    os/bluestore: drop deferred_submit_lock
+    
+    This lock serves no purpose.  It only protects the call to the aio_submit
+    on the OpSequencer running batch, but we are the only caller who will do
+    that submission, and a new batch won't be moved into place until ours is
+    completed and retired (by the completion for the aio we are queueing).
+    
+    More importantly, this fixes a deadlock:
+    
+    - thread A submits aio, but the queue is full, and blocks
+    - thread B blocks taking deferred_submit_lock while holding deferred_lock
+    - aio completion thread blocks trying to take deferred_lock, and thus
+    no further aios are drained.
+    
+    Fixes: http://tracker.ceph.com/issues/21171
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 7a5ef62af194373c3a8c307b05ae6d467e49c9f0)
+
+commit 0fd1035a6f280ebd38e6aabc925afb3d49fd53ea
+Merge: 823585311c c9c168b0ea
+Author: Pan Liu <liupan1111@gmail.com>
+Date:   Fri Sep 8 09:34:36 2017 +0800
+
+    Merge pull request #17534 from liewegas/wip-pr-17459-luminous
+    
+    os/bluestore: add bluestore_prefer_deferred_size_hdd/ssd to tracked keys
+
+commit 0ec531240ad47dc2d11db68a50d7e9debfe67efe
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Aug 28 13:50:46 2017 +0100
+
+    mds: fix "1 filesystem is have a..." message
+    
+    Like "Health check failed: 1 filesystem is have a failed mds daemon (FS_WITH_FAILED_MDS)"
+    
+    Fixes: http://tracker.ceph.com/issues/21153
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 7d21119a47212140d121df99efdb838a3f078a82)
+
+commit 1e9983ac833e8bd74fa82c6a03ad8fbba68747ac
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Tue Sep 5 16:33:24 2017 +0800
+
+    ceph: collect all mds in mdsids()
+    
+    otherwise, only the active mds are returned.
+    
+    Fixes: http://tracker.ceph.com/issues/21230
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit dd702cc94e32f533f0f2e76f9d202d1fa7c6a57f)
+
+commit dabbe79e17269e8061aae60198008292601335f3
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Tue Sep 5 16:05:44 2017 +0800
+
+    ceph: always populate `targets` with ids_by_service()
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit b682e61ddc190b91da4c6cbaeba3c69d54652afb)
+
+commit 428c9934fdf78d378b2c75ac43759581710472fb
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Tue Sep 5 16:00:59 2017 +0800
+
+    ceph: extract ids_by_service() so it can be reused
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 25639f66910aa8a188d5b4b8fff8803e169da62a)
+
+commit 468310890376a9d6b055e01d1743a8c5753dce35
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Sep 5 17:43:28 2017 -0400
+
+    qa/objectstore/bluestore*: less debug output
+    
+    Let's see if this makes the spurious MON_DOWN failures go away?  (See
+    http://tracker.ceph.com/issues/20910)
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 444f5aa08539cde827e7d93a514367a8ba39b122)
+    
+    Conflicts:
+     qa/objectstore/bluestore-bitmap.yaml
+     Added bluestore-bitmap.yaml to Luminous as well
+
+commit dd5f9e53335892fa04a1d489de1020d5655e1e3f
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Sep 5 15:01:02 2017 -0400
+
+    os/bluestore/BlueFS: prevent _compact_log_async reentry
+    
+    _should_compact_log uses new_log != nullptr to tell whether compaction is
+    already in progress, but we don't set it until we are midway through the
+    process.  Set it at the top of the method to prevent reentry.
+    
+    See 455cc6cea2e5e8bc1126b5047b6003fa583af1b5, which failed to implement
+    this properly.
+    
+    Fixes: http://tracker.ceph.com/issues/21250
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 6bd9db304f906e9e4a07ca5ce07ffffdbc1678f0)
+
+commit 7989da7da6b9c2fe1d0e183d8c6d67b9bcb7c097
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Sep 6 16:14:58 2017 -0400
+
+    rbd: support iterating over metadata items when listing
+    
+    Fixes: http://tracker.ceph.com/issues/21179
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 9c4f9856b034061aed052192b0ee09b9a9d09bc0)
+
+commit 6468ddf8fc17155229edd6e579db7f1c6405e27d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 16:26:52 2017 -0400
+
+    qa/suites/rbd: reduce monitor requirements for mirroring tests
+    
+    Fixes: http://tracker.ceph.com/issues/21251
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 27194c30c50009eaf6391a21837f73b312fe5de6)
+
+commit 0cef781d74bf387a8b29f2197e492579aba42389
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 16:20:26 2017 -0400
+
+    qa/suites/rbd: fixed cache override
+    
+    Fixes: http://tracker.ceph.com/issues/21251
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 98061bb3d7ce6309ddb04ea4d7e9d44a7ecd09c6)
+
+commit 8d6ec22730d6538f8bfce3fdc076d360f7cc0e6b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 15:59:47 2017 -0400
+
+    qa/suites/rbd: reduce OSD debug log levels
+    
+    The teuthology machines are periodically running out of space
+    due to the aggressive log settings.
+    
+    Fixes: http://tracker.ceph.com/issues/21251
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 763f1877ecda680e62a2b7eff5815bb6b7dd18f2)
+
+commit 40d46c01b77891f64129ad18575f82cb6cf00534
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 10:53:47 2017 -0400
+
+    cls/rbd: metadata_list not honoring max_return parameter
+    
+    Fixes: http://tracker.ceph.com/issues/21247
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0130b85732849da8bb3e96f4afb7c023c958aef9)
+
+commit 22208c8237913c5865b4d4cf40ddb083f2ffe48c
+Author: Pan Liu <wanjun.lp@alibaba-inc.com>
+Date:   Sun Sep 3 12:12:15 2017 +0800
+
+    rbd-nbd: fix generic option issue
+    
+    Fixes: http://tracker.ceph.com/issues/20426
+    Signed-off-by: Pan Liu <wanjun.lp@alibaba-inc.com>
+    (cherry picked from commit 16f64a4c01068603736af476f640268d0baa338d)
+
+commit c34be1841d041d318ded0b63e95eab79d63bd0ef
+Author: Pan Liu <wanjun.lp@alibaba-inc.com>
+Date:   Tue Aug 29 23:30:15 2017 +0800
+
+    rbd-nbd: lower down the log level when return -EINVAL in aio_callback.
+    
+    Signed-off-by: Pan Liu <wanjun.lp@alibaba-inc.com>
+    (cherry picked from commit dcd7e5bb82524bf111a6d80d9e0c050ae55b26a1)
+
+commit 3ac5343841805daa21a86be144da94c60a58590a
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 12:11:45 2017 -0400
+
+    librbd: rename of non-existent image results in seg fault
+    
+    Fixes: http://tracker.ceph.com/issues/21248
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 4a75ee43d3b108a9593a010160479fd62884eda8)
+
+commit 4f7c155c2eb241e87160db30de4e24e7d8931188
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Jul 5 16:10:38 2017 -0700
+
+    rgw: add tail tag to track tail instance
+    
+    Use tail_tag instead of idtag. The tail_tag is modified when either
+    creating a new tail, or adding a refcount to the tail (e.g., when
+    copying object). When just modifying the object's head, tail_tag
+    should remain the same. The gc will then use the tail_tag (if
+    exists, idtag if not) as the refcount id.
+    
+    Fixes: http://tracker.ceph.com/issues/20234
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit f71a3e525d9a69fe537428f25930fb207a602afe)
+
+commit d769b077b1a6fa34bfddbef857ae543872df2f75
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Sep 5 21:37:16 2017 -0400
+
+    test/cls_rbd: mask newer feature bits to support upgrade tests
+    
+    Fixes: http://tracker.ceph.com/issues/21217
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit aeb8f29d21625f3570e2f3e6dd26594d1a6df810)
+
+commit c9c168b0ea550fe13181e2e64b53cd8511794d22
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Tue Sep 5 11:45:53 2017 +0800
+
+    os/bluestore: add bluestore_prefer_deferred_size_hdd/ssd to tracked keys
+    
+    To make these two keys can be changed online:
+    
+    ./bin/ceph tell osd.* injectargs "--bluestore_prefer_deferred_size_hdd 0"
+    osd.0: bluestore_prefer_deferred_size_hdd = '0' (not observed, change may require restart)
+    osd.1: bluestore_prefer_deferred_size_hdd = '0' (not observed, change may require restart)
+    osd.2: bluestore_prefer_deferred_size_hdd = '0' (not observed, change may require restart)
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit cd1225634cf4d20e485f7c30d5a0438febc7ddcc)
+
+commit 7b3ab3252f9010590da1cc695919b70e09a3d5e8
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Sep 5 22:25:03 2017 -0400
+
+    crush: fix fast rule lookup when uniform
+    
+    Older clients will search for the first rule with a matching ruleset,
+    type, and size.  The has_uniform_rules bool is only set if we have rule
+    ids and rulesets that line up, but we must also verify that the rest of the
+    mask matches or else we can get a different CRUSH mapping result because
+    the mask might not match and old clients will fail to find a rule and we
+    will find one.  We also can't just check the ruleset as the legacy clients
+    find the *first* (of potentially many) matching rules; hence we only do
+    the fast check if all rulesets == rule id.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f24095e0e9734531dbdbcd4bff1392c463188e8e)
+
+commit 81bf6cbfd4cdea04937bb04eb4902762114e5913
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Sep 5 23:04:15 2017 -0400
+
+    os/bluestore: mark bluestore_allocator as DEV
+    
+    We don't want users changing this without a good reason.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 4b6a4a7ff3e82e015fc8268142d8c5c6437d089f
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 10 11:58:40 2017 -0400
+
+    os/bluestore: put StupidAllocator btree into bluestore_alloc mempool
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 6f189d8ab3c549a5c5e01616310c6eb39119fbc1)
+
+commit b943e7c5844d818b0cbc51e0d88fa147c31a44e2
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 10 11:21:32 2017 -0400
+
+    os/bluestore: default 'bluefs_allocator = stupid'
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2b6eea80eacd65cbb1aa3702a3a3b642304c04f5)
+
+commit 3e06813fe92c0ad07ac033aab14d088136b996f9
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Aug 8 12:14:07 2017 -0400
+
+    os/bluestore: default to bluestore_allocator = stupid
+    
+    Performance looks better, and code is simpler.
+    
+    Also fix config option annotations.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3750cf9cafabd3296c22b8b8dff35e44d18b9dd8)
+
+commit ac4cb6dd41adfc549d064756215421c33368dc86
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu Aug 24 16:04:54 2017 +0800
+
+    osd/PG: discard msgs from down peers
+    
+    if a repop is replied after a replica goes down in a new osdmap, and
+    before the pg advances to this new osdmap, the repop replies before this
+    repop can be discarded by that replica OSD, because the primary resets the
+    connection to it when handling the new osdmap marking it down, and also
+    resets the messenger sesssion when the replica reconnects. to avoid the
+    out-of-order replies, the messages from that replica should be discarded.
+    
+    Fixes: http://tracker.ceph.com/issues/19605
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit e3fce6be44506168a7a138aab93f6a4d6776397b)
+
+commit 8a0d7aa073eb14fa3324594449968d2755535d6c
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Aug 7 07:52:42 2017 -0400
+
+    mon: rate limit on health check update logging
+    
+    Fixes: http://tracker.ceph.com/issues/20888
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 5b903c7b428c2c7024fdfc1dffacad0b1521b750)
+
+commit 2484a728e2694357de5e50dae2345ce6894d873b
+Author: John Spray <john.spray@redhat.com>
+Date:   Fri Sep 1 05:33:16 2017 -0400
+
+    mon: add helper for emitting logs by health status
+    
+    We were starting to repeat our little "if(status==HEALTH_ERR"
+    blocks in too many places.
+    
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 618a27868d65aa152ac67cce8057a75c4d61def9)
+
+commit 4c0073d20b72a30e67c97b1527d091d43c67a358
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 24 17:56:13 2017 -0400
+
+    osd: subscribe to new osdmap while waiting_for_healthy
+    
+    If we are sitting around waiting until we are able to ping our "up" peers,
+    we need to be sure that our notion of "up" is still correct and we're not
+    just stuck on an old, stale OSDMap.
+    
+    Fixes: http://tracker.ceph.com/issues/21121
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit fbafa659dae94faba435ca449ee5e77b51108b4b)
+
+commit 3806293b1ecc888f92fdc7f15ef3f25ac37ac29b
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Thu Aug 31 12:42:36 2017 +0800
+
+    os/bluestore: formatting nits
+    
+    So we don't output anything if csum is currently off:
+    
+    _do_alloc_write blob Blob(0x7fad7cc25950 blob([0x42a80000~10000] none/0x1)
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 22740cc9b3e489ae82b4b3071a17793c11abce79)
+
+commit ca667063b77445a2f45cdce04110b3affbdf6bed
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Thu Aug 31 11:42:37 2017 +0800
+
+    os/bluestore: don't re-initialize csum-setting for existing blobs
+    
+    The global checksum setting may change, e.g., from NONE to CRC32,
+    which can cause improper re-initialization of the csum-settings of
+    existing blobs(e.g., partial write/overwrite may turn out to shrink
+    'csum_data').
+    
+    We could develop some complicated solutions but for now let's not
+    bother since the above scenario is rare.
+    
+    Fixes: http://tracker.ceph.com/issues/21175
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 8ec4b4960f9b93ff6d85a02308ccda0bccadb599)
+
+commit e2e81403f8dd2329c0e99c8c8abbfa8351f0401e
+Author: w11979 <wang.wenfeng@h3c.com>
+Date:   Fri Sep 1 10:02:34 2017 -0400
+
+    osd: fix build_initial_pg_history
+    
+    We need to update our info about the previous interval in order to
+    detect interval changes properly.
+    
+    Fixes: http://tracker.ceph.com/issues/21203
+    
+    Signed-off-by: w11979 <wang.wenfeng@h3c.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit afdacc6ed76dd288fdbc0f99857d9ffba23c5132)
+
+commit d57399c9dab0be6905a90b743d6b87ca93700cc6
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 31 14:55:46 2017 -0400
+
+    qa/tasks/ceph_manager: revive osds before doing final rerr reset
+    
+    We assume below that rerrosd is up, but it may not be when we exit the
+    loop.
+    
+    Fixes: http://tracker.ceph.com/issues/21206
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 21027233b2a31b587e7caf95b1d85f5bcf0ae8ec)
+
+commit 927b19ff77b667d6d5b73b5024fd3007196d0002
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 31 16:43:39 2017 -0400
+
+    os/bluestore: separate finisher for deferred_try_submit
+    
+    Reusing finishers[0], which is used for completions back into the OSD,
+    is deadlock-prone: the OSD code might block trying to submit new IO or
+    while waiting for some other bluestore work to complete.
+    
+    Fixes: http://tracker.ceph.com/issues/21207
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2b6a9d1ec0778f66b6e9d9f216df21a00caeba3f)
+
+commit cac29c9618fc5ca8bfcc6a5b4b83ff51443654fa
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Wed Aug 23 12:13:24 2017 +0300
+
+    rgw-admin: require --yes-i-really-mean-it when using --inconsistent_index
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    Fixes: http://tracker.ceph.com/issues/20777
+    (cherry picked from commit 1cd7ef0eb9bde5a08f8c758ce57c9e298fabad8d)
+
+commit 91dd0fe479c63e0b907ce218fa9f262fa950364f
+Author: Zac Medico <zmedico@gmail.com>
+Date:   Sun Aug 27 05:25:01 2017 -0700
+
+    interval_set: optimize intersect_of for identical spans
+    
+    Optimize comparisons for identical spans of intervals.
+    When this patch is combined with the previous map insert
+    optimization, a benchmark using 400000 identical
+    intervals shows a 7 times performance improvement in
+    comparison to without the patches.
+    
+    Signed-off-by: Zac Medico <zmedico@gmail.com>
+    (cherry picked from commit b6a035666c2765f8895ee9991348dbc025613ed7)
+
+commit 83236f0c476bc7e36c11e934787e69c11283ec13
+Author: Zac Medico <zmedico@gmail.com>
+Date:   Fri Aug 25 09:41:07 2017 -0700
+
+    interval_set: optimize intersect_of insert operations
+    
+    Use the std::map insert method with hint iterator to optimize
+    inserts. This increases performance more than 3.5 times for
+    large numbers of intervals. This will help performance
+    especially in the PGPool::update method, where profiling data
+    has shown that intersection operations are a hot spot. The
+    following benchmark data is for 400000 intervals:
+    
+        4 +-+--+----+----+----+----+----+----+----+----+--+-+
+    P     +    +    +    +    +    +    +    +  *************
+    E     |                             ********            |
+    R 3.5 +-+                       ****                  +-+
+    F     |                   ******                        |
+    O     |                 **                              |
+    R   3 +-+           ****                              +-+
+    M     |          ***                                    |
+    A     |        **                                       |
+    N 2.5 +-+     *                                       +-+
+    C     |     **                                          |
+    E     |     *                                           |
+        2 +-+ **                                          +-+
+    R     |  **                                             |
+    A     | **                                              |
+    T 1.5 +**                                             +-+
+    I     |**                                               |
+    O     +*   +    +    +    +    +    +    +    +    +    +
+        1 +*+--+----+----+----+----+----+----+----+----+--+-+
+          0   0.1  0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9
+    
+                            SET SIZE RATIO
+    
+    The above chart was generated using benchmark results
+    from the following program:
+    
+    #include <iostream>
+    #include <sys/timeb.h>
+    #include "include/interval_set.h"
+    
+    int main(int argc, char *argv[])
+    {
+      const int interval_count = std::stoi(argv[1]);
+      const int interval_distance = 4;
+      const int interval_size = 2;
+      const int sample_count = 8;
+      const int max_offset = interval_count * interval_distance;
+      interval_set<int> a, b, intersection;
+    
+      for (int i = 0; i < max_offset; i+=interval_distance) {
+        a.insert(i, interval_size);
+      }
+    
+      for (int m = 1; m < 100; m++) {
+        float ratio = 1 / float(m);
+    
+        for (int i = 0; i < max_offset; i+=interval_distance*m) {
+          b.insert(i, interval_size);
+        }
+    
+        struct timeb start, end;
+        int ms = 0;
+        for (int i = 0; i < sample_count; i++) {
+          ftime(&start);
+          intersection.intersection_of(a, b);
+          ftime(&end);
+          ms += (int) (1000.0 * (end.time - start.time)
+            + (end.millitm - start.millitm));
+          intersection.clear();
+        }
+        b.clear();
+    
+        std::cout << ratio << "\t" << ms << std::endl << std::flush;
+      }
+    }
+    
+    Signed-off-by: Zac Medico <zmedico@gmail.com>
+    (cherry picked from commit 32bc0430f70b057d1bba623252e92ab9f279028d)
+
+commit 8e9b52ee884dce49385855eed571ece6cdc9e0d7
+Author: yanyx <yanyx@umcloud.com>
+Date:   Mon Aug 7 18:14:14 2017 +0800
+
+    pybind: fix chart becomes bigger when refresh
+    
+    Fixes: http://tracker.ceph.com/issues/20746
+    Signed-off-by: Yixing Yan <yanyx@umcloud.com>
+    (cherry picked from commit edf93427734ce156f5eaac7a25f4c16a92852b98)
+
+commit 63c9382eafb5d40441ce487c2430c98c214ce84a
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Fri Aug 25 17:55:11 2017 -0400
+
+    rgw_file:  fix LRU lane lock in evict_block()
+    
+    Found by "Supriti Singh" <Supriti.Singh@suse.com>.
+    
+    Fixes http://tracker.ceph.com/issues/21141
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 3301596734adcbda1e8e76a742935efdeb7518fd)
+
+commit 24803b76c804fb1717a4c6ed4f93c63fbd4a8f19
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon Aug 28 10:14:03 2017 -0400
+
+    qa: create_cache_pool no longer runs 'pool application enable'
+    
+    Fixes: http://tracker.ceph.com/issues/21155
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 054297450484ff99f95470905cd6d8986c26e2c4)
+
+commit ca7e48c62e6a18c5a627d5e71ed8016e1e41b9a1
+Author: John Spray <john.spray@redhat.com>
+Date:   Mon Aug 28 10:08:12 2017 -0400
+
+    mgr: fix crash in MonCommandCompletion
+    
+    Fixes: http://tracker.ceph.com/issues/21157
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 5fa61b2ed078a3cf333a3111d4f43584ce27ba9d)
+
+commit 0c75157a91506dc5edd3c4ae5eb95ac1a0c38aee
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Tue Aug 29 08:21:07 2017 +0800
+
+    mon/OSDMonitor: make 'osd crush rule rename' idempotent
+    
+    Fixes: http://tracker.ceph.com/issues/21162
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit cd2191c3f192986e20beaab84b643dfaf49901f7)
+
+commit b575d00073ccf3f84d84a220f542058471a58472
+Author: Abhishek Lekshmanan <abhishek@suse.com>
+Date:   Thu Aug 3 15:14:05 2017 +0200
+
+    rgw_lc: add support for optional filter argument and make ID optional
+    
+    Support Filter tag in Lifecycle XML similar to AWS S3, while S3 docs
+    mention that this tag is mandatory, older clients still default to
+    Prefix, and S3 itself seems to relaxed in enforcing the rule, this
+    implementation also follows a similar pattern. Filter optionally
+    supports filtering via (multiple) Object Tags, this is still a TODO. The
+    current implementation of object tags is still as an object xattr, and
+    since the LC processing still iterates over the bucket index which
+    currently doesn't have any info. on tags, this requires some thought
+    into for implementing without a larger performance penalty
+    
+    Fixes: http://tracker.ceph.com/issues/20872
+    Signed-off-by: Abhishek Lekshmanan <abhishek@suse.com>
+    (cherry picked from commit 93a858392a2a3bc8c16369dd8c3f6845e99af404)
+
+commit ce2a181834cf60f9d03bbcf849ae72a740bb10a9
+Author: Jiaying Ren <jiaying.ren@umcloud.com>
+Date:   Thu Aug 10 10:57:13 2017 +0800
+
+    rgw: fix obj copied from remote gateway acl full_control issue
+    
+    This part of the code is commit in
+    ea3efca
+    
+    When copy a object to a remote gateway, the check processing which is
+    done by
+    "Bitwise And" between source object's acl elements and
+    grants_headers_def array elements
+    will be done to produce the target object's acl elements.
+    
+    So when the full_control is the first element of grants_headers_def, no
+    matter the
+    source object's acl element permission field is write or read, the
+    result of
+    bitwise and will always be true, then call grants_by_type_add_one_grant
+    with
+    check_perm which is full_control, all of the permission field of the
+    target object's
+    acl elements will be full_control.
+    
+    Fixes: http://tracker.ceph.com/issues/20658
+    
+    Signed-off-by: Enming Zhang <enming.zhang@umcloud.com>
+    (cherry picked from commit 6bb2ed24ad175005e7ebd187166bb8735761493c)
+
+commit 17626e01d832bac0068697947f32202d2f8cc13a
+Author: John Spray <john.spray@redhat.com>
+Date:   Thu Aug 10 11:10:09 2017 +0100
+
+    mgr/dashboard: fix FS status on old MDS daemons
+    
+    These may not have the version string.  We already handled
+    this in the equivalent code in the status module, so just
+    do the same thing in dashboard.
+    
+    Fixes: http://tracker.ceph.com/issues/20692
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 800662c2fa3f040992987dc5c635dfbc14f0a0ea)
+
+commit e171fa6a6dd77b2d3490e2d656de149beb5daaab
+Author: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+Date:   Mon Aug 21 17:04:45 2017 +0300
+
+    rgw: Prevent overflow of stats cached values
+    
+    Fixes: http://tracker.ceph.com/issues/20934
+    Signed-off-by: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+    (cherry picked from commit 634215eea1ddd4e4f5dc0066c4a2e745cfc20475)
+
+commit a656a38d285acb413d07c5b8b3d0ea90d491ed53
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Thu Aug 24 15:53:23 2017 +0800
+
+    osd/PrimaryLogPG: fix sparse read won't trigger repair correctly
+    
+    Normal reads instead of hole-reads should trigger auto-repair.
+    Also we shall quit on successfully triggering a repair, or else
+    we are at risk of doing the op multiple times.
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 4ad25c346215dc2ddc4b1a43948b6fe01316edf2)
+
+commit 39b3b132f24c2e66b7d862ef5b553992dd109cf4
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Aug 21 16:56:20 2017 +0800
+
+    qa: add health whitelist for kcephfs suite
+    
+    Fixes: http://tracker.ceph.com/issues/20892
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit b10989209f41ddb5abe16f816ffd8a3ce118fd02)
+
+commit 00ed756ae866f2f4777c3994f75032824f3ee5ac
+Author: Dan van der Ster <daniel.vanderster@cern.ch>
+Date:   Thu Aug 10 11:33:46 2017 +0200
+
+    client: skip lookupname if writing to unlinked file
+    
+    When a client writes to an unlinked file, get_quota_root tries to
+    resolve the filename via an MDS lookupname op. The op always results in
+    -13 permission denied for path-restricted caps or -2 no such file or
+    directory otherwise. More importantly, the repeated lookupname ops slow
+    down buffered writes significantly.
+    
+    Don't do the lookupname for unlinked files; use the root_ancentor's
+    quota instead.
+    
+    Fixes: http://tracker.ceph.com/issues/20945
+    Backport: jewel, luminous
+    Signed-off-by: Dan van der Ster <daniel.vanderster@cern.ch>
+    (cherry picked from commit 1d617eee2e8c32f7300cb2cb8dd37b3714a4699f)
+
+commit e2cc9ef48a7f7a2014c211a3baa10e7ac1a1a8a7
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Wed Aug 9 21:24:49 2017 +0800
+
+    mon/OSDMonitor: "osd pool application ls" support
+    
+    It would be a pain if we have to call 'ceph osd dump --format=json-pretty'
+    to find out these each time...
+    
+    Demo output:
+    (1) ceph osd pool application get
+    {
+        "cephfs_data_b": {
+            "cephfs": {}
+        },
+        "cephfs_metadata_a": {
+            "cephfs": {}
+        },
+        "test_pool": {
+            "rbd": {
+                "test": "me"
+            }
+        }
+    }
+    
+    (2) ceph osd pool application get test_pool
+    {
+        "rbd": {
+            "test": "me"
+        }
+    }
+    
+    (3) ceph osd pool application get test_pool rbd
+    {
+        "test": "me"
+    }
+    
+    (4) ceph osd pool application get test_pool rbd test
+    me
+    
+    Fixes: http://tracker.ceph.com/issues/20976
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 46586b22882c0c08c099243e189f5a165063da0c)
+
+commit 25a651e100d5854d730f1218154838fa37868686
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Mon Aug 21 13:14:40 2017 -0700
+
+    qa: add chown test clearing S_ISGID and S_ISUID
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 7fd94abd0a2b682c1d7f01699962e27809c061cd)
+
+commit d9a8b3e797252114c930117e6311f924ef0588b3
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Aug 16 10:48:21 2017 -0700
+
+    ceph-fuse: load supplementary groups by default
+    
+    Partially addresses POSIX test failures in [1] due to the config setting being
+    false by default.
+    
+    [1] https://bugzilla.redhat.com/show_bug.cgi?id=1480182#c6
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 08b077338cba1250c36232f91c708d189326bbb6)
+
+commit b9514d48471b40574a47ad433e3573674075e466
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Aug 16 10:20:11 2017 -0700
+
+    client: clear suid/sgid bits on non-zero write
+    
+    According to [1], these bits should be cleared regardless of any exe bits on
+    the file. Also, add the required non-zero write check.
+    
+    [1] http://pubs.opengroup.org/onlinepubs/9699919799/functions/pwrite.html
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 24c9de5d11d5d1145da96a2af52dd22d81e0c89d)
+
+commit e41a8c25345020f47513c43269eb91e3ca6d0852
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Aug 16 10:07:43 2017 -0700
+
+    client: add missing space in debug msg
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 3f806c72dd3b9b28761ee32f5e32001de8362028)
+
+commit f9eb24e74f948d85729432dbb440aa177789df85
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Aug 16 09:52:36 2017 -0700
+
+    cephfs: clear suid/sgid if regular file is exe
+    
+    According to [1], the suid/sgid should be cleared if any of the executable bits
+    are set.
+    
+    Found this while experimenting for [2].
+    
+    [1] http://pubs.opengroup.org/onlinepubs/9699919799/functions/chown.html
+    [2] https://bugzilla.redhat.com/show_bug.cgi?id=1480182
+    
+    Fixes: http://tracker.ceph.com/issues/21004
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit d306d74a60e6d2c79aa4e9a840f3fc12ee8461bc)
+
+commit 469e50646c7d83e1f4e59ea90aeeefbd437976e8
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Aug 16 09:48:09 2017 -0700
+
+    client: refactor clear set uid/gid if -1
+    
+    libfuse already does not set FUSE_SET_ATTR_UID if the chown uid is -1. However,
+    another libcephfs client could call setattr directly with -1 as the uid/gid so we
+    should handle that potential case.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 6448d4927fb4cfc29392ff58da8775d68e3e875b)
+
+commit 18442e15854f7973c1b478befaff42f08b549505
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Mon Aug 21 13:02:44 2017 -0600
+
+    rpm: ceph-fuse requires fuse package
+    
+    The ceph-fuse(8) man page describes using the "fusermount" tool to mount
+    CephFS. This utility is in the "fuse" package. Prior to this change, the
+    ceph-fuse RPM only depends on "fuse-libs", not "fuse".
+    
+    The Debian packaging has always depended on the full "fuse" (previously
+    "fuse-utils") package, so we should make the RPM packaging do the same.
+    
+    Fixes: http://tracker.ceph.com/issues/21057
+    Signed-off-by: Ken Dreyer <kdreyer@redhat.com>
+    (cherry picked from commit 6fba9cc3f910442d3d09b41f01f454a39bfdbc48)
+
+commit daacbfd90fb4e127dc73142674eacf63d618cdaf
+Author: Zhu Shangzhong <zhu.shangzhong@zte.com.cn>
+Date:   Wed Aug 23 10:20:17 2017 +0800
+
+    client: add blank space between function name and inode number for log
+    
+    Fixes: http://tracker.ceph.com/issues/21069
+    
+    Signed-off-by: Zhu Shangzhong <zhu.shangzhong@zte.com.cn>
+    (cherry picked from commit 0cb4d379fdd2b869bd765e1fcb424a8f8a8f6a04)
+
+commit a1a3c07ba41c2edea2499d1b31baba310e6417e2
+Author: Boris Ranto <branto@redhat.com>
+Date:   Fri Jun 9 14:38:28 2017 +0200
+
+    selinux: Allow nvme devices
+    
+    This commit allows nvme devices which use a different label than
+    standard block devices.
+    
+    Fixes: http://tracker.ceph.com/issues/19200
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit a8af61c8da9028adc13f7aea611d5a5fee9dbfd1)
+
+commit ce434ac24f89e3cd3f51fbbe63b37f500913bc7d
+Author: songweibin <song.weibin@zte.com.cn>
+Date:   Thu Aug 17 11:44:43 2017 +0800
+
+    common: add new line break when get command descriptions
+    
+    Signed-off-by: songweibin <song.weibin@zte.com.cn>
+    (cherry picked from commit 19dd4203eb930ffb7a321cb617c580d99ceca9c1)
+
+commit 59a327e0a9a71802c61f8dddf8d217a5a7bfe2f6
+Author: songweibin <song.weibin@zte.com.cn>
+Date:   Wed Aug 9 14:26:32 2017 +0800
+
+    rbd: adding newline operation when only '--format' used
+    
+    Signed-off-by: songweibin <song.weibin@zte.com.cn>
+    (cherry picked from commit 992829d38cb89732f6994642c1bdaa2448e610b7)
+
+commit 94fcad155dd2b1d35264e628309b67977146dfff
+Author: songweibin <song.weibin@zte.com.cn>
+Date:   Tue Aug 1 19:48:04 2017 +0800
+
+    rbd: '--pretty-format' should return error if '--format' not used
+    
+    Signed-off-by: songweibin <song.weibin@zte.com.cn>
+    (cherry picked from commit 47e7549826b55905e7f298717fedf0e8f220940a)
+    
+    Conflicts:
+        src/test/cli/rbd/help.t (master has several new commands compared to
+                                luminous: omit these)
+
+commit a74b3267eef23f17eb90fff180db03c0f2fa61a6
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Aug 17 18:39:05 2017 -0400
+
+    test/librbd: TestMirroringWatcher unit tests should ignore duplicates
+    
+    Fixes: http://tracker.ceph.com/issues/21029
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5d3d5ea5aca5807b09050fe8ad2245c4963a0f34)
+
+commit 5f0ba1353b6fe0eec5ed67489a9d1f7f87466d23
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Aug 1 15:03:57 2017 -0400
+
+    rbd: switched from legacy to new-style configuration options
+    
+    Fixes: http://tracker.ceph.com/issues/20737
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 7dc82bc08cbfabd424dcd0b83ed618d28db5fe8e)
+
+commit 3f0ee2aa39c7b48380617fe33871c7db5989abcb
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 9 16:23:59 2016 -0800
+
+    rgw: metadata full sync streams metadata keys
+    
+    We don't read the entire list of all metadata entries in a single
+    request.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 4a509a669125a9a2d74de11cce555df2547103d1)
+
+commit a8c156b4761edea882c7cabb981108d2d127f442
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 9 15:43:16 2016 -0800
+
+    rgw: rest list metadata supports max-entries and marker
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit a45fd78d08f4d862c273a13abf787a93ce8e0906)
+
+commit ebd09a4c7aaa8788fe6fbc5ba80b0ea3308ca3e2
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 9 14:34:46 2016 -0800
+
+    rgw-admin: add marker to metadata list
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit ae600c2c3f765f409cb16557870ceb91d6714760)
+
+commit 8d1b349f860a7eaaae0ea281e2f5451ce8fd06f3
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 9 14:30:57 2016 -0800
+
+    rgw: add marker to metadata api keys listing
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 84ece81bc3590b08e5565c5b96bcbb4cb97a4100)
+
+commit 298366deb4473370467e3f345dddadc2d5a87b71
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 9 14:22:57 2016 -0800
+
+    rgw: marker for raw pool listing
+    
+    We now have a marker (cursor) that can be used for raw pool
+    listing.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit a24b8aeb1e376ce9e5e50535d8ce1a287c99fa90)
+
+commit 5d229d18ec89fbe49a95cb5004be1a18b6376c65
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Aug 16 09:41:43 2017 -0400
+
+    test/rgw: add kms encryption key for teuthology
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit f27ebabe551f62241d1f5b55add9ec6b5d782073)
+
+commit d0c2adc1b71cea08a40805a65cb397b0dc5bedad
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Aug 16 09:01:28 2017 -0400
+
+    test/rgw: add multisite test_encrypted_object_sync
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit acb953a9ed83e5e760d9222c8f9ede6c8c73a341)
+
+commit cc9b83c2a759356142436eae2fc005cc8ce684a9
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jul 26 16:26:25 2017 -0400
+
+    rgw: rgwx-skip-decrypt header bypasses decryption filter on GetObj
+    
+    Fixes: http://tracker.ceph.com/issues/20668
+    Fixes: http://tracker.ceph.com/issues/20671
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit adf7a333017f52682c7319420804433b7d3851a0)
+
+commit b13a1d5ffa00030170bfb0bb944d94f1b011afb3
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jul 26 16:24:13 2017 -0400
+
+    rgw: add skip_decrypt to RGWRESTConn::get_obj()
+    
+    this adds a rgwx-skip-decrypt header to requests from
+    RGWRados::fetch_remote_obj()
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 2a7a5be4b41641cb17fb9127b84ce717ca55d3fe)
+
+commit df4131c7a9bc6b61aadf315d33b0258b52b0fbed
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed Jul 26 16:23:26 2017 -0400
+
+    rgw: name arguments to RGWRESTConn::get_obj()
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 9bd1aa7facf94eed41c4235722490c91c9dbf399)
+
+commit 07a15984c665b5f4720aa6c69ce9f44a8216d859
+Author: fang.yuxiang <fang.yuxiang@eisoo.com>
+Date:   Wed Aug 9 11:48:53 2017 +0800
+
+    rgw: break sending data-log list infinitely
+    
+    radosgw send data-log list infinitely when opposite end trimmed the data-log and in quiescence.
+    Fixes: http://tracker.ceph.com/issues/20951
+    
+    Signed-off-by: fang yuxiang fang.yuxiang@eisoo.com
+    (cherry picked from commit 40db1fdbc7b24d56b2c7b463238e6b96f2d4bbd9)
+
+commit 7c3a82225e44305fcc5648b0f78719c0331ecca5
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Fri Aug 4 20:01:32 2017 -0400
+
+    Test bytes_sent bugs.
+    
+    Rearrange logic to make it easier to measure accumulation.
+    Instrument the boto request/response loop to count bytes in and out.
+    Accumulate byte counts in usage like structure.
+    Compare actual usage reported by ceph against local usage measured.
+    Report and assert if there are any short-comings.
+    Remove zone placement rule that was newly added at end: tests should be rerunable.
+    
+    Nit: the logic to wait for "delete_obj" is not quite right.
+    
+    Fixes: http://tracker.ceph.com/issues/19870
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit a45ab45f74042617ec382f3d50f4d45d883042f5)
+
+commit 8c9805921edac7257a135873e663aea5c4316d1e
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Sun Jun 18 18:18:39 2017 -0400
+
+    Fix bytes_sent bugs.
+    
+    log bytes sent/received.
+    add cct to bufferingfilter
+    add cct to RGWRestfulIO
+    AccountingFilter - save cct for debugging output
+    implement AccountingFilter::complete_request() - account for bytes reported here.
+    BufferingFilter<T>::complete_request() - ignore counts from send_content_length() complete_header();
+    
+    Code quality note:
+    this patch makes "cct" available for a lot of newly added debug
+    statements.  The debug statements are mostly not very useful (and should
+    go away in the future) - *But* the "cct" logic should be redone and
+    incorporated into some base class (such RestfulClient) so that it is
+    possible to easily add in debug statements such as these in the future.
+    
+    Fixes: http://tracker.ceph.com/issues/19870
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit 0172aab860abe324923a392baf51f956a65b64a5)
+
+commit 823585311c41729309809690a7df5cb83c4ece12
+Merge: 85bc024bd9 e1253e2c24
+Author: Sage Weil <sage@newdream.net>
+Date:   Sat Sep 2 13:47:29 2017 -0500
+
+    Merge pull request #17383 from liewegas/wip-luminous-mon-bits-luminous
+    
+    mon: final luminous mon bits
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit e1253e2c248446cb1ef57777e1796d376f2ae97e
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Sep 2 14:46:47 2017 -0400
+
+    PendingReleaseNotes: must upgrade to 12.2.1 before mimic
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 85bc024bd9496c3cdfd64c5facb841a048179c50
+Merge: 3e35d292bd 6979dd31ed
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Fri Sep 1 14:37:38 2017 -0700
+
+    Merge pull request #17429 from ceph/wip-luminous-x-luminous
+    
+    qa: add upgrade/luminous-x suite
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 6979dd31ede42d7ab204b13b9346662a049b343a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Sep 1 14:29:41 2017 -0700
+
+    Initial check in luminous-x suite
+    
+    same from master https://github.com/ceph/ceph/pull/17160
+    
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 3e35d292bdd7d931deb204f5878c0a5dea02b27d
+Merge: fa996769fc 55a519056c
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Fri Sep 1 07:14:15 2017 -0400
+
+    Merge pull request #17408 from ceph/luminous-bz1485011
+    
+    luminous: ceph-volume Persist non-lv devices for journals
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit 55a519056ce2dd2c7e155f6f8a06ee95c428ad72
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Aug 31 10:27:39 2017 -0400
+
+    ceph-volume tests add new ceph_* ansible dev variables required (centos)
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit d3abfd42ef8e558a1bbb31e24d0ab3c44ee7f4c4)
+
+commit 00c28d7b3fbc4cf3d04e8de76abe284ed98451aa
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Aug 30 14:46:54 2017 -0400
+
+    ceph-volume tests add new ceph_* ansible dev variables required (xenial)
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit ebb48c58123a1cfcfc6eccdf9f6c2b3a720f1233)
+
+commit 22fbc9d8d0ef3803166c7fcf627f7b41847ad7e3
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Aug 30 14:12:33 2017 -0400
+
+    ceph-volume util create a disk utility for blkid operations
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit a19e1288e8ae044f41dff9a1770126aa540cc729)
+
+commit 5ce9597d3579e5f4ee6523b59c42f6b3ef2ece82
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Aug 30 14:11:52 2017 -0400
+
+    ceph-volume lvm.prepare store the blkid uuid of a partition journal
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 5160c5398bbf107bcc826696664c503aa52d0020)
+
+commit 3e8f2cc2a57351c990836792256af899bc233b1a
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Aug 30 14:05:22 2017 -0400
+
+    ceph-volume lvm.activate use the partuuid of a partition to link the journal
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit a1080f833b35c5de30d7b577deabf0a0e82fbbf2)
+
+commit a971b0e0c694da4c2cd5eda8d540f4a3965cd80c
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue Aug 29 13:34:21 2017 -0400
+
+    ceph-volume tests update the ansible version for functional/tox.ini
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 007655afa3def6788e07d2db10c7cd9cb4ab45b7)
+
+commit 9b20da46761c92f3e39e44383bc0b3e3625ee26c
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue Aug 29 13:25:28 2017 -0400
+
+    ceph-volume tests add pv* related unit tests
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 7c22743c9aa1306242fc09ccae5dedf94e025cc4)
+
+commit 459ed5ad1efe0af070e92267657ac4d6a6a15c28
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue Aug 29 11:31:56 2017 -0400
+
+    ceph-volume lvm.api include lv_uuid as output fields
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit d85656da2531471e11cb90fcc74570c9c2b804e0)
+
+commit 9b04a4cff09e7aaab6fde5d456854847acc4c061
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue Aug 29 09:38:08 2017 -0400
+
+    ceph-volume lvm.activate always update the link to the journal
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 6a1de41838cb9dbbdc4a8f59eb07e4340ccb9680)
+
+commit 9c1e84ab1fdaad47cb0e27453b19de8c899a9700
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue Aug 29 09:26:35 2017 -0400
+
+    ceph-volume lvm.activate retrieve the journal uuid if journal is a device
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit a368fa1ad6d6265c5094eacbe7e72f642b43559d)
+
+commit 7da501a250fb551edb396dde1f19d9737a5812c7
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Aug 28 17:33:39 2017 -0400
+
+    ceph-volume exceptions create a specifc error for multiple pvs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 73315c49115dbb45f3bb6c9e46955b333602cec2)
+
+commit 38e0caa1bbb2471808b2895604ede20d8a6615fe
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Aug 28 16:52:33 2017 -0400
+
+    ceph-volume lvm.prepare make a journal a pv, use uuids always
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 913cef2d01b91e12c16e42d268043886b62c72fa)
+
+commit 237e42c4ea21a48f04bc092f9c3f9c0d407ec298
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Aug 28 16:51:11 2017 -0400
+
+    ceph-volume lvm.api create the PVolumes class and helpers
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit f2bc125d980485c7b456e0193ec9c66ea0acbe54)
+
+commit 337edc3cd1145cf85dfa3745a8e0ab7c5d26cbf3
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Aug 24 19:28:12 2017 -0400
+
+    ceph-volume lvm.api create the PVolume class
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 1725a5f3589ba2faddc9ce633997e5563fc66a01)
+
+commit eda292b40a2c221d98b8ddf740752cc8dd857cf9
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Aug 24 16:37:48 2017 -0400
+
+    ceph-volume lvm.api add a helper to create pvs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 00f3fa401871f3108558fea71f6ac03660d00ba1)
+
+commit 4f021d396271c59492f38fe20f7d739be862c15d
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Aug 30 17:22:33 2017 -0400
+
+    qa/suites/rados/thrash/d-luminous/at-end: check for purged_snapdirs
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 807c4c834136e5a3d20b31d50e770430695473ff
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Aug 29 00:01:19 2017 -0400
+
+    mon: set purged_snapdirs OSDMap flag once snapsets have all converted
+    
+    This makes it easier to test whether the upgrade + conversion has
+    completed.  In particular, mimic+ will be able to simply test for this
+    flag without waiting for complete PG stats to know whether it is safe to
+    upgrade beyond luminous.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit c3cbaad2a1a4df68fe39394e07c2f3ac9818b9c8)
+
+commit 2f3e2e5578089c6c7498358c166689c697d82020
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Aug 28 15:21:44 2017 -0400
+
+    mon: CEPH_MON_FEATURE_INCOMPAT_LUMINOUS
+    
+    - set this once we have a luminous quorum
+    - require luminous if we have this set locally
+    - include this on mkfs
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 5b6c451e3fdaf0785b197fdfacf1c782b932bec9)
+
+commit fa996769fcf1d1eb135c00d98b7b48e370f210d0
+Merge: 935faacb34 dc76083ee4
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Aug 30 16:39:09 2017 -0400
+
+    Merge pull request #17381 from dillaman/ritz303-wip-doc-20437
+    
+    luminous: doc/rbd: iSCSI Gateway Documentation
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit dc76083ee451bbaef3e67720d46a6e268b877b60
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Aug 8 19:14:57 2017 -0400
+
+    doc: tweaks for the RBD iSCSI configuration documentation
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b0abab17e3fa96ca973791a3afe077406d066035)
+
+commit 3717fd060b815f8b4f0c2ec3225b28b6bca33601
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Wed Jul 12 17:11:25 2017 -0500
+
+    doc/rbd: Replaced numbered steps with a # for dynamic numbering
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit f109031cb5c8150f042f9754f16bfa5216411eda)
+
+commit 846093201207f1544b386d69c38573b21c69f4db
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 17:22:38 2017 -0500
+
+    doc/rbd: Updated the content based on engineering feedback
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit 2a59c82b3d4bbb13bc82cf62fce1d9cb5ba7e6be)
+
+commit 08fffcd3562d299cdb7ba499012a4ea19250433f
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 17:22:02 2017 -0500
+
+    doc/rbd: Updated the content based on engineering feedback
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit 1d4f5b458d127065d92652c323c73704cf775754)
+
+commit cee1621875257782d1077a513baf7d264a782795
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 17:20:40 2017 -0500
+
+    doc/rbd: Updated the content based on engineering feedback
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit 441820d95890d95ea79bae55afb3ca3b1a8a36e3)
+
+commit bf6086377298ca762d0d901934c6c4ec88b0f456
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 17:19:01 2017 -0500
+
+    doc/rbd: Updated the requirements based on engineering feedback
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit c57266bf82c554b93653489a4b355f53b4b86424)
+
+commit 75a3c6d4f11dedee222dc7d07ab1f7a8fe18db14
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 12:35:38 2017 -0500
+
+    doc/rbd: Added the iSCSI gateway requirements content
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit 9335742140a2b4e8b408560c600a490b2749bd9d)
+
+commit e05635e22894baf37e115a263b483bf251285aad
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 12:34:49 2017 -0500
+
+    doc/rbd: Added the iSCSI gateway overview content
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit d022034bb3a6e1b00cf185cae0b5fa3f4b617a38)
+
+commit 0cd40caa68355fa55b6b9d0fd57c45ae804cfd36
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 12:34:10 2017 -0500
+
+    doc/rbd: Added the iSCSI gateway 'gwtop' monitoring content
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit 7e8233429ba158c1a4cfe6e58a7ce24ffe8759c9)
+
+commit 3ef7639370939e1d087693c7dda5c819fd707e23
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 12:32:53 2017 -0500
+
+    doc/rbd: Added the iSCSI targets, Ansible and CLI docs
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit cbf654c702e7b7a8e7023c4707c4ea38d584be3e)
+
+commit 1d277117d3aa347177927ff85ce314c2d8233498
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 12:31:39 2017 -0500
+
+    doc/rbd: Added the iSCSI initiators, RHEL, Windows, and ESX docs
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit f0e177fa3d8807cfa6ae17f8a0dc759a045623f9)
+
+commit ad0b8eb0944275e023ddfc9140bd32886545f78c
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 12:28:06 2017 -0500
+
+    doc/rbd: Updated the "toctree" adding the iSCSI gateway overview doc
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit 4ef8426bff9a32e00093f7c5d2b6b9620252293b)
+
+commit 745f1748769bdef44635c4918deae106bbc28a1f
+Author: Aron Gunn <ritz_303@yahoo.com>
+Date:   Thu Jul 6 12:23:50 2017 -0500
+
+    doc/rbd: Added the unmodified iSCSI initiator images for ESX and Windows 2016
+    
+    Fixes: http://tracker.ceph.com/issues/20437
+    
+    Signed-off-by: Aron Gunn <agunn@redhat.com>
+    (cherry picked from commit 2fd61f8de1587d2bfbbb7e15c952a29566b390a1)
+
+commit 33dc4e65b2862fbadd7eba504247144d4c710a7c
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Thu Aug 24 18:03:36 2017 -0400
+
+    osd/PGLog: write only changed dup entries
+    
+    Writing all of the dup entries whenever one is changed causes a large
+    regression in performance.
+    
+    Instead, keep track of ranges that need to be cleared and written
+    after log merging (dirty_{to,from}_dups) and the earliest dup entry we
+    haven't written yet during normal operation (write_from_dups). This
+    parallels the way we track unpersisted log entries.
+    
+    Check that the correct set of dups is persisted by adding a roundtrip
+    through memstore to each merge_log unit test.
+    
+    Fixes: http://tracker.ceph.com/issues/21026
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 75af72f758aacc1260b8d828d0b8bb7786597fdf)
+
+commit 4c5db08e6600b47cb4e2a3b940ab008bc9b1cb72
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Thu Aug 24 18:34:48 2017 -0400
+
+    Revert "osd: adjust osd_min_pg_log_entries"
+    
+    This reverts commit 1c4df03394312fe67f36448613d8b54cb1a0e2c9.
+    
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 4c8fd9978369448e28355d62b4d1eef3685ea63b)
+
+commit 935faacb342ca2fc264d5a48085e7779757ab667
+Merge: bcf89707d6 8f0945a0f3
+Author: Sage Weil <sage@newdream.net>
+Date:   Wed Aug 30 08:28:33 2017 -0500
+
+    Merge pull request #17359 from tchaikov/wip-luminous-ceph-release-stable
+    
+    luminous: ceph_release: luminous is now 'stable' (12.2.x)
+
+commit 8f0945a0f39e7da629fa94f406bc1314e1b39fc8
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Wed Aug 30 12:23:42 2017 +0800
+
+    ceph_release: luminous is now 'stable' (12.2.x)
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+
+commit 2a1ae18fa71fa7463389b65245eee3279afade54
+Author: chenliuzhong <liuzhong.chen@easystack.cn>
+Date:   Tue Aug 29 02:28:01 2017 -0400
+
+    os/bluestore:reshard-fix wrong shard length
+    
+    change fault_range parameter from 'needs_reshard_end' to 'needs_reshard_end-needs_reshard_begin'
+    be given needs_reshard_end may be out of bounds
+    
+    Signed-off-by: chenliuzhong <liuzhong.chen@easystack.cn>
+    (cherry picked from commit 23bce6a9504955d7faf352242d88d26d4fe7ac96)
+
+commit bcf89707d6c3c3086f001d08c754095b9e7a85f1
+Merge: f726fee338 32ce2a3ae5
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Aug 29 10:48:19 2017 -0400
+
+    Merge tag 'v12.2.0' into luminous
+    
+    v12.2.0
+
+commit 2c7fbc463cf5a981e5966a4a8b7d2a0d1eff3e95
+Author: huangjun <huangjun@xsky.com>
+Date:   Mon Aug 28 22:52:37 2017 +0800
+
+    mon: use ceph_clock_now if message is self-generated
+    
+    Signed-off-by: huangjun <huangjun@xsky.com>
+    (cherry picked from commit 56e8031dac7ee65d54e831e7e372e8771fa0f94a)
+
+commit 43ffb7c897f0fc3b407d09f19954865fad168e03
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Tue Aug 29 09:33:51 2017 +0800
+
+    mon/OSDMonitor: make 'osd crush class rename' idempotent
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 2ee80aead88c90388871ee65d4ed31a2fa47f532)
+
+commit f726fee338e66356f62f9e6d0435df8c94b00cfd
+Merge: 10a5e1911b b713cc831d
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Tue Aug 29 21:33:58 2017 +0800
+
+    Merge pull request #17332 from tchaikov/wip-luminous-pr-17269
+    
+    luminous: mon: fix two stray legacy get_health() callers
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 10a5e1911bf0114a7563ad634b7387fefd90caad
+Author: Jenkins Build Slave User <ceph-release-team@redhat.com>
+Date:   Mon Aug 28 16:30:20 2017 +0000
+
+    12.2.0
+
+commit 9cd689934677b2b28b67a864a1a9dbe482824adb
+Author: yanyx <yanyx@umcloud.com>
+Date:   Thu Aug 3 14:13:07 2017 +0800
+
+    mgr/dashboard: fix rbd's pool sub menu position
+    
+    Signed-off-by: Yixing Yan <yanyx@umcloud.com>
+    (cherry picked from commit 4e1d539f7cbebdbb0fb29175694413deaa2aaddb)
+
+commit b713cc831da238844a6e42e80e93cb31ee060aad
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Aug 25 18:30:12 2017 -0400
+
+    mon: fix two stray legacy get_health() callers
+    
+    These need to call the new method when appropriate.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 69038a18070d0cd47dc857020cce115514beaa3d)
+
+commit 09e661dcb02db872d79427dfab9a9868bbb93750
+Merge: 9df9e82338 34bafa6134
+Author: Sage Weil <sage@newdream.net>
+Date:   Mon Aug 28 21:41:56 2017 -0500
+
+    Merge pull request #17327 from tchaikov/wip-luminous-pr-17326
+    
+    luminous: doc: fix order of options in osd new
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 34bafa6134e1fc6b0f1e7b0eb43192bc29917769
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Mon Aug 28 15:59:19 2017 -0700
+
+    doc: fix order of options in osd new
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit e47463028921f0414e2f64c467f74cf37a1de085)

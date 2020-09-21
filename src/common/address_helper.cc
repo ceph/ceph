@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 /*
  * address_helper.cc
  *
@@ -5,95 +7,32 @@
  *      Author: matt
  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netdb.h>
-
-#include <iostream>
-#include <string>
-
-using namespace std;
-
-#include "common/config.h"
-#include "boost/regex.hpp"
+#include <regex>
 
 #include "common/address_helper.h"
-
-#include <arpa/inet.h>
 
 // decode strings like "tcp://<host>:<port>"
 int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 {
-	using namespace boost;
-	using std::endl;
+	std::regex expr("(tcp|rdma)://([^:]*):([\\d]+)");
+	std::cmatch m;
 
-	struct addrinfo hints;
-	struct addrinfo *res;
-
-	regex expr("(tcp|rdma)://([^:]*):([\\d]+)");
-	cmatch m;
-
-	if (regex_match(url, m, expr)) {
-		int error;
-		string host(m[2].first, m[2].second);
-		string port(m[3].first, m[3].second);
+	if (std::regex_match(url, m, expr)) {
+	        std::string host(m[2].first, m[2].second);
+		std::string port(m[3].first, m[3].second);
+		addrinfo hints;
+		// FIPS zeroization audit 20191115: this memset is fine.
 		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = PF_UNSPEC;
-		error = getaddrinfo(host.c_str(), NULL, &hints, &res);
-		if (! error) {
-			struct sockaddr_in *sin;
-			struct sockaddr_in6 *sin6;
-			addr->addr.ss_family = res->ai_family;
-			switch(res->ai_family) {
-			case AF_INET:
-				sin = (struct sockaddr_in *) res->ai_addr;
-				memcpy(&addr->addr4.sin_addr, &sin->sin_addr,
-				       sizeof(sin->sin_addr));
-				break;
-			case AF_INET6:
-				sin6 = (struct sockaddr_in6 *) res->ai_addr;
-				memcpy(&addr->addr6.sin6_addr, &sin6->sin6_addr,
-				       sizeof(sin6->sin6_addr));
-				break;
-			default:
-				break;
-			};
+		addrinfo *res;
+		if (!getaddrinfo(host.c_str(), nullptr, &hints, &res)) {
+			addr->set_sockaddr((sockaddr*)res->ai_addr);
 			addr->set_port(std::atoi(port.c_str()));
+			freeaddrinfo(res);
 			return 0;
 		}
 	}
 
 	return 1;
 }
-
-int entity_addr_from_sockaddr(entity_addr_t *addr /* out */,
-			      const struct sockaddr *sa)
-{
-    struct sockaddr_in *sin;
-    struct sockaddr_in6 *sin6;
-
-    if (! sa)
-	return 0;
-
-    addr->addr.ss_family = sa->sa_family;
-    switch(sa->sa_family) {
-    case AF_INET:
-	sin = (struct sockaddr_in *) sa;
-	memcpy(&addr->addr4.sin_addr, &sin->sin_addr,
-	       sizeof(sin->sin_addr));
-	addr->addr4.sin_port = sin->sin_port;
-	break;
-    case AF_INET6:
-	sin6 = (struct sockaddr_in6 *) sa;
-	memcpy(&addr->addr6.sin6_addr, &sin6->sin6_addr,
-	       sizeof(sin6->sin6_addr));
-	addr->addr6.sin6_port = sin6->sin6_port;
-	break;
-    default:
-	break;
-    };
-
-    return 1;
-}
-
-

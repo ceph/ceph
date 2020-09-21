@@ -1,5 +1,5 @@
 =================================
- Using ``libvirt`` with Ceph RBD
+ Using libvirt with Ceph RBD
 =================================
 
 .. index:: Ceph Block Device; livirt
@@ -21,7 +21,9 @@ software that interfaces with ``libvirt``. The following stack diagram
 illustrates how ``libvirt`` and QEMU use Ceph block devices via ``librbd``. 
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                     libvirt                       |
             +------------------------+--------------------------+
                                      |
@@ -31,6 +33,8 @@ illustrates how ``libvirt`` and QEMU use Ceph block devices via ``librbd``.
             |                       QEMU                        |
             +---------------------------------------------------+
             |                      librbd                       |
+            +---------------------------------------------------+
+            |                     librados                      |
             +------------------------+-+------------------------+
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
@@ -47,7 +51,7 @@ You can also use Ceph block devices with ``libvirt``, ``virsh`` and the
 
 
 To create VMs that use Ceph block devices, use the procedures in the following
-sections. In the exemplary embodiment, we've used ``libvirt-pool`` for the pool
+sections. In the exemplary embodiment, we have used ``libvirt-pool`` for the pool
 name, ``client.libvirt`` for the user name, and ``new-libvirt-image`` for  the
 image name. You may use any value you like, but ensure you replace those values
 when executing commands in the subsequent procedures.
@@ -58,24 +62,28 @@ Configuring Ceph
 
 To configure Ceph for use with ``libvirt``, perform the following steps:
 
-#. `Create a pool`_ (or use the default). The following example uses the 
-   pool name ``libvirt-pool`` with 128 placement groups. ::
+#. `Create a pool`_. The following example uses the 
+   pool name ``libvirt-pool``.::
 
-	ceph osd pool create libvirt-pool 128 128
+	ceph osd pool create libvirt-pool
 
    Verify the pool exists. :: 
 
 	ceph osd lspools
 
-#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and 
-   earlier). The following example uses the Ceph user name ``client.libvirt`` 
+#. Use the ``rbd`` tool to initialize the pool for use by RBD::
+
+        rbd pool init <pool-name>
+
+#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and
+   earlier). The following example uses the Ceph user name ``client.libvirt``
    and references ``libvirt-pool``. ::
 
-	ceph auth get-or-create client.libvirt mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=libvirt-pool'
+	ceph auth get-or-create client.libvirt mon 'profile rbd' osd 'profile rbd pool=libvirt-pool'
 	
    Verify the name exists. :: 
    
-	ceph auth list
+	ceph auth ls
 
    **NOTE**: ``libvirt`` will access Ceph using the ID ``libvirt``, 
    not the Ceph name ``client.libvirt``. See `User Management - User`_ and 
@@ -95,6 +103,20 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
    **NOTE:** You can also use `rbd create`_ to create an image, but we
    recommend ensuring that QEMU is working properly.
 
+.. tip:: Optionally, if you wish to enable debug logs and the admin socket for
+   this client, you can add the following section to ``/etc/ceph/ceph.conf``::
+
+	[client.libvirt]
+	log file = /var/log/ceph/qemu-guest-$pid.log
+	admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
+
+   The ``client.libvirt`` section name should match the cephx user you created
+   above.  
+   If SELinux or AppArmor is enabled, note that this could prevent the client
+   process (qemu via libvirt) from doing some operations, such as writing logs
+   or operate the images or admin socket to the destination locations (``/var/
+   log/ceph`` or ``/var/run/ceph``). Additionally, make sure that the libvirt
+   and qemu users have appropriate access to the specified directory.
 
 
 Preparing the VM Manager
@@ -153,7 +175,7 @@ Configuring the VM
 When configuring the VM for use with Ceph, it is important  to use ``virsh``
 where appropriate. Additionally, ``virsh`` commands often require root
 privileges  (i.e., ``sudo``) and will not return appropriate results or notify
-you that that root privileges are required. For a reference of ``virsh``
+you that root privileges are required. For a reference of ``virsh``
 commands, refer to `Virsh Command Reference`_.
 
 
@@ -191,7 +213,7 @@ commands, refer to `Virsh Command Reference`_.
 		<source protocol='rbd' name='libvirt-pool/new-libvirt-image'>
 			<host name='{monitor-host}' port='6789'/>
 		</source>
-		<target dev='vda' bus='virtio'/>
+		<target dev='vdb' bus='virtio'/>
 	</disk>
 
    Replace ``{monitor-host}`` with the name of your host, and replace the 
@@ -221,7 +243,7 @@ commands, refer to `Virsh Command Reference`_.
 #. Define the secret. ::
 
 	sudo virsh secret-define --file secret.xml
-	<uuid of secret is output here>
+	{uuid of secret}
 
 #. Get the ``client.libvirt`` key and save the key string to a file. ::
 
@@ -242,7 +264,7 @@ commands, refer to `Virsh Command Reference`_.
 	...
 	</source>
 	<auth username='libvirt'>
-		<secret type='ceph' uuid='9ec59067-fdbc-a6c0-03ff-df165c0587b8'/>
+		<secret type='ceph' uuid='{uuid of secret}'/>
 	</auth>
 	<target ... 
 
@@ -276,11 +298,9 @@ following procedures.
 
 	sudo virsh qemu-monitor-command --hmp {vm-domain-name} 'info block'
 
-#. Check to see if the device from ``<target dev='hdb' bus='ide'/>`` appears
-   under ``/dev`` or under ``proc/partitions``. :: 
+#. Check to see if the device from ``<target dev='vdb' bus='virtio'/>`` exists::
    
-	ls dev
-	cat proc/partitions
+       virsh domblklist {vm-domain-name} --details
 
 If everything looks okay, you may begin using the Ceph block device 
 within your VM.

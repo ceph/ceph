@@ -41,7 +41,7 @@ struct ACLID {
   void encode(bufferlist& bl) const {
     bl.append((const char *)id, ID_SIZE);
   }
-  void decode(bufferlist::iterator& iter) {
+  void decode(bufferlist::const_iterator& iter) {
     iter.copy(ID_SIZE, (char *)id);
   }
 };
@@ -52,7 +52,7 @@ typedef __u32 ACLFlags;
 
 inline bool operator<(const ACLID& l, const ACLID& r)
 {
-  return (memcmp(&l, &r, ID_SIZE) > 0);
+  return (memcmp(&l, &r, ID_SIZE) < 0);
 }
 
 struct ACLPair {
@@ -66,10 +66,12 @@ class ObjectACLs {
 public:
 
   void encode(bufferlist& bl) const {
-    ::encode(acls_map, bl);
+    using ceph::encode;
+    encode(acls_map, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(acls_map, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(acls_map, bl);
   }
 
   int read_acl(ACLID& id, ACLFlags *flags);
@@ -151,14 +153,15 @@ int main(int argc, const char **argv)
 
   ACLID id;
 
-  snprintf(id.id, ID_SIZE + 1, "%.16x", 0x1234);
+  snprintf(id.id, sizeof(id.id), "%.8x", 0x1234);
   cout << "id=" << id.id << std::endl;
 
   r = io_ctx.exec(oid, "acl", "get", bl, bl2);
-  cout << "exec returned " << r << " len=" << bl2.length() << std::endl;
+  cout << "exec(acl get) returned " << r
+       << " len=" << bl2.length() << std::endl;
   ObjectACLs oa;
   if (r >= 0) {
-    bufferlist::iterator iter = bl2.begin();
+    auto iter = bl2.cbegin();
     oa.decode(iter);
   }
 
@@ -166,6 +169,8 @@ int main(int argc, const char **argv)
   bl.clear();
   oa.encode(bl);
   r = io_ctx.exec(oid, "acl", "set", bl, bl2);
+  cout << "exec(acl set) returned " << r
+       << " len=" << bl2.length() << std::endl;
 
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
   char md5_str[bl2.length()*2 + 1];
@@ -175,26 +180,6 @@ int main(int argc, const char **argv)
   int size = io_ctx.read(oid, bl2, 128, 0);
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
-
-#if 0
-  Rados::ListCtx ctx;
-  int entries;
-  do {
-    list<object_t> vec;
-    r = rados.list(io_ctx, 2, vec, ctx);
-    entries = vec.size();
-    cout << "list result=" << r << " entries=" << entries << std::endl;
-    list<object_t>::iterator iter;
-    for (iter = vec.begin(); iter != vec.end(); ++iter) {
-      cout << *iter << std::endl;
-    }
-  } while (entries);
-#endif
-#if 0
-  r = rados.remove(io_ctx, oid);
-  cout << "remove result=" << r << std::endl;
-  rados.close_io_ctx(io_ctx);
-#endif
 
   return 0;
 }

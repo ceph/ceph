@@ -15,10 +15,10 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "common/config.h"
 
+#include "common/async/context_pool.h"
 #include "client/SyntheticClient.h"
 #include "client/Client.h"
 
@@ -31,10 +31,6 @@ using namespace std;
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
 
-#if !defined(DARWIN) && !defined(__FreeBSD__)
-#include <envz.h>
-#endif // DARWIN || __FreeBSD__
-
 #include <sys/types.h>
 #include <fcntl.h>
 
@@ -46,7 +42,8 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   parse_syn_options(args);   // for SyntheticClient
@@ -54,25 +51,23 @@ int main(int argc, const char **argv, char *envp[])
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
   // get monmap
-  MonClient mc(g_ceph_context);
+  ceph::async::io_context_pool  poolctx(1);
+  MonClient mc(g_ceph_context, poolctx);
   if (mc.build_initial_monmap() < 0)
     return -1;
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;
-  Messenger* messengers[g_conf->num_client];
-  MonClient* mclients[g_conf->num_client];
+  vector<Messenger*> messengers{static_cast<unsigned>(num_client), nullptr};
+  vector<MonClient*> mclients{static_cast<unsigned>(num_client), nullptr};
 
-  cout << "ceph-syn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
-  for (int i=0; i<g_conf->num_client; i++) {
-      messengers[i] = Messenger::create(
-	g_ceph_context, g_conf->ms_type,
-	entity_name_t(entity_name_t::TYPE_CLIENT,-1), "synclient",
-	i * 1000000 + getpid());
-    messengers[i]->bind(g_conf->public_addr);
-    mclients[i] = new MonClient(g_ceph_context);
+  cout << "ceph-syn: starting " << num_client << " syn client(s)" << std::endl;
+  for (int i=0; i<num_client; i++) {
+    messengers[i] = Messenger::create_client_messenger(g_ceph_context,
+						       "synclient");
+    mclients[i] = new MonClient(g_ceph_context, poolctx);
     mclients[i]->build_initial_monmap();
-    Client *client = new Client(messengers[i], mclients[i]);
+    auto client = new StandaloneClient(messengers[i], mclients[i], poolctx);
     client->set_filer_flags(syn_filer_flags);
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);
@@ -85,6 +80,8 @@ int main(int argc, const char **argv, char *envp[])
        ++p)
     (*p)->start_thread();
 
+  poolctx.stop();
+
   //cout << "waiting for client(s) to finish" << std::endl;
   while (!clients.empty()) {
     Client *client = clients.front();
@@ -96,7 +93,7 @@ int main(int argc, const char **argv, char *envp[])
     delete client;
   }
 
-  for (int i = 0; i < g_conf->num_client; ++i) {
+  for (int i = 0; i < num_client; ++i) {
     // wait for messenger to finish
     delete mclients[i];
     messengers[i]->shutdown();
@@ -105,4 +102,3 @@ int main(int argc, const char **argv, char *envp[])
   }
   return 0;
 }
-

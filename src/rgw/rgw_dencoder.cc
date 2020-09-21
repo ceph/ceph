@@ -1,23 +1,39 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_cache.h"
+#include "rgw_meta_sync_status.h"
+#include "rgw_data_sync.h"
+#include "rgw_multi.h"
 
 #include "common/Formatter.h"
 
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
+
+static void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id)
+{
+  b->tenant = t;
+  b->name = n;
+  b->marker = m;
+  b->bucket_id = id;
+  b->explicit_placement.data_pool = rgw_pool(dp);
+  b->explicit_placement.index_pool = rgw_pool(ip);
+}
 
 void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>& o)
 {
   o.push_back(new RGWObjManifestPart);
 
   RGWObjManifestPart *p = new RGWObjManifestPart;
-  rgw_bucket b("bucket", ".pool", ".index_pool", "marker_", "12", "region");
+  rgw_bucket b;
+  init_bucket(&b, "tenant", "bucket", ".pool", ".index_pool", "marker_", "12");
+
   p->loc = rgw_obj(b, "object");
   p->loc_ofs = 512 * 1024;
   p->size = 128 * 1024;
@@ -32,11 +48,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     if (explicit_iter != manifest->objs.begin()) {
       --explicit_iter;
     }
-    if (ofs >= manifest->obj_size) {
+    if (ofs < manifest->obj_size) {
+      update_explicit_pos();
+    } else {
       ofs = manifest->obj_size;
-      return;
     }
-    update_explicit_pos();
     update_location();
     return;
   }
@@ -86,9 +102,9 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 
   if (!rule.part_size) {
     stripe_size = rule.stripe_max_size;
-    stripe_size = MIN(manifest->get_obj_size() - stripe_ofs, stripe_size);
+    stripe_size = std::min(manifest->get_obj_size() - stripe_ofs, stripe_size);
   } else {
-    uint64_t next = MIN(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
+    uint64_t next = std::min(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
     stripe_size = next - stripe_ofs;
   }
 
@@ -100,14 +116,17 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 void RGWObjManifest::obj_iterator::update_location()
 {
   if (manifest->explicit_objs) {
-    location = explicit_iter->second.loc;
+    if (manifest->empty()) {
+      location = rgw_obj_select{};
+    } else {
+      location = explicit_iter->second.loc;
+    }
     return;
   }
 
-  const rgw_obj& head = manifest->get_head();
-
   if (ofs < manifest->get_head_size()) {
-    location = head;
+    location = manifest->get_obj();
+    location.set_placement_rule(manifest->get_head_placement_rule());
     return;
   }
 
@@ -131,34 +150,40 @@ void RGWObjManifest::obj_iterator::update_explicit_pos()
 void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
 {
   RGWObjManifest *m = new RGWObjManifest;
+  map<uint64_t, RGWObjManifestPart> objs;
+  uint64_t total_size = 0;
   for (int i = 0; i<10; i++) {
     RGWObjManifestPart p;
-    rgw_bucket b("bucket", ".pool", ".index_pool", "marker_", "12", "region");
+    rgw_bucket b;
+    init_bucket(&b, "tenant", "bucket", ".pool", ".index_pool", "marker_", "12");
     p.loc = rgw_obj(b, "object");
     p.loc_ofs = 0;
     p.size = 512 * 1024;
-    m->objs[(uint64_t)i * 512 * 1024] = p;
+    total_size += p.size;
+    objs[total_size] = p;
   }
-  m->obj_size = 5 * 1024 * 1024;
-
+  m->set_explicit(total_size, objs);
   o.push_back(m);
-
   o.push_back(new RGWObjManifest);
 }
 
-void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj *location)
+void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location)
 {
-  string oid;
+  rgw_obj loc;
+
+  string& oid = loc.key.name;
+  string& ns = loc.key.ns;
+
   if (!override_prefix || override_prefix->empty()) {
     oid = prefix;
   } else {
     oid = *override_prefix;
   }
-  string ns;
 
   if (!cur_part_id) {
     if (ofs < max_head_size) {
-      *location = head_obj;
+      location->set_placement_rule(head_placement_rule);
+      *location = obj;
       return;
     } else {
       char buf[16];
@@ -179,15 +204,18 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
     }
   }
 
-  rgw_bucket *bucket;
-
-  if (!tail_bucket.name.empty()) {
-    bucket = &tail_bucket;
+  if (!tail_placement.bucket.name.empty()) {
+    loc.bucket = tail_placement.bucket;
   } else {
-    bucket = &head_obj.bucket;
+    loc.bucket = obj.bucket;
   }
 
-  location->init_ns(*bucket, oid, ns);
+  // Always overwrite instance with tail_instance
+  // to get the right shadow object location
+  loc.key.set_instance(tail_instance);
+
+  location->set_placement_rule(tail_placement.placement_rule);
+  *location = loc;
 }
 
 
@@ -210,6 +238,7 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->user_agent = "user_agent";
   e->referrer = "referrer";
   e->bucket_id = "10";
+  e->trans_id = "trans_id";
   o.push_back(e);
   o.push_back(new rgw_log_entry);
 }
@@ -257,8 +286,8 @@ ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
 
 void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
 {
-  string id, name, email;
-  id = "rgw";
+  rgw_user id("rgw");
+  string name, email;
   name = "Mr. RGW";
   email = "r@gw";
 
@@ -314,7 +343,7 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     p->acl = *l;
 
     string name = "radosgw";
-    string id = "rgw";
+    rgw_user id("rgw");
     p->owner.set_name(name);
     p->owner.set_id(id);
 
@@ -337,14 +366,15 @@ void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
 
 void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
 {
+  using ceph::encode;
   ObjectCacheInfo *i = new ObjectCacheInfo;
   i->status = 0;
   i->flags = CACHE_FLAG_MODIFY_XATTRS;
   string s = "this is a string";
   string s2 = "this is a another string";
   bufferlist data, data2;
-  ::encode(s, data);
-  ::encode(s2, data2);
+  encode(s, data);
+  encode(s2, data2);
   i->data = data;
   i->xattrs["x1"] = data;
   i->xattrs["x2"] = data2;
@@ -382,7 +412,6 @@ void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 {
   RGWUserInfo *i = new RGWUserInfo;
-  i->auid = 1;
   i->user_id = "user_id";
   i->display_name =  "display_name";
   i->user_email = "user@email";
@@ -404,7 +433,8 @@ void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 
 void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 {
-  rgw_bucket *b = new rgw_bucket("name", "pool", ".index_pool", "marker", "123", "region");
+  rgw_bucket *b = new rgw_bucket;
+  init_bucket(b, "tenant", "name", "pool", ".index_pool", "marker", "123");
   o.push_back(b);
   o.push_back(new rgw_bucket);
 }
@@ -412,18 +442,18 @@ void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
 {
   RGWBucketInfo *i = new RGWBucketInfo;
-  i->bucket = rgw_bucket("bucket", "pool", ".index_pool", "marker", "10", "region");
+  init_bucket(&i->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   i->owner = "owner";
   i->flags = BUCKET_SUSPENDED;
   o.push_back(i);
   o.push_back(new RGWBucketInfo);
 }
 
-void RGWRegion::generate_test_instances(list<RGWRegion*>& o)
+void RGWZoneGroup::generate_test_instances(list<RGWZoneGroup*>& o)
 {
-  RGWRegion *r = new RGWRegion;
+  RGWZoneGroup *r = new RGWZoneGroup;
   o.push_back(r);
-  o.push_back(new RGWRegion);
+  o.push_back(new RGWZoneGroup);
 }
 
 void RGWZone::generate_test_instances(list<RGWZone*> &o)
@@ -431,6 +461,27 @@ void RGWZone::generate_test_instances(list<RGWZone*> &o)
   RGWZone *z = new RGWZone;
   o.push_back(z);
   o.push_back(new RGWZone);
+}
+
+void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+{
+  RGWRealm *z = new RGWRealm;
+  o.push_back(z);
+  o.push_back(new RGWRealm);
+}
+
+void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
+{
+  RGWPeriod *z = new RGWPeriod;
+  o.push_back(z);
+  o.push_back(new RGWPeriod);
+}
+
+void RGWPeriodLatestEpochInfo::generate_test_instances(list<RGWPeriodLatestEpochInfo*> &o)
+{
+  RGWPeriodLatestEpochInfo *z = new RGWPeriodLatestEpochInfo;
+  o.push_back(z);
+  o.push_back(new RGWPeriodLatestEpochInfo);
 }
 
 void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
@@ -450,7 +501,7 @@ void RGWOLHInfo::generate_test_instances(list<RGWOLHInfo*> &o)
 void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
 {
   RGWBucketEnt *e = new RGWBucketEnt;
-  e->bucket = rgw_bucket("bucket", "pool", ".index_pool", "marker", "10", "region");
+  init_bucket(&e->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   e->size = 1024;
   e->size_rounded = 4096;
   e->count = 1;
@@ -470,9 +521,98 @@ void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
 
 void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
 {
-  rgw_bucket b = rgw_bucket("bucket", "pool", ".index_pool", "marker", "10", "region");
+  rgw_bucket b;
+  init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   rgw_obj *obj = new rgw_obj(b, "object");
   o.push_back(obj);
   o.push_back(new rgw_obj);
 }
 
+void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
+{
+  auto info = new rgw_meta_sync_info;
+  info->state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+  info->period = "periodid";
+  info->realm_epoch = 5;
+  o.push_back(info);
+  o.push_back(new rgw_meta_sync_info);
+}
+
+void rgw_meta_sync_marker::generate_test_instances(list<rgw_meta_sync_marker*>& o)
+{
+  auto marker = new rgw_meta_sync_marker;
+  marker->state = rgw_meta_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->realm_epoch = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_meta_sync_marker);
+}
+
+void rgw_meta_sync_status::generate_test_instances(list<rgw_meta_sync_status*>& o)
+{
+  o.push_back(new rgw_meta_sync_status);
+}
+
+void rgw_data_sync_info::generate_test_instances(list<rgw_data_sync_info*>& o)
+{
+  auto info = new rgw_data_sync_info;
+  info->state = rgw_data_sync_info::StateBuildingFullSyncMaps;
+  info->num_shards = 8;
+  o.push_back(info);
+  o.push_back(new rgw_data_sync_info);
+}
+
+void rgw_data_sync_marker::generate_test_instances(list<rgw_data_sync_marker*>& o)
+{
+  auto marker = new rgw_data_sync_marker;
+  marker->state = rgw_data_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->pos = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_data_sync_marker);
+}
+
+void rgw_data_sync_status::generate_test_instances(list<rgw_data_sync_status*>& o)
+{
+  o.push_back(new rgw_data_sync_status);
+}
+
+void objexp_hint_entry::generate_test_instances(list<objexp_hint_entry*>& o)
+{
+  auto it = new objexp_hint_entry;
+  it->tenant = "tenant1";
+  it->bucket_name = "bucket1";
+  it->bucket_id = "1234";
+  it->obj_key = rgw_obj_key("obj");
+  o.push_back(it);
+  o.push_back(new objexp_hint_entry);
+}
+
+void RGWBucketEntryPoint::generate_test_instances(list<RGWBucketEntryPoint*>& o)
+{
+  RGWBucketEntryPoint *bp = new RGWBucketEntryPoint();
+  init_bucket(&bp->bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
+  bp->owner = "owner";
+  bp->creation_time = ceph::real_clock::from_ceph_timespec({init_le32(2), init_le32(3)});
+
+  o.push_back(bp);
+  o.push_back(new RGWBucketEntryPoint);
+}
+
+void rgw_user::generate_test_instances(list<rgw_user*>& o)
+{
+  rgw_user *u = new rgw_user("tenant", "user");
+
+  o.push_back(u);
+  o.push_back(new rgw_user);
+}
+
+void obj_version::generate_test_instances(list<obj_version*>& o)
+{
+  obj_version *v = new obj_version;
+  v->ver = 5;
+  v->tag = "tag";
+
+  o.push_back(v);
+  o.push_back(new obj_version);
+}

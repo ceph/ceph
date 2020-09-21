@@ -23,74 +23,51 @@
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
  */
 
-struct MOSDPGCreate : public Message {
+class MOSDPGCreate : public Message {
+public:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
-  const static int HEAD_VERSION = 3;
-  // At head_version 2 the unspecified compat_version was set to 2
-  const static int COMPAT_VERSION = 2;
-
-  version_t          epoch;
-  map<pg_t,pg_create_t> mkpg;
-  map<pg_t,utime_t> ctimes;
+  version_t          epoch = 0;
+  std::map<pg_t,pg_create_t> mkpg;
+  std::map<pg_t,utime_t> ctimes;
 
   MOSDPGCreate()
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDPGCreate{0}
+  {}
   MOSDPGCreate(epoch_t e)
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
-      epoch(e) { }
+    : Message{MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION},
+      epoch(e)
+  {}
 private:
-  ~MOSDPGCreate() {}
+  ~MOSDPGCreate() override {}
 
-public:  
-  const char *get_type_name() const { return "pg_create"; }
+public:
+  std::string_view get_type_name() const override { return "pg_create"; }
 
-  void encode_payload(uint64_t features) {
-    ::encode(epoch, payload);
-    ::encode(mkpg, payload);
-    ::encode(ctimes, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(mkpg, payload);
+    encode(ctimes, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    if (header.version >= 2) {
-      ::decode(mkpg, p);
-    } else {
-      __u32 n;
-      ::decode(n, p);
-      while (n--) {
-	pg_t pgid;
-	epoch_t created;   // epoch pg created
-	pg_t parent;       // split from parent (if != pg_t())
-	__s32 split_bits;
-	::decode(pgid, p);
-	::decode(created, p);
-	::decode(parent, p);
-	::decode(split_bits, p);
-	mkpg[pgid] = pg_create_t(created, parent, split_bits);
-      }
-    }
-    if (header.version >= 3) {
-      ::decode(ctimes, p);
-    } else {
-      // To make other code simpler create map with time of 0,0 for each pg
-      for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
-	   i != mkpg.end(); ++i) {
-	ctimes[i->first] = utime_t();
-      }
-    }
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(mkpg, p);
+    decode(ctimes, p);
   }
-
-  void print(ostream& out) const {
-    out << "osd_pg_create(";
-    map<pg_t,utime_t>::const_iterator ci = ctimes.begin();
-    for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
-         i != mkpg.end();
-         ++i, ++ci) {
-      assert(ci != ctimes.end() && ci->first == i->first);
-      out << "pg" << i->first << "," << i->second.created << "@" << ci->second << "; ";
+  void print(std::ostream& out) const override {
+    out << "osd_pg_create(e" << epoch;
+    for (auto i = mkpg.begin(); i != mkpg.end(); ++i) {
+      out << " " << i->first << ":" << i->second.created;
     }
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -12,13 +12,21 @@ quickly and easily. Ceph supports block device snapshots using the ``rbd``
 command and many higher level interfaces, including `QEMU`_, `libvirt`_, 
 `OpenStack`_ and `CloudStack`_.
 
-.. important:: To use use RBD snapshots, you must have a running Ceph cluster.
+.. important:: To use RBD snapshots, you must have a running Ceph cluster.
 
-.. note:: **STOP I/O BEFORE** snapshotting an image.
-   If the image contains a filesystem, the filesystem must be in a
-   consistent state **BEFORE** snapshotting.
-   
-.. ditaa:: +------------+         +-------------+
+.. note:: Because RBD does not know about the file system, snapshots are
+	  `crash-consistent` if they are not coordinated with the mounting
+	  computer. So, we recommend you stop `I/O` before taking a snapshot of
+	  an image. If the image contains a file system, the file system must be
+	  in a consistent state before taking a snapshot or you may have to run
+	  `fsck`. To stop `I/O` you can use `fsfreeze` command. See
+	  `fsfreeze(8)` man page for more details.
+	  For virtual machines, `qemu-guest-agent` can be used to automatically
+	  freeze file systems when creating a snapshot.
+
+.. ditaa::
+
+           +------------+         +-------------+
            | {s}        |         | {s} c999    |
            |   Active   |<-------*|   Snapshot  |
            |   Image    |         |   of Image  |
@@ -31,7 +39,7 @@ Cephx Notes
 
 When `cephx`_ is enabled (it is by default), you must specify a user name or ID
 and a path to the keyring containing the corresponding key for the user. See
-`User Management`_ for details. You may also add the ``CEPH_ARGS`` environment
+:ref:`User Management <user-management>` for details. You may also add the ``CEPH_ARGS`` environment
 variable to avoid re-entry of the following parameters. ::
 
 	rbd --id {user-ID} --keyring=/path/to/secret [commands]
@@ -133,7 +141,7 @@ Layering
 ========
 
 Ceph supports the ability to create many copy-on-write (COW) clones of a block
-device shapshot. Snapshot layering enables Ceph block device clients to create
+device snapshot. Snapshot layering enables Ceph block device clients to create
 images very quickly. For example, you might create a block device image with a
 Linux VM written to it; then, snapshot the image, protect the snapshot, and
 create as many copy-on-write clones as you like. A snapshot is read-only, 
@@ -141,7 +149,9 @@ so cloning a snapshot simplifies semantics--making it possible to create
 clones rapidly.
 
 
-.. ditaa:: +-------------+              +-------------+
+.. ditaa::
+
+           +-------------+              +-------------+
            | {s} c999    |              | {s}         |
            |  Snapshot   | Child refers |  COW Clone  |
            |  of Image   |<------------*| of Snapshot |
@@ -175,7 +185,9 @@ Ceph block device layering is a simple process. You must have an image. You must
 create a snapshot of the image. You must protect the snapshot. Once you have 
 performed these steps, you can begin cloning the snapshot.
 
-.. ditaa:: +----------------------------+        +-----------------------------+
+.. ditaa::
+
+           +----------------------------+        +-----------------------------+
            |                            |        |                             |
            | Create Block Device Image  |------->|      Create a Snapshot      |
            |                            |        |                             |
@@ -197,7 +209,7 @@ clone snapshots  from one pool to images in another pool.
 
 
 #. **Image Template:** A common use case for block device layering is to create a
-   a master image and a snapshot that serves as a template for clones. For example, 
+   master image and a snapshot that serves as a template for clones. For example, 
    a user may create an image for a Linux distribution (e.g., Ubuntu 12.04), and 
    create a snapshot for it. Periodically, the user may update the image and create
    a new snapshot (e.g., ``sudo apt-get update``, ``sudo apt-get upgrade``,
@@ -289,14 +301,13 @@ a snapshot, you must flatten the child images first. ::
 
 For example:: 
 
-	rbd flatten rbd/my-image
+	rbd flatten rbd/new-image
 
 .. note:: Since a flattened image contains all the information from the snapshot, 
    a flattened image will take up more storage space than a layered clone.
 
 
 .. _cephx: ../../rados/configuration/auth-config-ref/
-.. _User Management: ../../operations/user-management
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
 .. _CloudStack: ../rbd-cloudstack/

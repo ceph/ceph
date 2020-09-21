@@ -17,25 +17,26 @@
 
 #include "msg/Message.h"
 
-struct MClientSnap : public Message {
+class MClientSnap : public SafeMessage {
+public:
   ceph_mds_snap_head head;
-  bufferlist bl;
+  ceph::buffer::list bl;
   
   // (for split only)
-  vector<inodeno_t> split_inos;
-  vector<inodeno_t> split_realms;
+  std::vector<inodeno_t> split_inos;
+  std::vector<inodeno_t> split_realms;
 
+protected:
   MClientSnap(int o=0) : 
-    Message(CEPH_MSG_CLIENT_SNAP) {
+    SafeMessage{CEPH_MSG_CLIENT_SNAP} {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
-private:
-  ~MClientSnap() {}
+  ~MClientSnap() override {}
 
 public:  
-  const char *get_type_name() const { return "client_snap"; }
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "client_snap"; }
+  void print(std::ostream& out) const override {
     out << "client_snap(" << ceph_snap_op_name(head.op);
     if (head.split)
       out << " split=" << inodeno_t(head.split);
@@ -43,24 +44,28 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
     head.num_split_inos = split_inos.size();
     head.num_split_realms = split_realms.size();
     head.trace_len = bl.length();
-    ::encode(head, payload);
-    ::encode_nohead(split_inos, payload);
-    ::encode_nohead(split_realms, payload);
-    ::encode_nohead(bl, payload);
+    encode(head, payload);
+    ceph::encode_nohead(split_inos, payload);
+    ceph::encode_nohead(split_realms, payload);
+    ceph::encode_nohead(bl, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
-    ::decode_nohead(head.num_split_inos, split_inos, p);
-    ::decode_nohead(head.num_split_realms, split_realms, p);
-    ::decode_nohead(head.trace_len, bl, p);
-    assert(p.end());
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(head, p);
+    ceph::decode_nohead(head.num_split_inos, split_inos, p);
+    ceph::decode_nohead(head.num_split_realms, split_realms, p);
+    ceph::decode_nohead(head.trace_len, bl, p);
+    ceph_assert(p.end());
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

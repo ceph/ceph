@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "exclude": [],
+  "include": [
+    "**/*.ts",
+    "plugins/index.js"
+  ],
+  "compilerOptions": {
+    "types": [
+      "cypress"
+    ],
+    "target": "es6"
+  }
+}

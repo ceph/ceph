@@ -1,0 +1,104 @@
+<cd-modal [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>{mode, select, edit {Edit} other {Add}} pool mirror peer</span>
+
+  <ng-container class="modal-content">
+    <form name="editPeerForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="editPeerForm"
+          novalidate>
+      <div class="modal-body">
+        <p>
+          <span i18n>{mode, select, edit {Edit} other {Add}} the pool
+          mirror peer attributes for pool <kbd>{{ poolName }}</kbd> and click
+          <kbd>Submit</kbd>.</span>
+        </p>
+
+        <div class="form-group">
+          <label class="col-form-label required"
+                 for="clusterName"
+                 i18n>Cluster Name</label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="Name..."
+                 i18n-placeholder
+                 id="clusterName"
+                 name="clusterName"
+                 formControlName="clusterName"
+                 autofocus>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clusterName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clusterName', formDir, 'invalidClusterName')"
+                i18n>The cluster name is not valid.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="col-form-label required"
+                 for="clientID"
+                 i18n>CephX ID</label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="CephX ID..."
+                 i18n-placeholder
+                 id="clientID"
+                 name="clientID"
+                 formControlName="clientID">
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clientID', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clientID', formDir, 'invalidClientID')"
+                i18n>The CephX ID is not valid.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="monAddr">
+            <span i18n>Monitor Addresses</span>
+          </label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="Comma-delimited addresses..."
+                 i18n-placeholder
+                 id="monAddr"
+                 name="monAddr"
+                 formControlName="monAddr">
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('monAddr', formDir, 'invalidMonAddr')"
+                i18n>The monitory address is not valid.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="key">
+            <span i18n>CephX Key</span>
+          </label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="Base64-encoded key..."
+                 i18n-placeholder
+                 id="key"
+                 name="key"
+                 formControlName="key">
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('key', formDir, 'invalidKey')"
+                i18n>CephX key must be base64 encoded.</span>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button i18n
+                          [form]="editPeerForm"
+                          (submitAction)="update()">Submit</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

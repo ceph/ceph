@@ -5,17 +5,20 @@
 #include <list>
 #include <map>
 #include <set>
+#include <stack>
+#include <random>
 
 #ifndef OBJECT_H
 #define OBJECT_H
 
+/// describes an object
 class ContDesc {
 public:
   int objnum;
   int cursnap;
   unsigned seqnum;
-  string prefix;
-  string oid;
+  std::string prefix;
+  std::string oid;
 
   ContDesc() :
     objnum(0), cursnap(0),
@@ -24,7 +27,7 @@ public:
   ContDesc(int objnum,
 	   int cursnap,
 	   unsigned seqnum,
-	   const string &prefix) :
+	   const std::string &prefix) :
     objnum(objnum), cursnap(cursnap),
     seqnum(seqnum), prefix(prefix) {}
 
@@ -44,11 +47,18 @@ public:
     return !((*this) == rhs);
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bp);
+  void decode(bufferlist::const_iterator &bp);
 };
 WRITE_CLASS_ENCODER(ContDesc)
 
-ostream &operator<<(ostream &out, const ContDesc &rhs);
+std::ostream &operator<<(std::ostream &out, const ContDesc &rhs);
+
+class ChunkDesc {
+public:
+  uint32_t offset;
+  uint32_t length;
+  std::string oid;
+};
 
 class ContentsGenerator {
 public:
@@ -61,6 +71,32 @@ public:
     virtual bool end() = 0;
     virtual ContDesc get_cont() const = 0;
     virtual uint64_t get_pos() const = 0;
+    virtual bufferlist gen_bl_advance(uint64_t s) {
+      bufferptr ret = buffer::create(s);
+      for (uint64_t i = 0; i < s; ++i, ++(*this)) {
+	ret[i] = **this;
+      }
+      bufferlist _ret;
+      _ret.push_back(ret);
+      return _ret;
+    }
+    /// walk through given @c bl
+    ///
+    /// @param[out] off the offset of the first byte which does not match
+    /// @returns true if @c bl matches with the content, false otherwise
+    virtual bool check_bl_advance(bufferlist &bl, uint64_t *off = nullptr) {
+      uint64_t _off = 0;
+      for (bufferlist::iterator i = bl.begin();
+	   !i.end();
+	   ++i, ++_off, ++(*this)) {
+	if (*i != **this) {
+	  if (off)
+	    *off = _off;
+	  return false;
+	}
+      }
+      return true;
+    }
     virtual ~iterator_impl() {};
   };
 
@@ -90,6 +126,12 @@ public:
       other.impl = impl;
       impl = otherimpl;
     }
+    bufferlist gen_bl_advance(uint64_t s) {
+      return impl->gen_bl_advance(s);
+    }
+    bool check_bl_advance(bufferlist &bl, uint64_t *off = nullptr) {
+      return impl->check_bl_advance(bl, off);
+    }
     iterator(ContentsGenerator *parent, iterator_impl *impl) :
       parent(parent), impl(impl) {}
   };
@@ -97,11 +139,11 @@ public:
   virtual uint64_t get_length(const ContDesc &in) = 0;
 
   virtual void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out) = 0;
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) = 0;
   void get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {
-    map<uint64_t, uint64_t> ranges;
+    std::map<uint64_t, uint64_t> ranges;
     get_ranges_map(cont, ranges);
-    for (map<uint64_t, uint64_t>::iterator i = ranges.begin();
+    for (std::map<uint64_t, uint64_t>::iterator i = ranges.begin();
 	 i != ranges.end();
 	 ++i) {
       out.insert(i->first, i->second);
@@ -124,19 +166,7 @@ public:
 
 class RandGenerator : public ContentsGenerator {
 public:
-  class RandWrap {
-  public:
-    unsigned int state;
-    RandWrap(unsigned int seed)
-    {
-      state = seed;
-    }
-
-    int operator()()
-    {
-      return rand_r(&state);
-    }
-  };
+  typedef std::minstd_rand0 RandWrap;
 
   class iterator_impl : public ContentsGenerator::iterator_impl {
   public:
@@ -150,20 +180,20 @@ public:
       current = rand();
     }
 
-    ContDesc get_cont() const { return cont; }
-    uint64_t get_pos() const { return pos; }
+    ContDesc get_cont() const override { return cont; }
+    uint64_t get_pos() const override { return pos; }
 
-    iterator_impl &operator++() {
+    iterator_impl &operator++() override {
       pos++;
       current = rand();
       return *this;
     }
 
-    char operator*() {
+    char operator*() override {
       return current;
     }
 
-    void seek(uint64_t _pos) {
+    void seek(uint64_t _pos) override {
       if (_pos < pos) {
 	iterator_impl begin = iterator_impl(cont, cont_gen);
 	begin.seek(_pos);
@@ -174,22 +204,22 @@ public:
       }
     }
 
-    bool end() {
+    bool end() override {
       return pos >= cont_gen->get_length(cont);
     }
   };
 
-  ContentsGenerator::iterator_impl *get_iterator_impl(const ContDesc &in) {
+  ContentsGenerator::iterator_impl *get_iterator_impl(const ContDesc &in) override {
     RandGenerator::iterator_impl *i = new iterator_impl(in, this);
     return i;
   }
 
-  void put_iterator_impl(ContentsGenerator::iterator_impl *in) {
+  void put_iterator_impl(ContentsGenerator::iterator_impl *in) override {
     delete in;
   }
 
   ContentsGenerator::iterator_impl *dup_iterator_impl(
-    const ContentsGenerator::iterator_impl *in) {
+    const ContentsGenerator::iterator_impl *in) override {
     ContentsGenerator::iterator_impl *retval = get_iterator_impl(in->get_cont());
     retval->seek(in->get_pos());
     return retval;
@@ -207,8 +237,8 @@ public:
     min_stride_size(min_stride_size),
     max_stride_size(max_stride_size) {}
   void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out);
-  uint64_t get_length(const ContDesc &in) {
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) override;
+  uint64_t get_length(const ContDesc &in) override {
     RandWrap rand(in.seqnum);
     if (max_length == 0)
       return 0;
@@ -223,10 +253,10 @@ public:
   AttrGenerator(uint64_t max_len, uint64_t big_max_len)
     : max_len(max_len), big_max_len(big_max_len) {}
   void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out) {
-    out.insert(pair<uint64_t, uint64_t>(0, get_length(cont)));
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) override {
+    out.insert(std::pair<uint64_t, uint64_t>(0, get_length(cont)));
   }
-  uint64_t get_length(const ContDesc &in) {
+  uint64_t get_length(const ContDesc &in) override {
     RandWrap rand(in.seqnum);
     // make some attrs big
     if (in.seqnum & 3)
@@ -239,7 +269,7 @@ public:
     for (iterator i = get_iterator(in); !i.end(); ++i) {
       bl.append(*i);
     }
-    assert(bl.length() < big_max_len);
+    ceph_assert(bl.length() < big_max_len);
     return bl;
   }
 };
@@ -275,11 +305,11 @@ public:
     RandWrap rand(in.seqnum);
     return round_up(rand() % max_append_total, alignment);
   }
-  uint64_t get_length(const ContDesc &in) {
+  uint64_t get_length(const ContDesc &in) override {
     return off + get_append_size(in);
   }
   void get_ranges_map(
-    const ContDesc &cont, map<uint64_t, uint64_t> &out);
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) override;
 };
 
 class ObjectDesc {
@@ -290,56 +320,186 @@ public:
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
     : exists(false), dirty(false),
       version(0) {
-    layers.push_front(pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(cont_gen), init));
+    layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(cont_gen), init));
   }
 
   class iterator {
   public:
     uint64_t pos;
-    ObjectDesc &obj;
-    list<pair<list<pair<ceph::shared_ptr<ContentsGenerator>,
-			ContDesc> >::iterator,
-	      uint64_t> > stack;
-    map<ContDesc,ContentsGenerator::iterator> cont_iters;
-    uint64_t limit;
-    list<pair<ceph::shared_ptr<ContentsGenerator>,
-	      ContDesc> >::iterator cur_cont;
-    
-    iterator(ObjectDesc &obj) :
-      pos(0), obj(obj) {
-      limit = obj.layers.begin()->first->get_length(obj.layers.begin()->second);
-      cur_cont = obj.layers.begin();
-      advance(true);
+    uint64_t size;
+    uint64_t cur_valid_till;
+
+    class ContState {
+      interval_set<uint64_t> ranges;
+      const uint64_t size;
+
+    public:
+      ContDesc cont;
+      std::shared_ptr<ContentsGenerator> gen;
+      ContentsGenerator::iterator iter;
+
+      ContState(
+	const ContDesc &_cont,
+	std::shared_ptr<ContentsGenerator> _gen,
+	ContentsGenerator::iterator _iter)
+	: size(_gen->get_length(_cont)), cont(_cont), gen(_gen), iter(_iter) {
+	gen->get_ranges(cont, ranges);
+      }
+
+      const interval_set<uint64_t> &get_ranges() {
+	return ranges;
+      }
+
+      uint64_t get_size() {
+	return gen->get_length(cont);
+      }
+
+      bool covers(uint64_t pos) {
+	return ranges.contains(pos) || (!ranges.starts_after(pos) && pos >= size);
+      }
+
+      uint64_t next(uint64_t pos) {
+	ceph_assert(!covers(pos));
+	return ranges.starts_after(pos) ? ranges.start_after(pos) : size;
+      }
+
+      uint64_t valid_till(uint64_t pos) {
+	ceph_assert(covers(pos));
+	return ranges.contains(pos) ?
+	  ranges.end_after(pos) :
+	  std::numeric_limits<uint64_t>::max();
+      }
+    };
+    // from latest to earliest
+    using layers_t = std::vector<ContState>;
+    layers_t layers;
+
+    struct StackState {
+      const uint64_t next;
+      const uint64_t size;
+    };
+    std::stack<std::pair<layers_t::iterator, StackState> > stack;
+    layers_t::iterator current;
+
+    explicit iterator(ObjectDesc &obj) :
+      pos(0),
+      size(obj.layers.begin()->first->get_length(obj.layers.begin()->second)),
+      cur_valid_till(0) {
+      for (auto &&i : obj.layers) {
+	layers.push_back({i.second, i.first, i.first->get_iterator(i.second)});
+      }
+      current = layers.begin();
+
+      adjust_stack();
     }
 
-    iterator &advance(bool init);
+    void adjust_stack();
     iterator &operator++() {
-      return advance(false);
+      ceph_assert(cur_valid_till >= pos);
+      ++pos;
+      if (pos >= cur_valid_till) {
+	adjust_stack();
+      }
+      return *this;
     }
 
     char operator*() {
-      if (cur_cont == obj.layers.end()) {
+      if (current == layers.end()) {
 	return '\0';
       } else {
-	map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(
-	  cur_cont->second);
-	assert(j != cont_iters.end());
-	return *(j->second);
+	return pos >= size ? '\0' : *(current->iter);
       }
     }
 
     bool end() {
-      return pos >= obj.layers.begin()->first->get_length(
-	obj.layers.begin()->second);
+      return pos >= size;
     }
 
+    // advance @c pos to given position
     void seek(uint64_t _pos) {
       if (_pos < pos) {
-	assert(0);
+	ceph_abort();
       }
       while (pos < _pos) {
-	++(*this);
+	ceph_assert(cur_valid_till >= pos);
+	uint64_t next = std::min(_pos - pos, cur_valid_till - pos);
+	pos += next;
+
+	if (pos >= cur_valid_till) {
+	  ceph_assert(pos == cur_valid_till);
+	  adjust_stack();
+	}
       }
+      ceph_assert(pos == _pos);
+    }
+
+    // grab the bytes in the range of [pos, pos+s), and advance @c pos
+    //
+    // @returns the bytes in the specified range
+    bufferlist gen_bl_advance(uint64_t s) {
+      bufferlist ret;
+      while (s > 0) {
+	ceph_assert(cur_valid_till >= pos);
+	uint64_t next = std::min(s, cur_valid_till - pos);
+	if (current != layers.end() && pos < size) {
+	  ret.append(current->iter.gen_bl_advance(next));
+	} else {
+	  ret.append_zero(next);
+	}
+
+	pos += next;
+	ceph_assert(next <= s);
+	s -= next;
+
+	if (pos >= cur_valid_till) {
+	  ceph_assert(cur_valid_till == pos);
+	  adjust_stack();
+	}
+      }
+      return ret;
+    }
+
+    // compare the range of [pos, pos+bl.length()) with given @c bl, and
+    // advance @pos if all bytes in the range match
+    //
+    // @param error_at the offset of the first byte which does not match
+    // @returns true if all bytes match, false otherwise
+    bool check_bl_advance(bufferlist &bl, uint64_t *error_at = nullptr) {
+      uint64_t off = 0;
+      while (off < bl.length()) {
+	ceph_assert(cur_valid_till >= pos);
+	uint64_t next = std::min(bl.length() - off, cur_valid_till - pos);
+
+	bufferlist to_check;
+	to_check.substr_of(bl, off, next);
+	if (current != layers.end() && pos < size) {
+	  if (!current->iter.check_bl_advance(to_check, error_at)) {
+	    if (error_at)
+	      *error_at += off;
+	    return false;
+	  }
+	} else {
+	  uint64_t at = pos;
+	  for (auto i = to_check.begin(); !i.end(); ++i, ++at) {
+	    if (*i) {
+	      if (error_at)
+		*error_at = at;
+	      return false;
+	    }
+	  }
+	}
+
+	pos += next;
+	off += next;
+	ceph_assert(off <= bl.length());
+
+	if (pos >= cur_valid_till) {
+	  ceph_assert(cur_valid_till == pos);
+	  adjust_stack();
+	}
+      }
+      ceph_assert(off == bl.length());
+      return true;
     }
   };
     
@@ -358,18 +518,22 @@ public:
   // takes ownership of gen
   void update(ContentsGenerator *gen, const ContDesc &next);
   bool check(bufferlist &to_check);
+  bool check_sparse(const std::map<uint64_t, uint64_t>& extends,
+		    bufferlist &to_check);
   const ContDesc &most_recent();
   ContentsGenerator *most_recent_gen() {
     return layers.begin()->first.get();
   }
-  map<string, ContDesc> attrs; // Both omap and xattrs
+  std::map<std::string, ContDesc> attrs; // Both omap and xattrs
   bufferlist header;
   bool exists;
   bool dirty;
 
   uint64_t version;
+  std::string redirect_target;
+  std::map<uint64_t, ChunkDesc> chunk_info;
 private:
-  list<pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
+  std::list<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };
 
 #endif

@@ -20,61 +20,66 @@
 class MPoolOpReply : public PaxosServiceMessage {
 public:
   uuid_d fsid;
-  __u32 replyCode;
-  epoch_t epoch;
-  bufferlist response_data;
+  __u32 replyCode = 0;
+  epoch_t epoch = 0;
+  ceph::buffer::list response_data;
 
-  MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0)
+  MPoolOpReply() : PaxosServiceMessage{CEPH_MSG_POOLOP_REPLY, 0}
   {}
   MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+    PaxosServiceMessage{CEPH_MSG_POOLOP_REPLY, v},
     fsid(f),
     replyCode(rc),
     epoch(e) {
     set_tid(t);
   }
-  MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
-		bufferlist *blp) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+  MPoolOpReply(uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
+	       ceph::buffer::list *blp) :
+    PaxosServiceMessage{CEPH_MSG_POOLOP_REPLY, v},
     fsid(f),
     replyCode(rc),
     epoch(e) {
     set_tid(t);
     if (blp)
-      response_data.claim(*blp);
+      response_data = std::move(*blp);
   }
 
-  const char *get_type_name() const { return "poolopreply"; }
+  std::string_view get_type_name() const override { return "poolopreply"; }
 
-  void print(ostream& out) const {
+  void print(std::ostream& out) const override {
     out << "pool_op_reply(tid " << get_tid()
 	<< " " << cpp_strerror(-replyCode)
 	<< " v" << version << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(replyCode, payload);
-    ::encode(epoch, payload);
+    encode(fsid, payload);
+    encode(replyCode, payload);
+    encode(epoch, payload);
     if (response_data.length()) {
-      ::encode(true, payload);
-      ::encode(response_data, payload);
+      encode(true, payload);
+      encode(response_data, payload);
     } else
-      ::encode(false, payload);
+      encode(false, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(replyCode, p);
-    ::decode(epoch, p);
+    decode(fsid, p);
+    decode(replyCode, p);
+    decode(epoch, p);
     bool has_response_data;
-    ::decode(has_response_data, p);
+    decode(has_response_data, p);
     if (has_response_data) {
-      ::decode(response_data, p);
+      decode(response_data, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

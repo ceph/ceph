@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -62,24 +63,25 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(max_age, bl);
-    ::encode(allowed_methods, bl);
-    ::encode(id, bl);
-    ::encode(allowed_hdrs, bl);
-    ::encode(allowed_origins, bl);
-    ::encode(exposable_hdrs, bl);
+    encode(max_age, bl);
+    encode(allowed_methods, bl);
+    encode(id, bl);
+    encode(allowed_hdrs, bl);
+    encode(allowed_origins, bl);
+    encode(exposable_hdrs, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(max_age, bl);
-    ::decode(allowed_methods, bl);
-    ::decode(id, bl);
-    ::decode(allowed_hdrs, bl);
-    ::decode(allowed_origins, bl);
-    ::decode(exposable_hdrs, bl);
+    decode(max_age, bl);
+    decode(allowed_methods, bl);
+    decode(id, bl);
+    decode(allowed_hdrs, bl);
+    decode(allowed_origins, bl);
+    decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
+  bool has_wildcard_origin();
   bool is_origin_present(const char *o);
   void format_exp_headers(std::string& s);
   void erase_origin_if_present(std::string& origin, bool *rule_empty);
@@ -99,12 +101,12 @@ class RGWCORSConfiguration
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(rules, bl);
+    encode(rules, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(rules, bl);
+    decode(rules, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -124,7 +126,7 @@ class RGWCORSConfiguration
 };
 WRITE_CLASS_ENCODER(RGWCORSConfiguration)
 
-static inline int validate_name_string(string& o) {
+static inline int validate_name_string(std::string_view o) {
   if (o.length() == 0)
     return -1;
   if (o.find_first_of("*") != o.find_last_of("*"))

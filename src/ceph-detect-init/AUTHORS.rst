@@ -1,2 +1,0 @@
-- Owen Synge <osynge@suse.com>
-- Loic Dachary <loic@dachary.org>

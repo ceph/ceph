@@ -1,474 +1,57 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
-#include "ObjectStore.h"
+#include "os/Transaction.h"
 #include "common/Formatter.h"
 
-void ObjectStore::Transaction::_build_actions_from_tbl()
+using std::list;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
+			      bufferlist *out)
 {
-  //used only for tbl encode
-  assert(use_tbl);
-  //Now we assert each transaction should only be iterated once
-  assert(coll_index.size() == 0);
-  assert(object_index.size() == 0);
-  assert(coll_id == 0);
-  assert(object_id == 0);
-  assert(data_bl.length() == 0);
-  assert(op_bl.length() == 0);
-
-  uint64_t ops = data.ops;
-
-  data.ops = 0;
-  use_tbl = false;
-  bufferlist::iterator p = tbl.begin();
-  __u32 op;
-  while(!p.end()) {
-    ::decode(op, p);
-
-    switch(op) {
-    case Transaction::OP_NOP:
-      {
-	nop();
-      }
-      break;
-
-    case Transaction::OP_TOUCH:
-      {
-	coll_t cid;
-	ghobject_t oid;
-
-	::decode(cid, p);
-	::decode(oid, p);
-
-	touch(cid, oid);
-      }
-      break;
-
-    case Transaction::OP_WRITE:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	uint64_t off;
-	uint64_t len;
-	bufferlist bl;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(off, p);
-	::decode(len, p);
-	::decode(bl, p);
-
-	write(cid, oid, off, len, bl);
-      }
-      break;
-
-    case Transaction::OP_ZERO:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	uint64_t off;
-	uint64_t len;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(off, p);
-	::decode(len, p);
-
-	zero(cid, oid, off, len);
-      }
-      break;
-
-    case Transaction::OP_TRIMCACHE:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	uint64_t off;
-	uint64_t len;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(off, p);
-	::decode(len, p);
-
-	// deprecated, no-op
-      }
-      break;
-
-    case Transaction::OP_TRUNCATE:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	uint64_t off;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(off, p);
-
-	truncate(cid, oid, off);
-      }
-      break;
-
-    case Transaction::OP_REMOVE:
-      {
-	coll_t cid;
-	ghobject_t oid;
-
-	::decode(cid, p);
-	::decode(oid, p);
-
-	remove(cid, oid);
-      }
-      break;
-
-    case Transaction::OP_SETATTR:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	string name;
-	bufferlist bl;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(name, p);
-	::decode(bl, p);
-
-	setattr(cid, oid, name, bl);
-      }
-      break;
-
-    case Transaction::OP_SETATTRS:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	map<string, bufferptr> aset;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(aset, p);
-
-	setattrs(cid, oid, aset);
-      }
-      break;
-
-    case Transaction::OP_RMATTR:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	string name;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(name, p);
-
-	rmattr(cid, oid, name);
-      }
-      break;
-
-    case Transaction::OP_RMATTRS:
-      {
-	coll_t cid;
-	ghobject_t oid;
-
-	::decode(cid, p);
-	::decode(oid, p);
-
-	rmattrs(cid, oid);
-      }
-      break;
-
-    case Transaction::OP_CLONE:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	ghobject_t noid;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(noid, p);
-
-	clone(cid, oid, noid);
-      }
-      break;
-
-    case Transaction::OP_CLONERANGE:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	ghobject_t noid;
-	uint64_t off;
-	uint64_t len;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(noid, p);
-	::decode(off, p);
-	::decode(len, p);
-
-	clone_range(cid, oid, noid, off, len, off);
-      }
-      break;
-
-    case Transaction::OP_CLONERANGE2:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	ghobject_t noid;
-	uint64_t off;
-	uint64_t len;
-	uint64_t dstoff;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(noid, p);
-	::decode(off, p);
-	::decode(len, p);
-	::decode(dstoff, p);
-
-	clone_range(cid, oid, noid, off, len, dstoff);
-      }
-      break;
-
-    case Transaction::OP_MKCOLL:
-      {
-	coll_t cid;
-
-	::decode(cid, p);
-
-	create_collection(cid, 0);
-      }
-      break;
-
-    case Transaction::OP_COLL_HINT:
-      {
-	coll_t cid;
-	uint32_t type;
-	bufferlist hint;
-
-	::decode(cid, p);
-	::decode(type, p);
-	::decode(hint, p);
-
-	collection_hint(cid, type, hint);
-      }
-      break;
-
-    case Transaction::OP_RMCOLL:
-      {
-	coll_t cid;
-
-	::decode(cid, p);
-
-	remove_collection(cid);
-      }
-      break;
-
-    case Transaction::OP_COLL_ADD:
-      {
-	coll_t ncid;
-	coll_t ocid;
-	ghobject_t oid;
-
-	::decode(ncid, p);
-	::decode(ocid, p);
-	::decode(oid, p);
-
-	// always followed by OP_COLL_REMOVE
-	int op;
-	coll_t ocid2;
-	ghobject_t oid2;
-
-	::decode(op, p);
-	::decode(ocid2, p);
-	::decode(oid2, p);
-	assert(op == Transaction::OP_COLL_REMOVE);
-	assert(ocid2 == ocid);
-	assert(oid2 == oid);
-
-	collection_move(ncid, ocid, oid);
-      }
-      break;
-
-    case Transaction::OP_COLL_MOVE:
-      {
-	// WARNING: this is deprecated and buggy; only here to replay old journals.
-	coll_t ocid;
-	coll_t ncid;
-	ghobject_t oid;
-
-	::decode(ocid, p);
-	::decode(ncid, p);
-	::decode(oid, p);
-
-	assert(0 == "OP_COLL_MOVE not supported");
-      }
-      break;
-
-    case Transaction::OP_COLL_MOVE_RENAME:
-      {
-	coll_t oldcid;
-	ghobject_t oldoid;
-	coll_t newcid;
-	ghobject_t newoid;
-
-	::decode(oldcid, p);
-	::decode(oldoid, p);
-	::decode(newcid, p);
-	::decode(newoid, p);
-
-	collection_move_rename(oldcid, oldoid, newcid, newoid);
-      }
-      break;
-
-    case Transaction::OP_COLL_SETATTR:
-    case Transaction::OP_COLL_SETATTRS:
-    case Transaction::OP_COLL_RMATTR:
-      assert(0 == "collection attrs no longer supported");
-      break;
-
-    case Transaction::OP_STARTSYNC:
-      {
-	start_sync();
-      }
-      break;
-
-    case Transaction::OP_COLL_RENAME:
-      {
-	coll_t cid;
-	coll_t ncid;
-
-	::decode(cid, p);
-	::decode(ncid, p);
-
-	assert(0 == "OP_COLL_REMOVE not supported");
-      }
-      break;
-
-    case Transaction::OP_OMAP_CLEAR:
-      {
-	coll_t cid;
-	ghobject_t oid;
-
-	::decode(cid, p);
-	::decode(oid, p);
-
-	omap_clear(cid, oid);
-      }
-      break;
-
-    case Transaction::OP_OMAP_SETKEYS:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	map<string, bufferlist> aset;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(aset, p);
-
-	omap_setkeys(cid, oid, aset);
-      }
-      break;
-
-    case Transaction::OP_OMAP_RMKEYS:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	set<string> keys;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(keys, p);
-
-	omap_rmkeys(cid, oid, keys);
-      }
-      break;
-
-    case Transaction::OP_OMAP_RMKEYRANGE:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	string first, last;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(first, p);
-	::decode(last, p);
-
-	omap_rmkeyrange(cid, oid, first, last);
-      }
-      break;
-
-    case Transaction::OP_OMAP_SETHEADER:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	bufferlist bl;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(bl, p);
-
-	omap_setheader(cid, oid, bl);
-      }
-      break;
-
-    case Transaction::OP_SPLIT_COLLECTION:
-      {
-	coll_t cid;
-	uint32_t bits;
-	uint32_t rem;
-	coll_t dest;
-
-	::decode(cid, p);
-	::decode(bits, p);
-	::decode(rem, p);
-	::decode(dest, p);
-
-	split_collection(cid, bits, rem, dest);
-      }
-      break;
-
-    case Transaction::OP_SPLIT_COLLECTION2:
-      {
-	coll_t cid;
-	uint32_t bits;
-	uint32_t rem;
-	coll_t dest;
-
-	::decode(cid, p);
-	::decode(bits, p);
-	::decode(rem, p);
-	::decode(dest, p);
-
-	split_collection(cid, bits, rem, dest);
-      }
-      break;
-
-    case Transaction::OP_SETALLOCHINT:
-      {
-	coll_t cid;
-	ghobject_t oid;
-	uint64_t expected_object_size;
-	uint64_t expected_write_size;
-
-	::decode(cid, p);
-	::decode(oid, p);
-	::decode(expected_object_size, p);
-	::decode(expected_write_size, p);
-
-	set_alloc_hint(cid, oid, expected_object_size, expected_write_size);
-      }
-      break;
-
-    default:
-      assert("Unkown op" == 0);
-    }
+  auto start = p;
+  __u32 n;
+  decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    decode(l, p);
+    p += l;
+    len += 4 + l;
+    decode(l, p);
+    p += l;
+    len += 4 + l;
   }
-  use_tbl = true;
-  assert(ops == data.ops);
+  start.copy(len, *out);
 }
 
-void ObjectStore::Transaction::dump(ceph::Formatter *f)
+void decode_str_set_to_bl(bufferlist::const_iterator& p,
+			  bufferlist *out)
+{
+  auto start = p;
+  __u32 n;
+  decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    decode(l, p);
+    p += l;
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+namespace ceph::os {
+
+void Transaction::dump(ceph::Formatter *f)
 {
   f->open_array_section("ops");
   iterator i = begin();
@@ -483,6 +66,16 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_NOP:
       f->dump_string("op_name", "nop");
       break;
+    case Transaction::OP_CREATE:
+      {
+	coll_t cid = i.get_cid(op->cid);
+	ghobject_t oid = i.get_oid(op->oid);
+	f->dump_string("op_name", "create");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+      }
+      break;
+
     case Transaction::OP_TOUCH:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -664,22 +257,32 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 
     case Transaction::OP_COLL_HINT:
       {
+	using ceph::decode;
         coll_t cid = i.get_cid(op->cid);
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         f->dump_string("op_name", "coll_hint");
         f->dump_stream("collection") << cid;
         f->dump_unsigned("type", type);
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           f->dump_unsigned("pg_num", pg_num);
           f->dump_unsigned("expected_num_objects", num_objs);
         }
+      }
+      break;
+
+    case Transaction::OP_COLL_SET_BITS:
+      {
+	coll_t cid = i.get_cid(op->cid);
+	f->dump_string("op_name", "coll_set_bits");
+	f->dump_stream("collection") << cid;
+	f->dump_unsigned("bits", op->split_bits);
       }
       break;
 
@@ -749,10 +352,6 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
-    case Transaction::OP_STARTSYNC:
-      f->dump_string("op_name", "startsync");
-      break;
-
     case Transaction::OP_COLL_RENAME:
       {
 	f->dump_string("op_name", "collection_rename");
@@ -796,6 +395,11 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_string("op_name", "omap_rmkeys");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
+	f->open_array_section("attrs");
+	for (auto& k : keys) {
+	  f->dump_string("", k.c_str());
+	}
+	f->close_section();
       }
       break;
 
@@ -840,6 +444,18 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        coll_t dest = i.get_cid(op->dest_cid);
+	f->dump_string("op_name", "op_merge_collection");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("dest") << dest;
+	f->dump_stream("bits") << bits;
+      }
+      break;
+
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -869,17 +485,31 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_TRY_RENAME:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t old_oid = i.get_oid(op->oid);
+        ghobject_t new_oid = i.get_oid(op->dest_oid);
+	f->dump_string("op_name", "op_coll_move_rename");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("old_oid") << old_oid;
+	f->dump_stream("new_oid") << new_oid;
+      }
+      break;
+	
     case Transaction::OP_SETALLOCHINT:
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
+        uint32_t alloc_hint_flags = op->hint;
         f->dump_string("op_name", "op_setallochint");
         f->dump_stream("collection") << cid;
         f->dump_stream("oid") << oid;
         f->dump_stream("expected_object_size") << expected_object_size;
         f->dump_stream("expected_write_size") << expected_write_size;
+        f->dump_string("alloc_hint_flags", ceph_osd_alloc_hint_flag_string(alloc_hint_flags));
       }
       break;
 
@@ -895,7 +525,11 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
   f->close_section();
 }
 
-void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transaction*>& o)
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+void Transaction::generate_test_instances(list<Transaction*>& o)
 {
   o.push_back(new Transaction);
 
@@ -937,3 +571,12 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   o.push_back(t);  
 }
 
+ostream& operator<<(ostream& out, const Transaction& tx) {
+
+  return out << "Transaction(" << &tx << ")";
+}
+
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
+
+}

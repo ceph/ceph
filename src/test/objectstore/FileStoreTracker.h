@@ -3,18 +3,18 @@
 #ifndef FILESTORE_TRACKER_H
 #define FILESTORE_TRACKER_H
 #include "test/common/ObjectContents.h"
-#include "os/FileStore.h"
-#include "os/KeyValueDB.h"
+#include "os/filestore/FileStore.h"
+#include "kv/KeyValueDB.h"
 #include <boost/scoped_ptr.hpp>
 #include <list>
 #include <map>
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 class FileStoreTracker {
   const static uint64_t SIZE = 4 * 1024;
   ObjectStore *store;
   KeyValueDB *db;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("Tracker Lock");
   uint64_t restart_seq;
 
   struct OutTransaction {
@@ -24,7 +24,7 @@ class FileStoreTracker {
 public:
   FileStoreTracker(ObjectStore *store, KeyValueDB *db)
     : store(store), db(db),
-      lock("Tracker Lock"), restart_seq(0) {}
+      restart_seq(0) {}
 
   class Transaction {
     class Op {
@@ -42,7 +42,7 @@ public:
 	    const string &oid)
 	: coll(coll), oid(oid) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) {
+		      OutTransaction *out) override {
 	harness->write(make_pair(coll, oid), out);
       }
     };
@@ -56,7 +56,7 @@ public:
 		 const string &to)
 	: coll(coll), from(from), to(to) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) {
+		      OutTransaction *out) override {
 	harness->clone_range(make_pair(coll, from), make_pair(coll, to),
 			     out);
       }
@@ -71,7 +71,7 @@ public:
 		 const string &to)
 	: coll(coll), from(from), to(to) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) {
+		      OutTransaction *out) override {
 	harness->clone(make_pair(coll, from), make_pair(coll, to),
 			     out);
       }
@@ -84,7 +84,7 @@ public:
 	     const string &obj)
 	: coll(coll), obj(obj) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) {
+		      OutTransaction *out) override {
 	harness->remove(make_pair(coll, obj),
 			out);
       }

@@ -1,18 +1,16 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-import json
+from __future__ import print_function
+
 import subprocess
 import shlex
-from StringIO import StringIO
 import errno
 import sys
 import os
 import io
 import re
 
-
-import rados
-from ceph_argparse import *
+from ceph_argparse import * # noqa
 
 keyring_base = '/tmp/cephtest-caps.keyring'
 
@@ -21,8 +19,7 @@ class UnexpectedReturn(Exception):
     if isinstance(cmd, list):
       self.cmd = ' '.join(cmd)
     else:
-      assert isinstance(cmd, str) or isinstance(cmd, unicode), \
-          'cmd needs to be either a list or a str'
+      assert isinstance(cmd, str), 'cmd needs to be either a list or a str'
       self.cmd = cmd
     self.cmd = str(self.cmd)
     self.ret = int(ret)
@@ -36,12 +33,12 @@ class UnexpectedReturn(Exception):
 def call(cmd):
   if isinstance(cmd, list):
     args = cmd
-  elif isinstance(cmd, str) or isinstance(cmd, unicode):
+  elif isinstance(cmd, str):
     args = shlex.split(cmd)
   else:
     assert False, 'cmd is not a string/unicode nor a list!'
 
-  print 'call: {0}'.format(args)
+  print('call: {0}'.format(args))
   proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   ret = proc.wait()
 
@@ -52,8 +49,8 @@ def expect(cmd, expected_ret):
   try:
     (r, p) = call(cmd)
   except ValueError as e:
-    print >> sys.stderr, \
-             'unable to run {c}: {err}'.format(c=repr(cmd), err=e.message)
+    print('unable to run {c}: {err}'.format(c=repr(cmd), err=e.message),
+          file=sys.stderr)
     return errno.EINVAL
 
   assert r == p.returncode, \
@@ -64,15 +61,15 @@ def expect(cmd, expected_ret):
 
   return p
 
-def expect_to_file(cmd, expected_ret, out_file, mode='a'):
+def expect_to_file(cmd, expected_ret, out_file):
 
   # Let the exception be propagated to the caller
   p = expect(cmd, expected_ret)
   assert p.returncode == expected_ret, \
       'expected result doesn\'t match and no exception was thrown!'
 
-  with io.open(out_file, mode) as file:
-    file.write(unicode(p.stdout.read()))
+  with io.open(out_file, 'ab') as file:
+    file.write(p.stdout.read())
 
   return p
 
@@ -86,7 +83,7 @@ class Command:
     self.args = []
     for s in j['sig']:
       if not isinstance(s, dict):
-        assert isinstance(s, str) or isinstance(s,unicode), \
+        assert isinstance(s, str), \
             'malformatted signature cid {0}: {1}\n{2}'.format(cid,s,j)
         if len(self.sig) > 0:
           self.sig += ' '
@@ -220,7 +217,7 @@ def test_all():
       'auth':[
         {
           'pre':'',
-          'cmd':('auth list', '', 'r'),
+          'cmd':('auth ls', '', 'r'),
           'post':''
           },
         {
@@ -233,17 +230,10 @@ def test_all():
         {
           'cmd':('pg getmap', '', 'r'),
           },
-        {
-          'cmd':('pg send_pg_creates', '', 'rw'),
-          },
         ],
       'mds':[
         {
           'cmd':('mds getmap', '', 'r'),
-          },
-        {
-          'cmd':('mds cluster_down', '', 'rw'),
-          'post':'mds cluster_up'
           },
         ],
       'mon':[
@@ -268,17 +258,17 @@ def test_all():
         ],
       'config-key':[
           {
-            'pre':'config-key put foo bar',
+            'pre':'config-key set foo bar',
             'cmd':('config-key get', 'key=foo', 'r')
             },
           {
-            'pre':'config-key put foo bar',
+            'pre':'config-key set foo bar',
             'cmd':('config-key del', 'key=foo', 'rw')
             }
           ]
       }
 
-  for (module,cmd_lst) in cmds.iteritems():
+  for (module,cmd_lst) in cmds.items():
     k = keyring_base + '.' + module
     for cmd in cmd_lst:
 
@@ -288,10 +278,10 @@ def test_all():
       if len(cmd_args) > 0:
         (cmd_args_key, cmd_args_val) = cmd_args.split('=')
 
-      print 'generating keyring for {m}/{c}'.format(m=module,c=cmd_cmd)
+      print('generating keyring for {m}/{c}'.format(m=module,c=cmd_cmd))
       # gen keyring
-      for (good_or_bad,kind_map) in perms.iteritems():
-        for (kind,lst) in kind_map.iteritems():
+      for (good_or_bad,kind_map) in perms.items():
+        for (kind,lst) in kind_map.items():
           for (perm, cap) in lst:
             cap_formatted = cap.format(
                 s=module,
@@ -311,11 +301,11 @@ def test_all():
                 'ceph auth get-or-create {n} {c}'.format(
                   n=cname,c=run_cap), 0, k)
       # keyring generated
-      print 'testing {m}/{c}'.format(m=module,c=cmd_cmd)
+      print('testing {m}/{c}'.format(m=module,c=cmd_cmd))
 
       # test
-      for good_bad in perms.iterkeys():
-        for (kind,lst) in perms[good_bad].iteritems():
+      for good_bad in perms.keys():
+        for (kind,lst) in perms[good_bad].items():
           for (perm,_) in lst:
             cname = 'client.{gb}-{k}-{p}'.format(gb=good_bad,k=kind,p=perm)
 
@@ -350,9 +340,9 @@ def test_misc():
   expect_to_file(
       'ceph auth get-or-create client.caps mon \'allow command "auth caps"' \
           ' with entity="client.caps"\'', 0, k)
-  expect('ceph -n client.caps -k {kf} mon_status'.format(kf=k), errno.EACCES)
+  expect('ceph -n client.caps -k {kf} quorum_status'.format(kf=k), errno.EACCES)
   expect('ceph -n client.caps -k {kf} auth caps client.caps mon \'allow *\''.format(kf=k), 0)
-  expect('ceph -n client.caps -k {kf} mon_status'.format(kf=k), 0)
+  expect('ceph -n client.caps -k {kf} quorum_status'.format(kf=k), 0)
   destroy_keyring(k)
 
 def main():
@@ -361,10 +351,9 @@ def main():
   test_all()
   test_misc()
 
-  print 'OK'
+  print('OK')
 
   return 0
 
 if __name__ == '__main__':
   main()
-

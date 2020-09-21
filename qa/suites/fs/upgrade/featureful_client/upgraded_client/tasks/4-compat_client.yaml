@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - missing required features
+tasks:
+- exec:
+    mon.a:
+      - ceph fs dump --format=json-pretty
+      - ceph fs required_client_features cephfs add metric_collect
+- fs.clients_evicted:
+    clients:
+      client.0: False
+      client.1: True

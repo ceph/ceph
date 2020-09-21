@@ -15,8 +15,11 @@
 #ifndef _INCLUDED_RBD_REPLAY_REPLAYER_HPP
 #define _INCLUDED_RBD_REPLAY_REPLAYER_HPP
 
-#include <boost/thread/mutex.hpp>
-#include <boost/thread/shared_mutex.hpp>
+#include <chrono>
+#include <mutex>
+#include <thread>
+#include <condition_variable>
+#include "rbd_replay/ActionTypes.h"
 #include "BoundedBuffer.hpp"
 #include "ImageNameMap.hpp"
 #include "PendingIO.hpp"
@@ -35,48 +38,48 @@ public:
   void start();
 
   /// Should only be called by StopThreadAction
-  void stop();
+  void stop() override;
 
   void join();
 
   void send(Action::ptr action);
 
-  void add_pending(PendingIO::ptr io);
+  void add_pending(PendingIO::ptr io) override;
 
-  void remove_pending(PendingIO::ptr io);
+  void remove_pending(PendingIO::ptr io) override;
 
-  librbd::Image* get_image(imagectx_id_t imagectx_id);
+  librbd::Image* get_image(imagectx_id_t imagectx_id) override;
 
-  void put_image(imagectx_id_t imagectx_id, librbd::Image* image);
+  void put_image(imagectx_id_t imagectx_id, librbd::Image* image) override;
 
-  void erase_image(imagectx_id_t imagectx_id);
+  void erase_image(imagectx_id_t imagectx_id) override;
 
-  librbd::RBD* rbd();
+  librbd::RBD* rbd() override;
 
-  librados::IoCtx* ioctx();
+  librados::IoCtx* ioctx() override;
 
-  void set_action_complete(action_id_t id);
+  void set_action_complete(action_id_t id) override;
 
-  bool readonly() const;
+  bool readonly() const override;
 
-  rbd_loc map_image_name(std::string image_name, std::string snap_name) const;
+  rbd_loc map_image_name(std::string image_name, std::string snap_name) const override;
 
 private:
   void run();
 
   Replayer &m_replayer;
   BoundedBuffer<Action::ptr> m_buffer;
-  boost::shared_ptr<boost::thread> m_thread;
+  std::shared_ptr<std::thread> m_thread;
   std::map<action_id_t, PendingIO::ptr> m_pending_ios;
-  boost::mutex m_pending_ios_mutex;
-  boost::condition m_pending_ios_empty;
+  std::mutex m_pending_ios_mutex;
+  std::condition_variable_any m_pending_ios_empty;
   bool m_done;
 };
 
 
 class Replayer {
 public:
-  Replayer(int num_action_trackers);
+  explicit Replayer(int num_action_trackers);
 
   ~Replayer();
 
@@ -100,7 +103,7 @@ public:
 
   bool is_action_complete(action_id_t id);
 
-  void wait_for_actions(const std::vector<dependency_d> &deps);
+  void wait_for_actions(const action::Dependencies &deps);
 
   std::string pool_name() const;
 
@@ -127,9 +130,9 @@ public:
 private:
   struct action_tracker_d {
     /// Maps an action ID to the time the action completed
-    std::map<action_id_t, boost::system_time> actions;
-    boost::shared_mutex mutex;
-    boost::condition condition;
+    std::map<action_id_t, std::chrono::system_clock::time_point> actions;
+    std::shared_mutex mutex;
+    std::condition_variable_any condition;
   };
 
   void clear_images();
@@ -150,7 +153,7 @@ private:
   bool m_dump_perf_counters;
 
   std::map<imagectx_id_t, librbd::Image*> m_images;
-  boost::shared_mutex m_images_mutex;
+  std::shared_mutex m_images_mutex;
 
   /// Actions are hashed across the trackers by ID.
   /// Number of trackers should probably be larger than the number of cores and prime.

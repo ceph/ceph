@@ -15,27 +15,27 @@
 #ifndef CEPH_MEMORYMODEL_H
 #define CEPH_MEMORYMODEL_H
 
-class CephContext;
+#include "include/common_fwd.h"
 
 class MemoryModel {
 public:
   struct snap {
-    int peak;
-    int size;
-    int hwm;
-    int rss;
-    int data;
-    int lib;
+    long peak;
+    long size;
+    long hwm;
+    long rss;
+    long data;
+    long lib;
     
-    int heap, malloc, mmap;
+    long heap;
 
     snap() : peak(0), size(0), hwm(0), rss(0), data(0), lib(0),
-	     heap(0), malloc(0), mmap(0)
+	     heap(0)
     {}
 
-    int get_total() { return size; }
-    int get_rss() { return rss; }
-    int get_heap() { return heap; }
+    long get_total() { return size; }
+    long get_rss() { return rss; }
+    long get_heap() { return heap; }
   } last;
 
 private:
@@ -43,7 +43,7 @@ private:
   void _sample(snap *p);
 
 public:
-  MemoryModel(CephContext *cct);
+  explicit MemoryModel(CephContext *cct);
   void sample(snap *p = 0) {
     _sample(&last);
     if (p)

@@ -13,9 +13,6 @@
  */
 
 #include <algorithm>
-
-#include "common/Mutex.h"
-#include "common/config.h"
 #include "common/debug.h"
 #include "include/str_list.h"
 
@@ -24,24 +21,28 @@
 const static int dout_subsys = ceph_subsys_auth;
 
 
-AuthMethodList::AuthMethodList(CephContext *cct, string str)
+AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
 {
-  list<string> sup_list;
+  std::list<std::string> sup_list;
   get_str_list(str, sup_list);
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
-  for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
+  for (auto iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
     if (iter->compare("cephx") == 0) {
       auth_supported.push_back(CEPH_AUTH_CEPHX);
     } else if (iter->compare("none") == 0) {
       auth_supported.push_back(CEPH_AUTH_NONE);
+    } else if (iter->compare("gss") == 0) {
+      auth_supported.push_back(CEPH_AUTH_GSS);
     } else {
+      auth_supported.push_back(CEPH_AUTH_UNKNOWN);
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
   if (auth_supported.empty()) {
+    lderr(cct) << "WARNING: no auth protocol defined, use 'cephx' by default" << dendl;
     auth_supported.push_back(CEPH_AUTH_CEPHX);
   }
 }
@@ -53,7 +54,7 @@ bool AuthMethodList::is_supported_auth(int auth_type)
 
 int AuthMethodList::pick(const std::set<__u32>& supported)
 {
-  for (set<__u32>::const_reverse_iterator p = supported.rbegin(); p != supported.rend(); ++p)
+  for (auto p = supported.rbegin(); p != supported.rend(); ++p)
     if (is_supported_auth(*p))
       return *p;
   return CEPH_AUTH_UNKNOWN;
@@ -61,7 +62,7 @@ int AuthMethodList::pick(const std::set<__u32>& supported)
 
 void AuthMethodList::remove_supported_auth(int auth_type)
 {
-  for (list<__u32>::iterator p = auth_supported.begin(); p != auth_supported.end(); ) {
+  for (auto p = auth_supported.begin(); p != auth_supported.end(); ) {
     if (*p == (__u32)auth_type)
       auth_supported.erase(p++);
     else 

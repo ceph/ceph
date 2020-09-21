@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #
 # multi-dump.sh
@@ -8,7 +8,7 @@
 
 ### Functions
 usage() {
-        echo <<EOF
+        cat <<EOF
 multi-dump.sh: dumps out ceph maps
 
 -D                         Enable diff-mode

@@ -10,7 +10,7 @@ struct Item {
   xlist<Item*>::item xitem;
   int val;
 
-  Item(int v) :
+  explicit Item(int v) :
     xitem(this),
     val(v)
   {}
@@ -26,13 +26,13 @@ protected:
   // for filling up an ItemList
   Refs refs;
 
-  virtual void SetUp() {
+  void SetUp() override {
     for (int i = 0; i < 13; i++) {
       items.push_back(new Item(i));
       refs.push_back(&items.back()->xitem);
     }
   }
-  virtual void TearDown() {
+  void TearDown() override {
     for (Items::iterator i = items.begin(); i != items.end(); ++i) {
       delete *i;
     }
@@ -43,14 +43,14 @@ protected:
 TEST_F(XlistTest, capability) {
   ItemList list;
   ASSERT_TRUE(list.empty());
-  ASSERT_EQ(list.size(), 0);
+  ASSERT_EQ(0u, list.size());
 
   std::copy(refs.begin(), refs.end(), std::back_inserter(list));
   ASSERT_EQ((size_t)list.size(), refs.size());
 
   list.clear();
   ASSERT_TRUE(list.empty());
-  ASSERT_EQ(list.size(), 0);
+  ASSERT_EQ(0u, list.size());
 }
 
 TEST_F(XlistTest, traverse) {

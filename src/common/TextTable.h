@@ -11,11 +11,13 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#ifndef TEXT_TABLE_H_
+#define TEXT_TABLE_H_
+
 #include <vector>
 #include <sstream>
-#include <iomanip>
-#include <string>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /**
  * TextTable:
@@ -43,15 +45,18 @@ private:
     Align col_align;
 
     TextTableColumn() {}
-    TextTableColumn(std::string h, int w, Align ha, Align ca) :
+    TextTableColumn(const std::string &h, int w, Align ha, Align ca) :
 		    heading(h), width(w), hd_align(ha), col_align(ca) { }
     ~TextTableColumn() {}
   };
 
   std::vector<TextTableColumn> col;	// column definitions
-  std::vector<std::vector<std::string> > row;	// row data array
   unsigned int curcol, currow;		// col, row being inserted into
   unsigned int indent;			// indent width when rendering
+  std::string column_separation = {"  "};
+
+protected:
+  std::vector<std::vector<std::string> > row;	// row data array
 
 public:
   TextTable(): curcol(0), currow(0), indent(0) {}
@@ -79,6 +84,15 @@ public:
   void set_indent(int i) { indent = i; }
 
   /**
+   * Set column separation
+   *
+   * @param s String to separate columns
+   */
+  void set_column_separation(const std::string& s) {
+    column_separation = s;
+  }
+
+  /**
    * Add item to table, perhaps on new row.
    * table << val1 << val2 << TextTable::endrow;
    *
@@ -104,7 +118,7 @@ public:
     }
 
     // inserting more items than defined columns is a coding error
-    assert(curcol + 1 <= col.size());
+    ceph_assert(curcol + 1 <= col.size());
 
     // get rendered width of item alone
     std::ostringstream oss;
@@ -130,7 +144,7 @@ public:
    */
 
   struct endrow_t {};
-  static endrow_t endrow;
+  static constexpr endrow_t endrow{};
 
   /**
    * Implements TextTable::endrow
@@ -147,7 +161,7 @@ public:
    * Render table to ostream (i.e. cout << table)
    */
 
-  friend std::ostream &operator<<(std::ostream& out, TextTable &t);
+  friend std::ostream &operator<<(std::ostream &out, const TextTable &t);
 
   /**
    * clear: Reset everything in a TextTable except column defs
@@ -156,3 +170,6 @@ public:
 
   void clear();
 };
+
+#endif
+

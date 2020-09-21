@@ -34,8 +34,8 @@ the typical process.
 
 Once the primary has its local reservation, it requests a remote
 reservation from the backfill target. This reservation CAN be rejected,
-for instance if the OSD is too full (osd_backfill_full_ratio config
-option). If the reservation is rejected, the primary drops its local
+for instance if the OSD is too full (backfillfull_ratio osd setting).
+If the reservation is rejected, the primary drops its local
 reservation, waits (osd_backfill_retry_interval), and then retries. It
 will retry indefinitely.
 
@@ -47,6 +47,14 @@ Finally, after backfill (or log-based recovery if backfill was not
 necessary), the primary drops the local reservation and enters the
 Recovered state. Once all the PGs have reported they are clean, the
 primary enters the Clean state and marks itself active+clean.
+
+-----------------
+Dump Reservations
+-----------------
+
+An OSD daemon command dumps total local and remote reservations::
+
+  ceph daemon osd.<id> dump_recovery_reservations
 
 
 --------------
@@ -62,9 +70,10 @@ to the monitor. The state chart can set:
 
  - recovery_wait: waiting for local/remote reservations
  - recovering: recovering
- - wait_backfill: waiting for remote backfill reservations
+ - recovery_toofull: recovery stopped, OSD(s) above full ratio
+ - backfill_wait: waiting for remote backfill reservations
  - backfilling: backfilling
- - backfill_toofull: backfill reservation rejected, OSD too full
+ - backfill_toofull: backfill stopped, OSD(s) above backfillfull ratio
 
 
 --------

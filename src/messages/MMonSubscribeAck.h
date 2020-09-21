@@ -17,34 +17,39 @@
 
 #include "msg/Message.h"
 
-struct MMonSubscribeAck : public Message {
+class MMonSubscribeAck : public Message {
+public:
   __u32 interval;
   uuid_d fsid;
   
-  MMonSubscribeAck() : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck() : Message{CEPH_MSG_MON_SUBSCRIBE_ACK},
 		       interval(0) {
-    memset(&fsid, 0, sizeof(fsid));
   }
-  MMonSubscribeAck(uuid_d& f, int i) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck(uuid_d& f, int i) : Message{CEPH_MSG_MON_SUBSCRIBE_ACK},
 				       interval(i), fsid(f) { }
 private:
-  ~MMonSubscribeAck() {}
+  ~MMonSubscribeAck() override {}
 
 public:
-  const char *get_type_name() const { return "mon_subscribe_ack"; }
-  void print(ostream& o) const {
+  std::string_view get_type_name() const override { return "mon_subscribe_ack"; }
+  void print(std::ostream& o) const override {
     o << "mon_subscribe_ack(" << interval << "s)";
   }
 
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(interval, p);
-    ::decode(fsid, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(interval, p);
+    decode(fsid, p);
   }
-  void encode_payload(uint64_t features) {
-    ::encode(interval, payload);
-    ::encode(fsid, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(interval, payload);
+    encode(fsid, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

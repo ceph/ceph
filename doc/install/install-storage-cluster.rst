@@ -4,11 +4,7 @@
 
 This guide describes installing Ceph packages manually. This procedure
 is only for users who are not installing with a deployment tool such as
-``ceph-deploy``, ``chef``, ``juju``, etc. 
-
-.. tip:: You can also use ``ceph-deploy`` to install Ceph packages, which may
-   be more convenient since you can install ``ceph`` on multiple hosts with
-   a single command.
+``cephadm``, ``chef``, ``juju``, etc. 
 
 
 Installing with APT
@@ -42,30 +38,27 @@ To install Ceph with RPMs, execute the following steps:
 
 	[ceph]
 	name=Ceph packages for $basearch
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/$basearch
+	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/$basearch
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/SRPMS
+	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/SRPMS
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 #. Install pre-requisite packages::  

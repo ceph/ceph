@@ -15,36 +15,44 @@
 #ifndef CEPH_MEXPORTDIRCANCEL_H
 #define CEPH_MEXPORTDIRCANCEL_H
 
-#include "msg/Message.h"
 #include "include/types.h"
+#include "messages/MMDSOp.h"
 
-class MExportDirCancel : public Message {
+class MExportDirCancel : public MMDSOp {
+private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
   dirfrag_t dirfrag;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
 
-  MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
+protected:
+  MExportDirCancel() : MMDSOp{MSG_MDS_EXPORTDIRCANCEL, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    MMDSOp{MSG_MDS_EXPORTDIRCANCEL, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df) {
     set_tid(tid);
   }
-private:
-  ~MExportDirCancel() {}
+  ~MExportDirCancel() override {}
 
 public:
-  const char *get_type_name() const { return "ExCancel"; }
-  void print(ostream& o) const {
+  std::string_view get_type_name() const override { return "ExCancel"; }
+  void print(std::ostream& o) const override {
     o << "export_cancel(" << dirfrag << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(dirfrag, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(dirfrag, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(dirfrag, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

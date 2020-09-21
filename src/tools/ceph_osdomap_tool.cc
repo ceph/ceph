@@ -19,22 +19,26 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
-#include "os/DBObjectMap.h"
-#include "os/LevelDBStore.h"
+#include "os/filestore/DBObjectMap.h"
+#include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
-  string store_path, cmd, out_path;
+  string store_path, cmd, oid, backend;
+  bool debug = false;
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
-     "path to mon directory, mandatory (current/omap usually)")
+     "path to omap directory, mandatory (current/omap usually)")
     ("paranoid", "use paranoid checking")
+    ("debug", "Additional debug output from DBObjectMap")
+    ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
-     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check], mandatory")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair, compact], mandatory")
+    ("backend", po::value<string>(&backend),
+     "DB backend (default rocksdb)")
     ;
   po::positional_options_description p;
   p.add("command", 1);
@@ -56,7 +60,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
@@ -64,17 +68,23 @@ int main(int argc, char **argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
-  g_conf = g_ceph_context->_conf;
+  if (vm.count("debug")) debug = true;
 
   if (vm.count("help")) {
     std::cerr << desc << std::endl;
     return 1;
   }
+
+  auto cct = global_init(
+    NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
+    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
+  common_init_finish(g_ceph_context);
+  cct->_conf.apply_changes(nullptr);
+  if (debug) {
+    g_conf().set_val_or_die("log_to_stderr", "true");
+    g_conf().set_val_or_die("err_to_stderr", "true");
+  }
+  g_conf().apply_changes(nullptr);
 
   if (vm.count("omap-path") == 0) {
     std::cerr << "Required argument --omap-path" << std::endl;
@@ -86,56 +96,76 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  LevelDBStore* store(new LevelDBStore(g_ceph_context, store_path));
-  if (vm.count("paranoid")) {
+  if (vm.count("backend") == 0) {
+    backend = "rocksdb";
+  }
+
+  KeyValueDB* store(KeyValueDB::create(g_ceph_context, backend, store_path));
+  if (store == NULL) {
+    std::cerr << "Invalid backend '" << backend << "' specified" << std::endl;
+    return 1;
+  }
+  /*if (vm.count("paranoid")) {
     std::cerr << "Enabling paranoid checks" << std::endl;
     store->options.paranoid_checks = true;
-  }
-  DBObjectMap omap(store);
+    }*/
+  DBObjectMap omap(cct.get(), store);
   stringstream out;
   int r = store->open(out);
   if (r < 0) {
     std::cerr << "Store open got: " << cpp_strerror(r) << std::endl;
     std::cerr << "Output: " << out.str() << std::endl;
-    goto done;
+    return r;
   }
-  r = 0;
+  // We don't call omap.init() here because it will repair
+  // the DBObjectMap which we might want to examine for diagnostic
+  // reasons.  Instead use --command repair.
 
+  omap.get_state();
+  std::cout << "Version: " << (int)omap.state.v << std::endl;
+  std::cout << "Seq: " << omap.state.seq << std::endl;
+  std::cout << "legacy: " << (omap.state.legacy ? "true" : "false") << std::endl;
 
   if (cmd == "dump-raw-keys") {
-    KeyValueDB::WholeSpaceIterator i = store->get_iterator();
+    KeyValueDB::WholeSpaceIterator i = store->get_wholespace_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
     }
+    return 0;
   } else if (cmd == "dump-raw-key-vals") {
-    KeyValueDB::WholeSpaceIterator i = store->get_iterator();
+    KeyValueDB::WholeSpaceIterator i = store->get_wholespace_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
       i->value().hexdump(std::cout);
     }
+    return 0;
   } else if (cmd == "dump-objects") {
     vector<ghobject_t> objects;
     r = omap.list_objects(&objects);
     if (r < 0) {
       std::cerr << "list_objects got: " << cpp_strerror(r) << std::endl;
-      goto done;
+      return r;
     }
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+        continue;
       std::cout << *i << std::endl;
     }
-    r = 0;
+    return 0;
   } else if (cmd == "dump-objects-with-keys") {
     vector<ghobject_t> objects;
     r = omap.list_objects(&objects);
     if (r < 0) {
       std::cerr << "list_objects got: " << cpp_strerror(r) << std::endl;
-      goto done;
+      return r;
     }
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+        continue;
       std::cout << "Object: " << *i << std::endl;
       ObjectMap::ObjectMapIterator j = omap.get_iterator(ghobject_t(i->hobj));
       for (j->seek_to_first(); j->valid(); j->next()) {
@@ -143,18 +173,39 @@ int main(int argc, char **argv) {
 	j->value().hexdump(std::cout);
       }
     }
-  } else if (cmd == "check") {
-    r = omap.check(std::cout);
-    if (!r) {
-      std::cerr << "check got: " << cpp_strerror(r) << std::endl;
-      goto done;
+    return 0;
+  } else if (cmd == "check" || cmd == "repair") {
+    ostringstream ss;
+    bool repair = (cmd == "repair");
+    r = omap.check(ss, repair, true);
+    if (r) {
+      std::cerr << ss.str() << std::endl;
+      if (r > 0) {
+        std::cerr << "check got " << r << " error(s)" << std::endl;
+        return 1;
+      }
     }
-    std::cout << "check succeeded" << std::endl;
+    std::cout << (repair ? "repair" : "check") << " succeeded" << std::endl;
+    return 0;
+  } else if (cmd == "dump-headers") {
+    vector<DBObjectMap::_Header> headers;
+    r = omap.list_object_headers(&headers);
+    if (r < 0) {
+      std::cerr << "list_object_headers got: " << cpp_strerror(r) << std::endl;
+      return 1;
+    }
+    for (auto i : headers)
+      std::cout << i << std::endl;
+    return 0;
+  } else if (cmd == "resetv2") {
+    omap.state.v = 2;
+    omap.state.legacy = false;
+    omap.set_state();
+  } else if (cmd == "compact") {
+    omap.compact();
+    return 0;
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
-    goto done;
+    return 1;
   }
-
-  done:
-  return r;
 }

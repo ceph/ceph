@@ -1,0 +1,3002 @@
+commit 45107e21c568dd033c2f0a3107dec8f0b0e58374 (tag: refs/tags/v10.2.2)
+Author: Jenkins Build Slave User <jenkins-build@trusty-huge--abdffd45-81df-4aa8-a769-e169993c7a0f.localdomain>
+Date:   Tue Jun 14 11:43:24 2016 +0000
+
+    10.2.2
+
+commit 008c5af59b045f9b6b8046a4c6d5e915cbe18bb3
+Merge: b733244 dd1ea65
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 14 07:32:44 2016 -0400
+
+    Merge pull request #9692 from dillaman/wip-16292
+    
+    jewel: librbd: remove should ignore mirror errors from older OSDs
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit dd1ea65c2c8ae966c1f07ce78f0d1f16c9a315d9
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 15:29:43 2016 -0400
+
+    librbd: remove should ignore mirror errors from older OSDs
+    
+    Fixes: http://tracker.ceph.com/issues/16268
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5a97a9b7ef238c4ceb16225a0b937f9a0cdbb2b6)
+
+commit b733244b3dc46e11689ddfb46187877c01347d3a
+Merge: 1feddef 2656881
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 14 07:24:28 2016 -0400
+
+    Merge pull request #9691 from dillaman/wip-16260-jewel
+    
+    jewel: librbd: do not shut down exclusive lock while acquiring'
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 1feddef07c182d5a50b3aa3c4a7ff87f21dbd3e1
+Merge: ffb64cd a38caf9
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 14 06:57:38 2016 -0400
+
+    Merge pull request #9690 from dillaman/wip-16290
+    
+    jewel: rbd-mirror: FAILED assert(!m_status_watcher)
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 26568819e331ef3adec6667a801f07058d94845b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 20:20:33 2016 -0400
+
+    librbd: track in-flight flush events for journaling
+    
+    The tracking for flush events was accidentally dropped. This
+    can result in the journal being closed too early since it
+    might miss in-flight flush ops.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a1ea1edce9332fa1730625629e3b4e16f02caaf4)
+
+commit a85fbb4e9a9a409738e9f031c20a8e2beb1b514f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 12:00:28 2016 -0400
+
+    librbd: do not shut down exclusive lock while acquiring
+    
+    Fixes: http://tracker.ceph.com/issues/16260
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c5694fc6766fb8e213c4b65d2cd7b9d066b07ff7)
+
+commit a38caf90c98a04d57b81519803271f9d85fb5d56
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Sun Jun 12 20:32:45 2016 +0300
+
+    rbd-mirror: FAILED assert(!m_status_watcher)
+    
+    Fixes: http://tracker.ceph.com/issues/16245
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit b8bfc0f2efb44d3eff7a5fd8bca24516c8815d62)
+
+commit ffb64cd0538cee05b4f360fa8334829da268d1b9
+Merge: 271406c edef63d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 14 06:54:51 2016 -0400
+
+    Merge pull request #9654 from dillaman/wip-16246
+    
+    jewel: librbd: recursive lock possible when disabling journaling
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 271406c77a6176057ba73b55a110a193d6872a48
+Merge: b5e344e 0579a48
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 14 06:54:31 2016 -0400
+
+    Merge pull request #9673 from dillaman/wip-16265
+    
+    jewel: rbd-mirror: do not re-use image id from mirror directory if creating image
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit b5e344e1e3670214da803ff6f7eb6e50bf52e46f
+Merge: 1720664 739f343
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 23:37:06 2016 -0400
+
+    Merge pull request #9674 from dillaman/wip-16267
+    
+    jewel: qa/workunits: ensure replay has started before checking position
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 739f343ec880eacd13b935d493b5dbfcc5efa387
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 00:19:37 2016 -0400
+
+    qa/workunits: ensure replay has started before checking position
+    
+    Fixes: http://tracker.ceph.com/issues/16248
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 6a68b68e0d2741e6694fd28d31766808ba881815)
+
+commit 0579a483bf7b0f1cc590fb1dbc6c740c17679dac
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 02:09:00 2016 -0400
+
+    rbd-mirror: reset local image id when creating new image
+    
+    Fixes: http://tracker.ceph.com/issues/16253
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 1948047acbc129de2982d53e130da1f577af224b)
+
+commit ec809870cc2902d2bdf6543d911e23e71567303c
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 02:07:54 2016 -0400
+
+    rbd-mirror: handle an attempt to delete a non-mirrored image
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 45dda67b3ef3d5dc5abb327fc1f242140f004d90)
+
+commit 6c303007af20a317f02b5caf7d3cb9f2214d2ee5
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 13 02:03:29 2016 -0400
+
+    cls_rbd: disallow setting an empty mirror image entry to disabling
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 7b2f99a97ff64451f3ae72081186dff41c507271)
+
+commit edef63d56bc329638f79ce8017e72810dcd768f1
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun Jun 12 21:42:59 2016 -0400
+
+    librbd: avoid holding owner_lock waiting for exclusive lock
+    
+    Fixes: http://tracker.ceph.com/issues/16235
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b96ab805eed49d4bdb494c8919d2e1ee7ad0a7e6)
+
+commit 1720664ddcb32dd300b2bd046ff15ed4916676a4
+Merge: f902309 2eaaf2e
+Author: Gregory Farnum <greg@gregs42.com>
+Date:   Mon Jun 13 01:26:53 2016 -0700
+
+    Merge pull request #9656 from gregsfortytwo/wip-jewel-16024
+    
+    Jewel client: fix bugs accidentally disabling readahead
+
+commit f902309bc9c159c0d6a798c0398a95f64bb682ed
+Merge: 89d6545 d61e3dd
+Author: Gregory Farnum <greg@gregs42.com>
+Date:   Mon Jun 13 01:22:22 2016 -0700
+
+    Merge pull request #9655 from gregsfortytwo/wip-jewel-15508
+    
+    Jewel mds: order directories by hash and fix simultaneous readdir races
+
+commit d61e3ddf6d99a4b9b72fd769d635bf9b2bffaf0e
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon May 9 22:12:48 2016 +0800
+
+    client: fix simultaneous readdirs race
+    
+    Current readdir code uses list to track the order of the dentries
+    in readdir replies.  When handling a readdir reply, it pushes the
+    resulting dentries to the back of directory's dentry_list. After
+    readdir finishes, the dentry_list reflects how MDS sorts dentries.
+    
+    This method is racy when there are simultaneous readdirs. The fix
+    is use vector instead of list to trace how dentries are sorted in
+    its parent directory. As long as shared_gen doesn't change, each
+    dentry is at fixed position of the vector. So cocurrent readdirs
+    do not affect each other.
+    
+    Fixes: http://tracker.ceph.com/issues/15508
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 9d297c5e98f814b282dadc379ab70dfa678db73e)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit ba9fa11a235dc6c55b3b03e3a98b17316d06cf27
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Apr 25 23:24:46 2016 +0800
+
+    client: move dir_{release,ordered}_count into class Inode
+    
+    We close Inode::dir when it's empty. Once closing the dir, we lose
+    track of {release,ordered}_count. This causes direcotry to be wrongly
+    marked as complete. (dir is trimmed to empty in the middle of readdir)
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 235fcf68f5d96a4d9d6cc260d12da912fa7ea4a8)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit f5db278c8cba873e580255dea6dba5227d508df7
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Apr 25 17:59:35 2016 +0800
+
+    ceph_test_libcephfs: check order of entries in readdir result
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 9b17d145c15a469caa29853312b8dcb0b19f55f0)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 51a75063f59fcb47d3a4d5f06aa51cab83b76616
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Apr 25 15:52:32 2016 +0800
+
+    mds: don't reset readdir offset if client supports hash order dentry
+    
+    Now the ordering of dentries is stable across directory fragmentation.
+    There is no need to reset readdir offset if directory get fragmented
+    in the middle of readdir.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 98a01af2cd8e01f14ab7be32c31a43571ef8bb87)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 3fe5a09f3e7aa9fc89cd47a261785110c2bf38a2
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Apr 25 15:31:27 2016 +0800
+
+    client: using hash value to compose dentry offset
+    
+    If MDS sorts dentries in dirfrag in hash order, we use hash value to
+    compose dentry offset. dentry offset is:
+    
+      (0xff << 52) | ((24 bits hash) << 28) |
+      (the nth entry hash hash collision)
+    
+    This offset is stable across directory fragmentation.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 680766ec131b95271e320f54dfe6d69ea8d4fbb3)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit a65b3ef30123e5d9d3199cf2f5dafd7d9ab8a755
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Apr 25 10:50:17 2016 +0800
+
+    client: record 'offset' for each entry of dir_result_t::buffer
+    
+    This is preparation for using hash value as dentry 'offset'
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit bd6546e5e8bfb4ef8927807492d63d5285534618)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 8361b988441d073b82809dbafd82fba1c23b13be
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon May 9 11:51:36 2016 +0800
+
+    client: fix cached readdir after seekdir
+    
+    Client::seekdir doesn't reset dirp->at_cache_name for a forward seek
+    within same frag. So the dentry with name == at_cache_name may not be
+    the one prior to the readdir postion.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 0e32115bae2f1ac2c59b57852976b0de5587abac)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit cf261257f6ad9b0d51f39af5d26beb15e5759672
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Apr 21 17:31:10 2016 +0800
+
+    mds: define end/complete in readdir reply as single u16 flags
+    
+    so that we can introduce new flags for readdir reply.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 92cfbdf526d1030891da366299b635e589dd5f8e)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 9ce73cdeb6056060b299cf92e4c858d1ab2aef2c
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Apr 23 16:03:48 2016 +0800
+
+    mds: sort dentries in CDir in hash order
+    
+    This gives us stable ordering of dentries. (Previously ordering of
+    dentries changes after directory gets fragmented)
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit f483224a0bc70b9eb5f62cd6cbb8b97df5b65953)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 288160b7e4bec94238d3b24622b4d16808a273e1
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Apr 22 09:43:54 2016 +0800
+
+    client: save readdir result into dir_result_t directly
+    
+    Current code saves the readdir result into MedaRequest, then updates
+    dir_result_t according to MetaRequest. I can't see any reason why
+    we need to do this.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit db5d60d1b8d01afd43da09a063f00aa6ab312903)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 75edb5b1c8bcdbc24b4cd6cb811e9c07608f09f5
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri Apr 22 09:31:00 2016 +0800
+
+    client: don't allocate dir_result_t::buffer dynamically
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit c41ceb9f1425432295a52965de8d4a23b15fe5e5)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 98e36d17d42d7b43720685745348317cab4a847f
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Apr 21 20:53:55 2016 +0800
+
+    client: simplify 'offset in frag'
+    
+    don't distinguish leftmost frag from other frags. always use 2 as
+    first entry's offset.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 6572c2a24ea2abec4c7eecef92a292c2cc72c762)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 2eaaf2e524c8b95b1b22b6bd7ba153b52746fd01
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Jun 10 17:33:04 2016 -0400
+
+    client: move readahead ref get/put to obj constr
+    
+    The readahead context was incrementing the file handle reference count but only
+    decreasing in finish which is not called if readahead is a no-op.
+    
+    This fixes a bug caught in testing where readahead was causing inode to become
+    disconnected:
+    
+        2016-06-10 19:46:48.953018 7f2a4351be80  1 client.4125 dump_inode: DISCONNECTED inode 10000000502 #10000000502 ref 110000000502.head(faked_ino=2307 ref=1 ll_ref=0 cap_refs={1024=0,2048=0,4096=0,8192=0} open={1=0,2=0} mode=100666 size=4194304/0 mtime=2016-06-10 19:29:45.107417 caps=-(0=pAsLsXsFscr) objectset[10000000502 ts 2/4012653 objects 0 dirty_or_tx 0] 0x7f2a24300d00)
+        2016-06-10 19:46:48.953032 7f2a4351be80  2 client.4125 cache still has 0+155 items, waiting (for caps to release?)
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit b5a0773259ce9f2ef44e8e6925ab11dc1a5e55e6)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit 1ec2ef876d0e5cfe595ebb4a98fabf4958e9e937
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu May 26 16:32:58 2016 -0400
+
+    client: use fh min readahead to enable readahead
+    
+    The client was using the configured maximum readahead of 0 which was changed in
+    95ee69989129750fddce6a3b5644238c4b88ed74. This prevented readahead from ever
+    running (without setting a different default from 0).
+    
+    Fixes: http://tracker.ceph.com/issues/16024
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 01c179bcce2dc8a269d78eb1be8198b12bd161f7)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit b0bccc3dc11731466f9809013d6deb09f020693b
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri May 27 11:43:31 2016 -0400
+
+    client: update comment
+    
+    Default was changed to unlimited in 11e4680e7394e6e02612441c964e05207b97737b.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit bee02a073f4c551798bc490618a0e8d862893c25)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit e4104689b2698feccd9ea8432f1d57847effbd07
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu May 26 15:08:52 2016 -0400
+
+    client: use layout.get_period() helper
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit b331d12a43a4177369a003c3ab9d525da6a89950)
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com
+
+commit e5759fa8d016d3f8e2a1ba79edb0bf90ab24565b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 15:44:26 2016 -0400
+
+    librbd: recursive lock possible when disabling journaling
+    
+    If pool-level mirroring is enabled, deleting the journal
+    could cause a deadlock attempting to delete remote peer
+    sync-point snapshots.
+    
+    Fixes: http://tracker.ceph.com/issues/16235
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit fb255e6c3cd44c8d24c53e3cd70395a11a712574)
+
+commit 89d65456ed1303b09e9bc054bbb62c0808db4565
+Merge: c526386 e15bfff
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun Jun 12 08:16:35 2016 -0400
+
+    Merge pull request #9553 from Abhishekvrshny/wip-16038-jewel
+    
+    jewel: pybind: rbd API should default features parameter to None
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit c526386b4b087029e6fc00315b7726a2cf9caecb
+Merge: 6f9f830 6af7b22
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun Jun 12 08:13:16 2016 -0400
+
+    Merge pull request #9552 from Abhishekvrshny/wip-15981-jewel
+    
+    jewel: qa: dynamic_features.sh races with image deletion
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 6f9f8307d7cff313bd2f476236591141d3c45c71
+Merge: 7edf393 dc38a26
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun Jun 12 08:08:39 2016 -0400
+
+    Merge pull request #9629 from dillaman/wip-16231
+    
+    jewel: rbd-mirror: fix deletion propagation edge cases
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 7edf393743b2f7811d784e02a42fce13af19e8bc
+Merge: 39f530a bc658ed
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun Jun 12 08:08:23 2016 -0400
+
+    Merge pull request #9630 from dillaman/wip-16233
+    
+    jewel: rbd-mirror: do not propagate deletions when pool unavailable
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 39f530a224d85cd12294ce125d8548cbe1e3e1c0
+Merge: bd454ff cb50679
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun Jun 12 08:07:42 2016 -0400
+
+    Merge pull request #9628 from dillaman/wip-16224
+    
+    jewel: rbd-mirror: fix journal shut down ordering
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit bd454ff3a95244d2be2177180814439667db73f1
+Merge: 3fe2f1b 3a2cd16
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun Jun 12 08:07:10 2016 -0400
+
+    Merge pull request #9627 from dillaman/wip-16217
+    
+    jewel: rbd-mirror: refresh image after creating sync point
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 3fe2f1b652d7d6d80f9375174885b002db503f40
+Merge: 2a9fee9 99ff1fc
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 10 21:48:26 2016 -0400
+
+    Merge pull request #9579 from Abhishekvrshny/wip-16006-jewel
+    
+    jewel: BackoffThrottle spins unnecessarily with very small backoff while the throttle is full
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 2a9fee94f10cba7675f564edbeac35620e8a6602
+Merge: ac1b354 4a967eb
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 10 17:34:19 2016 -0400
+
+    Merge pull request #9638 from ceph/wip-16211-jewel
+    
+    Jewel: remove reliance on FLAG_OMAP for reads
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit bc658ede5b2e68210852b66585bfa5560964f405
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 08:15:19 2016 -0400
+
+    rbd-mirror: do not propagate deletions when pool unavailable
+    
+    Fixes: http://tracker.ceph.com/issues/16229
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d321634414fa4b90c66474557ec990dfc935ae29)
+
+commit dc38a26e2e48f0a1fabdb51f1819e402e5b214ce
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 00:12:06 2016 -0400
+
+    rbd-mirror: image deleter properly handles multiple snapshots
+    
+    Fixes: http://tracker.ceph.com/issues/16226
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d72a8cb67fbdc7361f8f9e265c659ddb96dc0f74)
+
+commit 0a74552b5a4c297855f5e04336a9d5cf00441d9e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 9 22:32:33 2016 -0400
+
+    rbd-mirror: propagate deletions even if image replayer is stopped
+    
+    If an image deletion which causes the replayer to stop (due to an error)
+    before the deletion is detected, the deletion should still occur.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a0c526a23783fe543737f6445a2d9438cc73b137)
+
+commit da6d409ab670e45e34c1dcf7de3f775632423d3f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 9 21:14:27 2016 -0400
+
+    qa/workunits/rbd: improve deletion propagation test case
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit de15b198cd7b5e94016605c8016a5cf38c07c6f6)
+
+commit cb50679bad91fa1a0e360dca0331996b543fdadd
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jun 8 10:12:04 2016 -0400
+
+    librbd: quickly check for duplicate snap name upon create
+    
+    During journal replay, quickly check for a duplicate snap name
+    before allocating a snapshot sequence from the OSDs and
+    reverting due to the duplicate name.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 8374d45c7644666103f88c410a2b1b781f3a0cb8)
+
+commit 43f3bbf130c9914f895bf4834305f951d0228954
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 7 14:45:16 2016 -0400
+
+    rbd-mirror: stop external replayer before closing remote journaler
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 88bd3002082184c045bb82547929b30da1526cfb)
+
+commit f0bf15e9d38e3de63c959bac0ae90b609dafc514
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 7 12:42:52 2016 -0400
+
+    librbd: stop journal recorder before starting external replay
+    
+    Fixes: http://tracker.ceph.com/issues/16165
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5aa6eb2782bdb5cde6a050a5f7a4e683800414c0)
+
+commit 3a2cd16e6c35b7b8ba0dd113b9a8cc586c1086b0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jun 8 12:49:04 2016 -0400
+
+    rbd-mirror: refresh image after creating sync point snapshot
+    
+    Fixes: http://tracker.ceph.com/issues/16196
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c9a3e3be7ddc31992167d55de12bbe6849447b43)
+
+commit 6b77d2268e7b17911f0a6809045d356d97d1621a
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jun 8 12:03:33 2016 -0400
+
+    rbd-mirror: consistently use dout/derr for debug logging
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 03f5e4a917b3c18f8ccdaa5ce676ed9731dd2a8f)
+
+commit ac1b35478eea6bad574fac8641b47c0fcaee20f4
+Merge: 966186f 03466f0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:32:21 2016 -0400
+
+    Merge pull request #9612 from dillaman/wip-16208
+    
+    jewel: rbd-mirror: support bootstrap canceling
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 966186f3c20080475d3e692e918cc363cac1ae47
+Merge: 49ed4ff bddf944
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:32:02 2016 -0400
+
+    Merge pull request #9610 from dillaman/wip-16209
+    
+    jewel: librbd: prevent error messages when journal externally disabled
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 49ed4ffeb2c17f266559137030ab32182750b321
+Merge: 8e533c8 0014a9e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:19:47 2016 -0400
+
+    Merge pull request #9611 from dillaman/wip-16210
+    
+    jewel: librbd: journal IO error results in failed assertion in AioCompletion
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 8e533c877e5d7bac84867d418aada1998425ef72
+Merge: a768a1c e424482
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:16:49 2016 -0400
+
+    Merge pull request #9580 from Abhishekvrshny/wip-15996-jewel
+    
+    jewel: librbd: reuse ImageCtx::finisher and SafeTimer for lots of images case
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit a768a1cb7b0062963714361ce94f8a834db44bd4
+Merge: ba5d490 bb279f1
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:15:51 2016 -0400
+
+    Merge pull request #9609 from dillaman/wip-16216
+    
+    jewel: librbd: refresh image if needed in mirror functions
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit ba5d490824efa63c63713fee418631cd684293c4
+Merge: 41c5c27 3b8cb63
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:15:32 2016 -0400
+
+    Merge pull request #9608 from dillaman/wip-16189
+    
+    jewel: cls_rbd: mirror image status summary should read full directory
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 41c5c273b1f52d0284c6b08f15db3edb17cd674c
+Merge: 7d217b9 cec6870
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:15:08 2016 -0400
+
+    Merge pull request #9556 from Abhishekvrshny/wip-16162-jewel
+    
+    jewel: ceph_test_librbd_fsx crashes during journal replay shut down
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 7d217b9cc55778fa73f0ce4a0c2c5994f5f31c87
+Merge: 32f90a7 6c0e202
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:14:49 2016 -0400
+
+    Merge pull request #9554 from Abhishekvrshny/wip-16084-jewel
+    
+    jewel: librbd: validate image metadata configuration overrides
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 32f90a7c98ebd5a272ece71b1af7009be2742cb5
+Merge: 3715d20c 09200d4
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:13:06 2016 -0400
+
+    Merge pull request #9555 from Abhishekvrshny/wip-16147-jewel
+    
+    jewel: Object Map is showing as invalid, even when Object Map is disabled for that Image.
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 3715d20c25c19ec1d1c58d275cef4e7ddb5b7778
+Merge: 7ea13df 73464af
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:12:47 2016 -0400
+
+    Merge pull request #9550 from Abhishekvrshny/wip-15969-jewel
+    
+    jewel: Initial python APIs to support mirroring
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 7ea13dfb9d85613d5c4daf92811a786293ffc2be
+Merge: 2c22131 3084cf3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jun 10 12:12:37 2016 -0400
+
+    Merge pull request #9548 from Abhishekvrshny/wip-15963-jewel
+    
+    jewel: Disabling journaling feature results in "Transport endpoint is not connected" error
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 2c221318e27fb4c4b68780c0037b9acae5862d6e
+Merge: 4d68ae0 69a9500
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri Jun 10 00:55:47 2016 +0200
+
+    Merge pull request #9424 from SUSE/wip-16107-jewel
+    
+    jewel: ceph gid mismatch on upgrade from hammer with pre-existing ceph user (SUSE)
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 4d68ae062b90599c184282b807f7d16cfaf2f6ad
+Merge: 57b4542 b443fdf
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri Jun 10 00:54:52 2016 +0200
+
+    Merge pull request #8802 from SUSE/wip-15606-jewel
+    
+    jewel: ceph-{mds,mon,osd,radosgw} systemd unit files need wants=time-sync.target
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 57b45426b5efa7ec4e293f9276f1f4299b5bf3ac
+Merge: 3cf6533 555cec9
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 15:44:13 2016 -0700
+
+    Merge pull request #9320 from SUSE/wip-16017-jewel
+    
+    jewel: ceph: cli: exception when pool name has non-ascii characters
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 3cf653328c988da5cf6be678cf3f0cb4c80c094d
+Merge: a422d03 663d7c2
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 15:43:48 2016 -0700
+
+    Merge pull request #9270 from Abhishekvrshny/wip-15852-jewel
+    
+    jewel: mon/Monitor: memory leak on Monitor::handle_ping()
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit a422d0372719841ea4cc63f87e77ddc1dee7d815
+Merge: 34b193b 8356021
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 15:43:04 2016 -0700
+
+    Merge pull request #9237 from SUSE/wip-15961-jewel
+    
+    jewel: ceph-osd valgrind invalid reads/writes
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 34b193be043f0d88c42c5ae177a660b747e81486
+Merge: e2a035e 64f15b3
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 15:42:32 2016 -0700
+
+    Merge pull request #9103 from Abhishekvrshny/wip-15797-jewel
+    
+    jewel: deadlock in OSD::_committed_osd_maps
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit e2a035eeb19e9043c41e5132d2ea0b8a59ac1bed
+Merge: 2c35fe7 adfbe95
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 15:41:52 2016 -0700
+
+    Merge pull request #9101 from Abhishekvrshny/wip-15799-jewel
+    
+    jewel: osd boot race with noup being set
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 2c35fe7e739e99452cf4d039281185e8c4a40b1c
+Merge: 6528e43 f4306de
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 15:40:43 2016 -0700
+
+    Merge pull request #9104 from Abhishekvrshny/wip-15795-jewel
+    
+    jewel: LibRadosWatchNotifyPPTests/LibRadosWatchNotifyPP.WatchNotify2Timeout/1 segv
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 6528e4371e0ab1c385e539646d08f4ea1dded893
+Merge: 50143ed b989084
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 15:37:43 2016 -0700
+
+    Merge pull request #9427 from SUSE/wip-16104-jewel
+    
+    jewel: ceph-disk: workaround gperftool hang
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 50143ed004ef198f2161b9f360bfeccd16503954
+Merge: b328e99 a32820d
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jun 9 14:55:31 2016 -0400
+
+    Merge pull request #9614 from ceph/wip-16113-jewel
+    
+    osd: hobject_t::get_max() vs is_max() discrepancy
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 03466f096adcfe3322cad49c959fec976d887860
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 4 15:30:05 2016 +0300
+
+    rbd-mirror: don't return split-brain error if we still in MIRROR_PEER_STATE_SYNCING
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 3ac620c5d66d8516e68264fcdb5e97b0e803d0ec)
+
+commit dfefd343e35b1c69fc2c938c7ebc30352e1320d4
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Tue May 3 12:48:06 2016 +0300
+
+    rbd-mirror: refactor split-brain detection code
+    
+    to make it more readable and extendable.
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 039cd2d2e3bb6a9c5042c125d2c67ec9adc02c47)
+
+commit c94e5b740628b98008e5342b8a3b2b888ff7b794
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Tue May 31 15:00:30 2016 +0300
+
+    rbd-mirror: support bootstrap canceling
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 21f895f48498e518c3675a9e851559f4d071f6dd)
+
+commit c8a3e759298c3a2adfa67d932178d284619d460e
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Mon May 30 16:24:24 2016 +0300
+
+    rbd-mirror: return ECANCELED when ImageReplayer start is canceled
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit f581dbcb2eca108ce9440629b8f00f3229c07b95)
+
+commit 0014a9e284c6cfc7678e63b56d707a8ad9b93127
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 7 01:01:09 2016 -0400
+
+    librbd: flush journal commit positions before starting op
+    
+    Ensure all IO has been properly flushed and committed to the
+    journal before starting an op that could affect the IO path.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 636129653c7cac9665d0c423f6aafad5fd0c480a)
+
+commit 3cec45a17a3d8bdcd19c63c31dad6b9150a9fbfd
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 7 00:11:34 2016 -0400
+
+    librbd: leaked AioCompletion if IO issued after image shut down
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d3d4e068396e01c58832e0ea1224ca34bafb808e)
+
+commit ef12536830082194da52df3a0dc8e22a3f69cb54
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 6 19:00:47 2016 -0400
+
+    librbd: resize and snap create can hang on journal replay failure
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 1032f19b3c9d9c7916669d04af909131574b3cab)
+
+commit c8b4cabea0e1a74a62fd9b25ccb5e0b15df38733
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 6 14:54:23 2016 -0400
+
+    librbd: missing journal state for flushing/restarting replay
+    
+    Fixes: http://tracker.ceph.com/issues/16077
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a7f5bc181c9cd677d39f95ad78134e0f85c22acb)
+
+commit bc7649be5867fca46c1e86dacb99c1f8b18ad2e8
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 12 21:22:56 2016 -0400
+
+    librbd: track IO in the order issued
+    
+    Fixes: http://tracker.ceph.com/issues/15034
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit eb8dda5296eb5c19aa27e96d6e92eaa0c352cb62)
+
+commit 602ffd78f3de00d6655236dd914aa83006a8f862
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 12 15:15:04 2016 -0400
+
+    librbd: AioCompletion should retrieve CephContext from ImageCtx
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 133b1ffb21c982003c7aa9dafd585062f9b2eb51)
+
+commit 6e20662a9f5b9eabbd83eb91760532d8171d96b8
+Author: Hector Martin <marcan@marcan.st>
+Date:   Wed May 25 20:41:40 2016 +0900
+
+    librbd: only mark async completion as done after callback
+    
+    This change in behavior was introduced in fde9f78.
+    
+    Signed-off-by: Hector Martin <marcan@marcan.st>
+    (cherry picked from commit 77f7c1cf829e5417eb356ebf3bf1fbc8ff7a25a5)
+
+commit de29be73c043c0cd49b4d35a160ddd3910d423e8
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 9 18:17:49 2016 -0400
+
+    librbd: Journal no longer requires AioCompletion for IO events
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 82587a31f1d8ba1765f164391796753cf97a1878)
+
+commit 65556aa507e3e70352bb61c1549f340af0c4a9fb
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 9 17:59:09 2016 -0400
+
+    librbd: bubble journal error up via existing AioObjectRequests
+    
+    The journal cannot directly fail the AioCompletion because it
+    might have one-or-more outstanding requests associated with
+    it.
+    
+    Fixes: http://tracker.ceph.com/issues/15791
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 79c934742fb15c803780519b36070408599a74c5)
+
+commit bddf944797df5ffb93b587f8ac245846a48bd2e3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 6 22:34:30 2016 -0400
+
+    librbd: potential duplicate snap removal can result in crash
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 276fed6b7078158c2cd04fba14a11531c27898e0)
+
+commit 4ce4130d0e6deef315dcbd5dc899faf5de9ab0e7
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 2 00:43:53 2016 -0400
+
+    ObjectCacher: do not merge uncommitted journal bhs
+    
+    Avoid the possibility of an overwrite callback for regions
+    that were never associated with a journal write.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c6060ade16205337de3941a10d05e234b738fa07)
+
+commit 6e645985e77bd0597eab6755b6e4071b79967584
+Author: Zhiqiang Wang <zhiqiang@xsky.com>
+Date:   Wed Feb 24 21:54:34 2016 +0800
+
+    ObjectCacher: don't loop the extents of OSDRead in map_read
+    
+    Looping the extents of OSDRead is done in _readx. The looping in
+    map_read is not needed.
+    
+    Signed-off-by: Zhiqiang Wang <zhiqiang@xsky.com>
+    (cherry picked from commit fae912c3856cab6d03183411eecab90c6e6732d2)
+
+commit c5f281d64221c62e3736f9630204f85d67328670
+Author: Zhiqiang Wang <zhiqiang@xsky.com>
+Date:   Wed Feb 24 21:49:56 2016 +0800
+
+    ObjectCacher: fix the bytes_written in writex
+    
+    The BufferHead returned after map_write may include other dirty data to
+    the left and/or right. The actual length of data been written is in the
+    ObjectExtent.
+    
+    Signed-off-by: Zhiqiang Wang <zhiqiang@xsky.com>
+    (cherry picked from commit ca6f1681e4baf61682e258c5761536d67bf6bdb8)
+
+commit 1c00d813791cdd8c6e685c1ebf6f93ef4aa0adbe
+Author: Zhiqiang Wang <zhiqiang@xsky.com>
+Date:   Wed Feb 24 21:45:45 2016 +0800
+
+    osdc: don't loop the extents of OSDWrite in map_write
+    
+    We are looping all the extents of the OSDWrite in writex. The looping in
+    map_write is not needed. And if there are same object in these
+    extents,they will be mapped multiple times.
+    
+    Signed-off-by: Zhiqiang Wang <zhiqiang@xsky.com>
+    (cherry picked from commit 322f1059670898762a890a01af6d3b0dd3ccf826)
+
+commit b48cdb21da2ba02ae4ee5398c38b48e857dba8cf
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 2 00:42:30 2016 -0400
+
+    librbd: notify image feature update before releasing lock
+    
+    If a client is waiting for the lock, ensure it sees the latest
+    version of the image features.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f601ea835bb78554ac767ccb11789df960765bf9)
+
+commit 680efbdcc3d2e28b6de991e7ad5c18e0d71cc551
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jun 1 23:19:20 2016 -0400
+
+    librbd: refresh image after acquiring exclusive lock
+    
+    It's possible that the object map or journaling features have
+    been disabled while the lock was not owned.
+    
+    Fixes: http://tracker.ceph.com/issues/16114
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 03c54f52d15d6283c630bac6f75427e6829f7d0a)
+
+commit bb279f1b288f1069b83d7661588f883716c80d9d
+Author: Jon Bernard <jbernard@tuxion.com>
+Date:   Wed Jun 1 21:01:30 2016 -0400
+
+    librbd: refresh image if needed in mirror functions
+    
+    Fixes: http://tracker.ceph.com/issues/16096
+    
+    Signed-off-by: Jon Bernard <jbernard@tuxion.com>
+    (cherry picked from commit a355c8f6d9e792517a8d0e096a99a64474369cfc)
+
+commit 3b8cb634b34dd7742bbdea2ca354a358cb0fe089
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 7 09:36:02 2016 -0400
+
+    cls_rbd: mirror image status summary should read full directory
+    
+    Previously only retrieved the status for the first 64 images in
+    the rbd_mirroring directory.
+    
+    Fixes: http://tracker.ceph.com/issues/16178
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 61f86e7ec14233ea0dee5b3370595ce050ee28c3)
+
+commit 4a967eb42a7409b9d78d569585af2155414234d2 (refs/remotes/origin/wip-16211-jewel)
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 10:36:44 2016 -0700
+
+    Revert "osd/ReplicatedPG: for copy_get get omap, firstly check ob whether has omap."
+    
+    This reverts commit 771c869651132013054599f3decfc1017092a25f.
+
+commit fd8f8af2456bc197877793a60d4401751f828032
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 10:36:39 2016 -0700
+
+    Revert "osd/ReplicatedPG: For omap read ops, it should check object wether has omap"
+    
+    This reverts commit 98caba1d0b4dd334748e3bcaf1bfb3f79f75eb65.
+
+commit d59ca31a4fcc472809b1f1bd3379fc3521c28fb0
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 9 10:36:31 2016 -0700
+
+    Revert "osd/ReplicatedPG: When do omapclear, it should check object whether is omap."
+    
+    This reverts commit aeb8141c29cdd337961430bbf3e93a79e3e1bcd3.
+    
+    Conflicts:
+    	src/osd/ReplicatedPG.cc
+
+commit b328e998b2aa066f5f42577abd0c74a5f3d42694
+Merge: b1c4c4c 188318b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Jun 8 12:00:31 2016 +0200
+
+    Merge pull request #8938 from SUSE/wip-15739-jewel
+    
+    jewel: ceph.spec.in: drop support for RHEL<7 and SUSE<1210 in jewel and above
+    
+    Reviewed-by: Boris Ranto <branto@redhat.com>
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+
+commit f4306de66d6c071cb240a0d77e8f877841f87033
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 6 09:09:43 2016 -0400
+
+    osdc/Objecter: upper bound watch_check result
+    
+    This way we always return a safe upper bound on the amount of time
+    since we did a check.  Among other things, this prevents us from
+    returning a value of 0, which is confusing.
+    
+    Fixes: http://tracker.ceph.com/issues/15760
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2e2ce365866a7569b55aff338a82c132aa927089)
+
+commit 64f15b3cfd15faa65e7a36c9779713ea2436cf16
+Author: Xinze Chi <xinze@xsky.com>
+Date:   Wed May 4 09:49:40 2016 +0800
+
+    OSD: fix deadlock in OSD::_committed_osd_maps
+    
+    Fixes: http://tracker.ceph.com/issues/15701
+    Signed-off-by: Xinze Chi <xinze@xsky.com>
+    (cherry picked from commit 4fbf3891aab16347d02782f7c1c0400f9e0896af)
+
+commit adfbe9554be2cb79a6cbccc7c4a556139b4aed50
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon May 2 23:28:18 2016 -0400
+
+    osd: handle boot racing with NOUP set
+    
+    This is a follow-on to 7139a232d26beef441ffbc13bc087baab3505ea8,
+    which handled the NOUP set + clear case when the OSD found out
+    about the flag being cleared.  However, it's possible that the
+    flag will get cleared but the OSD won't get a map update (because
+    it hasn't subscribed and is not doing any work).
+    
+    This means that it is *more* likely than before that we will
+    restart the boot process even though the OSD did successfully
+    mark us up.  However, as before, it is unavoidable because there
+    is no notification of whether our boot request succeeds or not.
+    
+    And it is still mostly harmless (an extra mark down + up cycle).
+    
+    Fixes: http://tracker.ceph.com/issues/15678
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 11e4242fbdb2f2f6f654d4cb3a7c95d5b38a88c2)
+
+commit e424482d0e79ad0a0c44b14f0977cfa69d1b7f72
+Author: Haomai Wang <haomai@xsky.com>
+Date:   Sun Feb 28 23:35:17 2016 +0800
+
+    TaskFinisher: use singleton SafeTimer and Finisher
+    
+    Fix #13938
+    Signed-off-by: Haomai Wang <haomai@xsky.com>
+    
+    (cherry picked from commit dc6d6ce8b29de51b69242e569517f69acfe226f4)
+
+commit 99ff1fc34215da3339ccd227c4f17caf8294a32f
+Author: Samuel Just <sjust@redhat.com>
+Date:   Wed May 18 12:09:10 2016 -0700
+
+    BackoffThrottle: wait() if past max
+    
+    Otherwise, we risk spinning on wait_for() with a small
+    delay.
+    
+    Fixes: http://tracker.ceph.com/issues/15953
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 6f835726a7df5b29a96849fc1362186fd2116d9b)
+
+commit 5ce43eb7682535deeee149600f1226b87e41defd
+Author: Samuel Just <sjust@redhat.com>
+Date:   Wed May 18 11:49:19 2016 -0700
+
+    BackoffThrottle: use wait_for instead of wait_until
+    
+    On some platforms, wait_until won't surrender the lock
+    with a negative argument.
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 846808ff3f3837b1772f293ae71dba5eda609cc4)
+
+commit cec6870572621ed9abbe3791ba6e1a460333dfc0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 2 10:41:18 2016 -0400
+
+    test/rbd: fsx needs to shut down the journal
+    
+    Fixes: http://tracker.ceph.com/issues/16123
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d10ffaafbd2a5831154757b848ed8504dad99069)
+
+commit 09200d4b5002f8ef9e75a9218fe85aaa5da33a8b
+Author: xinxin shu <shuxinxin@chinac.com>
+Date:   Thu Jun 2 14:13:09 2016 +0800
+
+    remove invalid objectmap flag when objectmap is disabled
+    Fixes: http://tracker.ceph.com/issues/16076
+    Signed-off-by: xinxin shu <shuxinxin@chinac.com>
+    
+    (cherry picked from commit b2d475686ee7617bb2023d753941e3d6952f0878)
+
+commit 6c0e202573110de522d531e0aa8978e843b5167e
+Author: zhuangzeqiang <zhuang.zeqiang@h3c.com>
+Date:   Sat Oct 7 16:52:07 2017 +0800
+
+    rbd: check value of config override when setting image-meta
+    
+    Fixes: http://tracker.ceph.com/issues/15522
+    
+    Signed-off-by: zhuangzeqiang <zhuang.zeqiang@h3c.com>
+    (cherry picked from commit 4538f8152d0e73bdefc09874113c87467bdda622)
+
+commit e15bfff2e822e15e0a34d09825e04cee381d8737
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Mon May 23 09:18:34 2016 +0300
+
+    pybind/rbd: create/clone/copy: default to None for features param
+    
+    If None is specified don't set the features so that the defaults is
+    used.
+    
+    Fixes: http://tracker.ceph.com/issues/15982
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit b8b3a9757f7d517210a91f2893b0961b6b35afab)
+
+commit f9e32ac68a83932945165612dc64c307f0411b19
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Mon May 23 09:16:38 2016 +0300
+
+    librbd: clone: default to parent features
+    
+    Fixes: http://tracker.ceph.com/issues/15982
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit d305eaad8d57a6f64e6d80eebcd0839a65c9a668)
+
+commit 6af7b223f3d0a8d51cd472cb7024a5ec70d30f61
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Thu May 12 09:15:53 2016 +0300
+
+    qa: dynamic_features.sh: return error only if it failed on alive QEMU
+    
+    Fixes: #15500
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 8a71a79d24f2e1f999a5fc0a4154a10401d5a261)
+
+commit 73464af844b45137049b0fff294449ed3a6f13bb
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 11 14:33:00 2016 +0300
+
+    test: initial python APIs to support mirroring
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit bfad0ca33b9d65dcec65bc1a18596d35fb3098f3)
+
+commit 5c312669ba2d208acaa8e819812e50ce23418208
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 11 14:29:17 2016 +0300
+
+    rbd: initial python APIs to support mirroring
+    
+    Fixes: http://tracker.ceph.com/issues/15656
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit ef0ea8ee3c926a31b54e410c18e887415f6ea3cf)
+
+commit 3084cf32463a07cecec66befa1562a187bc1734f
+Author: Yuan Zhou <yuan.zhou@intel.com>
+Date:   Mon May 16 16:18:59 2016 +0800
+
+    rbd: close journal before removing
+    
+    Otherwise there is some unwanted error message.
+    
+    Fixes: http://tracker.ceph.com/issues/15863
+    
+    Signed-off-by: Yuan Zhou <yuan.zhou@intel.com>
+    (cherry picked from commit ecdad4acca635d4b9f0b407889dde9985ab3a506)
+
+commit a32820d15fd5d2f817bc5fc94b731f4e7adafbf3 (refs/remotes/origin/wip-16113-jewel)
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 2 17:13:09 2016 -0700
+
+    src/: remove all direct comparisons to get_max()
+    
+    get_max() now returns a special singleton type from which hobject_t's
+    can be assigned and constructed, but which cannot be directly compared.
+    
+    This patch also cleans up all such uses to use is_max() instead.
+    
+    This should prevent some issues like 16113 by preventing us from
+    checking for max-ness by comparing against a sentinel value.  The more
+    complete fix will be to make all fields of hobject_t private and enforce
+    a canonical max() representation that way.  That patch will be hard to
+    backport, however, so we'll settle for this for now.
+    
+    Fixes: http://tracker.ceph.com/issues/16113
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 7c5f2acaa57bd6caaf4b13b48154df3ad6fbe84d)
+
+commit f869594332fb8ffa4d29aae22573afd094c39f54
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 2 17:39:09 2016 -0700
+
+    PG::replica_scrub: don't adjust pool on max object
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 8b7b7c7a2379ce77173bbdfd90c98c561d786155)
+
+commit 1737ff3f49080904ef07a7519d200ee608fab446
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jun 2 17:36:21 2016 -0700
+
+    hobject: compensate for non-canonical hobject_t::get_max() encodings
+    
+    This closes a loop-hole that could allow a non-canonical in memory
+    hobject_t::get_max() object which would return true for is_max(), but
+    false for *this == hobject_t::get_max().
+    
+    Fixes: http://tracker.ceph.com/issues/16113
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 42fad4b76def50a0984bf3de06f78ed434d56954)
+
+commit b1c4c4c456d1d20ccc91de4f762dbe46d8e339a3
+Merge: 24404c9 5d9ee88
+Author: John Spray <jspray@redhat.com>
+Date:   Fri Jun 3 12:37:00 2016 +0100
+
+    Merge pull request #9430 from ceph/wip-manila-backports
+    
+    jewel: backports needed for Manila
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit 24404c928b878d28a34439b8adaf43854547d317
+Merge: 1aa81ce 208659f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jun 2 12:03:12 2016 -0400
+
+    Merge pull request #9423 from dillaman/wip-16101
+    
+    jewel: rbd-mirror: replicate cloned images
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 5d9ee88e2a0ee57455581350bafe613fef8e3da2
+Author: Xiaoxi Chen <xiaoxchen@ebay.com>
+Date:   Tue Apr 26 17:51:48 2016 -0500
+
+    pybind: configurable cephfs_vol_client prefix and ns_prefix.
+    
+    Which is useful if we would like to have multiple backends
+    in manila and potentially set different layout based on prefix.
+    
+    And also make ns_prefix configurable also in order to support
+    multiple backend.
+    
+    Fixes #15417
+    
+    Signed-off-by: Xiaoxi Chen <xiaoxchen@ebay.com>
+    (cherry picked from commit d1a21b07ede77ab3f2be7a753426d76de0343086)
+
+commit 470605c38f772e5bcc466e71ac232294b41be276
+Author: Ramana Raja <rraja@redhat.com>
+Date:   Wed Apr 13 14:03:51 2016 +0530
+
+    ceph_volume_client: evict client also based on mount path
+    
+    Evict clients based on not just their auth ID, but also based on the
+    volume path mounted. This is needed for the Manila use-case, where
+    the clients using an auth ID are denied further access to a share.
+    
+    Fixes: http://tracker.ceph.com/issues/15855
+    
+    Signed-off-by: Ramana Raja <rraja@redhat.com>
+    (cherry picked from commit 68714b9dda8ed6010cad6730e0ddf54b3219150d)
+    (cherry picked from commit aaa0e9aea9fcf2f63e73e544bd40c10a0d694408)
+
+commit 726292eb305d58661993803dea613e9d98a64f4f
+Author: John Spray <john.spray@redhat.com>
+Date:   Wed May 11 13:18:23 2016 +0100
+
+    client: report root's quota in statfs
+    
+    When user is mounted a quota-restricted inode
+    as the root, report that inode's quota status
+    as the filesystem statistics in statfs.
+    
+    This allows us to have a fairly convincing illusion
+    that someone has a filesystem to themselves, when
+    they're really mounting a restricted part of
+    the larger global filesystem.
+    
+    Fixes: http://tracker.ceph.com/issues/15599
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit b6d2b6d1a51969c210ae75fef93c71ac21f511a6)
+
+commit 46c2bd0864f8f7ace80a8cad07b873d9aa57ead9
+Author: John Spray <john.spray@redhat.com>
+Date:   Fri Apr 1 14:27:31 2016 +0100
+
+    pybind: fix unicode handling in CephFSVolumeClient::purge
+    
+    os.path.join is sensitive to string encoding, but
+    just doing a straight substitution should not be.
+    
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit e590f4d05fdb46747e83e35e66a26d9f4aa0314d)
+
+commit b989084dfc28659445fe08847537f8e5ad275cdd
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu May 26 12:55:51 2016 +0200
+
+    ceph-disk: workaround gperftool hang
+    
+    Temporary workaround: if ceph-osd --mkfs does not
+    complete within 5 minutes, assume it is blocked
+    because of https://github.com/gperftools/gperftools/issues/786
+    
+    References http://tracker.ceph.com/issues/13522
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit c092321c24b9ca493d90a9ccc8f0b4b9a38677f1)
+
+commit 69a9500d900b2d5b9bdb0e989f83fe60ddddeda0
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu May 12 19:23:31 2016 +0200
+
+    rpm: unconditionally set ceph user's primary group to ceph (SUSE)
+    
+    This commit brings the user/group creation into greater semantic alignment
+    with the Debian packaging.
+    
+    Fixes: http://tracker.ceph.com/issues/15869
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit b3dfa8d90962e60b6841555db830c8ea635f4cce)
+
+commit 208659fdebc888cab35239ec848f27320477420f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 26 12:49:45 2016 -0400
+
+    qa/workunits/rbd: basic cloned image test
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 943ff829874f96f720d6c6299e1212e4da24c6c5)
+
+commit af6be1bc15dfc2757cf74772078dd8516ed889be
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 26 08:22:16 2016 -0400
+
+    rbd-mirror: copy snapshot parent image settings
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f5fd09373714ebe8886bcf51bb97732038fffe55)
+
+commit 8405c2c377c7f9e755a349bfc90494f7ee7cc477
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 26 12:01:15 2016 -0400
+
+    cls_rbd: asynchronous helper method to set parent
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit fcfdebb471650a1730306f6a309f1775ba7a5eee)
+
+commit 26f4edcbb3b24eed98f111a2c77a5380cbf16927
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 25 17:38:06 2016 -0400
+
+    rbd-mirror: add support for cloning images from mirrored parent
+    
+    Fixes: http://tracker.ceph.com/issues/14937
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit ae6e03dfb1fa3be61e6deac4fe39982e7e7c18aa)
+
+commit b8b01c57949955b1ff6a6a35dcae05108a2dda58
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 25 17:36:06 2016 -0400
+
+    librbd: extend internal API to clone from open parent image
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit bfaa112c30da7091fd2d539b80a4a211176a6031)
+
+commit 9081c58a31aa8fa6f966f3b682b9870e2b6f8297
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 25 17:13:59 2016 -0400
+
+    cls_rbd: asynchronous helper methods to retrieve mirror image metadata
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5a26080447cfa4b7bfdacdc13242569258a64076)
+
+commit 2c2f4b251d0c8b870728293d06e9c853856c8092
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 25 15:16:28 2016 -0400
+
+    rbd-mirror: helper state machine to open remote/read-only images
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3731c3c34c15f8dcfbab444bdbf3c05976b03431)
+
+commit 1aa81ce5ba492e8eeea2b20f08b77a18a94cd738
+Merge: 54bfefb 0bcc295
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 13:11:22 2016 -0400
+
+    Merge pull request #9409 from dillaman/wip-16068
+    
+    jewel: rbd-mirror: support multiple replicated pools
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 0bcc295363d9ca20d43fd313084370158513bc62
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 27 11:40:58 2016 -0400
+
+    rbd-mirror: cluster-level asok commands need to support multiple pools
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f4339ee8cb64d5f1a164e017fea942600ffb0ea9)
+
+commit e4547c036ef641d48ab03808f59e035b56136745
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 26 23:26:20 2016 -0400
+
+    rbd-mirror: replayer should only handle a single pool
+    
+    The pool watcher now only needs to scan a single pool for
+    its associated replayer since a peer is inherently tied to
+    a single pool.
+    
+    Fixes: http://tracker.ceph.com/issues/16045
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c5a8b780edeb9b62a601f0718459837f3d66e63d)
+
+commit 6fc5328e93b7d005479f925cca1268e7e7e10234
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 26 16:03:59 2016 -0400
+
+    rbd-mirror: group peers by local pools
+    
+    The peer structure is automatically unique per pool due to its
+    UUID, so grouping local pools by a single peer doesn't work.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 020f0282a0771c0d321732a62f53cee10a193715)
+    
+     Conflicts:
+    	src/tools/rbd_mirror/ClusterWatcher.cc: trivial resolution
+
+commit 0745cc3db35a349799891c8397249bf8d088ef83
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 25 14:00:34 2016 -0400
+
+    rbd-mirror: stop stale replayers before starting new replayers
+    
+    If the connection details are tweaked for a remote peer, stop
+    the existing replayer before potentially starting a new replayer
+    against the same remote.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 6a2adca2a47b384f64c20996b9fc77010a70bc22)
+
+commit 91f8373613a38d48d71f2762e75e21ec817305be
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 26 13:29:49 2016 -0400
+
+    rbd-mirror: normalize debug log message prefix
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d52843190d84d533ab50a1702cf4a829b71ad68b)
+
+commit 5f0d89a9258fdf2f7392c63ca5d6488c4e3f210d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 26 13:26:57 2016 -0400
+
+    qa/workunits/rbd: create secondary replicated pool
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 839544ee6446b959f01290667592e44fc5ee6991)
+
+commit 54bfefb7d108667058eda56fda24b0029a560746
+Merge: 522c7f9 61542c1
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 11:51:05 2016 -0400
+
+    Merge pull request #9373 from dillaman/wip-16055
+    
+    jewel: journal: support asynchronous shutdown
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 522c7f9432e029f4db2b7455fb83b4aeb3ff4a4e
+Merge: f04972c 6375c78
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 11:49:39 2016 -0400
+
+    Merge pull request #9372 from dillaman/wip-15995
+    
+    jewel: rbd-mirror: Delete local image mirror when remote image mirroring is disabled
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 61542c14d34c4192f1468e2d7865fe913cce21b8
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 25 02:31:11 2016 -0400
+
+    rbd-mirror: image replay now uses asynchronous journal shutdown
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a1b0a1b1b9a237ae363a52c7b4038b19e87052a5)
+
+commit bf4c45830330b025bf818286e13693b837f1f2c5
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 25 00:21:14 2016 -0400
+
+    librbd: integrate with async journaler shutdown API
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit ad297850b1be8ed38f77b86913c6821748f3368b)
+
+commit 36cf42a3f47c23db82a8aca7a5560857cc3e0027
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 24 16:12:16 2016 -0400
+
+    journal: extend asynchronous shutdown to facade
+    
+    Fixes: http://tracker.ceph.com/issues/14530
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f40c595255a6828e27abfe63b4209ebae03e237b)
+
+commit 1b0422d7272788561253479a43f5b3dcdbb6282b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 24 15:53:12 2016 -0400
+
+    journal: trimmer now has asynchronous shutdown
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 59ca9916ba2e2b144eff5ee471a314b9c4391936)
+
+commit f913946ff74924fc14c7336fef6c73a4c6edfdfa
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 24 15:36:17 2016 -0400
+
+    journal: metadata init and shutdown now asynchronous
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0543e1b29eb253bf1d9e9af7af6f22fa394dd854)
+
+commit 1a9d60f8244d6ba8697b2254d967907fdb618cdb
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 24 12:06:26 2016 -0400
+
+    journal: player shutdown is now handled asynchronously
+    
+    Fixes: http://tracker.ceph.com/issues/15949
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 79b41346678b3acdeb547fe07e44d8d0543d37a7)
+
+commit 4af5bb1d2d86de68be0cef3713e09dfe0f1a9030
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 23 22:26:05 2016 -0400
+
+    test: use randomized write sizes for rbd-mirror stress test
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b9edff2174ff04bb8b6353dd2d2218c64757aae1)
+
+commit df2b8d9f0f399dcf9bb0e3eba3a39e14de504c49
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 23 22:21:33 2016 -0400
+
+    journal: eliminate watch delay for object refetches
+    
+    The randomized write sizes of the modified rbd-mirror stress
+    test results in a lot of journal object with few entries.
+    Immediately fetch objects when performing a refetch check prior
+    to closing an empty object.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d7b511b854c8ab633dcdb1c935014218b83f4e09)
+
+commit c65614f155ceccebd1960d6042d55e13b31e62ba
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 23 14:57:03 2016 -0400
+
+    journal: keep active tag to assist with pruning watched objects
+    
+    It's possible that there might be additional entries to prune in
+    objects that haven't been prefetched yet. Keep the active tag
+    to allow these entries to be pruned after they have been loaded.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0fb730e6be632e25d76695e1f37eba542162d620)
+
+commit 30c7f4dbe0a7c515d14be98f3f59ba8a8cdb1dcf
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 23 12:15:49 2016 -0400
+
+    journal: update commit entry object number upon overflow
+    
+    Otherwise the recorded object positions might point to an older
+    object that doesn't contain the actual entry.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5fbf5f82de8214c5c676d38feae7682a006fcab1)
+
+commit fa08330dadb9ce973db866ad641a79d5d2dd290c
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 23 11:01:05 2016 -0400
+
+    journal: cleanup watch refetch flag handling
+    
+    Clear the refetch required flag while scheduling the watch
+    and remove the stale object after the watch completes if still
+    empty. Previously, it was possible for the flag to become
+    out-of-sync with whether or not it was actually refreshed
+    and pruned.
+    
+    Fixes: http://tracker.ceph.com/issues/15993
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit ff2cc27ae592646b495bf1b614d35bd50c091a3d)
+
+commit 6375c7831de551c52f1dbf74bf9f65be3b6d8adf
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Fri May 13 16:47:25 2016 +0100
+
+    rbd-mirror: test: added image-deleter test case when mirroring is disabled
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit d85e312ead1da7c35d5ee4fe4be3d6e69a68b572)
+
+commit 1ba650539c1e90b82727a6bd9f1c16796b92b821
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Fri May 13 16:44:53 2016 +0100
+
+    rbd-mirror: Unregister clients from non-primary images journal
+    
+    A non-primary image may have registered clients on its journal
+    (for instance a primary image that was later demoted). We must
+    unregister the clients when disabling image mirroring with the
+    force option.
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit 9cb0b180bc8a12ea2ebb0d7e32279b696ddd127e)
+
+commit a53cf28ab95a704b78cfa46cf758c2eec8058619
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Tue Apr 19 12:35:49 2016 +0100
+
+    rbd-mirror: test: Added unit test for testing image-deleter thread
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit ac9514941b0accb6c738ce4aa0953c36cdcf69a6)
+
+commit 78b13a504c32685090bb5b6512be9c050df2d8b6
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Mon Apr 18 12:22:19 2016 +0100
+
+    rbd-mirror: test: Fixed test_PoolWatcher to support the new changes in PoolWatcher class
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit e3677f115e1f369a49227fba51a1d34505d487ac)
+
+commit fef7456f8bc85f32cbdb28ce81198a9eb7d56d3b
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Tue Apr 5 09:47:32 2016 +0100
+
+    rbd-mirror: Replayer: bootstrap existing mirrored images
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit 3c2615aa6da837bfef2365f701f56a34c49b536f)
+
+commit 97eb85f971a74678e4075b16cb5a8e836a985b56
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Thu Apr 28 11:49:43 2016 +0100
+
+    rbd-mirror: replayer: Added image-deleter thread to replayer
+    
+    Fixes: http://tracker.ceph.com/issues/14421
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit a6d698829d925894e4afcdec0ee42b1fc1205db0)
+
+commit 24406c5f8ea12d2c19573116ea84c90ba7446f8b
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Thu Apr 28 11:48:05 2016 +0100
+
+    rbd-mirror: Added image-deleter thread to rbd-mirror
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit 011984d40bce448fe0febfc6a9fcf57d2c7b4768)
+
+commit 0780230b4af7e4ca923dab5f77735d0a11409202
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Wed Apr 13 15:17:40 2016 +0100
+
+    rbd-mirror: Added implementation of image-deleter thread
+    
+    image-deleter thread will handle the deletion of local images that have
+    been disabled for mirroring by the primary site.
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit 6cc6e663ed2ec336a9475d93ab2cb605644e6ee0)
+
+commit 38514adc847a227dbd28318650931a8c2a7df7db
+Author: runsisi <runsisi@zte.com.cn>
+Date:   Wed May 11 20:42:37 2016 +0800
+
+    rbd-mirror: librbd::mirror_peer_list never returns -ENOENT
+    
+    no need to check -ENOENT specially
+    
+    Signed-off-by: runsisi <runsisi@zte.com.cn>
+    (cherry picked from commit 81ff42253369a9f57118bd26b29115c86a1748c5)
+
+commit 4e7233ad43d368a5f6e812870cec77545e034186
+Author: runsisi <runsisi@zte.com.cn>
+Date:   Wed May 11 20:52:38 2016 +0800
+
+    rbd-mirror: fix typo
+    
+    Signed-off-by: runsisi <runsisi@zte.com.cn>
+    (cherry picked from commit 25bfd4c786d0701fe6ae06e3d120098bd82f8aa0)
+
+commit c3b1bf1e530a4cf55585886a4b4038b9d2862471
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 18 10:07:55 2016 +0300
+
+    rbd-mirror: calculate behind_master only if mirror tag is not newer than master
+    
+    Fixes: http://tracker.ceph.com/issues/15916
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit cbd8d526f94523c9de3c575d426063e63d7e1802)
+
+commit f04972c8be28fc6d3133363b5474f22ebac5fd15
+Merge: c194c5d cb950fc
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 11:48:06 2016 -0400
+
+    Merge pull request #9377 from dillaman/wip-16063
+    
+    jewel: test: failure in journal.sh workunit test
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit cb950fca12395a1c62421d4b0bce64b4a52b2fd4
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 25 21:54:16 2016 +0300
+
+    test: workaround failure in journal.sh
+    
+    With the changes to ensure that the commit position of a new
+    client is initialized to the minimum position of other clients,
+    the 'journal inspect/export' commands return zero records because
+    the master client has committed all of its entries.
+    
+    Workaround this by restoring the initial commit position after
+    writing to the image.
+    
+    Fixes: http://tracker.ceph.com/issues/16011
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit e9ed8ac33b1884c6ed5cdfb23023094ec790b116)
+
+commit f92c2a5604d4a8e83504b7283114d3d59bc45f38
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 25 14:51:43 2016 +0300
+
+    cls::journal: treat empty commit position as minimal
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 16846e8085b0c594f065322a768e6dfcbd5d2444)
+
+commit c194c5d8d454d0b387e191d03fec9d916271ff7f
+Merge: 4d3b668 8fbb555
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 11:46:30 2016 -0400
+
+    Merge pull request #9376 from dillaman/wip-15994
+    
+    jewel: cls_journal: initialize empty commit position upon client register
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 4d3b66842d4477ec4c4a418a91723fc9b800101c
+Merge: dafe375 e5ebb51
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 11:45:43 2016 -0400
+
+    jewel: librbd: write-after-write might result in an inconsistent replicated image
+    
+    jewel: librbd: write-after-write might result in an inconsistent replicated image
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit dafe375640967e10d1a94b02970d399c51980076
+Merge: 409fc64 305ebbc
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 11:30:47 2016 -0400
+
+    Merge pull request #9318 from Abhishekvrshny/wip-15957-jewel
+    
+    jewel: Metadata config overrides are applied synchronously
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 409fc64799aec36e183e6ba2bb25c3bf7e3d603b
+Merge: cd6ed4d 0c99028
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 31 11:29:45 2016 -0400
+
+    Merge pull request #9317 from Abhishekvrshny/wip-15956-jewel
+    
+    jewel: rbd-mirror should disable the rbd cache for local images
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit cd6ed4deb0f4b66a10ea7bd5e027daee3a93d1f4
+Merge: 9fa8596 be9e85d
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Tue May 31 18:48:58 2016 +0800
+
+    Merge pull request #9403 from dachary/wip-16088-jewel
+    
+    jewel: tests: rm -fr /tmp/*virtualenv*
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit be9e85d83f3d025cec16b7da85d8a2ce1f64e8fa
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri May 20 13:19:07 2016 +0200
+
+    tests: rm -fr /tmp/*virtualenv*
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 8f0eefba00d1c6ad656302a608217fc3395d0401)
+
+commit 9fa85963a8accd669b0f0fbb17f4b721290432c6
+Merge: a046d2a 3674341
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Tue May 31 13:46:31 2016 +0800
+
+    Merge pull request #8968 from Abhishekvrshny/wip-15728-jewel
+    
+    jewel: osd: acting_primary not updated on split
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit a046d2a8c37182652d5f300f58673f70c8485114
+Merge: 954af78 8bbb5ad
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Tue May 31 13:42:28 2016 +0800
+
+    Merge pull request #9100 from Abhishekvrshny/wip-15856-jewel
+    
+    jewel: Hammer (0.94.3) OSD does not delete old OSD Maps in a timely fashion (maybe at all?)
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 954af787526a77b923fe85ed1282ba98277738e4
+Merge: e8e572c fae360f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon May 30 13:53:45 2016 +0300
+
+    Merge pull request #9245 from dreamhost/wip-15974-jewel
+    
+    rgw: fix manager selection when APIs customized
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit e8e572c6454816119448240fa7813be7995fd250
+Merge: c11db6f ffd545b
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon May 30 11:15:18 2016 +0200
+
+    Merge pull request #9239 from yehudasa/wip-15886-jewel
+    
+    rgw: keep track of written_objs correctly
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 8fbb555befb1415ef5218c8aaa149ca44017d73d
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Thu May 19 22:45:34 2016 +0530
+
+    cls_journal: Select min commit position for new clients
+    
+    When a new client registers, its commit position is initialized
+    to the least commit position of all other clients.
+    
+    Fixes: http://tracker.ceph.com/issues/15757
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    (cherry picked from commit dd2e3dae8adb3778e7e381db5dbfca0948571c55)
+
+commit 576ff0ca804779d1eb0b1c44d6ce38e0658b6a05
+Author: runsisi <runsisi@zte.com.cn>
+Date:   Mon May 9 15:15:31 2016 +0800
+
+    cls_journal: remove duplicated key generation
+    
+    Signed-off-by: runsisi <runsisi@zte.com.cn>
+    (cherry picked from commit 715e99c83e1ebc01ceb9eff0f66da8e2b598766a)
+
+commit fae360f0e419266b80f001a25a6864668e772d08
+Author: Robin H. Johnson <robin.johnson@dreamhost.com>
+Date:   Fri May 20 16:00:33 2016 -0700
+
+    rgw: fix manager selection when APIs customized
+    
+    When modifying rgw_enable_apis per RGW instance, such as for staticsites, you
+    can end up with RESTManager instance being null in some cases, which returns a
+    HTTP 405 MethodNotAllowed to all requests.
+    
+    Example configuration to trigger the bug:
+    rgw_enable_apis = s3website
+    
+    Backport: jewel
+    X-Note: Patch from Yehuda in private IRC discussion, 2016/05/20.
+    Fixes: http://tracker.ceph.com/issues/15973
+    Fixes: http://tracker.ceph.com/issues/15974
+    Signed-off-by: Robin H. Johnson <robin.johnson@dreamhost.com>
+    (cherry picked from commit 7c7a465b55f7100eab0f140bf54f9420abd1c776)
+
+commit 8bbb5add6208a552979270baf4623430cf45e1b3
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri May 13 11:26:31 2016 +0800
+
+    osd/OpRequest: reset connection upon unregister
+    
+    this helps to free the resources referenced by the connection, among
+    other things, in the case of MOSDOp, the OSD::Session and OSDMap. this
+    helps to free the resource earlier and trim the osdmaps in time.
+    
+    Fixes: http://tracker.ceph.com/issues/13990
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 87850e96ea6fa45a8368bacabee50f9e95b40ae9)
+
+commit e97cc2d1e9bcee0a43f54ed592d3078182571874
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu May 12 20:28:11 2016 +0800
+
+    osd: reset session->osdmap if session is not waiting for a map anymore
+    
+    we should release the osdmap reference once we are done with it,
+    otherwise we might need to wait very long to update that reference with
+    a newer osdmap ref. this appears to be an OSDMap leak: it is held by an
+    quiet OSD::Session forever.
+    
+    the osdmap is not reset in OSD::session_notify_pg_create(), because its
+    only caller is wake_pg_waiters(), which will call
+    dispatch_session_waiting() later. and dispatch_session_waiting() will
+    check the session->osdmap, and will also reset the osdmap if
+    session->waiting_for_pg.empty().
+    
+    Fixes: http://tracker.ceph.com/issues/13990
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 82b0af7cedc3071cd83ee53479f834c23c62b7d0)
+
+commit 555cec9a92568666880d70b9ae8f6e9748eca204
+Author: Ricardo Dias <rdias@suse.com>
+Date:   Tue May 17 18:04:28 2016 +0100
+
+    ceph.in: fix exception when pool name has non-ascii characters
+    
+    When deleting a pool without the --i-really-really-mean-it option, if
+    the pool name has non-ascii characters, the format of the command
+    message raises a UnicodeEncodeError exception.
+    
+    Fixes: http://tracker.ceph.com/issues/15913
+    
+    Signed-off-by: Ricardo Dias <rdias@suse.com>
+    (cherry picked from commit 805873fed0135616a4cf8b499d1ba0b10dac004c)
+
+commit 305ebbc36473cf8bfd22513ffe55d3a4a99d5ef1
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 18 19:19:24 2016 -0400
+
+    librbd: metadata retrieval added to open image state machine
+    
+    Fixes: http://tracker.ceph.com/issues/15928
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b64cb31f8e7796175b4709929c017b3236649462)
+
+commit 5c9ecea87d3eb90201a967d8da827018cd728f0d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 18 17:50:07 2016 -0400
+
+    cls_rbd: async version of metadata_list helper method
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 985cb38211c51c95d84479df231c4f53847cb2ec)
+
+commit 0c99028582326c4ac142a03f168ab1bcf0ddd3c2
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 18 20:53:26 2016 -0400
+
+    rbd-mirror: disable librbd caching for replicated images
+    
+    Each image has its own cache and each cache uses its own thread. With
+    a large replicated cluster, this could result in thousands of extra
+    threads and gigabytes of extra memory.
+    
+    Fixes: http://tracker.ceph.com/issues/15930
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit ea35f148257282fe3f3ae02fe7a26cf245cda952)
+
+commit 188318b7b567f206d60dfb754fedbb0bfc74ef91
+Author: Boris Ranto <branto@redhat.com>
+Date:   Mon May 23 17:06:19 2016 +0200
+
+    rpm: Restore /var/run/ceph context manually
+    
+    The fixfiles command won't fix label for /var/run/ceph (/run is probably
+    excluded from relabel), we need to restore the context manually.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 6de39ce73737f79d4511dfc4e1d10d7f3733ab1b)
+
+commit ab1f65dd0429647c30fdae1dd97ff6f393dbc1a8
+Author: Boris Ranto <branto@redhat.com>
+Date:   Fri May 20 08:09:42 2016 +0200
+
+    rpm: Mute semodule in postun script
+    
+    Currently, we don't mute the semodule output in postun script. This
+    results in the following message when removing ceph-selinux package:
+    
+    libsemanage.semanage_direct_remove_key: Removing last ceph module (no
+    other ceph module exists at another priority).
+    
+    The fix is to simply mute the output of the command.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 3c104b106540fabdba43e0d04a3828d77f83e89d)
+
+commit 587fb3df704973071114a30bc55288768dbc2720
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Wed Apr 27 11:13:06 2016 +0200
+
+    install-deps.sh: systemd-rpm-macros must be installed on SUSE
+    
+    Otherwise the script breaks.
+    
+    Fixes: http://tracker.ceph.com/issues/15627
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit a7f5ad5f6f9c01ef81f90a7071b6e2243b6da4e7)
+
+commit 69470d406d2b539e8021afd4def7de931ac91857
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue May 10 18:20:13 2016 +0200
+
+    rpm: Drop SELinux priority setting
+    
+    Older versions of semodule binary that are in Centos/RHEL do not
+    support priority setting, dropping it.
+    
+    Fixes: #15822
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 7e606f29f499eac83ecb7053ea6874fcfd092924)
+
+commit 128dbc8af0095622d48b962ddd9476aa4140bc16
+Author: Boris Ranto <branto@redhat.com>
+Date:   Wed May 4 09:09:47 2016 +0200
+
+    rpm: Fix SELinux relabel on fedora
+    
+    The SELinux userspace utilities stopped providing versions when they
+    switched to CIL language. We need to use a different technique to
+    relabel the files.
+    
+    Fixes: #15725
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit bd26641d705a34a1148a781eea08d203e81b750d)
+
+commit 8182b9a4d2750bb8f0f035d84e9d8476abc62c3c
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Apr 12 15:33:45 2016 +0200
+
+    Test-enable XIO messenger and IB/RDMA support
+    
+    Fixes: http://tracker.ceph.com/issues/15472
+    
+    Signed-off-by: Lars Marowsky-Bree <lmb@suse.com>
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit d4b74c56d6cbb2c6852bf66f2f34b8a877d7a9ef)
+
+commit 50626cec7a55637764ba379d6cb71e0b485290a8
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Apr 28 19:29:00 2016 +0200
+
+    rpm: do a full make check when --with-tests is given
+    
+    The check-local target tests the CLI tools only.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit e1514809ae3d2df08a0c47882f9b3bd0ed68d200)
+
+commit fb6858c283d96de15c70fbe8ffc33b5dada82739
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Apr 26 17:03:28 2016 +0200
+
+    rpm: drop sysvinit bits from relabel_files function
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 20df58799a4853ed3798501176988ffaf888936b)
+
+commit db4f2d677df5c9fc00592fc9e003bccb44af6da6
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 18:27:45 2015 +0200
+
+    rpm: replace literal paths with RPM macros
+    
+    The only place we should write out literal paths is in the RPM scriptlets,
+    and there only for things that are not installed by this package.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit e0346b36fc0e6e17c80c047b13997448ccf1c76e)
+
+commit 3abf89517b0b2142698610debbaa3c6b535424f3
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 18:05:12 2015 +0200
+
+    rpm: drop udev/95-ceph-osd-alt.rules
+    
+    This udev rules file was needed on older RHEL platforms, which are
+    unsupported as of jewel.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit ee4acb31593dd33da99138998fd0f30ebc2f1a6e)
+
+commit a7e01dd4ff08607fc6d99e41189e3db1a3c1d4da
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 17:20:46 2015 +0200
+
+    rpm: global replace $RPM_BUILD_ROOT with %{buildroot}
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit bed92b6a86cdef784e89c38952fa779ce5fc5a91)
+
+commit d81cec99421e544e2cf7d212680b04d51ef675f3
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 10:37:47 2015 +0200
+
+    rpm: put dependencies in alphabetical order
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 66042c03df012754215ed848e475f2195ee988a0)
+
+commit e8338a5844aea6dad8e61f00dbd94ca4e04df7be
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 10:32:46 2015 +0200
+
+    rpm: drop sysvinit-specific dependencies
+    
+    Obsolete in jewel and above.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit c655cb896ad10e001b95848f4a4b64dd1ef6984f)
+
+commit b18d8ac0d65f91929fc956980d3b5977bb2970e6
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 10:32:05 2015 +0200
+
+    rpm: move boost-random dependency to appropriate section
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 46b16c19f73d82cc357b16e6201926a3479046f2)
+
+commit 94efaef9c28347baebc374e27d3e81f143e642e0
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Apr 23 19:57:49 2016 +0200
+
+    rpm: move unified python-sphinx build dependency
+    
+    Now that the python-sphinx build dependency is unified, move it
+    to the proper section of the spec file.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 1d897da861c6134778136fa2b8b33e36c08faff9)
+
+commit 54dc8bf5703e2fb8962a97f7737a6114132b9b20
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Apr 23 19:41:06 2016 +0200
+
+    rpm: drop init-ceph.in-fedora.patch
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit e8cf501d0f22c757a0860a0c91dcb1d7a472ed34)
+
+commit 641e5bb0808a14d2b59cba141bad4acf5bbfb63a
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 10:22:37 2015 +0200
+
+    rpm: drop dead conditionals
+    
+    This commit drops conditionals that no longer serve any purpose, since
+    jewel and above do not support the distro versions they are checking for.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 1332fac70e537014b5e03810aa983e2c9210d8dc)
+
+commit 4317a17997f21019e1dec59606928a2a9f4d94b9
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 10:18:33 2015 +0200
+
+    rpm: drop python-argparse dependency
+    
+    This was only necessary for older (now unsupported) distro versions.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 6c42066d488d03142a56f92cff99d9c29d106214)
+
+commit 70466ffd386795082f02d718e804ad9e9c494401
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 10:02:40 2015 +0200
+
+    rpm: drop _with_systemd
+    
+    Ceph versions jewel and above only support systemd.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 2ca6dd250b6a049f27fa17c5e8ca11674acb63f6)
+
+commit 928a8158aa71012db9f451a4302e8661783b5d37
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Oct 11 09:43:06 2015 +0200
+
+    rpm: drop python_sitelib/sitearch conditional
+    
+    This conditional was required to support older versions of RHEL/CentOS that are
+    no longer supported in infernalis and above.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 98d52120f89af3e93896d0518dbea4c4f660af48)
+
+commit 9f76b9ff31525eac01f04450d72559ec99927496
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Apr 18 09:16:02 2016 -0400
+
+    udev: remove 60-ceph-partuuid-workaround-rules
+    
+    These were added to get /dev/disk/by-partuuid/ symlinks to work on
+    wheezy.  They are no longer needed for the supported distros (el7+,
+    jessie+, trusty+), and they apparently break dm by opening devices they
+    should not.
+    
+    Fixes: http://tracker.ceph.com/issues/15516
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9f77244b8e0782921663e52005b725cca58a8753)
+
+commit 1ad390197af21d8cd7e507e2959f803028d3d09d
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Wed Apr 20 17:21:56 2016 +0200
+
+    rpm: refrain from installing systemd unit files twice
+    
+    These files are already installed by systemd/Makefile.am
+    
+    Fixes: http://tracker.ceph.com/issues/15549
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 6d3cbaa509525f1807ac34bf5fed0fe99255f40f)
+
+commit 9c81f25b76ef2211910e453ba2bc4577fc921d7f
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue Feb 23 05:57:14 2016 +0100
+
+    test/ec: build the libs only when 'make check'
+    
+    Currently, we are always building the erasure code libraries while we
+    need them only when 'make check' is run. Moving the test libraries to
+    check_LTLIBRARIES should fix this for us.
+    
+    We no longer need to remove the libec libs manually, remove the lines
+    that do that.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 0bbfea5cf13c138bbb2f0993607fa0dbf756281b)
+
+commit 663d7c2901ddf0b6e4184ec344bf0af00582eaf2
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Wed May 4 16:53:18 2016 +0800
+
+    mon/Monitor: use CEPH_MON_PORT for CRC output
+    
+    The default monitor port will be changed from 6789 to 3300, which has
+    been assigned to us by IANA. So update this accordingly for better
+    tracing and understanding.
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit 2b3d5686d76ee65fceca31d0d3343c2eaa4f2364)
+
+commit 64b948c21a4608a7680012e247f23dd2a3393f3f
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Wed May 4 15:03:55 2016 +0800
+
+    mon/Monitor: fix memory leak
+    
+    Fixes: http://tracker.ceph.com/issues/15793
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit ae5184ac07523a050584a3d621954baeb0dca01a)
+
+commit 9c3c6d57552a0a2cd448f0e60ded2f96ef9802ef
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Wed May 4 14:54:32 2016 +0800
+
+    mon/Monitor: use VOID_TEMP_FAILURE_RETRY wrapper for fd close().
+    
+    This is safer and much more robust.
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit bfa40363b2d8fc25b4aed0164579d55137ac9e8b)
+
+commit 544c538d3720d7f18fca29ba15fd47200d3e05fc
+Author: xie xingguo <xie.xingguo@zte.com.cn>
+Date:   Wed May 4 10:02:01 2016 +0800
+
+    mon/Monitor: add "host" to tracked_conf_key
+    
+    The get_tracked_conf_keys() method gets the specified keys
+    registered and works as filters for configuration changing,
+    so we can track these key configuration changing and react
+    properly.
+    
+    Right now graylog prints host in its log entry, so
+    Monitor::update_log_clients() also reads from conf.host
+    and pass the host read from conf to graylog. That is
+    why we shall get "host" to the tracked_conf_key too.
+    
+    Signed-off-by: xie xingguo <xie.xingguo@zte.com.cn>
+    (cherry picked from commit c79fc3305be42bd6126e8a60ae1f220d86754830)
+
+commit e5ebb51f22c43d49d716129ffcb5f87390b7acab
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 19 15:52:16 2016 -0400
+
+    journal: replay position might change after pruning stale tags
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0f5f1c375d8ef7b301cfd20b6848bdc81a761746)
+
+commit 9ecc3dcb76cc8f6d2904118d6b246d77d10cd9cf
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 19 15:50:04 2016 -0400
+
+    librbd: delay commit of overwritten journal event
+    
+    With the cache enabled and write-after-write IOs to the same
+    object extents, it was possible for the overwritten journal event
+    to be committed before the overwriter journal event was written
+    to disk.  If a client crash occurs before the event is written,
+    the image will be inconsistent on replay.
+    
+    Fixes: http://tracker.ceph.com/issues/15938
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit e8bf64cc85ffe3d2dda23eab1834f7a5f104f6fe)
+
+commit 070dc7c98daaacaa05f72f50561d47ce459984da
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 19 14:13:46 2016 -0400
+
+    ObjectCacher: pass new journal tid when overwriting extent
+    
+    librbd needs to ensure the new journal event has been safely
+    committed to disk before it can mark an overwritten journal
+    event as committed.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0051316effe0b25804378975b117691d7ad08a3b)
+
+commit 0dfc787ef58fe9aa8177742f7c6e294e3b5d4b89
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 19 13:48:22 2016 -0400
+
+    qa/workunits/rbd: record rbd CLI debug messages during mirror stress
+    
+    The debug messages from 'rbd bench-write' and 'rbd snap create',
+    in addition to the existing debug messages from rbd-mirror, make
+    it possible to determine the source of any image inconsistency.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 714ed5e64e65fed9ac886537becf3a85ae6ae7fd)
+
+commit ffd545bf173c5a076c47541cbe3889175188d73e
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon May 16 14:35:12 2016 -0700
+
+    rgw: keep track of written_objs correctly
+    
+    Fixes: http://tracker.ceph.com/issues/15886
+    
+    Only add a rados object to the written_objs list if the write
+    was successful. Otherwise if the write will be canceled for some
+    reason, we'd remove an object that we didn't write to. This was
+    a problem in a case where there's multiple writes that went to
+    the same part. The second writer should fail the write, since
+    we do an exclusive write. However, we added the object's name
+    to the written_objs list anyway, which was a real problem when
+    the old processor was disposed (as it was clearing the objects).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 8fd74d11682f9d0c9085d2dc445fc3eb5631f6e0)
+
+commit 8356021ef3d3d21fd632d3caa660ba9a03cf80d3
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu May 12 16:57:49 2016 -0700
+
+    Pipe: take a ref to existing while we are waiting
+    
+    Otherwise, if it is reaped while we are waiting, it'll be a
+    use-after-free.
+    
+    Fixes: http://tracker.ceph.com/issues/15870
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit b224912d249453d754fc0478d3680f8cfa1a5c22)
+
+commit c11db6f103b2dd0049894a606916a84d66933833
+Merge: 7834070 e0dfc55
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 20 14:57:00 2016 -0400
+
+    Merge pull request #9232 from jdurgin/wip-mirror-workunit-jewel
+    
+    jewel: qa/workunits/rbd: fixed rbd_mirror teuthology runtime errors
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit e0dfc55ac874f2531bd0b88aa1c81156d7f7aec9
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 18 14:17:13 2016 -0400
+
+    qa/workunits/rbd: fixed rbd_mirror teuthology runtime errors
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 8ef09c4d8d3c7c6fbc9b6f7ef17cca0179e73468)
+
+commit 7834070fd8ead19e49fb8c766ea3ce8bfe63f032
+Merge: 9873fc1 5f09b9a
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 20 09:02:51 2016 -0400
+
+    Merge pull request #9226 from dillaman/wip-15950
+    
+    jewel: rbd-mirror: potential crash during image status update
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 9873fc13d5647e94ec6f0152f903dd67b2882b0d
+Merge: aee6f7e 6c2973c
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 20 09:02:06 2016 -0400
+
+    Merge pull request #9069 from dillaman/fixup-mirror_image_status_list-jewel
+    
+    jewel: cls::rbd: mirror_image_status_list returned max 64 items
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 5f09b9aef8f30d9dc7e5ec934b228d885e6456e2
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 19 10:11:12 2016 -0400
+
+    journal: reset watch step after pruning expired tag
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 48c2f4e079000021b6ebe807bb1dba0dc1a6a11d)
+
+commit 2ee1e0a583d0ca851db4671b561eff9d493ca7d3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 18 11:01:22 2016 -0400
+
+    rbd-mirror: additional debug messages during image replayer start/stop
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit afc891f7fcb000d106b1d722386f6d81ddeddab6)
+
+commit f9e6bd8f1b6750d500fba3dd134257b7baac08c3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 18 00:55:01 2016 -0400
+
+    rbd-mirror: ensure proper handling of status updates during shutdown
+    
+    Previously, several shutdown race conditions could occur due to the
+    use of the async work queue for scheduling updates.
+    
+    Fixes: http://tracker.ceph.com/issues/15909
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 9ae4edc05660665c3a135536a7c51d4070d28a40)
+
+commit f789d83cbb9dbb1a6daa15585e2be2980ea19616
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 17 23:31:02 2016 -0400
+
+    rbd-mirror: track bootstrap state within image status
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit e5dd97b4bf4a993911febf34dce90470a2a91d59)
+
+commit e0b3879692d38bcc01d928cef09f74bc850cef86
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 17 23:25:25 2016 -0400
+
+    rbd-mirror: combine ImageReplayer stopped and uninitialized states
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a8f6dde4dbae8039380f31e026030a22a89fb4bd)
+
+commit 9c7977da45aef44160efadb48cb2d606568d4a7b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 17 16:14:42 2016 -0400
+
+    rbd-mirror: lock ordering issue in status update callback
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5c04c1361074ca9e9df1bc1c2dd82dfafc2a1304)
+
+commit 66f7f2d7bda7f2db6871870f5622594d6391b921
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 4 15:23:11 2016 +0300
+
+    rbd-mirror: don't unregister asok commands if image replayer start failed
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 2fd6fdd3dc9ecb915362f5e3aa8a224210273540)
+
+commit 569f06f1241309a710a0570d4ede950c1dc6e5d1
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 4 15:25:04 2016 +0300
+
+    rbd-mirror: avoid potential deadlock
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 46bf727d43af4975beeb514630a99d59cfb0a406)
+
+commit aee6f7ed791abd63ff9d1158a258d51db6c5ad28
+Merge: 2d0669e 0d19390
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 20 09:01:50 2016 -0400
+
+    Merge pull request #9217 from dillaman/wip-15945
+    
+    jewel: journal: live replay might skip entries from previous object set
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 0d193905b1d552600b542a466759af054c80e498
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 16 21:17:09 2016 -0400
+
+    qa/workunits/rbd: rbd-mirror daemon stress test
+    
+    This test repeatedly runs rbd bench-write, kills the process
+    randomly to create an unclean journal shutdown, and verifies
+    that the image content replicates correctly.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit e2ab3128a37f4f36c9a1de6ddf2c0fe2e48aa7e2)
+
+commit d020b6ab1d10daa92fc99d1506222987b4306b26
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 16 18:08:35 2016 -0400
+
+    journal: helper method to detect newer tags
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0a8a6126ea35344e85af7eb64ffc490938edba51)
+
+commit 56515070710a6723ae4adc3e3b166e9ae9a35fdf
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sun May 15 09:52:41 2016 -0400
+
+    journal: skip partially complete tag entries during playback
+    
+    If a journal client does not fully write out its buffered entries
+    before quiting, replay should skip over all remaining out-of-
+    sequence entries for the tag.
+    
+    Fixes: http://tracker.ceph.com/issues/15864
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 9454f7e4c62437b1c288f371009feba1fd374584)
+
+commit 18f663d834edd03b42e2c08b9428e72fdc6bae9d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sat May 14 18:58:41 2016 -0400
+
+    journal: close, advance, and open object set ordering
+    
+    Flush in-flight appends to open objects before advancing the
+    active object set.  Additionally, don't start recording to the
+    new objects until after advancing the active set.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit de830057d0f7286914e019540c6263423cb60428)
+
+commit 27fba6ad7e7cb566d32c6e63f35aff966fc60bd7
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Sat May 14 18:13:38 2016 -0400
+
+    journal: new ObjectRecorder closed callback
+    
+    The callback will be invoked if there were in-flight appends
+    when the close was requested.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit bba91437dbe3b7a9b6da8a61ccc4c597858c8efc)
+
+commit 870c21c738e42d2cf34478bfa0631d602175dadc
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 13 16:34:44 2016 -0400
+
+    journal: do not flag append as full if already known to be full
+    
+    Once an object has overflowed or a close is in-progress, re-attempting
+    to close the object is not needed since the async process is already
+    underway.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 45620dc312ca2aeaf084638144aaa4783b622c4a)
+
+commit 1cdebc7b896dd36bfee30f12aa3abd602c15af3e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 13 16:28:50 2016 -0400
+
+    journal: delay object overflow event until in-flight appends settled
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit ee8d311a1fcdf7a85cdc168e1740fbaa252e87d3)
+
+commit 821d92af2fcc43ff560f01c78ff699ad7df33daa
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 13 16:17:37 2016 -0400
+
+    journal: ignore flush on closed/overflowed object
+    
+    The journal would be in-progress on transitioning to a new
+    object recorder in a newer object set.  Once the records
+    re-attach to the new object player they will automatically
+    flush.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a13cb821f71b6b1b3378464bcc2d8318eb0da48a)
+
+commit 3d860d5db37f77c1e8c76d214529266062caaa75
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 13 16:10:11 2016 -0400
+
+    journal: implicitly detach future's flush handler on append
+    
+    If the future is already in-flight, there is no purpose served
+    by requesting the future be flushed to disk.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 1cb9b1a1b25d0f4c2d9a9e22661636e195fc70a0)
+
+commit f98e1289ce10aeb059a0b7d7cc8d17d6f1d60219
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 13 15:22:30 2016 -0400
+
+    journal: async callback for advancing the active object set
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit ca89abfd9e6f0e8edc3234afea387757ef694826)
+
+commit 86e51ebcb301d823fb5c8b30bdc07107704679b4
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 13 14:49:07 2016 -0400
+
+    journal: re-fetch active object before advancing set during replay
+    
+    During a live replay, it's possible that an append and and overflow
+    into the next object could race with the live playback of the same
+    object.  Re-fetch an "empty" object at least once before advancing
+    to next set to ensure all records have been read.
+    
+    Fixes: http://tracker.ceph.com/issues/15665
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 6056f8c45c99bd37cb18933a37cc238c7e9a7c7d)
+
+commit 2d0669e172c37d38f118332574a474a534d27020
+Merge: f3979cd e885f1e
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu May 19 13:08:00 2016 -0700
+
+    Merge pull request #9210 from yehudasa/wip-15926-jewel
+    
+    radosgw-admin: fix 'period push' handling of --url
+
+commit e885f1e3be0f9a0c6457c5387f1c38b6e8b6a492
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon May 16 09:37:05 2016 -0400
+
+    radosgw-admin: fix 'period push' handling of --url
+    
+    was calling send_to_remote_gateway(), but passing 'url' instead of
+    'remote'. now uses send_to_remote_or_url() to accept either
+    
+    Fixes: http://tracker.ceph.com/issues/15926
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+
+commit f3979cd1d2fe910185db6dc3894722dd385379bd
+Merge: 1356d29 37ecfa6
+Author: Boris Ranto <branto@redhat.com>
+Date:   Thu May 19 12:56:15 2016 +0200
+
+    Merge pull request #9194 from ceph/wip-jewel-no-lttng-global-link
+    
+    Do not link lttng into libglobal
+    
+    Reviewed-by: Boris Ranto <branto@redhat.com>
+
+commit 37ecfa6c754683cac1c6f4c66a1a491d2fd5db1d
+Author: Karol Mroz <kmroz@suse.com>
+Date:   Mon May 2 14:01:27 2016 +0200
+
+    global: don't link lttng into libglobal
+    
+    Rely on dynamic initialization instead. Linking lttng in this way had
+    the unfortunate side effect of causing radosgw to segfault (when
+    daemonized) during sigterm processing (ie. during lttng_ust_exit()).
+    
+    This was originally removed in 638738f, but accidentally re-added via
+    5f61d36.
+    
+    Signed-off-by: Karol Mroz <kmroz@suse.com>
+
+commit 1356d29c70afedcbd55599d29aab93d2f79a02ad
+Merge: 15c4ad4 16ba13c
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 18 13:23:39 2016 -0400
+
+    Merge pull request #9180 from dillaman/wip-15746-jewel
+    
+    jewel: doc: update mirroring guide to include pool/image status commands
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 16ba13c83d678656723173c061318dd83805768a
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Thu May 12 11:15:34 2016 +0300
+
+    doc: update mirroring guide to include pool/image status commands
+    
+    Fixes: http://tracker.ceph.com/issues/15746
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 4381e341c435c80793b847115eed616b8359c4e6)
+
+commit 818166e25d2ccac5d9bb3541f6166fcb8c25fd64
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Thu May 12 11:11:55 2016 +0300
+
+    doc: fixup: "rbd-mirror daemon" instead of "rbd-daemon"
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit ddd6345f8f7edcff638ed435aef316ba3e0e40dd)
+
+commit 15c4ad44010c798af7804e287ba71dcc289f806f
+Merge: 3a66dd4 7be281d
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed May 18 05:11:55 2016 -0400
+
+    Merge pull request #8815 from ktdreyer/wip-15646-jewel-system-targets
+    
+    jewel: debian: install systemd target files
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 7be281dab96c15b53fcfc3c2ffe6d17aec84b315
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Apr 28 09:13:50 2016 -0400
+
+    debian/control: dh_systemd_start is in the dh-systemd package
+    
+    Fixes: http://tracker.ceph.com/issues/15573
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 89154d1e01dbc58dc92f37741031f7ddb0448d2e)
+
+commit e463aa8b92dabdc7c13e150585eb09790da638ba
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri Apr 22 21:07:58 2016 +0800
+
+    debian: install systemd target files
+    
+    * enable it using dh_systemd_enable
+    * start the target using dh_systemd_start
+    * move the dh_installinit, dh_systemd_enable, dh_systemd_start calls
+      down, so they can identify the service files if they care about them.
+    
+    Fixes: http://tracker.ceph.com/issues/15573
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit f950a0a7f5b35e13668379bc69dcb5d98a2dfc1f)
+
+commit 72c9b6f70752faf779b9272724f428e68d6499bb
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon May 9 14:15:36 2016 +0800
+
+    osd: remove all stale osdmaps in handle_osd_map()
+    
+    in a large cluster, there are better chances that the OSD fails to trim
+    the cached osdmap in a timely manner. and sometimes, it is just unable
+    to keep up with the incoming osdmap if skip_maps, so the osdmap cache
+    can keep building up to over 250GB in size. in this change
+    
+    * publish_superblock() before trimming the osdmaps, so other osdmap
+      consumers of OSDService.superblock won't access the osdmaps being
+      removed.
+    * trim all stale osdmaps in batch of conf->osd_target_transaction_size
+      if skip_maps is true. in my test, it happens when the osd only
+      receives the osdmap from monitor occasionally because the osd happens
+      to be chosen when monitor wants to share a new osdmap with a random
+      osd.
+    * always use dedicated transaction(s) for trimming osdmaps. so even in
+      the normal case where we are able to trim all stale osdmaps in a
+      single batch, a separated transaction is used. we can piggy back
+      the commits for removing maps, but we keep it this way for simplicity.
+    * use std::min() instead MIN() for type safety
+    
+    Fixes: http://tracker.ceph.com/issues/13990
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 369db9930887d75b498927da9c97733bff4472b6)
+
+commit 6c2973cd08503a3d91eeb881732c79213e42599f
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Wed May 11 14:14:46 2016 +0300
+
+    cls::rbd: mirror_image_status_list returned max 64 items
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit e925ce86243c91e6d64ff8d7b45166e4e3f2650b)
+
+commit 36743419ba49df4f97cdbe9ac25d9b08b0685108
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Apr 29 15:24:09 2016 -0400
+
+    osd/PG: update info.stats.* mappings on split
+    
+    These are updated in the init and start_peering_interval paths, but not
+    on split.
+    
+    Fixes: http://tracker.ceph.com/issues/15523
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 8b42294d98dd70715184991da5ba495fbe93d009)
+
+commit b443fdf9402df621400ab7ca66799f597e8b2c23
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Apr 23 11:42:25 2016 +0200
+
+    ceph.spec.in: recommend ntp-daemon on SUSE
+    
+    SUSE has settled on "ntp-daemon" as the generic package name. The "ntp" and
+    "chrony" etc. packages have "Provides: ntp-daemon" in their respective spec
+    files.
+    
+    References: http://tracker.ceph.com/issues/15419
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 23108547454f53b95e193086d82d433570312ad4)
+
+commit 299f84ccdbf4d91412e216042fb248fd802af89d
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Apr 7 20:54:21 2016 +0200
+
+    deb: make ceph-base and radosgw recommend time-daemon
+    
+    References: http://tracker.ceph.com/issues/15419
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit f27cda03b7a961e445cce4ad35db6417e9e55959)
+
+commit 2da7cb2c7daad3ce2f9d2614e019291f75d4737d
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Apr 7 20:17:44 2016 +0200
+
+    systemd: make Ceph daemon units "want" time-sync.target
+    
+    Fixes: http://tracker.ceph.com/issues/15419
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit df893f395e62c8b1db18a277b38b44cab8b2016f)

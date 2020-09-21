@@ -15,20 +15,21 @@
 #include <iostream>
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "global/global_init.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout
 
 struct Foo : public Thread {
-  void *entry() {
+  void *entry() override {
     dout(0) << "foo started" << dendl;
     sleep(1);
     dout(0) << "foo asserting 0" << dendl;
-    assert(0);
+    ceph_abort();
   }
 } foo;
 
@@ -36,9 +37,10 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   // args
@@ -49,7 +51,7 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename << std::endl;
   cout << "#mb " << mb << std::endl;
 
-  ObjectStore *fs = new FileStore(filename, NULL);
+  ObjectStore *fs = new FileStore(cct.get(), filename, NULL);
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;
@@ -59,6 +61,7 @@ int main(int argc, const char **argv)
   char buf[1 << 20];
   bufferlist bl;
   bl.append(buf, sizeof(buf));
+  auto ch = fs->create_new_collection(coll_t());
   t.create_collection(coll_t(), 0);
 
   for (int i=0; i<mb; i++) {
@@ -69,9 +72,8 @@ int main(int argc, const char **argv)
   }
   
   dout(0) << "starting thread" << dendl;
-  foo.create();
+  foo.create("foo");
   dout(0) << "starting op" << dendl;
-  fs->apply_transaction(t);
-
+  fs->queue_transaction(ch, std::move(t));
 }
 

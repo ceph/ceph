@@ -15,8 +15,12 @@
 #include "include/rados/librados.hpp"
 #include "mds/JournalPointer.h"
 
+#include "mds/events/ESubtreeMap.h"
+#include "mds/PurgeQueue.h"
+
 #include "JournalScanner.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 /**
@@ -30,12 +34,12 @@ int JournalScanner::scan(bool const full)
 {
   int r = 0;
 
-  r = scan_pointer();
+  r = set_journal_ino();
   if (r < 0) {
     return r;
   }
 
-  if (pointer_present) {
+  if (!is_mdlog || pointer_present) {
     r = scan_header();
     if (r < 0) {
       return r;
@@ -52,6 +56,22 @@ int JournalScanner::scan(bool const full)
   return 0;
 }
 
+
+int JournalScanner::set_journal_ino()
+{
+  int r = 0;
+  if (type == "purge_queue") {
+    ino = MDS_INO_PURGE_QUEUE + rank;
+  }
+  else if (type == "mdlog"){
+    r = scan_pointer();
+    is_mdlog = true;
+  }
+  else {
+    ceph_abort(); // should not get here
+  }
+  return r;
+}
 
 int JournalScanner::scan_pointer()
 {
@@ -73,7 +93,7 @@ int JournalScanner::scan_pointer()
 
     JournalPointer jp;
     try {
-      bufferlist::iterator q = pointer_bl.begin();
+      auto q = pointer_bl.cbegin();
       jp.decode(q);
     } catch(buffer::error &e) {
       derr << "Pointer " << pointer_oid << " is corrupt: " << e.what() << dendl;
@@ -102,7 +122,7 @@ int JournalScanner::scan_header()
     header_present = true;
   }
 
-  bufferlist::iterator header_bl_i = header_bl.begin();
+  auto header_bl_i = header_bl.cbegin();
   header = new Journaler::Header();
   try
   {
@@ -132,10 +152,10 @@ int JournalScanner::scan_header()
 
 int JournalScanner::scan_events()
 {
-  uint64_t object_size = g_conf->mds_log_segment_size;
+  uint64_t object_size = g_conf()->mds_log_segment_size;
   if (object_size == 0) {
     // Default layout object size
-    object_size = g_default_file_layout.fl_object_size;
+    object_size = file_layout_t::get_default().object_size;
   }
 
   uint64_t read_offset = header->expire_pos;
@@ -174,14 +194,21 @@ int JournalScanner::scan_events()
       }
 
       objects_missing.push_back(obj_offset);
-      gap = true;
-      gap_start = read_offset;
+      if (!gap) {
+        gap_start = read_offset;
+        gap = true;
+      }
+      if (read_buf.length() > 0) {
+        read_offset += read_buf.length();
+        read_buf.clear();
+      }
+      read_offset += object_size - offset_in_obj;
       continue;
     } else {
       dout(4) << "Read 0x" << std::hex << this_object.length() << std::dec
               << " bytes from " << oid << " gap=" << gap << dendl;
       objects_valid.push_back(oid);
-      this_object.copy(0, this_object.length(), read_buf);
+      this_object.begin().copy(this_object.length(), read_buf);
     }
 
     if (gap) {
@@ -191,9 +218,9 @@ int JournalScanner::scan_events()
               << ", 0x" << read_buf.length() << std::dec << " bytes available" << dendl;
 
       do {
-        bufferlist::iterator p = read_buf.begin();
+        auto p = read_buf.cbegin();
         uint64_t candidate_sentinel;
-        ::decode(candidate_sentinel, p);
+        decode(candidate_sentinel, p);
 
         dout(4) << "Data at 0x" << std::hex << read_offset << " = 0x" << candidate_sentinel << std::dec << dendl;
 
@@ -209,7 +236,8 @@ int JournalScanner::scan_events()
         }
       } while (read_buf.length() >= sizeof(JournalStream::sentinel));
       dout(4) << "read_buf size is " << read_buf.length() << dendl;
-    } else {
+    } 
+    {
       dout(10) << "Parsing data, 0x" << std::hex << read_buf.length() << std::dec << " bytes available" << dendl;
       while(true) {
         // TODO: detect and handle legacy format journals: can do many things
@@ -254,22 +282,52 @@ int JournalScanner::scan_events()
           read_offset += consumed;
           break;
         }
+        bool valid_entry = true;
+        if (is_mdlog) {
+          auto le = LogEvent::decode_event(le_bl.cbegin());
 
-        LogEvent *le = LogEvent::decode(le_bl);
-        if (le) {
-          dout(10) << "Valid entry at 0x" << std::hex << read_offset << std::dec << dendl;
+          if (le) {
+            dout(10) << "Valid entry at 0x" << std::hex << read_offset << std::dec << dendl;
 
-          if (filter.apply(read_offset, *le)) {
-            events[read_offset] = EventRecord(le, consumed);
+            if (le->get_type() == EVENT_SUBTREEMAP
+                || le->get_type() == EVENT_SUBTREEMAP_TEST) {
+              auto&& sle = dynamic_cast<ESubtreeMap&>(*le);
+              if (sle.expire_pos > read_offset) {
+                errors.insert(std::make_pair(
+                      read_offset, EventError(
+                        -ERANGE,
+                        "ESubtreeMap has expire_pos ahead of its own position")));
+              }
+            }
+
+            if (filter.apply(read_offset, *le)) {
+              events.insert_or_assign(read_offset, EventRecord(std::move(le), consumed));
+            }
           } else {
-            delete le;
+            valid_entry = false;
           }
-          events_valid.push_back(read_offset);
-          read_offset += consumed;
+        } else if (type == "purge_queue"){
+           auto pi = std::make_unique<PurgeItem>();
+           try {
+             auto q = le_bl.cbegin();
+             pi->decode(q);
+	     if (filter.apply(read_offset, *pi)) {
+	       events.insert_or_assign(read_offset, EventRecord(std::move(pi), consumed));
+	     }
+           } catch (const buffer::error &err) {
+             valid_entry = false;
+           }
         } else {
+          ceph_abort(); // should not get here
+        }
+        if (!valid_entry) {
           dout(10) << "Invalid entry at 0x" << std::hex << read_offset << std::dec << dendl;
           gap = true;
           gap_start = read_offset;
+          read_offset += consumed;
+          break;
+        } else {
+          events_valid.push_back(read_offset);
           read_offset += consumed;
         }
       }
@@ -297,9 +355,6 @@ JournalScanner::~JournalScanner()
     header = NULL;
   }
   dout(4) << events.size() << " events" << dendl;
-  for (EventMap::iterator i = events.begin(); i != events.end(); ++i) {
-    delete i->second.log_event;
-  }
   events.clear();
 }
 
@@ -309,7 +364,7 @@ JournalScanner::~JournalScanner()
  */
 bool JournalScanner::is_healthy() const
 {
-  return (pointer_present && pointer_valid
+  return ((!is_mdlog || (pointer_present && pointer_valid))
       && header_present && header_valid
       && ranges_invalid.empty()
       && objects_missing.empty());
@@ -351,12 +406,13 @@ void JournalScanner::report(std::ostream &out) const
 {
   out << "Overall journal integrity: " << (is_healthy() ? "OK" : "DAMAGED") << std::endl;
 
-  if (!pointer_present) {
-    out << "Pointer not found" << std::endl;
-  } else if (!pointer_valid) {
-    out << "Pointer could not be decoded" << std::endl;
+  if (is_mdlog) {
+    if (!pointer_present) {
+      out << "Pointer not found" << std::endl;
+    } else if (!pointer_valid) {
+      out << "Pointer could not be decoded" << std::endl;
+    }
   }
-
   if (!header_present) {
     out << "Header not found" << std::endl;
   } else if (!header_valid) {

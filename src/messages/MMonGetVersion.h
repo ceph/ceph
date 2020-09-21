@@ -27,32 +27,34 @@
  */
 class MMonGetVersion : public Message {
 public:
-  MMonGetVersion() : Message(CEPH_MSG_MON_GET_VERSION) {}
+  MMonGetVersion() : Message{CEPH_MSG_MON_GET_VERSION} {}
 
-  const char *get_type_name() const {
+  std::string_view get_type_name() const override {
     return "mon_get_version";
   }
 
-  void print(ostream& o) const {
+  void print(std::ostream& o) const override {
     o << "mon_get_version(what=" << what << " handle=" << handle << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(handle, payload);
-    ::encode(what, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(handle, payload);
+    encode(what, payload);
   }
 
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(handle, p);
-    ::decode(what, p);
+  void decode_payload() override {
+    auto p = payload.cbegin();
+    using ceph::decode;
+    decode(handle, p);
+    decode(what, p);
   }
 
-  ceph_tid_t handle;
-  string what;
+  ceph_tid_t handle = 0;
+  std::string what;
 
 private:
-  ~MMonGetVersion() {}
+  ~MMonGetVersion() override {}
 };
 
 #endif

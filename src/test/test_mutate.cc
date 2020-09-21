@@ -43,8 +43,9 @@ int main(int argc, const char **argv)
   int ret = 0;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   string val;
@@ -98,6 +99,8 @@ int main(int argc, const char **argv)
 	  << "': error " << ret << std::endl;
      return 1;
   }
+  ioctx.application_enable("rados", true);
+
   librados::ObjectWriteOperation op;
   op.create(true);
   ret = ioctx.operate(oid, &op);

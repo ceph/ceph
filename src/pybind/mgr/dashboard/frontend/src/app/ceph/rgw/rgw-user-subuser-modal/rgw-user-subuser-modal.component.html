@@ -1,0 +1,132 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+
+        <!-- Username -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="uid"
+                 i18n>Username</label>
+          <div class="cd-col-form-input">
+            <input id="uid"
+                   class="form-control"
+                   type="text"
+                   formControlName="uid"
+                   [readonly]="true">
+          </div>
+        </div>
+
+        <!-- Subuser -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': !editing}"
+                 for="subuid"
+                 i18n>Subuser</label>
+          <div class="cd-col-form-input">
+            <input id="subuid"
+                   class="form-control"
+                   type="text"
+                   formControlName="subuid"
+                   [readonly]="editing"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('subuid', frm, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('subuid', frm, 'subuserIdExists')"
+                  i18n>The chosen subuser ID is already in use.</span>
+          </div>
+        </div>
+
+        <!-- Permission -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="perm"
+                 i18n>Permission</label>
+          <div class="cd-col-form-input">
+            <select id="perm"
+                    class="form-control custom-select"
+                    formControlName="perm">
+              <option i18n
+                      [ngValue]="null">-- Select a permission --</option>
+              <option *ngFor="let perm of ['read', 'write']"
+                      [value]="perm">
+                {{ perm }}
+              </option>
+              <option i18n
+                      value="read-write">read, write</option>
+              <option i18n
+                      value="full-control">full</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('perm', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Swift key -->
+        <fieldset *ngIf="!editing">
+          <legend i18n>Swift key</legend>
+
+          <!-- Auto-generate key -->
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="generate_secret"
+                       type="checkbox"
+                       formControlName="generate_secret">
+                <label class="custom-control-label"
+                       for="generate_secret"
+                       i18n>Auto-generate secret</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Secret key -->
+          <div class="form-group row"
+               *ngIf="!editing && !formGroup.getValue('generate_secret')">
+            <label class="cd-col-form-label required"
+                   for="secret_key"
+                   i18n>Secret key</label>
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input id="secret_key"
+                       class="form-control"
+                       type="password"
+                       formControlName="secret_key">
+                <span class="input-group-append">
+                  <button type="button"
+                          class="btn btn-light"
+                          cdPasswordButton="secret_key">
+                  </button>
+                  <button type="button"
+                          class="btn btn-light"
+                          cdCopy2ClipboardButton="secret_key">
+                  </button>
+                </span>
+              </div>
+              <span class="invalid-feedback"
+                    *ngIf="formGroup.showError('secret_key', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+        </fieldset>
+
+      </div>
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="onSubmit()"
+                          i18n="form action button|Example: Create Pool@@formActionButton"
+                          [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+        <cd-back-button [back]="bsModalRef.close"></cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

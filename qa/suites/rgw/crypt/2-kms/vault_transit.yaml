@@ -1,0 +1,23 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: vault
+        rgw crypt vault auth: token
+        rgw crypt vault secret engine: transit
+        rgw crypt vault prefix: /v1/transit/export/encryption-key/
+  rgw:
+    client.0:
+      use-vault-role: client.0
+
+tasks:
+- vault:
+    client.0:
+      install_url: https://releases.hashicorp.com/vault/1.2.2/vault_1.2.2_linux_amd64.zip
+      install_sha256: 7725b35d9ca8be3668abe63481f0731ca4730509419b4eb29fa0b0baa4798458
+      root_token: test_root_token
+      engine: transit
+      prefix: /v1/transit/keys/
+      secrets:
+        - path: my-key-1
+        - path: my-key-2

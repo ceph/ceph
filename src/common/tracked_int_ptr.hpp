@@ -15,12 +15,6 @@
 #ifndef CEPH_TRACKEDINTPTR_H
 #define CEPH_TRACKEDINTPTR_H
 
-#include <map>
-#include <list>
-#include <memory>
-#include <utility>
-#include "common/Mutex.h"
-#include "common/Cond.h"
 
 template <class T>
 class TrackedIntPtr {
@@ -33,7 +27,7 @@ public:
     if (ptr)
       put_with_id(ptr, id);
     else
-      assert(id == 0);
+      ceph_assert(id == 0);
   }
   void swap(TrackedIntPtr &other) {
     T *optr = other.ptr;
@@ -46,22 +40,19 @@ public:
   TrackedIntPtr(const TrackedIntPtr &rhs) :
     ptr(rhs.ptr), id(ptr ? get_with_id(ptr) : 0) {}
 
-  void operator=(const TrackedIntPtr &rhs) {
+  TrackedIntPtr& operator=(const TrackedIntPtr &rhs) {
     TrackedIntPtr o(rhs.ptr);
     swap(o);
+    return *this;
   }
-  const T &operator*() const {
+  T &operator*() const {
     return *ptr;
   }
-  T &operator*() {
-    return *ptr;
-  }
-  const T *operator->() const {
+  T *operator->() const {
     return ptr;
   }
-  T *operator->() {
-    return ptr;
-  }
+  T *get() const { return ptr; }
+
   operator bool() const {
     return ptr != NULL;
   }
@@ -70,6 +61,13 @@ public:
   }
   bool operator==(const TrackedIntPtr &lhs) const {
     return ptr == lhs.ptr;
+  }
+
+  void reset() {
+    if (ptr) 
+      put_with_id(ptr, id);
+    ptr = nullptr;
+    id = 0;
   }
 };
 

@@ -1,19 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
 
 #include <iostream>
 #include <map>
 
+#include <expat.h>
+
 #include "include/types.h"
+#include "include/utime.h"
 
-#include "rgw_common.h"
 #include "rgw_xml.h"
-
-#define dout_subsys ceph_subsys_rgw
-
-using namespace std;
 
 XMLObjIter::
 XMLObjIter()
@@ -43,7 +41,17 @@ get_next()
   return obj;
 }
 
-ostream& operator<<(ostream& out, XMLObj& obj) {
+bool XMLObjIter::get_name(std::string& name) const
+{
+  if (cur == end) {
+    return false;
+  }
+
+  name = cur->first;
+  return true;
+}
+
+ostream& operator<<(ostream &out, const XMLObj &obj) {
    out << obj.obj_type << ": " << obj.data;
    return out;
 }
@@ -59,7 +67,7 @@ xml_start(XMLObj *parent, const char *el, const char **attr)
   this->parent = parent;
   obj_type = el;
   for (int i = 0; attr[i]; i += 2) {
-    attr_map[attr[i]] = string(attr[i + 1]);
+    attr_map[attr[i]] = std::string(attr[i + 1]);
   }
   return true;
 }
@@ -76,10 +84,16 @@ xml_handle_data(const char *s, int len)
   data.append(s, len);
 }
 
-string& XMLObj::
-XMLObj::get_data()
+const std::string& XMLObj::
+XMLObj::get_data() const
 {
   return data;
+}
+
+const std::string& XMLObj::
+XMLObj::get_obj_type() const
+{
+  return obj_type;
 }
 
 XMLObj *XMLObj::
@@ -89,15 +103,15 @@ XMLObj::get_parent()
 }
 
 void XMLObj::
-add_child(string el, XMLObj *obj)
+add_child(const std::string& el, XMLObj *obj)
 {
-  children.insert(pair<string, XMLObj *>(el, obj));
+  children.insert(std::pair<std::string, XMLObj *>(el, obj));
 }
 
 bool XMLObj::
-get_attr(string name, string& attr)
+get_attr(const std::string& name, std::string& attr) const
 {
-  map<string, string>::iterator iter = attr_map.find(name);
+  const std::map<std::string, std::string>::const_iterator iter = attr_map.find(name);
   if (iter == attr_map.end())
     return false;
   attr = iter->second;
@@ -105,12 +119,11 @@ get_attr(string name, string& attr)
 }
 
 XMLObjIter XMLObj::
-find(string name)
+find(const std::string& name)
 {
   XMLObjIter iter;
-  map<string, XMLObj *>::iterator first;
-  map<string, XMLObj *>::iterator last;
-  first = children.find(name);
+  const XMLObjIter::const_map_iter_t first = children.find(name);
+  XMLObjIter::const_map_iter_t last;
   if (first != children.end()) {
     last = children.upper_bound(name);
   }else
@@ -119,27 +132,28 @@ find(string name)
   return iter;
 }
 
-XMLObj *XMLObj::
-find_first(string name)
+XMLObjIter XMLObj::find_first()
 {
   XMLObjIter iter;
-  map<string, XMLObj *>::iterator first;
-  first = children.find(name);
+  const XMLObjIter::const_map_iter_t first = children.begin();
+  const XMLObjIter::const_map_iter_t last = children.end();
+  iter.set(first, last);
+  return iter;
+}
+
+XMLObj *XMLObj::
+find_first(const std::string& name)
+{
+  const XMLObjIter::const_map_iter_t first = children.find(name);
   if (first != children.end())
     return first->second;
-  return NULL;
-}
-static void xml_start(void *data, const char *el, const char **attr) {
-  RGWXMLParser *handler = static_cast<RGWXMLParser *>(data);
-
-  if (!handler->xml_start(el, attr))
-    handler->set_failure();
+  return nullptr;
 }
 
 RGWXMLParser::
-RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true)
+RGWXMLParser() : buf(nullptr), buf_len(0), cur_obj(nullptr), success(true), init_called(false)
 {
-  p = XML_ParserCreate(NULL);
+  p = XML_ParserCreate(nullptr);
 }
 
 RGWXMLParser::
@@ -148,72 +162,67 @@ RGWXMLParser::
   XML_ParserFree(p);
 
   free(buf);
-  vector<XMLObj *>::iterator iter;
-  for (iter = objs.begin(); iter != objs.end(); ++iter) {
+  std::list<XMLObj *>::const_iterator iter;
+  for (iter = allocated_objs.begin(); iter != allocated_objs.end(); ++iter) {
     XMLObj *obj = *iter;
     delete obj;
   }
 }
 
-bool RGWXMLParser::xml_start(const char *el, const char **attr) {
-  XMLObj * obj = alloc_obj(el);
+void RGWXMLParser::call_xml_start(void* user_data, const char *el, const char **attr) {
+  RGWXMLParser *handler = static_cast<RGWXMLParser *>(user_data);
+  XMLObj * obj = handler->alloc_obj(el);
   if (!obj) {
-    obj = new XMLObj();
-  }
-  if (!obj->xml_start(cur_obj, el, attr))
-    return false;
-  if (cur_obj) {
-    cur_obj->add_child(el, obj);
+    handler->unallocated_objs.push_back(XMLObj());
+    obj = &handler->unallocated_objs.back();
   } else {
-    children.insert(pair<string, XMLObj *>(el, obj));
+    handler->allocated_objs.push_back(obj);
   }
-  cur_obj = obj;
+  if (!obj->xml_start(handler->cur_obj, el, attr)) {
+    handler->success = false;
+    return;
+  }
+  if (handler->cur_obj) {
+    handler->cur_obj->add_child(el, obj);
+  } else {
+    handler->children.insert(std::pair<std::string, XMLObj *>(el, obj));
+  }
+  handler->cur_obj = obj;
 
-  objs.push_back(obj);
-  return true;
+  handler->objs.push_back(obj);
 }
 
-static void xml_end(void *data, const char *el) {
-  RGWXMLParser *handler = static_cast<RGWXMLParser *>(data);
-
-  if (!handler->xml_end(el))
-    handler->set_failure();
+void RGWXMLParser::call_xml_end(void* user_data, const char *el) {
+  RGWXMLParser *handler = static_cast<RGWXMLParser *>(user_data);
+  XMLObj *parent_obj = handler->cur_obj->get_parent();
+  if (!handler->cur_obj->xml_end(el)) {
+    handler->success = false;
+    return;
+  }
+  handler->cur_obj = parent_obj;
 }
 
-bool RGWXMLParser::xml_end(const char *el) {
-  XMLObj *parent_obj = cur_obj->get_parent();
-  if (!cur_obj->xml_end(el))
-    return false;
-  cur_obj = parent_obj;
-  return true;
-}
-
-static void handle_data(void *data, const char *s, int len)
+void RGWXMLParser::call_xml_handle_data(void* user_data, const char *s, int len)
 {
-  RGWXMLParser *handler = static_cast<RGWXMLParser *>(data);
-
-  handler->handle_data(s, len);
+  RGWXMLParser *handler = static_cast<RGWXMLParser *>(user_data);
+  handler->cur_obj->xml_handle_data(s, len);
 }
-
-void RGWXMLParser::handle_data(const char *s, int len)
-{
-  cur_obj->xml_handle_data(s, len);
-}
-
 
 bool RGWXMLParser::init()
 {
   if (!p) {
     return false;
   }
-  XML_SetElementHandler(p, ::xml_start, ::xml_end);
-  XML_SetCharacterDataHandler(p, ::handle_data);
+  init_called = true;
+  XML_SetElementHandler(p, RGWXMLParser::call_xml_start, RGWXMLParser::call_xml_end);
+  XML_SetCharacterDataHandler(p, RGWXMLParser::call_xml_handle_data);
   XML_SetUserData(p, (void *)this);
   return true;
 }
 
 bool RGWXMLParser::parse(const char *_buf, int len, int done)
 {
+  ceph_assert(init_called);
   int pos = buf_len;
   char *tmp_buf;
   tmp_buf = (char *)realloc(buf, buf_len + len);
@@ -238,3 +247,254 @@ bool RGWXMLParser::parse(const char *_buf, int len, int done)
 
   return success;
 }
+
+void decode_xml_obj(unsigned long& val, XMLObj *obj)
+{
+  auto& s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtoul(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && val == ULONG_MAX) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+
+void decode_xml_obj(long& val, XMLObj *obj)
+{
+  const std::string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtol(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && (val == LONG_MAX || val == LONG_MIN)) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_xml_obj(long long& val, XMLObj *obj)
+{
+  const std::string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtoll(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && (val == LLONG_MAX || val == LLONG_MIN)) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_xml_obj(unsigned long long& val, XMLObj *obj)
+{
+  const std::string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtoull(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && val == ULLONG_MAX) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_xml_obj(int& val, XMLObj *obj)
+{
+  long l;
+  decode_xml_obj(l, obj);
+#if LONG_MAX > INT_MAX
+  if (l > INT_MAX || l < INT_MIN) {
+    throw RGWXMLDecoder::err("integer out of range");
+  }
+#endif
+
+  val = (int)l;
+}
+
+void decode_xml_obj(unsigned& val, XMLObj *obj)
+{
+  unsigned long l;
+  decode_xml_obj(l, obj);
+#if ULONG_MAX > UINT_MAX
+  if (l > UINT_MAX) {
+    throw RGWXMLDecoder::err("unsigned integer out of range");
+  }
+#endif
+
+  val = (unsigned)l;
+}
+
+void decode_xml_obj(bool& val, XMLObj *obj)
+{
+  const std::string s = obj->get_data();
+  if (strncasecmp(s.c_str(), "true", 8) == 0) {
+    val = true;
+    return;
+  }
+  if (strncasecmp(s.c_str(), "false", 8) == 0) {
+    val = false;
+    return;
+  }
+  int i;
+  decode_xml_obj(i, obj);
+  val = (bool)i;
+}
+
+void decode_xml_obj(bufferlist& val, XMLObj *obj)
+{
+  const std::string s = obj->get_data();
+
+  bufferlist bl;
+  bl.append(s.c_str(), s.size());
+  try {
+    val.decode_base64(bl);
+  } catch (buffer::error& err) {
+   throw RGWXMLDecoder::err("failed to decode base64");
+  }
+}
+
+void decode_xml_obj(utime_t& val, XMLObj *obj)
+{
+  const std::string s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    val = utime_t(epoch, nsec);
+  } else {
+    throw RGWXMLDecoder::err("failed to decode utime_t");
+  }
+}
+
+void encode_xml(const char *name, const string& val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
+void encode_xml(const char *name, const char *val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
+void encode_xml(const char *name, bool val, Formatter *f)
+{
+  std::string s;
+  if (val)
+    s = "True";
+  else
+    s = "False";
+
+  f->dump_string(name, s);
+}
+
+void encode_xml(const char *name, int val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_xml(const char *name, long val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_xml(const char *name, unsigned val, Formatter *f)
+{
+  f->dump_unsigned(name, val);
+}
+
+void encode_xml(const char *name, unsigned long val, Formatter *f)
+{
+  f->dump_unsigned(name, val);
+}
+
+void encode_xml(const char *name, unsigned long long val, Formatter *f)
+{
+  f->dump_unsigned(name, val);
+}
+
+void encode_xml(const char *name, long long val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_xml(const char *name, const utime_t& val, Formatter *f)
+{
+  val.gmtime(f->dump_stream(name));
+}
+
+void encode_xml(const char *name, const bufferlist& bl, Formatter *f)
+{
+  /* need to copy data from bl, as it is const bufferlist */
+  bufferlist src = bl;
+
+  bufferlist b64;
+  src.encode_base64(b64);
+
+  const std::string s(b64.c_str(), b64.length());
+
+  encode_xml(name, s, f);
+}
+

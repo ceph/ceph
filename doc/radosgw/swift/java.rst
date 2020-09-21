@@ -12,15 +12,15 @@ classes to be imported:
 
 .. code-block:: java
 
-	import java.io.File;
-	import java.util.List;
-	import java.util.Map;
-	import com.rackspacecloud.client.cloudfiles.FilesClient;
-	import com.rackspacecloud.client.cloudfiles.FilesConstants;
-	import com.rackspacecloud.client.cloudfiles.FilesContainer;
-	import com.rackspacecloud.client.cloudfiles.FilesContainerExistsException;
-	import com.rackspacecloud.client.cloudfiles.FilesObject;
-	import com.rackspacecloud.client.cloudfiles.FilesObjectMetaData;
+       import org.javaswift.joss.client.factory.AccountConfig;
+       import org.javaswift.joss.client.factory.AccountFactory;
+       import org.javaswift.joss.client.factory.AuthenticationMethod;
+       import org.javaswift.joss.model.Account;
+       import org.javaswift.joss.model.Container;
+       import org.javaswift.joss.model.StoredObject;
+       import java.io.File;
+       import java.io.IOException;
+       import java.util.*;
 
 
 Create a Connection
@@ -30,14 +30,16 @@ This creates a connection so that you can interact with the server:
 
 .. code-block:: java
 
-	String username = "USERNAME";
-	String password = "PASSWORD";
-	String authUrl  = "https://objects.dreamhost.com/auth";
+       String username = "USERNAME";
+       String password = "PASSWORD";
+       String authUrl  = "https://radosgw.endpoint/auth/1.0";
 
-	FilesClient client = new FilesClient(username, password, authUrl);
-	if (!client.login()) {
-		throw new RuntimeException("Failed to log in");
-	}
+       AccountConfig config = new AccountConfig();
+       config.setUsername(username);
+       config.setPassword(password);
+       config.setAuthUrl(authUrl);
+       config.setAuthenticationMethod(AuthenticationMethod.BASIC);
+       Account account = new AccountFactory(config).createAccount();
 
 
 Create a Container
@@ -47,7 +49,8 @@ This creates a new container called ``my-new-container``:
 
 .. code-block:: java
 
-	client.createContainer("my-new-container");
+       Container container = account.getContainer("my-new-container");
+       container.create();
 
 
 Create an Object
@@ -58,9 +61,9 @@ the container ``my-new-container``:
 
 .. code-block:: java
 
-	File file = new File("foo.txt");
-	String mimeType = FilesConstants.getMimetype("txt");
-	client.storeObject("my-new-container", file, mimeType);
+       Container container = account.getContainer("my-new-container");
+       StoredObject object = container.getObject("foo.txt");
+       object.uploadObject(new File("foo.txt"));
 
 
 Add/Update Object Metadata
@@ -71,11 +74,11 @@ This adds the metadata key-value pair ``key``:``value`` to the object named
 
 .. code-block:: java
 
-	FilesObjectMetaData metaData = client.getObjectMetaData("my-new-container", "foo.txt");
-	metaData.addMetaData("key", "value");
-
-	Map<String, String> metamap = metaData.getMetaData();
-	client.updateObjectMetadata("my-new-container", "foo.txt", metamap);
+       Container container = account.getContainer("my-new-container");
+       StoredObject object = container.getObject("foo.txt");
+       Map<String, Object> metadata = new TreeMap<String, Object>();
+       metadata.put("key", "value");
+       object.setMetadata(metadata);
 
 
 List Owned Containers
@@ -86,10 +89,10 @@ This also prints out the container name.
 
 .. code-block:: java
 
-	List<FilesContainer> containers = client.listContainers();
-	for (FilesContainer container : containers) {
-		System.out.println("  " + container.getName());
-	}
+       Collection<Container> containers = account.list();
+       for (Container currentContainer : containers) {
+           System.out.println(currentContainer.getName());
+       }
 
 The output will look something like this::
 
@@ -106,10 +109,11 @@ prints out each object's name, the file size, and last modified date:
 
 .. code-block:: java
 
-	List<FilesObject> objects = client.listObjects("my-new-container");
-	for (FilesObject object : objects) {
-		System.out.println("  " + object.getName());
-	}
+       Container container = account.getContainer("my-new-container");
+       Collection<StoredObject> objects = container.list();
+       for (StoredObject currentObject : objects) {
+           System.out.println(currentObject.getName());
+       }
 
 The output will look something like this::
 
@@ -125,8 +129,13 @@ in a container named ``my-new-container``:
 
 .. code-block:: java
 
-	FilesObjectMetaData metaData =	client.getObjectMetaData("my-new-container", "foo.txt");
-	String mimeType = metaData.getMimeType();
+       Container container = account.getContainer("my-new-container");
+       StoredObject object = container.getObject("foo.txt");
+       Map<String, Object> returnedMetadata = object.getMetadata();
+       for (String name : returnedMetadata.keySet()) {
+           System.out.println("META / "+name+": "+returnedMetadata.get(name));
+       }
+
 
 Retrieve an Object
 ==================
@@ -136,17 +145,9 @@ and saves it in ``./outfile.txt``:
 
 .. code-block:: java
 
-	FilesObject obj;
-	File outfile = new File("outfile.txt");
-
-	List<FilesObject> objects = client.listObjects("my-new-container");
-	for (FilesObject object : objects) {
-		String name = object.getName();
-		if (name.equals("foo.txt")) {
-			obj = object;
-			obj.writeObjectToFile(outfile);
-		}
-	}
+       Container container = account.getContainer("my-new-container");
+       StoredObject object = container.getObject("foo.txt");
+       object.downloadObject(new File("outfile.txt"));
 
 
 Delete an Object
@@ -156,7 +157,10 @@ This deletes the object ``goodbye.txt`` in the container "my-new-container":
 
 .. code-block:: java
 
-	client.deleteObject("my-new-container", "goodbye.txt");
+       Container container = account.getContainer("my-new-container");
+       StoredObject object = container.getObject("foo.txt");
+       object.delete();
+
 
 Delete a Container
 ==================
@@ -165,6 +169,7 @@ This deletes a container named "my-new-container":
 
 .. code-block:: java
 
-	client.deleteContainer("my-new-container");
+       Container container = account.getContainer("my-new-container");
+       container.delete();
 	
 .. note:: The container must be empty! Otherwise it won't work!

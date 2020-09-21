@@ -36,6 +36,7 @@ StRadosListObjects(int argc, const char **argv,
 		   CrossProcessSem *midway_sem_wait,
 		   CrossProcessSem *midway_sem_post)
   : SysTestRunnable(argc, argv),
+    m_pool_name(pool_name),
     m_accept_list_errors(accept_list_errors),
     m_midway_cnt(midway_cnt),
     m_pool_setup_sem(pool_setup_sem),
@@ -63,8 +64,8 @@ run()
   m_pool_setup_sem->post();
 
   rados_ioctx_t io_ctx;
-  rados_pool_create(cl, "foo");
-  RETURN1_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
+  rados_pool_create(cl, m_pool_name.c_str());
+  RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
 
   int saw = 0;
   const char *obj_name;

@@ -15,9 +15,13 @@
 #ifndef CEPH_OS_FS_H
 #define CEPH_OS_FS_H
 
+#include <errno.h>
+#include <time.h>
+
 #include <string>
 
 #include "include/types.h"
+#include "common/Cond.h"
 
 class FS {
 public:
@@ -39,6 +43,8 @@ public:
 			      int from_fd,
 			      uint64_t from_offset, uint64_t from_len);
   virtual int zero(int fd, uint64_t offset, uint64_t length);
+
+  // -- aio --
 };
 
 #endif

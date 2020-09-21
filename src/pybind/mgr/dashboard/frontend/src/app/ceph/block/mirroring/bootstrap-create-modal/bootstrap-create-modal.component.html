@@ -1,0 +1,92 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n
+                class="modal-title">Create Bootstrap Token</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="createBootstrapForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="createBootstrapForm"
+          novalidate>
+      <div class="modal-body">
+        <p>
+          <ng-container i18n>To create a bootstrap token which can be imported
+          by a peer site cluster, provide the local site's name, select
+          which pools will have mirroring enabled, and click&nbsp;
+          <kbd>Generate</kbd>.</ng-container>
+        </p>
+
+        <div class="form-group">
+          <label class="col-form-label required"
+                 for="siteName"
+                 i18n>Site Name</label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="Name..."
+                 i18n-placeholder
+                 id="siteName"
+                 name="siteName"
+                 formControlName="siteName"
+                 autofocus>
+          <span *ngIf="createBootstrapForm.showError('siteName', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+        </div>
+
+        <div class="form-group"
+             formGroupName="pools">
+          <label class="col-form-label required"
+                 for="pools"
+                 i18n>Pools</label>
+          <div class="custom-control custom-checkbox"
+               *ngFor="let pool of pools">
+            <input type="checkbox"
+                   class="custom-control-input"
+                   id="{{ pool.name }}"
+                   name="{{ pool.name }}"
+                   formControlName="{{ pool.name }}">
+            <label class="custom-control-label"
+                   for="{{ pool.name }}">{{ pool.name }}</label>
+          </div>
+          <span *ngIf="createBootstrapForm.showError('pools', formDir, 'requirePool')"
+                class="invalid-feedback"
+                i18n>At least one pool is required.</span>
+        </div>
+
+        <cd-submit-button class="mb-4 float-right"
+                          i18n
+                          [form]="createBootstrapForm"
+                          (submitAction)="generate()">Generate</cd-submit-button>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="token">
+            <span i18n>Token</span>
+          </label>
+          <textarea class="form-control resize-vertical"
+                    placeholder="Generated token..."
+                    i18n-placeholder
+                    id="token"
+                    formControlName="token"
+                    readonly>
+          </textarea>
+        </div>
+        <button class="btn btn-primary mb-3 float-right"
+                aria-label="Copy to Clipboard"
+                i18n-aria-label
+                title="Copy to Clipboard"
+                i18n-title
+                cdCopy2ClipboardButton="token">
+          <ng-container i18n>Copy to Clipboard</ng-container>
+        </button>
+      </div>
+
+      <div class="modal-footer">
+        <cd-back-button [back]="activeModal.close"
+                        name="Close"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

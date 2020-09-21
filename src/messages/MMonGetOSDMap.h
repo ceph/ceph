@@ -15,32 +15,37 @@
 #ifndef CEPH_MMONGETOSDMAP_H
 #define CEPH_MMONGETOSDMAP_H
 
+#include <iostream>
+#include <string>
+#include <string_view>
+
 #include "msg/Message.h"
 
 #include "include/types.h"
 
 class MMonGetOSDMap : public PaxosServiceMessage {
+private:
   epoch_t full_first, full_last;
   epoch_t inc_first, inc_last;
 
 public:
   MMonGetOSDMap()
-    : PaxosServiceMessage(CEPH_MSG_MON_GET_OSDMAP, 0),
+    : PaxosServiceMessage{CEPH_MSG_MON_GET_OSDMAP, 0},
       full_first(0),
       full_last(0),
       inc_first(0),
       inc_last(0) { }
 private:
-  ~MMonGetOSDMap() {}
+  ~MMonGetOSDMap() override {}
 
 public:
   void request_full(epoch_t first, epoch_t last) {
-    assert(last >= first);
+    ceph_assert(last >= first);
     full_first = first;
     full_last = last;
   }
   void request_inc(epoch_t first, epoch_t last) {
-    assert(last >= first);
+    ceph_assert(last >= first);
     inc_first = first;
     inc_last = last;
   }
@@ -57,8 +62,8 @@ public:
     return inc_last;
   }
 
-  const char *get_type_name() const { return "mon_get_osdmap"; }
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "mon_get_osdmap"; }
+  void print(std::ostream& out) const override {
     out << "mon_get_osdmap(";
     if (full_first && full_last)
       out << "full " << full_first << "-" << full_last;
@@ -67,21 +72,26 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(full_first, payload);
-    ::encode(full_last, payload);
-    ::encode(inc_first, payload);
-    ::encode(inc_last, payload);
+    encode(full_first, payload);
+    encode(full_last, payload);
+    encode(inc_first, payload);
+    encode(inc_last, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(full_first, p);
-    ::decode(full_last, p);
-    ::decode(inc_first, p);
-    ::decode(inc_last, p);
+    decode(full_first, p);
+    decode(full_last, p);
+    decode(inc_first, p);
+    decode(inc_last, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

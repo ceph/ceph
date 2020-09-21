@@ -21,7 +21,7 @@ This creates a connection so that you can interact with the server.
 	AmazonS3Config config = new AmazonS3Config();
 	config.ServiceURL = "objects.dreamhost.com";
 
-	AmazonS3 client = Amazon.AWSClientFactory.CreateAmazonS3Client(
+	AmazonS3Client s3Client = new AmazonS3Client(
 		accessKey,
 		secretKey,
 		config
@@ -36,7 +36,7 @@ This also prints out the bucket name and creation date of each bucket.
 
 .. code-block:: csharp
 
-	ListBucketResponse response = client.ListBuckets();
+	ListBucketsResponse response = client.ListBuckets();
 	foreach (S3Bucket b in response.Buckets)
 	{
 		Console.WriteLine("{0}\t{1}", b.BucketName, b.CreationDate);
@@ -112,7 +112,7 @@ This creates a file ``hello.txt`` with the string ``"Hello World!"``
 .. code-block:: csharp
 
 	PutObjectRequest request = new PutObjectRequest();
-	request.Bucket      = "my-new-bucket";
+	request.BucketName  = "my-new-bucket";
 	request.Key         = "hello.txt";
 	request.ContentType = "text/plain";
 	request.ContentBody = "Hello World!";
@@ -127,17 +127,17 @@ This makes the object ``hello.txt`` to be publicly readable, and
 
 .. code-block:: csharp
 
-	SetACLRequest request = new SetACLRequest();
+	PutACLRequest request = new PutACLRequest();
 	request.BucketName = "my-new-bucket";
 	request.Key        = "hello.txt";
 	request.CannedACL  = S3CannedACL.PublicRead;
-	client.SetACL(request);
+	client.PutACL(request);
 
-	SetACLRequest request2 = new SetACLRequest();
+	PutACLRequest request2 = new PutACLRequest();
 	request2.BucketName = "my-new-bucket";
 	request2.Key        = "secret_plans.txt";
 	request2.CannedACL  = S3CannedACL.Private;
-	client.SetACL(request2);
+	client.PutACL(request2);
 
 
 Download an Object (to a file)
@@ -150,7 +150,7 @@ This downloads the object ``perl_poetry.pdf`` and saves it in
 
 	GetObjectRequest request = new GetObjectRequest();
 	request.BucketName = "my-new-bucket";
-	request.Key        = "perl_poetry.pdf"
+	request.Key        = "perl_poetry.pdf";
 	GetObjectResponse response = client.GetObject(request);
 	response.WriteResponseStreamToFile("C:\\Users\\larry\\Documents\\perl_poetry.pdf");
 

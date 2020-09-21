@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Ceph distributed storage system
 #
@@ -13,65 +13,54 @@
 #
 
 #
-# Return true if the working tree is after the release that made
-# make -j8 check possible
+# To just look at what this script will do, run it like this:
 #
-function can_parallel_make_check() {
-    local commit=$(git rev-parse tags/v0.88^{})
-    git rev-list HEAD | grep --quiet $commit
-}
+# $ DRY_RUN=echo ./run-make-check.sh
+#
 
-function maybe_parallel_make_check() {
-    if can_parallel_make_check ; then
-        echo -j$(get_processors)
-    fi
-}
-#
-# Return MAX(1, (number of processors / 2)) by default or NPROC
-#
-function get_processors() {
-    if test -n "$NPROC" ; then
-        echo $NPROC
-    else
-        if test $(nproc) -ge 2 ; then
-            expr $(nproc) / 2
-        else
-            echo 1
-        fi
-    fi
-}
+source src/script/run-make.sh
 
 function run() {
-    # Same logic as install-deps.sh for finding package installer
-    local install_cmd
-    test -f /etc/redhat-release && install_cmd="yum install -y"
-    type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
-    type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
-    if [ -n "$install_cmd" ]; then
-        sudo $install_cmd ccache jq
-    else
-        echo "WARNING: Don't know how to install packages" >&2
+    # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
+    $DRY_RUN ulimit -n $(ulimit -Hn)
+    if [ $(ulimit -n) -lt 1024 ];then
+        echo "***ulimit -n too small, better bigger than 1024 for test***"
+        return 1
     fi
-    sudo /sbin/modprobe rbd
 
-    if test -f ./install-deps.sh ; then
-	$DRY_RUN ./install-deps.sh || return 1
+    # increase the aio-max-nr, which is by default 65536. we could reach this
+    # limit while running seastar tests and bluestore tests.
+    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * 16))
+
+    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
+        rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+        return 1
     fi
-    $DRY_RUN ./autogen.sh || return 1
-    $DRY_RUN ./configure "$@" --disable-static --with-radosgw --with-debug --without-lttng \
-        CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
-    $DRY_RUN make -j$(get_processors) || return 1
-    $DRY_RUN make $(maybe_parallel_make_check) check || return 1
-    $DRY_RUN make dist || return 1
 }
 
 function main() {
-    if run "$@" ; then
-        echo "make check: successful run on $(git rev-parse HEAD)"
-        return 0
+    if [[ $EUID -eq 0 ]] ; then
+        echo "For best results, run this script as a normal user configured"
+        echo "with the ability to run commands as root via sudo."
+    fi
+    echo -n "Checking hostname sanity... "
+    if $DRY_RUN hostname --fqdn >/dev/null 2>&1 ; then
+        echo "OK"
     else
+        echo "NOT OK"
+        echo "Please fix 'hostname --fqdn', otherwise 'make check' will fail"
         return 1
     fi
+    FOR_MAKE_CHECK=1 prepare
+    # Init defaults after deps are installed.
+    local cmake_opts=" -DWITH_PYTHON3=3 -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
+    if [ $WITH_SEASTAR ]; then
+        cmake_opts+=" -DWITH_SEASTAR=ON"
+    fi
+    configure $cmake_opts $@
+    build tests && echo "make check: successful build on $(git rev-parse HEAD)"
+    run
 }
 
 main "$@"

@@ -1,15 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include <pthread.h>
 #include "include/buffer.h"
-#include "os/LevelDBStore.h"
+#include "kv/KeyValueDB.h"
 #include <sys/types.h>
 #include <dirent.h>
 #include <string>
 #include <vector>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
+#include <iostream>
 #include <sstream>
 #include "stdlib.h"
+#include "global/global_context.h"
+
+using namespace std;
 
 const string CONTROL_PREFIX = "CONTROL";
 const string PRIMARY_PREFIX = "PREFIX";
@@ -34,8 +37,8 @@ int verify(KeyValueDB *db) {
       for (map<int, KeyValueDB::Iterator>::iterator i = iterators.begin();
 	   i != iterators.end();
 	   ++i) {
-	assert(i->second->valid());
-	assert(i->second->key() == iterators.rbegin()->second->key());
+	ceph_assert(i->second->valid());
+	ceph_assert(i->second->key() == iterators.rbegin()->second->key());
 	bufferlist r = i->second->value();
 	bufferlist l = iterators.rbegin()->second->value();
 	i->second->next();
@@ -44,7 +47,7 @@ int verify(KeyValueDB *db) {
     for (map<int, KeyValueDB::Iterator>::iterator i = iterators.begin();
 	 i != iterators.end();
 	 ++i) {
-      assert(!i->second->valid());
+      ceph_assert(!i->second->valid());
     }
   }
   return 0;
@@ -70,7 +73,7 @@ void *write(void *_db) {
     for (int j = 0; j < NUM_COPIES; ++j) {
       t->set(prefix_gen(j), to_set);
     }
-    assert(!db->submit_transaction(t));
+    ceph_assert(!db->submit_transaction(t));
   }
   return 0;
 }
@@ -84,8 +87,8 @@ int main() {
   }
   string strpath(path);
   std::cerr << "Using path: " << strpath << std::endl;
-  LevelDBStore *store = new LevelDBStore(NULL, strpath);
-  assert(!store->create_and_open(std::cerr));
+  KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
+  ceph_assert(!store->create_and_open(std::cerr));
   db.reset(store);
 
   verify(db.get());

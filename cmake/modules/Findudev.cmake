@@ -24,29 +24,11 @@
 # UDEV_FOUND - True if udev found.
 
 find_path(UDEV_INCLUDE_DIR libudev.h)
+find_library(UDEV_LIBRARIES udev)
 
-set(UDEV_NAMES ${UDEV_NAMES} udev)
-find_library(UDEV_LIBRARY NAMES ${UDEV_NAMES})
-
-if(UDEV_INCLUDE_DIR AND UDEV_LIBRARY)
-  set(UDEV_FOUND TRUE)
-  set(UDEV_LIBRARIES ${UDEV_LIBRARY})
-else()
-  set(UDEV_FOUND FALSE)
-  set(UDEV_LIBRARIES)
-endif()
-
-if(UDEV_FOUND)
-  message(STATUS "Found libudev: ${UDEV_LIBRARY}")
-else()
-  message(STATUS "Not Found libudev: ${UDEV_LIBRARY}")
-  if(UDEV_FIND_REQUIRED)
-    message(STATUS "Looked for libudev named ${UDEV_NAMES}.")
-    message(FATAL_ERROR "Could NOT find libudev")
-  endif()
-endif()
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(udev DEFAULT_MSG UDEV_LIBRARIES UDEV_INCLUDE_DIR)
 
 mark_as_advanced(
-  UDEV_LIBRARY
-  UDEV_I
-)
+  UDEV_LIBRARIES
+  UDEV_INCLUDE_DIR)

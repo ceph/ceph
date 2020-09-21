@@ -1,13 +1,6 @@
 usr/bin/librados-config
-usr/include/rados/buffer.h
-usr/include/rados/crc32c.h
 usr/include/rados/librados.h
-usr/include/rados/librados.hpp
-usr/include/rados/page.h
 usr/include/rados/rados_types.h
-usr/include/rados/rados_types.hpp
-usr/include/rados/memory.h
-usr/lib/librados.a
-usr/lib/librados.la
 usr/lib/librados.so
+usr/lib/librados_tp.so
 usr/share/man/man8/librados-config.8

@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #ifndef _CEPH_UUID_H
 #define _CEPH_UUID_H
 
@@ -6,12 +7,17 @@
  */
 
 #include "encoding.h"
+
 #include <ostream>
+#include <random>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <boost/random/random_device.hpp>
+
+namespace ceph {
+  class Formatter;
+}
 
 struct uuid_d {
   boost::uuids::uuid uuid;
@@ -26,8 +32,8 @@ struct uuid_d {
   }
 
   void generate_random() {
-    boost::random::random_device rng("/dev/urandom");
-    boost::uuids::basic_random_generator<boost::random::random_device> gen(&rng);
+    std::random_device rng;
+    boost::uuids::basic_random_generator gen(rng);
     uuid = gen();
   }
   
@@ -44,17 +50,24 @@ struct uuid_d {
     memcpy(s, boost::uuids::to_string(uuid).c_str(), 37);
   }
 
+ std::string to_string() const {
+    return boost::uuids::to_string(uuid);
+  }
+
   char *bytes() const {
     return (char*)uuid.data;
   }
-  
-  void encode(bufferlist& bl) const {
-    ::encode_raw(uuid, bl);
+
+  void encode(ceph::buffer::list& bl) const {
+    ceph::encode_raw(uuid, bl);
   }
 
-  void decode(bufferlist::iterator& p) const {
-    ::decode_raw(uuid, p);
+  void decode(ceph::buffer::list::const_iterator& p) const {
+    ceph::decode_raw(uuid, p);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<uuid_d*>& o);
 };
 WRITE_CLASS_ENCODER(uuid_d)
 
@@ -69,6 +82,9 @@ inline bool operator==(const uuid_d& l, const uuid_d& r) {
 }
 inline bool operator!=(const uuid_d& l, const uuid_d& r) {
   return l.uuid != r.uuid;
+}
+inline bool operator<(const uuid_d& l, const uuid_d& r) {
+  return l.to_string() < r.to_string();
 }
 
 

@@ -1,0 +1,2 @@
+fs.aio-max-nr = 1048576
+@sysctl_pid_max@

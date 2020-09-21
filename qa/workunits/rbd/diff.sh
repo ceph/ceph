@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 function cleanup() {
     rbd snap purge foo || :
@@ -13,19 +14,19 @@ function cleanup() {
 cleanup
 
 rbd create foo --size 1000
-rbd bench-write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
+rbd bench --io-type write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
 
 #rbd cp foo foo.copy
 rbd create foo.copy --size 1000
 rbd export-diff foo - | rbd import-diff - foo.copy
 
 rbd snap create foo --snap=two
-rbd bench-write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
+rbd bench --io-type write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
 rbd snap create foo --snap=three
 rbd snap create foo.copy --snap=two
 
 rbd export-diff foo@two --from-snap three foo.diff && exit 1 || true  # wrong snap order
-rm foo.diff
+rm -f foo.diff
 
 rbd export-diff foo@three --from-snap two foo.diff
 rbd import-diff foo.diff foo.copy

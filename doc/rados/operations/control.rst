@@ -33,12 +33,15 @@ and major events. ::
 Execute the following to show the monitor quorum, including which monitors are
 participating and which one is the leader. ::
 
+	ceph mon stat
 	ceph quorum_status
 
 Execute the following to query the status of a single monitor, including whether
 or not it is in the quorum. ::
 
-	ceph [-m monhost] mon_status
+	ceph tell mon.[id] mon_status
+
+where the value of ``[id]`` can be determined, e.g., from ``ceph -s``.
 
 
 Authentication Subsystem
@@ -50,7 +53,7 @@ To add a keyring for an OSD, execute the following::
 
 To list the cluster's keys and their capabilities, execute the following::
 
-	ceph auth list
+	ceph auth ls
 
 
 Placement Group Subsystem
@@ -60,7 +63,7 @@ To display the statistics for all placement groups, execute the following::
 
 	ceph pg dump [--format {format}]
 
-The valid formats are ``plain`` (default) and ``json``.
+The valid formats are ``plain`` (default), ``json`` ``json-pretty``, ``xml``, and ``xml-pretty``.
 
 To display the statistics for all placement groups stuck in a specified state, 
 execute the following:: 
@@ -68,7 +71,7 @@ execute the following::
 	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
 
-``--format`` may be ``plain`` (default) or ``json``
+``--format`` may be ``plain`` (default), ``json``, ``json-pretty``, ``xml``, or ``xml-pretty``.
 
 ``--threshold`` defines how many seconds "stuck" is (default: 300)
 
@@ -96,24 +99,23 @@ Query OSD subsystem status. ::
 	ceph osd stat
 
 Write a copy of the most recent OSD map to a file. See
-`osdmaptool`_. ::
+:ref:`osdmaptool <osdmaptool>`. ::
 
 	ceph osd getmap -o file
-
-.. _osdmaptool: ../../man/8/osdmaptool
 
 Write a copy of the crush map from the most recent OSD map to
 file. ::
 
 	ceph osd getcrushmap -o file
 
-The foregoing functionally equivalent to ::
+The foregoing is functionally equivalent to ::
 
 	ceph osd getmap -o /tmp/osdmap
 	osdmaptool /tmp/osdmap --export-crush file
 
-Dump the OSD map. Valid formats for ``-f`` are ``plain`` and ``json``. If no
-``--format`` option is given, the OSD map is dumped as plain text. ::
+Dump the OSD map. Valid formats for ``-f`` are ``plain``, ``json``, ``json-pretty``,
+``xml``, and ``xml-pretty``. If no ``--format`` option is given, the OSD map is 
+dumped as plain text. ::
 
 	ceph osd dump [--format {format}]
 
@@ -141,15 +143,11 @@ Remove an existing bucket from the CRUSH map. ::
 
 Move an existing bucket from one position in the hierarchy to another.  ::
 
-   ceph osd crush move {id} {loc1} [{loc2} ...]
+	ceph osd crush move {id} {loc1} [{loc2} ...]
 
 Set the weight of the item given by ``{name}`` to ``{weight}``. ::
 
 	ceph osd crush reweight {name} {weight}
-
-Create a cluster snapshot. ::
-
-	ceph osd cluster_snap {name}
 
 Mark an OSD as lost. This may result in permanent data loss. Use with caution. ::
 
@@ -189,10 +187,6 @@ Mark ``{osd-num}`` in the distribution (i.e. allocated data). ::
 
 	ceph osd in {osd-num}
 
-List classes that are loaded in the ceph cluster. ::
-
-	ceph class list
-
 Set or clear the pause flags in the OSD map. If set, no IO requests
 will be sent to any OSD. Clearing the flags via unpause results in
 resending pending requests. ::
@@ -200,38 +194,61 @@ resending pending requests. ::
 	ceph osd pause
 	ceph osd unpause
 
-Set the weight of ``{osd-num}`` to ``{weight}``. Two OSDs with the
+Set the override weight (reweight) of ``{osd-num}`` to ``{weight}``. Two OSDs with the
 same weight will receive roughly the same number of I/O requests and
 store approximately the same amount of data. ``ceph osd reweight``
 sets an override weight on the OSD. This value is in the range 0 to 1,
 and forces CRUSH to re-place (1-weight) of the data that would
-otherwise live on this drive. It does not change the weights assigned
+otherwise live on this drive. It does not change weights assigned
 to the buckets above the OSD in the crush map, and is a corrective
-measure in case the normal CRUSH distribution isn't working out quite
+measure in case the normal CRUSH distribution is not working out quite
 right. For instance, if one of your OSDs is at 90% and the others are
-at 50%, you could reduce this weight to try and compensate for it. ::
+at 50%, you could reduce this weight to compensate. ::
 
 	ceph osd reweight {osd-num} {weight}
 
-Reweights all the OSDs by reducing the weight of OSDs which are
-heavily overused. By default it will adjust the weights downward on
-OSDs which have 120% of the average utilization, but if you include
-threshold it will use that percentage instead. ::
+Balance OSD fullness by reducing the override weight of OSDs which are
+overly utilized.  Note that these override aka ``reweight`` values
+default to 1.00000 and are relative only to each other; they not absolute.
+It is crucial to distinguish them from CRUSH weights, which reflect the
+absolute capacity of a bucket in TiB.  By default this command adjusts
+override weight on OSDs which have + or - 20% of the average utilization,
+but if you include a ``threshold`` that percentage will be used instead. ::
 
-	ceph osd reweight-by-utilization [threshold]
+	ceph osd reweight-by-utilization [threshold [max_change [max_osds]]] [--no-increasing]
 
-Adds/removes the address to/from the blacklist. When adding an address,
-you can specify how long it should be blacklisted in seconds; otherwise,
-it will default to 1 hour. A blacklisted address is prevented from
-connecting to any OSD. Blacklisting is most often used to prevent a
+To limit the step by which any OSD's reweight will be changed, specify
+``max_change`` which defaults to 0.05.  To limit the number of OSDs that will
+be adjusted, specify ``max_osds`` as well; the default is 4.  Increasing these
+parameters can speed leveling of OSD utilization, at the potential cost of
+greater impact on client operations due to more data moving at once.
+
+To determine which and how many PGs and OSDs will be affected by a given invocation
+you can test before executing. ::
+
+	ceph osd test-reweight-by-utilization [threshold [max_change max_osds]] [--no-increasing]
+
+Adding ``--no-increasing`` to either command prevents increasing any
+override weights that are currently < 1.00000.  This can be useful when
+you are balancing in a hurry to remedy ``full`` or ``nearful`` OSDs or
+when some OSDs are being evacuated or slowly brought into service.
+
+Deployments utilizing Nautilus (or later revisions of Luminous and Mimic)
+that have no pre-Luminous cients may instead wish to instead enable the
+`balancer`` module for ``ceph-mgr``.
+
+Add/remove an IP address to/from the blocklist. When adding an address,
+you can specify how long it should be blocklisted in seconds; otherwise,
+it will default to 1 hour. A blocklisted address is prevented from
+connecting to any OSD. Blocklisting is most often used to prevent a
 lagging metadata server from making bad changes to data on the OSDs.
 
 These commands are mostly only useful for failure testing, as
-blacklists are normally maintained automatically and shouldn't need
+blocklists are normally maintained automatically and shouldn't need
 manual intervention. ::
 
-	ceph osd blacklist add ADDRESS[:source_port] [TIME]
-	ceph osd blacklist rm ADDRESS[:source_port]
+	ceph osd blocklist add ADDRESS[:source_port] [TIME]
+	ceph osd blocklist rm ADDRESS[:source_port]
 
 Creates/deletes a snapshot of a pool. ::
 
@@ -240,7 +257,7 @@ Creates/deletes a snapshot of a pool. ::
 
 Creates/deletes/renames a storage pool. ::
 
-	ceph osd pool create {pool-name} pg_num [pgp_num]
+	ceph osd pool create {pool-name} [pg_num [pgp_num]]
 	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 	ceph osd pool rename {old-name} {new-name}
 
@@ -251,11 +268,9 @@ Changes a pool setting. ::
 Valid fields are:
 
 	* ``size``: Sets the number of copies of data in the pool.
-	* ``crash_replay_interval``: The number of seconds to allow
-	  clients to replay acknowledged but uncommited requests.
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number when calculating pg placement.
-	* ``crush_ruleset``: rule number for mapping placement.
+	* ``crush_rule``: rule number for mapping placement.
 
 Get the value of a pool setting. ::
 
@@ -265,8 +280,6 @@ Valid fields are:
 
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number of placement groups when calculating placement.
-	* ``lpg_num``: The number of local placement groups.
-	* ``lpgp_num``: The number used for placing the local placement groups.
 
 
 Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. ::
@@ -277,32 +290,39 @@ Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
 
 	ceph osd repair N
 
-Runs a simple throughput benchmark against OSD.N, writing ``NUMBER_OF_OBJECTS``
+Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_DATA_BYTES``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
 writes 1 GB in total in 4-MB increments.
 The benchmark is non-destructive and will not overwrite existing live
 OSD data, but might temporarily affect the performance of clients
 concurrently accessing the OSD. ::
 
-	ceph tell osd.N bench [NUMER_OF_OBJECTS] [BYTES_PER_WRITE]
+	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
+To clear an OSD's caches between benchmark runs, use the 'cache drop' command ::
+
+	ceph tell osd.N cache drop
+
+To get the cache statistics of an OSD, use the 'cache status' command ::
+
+	ceph tell osd.N cache status
 
 MDS Subsystem
 =============
 
 Change configuration parameters on a running mds. ::
 
-	ceph tell mds.{mds-id} injectargs --{switch} {value} [--{switch} {value}]
+	ceph tell mds.{mds-id} config set {setting} {value}
 
 Example::
 
-	ceph tell mds.0 injectargs --debug_ms 1 --debug_mds 10
+	ceph tell mds.0 config set debug_ms 1
 
 Enables debug messages. ::
 
 	ceph mds stat
 
-Displays the status of all metadata servers.
+Displays the status of all metadata servers. ::
 
 	ceph mds fail 0
 
@@ -317,89 +337,142 @@ Mon Subsystem
 Show monitor stats::
 
 	ceph mon stat
-	
-	2011-12-14 10:40:59.044395 mon {- [mon,stat]
-	2011-12-14 10:40:59.057111 mon.1 -} 'e3: 5 mons at {a=10.1.2.3:6789/0,b=10.1.2.4:6789/0,c=10.1.2.5:6789/0,d=10.1.2.6:6789/0,e=10.1.2.7:6789/0}, election epoch 16, quorum 0,1,2,3' (0)
+
+	e2: 3 mons at {a=127.0.0.1:40000/0,b=127.0.0.1:40001/0,c=127.0.0.1:40002/0}, election epoch 6, quorum 0,1,2 a,b,c
+
 
 The ``quorum`` list at the end lists monitor nodes that are part of the current quorum.
 
 This is also available more directly::
 
-	$ ./ceph quorum_status
+	ceph quorum_status -f json-pretty
 	
-	2011-12-14 10:44:20.417705 mon {- [quorum_status]
-	2011-12-14 10:44:20.431890 mon.0 -} 
-
 .. code-block:: javascript	
-	
-	'{ "election_epoch": 10,	
-	  "quorum": [
-	        0,
-	        1,
-	        2],
-	  "monmap": { "epoch": 1,
-	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
-	      "modified": "2011-12-12 13:28:27.505520",
-	      "created": "2011-12-12 13:28:27.505520",
-	      "mons": [
-	            { "rank": 0,
-	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
-	            { "rank": 1,
-	              "name": "b",
-	              "addr": "127.0.0.1:6790\/0"},
-	            { "rank": 2,
-	              "name": "c",
-	              "addr": "127.0.0.1:6791\/0"}]}}' (0)
+
+	{
+	    "election_epoch": 6,
+	    "quorum": [
+		0,
+		1,
+		2
+	    ],
+	    "quorum_names": [
+		"a",
+		"b",
+		"c"
+	    ],
+	    "quorum_leader_name": "a",
+	    "monmap": {
+		"epoch": 2,
+		"fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
+		"modified": "2016-12-26 14:42:09.288066",
+		"created": "2016-12-26 14:42:03.573585",
+		"features": {
+		    "persistent": [
+			"kraken"
+		    ],
+		    "optional": []
+		},
+		"mons": [
+		    {
+			"rank": 0,
+			"name": "a",
+			"addr": "127.0.0.1:40000\/0",
+			"public_addr": "127.0.0.1:40000\/0"
+		    },
+		    {
+			"rank": 1,
+			"name": "b",
+			"addr": "127.0.0.1:40001\/0",
+			"public_addr": "127.0.0.1:40001\/0"
+		    },
+		    {
+			"rank": 2,
+			"name": "c",
+			"addr": "127.0.0.1:40002\/0",
+			"public_addr": "127.0.0.1:40002\/0"
+		    }
+		]
+	    }
+	}
+	  
 
 The above will block until a quorum is reached.
 
-For a status of just the monitor you connect to (use ``-m HOST:PORT``
-to select)::
+For a status of just a single monitor::
 
-	ceph mon_status
+	ceph tell mon.[name] mon_status
 	
+where the value of ``[name]`` can be taken from ``ceph quorum_status``. Sample
+output::
 	
-	2011-12-14 10:45:30.644414 mon {- [mon_status]
-	2011-12-14 10:45:30.644632 mon.0 -} 
-
-.. code-block:: javascript
-	
-	'{ "name": "a",
-	  "rank": 0,
-	  "state": "leader",
-	  "election_epoch": 10,
-	  "quorum": [
-	        0,
-	        1,
-	        2],
-	  "outside_quorum": [],
-	  "monmap": { "epoch": 1,
-	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
-	      "modified": "2011-12-12 13:28:27.505520",
-	      "created": "2011-12-12 13:28:27.505520",
-	      "mons": [
-	            { "rank": 0,
-	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
-	            { "rank": 1,
-	              "name": "b",
-	              "addr": "127.0.0.1:6790\/0"},
-	            { "rank": 2,
-	              "name": "c",
-	              "addr": "127.0.0.1:6791\/0"}]}}' (0)
+	{
+	    "name": "b",
+	    "rank": 1,
+	    "state": "peon",
+	    "election_epoch": 6,
+	    "quorum": [
+		0,
+		1,
+		2
+	    ],
+	    "features": {
+		"required_con": "9025616074522624",
+		"required_mon": [
+		    "kraken"
+		],
+		"quorum_con": "1152921504336314367",
+		"quorum_mon": [
+		    "kraken"
+		]
+	    },
+	    "outside_quorum": [],
+	    "extra_probe_peers": [],
+	    "sync_provider": [],
+	    "monmap": {
+		"epoch": 2,
+		"fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
+		"modified": "2016-12-26 14:42:09.288066",
+		"created": "2016-12-26 14:42:03.573585",
+		"features": {
+		    "persistent": [
+			"kraken"
+		    ],
+		    "optional": []
+		},
+		"mons": [
+		    {
+			"rank": 0,
+			"name": "a",
+			"addr": "127.0.0.1:40000\/0",
+			"public_addr": "127.0.0.1:40000\/0"
+		    },
+		    {
+			"rank": 1,
+			"name": "b",
+			"addr": "127.0.0.1:40001\/0",
+			"public_addr": "127.0.0.1:40001\/0"
+		    },
+		    {
+			"rank": 2,
+			"name": "c",
+			"addr": "127.0.0.1:40002\/0",
+			"public_addr": "127.0.0.1:40002\/0"
+		    }
+		]
+	    }
+	}
 
 A dump of the monitor state::
 
 	ceph mon dump
 
-	2011-12-14 10:43:08.015333 mon {- [mon,dump]
-	2011-12-14 10:43:08.015567 mon.0 -} 'dumped monmap epoch 1' (0)
-	epoch 1
-	fsid 444b489c-4f16-4b75-83f0-cb8097468898
-	last_changed 2011-12-12 13:28:27.505520
-	created 2011-12-12 13:28:27.505520
-	0: 127.0.0.1:6789/0 mon.a
-	1: 127.0.0.1:6790/0 mon.b
-	2: 127.0.0.1:6791/0 mon.c
+	dumped monmap epoch 2
+	epoch 2
+	fsid ba807e74-b64f-4b72-b43f-597dfe60ddbc
+	last_changed 2016-12-26 14:42:09.288066
+	created 2016-12-26 14:42:03.573585
+	0: 127.0.0.1:40000/0 mon.a
+	1: 127.0.0.1:40001/0 mon.b
+	2: 127.0.0.1:40002/0 mon.c
 

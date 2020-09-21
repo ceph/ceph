@@ -15,32 +15,45 @@
 #ifndef CEPH_MDSOPENINO_H
 #define CEPH_MDSOPENINO_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-struct MMDSOpenIno : public Message {
+class MMDSOpenIno : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
+public:
   inodeno_t ino;
-  vector<inode_backpointer_t> ancestors;
+  std::vector<inode_backpointer_t> ancestors;
 
-  MMDSOpenIno() : Message(MSG_MDS_OPENINO) {}
-  MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>& a) :
-    Message(MSG_MDS_OPENINO), ino(i), ancestors(a) {
+protected:
+  MMDSOpenIno() : MMDSOp{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSOpenIno(ceph_tid_t t, inodeno_t i, std::vector<inode_backpointer_t>* pa) :
+    MMDSOp{MSG_MDS_OPENINO, HEAD_VERSION, COMPAT_VERSION}, ino(i) {
     header.tid = t;
+    if (pa)
+      ancestors = *pa;
   }
+  ~MMDSOpenIno() override {}
 
-  const char *get_type_name() const { return "openino"; }
-  void print(ostream &out) const {
+public:
+  std::string_view get_type_name() const override { return "openino"; }
+  void print(std::ostream &out) const override {
     out << "openino(" << header.tid << " " << ino << " " << ancestors << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(ino, payload);
-    ::encode(ancestors, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(ino, payload);
+    encode(ancestors, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(ancestors, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(ancestors, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

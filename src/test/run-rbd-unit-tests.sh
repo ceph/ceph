@@ -1,13 +1,23 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 # this should be run from the src directory in the ceph.git
 
-CEPH_SRC=$(pwd)
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$CEPH_SRC/.libs"
-PATH="$CEPH_SRC:$PATH"
+source $(dirname $0)/detect-build-env-vars.sh
+PATH="$CEPH_BIN:$PATH"
 
-unittest_librbd
-for i in 0 1 5 29 45
+if [ $# = 0 ]; then
+  # mimic the old behaviour
+  TESTS='0 1 61 109 127'
+  unset RBD_FEATURES; unittest_librbd
+elif [ $# = 1 -a "${1}" = N ] ; then
+  # new style no feature request
+  unset RBD_FEATURES; unittest_librbd
+else 
+  TESTS="$*"
+fi
+
+for i in ${TESTS}
 do
     RBD_FEATURES=$i unittest_librbd
 done

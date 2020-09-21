@@ -1,5 +1,5 @@
-CephFS Quotas
-=============
+Quotas
+======
 
 CephFS allows quotas to be set on any directory in the system.  The
 quota can restrict the number of *bytes* or the number of *files*
@@ -23,20 +23,26 @@ Limitations
    of data.  Generally speaking writers will be stopped within 10s of
    seconds of crossing the configured limit.
 
-#. *Quotas are not yet implemented in the kernel client.* Quotas are
-   supported by the userspace client (libcephfs, ceph-fuse) but are
-   not yet implemented in the Linux kernel client.
+#. *Quotas are implemented in the kernel client 4.17 and higher.*
+   Quotas are supported by the userspace client (libcephfs, ceph-fuse).
+   Linux kernel clients >= 4.17 support CephFS quotas but only on
+   mimic+ clusters.  Kernel clients (even recent versions) will fail
+   to handle quotas on older clusters, even if they may be able to set
+   the quotas extended attributes.
 
 #. *Quotas must be configured carefully when used with path-based
    mount restrictions.* The client needs to have access to the
    directory inode on which quotas are configured in order to enforce
    them.  If the client has restricted access to a specific path
    (e.g., ``/home/user``) based on the MDS capability, and a quota is
-   configured on an ancestor directory they do not have access too
+   configured on an ancestor directory they do not have access to
    (e.g., ``/home``), the client will not enforce it.  When using
    path-based access restrictions be sure to configure the quota on
    the directory the client is restricted too (e.g., ``/home/user``)
    or something nested beneath it.
+
+#. *Snapshot file data which has since been deleted or changed does not count
+   towards the quota.* See also: http://tracker.ceph.com/issues/24284
 
 Configuration
 -------------

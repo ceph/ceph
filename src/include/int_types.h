@@ -3,62 +3,11 @@
 
 #include "acconfig.h"
 
-/*
- * Get 64b integers either from inttypes.h or glib.h
- */
-#ifdef HAVE_INTTYPES_H
-#  include <inttypes.h>
-//#else
-//#  ifdef HAVE_GLIB
-//#    include <glib.h>
-//#  endif
-#endif
+#include <inttypes.h>
 
-/*
- * C99 says inttypes.h includes stdint.h, but that's not true on all
- * systems. If it's there, include it always - just in case.
- */
-#ifdef HAVE_STDINT_H
-#include <stdint.h>
-#endif
-
-/*
- * Include types.h after stdint.h to accomodate for older distributions
- *
- */
 #ifdef HAVE_LINUX_TYPES_H
 #include <linux/types.h>
-#endif
-
-/*
- * Emergency replacements for PRI*64 modifiers. Some systems have
- * an inttypes.h that doesn't define all the PRI[doxu]64 macros.
- */
-#if !defined(PRIu64)
-#  if defined(HAVE_INTTYPES_H) || defined(HAVE_GLIB)
-/* If we have inttypes or glib, assume we have 64-bit long long int */
-#    define PRIu64 "llu"
-#    define PRIi64 "lli"
-#    define PRIx64 "llx"
-#    define PRIX64 "llX"
-#    define PRIo64 "llo"
-#    define PRId64 "lld"
-#  else
-/* Assume that we don't have long long, so use long int modifiers */
-#    define PRIu64 "lu"
-#    define PRIi64 "li"
-#    define PRIx64 "lx"
-#    define PRIX64 "lX"
-#    define PRIo64 "lo"
-#    define PRId64 "ld"
-#  endif
-#endif
-
-#ifdef HAVE_SYS_TYPES_H
-#include <sys/types.h>
-#endif
-
-#ifndef HAVE_LINUX_TYPES_H
+#else
 #ifndef HAVE___U8
 typedef uint8_t __u8;
 #endif
@@ -92,13 +41,16 @@ typedef int64_t __s64;
 #endif
 #endif /* LINUX_TYPES_H */
 
-#define __bitwise__
+#ifndef BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
+#define BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
+#endif
 
-typedef __u16 __bitwise__ __le16;
-typedef __u16 __bitwise__ __be16;
-typedef __u32 __bitwise__ __le32;
-typedef __u32 __bitwise__ __be32;
-typedef __u64 __bitwise__ __le64;
-typedef __u64 __bitwise__ __be64;
+#ifndef BOOST_MPL_LIMIT_VECTOR_SIZE
+#define BOOST_MPL_LIMIT_VECTOR_SIZE 30 // or whatever you need
+#endif
+
+#ifndef BOOST_MPL_LIMIT_MAP_SIZE
+#define BOOST_MPL_LIMIT_MAP_SIZE 30 // or whatever you need
+#endif
 
 #endif

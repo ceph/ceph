@@ -1,0 +1,259 @@
+releases:
+
+ <0.48  pre-argonaut, dev
+ 0.48   argonaut
+ 0.56   bobtail
+ 0.61   cuttlefish
+ 0.67   dumpling
+ 0.72   emperor
+ 0.80   firefly
+ 0.87   giant
+ 0.94   hammer
+ 9.1.0  infernalis rc
+ 9.2.0  infernalis
+ 10.2.0 jewel
+ 11.2.0 kraken
+ 12.2.0 luminous
+ 13.2.0 mimic
+ 14.2.0 nautilus (to-be)
+
+osdmap:
+
+type / v / cv / ev / commit / version / date
+
+map / 1 / - / - / 017788a6ecb570038632de31904dd2e1314dc7b7 / 0.11 / 2009
+inc / 1 / - / - /
+      * initial
+map / 2 / - / - / 020350e19a5dc03cd6cedd7494e434295580615f / 0.13 / 2009
+inc / 2 / - / - /
+      * pg_temp
+map / 3 / - / - / 1ebcebf6fff056a0c0bdf82dde69356e271be27e / 0.19 / 2009
+inc / 3 / - / - /
+      * heartbeat_addr
+map / 4 / - / - / 3ced5e7de243edeccfd20a90ec2034206c920795 / 0.19 / 2010
+inc / 4 / - / - /
+      * pools removed from map
+map / 5 / - / 5 / c4892bed6f49df396df3cbf9ed561c7315bd2442 / 0.20 / 2010
+inc / 5 / - / 5 /
+      * pool names moved to first part of encoding
+        * adds CEPH_OSDMAP_INC_VERSION_EXT (for extended part of map)
+        * adds CEPH_OSDMAP_VERSION_EXT (for extended part of map)
+        * adds 'ev' (extended version) during encode() and decode
+map / 5 / - / 5 / bc9cb9311f1b946898b5256eab500856fccf5c83 / 0.22 / 2010
+inc / 5 / - / 6 /
+      * separate up client/osd
+        * increments CEPH_OSDMAP_INC_VERSION_EXT to 6
+        * CEPH_OSDMAP_INC_VERSION stays at 5
+map / 5 / - / 6 / 7f70112052c7fc3ba46f9e475fa575d85e8b16b2 / 0.22 / 2010
+inc / 5 / - / 6 /
+      * add osd_cluster_addr to full map
+        * increments CEPH_OSDMAP_VERSION_EXT to 6
+        * CEPH_OSDMAP_VERSION stays at 5
+map / 5 / - / 7 / 2ced4e24aef64f2bc7d55b73abb888c124512eac / 0.28 / 2011
+inc / 5 / - / 7 /
+      * add cluster_snapshot field
+        * increments CEPH_OSDMAP_VERSION_EXT to 7
+        * increments CEPH_OSDMAP_INC_VERSION_EXT to 7
+        * CEPH_OSDMAP_INC_VERSION stays at 5
+        * CEPH_OSDMAP_VERSION stays at 5
+map / 6 / - / 7 / d1ce410842ca51fad3aa100a52815a39e5fe6af6 / 0.35 / 2011
+inc / 6 / - / 7 /
+      * encode/decode old + new versions
+        * adds encode_client_old() (basically transitioning from uint32 to
+          uint64)
+        * bumps osdmap version to 6, old clients stay at 5
+        * starts using in-function versions (i.e., _u16 v = 6)
+map / 6 / - / 7 / b297d1edecaf31a48cff6c37df2ee266e51cdec1 / 0.38 / 2011
+inc / 6 / - / 7 /
+      * make encoding conditional based on features
+        * essentially checks whether features & CEPH_FEATURE_PGID64 and opts
+          to either use encode_client_old() or encode()
+map / 6 / - / 7 / 0f0c59478894c9ca7fa04fc32e854648192a9fae / 0.38 / 2011
+inc / 6 / - / 7 /
+      * move stuff from osdmap.h to osdmap.cc
+map / 6 / 8 / ca4311e5e39cec8fad85fad3e67eea968707e9eb / 0.47 / 2012
+inc / 6 / 8 /
+      * store uuid per osd
+        * bumps osdmap::incremental extended version to 8; in function
+        * bumps osdmap's extended version to 8; in function
+map / 6 / - / 8 / 5125daa6d78e173a8dbc75723a8fdcd279a44bcd / 0.47 / 2012
+inc / 6 / - / 8 /
+      * drop defines
+        * drops defines for CEPH_OSDMAP_*_VERSION from rados.h
+map / 6 / 9 / e9f051ef3c49a080b24d7811a16aefb64beacbbd / 0.53 / 2012
+inc / 6 / 9 /
+      * add osd_xinfo_t
+        * osdmap::incremental ext version bumped to 9
+        * osdmap's ext version bumped to 9
+        * because we're adding osd_xinfo_t to the map
+map / 6 / - / 10 / 1fee4ccd5277b52292e255daf458330eef5f0255 / 0.64 / 2013
+inc / 6 / - / 10 /
+      * encode front hb addr
+        * osdmap::incremental ext version bumped to 10
+        * osdmap's ext versiont bumped to 10
+        * because we're adding osd_addrs->hb_front_addr to map
+
+// below we have the change to ENCODE_START() for osdmap and others
+// this means client-usable data and extended osd data get to have their
+// own ENCODE_START()'s, hence their versions start at 1 again.
+
+map / 7 / 1 / 1 / 3d7c69fb0986337dc72e466dc39d93e5ab406062 / 0.77 / 2014
+inc / 7 / 1 / 1 / b55c45e85dbd5d2513a4c56b3b74dcafd03f20b1 / 0.77 / 2014
+      * introduces ENCODE_START() approach to osdmap, and the 'features'
+        argument we currently see in ::encode() functions
+      * same, but for osdmap::incremental
+map / 7 / 1 / 1 / b9208b47745fdd53d36b682bebfc01e913347092 / 0.77 / 2014
+inc / 7 / 1 / 2 /
+      * include features argument in incremental.
+map / 7 / 2 / 1 / cee914290c5540eb1fb9d70faac70a581381c29b / 0.78 / 2014
+inc / 7 / 2 / 2 /
+      * add osd_primary_affinity
+map / 7 / 3 / 1 / c4f8f265955d54f33c79cde02c1ab2fe69ab1ab0 / 0.78 / 2014
+inc / 7 / 3 / 2 /
+      * add new/old erasure code profiles
+map / 8 / 3 / 1 / 3dcf5b9636bb9e0cd6484d18f151b457e1a0c328 / 0.91 / 2014
+inc / 8 / 3 / 2 /
+      * encode crc
+map / 8 / 3 / 1 / 04679c5451e353c966f6ed00b33fa97be8072a79 / 9.1.0 / 2015
+inc / 8 / 3 / 2 /
+      * simply ensures encode_features are filled to CEPH_FEATURE_PGID64 when
+        decoding an incremental if struct_v >= 6; else keeps it at zero.
+      * otherwise, if we get an incremental from hammer (which has
+        struct_v = 6) we would be decoding it as if it were a map from before
+        CEPH_FEATURES_PGID64 (which was introduced in 0.35, pre-argonaut)
+map / 8 / 3 / 2 / 5c6b9d9dcd0a225e3a2b154c20a623868c269346 / 12.0.1 / 2017
+inc / 8 / 3 / 3 /
+      * add (near)full_ratio
+        * used to live in pgmap, moving to osdmap for luminous
+      * conditional on SERVER_LUMINOUS feature being present
+        * osdmap::incremental::encode(): conditional on ev >= 3
+        * osdmap::incremental::decode(): conditional on ev >= 3, else -1
+        * osdmap::encode(): conditional on ev >= 2
+        * osdmap::decode(): conditional on ev >= 0, else 0
+map / 8 / 4 / 2 / 27d6f4373bafa24450f6dbb4e4252c2d9c2c1448 / 12.0.2 / 2017
+inc / 8 / 4 / 3 /
+      * add pg_remap and pg_remap_items
+        * first forces a pg to map to a particular value; second replaces
+          specific osds with specific other osds in crush mapping.
+      * inc conditional on SERVER_LUMINOUS feature being present
+        * osdmap::incremental::encode(): conditional on cv >= 4
+        * osdmap::incremental::decode(): conditional on cv >= 4
+      * map conditional on OSDMAP_REMAP feature being present
+        * osdmap::encode(): if not feature, cv = 3; encode on cv >= 4
+        * osdmap::decode(): conditional on cv >= 4
+map / 8 / 4 / 3 / 27d6f4373bafa24450f6dbb4e4252c2d9c2c1448 / 12.0.2 / 2017
+inc / 8 / 4 / 4 /
+      * handle backfillfull_ratio like nearfull and full
+      * inc:
+        * osdmap::incremental::encode(): conditional on ev >= 3
+        * osdmap::incremental::decode(): conditional on ev >= 4, else -1
+      * map:
+        * osdmap::encode(): conditional on ev >= 2
+        * osdmap::decode(): conditional on ev >= 3, else 0
+map / 8 / 4 / 3 / a1c66468232002c9f36033226f5db0a5751e8d18 / 12.0.3 / 2017
+inc / 8 / 4 / 4 /
+      * add require_min_compat_client field
+      * inc:
+        * osdmap::incremental::encode() conditional on ev >= 4
+        * osdmap::incremental::decode() conditional on ev >= 4
+      map:
+        * osdmap::encode() conditional on ev >= 3
+        * osdmap::decode() conditional on ev >= 3
+map / 8 / 4 / 4 / 4a09e9431de3084b1ca98af11b28f822fde4ffbe / 12.0.3 / 2017
+inc / 8 / 4 / 5 /
+      * bumps encoding version for require_min_compat_client
+          * otherwise osdmap::decode() would throw exception when decoding
+            old maps
+      * inc:
+        * osdmap::incremental::encode() no conditional on ev >= 3
+        * osdmap::incremental::decode() conditional on ev >= 5
+      * map:
+      * osdmap::encode() conditional on ev >= 2
+      * osdmap::decode() conditional on ev >= 4
+map / 8 / 4 / 5 / 3d4c4d9d9da07e1456331c43acc998d2008ca8ea / 12.1.0 / 2017
+inc / 8 / 4 / 6 /
+      * add require_osd_release numeric field
+      * new_require_min_compat_client:
+        * osdmap::incremental::encode() conditional on ev >= 5
+        * osdmap::encode() conditional on ev >= 4
+      * require_osd_release:
+        * osdmap::incremental::encode() conditional on ev >= 6
+        * osdmap::incremental::decode() conditional on ev >= 6 (else, -1)
+        * osdmap::encode() conditional on ev >= 5
+        * osdmap::decode() conditional on ev >= 5 (else, -1)
+map / 8 / 4 / 5 / f22997e24bda4e6476e15d5d4ad9737861f9741f / 12.1.0 / 2017
+inc / 8 / 4 / 6 /
+        * switch (require_)min_compat_client to integers instead of strings
+        * osdmap::incremental::encode() conditional on ev >= 6
+        * osdmap::incremental::decode():
+          * if ev == 5, decode string and translate to release number
+          * if ev >= 6, decode integer
+        * osdmap::encode() conditional on ev >= 4
+        * osdmap::decode():
+          * if ev == 4, decode string and translate to release number
+          * if ev >= 5, decode integer
+map / 8 / 4 / 6 / a8fb39b57884d96201fa502b17bc9395ec38c1b3 / 12.1.0 / 2017
+inc / 8 / 5 / 6 /
+        * make incremental's `new_state` 32 bits instead of 8 bits
+        * implies forcing 8 bits on
+          * osdmap::incremental::encode_client_old()
+          * osdmap::incremental::encode_classic()
+          * osdmap::incremental::decode_classic()
+        * osdmap::incremental::encode() conditional on cv >= 5, else force 8b.
+        * osdmap::incremental::decode() conditional on cv >= 5, else force 8b.
+map / 8 / 5 / 6 / 3c1e58215bbb98f71aae30904f9010a57a58da81 / 12.1.0 / 2017
+inc / 8 / 5 / 6 /
+        * same as above
+map / 8 / 6 / 6 / 48158ec579b708772fae82daaa6cb5dcaf5ac5dd / 12.1.0 / 2017
+inc / 8 / 5 / 6 /
+        * add crush_version
+        * osdmap::encode() conditional on cv >= 6
+        * osdmap::decode() conditional on cv >= 6
+map / 8 / 7 / 6 / 553048fbf97af999783deb7e992c8ecfa5e55500 / 13.0.2 / 2017
+inc / 8 / 6 / 6 /
+        * track newly removed and purged snaps in each epoch
+          * new_removed_snaps
+          * new_purged_snaps
+        * osdmap::encode() conditional on cv >= 7
+          * if SERVER_MIMIC not in features, cv = 6
+        * osdmap::decode() conditional cv >= 7
+map / 8 / 8 / 6 / f99c2a9fec65ad3ce275ef24bd167ee03275d3d7 / 14.0.1 / 2018
+inc / 8 / 7 / 6 /
+        * fix pre-addrvec compat
+        * osdmap::encode() conditional on cv >= 8, else encode client addrs
+          one by one in a loop.
+        * osdmap::decode() just bumps version (?)
+map / 8 / 8 / 7 / 9fb1e521c7c75c124b0dbf193e8b65ff1b5f461e / 14.0.1 / 2018
+inc / 8 / 7 / 7 /
+        * make cluster addrs into addrvecs too
+          * this will allow single-step upgrade from msgr1 to msgr2
+map / 8 / 9 / 7 / d414f0b43a69f3c2db8e454d795be881496237c6 / 14.0.1 / 2018
+inc / 8 / 8 / 7 /
+        * store last_up_change and last_in_change
+        * osdmap::encode() conditional on cv >= 9
+        * osdmap::decode() conditional on cv >= 9
+
+
+
+osd_info_t:
+v / commit / version / date / reason
+
+1 / e574c84a6a0c5a5070dc72d5f5d3d17914ef824a / 0.19 / 2010 / add struct_v
+
+osd_xinfo_t:
+v / commit / version / date
+
+1 / e9f051ef3c49a080b24d7811a16aefb64beacbbd / 0.53 / 2012
+      * add osd_xinfo_t
+2 / 31743d50a109a463d664ec9cf764d5405db507bd / 0.75 / 2013
+      * add features bit mask to osd_xinfo_t
+3 / 87722a42c286d4d12190b86b6d06d388e2953ba0 / 0.82 / 2014
+      * remember osd weight when auto-marking osds out
+
+rados.h:
+v / commit / version / date / reason
+
+- / 147c6f51e34a875ab65624df04baa8ef89296ddd / 0.19 / 2010 / move versions
+  3 / CEPH_OSDMAP_INC_VERSION
+  3 / CEPH_OSDMAP_VERSION
+  2 / CEPH_PG_POOL_VERSION

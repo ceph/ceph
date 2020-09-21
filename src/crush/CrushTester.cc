@@ -1,14 +1,30 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <algorithm>
+#include <cstdlib>
+#include <iostream>
+
+#include <boost/lexical_cast.hpp>
+#include <boost/icl/interval_map.hpp>
+#include <boost/algorithm/string/join.hpp>
+
+#include "common/SubProcess.h"
+#include "common/fork_function.h"
+
 #include "include/stringify.h"
 #include "CrushTester.h"
 #include "CrushTreeDumper.h"
+#include "include/ceph_features.h"
 
-#include <algorithm>
-#include <stdlib.h>
-#include <boost/lexical_cast.hpp>
-#include <common/SubProcess.h>
+
+using std::cerr;
+using std::cout;
+using std::map;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::vector;
 
 void CrushTester::set_device_weight(int dev, float f)
 {
@@ -66,7 +82,7 @@ int CrushTester::get_maximum_affected_by_rule(int ruleno)
    * get the smallest number of buckets available of any type as this is our upper bound on
    * the number of replicas we can place
   */
-  int max_affected = max( crush.get_max_buckets(), crush.get_max_devices() );
+  int max_affected = std::max( crush.get_max_buckets(), crush.get_max_devices() );
 
   for(std::vector<int>::iterator it = affected_types.begin(); it != affected_types.end(); ++it){
     if (max_devices_of_type[*it] > 0 && max_devices_of_type[*it] < max_affected )
@@ -252,14 +268,8 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
       crush.get_max_devices() == 0)
     return -EINVAL;
 
-  // compute each device's proportional weight
-  vector<float> proportional_weights( weight.size() );
-  for (unsigned i = 0; i < weight.size(); i++) {
-    proportional_weights[i] = (float) weight[i] / (float) total_weight;
-  }
-
   // determine the real maximum number of devices to return
-  int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
+  int devices_requested = std::min(maxout, get_maximum_affected_by_rule(ruleno));
   bool accept_placement = false;
 
   vector<int> trial_placement(devices_requested);
@@ -355,39 +365,16 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_crushtool(const char *crushtool_cmd, int max_id, int timeout)
+int CrushTester::test_with_fork(int timeout)
 {
-  SubProcessTimed crushtool(crushtool_cmd, true, false, true, timeout);
-  string opt_max_id = boost::lexical_cast<string>(max_id);
-  crushtool.add_cmd_args(
-    "-i", "-",
-    "--test", "--check", opt_max_id.c_str(),
-    "--min-x", "1",
-    "--max-x", "50",
-    NULL);
-  int ret = crushtool.spawn();
-  if (ret != 0) {
-    err << "failed run crushtool: " << crushtool.err();
-    return ret;
+  ostringstream sink;
+  int r = fork_function(timeout, sink, [&]() {
+      return test();
+    });
+  if (r == -ETIMEDOUT) {
+    err << "timed out during smoke test (" << timeout << " seconds)";
   }
-
-  bufferlist bl;
-  ::encode(crush, bl);
-  bl.write_fd(crushtool.stdin());
-  crushtool.close_stdin();
-  bl.clear();
-  ret = bl.read_fd(crushtool.stderr(), 100 * 1024);
-  if (ret < 0) {
-    err << "failed read from crushtool: " << cpp_strerror(-ret);
-    return ret;
-  }
-  bl.write_stream(err);
-  if (crushtool.join() != 0) {
-    err << crushtool.err();
-    return -EINVAL;
-  }
-
-  return 0;
+  return r;
 }
 
 namespace {
@@ -404,8 +391,8 @@ namespace {
     int max_id;
   public:
     CrushWalker(const CrushWrapper *crush, unsigned max_id)
-      : Parent(crush), max_id(max_id) {}
-    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) {
+      : Parent(crush, CrushTreeDumper::name_map_t()), max_id(max_id) {}
+    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) override {
       int type = -1;
       if (qi.is_bucket()) {
 	if (!crush->get_item_name(qi.id)) {
@@ -434,12 +421,57 @@ bool CrushTester::check_name_maps(unsigned max_id) const
     // and see if the maps is also able to handle straying OSDs, whose id >= 0.
     // "ceph osd tree" will try to print them, even they are not listed in the
     // crush map.
-    crush_walker.dump_item(CrushTreeDumper::Item(0, 0, 0), NULL);
+    crush_walker.dump_item(CrushTreeDumper::Item(0, 0, 0, 0), NULL);
   } catch (const BadCrushMap& e) {
     err << e.what() << ": item#" << e.item << std::endl;
     return false;
   }
   return true;
+}
+
+static string get_rule_name(CrushWrapper& crush, int rule)
+{
+  if (crush.get_rule_name(rule))
+    return crush.get_rule_name(rule);
+  else
+    return string("rule") + std::to_string(rule);
+}
+
+void CrushTester::check_overlapped_rules() const
+{
+  namespace icl = boost::icl;
+  typedef std::set<string> RuleNames;
+  typedef icl::interval_map<int, RuleNames> Rules;
+  // <ruleset, type> => interval_map<size, {names}>
+  typedef std::map<std::pair<int, int>, Rules> RuleSets;
+  using interval = icl::interval<int>;
+
+  // mimic the logic of crush_find_rule(), but it only return the first matched
+  // one, but I am collecting all of them by the overlapped sizes.
+  RuleSets rulesets;
+  for (int rule = 0; rule < crush.get_max_rules(); rule++) {
+    if (!crush.rule_exists(rule)) {
+      continue;
+    }
+    Rules& rules = rulesets[{crush.get_rule_mask_ruleset(rule),
+			     crush.get_rule_mask_type(rule)}];
+    rules += make_pair(interval::closed(crush.get_rule_mask_min_size(rule),
+					crush.get_rule_mask_max_size(rule)),
+		       RuleNames{get_rule_name(crush, rule)});
+  }
+  for (auto i : rulesets) {
+    auto ruleset_type = i.first;
+    const Rules& rules = i.second;
+    for (auto r : rules) {
+      const RuleNames& names = r.second;
+      // if there are more than one rules covering the same size range,
+      // print them out.
+      if (names.size() > 1) {
+	err << "overlapped rules in ruleset " << ruleset_type.first << ": "
+	    << boost::join(names, ", ") << "\n";
+      }
+    }
+  }
 }
 
 int CrushTester::test()
@@ -471,7 +503,7 @@ int CrushTester::test()
   }
 
   if (output_utilization_all)
-    err << "devices weights (hex): " << hex << weight << dec << std::endl;
+    cerr << "devices weights (hex): " << std::hex << weight << std::dec << std::endl;
 
   // make adjustments
   adjust_weights(weight);
@@ -489,6 +521,10 @@ int CrushTester::test()
     if (!crush.rule_exists(r)) {
       if (output_statistics)
         err << "rule " << r << " dne" << std::endl;
+      continue;
+    }
+    if (ruleset >= 0 &&
+	crush.get_rule_mask_ruleset(r) != ruleset) {
       continue;
     }
     int minr = min_rep, maxr = max_rep;
@@ -512,7 +548,6 @@ int CrushTester::test()
 
       // create a structure to hold data for post-processing
       tester_data_set tester_data;
-      vector<int> vector_data_buffer;
       vector<float> vector_data_buffer_f;
 
       // create a map to hold batch-level placement information
@@ -530,7 +565,7 @@ int CrushTester::test()
 	continue;
 
       // compute the expected number of objects stored per device in the absence of weighting
-      float expected_objects = min(nr, get_maximum_affected_by_rule(r)) * num_objects;
+      float expected_objects = std::min(nr, get_maximum_affected_by_rule(r)) * num_objects;
 
       // compute each device's proportional weight
       vector<float> proportional_weights( per.size() );
@@ -565,7 +600,7 @@ int CrushTester::test()
           objects_per_batch = (batch_max - batch_min + 1);
         }
 
-        float batch_expected_objects = min(nr, get_maximum_affected_by_rule(r)) * objects_per_batch;
+        float batch_expected_objects = std::min(nr, get_maximum_affected_by_rule(r)) * objects_per_batch;
         vector<float> batch_num_objects_expected( per.size() );
 
         for (unsigned i = 0; i < per.size() ; i++)
@@ -581,7 +616,11 @@ int CrushTester::test()
           if (use_crush) {
             if (output_mappings)
 	      err << "CRUSH"; // prepend CRUSH to placement output
-            crush.do_rule(r, x, out, nr, weight);
+            uint32_t real_x = x;
+            if (pool_id != -1) {
+              real_x = crush_hash32_2(CRUSH_HASH_RJENKINS1, x, (uint32_t)pool_id);
+            }
+            crush.do_rule(r, real_x, out, nr, weight, 0);
           } else {
             if (output_mappings)
 	      err << "RNG"; // prepend RNG to placement output to denote simulation
@@ -688,4 +727,81 @@ int CrushTester::test()
   }
 
   return 0;
+}
+
+int CrushTester::compare(CrushWrapper& crush2)
+{
+  if (min_rule < 0 || max_rule < 0) {
+    min_rule = 0;
+    max_rule = crush.get_max_rules() - 1;
+  }
+  if (min_x < 0 || max_x < 0) {
+    min_x = 0;
+    max_x = 1023;
+  }
+
+  // initial osd weights
+  vector<__u32> weight;
+
+  /*
+   * note device weight is set by crushtool
+   * (likely due to a given a command line option)
+   */
+  for (int o = 0; o < crush.get_max_devices(); o++) {
+    if (device_weight.count(o)) {
+      weight.push_back(device_weight[o]);
+    } else if (crush.check_item_present(o)) {
+      weight.push_back(0x10000);
+    } else {
+      weight.push_back(0);
+    }
+  }
+
+  // make adjustments
+  adjust_weights(weight);
+
+  map<int,int> bad_by_rule;
+
+  int ret = 0;
+  for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
+    if (!crush.rule_exists(r)) {
+      if (output_statistics)
+        err << "rule " << r << " dne" << std::endl;
+      continue;
+    }
+    if (ruleset >= 0 &&
+	crush.get_rule_mask_ruleset(r) != ruleset) {
+      continue;
+    }
+    int minr = min_rep, maxr = max_rep;
+    if (min_rep < 0 || max_rep < 0) {
+      minr = crush.get_rule_mask_min_size(r);
+      maxr = crush.get_rule_mask_max_size(r);
+    }
+    int bad = 0;
+    for (int nr = minr; nr <= maxr; nr++) {
+      for (int x = min_x; x <= max_x; ++x) {
+	vector<int> out;
+	crush.do_rule(r, x, out, nr, weight, 0);
+	vector<int> out2;
+	crush2.do_rule(r, x, out2, nr, weight, 0);
+	if (out != out2) {
+	  ++bad;
+	}
+      }
+    }
+    if (bad) {
+      ret = -1;
+    }
+    int max = (maxr - minr + 1) * (max_x - min_x + 1);
+    double ratio = (double)bad / (double)max;
+    cout << "rule " << r << " had " << bad << "/" << max
+	 << " mismatched mappings (" << ratio << ")" << std::endl;
+  }
+  if (ret) {
+    cerr << "warning: maps are NOT equivalent" << std::endl;
+  } else {
+    cout << "maps appear equivalent" << std::endl;
+  }
+  return ret;
 }

@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+    - SLOW_OPS
+    - slow request
+tasks:
+- workunit:
+    clients:
+      all:
+        - suites/ffsb.sh

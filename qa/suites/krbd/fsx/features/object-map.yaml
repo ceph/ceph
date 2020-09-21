@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        # layering, exclusive-lock, object-map, fast-diff, deep-flatten
+        rbd default features: 61

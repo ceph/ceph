@@ -16,6 +16,7 @@
 #define CEPH_MMDSLoadTargets_H
 
 #include "msg/Message.h"
+#include "mds/mdstypes.h"
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
 
@@ -23,36 +24,40 @@
 using std::map;
 
 class MMDSLoadTargets : public PaxosServiceMessage {
- public:
+public:
   mds_gid_t global_id;
-  set<mds_rank_t> targets;
+  std::set<mds_rank_t> targets;
 
+protected:
   MMDSLoadTargets() : PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0) {}
-
-  MMDSLoadTargets(mds_gid_t g, set<mds_rank_t>& mds_targets) :
+  MMDSLoadTargets(mds_gid_t g, std::set<mds_rank_t>& mds_targets) :
     PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
-private:
-  ~MMDSLoadTargets() {}
+  ~MMDSLoadTargets() override {}
 
 public:
-  const char* get_type_name() const { return "mds_load_targets"; }
-  void print(ostream& o) const {
+  std::string_view get_type_name() const override { return "mds_load_targets"; }
+  void print(std::ostream& o) const override {
     o << "mds_load_targets(" << global_id << " " << targets << ")";
   }
 
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(global_id, p);
-    ::decode(targets, p);
+    decode(global_id, p);
+    decode(targets, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(global_id, payload);
-    ::encode(targets, payload);
+    encode(global_id, payload);
+    encode(targets, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

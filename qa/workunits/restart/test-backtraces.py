@@ -1,12 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-import subprocess as sub
-from cStringIO import StringIO
+from __future__ import print_function
+
+import subprocess
 import json
 import os
 import time
 import sys
-import thread
 
 import rados as rados
 import cephfs as cephfs
@@ -18,27 +18,25 @@ def get_name(b, i, j):
     return c, b + '/' + c
 
 def mkdir(ceph, d):
-    print >>sys.stderr, "mkdir {d}".format(d=d)
-    ceph.mkdir(d, 0755)
+    print("mkdir {d}".format(d=d), file=sys.stderr)
+    ceph.mkdir(d, 0o755)
     return ceph.stat(d)['st_ino']
 
 def create(ceph, f):
-    print >>sys.stderr, "creating {f}".format(f=f)
-    fd = ceph.open(f, os.O_CREAT|os.O_RDWR, 0644)
+    print("creating {f}".format(f=f), file=sys.stderr)
+    fd = ceph.open(f, os.O_CREAT | os.O_RDWR, 0o644)
     ceph.close(fd)
     return ceph.stat(f)['st_ino']
 
 def set_mds_config_param(ceph, param):
-    with file('/dev/null', 'rb') as devnull:
+    with open('/dev/null', 'rb') as devnull:
         confarg = ''
         if conf != '':
             confarg = '-c {c}'.format(c=conf)
-        r = sub.call("ceph {ca} mds tell a injectargs '{p}'".format(ca=confarg, p=param), shell=True, stdout=devnull)
-        if (r != 0):
-            raise
+        r = subprocess.call("ceph {ca} mds tell a injectargs '{p}'".format(ca=confarg, p=param), shell=True, stdout=devnull)
+        if r != 0:
+            raise Exception
 
-import ConfigParser
-import contextlib
 
 class _TrimIndentFile(object):
     def __init__(self, fp):
@@ -54,34 +52,34 @@ def _optionxform(s):
     return s
 
 def conf_set_kill_mds(location, killnum):
-    print >>sys.stderr, 'setting mds kill config option for {l}.{k}'.format(l=location, k=killnum)
-    print "restart mds a mds_kill_{l}_at {k}".format(l=location, k=killnum)
+    print('setting mds kill config option for {l}.{k}'.format(l=location, k=killnum), file=sys.stderr)
+    print("restart mds a mds_kill_{l}_at {k}".format(l=location, k=killnum))
     sys.stdout.flush()
     for l in sys.stdin.readline():
         if l == 'restarted':
             break
 
 def flush(ceph, testnum):
-    print >>sys.stderr, 'flushing {t}'.format(t=testnum)
+    print('flushing {t}'.format(t=testnum), file=sys.stderr)
     set_mds_config_param(ceph, '--mds_log_max_segments 1')
 
     for i in range(1, 500):
         f = '{p}.{pid}.{t}.{i}'.format(p=prefix, pid=os.getpid(), t=testnum, i=i)
-        print >>sys.stderr, 'flushing with create {f}'.format(f=f)
-        fd = ceph.open(f, os.O_CREAT | os.O_RDWR, 0644)
+        print('flushing with create {f}'.format(f=f), file=sys.stderr)
+        fd = ceph.open(f, os.O_CREAT | os.O_RDWR, 0o644)
         ceph.close(fd)
         ceph.unlink(f)
 
-    print >> sys.stderr, 'flush doing shutdown'
+    print('flush doing shutdown', file=sys.stderr)
     ceph.shutdown()
-    print >> sys.stderr, 'flush reinitializing ceph'
+    print('flush reinitializing ceph', file=sys.stderr)
     ceph = cephfs.LibCephFS(conffile=conf)
-    print >> sys.stderr, 'flush doing mount'
+    print('flush doing mount', file=sys.stderr)
     ceph.mount()
     return ceph
 
 def kill_mds(ceph, location, killnum):
-    print >>sys.stderr, 'killing mds: {l}.{k}'.format(l=location, k=killnum)
+    print('killing mds: {l}.{k}'.format(l=location, k=killnum), file=sys.stderr)
     set_mds_config_param(ceph, '--mds_kill_{l}_at {k}'.format(l=location, k=killnum))
 
 def wait_for_mds(ceph):
@@ -90,7 +88,7 @@ def wait_for_mds(ceph):
         confarg = ''
         if conf != '':
             confarg = '-c {c}'.format(c=conf)
-        r = sub.check_output("ceph {ca} mds stat".format(ca=confarg), shell=True)
+        r = subprocess.check_output("ceph {ca} mds stat".format(ca=confarg), shell=True).decode()
         if r.find('a=up:active'):
             break
         time.sleep(1)
@@ -101,7 +99,7 @@ def decode(value):
     with open(tmpfile, 'w+') as f:
       f.write(value)
 
-    p = sub.Popen(
+    p = subprocess.Popen(
         [
             'ceph-dencoder',
             'import',
@@ -111,13 +109,13 @@ def decode(value):
             'decode',
             'dump_json',
         ],
-        stdin=sub.PIPE,
-        stdout=sub.PIPE,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
       )
     (stdout, _) = p.communicate(input=value)
     p.stdin.close()
-    if (p.returncode != 0):
-        raise
+    if p.returncode != 0:
+        raise Exception
     os.remove(tmpfile)
     return json.loads(stdout)
 
@@ -125,7 +123,7 @@ class VerifyFailure(Exception):
     pass
 
 def verify(rados_ioctx, ino, values, pool):
-    print >>sys.stderr, 'getting parent attr for ino: %lx.00000000' % ino
+    print('getting parent attr for ino: %lx.00000000' % ino, file=sys.stderr)
     savede = None
     for i in range(1, 20):
         try:
@@ -140,10 +138,10 @@ def verify(rados_ioctx, ino, values, pool):
 
     bt = decode(binbt)
 
+    ind = 0
     if bt['ino'] != ino:
         raise VerifyFailure('inode mismatch: {bi} != {ino}\n\tbacktrace:\n\t\t{bt}\n\tfailed verify against:\n\t\t{i}, {v}'.format(
                     bi=bt['ancestors'][ind]['dname'], ino=ino, bt=bt, i=ino, v=values))
-    ind = 0
     for (n, i) in values:
         if bt['ancestors'][ind]['dirino'] != i:
             raise VerifyFailure('ancestor dirino mismatch: {b} != {ind}\n\tbacktrace:\n\t\t{bt}\n\tfailed verify against:\n\t\t{i}, {v}'.format(
@@ -201,7 +199,7 @@ if len(sys.argv) > 2:
 
 i = 0
 if test < 0 or test == i:
-  print >>sys.stderr, 'Running test %d: basic verify' % i
+  print('Running test %d: basic verify' % i, file=sys.stderr)
   ino, expected_bt = make_abc(ceph, rooti, i)
   ceph = flush(ceph, i)
   verify(ioctx, ino, expected_bt, 0)
@@ -215,8 +213,8 @@ i += 1
 # verify
 
 if test < 0 or test == i:
-  print >>sys.stderr, 'Running test %d: kill openc' % i
-  print "restart mds a"
+  print('Running test %d: kill openc' % i, file=sys.stderr)
+  print("restart mds a")
   sys.stdout.flush()
   kill_mds(ceph, 'openc', 1)
   ino, expected_bt = make_abc(ceph, rooti, i)
@@ -232,11 +230,11 @@ i += 1
 # flush
 # verify
 if test < 0 or test == i:
-  print >>sys.stderr, 'Running test %d: kill openc/replay' % i
+  print('Running test %d: kill openc/replay' % i, file=sys.stderr)
   # these are reversed because we want to prepare the config
   conf_set_kill_mds('journal_replay', 1)
   kill_mds(ceph, 'openc', 1)
-  print "restart mds a"
+  print("restart mds a")
   sys.stdout.flush()
   ino, expected_bt = make_abc(ceph, rooti, i)
   ceph = flush(ceph, i)
@@ -248,5 +246,5 @@ ioctx.close()
 radosobj.shutdown()
 ceph.shutdown()
 
-print "done"
+print("done")
 sys.stdout.flush()

@@ -147,7 +147,7 @@ chunks are lost, it is not possible to recover the object.
 Reading the original content of object O can be a simple
 concatenation of O1, O2, ... OM, because the plugins are using
 `systematic codes
-<http://en.wikipedia.org/wiki/Systematic_code>`_. Otherwise the chunks
+<https://en.wikipedia.org/wiki/Systematic_code>`_. Otherwise the chunks
 must be given to the erasure code library *decode* method to retrieve
 the content of the object.
 
@@ -166,15 +166,15 @@ key=value pairs stored in an `erasure code profile`_.
 ::
  
  $ ceph osd erasure-code-profile set myprofile \
-     ruleset-failure-domain=osd
+     crush-failure-domain=osd
  $ ceph osd erasure-code-profile get myprofile
  directory=/usr/lib/ceph/erasure-code
  k=2
  m=1
  plugin=jerasure
  technique=reed_sol_van
- ruleset-failure-domain=osd
- $ ceph osd pool create ecpool 12 12 erasure myprofile
+ crush-failure-domain=osd
+ $ ceph osd pool create ecpool erasure myprofile
 
 The *plugin* is dynamically loaded from *directory*  and expected to
 implement the *int __erasure_code_init(char *plugin_name, char *directory)* function 
@@ -189,7 +189,7 @@ in the registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blo
 
 The *ErasureCodePlugin* derived object must provide a factory method
 from which the concrete implementation of the *ErasureCodeInterface*
-object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/v0.78/src/test/osd/ErasureCodePluginExample.cc>`_ reads:
+object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/v0.78/src/test/erasure-code/ErasureCodePluginExample.cc>`_ reads:
 
 ::
  
@@ -207,9 +207,9 @@ set in the erasure code profile, before the pool was created.
   ceph osd erasure-code-profile set myprofile \
      directory=<dir>         \ # mandatory
      plugin=jerasure         \ # mandatory
-     m=10                    \ # optional and plugin dependant
-     k=3                     \ # optional and plugin dependant
-     technique=reed_sol_van  \ # optional and plugin dependant
+     m=10                    \ # optional and plugin dependent
+     k=3                     \ # optional and plugin dependent
+     technique=reed_sol_van  \ # optional and plugin dependent
 
 Notes
 -----

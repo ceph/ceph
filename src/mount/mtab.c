@@ -105,7 +105,7 @@ unlock_mtab (void) {
 
 /*
  * The original mount locking code has used sleep(1) between attempts and
- * maximal number of attemps has been 5.
+ * maximal number of attempts has been 5.
  *
  * There was very small number of attempts and extremely long waiting (1s)
  * that is useless on machines with large number of concurret mount processes.
@@ -289,4 +289,6 @@ update_mtab_entry(const char *spec, const char *node, const char *type,
 
 	free(mnt.mnt_fsname);
 	free(mnt.mnt_dir);
+	free(mnt.mnt_type);
+	free(mnt.mnt_opts);
 }

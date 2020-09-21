@@ -14,83 +14,153 @@
 #include "mon/PGMap.h"
 #include "gtest/gtest.h"
 
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
+#include "include/stringify.h"
 
-TEST(pgmap, min_last_epoch_clean)
-{
-  PGMap pg_map;
-  PGMap::Incremental inc;
-  osd_stat_t os;
-  pg_stat_t ps;
 
-  ps.last_epoch_clean = 999;
-  inc.pg_stat_updates[pg_t(9,9)] = ps;
-  inc.version = 1;
-  inc.update_stat(0, 123, os);
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(123u, pg_map.get_min_last_epoch_clean());
+namespace {
+  class CheckTextTable : public TextTable {
+  public:
+    explicit CheckTextTable(bool verbose) {
+      for (int i = 0; i < 5; i++) {
+        define_column("", TextTable::LEFT, TextTable::LEFT);
+      }
+      if (verbose) {
+        for (int i = 0; i < 9; i++) {
+          define_column("", TextTable::LEFT, TextTable::LEFT);
+        }
+      }
+    }
+    const string& get(unsigned r, unsigned c) const {
+      ceph_assert(r < row.size());
+      ceph_assert(c < row[r].size());
+      return row[r][c];
+    }
+  };
 
-  inc = PGMap::Incremental();
-  inc.version = 2;
-  inc.update_stat(1, 222, os);
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(123u, pg_map.get_min_last_epoch_clean());
-
-  inc = PGMap::Incremental();
-  inc.version = 3;
-  inc.update_stat(0, 222, os);
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(222u, pg_map.get_min_last_epoch_clean());
-
-  inc = PGMap::Incremental();
-  inc.version = 4;
-  inc.update_stat(0, 333, os);
-  inc.update_stat(1, 333, os);
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(333u, pg_map.get_min_last_epoch_clean());
-
-  ps.last_epoch_clean = 222;
-  inc = PGMap::Incremental();
-  inc.version = 5;
-  inc.pg_stat_updates[pg_t(1,1)] = ps;
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(222u, pg_map.get_min_last_epoch_clean());
-
-  ps.last_epoch_clean = 223;
-  inc = PGMap::Incremental();
-  inc.version = 6;
-  inc.pg_stat_updates[pg_t(1,1)] = ps;
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(223u, pg_map.get_min_last_epoch_clean());
-
-  ps.last_epoch_clean = 224;
-  inc = PGMap::Incremental();
-  inc.version = 7;
-  inc.pg_stat_updates[pg_t(2,2)] = ps;
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(223u, pg_map.get_min_last_epoch_clean());
-
-  ps.last_epoch_clean = 225;
-  inc = PGMap::Incremental();
-  inc.version = 8;
-  inc.pg_stat_updates[pg_t(1,1)] = ps;
-  pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(224u, pg_map.get_min_last_epoch_clean());
-
+  // copied from PGMap.cc
+  string percentify(float a) {
+    stringstream ss;
+    if (a < 0.01)
+      ss << "0";
+    else
+      ss << std::fixed << std::setprecision(2) << a;
+    return ss.str();
+  }
 }
 
+// dump_object_stat_sum() is called by "ceph df" command
+// with table, without formatter, verbose = true, not empty, avail > 0
+TEST(pgmap, dump_object_stat_sum_0)
+{
+  bool verbose = true;
+  CheckTextTable tbl(verbose);
+  pool_stat_t pool_stat;
+  object_stat_sum_t& sum = pool_stat.stats.sum;
+  sum.num_bytes = 42 * 1024 * 1024;
+  sum.num_objects = 42;
+  sum.num_objects_degraded = 13; // there are 13 missings + not_yet_backfilled
+  sum.num_objects_dirty = 2;
+  sum.num_rd = 100;
+  sum.num_rd_kb = 123;
+  sum.num_wr = 101;
+  sum.num_wr_kb = 321;    
+  pool_stat.num_store_stats = 3;
+  store_statfs_t &statfs = pool_stat.store_stats;
+  statfs.data_stored = 40 * 1024 * 1024;
+  statfs.allocated = 41 * 1024 * 1024 * 2;
+  statfs.data_compressed_allocated = 4334;
+  statfs.data_compressed_original = 1213;
 
+  sum.calc_copies(3); // assuming we have 3 copies for each obj
+  // nominal amount of space available for new objects in this pool
+  uint64_t avail = 2016 * 1024 * 1024;
+  pg_pool_t pool;
+  pool.quota_max_objects = 2000;
+  pool.quota_max_bytes = 2000 * 1024 * 1024;
+  pool.size = 2;
+  pool.type = pg_pool_t::TYPE_REPLICATED;
+  PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
+			      pool.get_size(), verbose, true, true, &pool);  
+  float copies_rate =
+    (static_cast<float>(sum.num_object_copies - sum.num_objects_degraded) /
+      sum.num_object_copies) * pool.get_size();
+  float used_percent = (float)statfs.allocated /
+    (statfs.allocated + avail) * 100;
+  uint64_t stored = statfs.data_stored / copies_rate;
 
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
+  unsigned col = 0;
+  ASSERT_EQ(stringify(byte_u_t(stored)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(stored)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(sum.num_objects)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(percentify(used_percent), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(avail/copies_rate)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(pool.quota_max_objects)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(pool.quota_max_bytes)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(sum.num_objects_dirty)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.data_compressed_allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.data_compressed_original)), tbl.get(0, col++));
+}
 
-  vector<const char*> def_args;
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+// with table, without formatter, verbose = true, empty, avail > 0
+TEST(pgmap, dump_object_stat_sum_1)
+{
+  bool verbose = true;
+  CheckTextTable tbl(verbose);
+  pool_stat_t pool_stat;
+  object_stat_sum_t& sum = pool_stat.stats.sum; // zero by default
+  ASSERT_TRUE(sum.is_zero());
+  // nominal amount of space available for new objects in this pool
+  uint64_t avail = 2016 * 1024 * 1024;
+  pg_pool_t pool;
+  pool.quota_max_objects = 2000;
+  pool.quota_max_bytes = 2000 * 1024 * 1024;
+  pool.size = 2;
+  pool.type = pg_pool_t::TYPE_REPLICATED;
+  PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
+			      pool.get_size(), verbose, true, true, &pool);  
+  unsigned col = 0;
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(percentify(0), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(pool.quota_max_objects)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(pool.quota_max_bytes)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+}
+
+// with table, without formatter, verbose = false, empty, avail = 0
+TEST(pgmap, dump_object_stat_sum_2)
+{
+  bool verbose = false;
+  CheckTextTable tbl(verbose);
+  pool_stat_t pool_stat;
+  object_stat_sum_t& sum = pool_stat.stats.sum; // zero by default
+  ASSERT_TRUE(sum.is_zero());
+  // nominal amount of space available for new objects in this pool
+  uint64_t avail = 0;
+  pg_pool_t pool;
+  pool.quota_max_objects = 2000;
+  pool.quota_max_bytes = 2000 * 1024 * 1024;
+  pool.size = 2;
+  pool.type = pg_pool_t::TYPE_REPLICATED;
+
+  PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
+			      pool.get_size(), verbose, true, true, &pool);  
+  unsigned col = 0;
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(percentify(0), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
 }

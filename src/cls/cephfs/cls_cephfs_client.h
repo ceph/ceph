@@ -1,7 +1,8 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
-#include "include/rados/librados.hpp"
+#include "include/rados/librados_fwd.hpp"
 #include "mds/mdstypes.h"
-
 #include "cls_cephfs.h"
 
 class AccumulateArgs;
@@ -20,7 +21,14 @@ class ClsCephFSClient
       librados::IoCtx &ctx,
       const std::string &oid,
       inode_backtrace_t *backtrace,
-      ceph_file_layout *layout,
+      file_layout_t *layout,
       AccumulateResult *result);
-};
 
+  static int delete_inode_accumulate_result(
+      librados::IoCtx &ctx,
+      const std::string &oid);
+
+  static void build_tag_filter(
+      const std::string &scrub_tag,
+      ceph::buffer::list *out_bl);
+};

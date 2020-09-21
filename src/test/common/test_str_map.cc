@@ -58,11 +58,23 @@ TEST(str_map, plaintext) {
   }
   {
     map<string,string> str_map;
-    ASSERT_EQ(0, get_str_map(" key1=val1; key2=\tval2; key3\t = \t val3; \n ", "\n;", &str_map));
+    ASSERT_EQ(0, get_str_map(" key1=val1; key2=\tval2; key3\t = \t val3; \n ", &str_map, "\n;"));
     ASSERT_EQ(4u, str_map.size());
     ASSERT_EQ("val1", str_map["key1"]);
     ASSERT_EQ("val2", str_map["key2"]);
     ASSERT_EQ("val3", str_map["key3"]);
+  }
+}
+
+TEST(str_map, empty_values) {
+  {
+    map<string,string> str_map;
+    ASSERT_EQ(0, get_str_map("M= P= L=",
+			     &str_map));
+    ASSERT_EQ(3u, str_map.size());
+    ASSERT_EQ("", str_map["M"]);
+    ASSERT_EQ("", str_map["P"]);
+    ASSERT_EQ("", str_map["L"]);
   }
 }
 

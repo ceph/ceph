@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon min osdmap epochs: 50
+        paxos service trim min: 10
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
+tasks:
+- install:
+- ceph:

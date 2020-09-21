@@ -1,0 +1,42 @@
+# begin crush map
+tunable choose_local_tries 0
+tunable choose_local_fallback_tries 0
+tunable choose_total_tries 50
+tunable chooseleaf_descend_once 1
+tunable chooseleaf_vary_r 1
+tunable chooseleaf_stable 0
+tunable straw_calc_version 1
+tunable allowed_bucket_algs 22
+
+# types
+type 0 osd
+type 1 host
+type 2 chassis
+type 3 rack
+type 4 row
+type 5 pdu
+type 6 pod
+type 7 room
+type 8 datacenter
+type 9 region
+type 10 root
+
+# default bucket
+root default {
+    id -1   # do not change unnecessarily
+    alg straw
+    hash 0  # rjenkins1
+}
+
+# rules
+rule replicated_ruleset {
+    ruleset 0
+    type replicated
+    min_size 1
+    max_size 10
+    step take default
+    step chooseleaf firstn 0 type host
+    step emit
+}
+
+# end crush map

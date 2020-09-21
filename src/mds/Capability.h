@@ -16,12 +16,16 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
+#include "include/counter.h"
+#include "include/mempool.h"
 #include "include/xlist.h"
+#include "include/elist.h"
 
 #include "common/config.h"
 
 #include "mdstypes.h"
+
 
 /*
 
@@ -58,95 +62,99 @@
  */
 
 class CInode;
+class Session;
+class MDLockCache;
 
 namespace ceph {
   class Formatter;
 }
 
-class Capability {
-private:
-  static boost::pool<> pool;
+class Capability : public Counter<Capability> {
 public:
-  static void *operator new(size_t num_bytes) { 
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
-public:
+  MEMPOOL_CLASS_HELPERS();
+
   struct Export {
-    int64_t cap_id;
-    int32_t wanted;
-    int32_t issued;
-    int32_t pending;
-    snapid_t client_follows;
-    ceph_seq_t seq;
-    ceph_seq_t mseq;
-    utime_t last_issue_stamp;
     Export() {}
-    Export(int64_t id, int w, int i, int p, snapid_t cf, ceph_seq_t s, ceph_seq_t m, utime_t lis) :
+    Export(int64_t id, int w, int i, int p, snapid_t cf,
+	   ceph_seq_t s, ceph_seq_t m, utime_t lis, unsigned st) :
       cap_id(id), wanted(w), issued(i), pending(p), client_follows(cf),
-      seq(s), mseq(m), last_issue_stamp(lis) {}
-    void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &p);
-    void dump(Formatter *f) const;
-    static void generate_test_instances(list<Export*>& ls);
+      seq(s), mseq(m), last_issue_stamp(lis), state(st) {}
+    void encode(ceph::buffer::list &bl) const;
+    void decode(ceph::buffer::list::const_iterator &p);
+    void dump(ceph::Formatter *f) const;
+    static void generate_test_instances(std::list<Export*>& ls);
+
+    int64_t cap_id = 0;
+    int32_t wanted = 0;
+    int32_t issued = 0;
+    int32_t pending = 0;
+    snapid_t client_follows;
+    ceph_seq_t seq = 0;
+    ceph_seq_t mseq = 0;
+    utime_t last_issue_stamp;
+    uint32_t state = 0;
   };
   struct Import {
-    int64_t cap_id;
-    ceph_seq_t issue_seq;
-    ceph_seq_t mseq;
     Import() {}
     Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
-    void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &p);
-    void dump(Formatter *f) const;
+    void encode(ceph::buffer::list &bl) const;
+    void decode(ceph::buffer::list::const_iterator &p);
+    void dump(ceph::Formatter *f) const;
+
+    int64_t cap_id = 0;
+    ceph_seq_t issue_seq = 0;
+    ceph_seq_t mseq = 0;
   };
-
-private:
-  CInode *inode;
-  client_t client;
-
-  uint64_t cap_id;
-
-  __u32 _wanted;     // what the client wants (ideally)
-
-  utime_t last_issue_stamp;
-  utime_t last_revoke_stamp;
-  unsigned num_revoke_warnings;
-
-  // track in-flight caps --------------
-  //  - add new caps to _pending
-  //  - track revocations in _revokes list
-public:
   struct revoke_info {
-    __u32 before;
-    ceph_seq_t seq, last_issue;
     revoke_info() {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
-    void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& bl);
-    void dump(Formatter *f) const;
-    static void generate_test_instances(list<revoke_info*>& ls);
+    void encode(ceph::buffer::list& bl) const;
+    void decode(ceph::buffer::list::const_iterator& bl);
+    void dump(ceph::Formatter *f) const;
+    static void generate_test_instances(std::list<revoke_info*>& ls);
+
+    __u32 before = 0;
+    ceph_seq_t seq = 0;
+    ceph_seq_t last_issue = 0;
   };
-private:
-  __u32 _pending, _issued;
-  list<revoke_info> _revokes;
 
-public:
-  int pending() { return _pending; }
-  int issued() { return _issued; }
-  bool is_null() { return !_pending && _revokes.empty(); }
+  const static unsigned STATE_NOTABLE		= (1<<0);
+  const static unsigned STATE_NEW		= (1<<1);
+  const static unsigned STATE_IMPORTING		= (1<<2);
+  const static unsigned STATE_NEEDSNAPFLUSH	= (1<<3);
+  const static unsigned STATE_CLIENTWRITEABLE	= (1<<4);
+  const static unsigned STATE_NOINLINE		= (1<<5);
+  const static unsigned STATE_NOPOOLNS		= (1<<6);
+  const static unsigned STATE_NOQUOTA		= (1<<7);
 
-  ceph_seq_t issue(unsigned c) {
+  const static unsigned MASK_STATE_EXPORTED =
+    (STATE_CLIENTWRITEABLE | STATE_NOINLINE | STATE_NOPOOLNS | STATE_NOQUOTA);
+
+  Capability(CInode *i=nullptr, Session *s=nullptr, uint64_t id=0);
+  Capability(const Capability& other) = delete;
+
+  const Capability& operator=(const Capability& other) = delete;
+
+  int pending() const {
+    return _pending;
+  }
+  int issued() const {
+    return _issued;
+  }
+  int revoking() const {
+    return _issued & ~_pending;
+  }
+  ceph_seq_t issue(unsigned c, bool reval=false) {
+    if (reval)
+      revalidate();
+
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
-      _revokes.push_back(revoke_info(_pending, last_sent, last_issue));
+      _revokes.emplace_back(_pending, last_sent, last_issue);
       _pending = c;
       _issued |= c;
+      if (!is_notable())
+	mark_notable();
     } else if (~_pending & c) {
       // adding bits only.  remove obsolete revocations?
       _pending |= c;
@@ -157,25 +165,25 @@ public:
 	_revokes.pop_back();
     } else {
       // no change.
-      assert(_pending == c);
+      ceph_assert(_pending == c);
     }
     //last_issue = 
-    ++last_sent;
+    inc_last_seq();
     return last_sent;
   }
-  ceph_seq_t issue_norevoke(unsigned c) {
+  ceph_seq_t issue_norevoke(unsigned c, bool reval=false) {
+    if (reval)
+      revalidate();
+
     _pending |= c;
     _issued |= c;
-    //check_rdcaps_list();
-    ++last_sent;
+    clear_new();
+
+    inc_last_seq();
     return last_sent;
   }
-  void _calc_issued() {
-    _issued = _pending;
-    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); ++p)
-      _issued |= p->before;
-  }
-  void confirm_receipt(ceph_seq_t seq, unsigned caps) {
+  int confirm_receipt(ceph_seq_t seq, unsigned caps) {
+    int was_revoking = (_issued & ~_pending);
     if (seq == last_sent) {
       _revokes.clear();
       _issued = caps;
@@ -188,18 +196,19 @@ public:
       if (!_revokes.empty()) {
 	if (_revokes.front().seq == seq)
 	  _revokes.begin()->before = caps;
-	_calc_issued();
+	calc_issued();
       } else {
 	// seq < last_sent
 	_issued = caps | _pending;
       }
     }
 
-    if (_issued == _pending) {
+    if (was_revoking && _issued == _pending) {
       item_revoking_caps.remove_myself();
       item_client_revoking_caps.remove_myself();
+      maybe_clear_notable();
     }
-    //check_rdcaps_list();
+    return was_revoking & ~_issued; // return revoked
   }
   // we may get a release racing with revocations, which means our revokes will be ignored
   // by the client.  clean them out of our _revokes history so we don't wait on them.
@@ -210,106 +219,89 @@ public:
       changed = true;
     }
     if (changed) {
-      _calc_issued();
-      if (_issued == _pending) {
+      bool was_revoking = (_issued & ~_pending);
+      calc_issued();
+      if (was_revoking && _issued == _pending) {
 	item_revoking_caps.remove_myself();
 	item_client_revoking_caps.remove_myself();
+	maybe_clear_notable();
       }
     }
   }
-
-
-private:
-  ceph_seq_t last_sent;
-  ceph_seq_t last_issue;
-  ceph_seq_t mseq;
-
-  int suppress;
-  unsigned state;
-
-  const static unsigned STATE_STALE		= (1<<0);
-  const static unsigned STATE_NEW		= (1<<1);
-
-public:
-  snapid_t client_follows;
-  version_t client_xattr_version;
-  version_t client_inline_version;
-  int64_t last_rbytes;
-  int64_t last_rsize;
-
-  xlist<Capability*>::item item_session_caps;
-  xlist<Capability*>::item item_snaprealm_caps;
-  xlist<Capability*>::item item_revoking_caps;
-  xlist<Capability*>::item item_client_revoking_caps;
-
-  Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) : 
-    inode(i), client(c),
-    cap_id(id),
-    _wanted(0), num_revoke_warnings(0),
-    _pending(0), _issued(0),
-    last_sent(0),
-    last_issue(0),
-    mseq(0),
-    suppress(0), state(0),
-    client_follows(0), client_xattr_version(0),
-    client_inline_version(0),
-    last_rbytes(0), last_rsize(0),
-    item_session_caps(this), item_snaprealm_caps(this),
-    item_revoking_caps(this), item_client_revoking_caps(this) {
-    g_num_cap++;
-    g_num_capa++;
-  }
-  ~Capability() {
-    g_num_cap--;
-    g_num_caps++;
-  }
-
-  Capability(const Capability& other);  // no copying
-  const Capability& operator=(const Capability& other);  // no copying
-  
-  ceph_seq_t get_mseq() { return mseq; }
+  ceph_seq_t get_mseq() const { return mseq; }
   void inc_mseq() { mseq++; }
 
-  ceph_seq_t get_last_sent() { return last_sent; }
-  utime_t get_last_issue_stamp() { return last_issue_stamp; }
-  utime_t get_last_revoke_stamp() { return last_revoke_stamp; }
+  utime_t get_last_issue_stamp() const { return last_issue_stamp; }
+  utime_t get_last_revoke_stamp() const { return last_revoke_stamp; }
 
   void set_last_issue() { last_issue = last_sent; }
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
   void set_last_revoke_stamp(utime_t t) { last_revoke_stamp = t; }
   void reset_num_revoke_warnings() { num_revoke_warnings = 0; }
   void inc_num_revoke_warnings() { ++num_revoke_warnings; }
-  unsigned get_num_revoke_warnings() { return num_revoke_warnings; }
+  unsigned get_num_revoke_warnings() const { return num_revoke_warnings; }
 
   void set_cap_id(uint64_t i) { cap_id = i; }
-  uint64_t get_cap_id() { return cap_id; }
+  uint64_t get_cap_id() const { return cap_id; }
 
   //ceph_seq_t get_last_issue() { return last_issue; }
 
-  bool is_suppress() { return suppress > 0; }
+  bool is_suppress() const { return suppress > 0; }
   void inc_suppress() { suppress++; }
   void dec_suppress() { suppress--; }
 
-  bool is_stale() { return state & STATE_STALE; }
-  void mark_stale() { state |= STATE_STALE; }
-  void clear_stale() { state &= ~STATE_STALE; }
-  bool is_new() { return state & STATE_NEW; }
+  static bool is_wanted_notable(int wanted) {
+    return wanted & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD);
+  }
+  bool is_wanted_notable() const {
+    return is_wanted_notable(wanted());
+  }
+  bool is_notable() const { return state & STATE_NOTABLE; }
+
+  bool is_stale() const;
+  bool is_valid() const;
+  bool is_new() const { return state & STATE_NEW; }
   void mark_new() { state |= STATE_NEW; }
   void clear_new() { state &= ~STATE_NEW; }
+  bool is_importing() const { return state & STATE_IMPORTING; }
+  void mark_importing() { state |= STATE_IMPORTING; }
+  void clear_importing() { state &= ~STATE_IMPORTING; }
+  bool need_snapflush() const { return state & STATE_NEEDSNAPFLUSH; }
+  void mark_needsnapflush() { state |= STATE_NEEDSNAPFLUSH; }
+  void clear_needsnapflush() { state &= ~STATE_NEEDSNAPFLUSH; }
 
-  CInode *get_inode() { return inode; }
-  client_t get_client() const { return client; }
-
-  // caps this client wants to hold
-  int wanted() { return _wanted; }
-  void set_wanted(int w) {
-    _wanted = w;
-    //check_rdcaps_list();
+  bool is_clientwriteable() const { return state & STATE_CLIENTWRITEABLE; }
+  void mark_clientwriteable() {
+    if (!is_clientwriteable()) {
+      state |= STATE_CLIENTWRITEABLE;
+      if (!is_notable())
+	mark_notable();
+    }
+  }
+  void clear_clientwriteable() {
+    if (is_clientwriteable()) {
+      state &= ~STATE_CLIENTWRITEABLE;
+      maybe_clear_notable();
+    }
   }
 
+  bool is_noinline() const { return state & STATE_NOINLINE; }
+  bool is_nopoolns() const { return state & STATE_NOPOOLNS; }
+  bool is_noquota() const { return state & STATE_NOQUOTA; }
+
+  CInode *get_inode() const { return inode; }
+  Session *get_session() const { return session; }
+  client_t get_client() const;
+
+  // caps this client wants to hold
+  int wanted() const { return _wanted; }
+  void set_wanted(int w);
+
   void inc_last_seq() { last_sent++; }
-  ceph_seq_t get_last_seq() { return last_sent; }
-  ceph_seq_t get_last_issue() { return last_issue; }
+  ceph_seq_t get_last_seq() const {
+    return last_sent;
+  }
+  ceph_seq_t get_last_issue() const { return last_issue; }
 
   void reset_seq() {
     last_sent = 0;
@@ -317,57 +309,108 @@ public:
   }
   
   // -- exports --
-  Export make_export() {
-    return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
+  Export make_export() const {
+    return Export(cap_id, wanted(), issued(), pending(), client_follows, get_last_seq(), mseq+1, last_issue_stamp, state);
   }
-  void merge(Export& other, bool auth_cap) {
-    if (!is_stale()) {
-      // issued + pending
-      int newpending = other.pending | pending();
-      if (other.issued & ~newpending)
-	issue(other.issued | newpending);
-      else
-	issue(newpending);
-      last_issue_stamp = other.last_issue_stamp;
-    } else {
-      issue(CEPH_CAP_PIN);
-    }
+  void merge(const Export& other, bool auth_cap) {
+    // issued + pending
+    int newpending = other.pending | pending();
+    if (other.issued & ~newpending)
+      issue(other.issued | newpending);
+    else
+      issue(newpending);
+    last_issue_stamp = other.last_issue_stamp;
 
     client_follows = other.client_follows;
 
+    state |= other.state & MASK_STATE_EXPORTED;
+    if ((other.state & STATE_CLIENTWRITEABLE) && !is_notable())
+      mark_notable();
+
     // wanted
-    _wanted = _wanted | other.wanted;
+    set_wanted(wanted() | other.wanted);
     if (auth_cap)
       mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
-    if (!is_stale()) {
-      // issued + pending
-      int newpending = pending();
-      if (otherissued & ~newpending)
-	issue(otherissued | newpending);
-      else
-	issue(newpending);
-    } else {
-      issue(CEPH_CAP_PIN);
-    }
+    // issued + pending
+    int newpending = pending();
+    if (otherissued & ~newpending)
+      issue(otherissued | newpending);
+    else
+      issue(newpending);
 
     // wanted
-    _wanted = _wanted | otherwanted;
+    set_wanted(wanted() | otherwanted);
   }
 
-  void revoke() {
-    if (pending() & ~CEPH_CAP_PIN)
-      issue(CEPH_CAP_PIN);
-    confirm_receipt(last_sent, CEPH_CAP_PIN);
+  int revoke() {
+    if (revoking())
+      return confirm_receipt(last_sent, pending());
+    return 0;
   }
 
   // serializers
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<Capability*>& ls);
-  
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<Capability*>& ls);
+
+  snapid_t client_follows = 0;
+  version_t client_xattr_version = 0;
+  version_t client_inline_version = 0;
+  int64_t last_rbytes = 0;
+  int64_t last_rsize = 0;
+
+  xlist<Capability*>::item item_session_caps;
+  xlist<Capability*>::item item_snaprealm_caps;
+  xlist<Capability*>::item item_revoking_caps;
+  xlist<Capability*>::item item_client_revoking_caps;
+
+  elist<MDLockCache*> lock_caches;
+  int get_lock_cache_allowed() const { return lock_cache_allowed; }
+  void set_lock_cache_allowed(int c) { lock_cache_allowed |= c; }
+  void clear_lock_cache_allowed(int c) { lock_cache_allowed &= ~c; }
+
+private:
+  void calc_issued() {
+    _issued = _pending;
+    for (const auto &r : _revokes) {
+      _issued |= r.before;
+    }
+  }
+
+  void revalidate();
+
+  void mark_notable();
+  void maybe_clear_notable();
+
+  CInode *inode;
+  Session *session;
+
+  uint64_t cap_id;
+  uint32_t cap_gen;
+
+  __u32 _wanted = 0;     // what the client wants (ideally)
+
+  utime_t last_issue_stamp;
+  utime_t last_revoke_stamp;
+  unsigned num_revoke_warnings = 0;
+
+  // track in-flight caps --------------
+  //  - add new caps to _pending
+  //  - track revocations in _revokes list
+  __u32 _pending = 0, _issued = 0;
+  mempool::mds_co::list<revoke_info> _revokes;
+
+  ceph_seq_t last_sent = 0;
+  ceph_seq_t last_issue = 0;
+  ceph_seq_t mseq = 0;
+
+  int suppress = 0;
+  unsigned state = 0;
+
+  int lock_cache_allowed = 0;
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)

@@ -17,8 +17,10 @@
 
 #include <boost/shared_ptr.hpp>
 #include "include/rbd/librbd.hpp"
-#include "Deser.hpp"
+#include "common/Formatter.h"
+#include "rbd_replay/ActionTypes.h"
 #include "rbd_loc.hpp"
+#include <iostream>
 
 // Stupid Doxygen requires this or else the typedef docs don't appear anywhere.
 /// @file rbd_replay/actions.hpp
@@ -31,43 +33,7 @@ typedef uint64_t thread_id_t;
 /// Even IDs are normal actions, odd IDs are completions.
 typedef uint32_t action_id_t;
 
-/**
-   Dependencies link actions to earlier actions or completions.
-   If an action has a dependency \c d then it waits until \c d.time_delta nanoseconds after the action or completion with ID \c d.id has fired.
-*/
-struct dependency_d {
-  /// ID of the action or completion to wait for.
-  action_id_t id;
-
-  /// Nanoseconds of delay to wait until after the action or completion fires.
-  uint64_t time_delta;
-
-  /**
-     @param id ID of the action or completion to wait for.
-     @param time_delta Nanoseconds of delay to wait after the action or completion fires.
-   */
-  dependency_d(action_id_t id,
-	       uint64_t time_delta)
-    : id(id),
-      time_delta(time_delta) {
-  }
-};
-
-// These are written to files, so don't change existing assignments.
-enum io_type {
-  IO_START_THREAD,
-  IO_STOP_THREAD,
-  IO_READ,
-  IO_WRITE,
-  IO_ASYNC_READ,
-  IO_ASYNC_WRITE,
-  IO_OPEN_IMAGE,
-  IO_CLOSE_IMAGE,
-};
-
-
 class PendingIO;
-
 
 /**
    %Context through which an Action interacts with its environment.
@@ -114,7 +80,7 @@ public:
   /**
      Maps an image name from the name in the original trace to the name that should be used when replaying.
      @param image_name name of the image in the original trace
-     @param snap_name name of the snap in the orginal trace
+     @param snap_name name of the snap in the original trace
      @return image name to replay against
    */
   virtual rbd_loc map_image_name(std::string image_name, std::string snap_name) const = 0;
@@ -131,19 +97,14 @@ class Action {
 public:
   typedef boost::shared_ptr<Action> ptr;
 
-  Action(action_id_t id,
-	 thread_id_t thread_id,
-	 int num_successors,
-	 int num_completion_successors,
-	 std::vector<dependency_d> &predecessors);
-
-  virtual ~Action();
+  virtual ~Action() {
+  }
 
   virtual void perform(ActionCtx &ctx) = 0;
 
   /// Returns the ID of the completion corresponding to this action.
   action_id_t pending_io_id() {
-    return m_id + 1;
+    return id() + 1;
   }
 
   // There's probably a better way to do this, but oh well.
@@ -151,206 +112,231 @@ public:
     return false;
   }
 
-  action_id_t id() const {
-    return m_id;
-  }
-
-  thread_id_t thread_id() const {
-    return m_thread_id;
-  }
-
-  const std::vector<dependency_d>& predecessors() const {
-    return m_predecessors;
-  }
-
-  /// Reads and constructs an action from the replay file.
-  static ptr read_from(Deser &d);
-
-protected:
-  std::ostream& dump_action_fields(std::ostream& o) const;
-
-private:
-  friend std::ostream& operator<<(std::ostream&, const Action&);
+  virtual action_id_t id() const = 0;
+  virtual thread_id_t thread_id() const = 0;
+  virtual const action::Dependencies& predecessors() const = 0;
 
   virtual std::ostream& dump(std::ostream& o) const = 0;
 
-  const action_id_t m_id;
-  const thread_id_t m_thread_id;
-  const int m_num_successors;
-  const int m_num_completion_successors;
-  const std::vector<dependency_d> m_predecessors;
+  static ptr construct(const action::ActionEntry &action_entry);
+};
+
+template <typename ActionType>
+class TypedAction : public Action {
+public:
+  explicit TypedAction(const ActionType &action) : m_action(action) {
+  }
+
+  action_id_t id() const override {
+    return m_action.id;
+  }
+
+  thread_id_t thread_id() const override {
+    return m_action.thread_id;
+  }
+
+  const action::Dependencies& predecessors() const override {
+    return m_action.dependencies;
+  }
+
+  std::ostream& dump(std::ostream& o) const override {
+    o << get_action_name() << ": ";
+    ceph::JSONFormatter formatter(false);
+    formatter.open_object_section("");
+    m_action.dump(&formatter);
+    formatter.close_section();
+    formatter.flush(o);
+    return o;
+  }
+
+protected:
+  const ActionType m_action;
+
+  virtual const char *get_action_name() const = 0;
 };
 
 /// Writes human-readable debug information about the action to the stream.
 /// @related Action
 std::ostream& operator<<(std::ostream& o, const Action& a);
 
-
-/**
-   Placeholder for partially-constructed actions.
-   Does nothing, and does not appear in the replay file.
- */
-class DummyAction : public Action {
+class StartThreadAction : public TypedAction<action::StartThreadAction> {
 public:
-  DummyAction(action_id_t id,
-	      thread_id_t thread_id,
-	      int num_successors,
-	      int num_completion_successors,
-	      std::vector<dependency_d> &predecessors)
-    : Action(id, thread_id, num_successors, num_completion_successors, predecessors) {
+  explicit StartThreadAction(const action::StartThreadAction &action)
+    : TypedAction<action::StartThreadAction>(action) {
   }
 
-  void perform(ActionCtx &ctx) {
+  bool is_start_thread() override {
+    return true;
+  }
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "StartThreadAction";
+  }
+};
+
+class StopThreadAction : public TypedAction<action::StopThreadAction> {
+public:
+  explicit StopThreadAction(const action::StopThreadAction &action)
+    : TypedAction<action::StopThreadAction>(action) {
   }
 
-private:
-  std::ostream& dump(std::ostream& o) const;
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "StartThreadAction";
+  }
 };
 
 
-class StopThreadAction : public Action {
+class AioReadAction : public TypedAction<action::AioReadAction> {
 public:
-  explicit StopThreadAction(Action &src);
+  explicit AioReadAction(const action::AioReadAction &action)
+    : TypedAction<action::AioReadAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  static Action::ptr read_from(Action &src, Deser &d);
-
-private:
-  std::ostream& dump(std::ostream& o) const;
+protected:
+  const char *get_action_name() const override {
+    return "AioReadAction";
+  }
 };
 
 
-class AioReadAction : public Action {
+class ReadAction : public TypedAction<action::ReadAction> {
 public:
-  AioReadAction(const Action &src,
-		imagectx_id_t imagectx_id,
-		uint64_t offset,
-		uint64_t length);
+  explicit ReadAction(const action::ReadAction &action)
+    : TypedAction<action::ReadAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  static Action::ptr read_from(Action &src, Deser &d);
-
-private:
-  std::ostream& dump(std::ostream& o) const;
-
-  imagectx_id_t m_imagectx_id;
-  uint64_t m_offset;
-  uint64_t m_length;
+protected:
+  const char *get_action_name() const override {
+    return "ReadAction";
+  }
 };
 
 
-class ReadAction : public Action {
+class AioWriteAction : public TypedAction<action::AioWriteAction> {
 public:
-  ReadAction(const Action &src,
-	     imagectx_id_t imagectx_id,
-	     uint64_t offset,
-	     uint64_t length);
+  explicit AioWriteAction(const action::AioWriteAction &action)
+    : TypedAction<action::AioWriteAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  static Action::ptr read_from(Action &src, Deser &d);
-
-private:
-  std::ostream& dump(std::ostream& o) const;
-
-  imagectx_id_t m_imagectx_id;
-  uint64_t m_offset;
-  uint64_t m_length;
+protected:
+  const char *get_action_name() const override {
+    return "AioWriteAction";
+  }
 };
 
 
-class AioWriteAction : public Action {
+class WriteAction : public TypedAction<action::WriteAction> {
 public:
-  AioWriteAction(const Action &src,
-		 imagectx_id_t imagectx_id,
-		 uint64_t offset,
-		 uint64_t length);
+  explicit WriteAction(const action::WriteAction &action)
+    : TypedAction<action::WriteAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  static Action::ptr read_from(Action &src, Deser &d);
-
-private:
-  std::ostream& dump(std::ostream& o) const;
-
-  imagectx_id_t m_imagectx_id;
-  uint64_t m_offset;
-  uint64_t m_length;
+protected:
+  const char *get_action_name() const override {
+    return "WriteAction";
+  }
 };
 
 
-class WriteAction : public Action {
+class AioDiscardAction : public TypedAction<action::AioDiscardAction> {
 public:
-  WriteAction(const Action &src,
-	      imagectx_id_t imagectx_id,
-	      uint64_t offset,
-	      uint64_t length);
+  explicit AioDiscardAction(const action::AioDiscardAction &action)
+    : TypedAction<action::AioDiscardAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  static Action::ptr read_from(Action &src, Deser &d);
-
-private:
-  std::ostream& dump(std::ostream& o) const;
-
-  imagectx_id_t m_imagectx_id;
-  uint64_t m_offset;
-  uint64_t m_length;
+protected:
+  const char *get_action_name() const override {
+    return "AioDiscardAction";
+  }
 };
 
 
-class OpenImageAction : public Action {
+class DiscardAction : public TypedAction<action::DiscardAction> {
 public:
-  OpenImageAction(Action &src,
-		  imagectx_id_t imagectx_id,
-		  std::string name,
-		  std::string snap_name,
-		  bool readonly);
+  explicit DiscardAction(const action::DiscardAction &action)
+    : TypedAction<action::DiscardAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  static Action::ptr read_from(Action &src, Deser &d);
-
-private:
-  std::ostream& dump(std::ostream& o) const;
-
-  imagectx_id_t m_imagectx_id;
-  std::string m_name;
-  std::string m_snap_name;
-  bool m_readonly;
+protected:
+  const char *get_action_name() const override {
+    return "DiscardAction";
+  }
 };
 
 
-class CloseImageAction : public Action {
+class OpenImageAction : public TypedAction<action::OpenImageAction> {
 public:
-  CloseImageAction(Action &src,
-		   imagectx_id_t imagectx_id);
+  explicit OpenImageAction(const action::OpenImageAction &action)
+    : TypedAction<action::OpenImageAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  static Action::ptr read_from(Action &src, Deser &d);
-
-private:
-  std::ostream& dump(std::ostream& o) const;
-
-  imagectx_id_t m_imagectx_id;
+protected:
+  const char *get_action_name() const override {
+    return "OpenImageAction";
+  }
 };
 
 
-class StartThreadAction : public Action {
+class CloseImageAction : public TypedAction<action::CloseImageAction> {
 public:
-  explicit StartThreadAction(Action &src);
+  explicit CloseImageAction(const action::CloseImageAction &action)
+    : TypedAction<action::CloseImageAction>(action) {
+  }
 
-  void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
-  bool is_start_thread();
+protected:
+  const char *get_action_name() const override {
+    return "CloseImageAction";
+  }
+};
 
-  static Action::ptr read_from(Action &src, Deser &d);
+class AioOpenImageAction : public TypedAction<action::AioOpenImageAction> {
+public:
+  explicit AioOpenImageAction(const action::AioOpenImageAction &action)
+    : TypedAction<action::AioOpenImageAction>(action) {
+  }
 
-private:
-  std::ostream& dump(std::ostream& o) const;
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "AioOpenImageAction";
+  }
+};
+
+
+class AioCloseImageAction : public TypedAction<action::AioCloseImageAction> {
+public:
+  explicit AioCloseImageAction(const action::AioCloseImageAction &action)
+    : TypedAction<action::AioCloseImageAction>(action) {
+  }
+
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "AioCloseImageAction";
+  }
 };
 
 }

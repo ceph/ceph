@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 delay_mon() {
     MSGTYPE=$1
@@ -20,9 +21,9 @@ delay_osd() {
 
 # pool ops
 delay_mon omap rados lspools
-delay_mon poolopreply rados mkpool test
+delay_mon poolopreply ceph osd pool create test 8
 delay_mon poolopreply rados mksnap -p test snap
-delay_mon poolopreply rados rmpool test test --yes-i-really-really-mean-it
+delay_mon poolopreply ceph osd pool rm test test --yes-i-really-really-mean-it
 
 # other mon ops
 delay_mon getpoolstats rados df

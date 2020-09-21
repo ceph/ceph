@@ -1,0 +1,229 @@
+<ng-template #matcherTpl
+             let-matcher="matcher"
+             let-index="index">
+  <div class="input-group my-2">
+    <ng-container *ngFor="let config of matcherConfig">
+      <div class="input-group-prepend">
+        <span class="input-group-text"
+              [ngbTooltip]="config.tooltip">
+          <i [ngClass]="[config.icon]"></i>
+        </span>
+      </div>
+
+      <ng-container *ngIf="config.attribute !== 'isRegex'">
+        <input type="text"
+               id="matcher-{{config.attribute}}-{{index}}"
+               class="form-control"
+               [value]="matcher[config.attribute]"
+               disabled
+               readonly>
+      </ng-container>
+
+      <ng-container *ngIf="config.attribute === 'isRegex'">
+        <div class="input-group-append">
+          <div class="input-group-text">
+            <input type="checkbox"
+                   id="matcher-{{config.attribute}}-{{index}}"
+                   [checked]="matcher[config.attribute]"
+                   disabled
+                   readonly>
+          </div>
+        </div>
+      </ng-container>
+    </ng-container>
+
+    <!-- Matcher actions -->
+    <span class="input-group-append">
+      <button type="button"
+              class="btn btn-light"
+              id="matcher-edit-{{index}}"
+              i18n-ngbTooltip
+              ngbTooltip="Edit"
+              (click)="showMatcherModal(index)">
+        <i [ngClass]="[icons.edit]"></i>
+      </button>
+      <button type="button"
+              class="btn btn-light"
+              id="matcher-delete-{{index}}"
+              i18n-ngbTooltip
+              ngbTooltip="Delete"
+              (click)="deleteMatcher(index)">
+        <i [ngClass]="[icons.trash]"></i>
+      </button>
+    </span>
+  </div>
+  <span class="help-block"></span>
+</ng-template>
+
+<div class="cd-col-form">
+  <form #formDir="ngForm"
+        [formGroup]="form"
+        class="form"
+        name="form"
+        novalidate>
+    <div class="card">
+      <div class="card-header">
+        <span i18n="@@formTitle">
+          {{ action | titlecase }} {{ resource | upperFirst }}
+        </span>
+        <cd-helper *ngIf="edit"
+                   i18n>Editing a silence will expire the old silence and recreate it as a new silence</cd-helper>
+      </div>
+
+      <!-- Creator -->
+      <div class="card-body">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="created-by"
+                 i18n>Creator</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   formControlName="createdBy"
+                   id="created-by"
+                   name="created-by"
+                   type="text">
+            <span *ngIf="form.showError('createdBy', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Comment -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="comment"
+                 i18n>Comment</label>
+          <div class="cd-col-form-input">
+            <textarea class="form-control"
+                      formControlName="comment"
+                      id="comment"
+                      name="comment"
+                      type="text">
+            </textarea>
+            <span *ngIf="form.showError('comment', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Start time -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="starts-at">
+            <span class="required"
+                  i18n>Start time</span>
+            <cd-helper i18n>If the start time lies in the past the creation time will be used</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   formControlName="startsAt"
+                   [ngbPopover]="popStart"
+                   triggers="manual"
+                   #ps="ngbPopover"
+                   (click)="ps.open()"
+                   (keypress)="ps.close()">
+            <span *ngIf="form.showError('startsAt', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Duration -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="duration"
+                 i18n>Duration</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   formControlName="duration"
+                   id="duration"
+                   name="duration"
+                   type="text">
+            <span *ngIf="form.showError('duration', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- End time -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="ends-at"
+                 i18n>End time</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   formControlName="endsAt"
+                   [ngbPopover]="popEnd"
+                   triggers="manual"
+                   #pe="ngbPopover"
+                   (click)="pe.open()"
+                   (keypress)="pe.close()">
+            <span *ngIf="form.showError('endsAt', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Matchers -->
+        <fieldset>
+          <legend class="required"
+                  i18n>Matchers</legend>
+
+          <div class="cd-col-form-offset">
+            <h5 *ngIf="matchers.length === 0"
+                [ngClass]="{'text-warning': !formDir.submitted, 'text-danger': formDir.submitted}">
+              <strong i18n>A silence requires at least one matcher</strong>
+            </h5>
+
+            <span *ngFor="let matcher of matchers; let i=index;">
+              <ng-container *ngTemplateOutlet="matcherTpl; context:{index: i, matcher: matcher}"></ng-container>
+            </span>
+
+            <div class="row">
+              <div class="col-12">
+                <button type="button"
+                        id="add-matcher"
+                        class="btn btn-light float-right my-3"
+                        [ngClass]="{'btn-warning': formDir.submitted && matchers.length === 0 }"
+                        (click)="showMatcherModal()">
+                  <i [ngClass]="[icons.add]"></i>
+                  <ng-container i18n>Add matcher</ng-container>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="matchers.length && matcherMatch"
+               class="cd-col-form-offset {{matcherMatch.cssClass}}"
+               id="match-state">
+            <span class="text-muted {{matcherMatch.cssClass}}">
+              {{ matcherMatch.status }}
+            </span>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="card-footer">
+        <div class="text-right">
+          <cd-submit-button (submitAction)="submit()"
+                            [form]="formDir"
+                            i18n="@@formTitle">
+            {{ action | titlecase }} {{ resource | upperFirst }}
+          </cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<ng-template #popStart>
+  <cd-date-time-picker [control]="form.get('startsAt')"
+                       [hasSeconds]="false"></cd-date-time-picker>
+</ng-template>
+
+
+<ng-template #popEnd>
+  <cd-date-time-picker [control]="form.get('endsAt')"
+                       [hasSeconds]="false"></cd-date-time-picker>
+</ng-template>

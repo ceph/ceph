@@ -69,14 +69,14 @@ write into an object called ``greeting`` with
 		exit(1);
 	}
 
-In the end, you'll want to close your IO context and connection to RADOS with :c:func:`rados_ioctx_destroy()` and :c:func:`rados_shutdown()`::
+In the end, you will want to close your IO context and connection to RADOS with :c:func:`rados_ioctx_destroy()` and :c:func:`rados_shutdown()`::
 
 	rados_ioctx_destroy(io);
 	rados_shutdown(cluster);
 
 
-Asychronous IO
-==============
+Asynchronous IO
+===============
 
 When doing lots of IO, you often don't need to wait for one operation
 to complete before starting the next one. `Librados` provides
@@ -113,8 +113,8 @@ be in memory or on disk on all replicas::
 		rados_shutdown(cluster);
 		exit(1);
 	}
-	rados_wait_for_complete(comp); // in memory
-	rados_wait_for_safe(comp); // on disk
+	rados_aio_wait_for_complete(comp); // in memory
+	rados_aio_wait_for_safe(comp); // on disk
 
 Finally, we need to free the memory used by the completion with :c:func:`rados_aio_release`::
 

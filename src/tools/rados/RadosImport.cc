@@ -18,6 +18,7 @@
 #include "osd/PGLog.h"
 #include "RadosImport.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
 int RadosImport::import(std::string pool, bool no_overwrite)
@@ -42,7 +43,11 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
     return ret;
   }
-  cluster.connect();
+  ret = cluster.connect();
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.connect" << std::endl;
+    return ret;
+  }
 
   ret = cluster.ioctx_create(pool.c_str(), ioctx);
   if (ret < 0) {
@@ -86,7 +91,7 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
     pool_mode = true;
     cout << "Importing pool" << std::endl;
   } else if (type == TYPE_PG_BEGIN) {
-    bufferlist::iterator ebliter = ebl.begin();
+    auto ebliter = ebl.cbegin();
     pg_begin pgb;
     pgb.decode(ebliter);
     spg_t pgid = pgb.pgid;;
@@ -110,8 +115,10 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
   }
 #endif
 
+#if defined(__linux__)
   if (file_fd != STDIN_FILENO)
     posix_fadvise(file_fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
 
   bool done = false;
   bool found_metadata = false;
@@ -152,14 +159,16 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
     cerr << "Missing metadata section!" << std::endl;
   }
 
+#if defined(__linux__)
   if (file_fd != STDIN_FILENO)
     posix_fadvise(file_fd, 0, 0, POSIX_FADV_DONTNEED);
+#endif
   return 0;
 }
 
 int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   object_begin ob;
   ob.decode(ebliter);
   map<string,bufferlist>::iterator i;
@@ -171,7 +180,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
   omap_hdr_section oh;
   omap_section os;
 
-  assert(g_ceph_context);
+  ceph_assert(g_ceph_context);
   if (ob.hoid.hobj.nspace == g_ceph_context->_conf->osd_hit_set_namespace) {
     cout << "Skipping internal object " << ob.hoid << std::endl;
     skip_object(bl);
@@ -185,6 +194,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
   }
 
   ioctx.set_namespace(ob.hoid.hobj.get_namespace());
+  ioctx.locator_set_key(ob.hoid.hobj.get_key());
 
   string msg("Write");
   skipping = false;
@@ -239,8 +249,22 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
     need_align = true;
     alignment = align;
   } else {
-    if ((need_align = ioctx.pool_requires_alignment()))
-      alignment = ioctx.pool_required_alignment();
+    int ret = ioctx.pool_requires_alignment2(&need_align);
+    if (ret < 0) {
+      cerr << "pool_requires_alignment2 failed: " << cpp_strerror(ret)
+        << std::endl;
+      return ret;
+    }
+
+    if (need_align) {
+      ret = ioctx.pool_required_alignment2(&alignment);
+      if (ret < 0) {
+        cerr << "pool_required_alignment2 failed: " << cpp_strerror(ret)
+	  << std::endl;
+	return ret;
+      }
+      ceph_assert(alignment != 0);
+    }
   }
 
   if (need_align) {
@@ -258,7 +282,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
       return ret;
     }
 
-    ebliter = ebl.begin();
+    ebliter = ebl.cbegin();
     //cout << "\tdo_object: Section type " << hex << type << dec << std::endl;
     //cout << "\t\tsection size " << ebl.length() << std::endl;
     if (type >= END_OF_TYPES) {
@@ -274,7 +298,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
           cerr << "Discontiguous object data in export" << std::endl;
           return -EFAULT;
         }
-        assert(ds.databl.length() == ds.len);
+        ceph_assert(ds.databl.length() == ds.len);
         databl.claim_append(ds.databl);
         in_offset += ds.len;
         if (databl.length() >= alignment) {
@@ -290,7 +314,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
           out_offset += rndlen;
           bufferlist n;
           if (databl.length() > rndlen) {
-            assert(databl.length() - rndlen < alignment);
+            ceph_assert(databl.length() - rndlen < alignment);
 	    n.substr_of(databl, rndlen, databl.length() - rndlen);
           }
           databl = n;
@@ -313,7 +337,9 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         break;
       for (std::map<string,bufferlist>::iterator i = as.data.begin();
           i != as.data.end(); ++i) {
-        if (i->first == "_" || i->first == "snapset")
+	// The user xattrs that we want all begin with "_" with length > 1.
+        // Drop key "_" and all attributes that do not start with '_'
+        if (i->first == "_" || i->first[0] != '_')
           continue;
         ret = ioctx.setxattr(ob.hoid.hobj.oid.name, i->first.substr(1).c_str(), i->second);
         if (ret) {
@@ -353,7 +379,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
     case TYPE_OBJECT_END:
       done = true;
       if (need_align && databl.length() > 0) {
-        assert(databl.length() < alignment);
+        ceph_assert(databl.length() < alignment);
         dout(10) << "END write offset=" << out_offset << " len=" << databl.length() << dendl;
         if (dry_run || skipping)
           break;

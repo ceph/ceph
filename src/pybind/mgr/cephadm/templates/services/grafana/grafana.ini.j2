@@ -1,0 +1,17 @@
+# {{ cephadm_managed }}
+[users]
+  default_theme = light
+[auth.anonymous]
+  enabled = true
+  org_name = 'Main Org.'
+  org_role = 'Viewer'
+[server]
+  domain = 'bootstrap.storage.lab'
+  protocol = https
+  cert_file = /etc/grafana/certs/cert_file
+  cert_key = /etc/grafana/certs/cert_key
+  http_port = {{ http_port }}
+[security]
+  admin_user = admin
+  admin_password = admin
+  allow_embedding = true

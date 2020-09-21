@@ -23,34 +23,34 @@
  * stuff to live.
  */
 
-#include <deque>
-#include <stdint.h>
 #include <string>
 #include <vector>
 
 #include "common/entity_name.h"
-#include "msg/msg_types.h"
 
 /////////////////////// Types ///////////////////////
 class CephInitParameters
 {
 public:
-  CephInitParameters(uint32_t module_type_);
+  explicit CephInitParameters(uint32_t module_type_);
   std::list<std::string> get_conf_files() const;
 
   uint32_t module_type;
   EntityName name;
+  bool no_config_file = false;
 };
 
 /////////////////////// Functions ///////////////////////
 extern void string_to_vec(std::vector<std::string>& args, std::string argstr);
+extern void clear_g_str_vec();
 extern void env_to_vec(std::vector<const char*>& args, const char *name=NULL);
 extern void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
 extern void vec_to_argv(const char *argv0, std::vector<const char*>& args,
 			int *argc, const char ***argv);
 
-extern bool parse_ip_port_vec(const char *s, std::vector<entity_addr_t>& vec);
+extern bool parse_ip_port_vec(const char *s, std::vector<entity_addrvec_t>& vec,
+			      int type=0);
 bool ceph_argparse_double_dash(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i);
 bool ceph_argparse_flag(std::vector<const char*> &args,
@@ -68,8 +68,9 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
 	std::ostream *oss, ...);
 extern CephInitParameters ceph_argparse_early_args
-	    (std::vector<const char*>& args, uint32_t module_type, int flags,
+	    (std::vector<const char*>& args, uint32_t module_type,
 	     std::string *cluster, std::string *conf_file_list);
+extern bool ceph_argparse_need_usage(const std::vector<const char*>& args);
 extern void generic_server_usage();
 extern void generic_client_usage();
 

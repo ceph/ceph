@@ -1,15 +1,19 @@
+.. _erasure-code-profiles:
+
 =====================
 Erasure code profiles
 =====================
 
 Erasure code is defined by a **profile** and is used when creating an
-erasure coded pool and the associated crush ruleset.
+erasure coded pool and the associated CRUSH rule.
 
 The **default** erasure code profile (which is created when the Ceph
-cluster is initialized) provides the same level of redundancy as two
-copies but requires 25% less disk space. It is described as a profile
-with **k=2** and **m=1**, meaning the information is spread over three
-OSD (k+m == 3) and one of them can be lost.
+cluster is initialized) will split the data into 2 equal-sized chunks,
+and have 2 parity chunks of the same size. It will take as much space
+in the cluster as a 2-replica pool but can sustain the data loss of 2
+chunks out of 4. It is described as a profile with **k=2** and **m=2**,
+meaning the information is spread over four OSD (k+m == 4) and two of
+them can be lost.
 
 To improve redundancy without increasing raw storage requirements, a
 new profile can be created. For instance, a profile with **k=10** and
@@ -30,6 +34,7 @@ same time.
 	erasure-code-isa
 	erasure-code-lrc
 	erasure-code-shec
+	erasure-code-clay
 
 osd erasure-code-profile set
 ============================
@@ -39,6 +44,7 @@ To create a new erasure code profile::
 	ceph osd erasure-code-profile set {name} \
              [{directory=directory}] \
              [{plugin=plugin}] \
+             [{stripe_unit=stripe_unit}] \
              [{key=value} ...] \
              [--force]
 
@@ -60,8 +66,24 @@ Where:
               plugins`_ for more information.
 
 :Type: String
-:Required: No. 
+:Required: No.
 :Default: jerasure
+
+``{stripe_unit=stripe_unit}``
+
+:Description: The amount of data in a data chunk, per stripe. For
+              example, a profile with 2 data chunks and stripe_unit=4K
+              would put the range 0-4K in chunk 0, 4K-8K in chunk 1,
+              then 8K-12K in chunk 0 again. This should be a multiple
+              of 4K for best performance. The default value is taken
+              from the monitor config option
+              ``osd_pool_erasure_code_stripe_unit`` when a pool is
+              created.  The stripe_width of a pool using this profile
+              will be the number of data chunks multiplied by this
+              stripe_unit.
+
+:Type: String
+:Required: No.
 
 ``{key=value}``
 
@@ -69,14 +91,15 @@ Where:
               by the erasure code plugin.
 
 :Type: String
-:Required: No. 
+:Required: No.
 
 ``--force``
 
-:Description: Override an existing profile by the same name.
+:Description: Override an existing profile by the same name, and allow
+              setting a non-4K-aligned stripe_unit.
 
 :Type: String
-:Required: No. 
+:Required: No.
 
 osd erasure-code-profile rm
 ============================

@@ -7,6 +7,22 @@ The following settings may added to the Ceph configuration file (i.e., usually
 settings may contain default values. If you do not specify each setting in the
 Ceph configuration file, the default value will be set automatically.
 
+Configuration variables set under the ``[client.radosgw.{instance-name}]``
+section will not apply to rgw or radosgw-admin commands without an instance-name
+specified in the command. Thus variables meant to be applied to all RGW
+instances or all radosgw-admin commands can be put into the ``[global]`` or the
+``[client]`` section to avoid specifying instance-name.
+
+``rgw frontends``
+
+:Description: Configures the HTTP frontend(s). The configuration for multiple
+              frontends can be provided in a comma-delimited list. Each frontend
+              configuration may include a list of options separated by spaces,
+              where each option is in the form "key=value" or "key". See
+              `HTTP Frontends`_ for more on supported options.
+
+:Type: String
+:Default: ``beast port=7480``
 
 ``rgw data``
 
@@ -18,6 +34,11 @@ Ceph configuration file, the default value will be set automatically.
 ``rgw enable apis``
 
 :Description: Enables the specified APIs.
+
+              .. note:: Enabling the ``s3`` API is a requirement for
+                        any radosgw instance that is meant to
+                        participate in a `multi-site <../multisite>`_
+                        configuration.
 :Type: String
 :Default: ``s3, swift, swift_auth, admin`` All APIs.
 
@@ -34,23 +55,28 @@ Ceph configuration file, the default value will be set automatically.
 :Description: The number of entries in the Ceph Object Gateway cache.
 :Type: Integer
 :Default: ``10000``
-	
+
 
 ``rgw socket path``
 
-:Description: The socket path for the domain socket. ``FastCgiExternalServer`` 
-              uses this socket. If you do not specify a socket path, Ceph 
-              Object Gateway will not run as an external server. The path you 
-              specify here must be the same as the path specified in the 
+:Description: The socket path for the domain socket. ``FastCgiExternalServer``
+              uses this socket. If you do not specify a socket path, Ceph
+              Object Gateway will not run as an external server. The path you
+              specify here must be the same as the path specified in the
               ``rgw.conf`` file.
 
 :Type: String
 :Default: N/A
 
+``rgw fcgi socket backlog``
+
+:Description: The socket backlog for fcgi.
+:Type: Integer
+:Default: ``1024``
 
 ``rgw host``
 
-:Description: The host for the Ceph Object Gateway instance. Can be an IP 
+:Description: The host for the Ceph Object Gateway instance. Can be an IP
               address or a hostname.
 
 :Type: String
@@ -59,9 +85,9 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw port``
 
-:Description: Port the instance listens for requests. If not specified, 
+:Description: Port the instance listens for requests. If not specified,
               Ceph Object Gateway runs external FastCGI.
-              
+
 :Type: String
 :Default: None
 
@@ -69,9 +95,9 @@ Ceph configuration file, the default value will be set automatically.
 ``rgw dns name``
 
 :Description: The DNS name of the served domain. See also the ``hostnames`` setting within regions.
-:Type: String 
+:Type: String
 :Default: None
-	
+
 
 ``rgw script uri``
 
@@ -100,8 +126,8 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw remote addr param``
 
-:Description: The remote address parameter. For example, the HTTP field 
-              containing the remote address, or the ``X-Forwarded-For`` 
+:Description: The remote address parameter. For example, the HTTP field
+              containing the remote address, or the ``X-Forwarded-For``
               address if a reverse proxy is operational.
 
 :Type: String
@@ -109,38 +135,26 @@ Ceph configuration file, the default value will be set automatically.
 
 
 ``rgw op thread timeout``
-	
+
 :Description: The timeout in seconds for open threads.
 :Type: Integer
 :Default: 600
-	
+
 
 ``rgw op thread suicide timeout``
-	
-:Description: The time ``timeout`` in seconds before a Ceph Object Gateway 
+
+:Description: The time ``timeout`` in seconds before a Ceph Object Gateway
               process dies. Disabled if set to ``0``.
 
-:Type: Integer 
+:Type: Integer
 :Default: ``0``
 
 
 ``rgw thread pool size``
 
 :Description: The size of the thread pool.
-:Type: Integer 
-:Default: 100 threads.
-
-
-``rgw num rados handles``
-
-:Description: The numer of the `RADOS cluster handles`_ for Ceph Object Gateway.
-              Having a configurable number of RADOS handles is resulting in
-              significant performance boost for all types of workloads. Each RGW
-              worker thread would now get to pick a RADOS handle for its lifetime,
-              from the available bunch.
-
 :Type: Integer
-:Default: ``1``
+:Default: 100 threads.
 
 
 ``rgw num control oids``
@@ -154,7 +168,7 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw init timeout``
 
-:Description: The number of seconds before Ceph Object Gateway gives up on 
+:Description: The number of seconds before Ceph Object Gateway gives up on
               initialization.
 
 :Type: Integer
@@ -163,45 +177,11 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw mime types file``
 
-:Description: The path and location of the MIME types. Used for Swift 
+:Description: The path and location of the MIME types. Used for Swift
               auto-detection of object types.
 
 :Type: String
 :Default: ``/etc/mime.types``
-
-
-``rgw gc max objs``
-
-:Description: The maximum number of objects that may be handled by 
-              garbage collection in one garbage collection processing cycle.
-
-:Type: Integer
-:Default: ``32``
-
-
-``rgw gc obj min wait``
-
-:Description: The minimum wait time before the object may be removed 
-              and handled by garbage collection processing.
-              
-:Type: Integer
-:Default: ``2 * 3600``
-
-
-``rgw gc processor max time``
-
-:Description: The maximum time between the beginning of two consecutive garbage 
-              collection processing cycles.
-
-:Type: Integer
-:Default: ``3600``
-
-
-``rgw gc processor period``
-
-:Description: The cycle time for garbage collection processing.
-:Type: Integer
-:Default: ``3600``
 
 
 ``rgw s3 success create obj status``
@@ -213,7 +193,7 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw resolve cname``
 
-:Description: Whether ``rgw`` should use DNS CNAME record of the request 
+:Description: Whether ``rgw`` should use DNS CNAME record of the request
               hostname field (if hostname is not equal to ``rgw dns name``).
 
 :Type: Boolean
@@ -231,19 +211,20 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw extended http attrs``
 
-:Description: Add new set of attributes that could be set on an object. These 
-              extra attributes can be set through HTTP header fields when 
-              putting the objects. If set, these attributes will return as HTTP 
-              fields when doing GET/HEAD on the object.
+:Description: Add new set of attributes that could be set on an entity
+              (user, bucket or object). These extra attributes can be set
+              through HTTP header fields when putting the entity or modifying
+              it using POST method. If set, these attributes will return as
+              HTTP  fields when doing GET/HEAD on the entity.
 
 :Type: String
 :Default: None
-:Example: "content_foo, content_bar"
+:Example: "content_foo, content_bar, x-foo-bar"
 
 
 ``rgw exit timeout secs``
 
-:Description: Number of seconds to wait for a process before exiting 
+:Description: Number of seconds to wait for a process before exiting
               unconditionally.
 
 :Type: Integer
@@ -265,7 +246,7 @@ Ceph configuration file, the default value will be set automatically.
 :Type: Integer
 :Default: ``4 << 20``
 
- 
+
 ``rgw relaxed s3 bucket names``
 
 :Description: Enables relaxed S3 bucket names rules for US region buckets.
@@ -288,32 +269,16 @@ Ceph configuration file, the default value will be set automatically.
               a value of zero indicates there is no sharding. It is not
               recommended to set a value too large (e.g. thousand) as it
               increases the cost for bucket listing.
+              This variable should be set in the client or global sections
+              so that it is automatically applied to radosgw-admin commands.
 
 :Type: Integer
 :Default: ``0``
 
 
-``rgw num zone opstate shards``
-
-:Description: The maximum number of shards for keeping inter-region copy 
-              progress information.
-
-:Type: Integer
-:Default: ``128``
-
-
-``rgw opstate ratelimit sec``
-
-:Description: The minimum time between opstate updates on a single upload. 
-              ``0`` disables the ratelimit.
-
-:Type: Integer
-:Default: ``30``
-
-
 ``rgw curl wait timeout ms``
 
-:Description: The timeout in milliseconds for certain ``curl`` calls. 
+:Description: The timeout in milliseconds for certain ``curl`` calls.
 :Type: Integer
 :Default: ``1000``
 
@@ -328,7 +293,7 @@ Ceph configuration file, the default value will be set automatically.
 ``rgw copy obj progress every bytes``
 
 :Description: The minimum bytes between copy progress output.
-:Type: Integer 
+:Type: Integer
 :Default: ``1024 * 1024``
 
 
@@ -341,385 +306,294 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw content length compat``
 
-:Description: Enable compatability handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
+:Description: Enable compatibility handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
 :Type: Boolean
 :Default: ``false``
 
-Regions
-=======
 
-In Ceph v0.67 and beyond, Ceph Object Gateway supports federated deployments and
-a global namespace via the notion of regions. A region defines the geographic
-location of one or more Ceph Object Gateway instances within one or more zones. 
+``rgw bucket quota ttl``
 
+:Description: The amount of time in seconds cached quota information is
+              trusted.  After this timeout, the quota information will be
+              re-fetched from the cluster.
+:Type: Integer
+:Default: ``600``
 
-Configuring regions differs from typical configuration procedures, because not
-all of the settings end up in a Ceph configuration file. In Ceph v0.67 and
-beyond, you can list regions, get a region configuration and set a region
-configuration.
 
+``rgw user quota bucket sync interval``
 
-List Regions
-------------
+:Description: The amount of time in seconds bucket quota information is
+              accumulated before syncing to the cluster.  During this time,
+              other RGW instances will not see the changes in bucket quota
+              stats from operations on this instance.
+:Type: Integer
+:Default: ``180``
 
-A Ceph cluster contains a list of regions. To list the regions, execute:: 
 
-	sudo radosgw-admin regions list
+``rgw user quota sync interval``
 
-The ``radosgw-admin`` returns a JSON formatted list of regions. 
+:Description: The amount of time in seconds user quota information is
+              accumulated before syncing to the cluster.  During this time,
+              other RGW instances will not see the changes in user quota stats
+              from operations on this instance.
+:Type: Integer
+:Default: ``180``
 
-.. code-block:: javascript
 
-	{ "default_info": { "default_region": "default"},
-	  "regions": [
-	        "default"]}
-	        
+``rgw bucket default quota max objects``
 
-Get a Region Map
-----------------
+:Description: Default max number of objects per bucket. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+              This variable should be set in the client or global sections
+              so that it is automatically applied to radosgw-admin commands.
+:Type: Integer
+:Default: ``-1``
 
-To list the details of each region, execute:: 
 
-	sudo radosgw-admin region-map get
-	
-	
-.. note:: If you receive a ``failed to read region map`` error, run
-   ``sudo radosgw-admin region-map update`` first.
+``rgw bucket default quota max size``
 
+:Description: Default max capacity per bucket, in bytes. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
 
-Get a Region
-------------
 
-To view the configuration of a region, execute:: 
+``rgw user default quota max objects``
 
-	radosgw-admin region get [--rgw-region=<region>]
+:Description: Default max number of objects for a user. This includes all
+              objects in all buckets owned by the user. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
 
-The ``default`` region looks like this:
 
-.. code-block:: javascript
+``rgw user default quota max size``
 
-   {"name": "default",
-    "api_name": "",
-    "is_master": "true",
-    "endpoints": [],
-    "hostnames": [],
-    "master_zone": "",
-    "zones": [
-      {"name": "default",
-       "endpoints": [],
-       "log_meta": "false",
-       "log_data": "false"}
-     ],
-    "placement_targets": [
-      {"name": "default-placement",
-       "tags": [] }],
-    "default_placement": "default-placement"}
+:Description: The value for user max size quota in bytes set on new users,
+              if no other quota is specified.  Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
 
-Set a Region
-------------
 
-Defining a region consists of creating a JSON object, specifying at least the
-required settings:
+``rgw verify ssl``
 
-#. ``name``: The name of the region. Required.
+:Description: Verify SSL certificates while making requests.
+:Type: Boolean
+:Default: ``true``
 
-#. ``api_name``: The API name for the region. Optional.
+Lifecycle Settings
+==================
 
-#. ``is_master``: Determines if the region is the master region.  Required.
-   **note:** You can only have one master region.
+Bucket Lifecycle configuration can be used to manage your objects so they are stored
+effectively throughout their lifetime. In past releases Lifecycle processing was rate-limited
+by single threaded processing. With the Nautilus release this has been addressed and the
+Ceph Object Gateway now allows for parallel thread processing of bucket lifecycles across
+additional Ceph Object Gateway instances and replaces the in-order
+index shard enumeration with a random ordered sequence.
 
-#. ``endpoints``: A list of all the endpoints in the region. For example, 
-   you may use multiple domain names to refer to the same region. Remember to 
-   escape the forward slashes (``\/``). You may also specify a 
-   port (``fqdn:port``) for each endpoint. Optional.
+There are two options in particular to look at when looking to increase the
+aggressiveness of lifecycle processing:
 
-#. ``hostnames``: A list of all the hostnames in the region. For example, 
-   you may use multiple domain names to refer to the same region. Optional.
-   The ``rgw dns name`` setting will automatically be included in this list.
-   You should restart the ``radosgw`` daemon(s) after changing this setting.
+``rgw lc max worker``
 
-#. ``master_zone``: The master zone for the region. Optional. Uses the default
-   zone if not specified. **note:** You can only have one master zone per 
-   region.
+:Description: This option specifies the number of lifecycle worker threads
+              to run in parallel, thereby processing bucket and index
+              shards simultaneously.
 
-#. ``zones``: A list of all zones within the region. Each zone has a 
-   name (required), a list of endpoints (optional), and whether or not the 
-   gateway will log metadata and data operations (false by default).
+:Type: Integer
+:Default: ``3``
 
-#. ``placement_targets``: A list of placement targets (optional). Each 
-   placement target contains a name (required) for the placement target 
-   and a list of tags (optional) so that only users with the tag can use
-   the placement target (i.e., the user's ``placement_tags`` field in the 
-   user info). 
+``rgw lc max wp worker``
 
-#. ``default_placement``: The default placement target for the object 
-   index and object data. Set to ``default-placement`` by default. You 
-   may also set a per-user default placement in the user info for each 
-   user.
+:Description: This option specifies the number of threads in each lifecycle
+              workers work pool. This option can help accelerate processing each bucket.
 
-To set a region, create a JSON object consisting of the required fields, save
-the object to a file (e.g., ``region.json``); then, execute the following
-command::
+These values can be tuned based upon your specific workload to further increase the
+aggressiveness of lifecycle processing. For a workload with a larger number of buckets (thousands)
+you would look at increasing the ``rgw lc max worker`` value from the default value of 3 whereas a
+workload with a smaller number of buckets but higher number of objects (hundreds of thousands)
+per bucket you would look at tuning ``rgw lc max wp worker`` from the default value of 3.
 
-	sudo radosgw-admin region set --infile region.json
+:NOTE: When looking to tune either of these specific values please validate the
+       current Cluster performance and Ceph Object Gateway utilization before increasing.
 
-Where ``region.json`` is the JSON file you created.
+Garbage Collection Settings
+===========================
 
+The Ceph Object Gateway allocates storage for new objects immediately.
 
-.. important:: The ``default`` region ``is_master`` setting is ``true`` by
-   default. If you create a new region and want to make it the master region,
-   you must either set the ``default`` region ``is_master`` setting to 
-   ``false``, or delete the ``default`` region.
+The Ceph Object Gateway purges the storage space used for deleted and overwritten 
+objects in the Ceph Storage cluster some time after the gateway deletes the 
+objects from the bucket index. The process of purging the deleted object data 
+from the Ceph Storage cluster is known as Garbage Collection or GC.
 
+To view the queue of objects awaiting garbage collection, execute the following::
 
-Finally, update the map. :: 
+  $ radosgw-admin gc list 
 
-	sudo radosgw-admin region-map update
+  Note: specify --include-all to list all entries, including unexpired
+  
+Garbage collection is a background activity that may
+execute continuously or during times of low loads, depending upon how the
+administrator configures the Ceph Object Gateway. By default, the Ceph Object
+Gateway conducts GC operations continuously. Since GC operations are a normal
+part of Ceph Object Gateway operations, especially with object delete
+operations, objects eligible for garbage collection exist most of the time.
 
+Some workloads may temporarily or permanently outpace the rate of garbage
+collection activity. This is especially true of delete-heavy workloads, where
+many objects get stored for a short period of time and then deleted. For these
+types of workloads, administrators can increase the priority of garbage
+collection operations relative to other operations with the following
+configuration parameters.
 
-Set a Region Map
-----------------
 
-Setting a region map consists of creating a JSON object consisting of one or more
-regions, and setting the ``master_region`` for the cluster. Each region in the 
-region map consists of a key/value pair, where the ``key`` setting is equivalent to
-the ``name`` setting for an individual region configuration, and the ``val`` is 
-a JSON object consisting of an individual region configuration.
+``rgw gc max objs``
 
-You may only have one region with ``is_master`` equal to ``true``, and it must be
-specified as the ``master_region`` at the end of the region map. The following
-JSON object is an example of a default region map.
+:Description: The maximum number of objects that may be handled by
+              garbage collection in one garbage collection processing cycle.
+              Please do not change this value after the first deployment.
 
+:Type: Integer
+:Default: ``32``
 
-.. code-block:: javascript
 
-     { "regions": [
-          { "key": "default",
-            "val": { "name": "default",
-            "api_name": "",
-            "is_master": "true",
-            "endpoints": [],
-            "hostnames": [],
-            "master_zone": "",
-            "zones": [
-              { "name": "default",
-                "endpoints": [],
-                "log_meta": "false",
-                 "log_data": "false"}],
-                 "placement_targets": [
-                   { "name": "default-placement",
-                     "tags": []}],
-                     "default_placement": "default-placement"
-                   }
-               }
-            ],
-        "master_region": "default"
-     }
+``rgw gc obj min wait``
 
-To set a region map, execute the following:: 
+:Description: The minimum wait time before a deleted object may be removed
+              and handled by garbage collection processing.
 
-	sudo radosgw-admin region-map set --infile regionmap.json
+:Type: Integer
+:Default: ``2 * 3600``
 
-Where ``regionmap.json`` is the JSON file you created. Ensure that you have
-zones created for the ones specified in the region map. Finally, update the map.
-::
 
-	sudo radosgw-admin regionmap update
+``rgw gc processor max time``
 
+:Description: The maximum time between the beginning of two consecutive garbage
+              collection processing cycles.
 
-Zones
-=====
+:Type: Integer
+:Default: ``3600``
 
-In Ceph v0.67 and beyond, Ceph Object Gateway supports the notion of zones. A
-zone defines a logical group consisting of one or more Ceph Object Gateway
-instances.
 
-Configuring zones differs from typical configuration procedures, because not
-all of the settings end up in a Ceph configuration file. In Ceph v0.67 and
-beyond, you can list zones, get a zone configuration and set a zone
-configuration.
+``rgw gc processor period``
 
+:Description: The cycle time for garbage collection processing.
+:Type: Integer
+:Default: ``3600``
 
-List Zones
-----------
 
-To list the zones in a cluster, execute::
+``rgw gc max concurrent io``
 
-	sudo radosgw-admin zone list
+:Description: The maximum number of concurrent IO operations that the RGW garbage
+              collection thread will use when purging old data.
+:Type: Integer
+:Default: ``10``
 
 
-Get a Zone
-----------
+:Tuning Garbage Collection for Delete Heavy Workloads:
 
-To get the configuration of a zone, execute:: 
+As an initial step towards tuning Ceph Garbage Collection to be more aggressive the following options are suggested to be increased from their default configuration values:
 
-	sudo radosgw-admin zone get [--rgw-zone=<zone>]
+``rgw gc max concurrent io = 20``
+``rgw gc max trim chunk = 64``
 
-The ``default`` zone looks like this:
+:NOTE: Modifying these values requires a restart of the RGW service.
 
-.. code-block:: javascript
+Once these values have been increased from default please monitor for performance of the cluster during Garbage Collection to verify no adverse performance issues due to the increased values.
 
-   { "domain_root": ".rgw",
-     "control_pool": ".rgw.control",
-     "gc_pool": ".rgw.gc",
-     "log_pool": ".log",
-     "intent_log_pool": ".intent-log",
-     "usage_log_pool": ".usage",
-     "user_keys_pool": ".users",
-     "user_email_pool": ".users.email",
-     "user_swift_pool": ".users.swift",
-     "user_uid_pool": ".users.uid",
-     "system_key": { "access_key": "", "secret_key": ""},
-     "placement_pools": [
-         {  "key": "default-placement",
-            "val": { "index_pool": ".rgw.buckets.index",
-                     "data_pool": ".rgw.buckets"}
-         }
-       ]
-     }
+Multisite Settings
+==================
 
-
-Set a Zone
-----------
-
-Configuring a zone involves specifying a series of Ceph Object Gateway pools.
-For consistency, we recommend using a pool prefix that is
-the same as the zone name. See `Pools`_ for details of configuring pools.
-
-To set a zone, create a JSON object consisting of the pools, save
-the object to a file (e.g., ``zone.json``); then, execute the following
-command, replacing ``{zone-name}`` with the name of the zone::
-
-	sudo radosgw-admin zone set --rgw-zone={zone-name} --infile zone.json
-
-Where ``zone.json`` is the JSON file you created.
-
-
-Region/Zone Settings
-====================
+.. versionadded:: Jewel
 
 You may include the following settings in your Ceph configuration
 file under each ``[client.radosgw.{instance-name}]`` instance.
 
 
-.. versionadded:: v.67
-
 ``rgw zone``
 
-:Description: The name of the zone for the gateway instance.
+:Description: The name of the zone for the gateway instance. If no zone is
+              set, a cluster-wide default can be configured with the command
+              ``radosgw-admin zone default``.
 :Type: String
 :Default: None
 
 
-.. versionadded:: v.67
+``rgw zonegroup``
 
-``rgw region``
-
-:Description: The name of the region for the gateway instance.
+:Description: The name of the zonegroup for the gateway instance. If no
+              zonegroup is set, a cluster-wide default can be configured with
+              the command ``radosgw-admin zonegroup default``.
 :Type: String
 :Default: None
 
 
-.. versionadded:: v.67
+``rgw realm``
 
-``rgw default region info oid``
-
-:Description: The OID for storing the default region. We do not recommend
-              changing this setting.
-              
+:Description: The name of the realm for the gateway instance. If no realm is
+              set, a cluster-wide default can be configured with the command
+              ``radosgw-admin realm default``.
 :Type: String
-:Default: ``default.region``
+:Default: None
 
 
+``rgw run sync thread``
 
-Pools
-=====
-
-Ceph zones map to a series of Ceph Storage Cluster pools. 
-
-.. topic:: Manually Created Pools vs. Generated Pools
-
-   If you provide write capabilities to the user key for your Ceph Object 
-   Gateway, the gateway has the ability to create pools automatically. This 
-   is convenient, but the Ceph Object Storage Cluster uses the default 
-   values for the number of placement groups (which may not be ideal) or the 
-   values you specified in your Ceph configuration file. If you allow the 
-   Ceph Object Gateway to create pools automatically, ensure that you have 
-   reasonable defaults for the number of placement groups. See 
-   `Pool Configuration`_ for details. See `Cluster Pools`_ for details on 
-   creating pools.
-   
-The default pools for the Ceph Object Gateway's default zone include:
-
-- ``.rgw``
-- ``.rgw.control``
-- ``.rgw.gc``
-- ``.log``
-- ``.intent-log``
-- ``.usage``
-- ``.users``
-- ``.users.email``
-- ``.users.swift``
-- ``.users.uid``
-
-You have significant discretion in determining how you want a zone to access
-pools. You can create pools on a per zone basis, or use the same pools for
-multiple zones. As a best practice, we recommend having a separate set of pools
-for your master zone and your secondary zones in each region. When creating
-pools for a specific zone, consider prepending the region name and zone name to
-the default pool names. For example:
-
-- ``.region1-zone1.domain.rgw``
-- ``.region1-zone1.rgw.control``
-- ``.region1-zone1.rgw.gc``
-- ``.region1-zone1.log``
-- ``.region1-zone1.intent-log``
-- ``.region1-zone1.usage``
-- ``.region1-zone1.users``
-- ``.region1-zone1.users.email``
-- ``.region1-zone1.users.swift``
-- ``.region1-zone1.users.uid``
+:Description: If there are other zones in the realm to sync from, spawn threads
+              to handle the sync of data and metadata.
+:Type: Boolean
+:Default: ``true``
 
 
-Ceph Object Gateways store data for the bucket index (``index_pool``) and bucket
-data (``data_pool``) in placement pools. These may overlap--i.e., you may use
-the same pool for the index and the data. The index pool for default
-placement is ``.rgw.buckets.index`` and for the data pool for default placement
-is ``.rgw.buckets``. See `Zones`_ for details on specifying pools in a zone
-configuration.
+``rgw data log window``
+
+:Description: The data log entries window in seconds.
+:Type: Integer
+:Default: ``30``
 
 
-.. deprecated:: v.67
+``rgw data log changes size``
 
-``rgw cluster root pool``
+:Description: The number of in-memory entries to hold for the data changes log.
+:Type: Integer
+:Default: ``1000``
 
-:Description: The Ceph Storage Cluster pool to store ``radosgw`` metadata for 
-              this instance. Not used in Ceph version v.67 and later. Use
-              ``rgw zone root pool`` instead.
 
+``rgw data log obj prefix``
+
+:Description: The object name prefix for the data log.
 :Type: String
-:Required: No
-:Default: ``.rgw.root``
-:Replaced By: ``rgw zone root pool``
+:Default: ``data_log``
 
 
-.. versionadded:: v.67
+``rgw data log num shards``
 
-``rgw region root pool``
+:Description: The number of shards (objects) on which to keep the
+              data changes log.
 
-:Description: The pool for storing all region-specific information.
-:Type: String
-:Default: ``.rgw.root``
+:Type: Integer
+:Default: ``128``
 
 
+``rgw md log max shards``
 
-.. versionadded:: v.67
+:Description: The maximum number of shards for the metadata log.
+:Type: Integer
+:Default: ``64``
 
-``rgw zone root pool``
+.. important:: The values of ``rgw data log num shards`` and
+   ``rgw md log max shards`` should not be changed after sync has
+   started.
 
-:Description: The pool for storing zone-specific information.
-:Type: String
-:Default: ``.rgw.root``
+S3 Settings
+===========
+
+``rgw s3 auth use ldap``
+
+:Description: Should S3 authentication use LDAP.
+:Type: Boolean
+:Default: ``false``
 
 
 Swift Settings
@@ -730,8 +604,8 @@ Swift Settings
 :Description: Enforces the Swift Access Control List (ACL) settings.
 :Type: Boolean
 :Default: ``true``
-	
-	
+
+
 ``rgw swift token expiration``
 
 :Description: The time in seconds for expiring a Swift token.
@@ -744,18 +618,40 @@ Swift Settings
 :Description: The URL for the Ceph Object Gateway Swift API.
 :Type: String
 :Default: None
-	
+
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift API. 
+:Description: The URL prefix for the Swift API, to distinguish it from
+              the S3 API endpoint. The default is ``swift``, which
+              makes the Swift API available at the URL
+              ``http://host:port/swift/v1`` (or
+              ``http://host:port/swift/v1/AUTH_%(tenant_id)s`` if
+              ``rgw swift account in url`` is enabled).
+
+              For compatibility, setting this configuration variable
+              to the empty string causes the default ``swift`` to be
+              used; if you do want an empty prefix, set this option to
+              ``/``.
+
+              .. warning:: If you set this option to ``/``, you must
+                           disable the S3 API by modifying ``rgw
+                           enable apis`` to exclude ``s3``. It is not
+                           possible to operate radosgw with ``rgw
+                           swift url prefix = /`` and simultaneously
+                           support both the S3 and Swift APIs. If you
+                           do need to support both APIs without
+                           prefixes, deploy multiple radosgw instances
+                           to listen on different hosts (or ports)
+                           instead, enabling some for S3 and some for
+                           Swift.
 :Default: ``swift``
-:Example: http://fqdn.com/swift
-	
+:Example: "/swift-testing"
+
 
 ``rgw swift auth url``
 
-:Description: Default URL for verifying v1 auth tokens (if not using internal 
+:Description: Default URL for verifying v1 auth tokens (if not using internal
               Swift auth).
 
 :Type: String
@@ -769,6 +665,67 @@ Swift Settings
 :Default: ``auth``
 
 
+``rgw swift account in url``
+
+:Description: Whether or not the Swift account name should be included
+              in the Swift API URL.
+
+              If set to ``false`` (the default), then the Swift API
+              will listen on a URL formed like
+              ``http://host:port/<rgw_swift_url_prefix>/v1``, and the
+              account name (commonly a Keystone project UUID if
+              radosgw is configured with `Keystone integration
+              <../keystone>`_) will be inferred from request
+              headers.
+
+              If set to ``true``, the Swift API URL will be
+              ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<account_name>``
+              (or
+              ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<keystone_project_id>``)
+              instead, and the Keystone ``object-store`` endpoint must
+              accordingly be configured to include the
+              ``AUTH_%(tenant_id)s`` suffix.
+
+              You **must** set this option to ``true`` (and update the
+              Keystone service catalog) if you want radosgw to support
+              publicly-readable containers and `temporary URLs
+              <../swift/tempurl>`_.
+:Type: Boolean
+:Default: ``false``
+
+
+``rgw swift versioning enabled``
+
+:Description: Enables the Object Versioning of OpenStack Object Storage API.
+              This allows clients to put the ``X-Versions-Location`` attribute
+              on containers that should be versioned. The attribute specifies
+              the name of container storing archived versions. It must be owned
+              by the same user that the versioned container due to access
+              control verification - ACLs are NOT taken into consideration.
+              Those containers cannot be versioned by the S3 object versioning
+              mechanism.
+
+	      A slightly different attribute, ``X-History-Location``, which is also understood by
+              `OpenStack Swift <https://docs.openstack.org/swift/latest/api/object_versioning.html>`_
+              for handling ``DELETE`` operations, is currently not supported.
+:Type: Boolean
+:Default: ``false``
+
+
+``rgw trust forwarded https``
+
+:Description: When a proxy in front of radosgw is used for ssl termination, radosgw
+              does not know whether incoming http connections are secure. Enable
+              this option to trust the ``Forwarded`` and ``X-Forwarded-Proto`` headers
+              sent by the proxy when determining whether the connection is secure.
+              This is required for some features, such as server side encryption.
+              (Never enable this setting if you do not have a trusted proxy in front of
+              radosgw, or else malicious users will be able to set these headers in
+              any request.)
+:Type: Boolean
+:Default: ``false``
+
+
 
 Logging Settings
 ================
@@ -776,7 +733,7 @@ Logging Settings
 
 ``rgw log nonexistent bucket``
 
-:Description: Enables Ceph Object Gateway to log a request for a non-existent 
+:Description: Enables Ceph Object Gateway to log a request for a non-existent
               bucket.
 
 :Type: Boolean
@@ -785,7 +742,7 @@ Logging Settings
 
 ``rgw log object name``
 
-:Description: The logging format for an object name. See manpage 
+:Description: The logging format for an object name. See manpage
               :manpage:`date` for details about format specifiers.
 
 :Type: Date
@@ -794,7 +751,7 @@ Logging Settings
 
 ``rgw log object name utc``
 
-:Description: Whether a logged object name includes a UTC time. 
+:Description: Whether a logged object name includes a UTC time.
               If ``false``, it uses the local time.
 
 :Type: Boolean
@@ -810,7 +767,7 @@ Logging Settings
 
 ``rgw usage max user shards``
 
-:Description: The maximum number of shards used for a single user's 
+:Description: The maximum number of shards used for a single user's
               usage logging.
 
 :Type: Integer
@@ -833,7 +790,7 @@ Logging Settings
 
 ``rgw ops log rados``
 
-:Description: Whether the operations log should be written to the 
+:Description: Whether the operations log should be written to the
               Ceph Storage Cluster backend.
 
 :Type: Boolean
@@ -858,7 +815,7 @@ Logging Settings
 
 ``rgw usage log flush threshold``
 
-:Description: The number of dirty merged entries in the usage log before 
+:Description: The number of dirty merged entries in the usage log before
               flushing synchronously.
 
 :Type: Integer
@@ -872,9 +829,20 @@ Logging Settings
 :Default: ``30``
 
 
+``rgw log http headers``
+
+:Description: Comma-delimited list of HTTP headers to include with ops
+	      log entries.  Header names are case insensitive, and use
+	      the full header name with words separated by underscores.
+
+:Type: String
+:Default: None
+:Example: "http_x_forwarded_for, http_x_special_k"
+
+
 ``rgw intent log object name``
 
-:Description: The logging format for the intent log object name. See manpage 
+:Description: The logging format for the intent log object name. See manpage
               :manpage:`date` for details about format specifiers.
 
 :Type: Date
@@ -883,55 +851,11 @@ Logging Settings
 
 ``rgw intent log object name utc``
 
-:Description: Whether the intent log object name includes a UTC time. 
+:Description: Whether the intent log object name includes a UTC time.
               If ``false``, it uses the local time.
 
 :Type: Boolean
 :Default: ``false``
-
-
-``rgw data log window``
-
-:Description: The data log entries window in seconds.
-:Type: Integer
-:Default: ``30``
-
-
-``rgw data log changes size``
-
-:Description: The number of in-memory entries to hold for the data changes log.
-:Type: Integer
-:Default: ``1000``
-
-
-``rgw data log num shards``
-
-:Description: The number of shards (objects) on which to keep the 
-              data changes log.
-
-:Type: Integer
-:Default: ``128``
-
-
-``rgw data log obj prefix``
-
-:Description: The object name prefix for the data log.
-:Type: String
-:Default: ``data_log``
-
-
-``rgw replica log obj prefix``
-
-:Description: The object name prefix for the replica log.
-:Type: String
-:Default: ``replica log``
-
-
-``rgw md log max shards``
-
-:Description: The maximum number of shards for the metadata log.
-:Type: Integer
-:Default: ``64``
 
 
 
@@ -946,9 +870,87 @@ Keystone Settings
 :Default: None
 
 
+``rgw keystone api version``
+
+:Description: The version (2 or 3) of OpenStack Identity API that should be
+              used for communication with the Keystone server.
+:Type: Integer
+:Default: ``2``
+
+
+``rgw keystone admin domain``
+
+:Description: The name of OpenStack domain with admin privilege when using
+              OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+
+``rgw keystone admin project``
+
+:Description: The name of OpenStack project with admin privilege when using
+              OpenStack Identity API v3. If left unspecified, value of
+              ``rgw keystone admin tenant`` will be used instead.
+:Type: String
+:Default: None
+
+
 ``rgw keystone admin token``
 
-:Description: The Keystone admin token (shared secret).
+:Description: The Keystone admin token (shared secret). In Ceph RadosGW
+              authentication with the admin token has priority over
+              authentication with the admin credentials
+              (``rgw keystone admin user``, ``rgw keystone admin password``,
+              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
+              ``rgw keystone admin domain``). The Keystone admin token
+              has been deprecated, but can be used to integrate with
+              older environments.  Prefer ``rgw keystone admin token path``
+              to avoid exposing the token.
+:Type: String
+:Default: None
+
+``rgw keystone admin token path``
+
+:Description: Path to a file containing the Keystone admin token
+	      (shared secret).  In Ceph RadosGW authentication with
+	      the admin token has priority over authentication with
+	      the admin credentials
+              (``rgw keystone admin user``, ``rgw keystone admin password``,
+              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
+              ``rgw keystone admin domain``).
+              The Keystone admin token has been deprecated, but can be
+              used to integrate with older environments.
+:Type: String
+:Default: None
+
+``rgw keystone admin tenant``
+
+:Description: The name of OpenStack tenant with admin privilege (Service Tenant) when
+              using OpenStack Identity API v2
+:Type: String
+:Default: None
+
+
+``rgw keystone admin user``
+
+:Description: The name of OpenStack user with admin privilege for Keystone
+              authentication (Service User) when OpenStack Identity API v2
+:Type: String
+:Default: None
+
+
+``rgw keystone admin password``
+
+:Description: The password for OpenStack admin user when using OpenStack
+              Identity API v2.  Prefer ``rgw keystone admin password path``
+              to avoid exposing the token.
+:Type: String
+:Default: None
+
+``rgw keystone admin password path``
+
+:Description: Path to a file containing the password for OpenStack
+              admin user when using OpenStack Identity API v2.
 :Type: String
 :Default: None
 
@@ -974,8 +976,178 @@ Keystone Settings
 :Default: ``15 * 60``
 
 
+``rgw keystone verify ssl``
+
+:Description: Verify SSL certificates while making token requests to keystone.
+:Type: Boolean
+:Default: ``true``
+
+
+Server-side encryption Settings
+===============================
+
+``rgw crypt s3 kms backend``
+
+:Description: Where the SSE-KMS encryption keys are stored. Supported KMS
+              systems are OpenStack Barbican (``barbican``, the default) and
+              HashiCorp Vault (``vault``).
+:Type: String
+:Default: None
+
+
+Barbican Settings
+=================
+
+``rgw barbican url``
+
+:Description: The URL for the Barbican server.
+:Type: String
+:Default: None
+
+``rgw keystone barbican user``
+
+:Description: The name of the OpenStack user with access to the `Barbican`_
+              secrets used for `Encryption`_.
+:Type: String
+:Default: None
+
+``rgw keystone barbican password``
+
+:Description: The password associated with the `Barbican`_ user.
+:Type: String
+:Default: None
+
+``rgw keystone barbican tenant``
+
+:Description: The name of the OpenStack tenant associated with the `Barbican`_
+              user when using OpenStack Identity API v2.
+:Type: String
+:Default: None
+
+``rgw keystone barbican project``
+
+:Description: The name of the OpenStack project associated with the `Barbican`_
+              user when using OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+``rgw keystone barbican domain``
+
+:Description: The name of the OpenStack domain associated with the `Barbican`_
+              user when using OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+
+HashiCorp Vault Settings
+========================
+
+``rgw crypt vault auth``
+
+:Description: Type of authentication method to be used. The only method
+              currently supported is ``token``.
+:Type: String
+:Default: ``token``
+
+``rgw crypt vault token file``
+
+:Description: If authentication method is ``token``, provide a path to the token
+              file, which should be readable only by Rados Gateway.
+:Type: String
+:Default: None
+
+``rgw crypt vault addr``
+
+:Description: Vault server base address, e.g. ``http://vaultserver:8200``.
+:Type: String
+:Default: None
+
+``rgw crypt vault prefix``
+
+:Description: The Vault secret URL prefix, which can be used to restrict access
+              to a particular subset of the secret space, e.g. ``/v1/secret/data``.
+:Type: String
+:Default: None
+
+``rgw crypt vault secret engine``
+
+:Description: Vault Secret Engine to be used to retrieve encryption keys: choose
+              between kv-v2, transit.
+:Type: String
+:Default: None
+
+``rgw crypt vault namespace``
+
+:Description: If set, Vault Namespace provides tenant isolation for teams and individuals
+              on the same Vault Enterprise instance, e.g. ``acme/tenant1``
+:Type: String
+:Default: None
+
+
+QoS settings
+------------
+
+.. versionadded:: Nautilus
+
+The ``civetweb`` frontend has a threading model that uses a thread per
+connection and hence automatically throttled by ``rgw thread pool size``
+configurable when it comes to accepting connections. The ``beast`` frontend is
+not restricted by the thread pool size when it comes to accepting new
+connections, so a scheduler abstraction is introduced in Nautilus release which
+for supporting ways for scheduling requests in the future.
+
+Currently the scheduler defaults to a throttler which throttles the active
+connections to a configured limit. QoS based on mClock is currently in an
+*experimental* phase and not recommended for production yet. Current
+implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
+(swift auth, sts) metadata & data requests.
+
+
+``rgw max concurrent requests``
+
+:Description: Maximum number of concurrent HTTP requests that the beast frontend
+              will process. Tuning this can help to limit memory usage under
+              heavy load.
+:Type: Integer
+:Default: 1024
+
+
+``rgw scheduler type``
+
+:Description: The type of RGW Scheduler to use. Valid values are throttler,
+              dmclock. Currently defaults to throttler which throttles beast
+              frontend requests. dmclock is *experimental* and will need the
+              experimental flag set
+
+
+The options below are to tune the experimental dmclock scheduler. For some
+further reading on dmclock, see :ref:`dmclock-qos`. `op_class` for the flags below is
+one of admin, auth, metadata or data.
+
+``rgw_dmclock_<op_class>_res``
+
+:Description: The mclock reservation for `op_class` requests
+:Type: float
+:Default: 100.0
+
+``rgw_dmclock_<op_class>_wgt``
+
+:Description: The mclock weight for `op_class` requests
+:Type: float
+:Default: 1.0
+
+``rgw_dmclock_<op_class>_lim``
+
+:Description: The mclock limit for `op_class` requests
+:Type: float
+:Default: 0.0
+
+
 
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle
+.. _Barbican: ../barbican
+.. _Encryption: ../encryption
+.. _HTTP Frontends: ../frontends

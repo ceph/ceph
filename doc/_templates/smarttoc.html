@@ -10,7 +10,7 @@
 
 #}
 <h3><a href="{{ pathto(master_doc) }}">{{ _('Table Of Contents') }}</a></h3>
-{{ toctree(maxdepth=-1) }}
+{{ toctree(maxdepth=-1, includehidden=True) }}
 
 <!-- ugly kludge to make genindex look like it's part of the toc -->
 <ul style="margin-top: -10px"><li class="toctree-l1"><a class="reference internal" href="{{ pathto('genindex') }}">Index</a></li></ul>

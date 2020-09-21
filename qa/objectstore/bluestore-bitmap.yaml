@@ -1,0 +1,43 @@
+overrides:
+  thrashosds:
+    bdev_inject_crash: 2
+    bdev_inject_crash_probability: .5
+  ceph:
+    fs: xfs
+    conf:
+      osd:
+        osd objectstore: bluestore
+        bluestore block size: 96636764160
+        debug bluestore: 20
+        debug bluefs: 20
+        debug rocksdb: 10
+        bluestore fsck on mount: true
+        bluestore allocator: bitmap
+        # lower the full ratios since we can fill up a 100gb osd so quickly
+        mon osd full ratio: .9
+        mon osd backfillfull_ratio: .85
+        mon osd nearfull ratio: .8
+        osd failsafe full ratio: .95
+# this doesn't work with failures bc the log writes are not atomic across the two backends
+#        bluestore bluefs env mirror: true
+        bdev enable discard: true
+        bdev async discard: true
+  ceph-deploy:
+    fs: xfs
+    bluestore: yes
+    conf:
+      osd:
+        osd objectstore: bluestore
+        bluestore block size: 96636764160
+        debug bluestore: 20
+        debug bluefs: 20
+        debug rocksdb: 10
+        bluestore fsck on mount: true
+        # lower the full ratios since we can fill up a 100gb osd so quickly
+        mon osd full ratio: .9
+        mon osd backfillfull_ratio: .85
+        mon osd nearfull ratio: .8
+        osd failsafe full ratio: .95
+        bdev enable discard: true
+        bdev async discard: true
+

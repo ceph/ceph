@@ -1,162 +1,204 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #ifndef CEPH_CRYPTO_H
 #define CEPH_CRYPTO_H
 
 #include "acconfig.h"
+#include <stdexcept>
+
+#include "include/common_fwd.h"
+#include "include/buffer.h"
+#include "include/types.h"
 
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
+#define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
+#define CEPH_CRYPTO_SHA512_DIGESTSIZE 64
 
-#ifdef USE_CRYPTOPP
-# define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include <string.h>
-#include <cryptopp/md5.h>
-#include <cryptopp/sha.h>
-#include <cryptopp/hmac.h>
+#include <openssl/evp.h>
+#include <openssl/ossl_typ.h>
+#include <openssl/hmac.h>
 
-// reinclude our assert to clobber the system one
-# include "include/assert.h"
+#include "include/ceph_assert.h"
 
-namespace ceph {
-  namespace crypto {
-    void assert_init();
-    void init(CephContext *cct);
-    void shutdown();
+extern "C" {
+  const EVP_MD *EVP_md5(void);
+  const EVP_MD *EVP_sha1(void);
+  const EVP_MD *EVP_sha256(void);
+  const EVP_MD *EVP_sha512(void);
+}
 
-    using CryptoPP::Weak::MD5;
-    using CryptoPP::SHA1;
-    using CryptoPP::SHA256;
+namespace TOPNSPC::crypto {
+  void assert_init();
+  void init();
+  void shutdown(bool shared=true);
 
-    class HMACSHA1: public CryptoPP::HMAC<CryptoPP::SHA1> {
+  void zeroize_for_security(void *s, size_t n);
+
+  class DigestException : public std::runtime_error
+  {
     public:
-      HMACSHA1 (const byte *key, size_t length)
-	: CryptoPP::HMAC<CryptoPP::SHA1>(key, length)
-	{
+      DigestException(const char* what_arg) : runtime_error(what_arg)
+	{}
+  };
+
+  namespace ssl {
+    class OpenSSLDigest {
+      private:
+	EVP_MD_CTX *mpContext;
+	const EVP_MD *mpType;
+      public:
+	OpenSSLDigest (const EVP_MD *_type);
+	~OpenSSLDigest ();
+	void Restart();
+	void Update (const unsigned char *input, size_t length);
+	void Final (unsigned char *digest);
+    };
+
+    class MD5 : public OpenSSLDigest {
+      public:
+	static constexpr size_t digest_size = CEPH_CRYPTO_MD5_DIGESTSIZE;
+	MD5 () : OpenSSLDigest(EVP_md5()) { }
+    };
+
+    class SHA1 : public OpenSSLDigest {
+      public:
+        static constexpr size_t digest_size = CEPH_CRYPTO_SHA1_DIGESTSIZE;
+        SHA1 () : OpenSSLDigest(EVP_sha1()) { }
+    };
+
+    class SHA256 : public OpenSSLDigest {
+      public:
+        static constexpr size_t digest_size = CEPH_CRYPTO_SHA256_DIGESTSIZE;
+        SHA256 () : OpenSSLDigest(EVP_sha256()) { }
+    };
+
+    class SHA512 : public OpenSSLDigest {
+      public:
+        static constexpr size_t digest_size = CEPH_CRYPTO_SHA512_DIGESTSIZE;
+        SHA512 () : OpenSSLDigest(EVP_sha512()) { }
+    };
+
+
+# if OPENSSL_VERSION_NUMBER < 0x10100000L
+  class HMAC {
+  private:
+    HMAC_CTX mContext;
+    const EVP_MD *mpType;
+
+  public:
+    HMAC (const EVP_MD *type, const unsigned char *key, size_t length)
+      : mpType(type) {
+      // the strict FIPS zeroization doesn't seem to be necessary here.
+      // just in the case.
+      ::TOPNSPC::crypto::zeroize_for_security(&mContext, sizeof(mContext));
+      const auto r = HMAC_Init_ex(&mContext, key, length, mpType, nullptr);
+      if (r != 1) {
+	  throw DigestException("HMAC_Init_ex() failed");
+      }
+    }
+    ~HMAC () {
+      HMAC_CTX_cleanup(&mContext);
+    }
+
+    void Restart () {
+      const auto r = HMAC_Init_ex(&mContext, nullptr, 0, mpType, nullptr);
+      if (r != 1) {
+	throw DigestException("HMAC_Init_ex() failed");
+      }
+    }
+    void Update (const unsigned char *input, size_t length) {
+      if (length) {
+        const auto r = HMAC_Update(&mContext, input, length);
+	if (r != 1) {
+	  throw DigestException("HMAC_Update() failed");
 	}
-      ~HMACSHA1();
-    };
-  }
-}
-#elif defined(USE_NSS)
-// you *must* use CRYPTO_CXXFLAGS in Makefile.am for including this include
-# include <nss.h>
-# include <pk11pub.h>
+      }
+    }
+    void Final (unsigned char *digest) {
+      unsigned int s;
+      const auto r = HMAC_Final(&mContext, digest, &s);
+      if (r != 1) {
+	throw DigestException("HMAC_Final() failed");
+      }
+    }
+  };
+# else
+  class HMAC {
+  private:
+    HMAC_CTX *mpContext;
 
-// NSS thinks a lot of fairly fundamental operations might potentially
-// fail, because it has been written to support e.g. smartcards doing all
-// the crypto operations. We don't want to contaminate too much code
-// with error checking, and just say these really should never fail.
-// This assert MUST NOT be compiled out, even on non-debug builds.
-# include "include/assert.h"
+  public:
+    HMAC (const EVP_MD *type, const unsigned char *key, size_t length)
+      : mpContext(HMAC_CTX_new()) {
+      const auto r = HMAC_Init_ex(mpContext, key, length, type, nullptr);
+      if (r != 1) {
+	throw DigestException("HMAC_Init_ex() failed");
+      }
+    }
+    ~HMAC () {
+      HMAC_CTX_free(mpContext);
+    }
 
-// ugly bit of CryptoPP that we have to emulate here :(
-typedef unsigned char byte;
+    void Restart () {
+      const EVP_MD * const type = HMAC_CTX_get_md(mpContext);
+      const auto r = HMAC_Init_ex(mpContext, nullptr, 0, type, nullptr);
+      if (r != 1) {
+	throw DigestException("HMAC_Init_ex() failed");
+      }
+    }
+    void Update (const unsigned char *input, size_t length) {
+      if (length) {
+        const auto r = HMAC_Update(mpContext, input, length);
+	if (r != 1) {
+	  throw DigestException("HMAC_Update() failed");
+	}
+      }
+    }
+    void Final (unsigned char *digest) {
+      unsigned int s;
+      const auto r = HMAC_Final(mpContext, digest, &s);
+      if (r != 1) {
+	throw DigestException("HMAC_Final() failed");
+      }
+    }
+  };
+# endif // OPENSSL_VERSION_NUMBER < 0x10100000L
 
-namespace ceph {
-  namespace crypto {
-    void assert_init();
-    void init(CephContext *cct);
-    void shutdown();
-    class Digest {
-    private:
-      PK11Context *ctx;
-      SECOidTag sec_type;
-      size_t digest_size;
-    public:
-      Digest (SECOidTag _type, size_t _digest_size) : sec_type(_type), digest_size(_digest_size) {
-	ctx = PK11_CreateDigestContext(_type);
-	assert(ctx);
-	Restart();
-      }
-      ~Digest () {
-	PK11_DestroyContext(ctx, PR_TRUE);
-      }
-      void Restart() {
-	SECStatus s;
-	s = PK11_DigestBegin(ctx);
-	assert(s == SECSuccess);
-      }
-      void Update (const byte *input, size_t length) {
-        if (length) {
-	  SECStatus s;
-	  s = PK11_DigestOp(ctx, input, length);
-	  assert(s == SECSuccess);
-        }
-      }
-      void Final (byte *digest) {
-	SECStatus s;
-	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
-	assert(s == SECSuccess);
-	assert(dummy == digest_size);
-	Restart();
-      }
-    };
-    class MD5 : public Digest {
-    public:
-      MD5 () : Digest(SEC_OID_MD5, CEPH_CRYPTO_MD5_DIGESTSIZE) { }
-    };
+  struct HMACSHA1 : public HMAC {
+    HMACSHA1 (const unsigned char *key, size_t length)
+      : HMAC(EVP_sha1(), key, length) {
+    }
+  };
 
-    class SHA1 : public Digest {
-    public:
-      SHA1 () : Digest(SEC_OID_SHA1, CEPH_CRYPTO_SHA1_DIGESTSIZE) { }
-    };
-
-    class SHA256 : public Digest {
-    public:
-      SHA256 () : Digest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
-    };
-
-    class HMACSHA1 {
-    private:
-      PK11SlotInfo *slot;
-      PK11SymKey *symkey;
-      PK11Context *ctx;
-    public:
-      HMACSHA1 (const byte *key, size_t length) {
-	slot = PK11_GetBestSlot(CKM_SHA_1_HMAC, NULL);
-	assert(slot);
-	SECItem keyItem;
-	keyItem.type = siBuffer;
-	keyItem.data = (unsigned char*)key;
-	keyItem.len = length;
-	symkey = PK11_ImportSymKey(slot, CKM_SHA_1_HMAC, PK11_OriginUnwrap,
-				   CKA_SIGN,  &keyItem, NULL);
-	assert(symkey);
-	SECItem param;
-	param.type = siBuffer;
-	param.data = NULL;
-	param.len = 0;
-	ctx = PK11_CreateContextBySymKey(CKM_SHA_1_HMAC, CKA_SIGN, symkey, &param);
-	assert(ctx);
-	Restart();
-      }
-      ~HMACSHA1 ();
-      void Restart() {
-	SECStatus s;
-	s = PK11_DigestBegin(ctx);
-	assert(s == SECSuccess);
-      }
-      void Update (const byte *input, size_t length) {
-	SECStatus s;
-	s = PK11_DigestOp(ctx, input, length);
-	assert(s == SECSuccess);
-      }
-      void Final (byte *digest) {
-	SECStatus s;
-	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-	assert(s == SECSuccess);
-	assert(dummy == CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-	Restart();
-      }
-    };
-  }
+  struct HMACSHA256 : public HMAC {
+    HMACSHA256 (const unsigned char *key, size_t length)
+      : HMAC(EVP_sha256(), key, length) {
+    }
+  };
 }
 
-#else
-# error "No supported crypto implementation found."
-#endif
+
+  using ssl::SHA256;
+  using ssl::MD5;
+  using ssl::SHA1;
+  using ssl::SHA512;
+
+  using ssl::HMACSHA256;
+  using ssl::HMACSHA1;
+
+template<class Digest>
+auto digest(const ceph::buffer::list& bl)
+{
+  unsigned char fingerprint[Digest::digest_size];
+  Digest gen;
+  for (auto& p : bl.buffers()) {
+    gen.Update((const unsigned char *)p.c_str(), p.length());
+  }
+  gen.Final(fingerprint);
+  return sha_digest_t<Digest::digest_size>{fingerprint};
+}
+}
 
 #endif

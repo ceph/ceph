@@ -12,6 +12,7 @@
 */
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/scope_exit.hpp>
 
 #include <stdlib.h>
 #include <string>
@@ -19,20 +20,29 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
+#include "auth/KeyRing.h"
+#include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "include/stringify.h"
+#include "mgr/mgr_commands.h"
+#include "mon/AuthMonitor.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
+#include "mon/MonMap.h"
+#include "mds/FSMap.h"
+#include "mon/MgrMap.h"
+#include "osd/OSDMap.h"
+#include "crush/CrushCompiler.h"
+#include "mon/CreatingPGs.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 class TraceIter {
   int fd;
   unsigned idx;
   MonitorDBStore::TransactionRef t;
 public:
-  TraceIter(string fname) : fd(-1), idx(-1) {
+  explicit TraceIter(string fname) : fd(-1), idx(-1) {
     fd = ::open(fname.c_str(), O_RDONLY);
     t.reset(new MonitorDBStore::Transaction);
   }
@@ -40,7 +50,7 @@ public:
     return fd != -1;
   }
   MonitorDBStore::TransactionRef cur() {
-    assert(valid());
+    ceph_assert(valid());
     return t;
   }
   unsigned num() { return idx; }
@@ -60,12 +70,12 @@ public:
       fd = -1;
       return;
     }
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     uint8_t ver, ver2;
-    ::decode(ver, bliter);
-    ::decode(ver2, bliter);
+    decode(ver, bliter);
+    decode(ver2, bliter);
     uint32_t len;
-    ::decode(len, bliter);
+    decode(len, bliter);
     r = bl.read_fd(fd, len);
     if (r < 0) {
       std::cerr << "Got error: " << cpp_strerror(r) << " on read_fd"
@@ -79,7 +89,7 @@ public:
       fd = -1;
       return;
     }
-    bliter = bl.begin();
+    bliter = bl.cbegin();
     t.reset(new MonitorDBStore::Transaction);
     t->decode(bliter);
   }
@@ -124,7 +134,7 @@ int parse_cmd_args(
   // and that's what 'desc_all' is all about.
   //
 
-  assert(desc != NULL);
+  ceph_assert(desc != NULL);
 
   po::options_description desc_all;
   desc_all.add(*desc);
@@ -193,6 +203,12 @@ void usage(const char *n, po::options_description &d)
   << "                                  (default: last committed)\n"
   << "  get mdsmap [-- options]         get mdsmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
+  << "  get mgr [-- options]            get mgr map (version VER if specified)\n"
+  << "                                  (default: last committed)\n"
+  << "  get crushmap [-- options]       get crushmap (version VER if specified)\n"
+  << "                                  (default: last committed)\n"
+  << "  show-versions [-- options]      show the first&last committed version of map\n"
+  << "                                  (show-versions -- --help for more info)\n"
   << "  dump-keys                       dumps store keys to FILE\n"
   << "                                  (default: stdout)\n"
   << "  dump-paxos [-- options]         dump paxos transactions\n"
@@ -205,6 +221,8 @@ void usage(const char *n, po::options_description &d)
   << "                                  (random-gen -- --help for more info)\n"
   << "  rewrite-crush [-- options]      add a rewrite commit to the store\n"
   << "                                  (rewrite-crush -- --help for more info)\n"
+  << "  rebuild                         rebuild store\n"
+  << "                                  (rebuild -- --help for more info)\n"
   << std::endl;
   std::cerr << d << std::endl;
   std::cerr
@@ -217,7 +235,7 @@ void usage(const char *n, po::options_description &d)
 }
 
 int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
-		  ceph::shared_ptr<CrushWrapper> crush,
+		  std::shared_ptr<CrushWrapper> crush,
 		  MonitorDBStore::Transaction* t) {
   const string prefix("osdmap");
 
@@ -255,7 +273,7 @@ int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
     OSDMap::Incremental inc(bl);
     if (inc.crush.length()) {
       inc.crush.clear();
-      crush->encode(inc.crush);
+      crush->encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
     }
     if (inc.fullmap.length()) {
       OSDMap fullmap;
@@ -265,7 +283,7 @@ int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
       fullmap.encode(inc.fullmap);
     }
   }
-  assert(osdmap.have_crc());
+  ceph_assert(osdmap.have_crc());
   inc.full_crc = osdmap.get_crc();
   bl.clear();
   // be consistent with OSDMonitor::update_from_paxos()
@@ -300,7 +318,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
 
   // load/extract the crush map
   int r = 0;
-  ceph::shared_ptr<CrushWrapper> crush(new CrushWrapper);
+  std::shared_ptr<CrushWrapper> crush(new CrushWrapper);
   if (crush_file.empty()) {
     bufferlist bl;
     r = store.get(prefix, store.combine_strings("full", good_version), bl);
@@ -319,7 +337,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
       std::cerr << err << ": " << cpp_strerror(r) << std::endl;
       return r;
     }
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     crush->decode(p);
   }
 
@@ -327,7 +345,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
   // (good_version, last_committed]
   // with the good crush map.
   // XXX: may need to break this into several paxos versions?
-  assert(good_version < last_committed);
+  ceph_assert(good_version < last_committed);
   for (version_t v = good_version + 1; v <= last_committed; v++) {
     cout << "rewriting epoch #" << v << "/" << last_committed << std::endl;
     r = update_osdmap(store, v, false, crush, t);
@@ -419,7 +437,7 @@ int rewrite_crush(const char* progname,
   // store the transaction into store as a proposal
   const string prefix("paxos");
   version_t pending_v = store.get(prefix, "last_committed") + 1;
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   bufferlist bl;
   rewrite_txn.encode(bl);
   cout << "adding pending commit " << pending_v
@@ -430,6 +448,271 @@ int rewrite_crush(const char* progname,
   version_t pending_pn = (store.get(prefix, "accepted_pn") / 100 + 4) * 100 + 1;
   t->put(prefix, "pending_pn", pending_pn);
   store.apply_transaction(t);
+  return 0;
+}
+
+static int update_auth(MonitorDBStore& st, const string& keyring_path)
+{
+  // import all keyrings stored in the keyring file
+  KeyRing keyring;
+  int r = keyring.load(g_ceph_context, keyring_path);
+  if (r < 0) {
+    cerr << "unable to load admin keyring: " << keyring_path << std::endl;
+    return r;
+  }
+
+  bufferlist bl;
+  __u8 v = 1;
+  encode(v, bl);
+
+  for (const auto& k : keyring.get_keys()) {
+    KeyServerData::Incremental auth_inc;
+    auth_inc.name = k.first;
+    auth_inc.auth = k.second;
+    if (auth_inc.auth.caps.empty()) {
+      cerr << "no caps granted to: " << auth_inc.name << std::endl;
+      return -EINVAL;
+    }
+    map<string,string> caps;
+    std::transform(begin(auth_inc.auth.caps), end(auth_inc.auth.caps),
+		   inserter(caps, end(caps)),
+		   [](auto& cap) {
+		     string c;
+		     auto p = cap.second.cbegin();
+		     decode(c, p);
+		     return make_pair(cap.first, c);
+		   });
+    cout << "adding auth for '"
+	 << auth_inc.name << "': " << auth_inc.auth
+	 << " with caps(" << caps << ")" << std::endl;
+    auth_inc.op = KeyServerData::AUTH_INC_ADD;
+
+    AuthMonitor::Incremental inc;
+    inc.inc_type = AuthMonitor::AUTH_DATA;
+    encode(auth_inc, inc.auth_data);
+    inc.auth_type = CEPH_AUTH_CEPHX;
+    inc.encode(bl, CEPH_FEATURES_ALL);
+  }
+
+  const string prefix("auth");
+  auto last_committed = st.get(prefix, "last_committed") + 1;
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put(prefix, last_committed, bl);
+  t->put(prefix, "last_committed", last_committed);
+  auto first_committed = st.get(prefix, "first_committed");
+  if (!first_committed) {
+    t->put(prefix, "first_committed", last_committed);
+  }
+  st.apply_transaction(t);
+  return 0;
+}
+
+static int update_mkfs(MonitorDBStore& st,
+		       const string& monmap_path,
+		       const vector<string>& mon_ids)
+{
+  MonMap monmap;
+  if (!monmap_path.empty()) {
+    cout << __func__ << " pulling initial monmap from " << monmap_path << std::endl;
+    bufferlist bl;
+    string err;
+    int r = bl.read_file(monmap_path.c_str(), &err);
+    if (r < 0) {
+      cerr << "failed to read monmap from " << monmap_path << ": "
+	   << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    monmap.decode(bl);
+  } else {
+    cout << __func__ << " generating seed initial monmap" << std::endl;
+    int r = monmap.build_initial(g_ceph_context, true, cerr);
+    if (r) {
+      cerr << "no initial monitors" << std::endl;
+      return -EINVAL;
+    }
+    vector<string> new_names;
+    if (!mon_ids.empty()) {
+      if (mon_ids.size() != monmap.size()) {
+	cerr << "Please pass the same number of <mon-ids> to name the hosts "
+	     << "listed in 'mon_host'. "
+	     << mon_ids.size() << " mon-id(s) specified, "
+	     << "while you have " << monmap.size() << " mon hosts." << std::endl;
+	return -EINVAL;
+      }
+      new_names = mon_ids;
+    } else {
+      for (unsigned rank = 0; rank < monmap.size(); rank++) {
+	string new_name{"a"};
+	new_name[0] += rank;
+	new_names.push_back(std::move(new_name));
+      }
+    }
+    for (unsigned rank = 0; rank < monmap.size(); rank++) {
+      auto name = monmap.get_name(rank);
+      if (name.compare(0, 7, "noname-") == 0) {
+	monmap.rename(name, new_names[rank]);
+      }
+    }
+  }
+  monmap.print(cout);
+  bufferlist bl;
+  monmap.encode(bl, CEPH_FEATURES_ALL);
+  monmap.set_epoch(0);
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put("mkfs", "monmap", bl);
+  st.apply_transaction(t);
+  return 0;
+}
+
+static int update_monitor(MonitorDBStore& st)
+{
+  const string prefix("monitor");
+  // a stripped-down Monitor::mkfs()
+  bufferlist bl;
+  bl.append(CEPH_MON_ONDISK_MAGIC "\n");
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put(prefix, "magic", bl);
+  st.apply_transaction(t);
+  return 0;
+}
+
+// rebuild
+//  - creating_pgs
+static int update_creating_pgs(MonitorDBStore& st)
+{
+  bufferlist bl;
+  auto last_osdmap_epoch = st.get("osdmap", "last_committed");
+  int r = st.get("osdmap", st.combine_strings("full", last_osdmap_epoch), bl);
+  if (r < 0) {
+    cerr << "unable to load osdmap e" << last_osdmap_epoch << std::endl;
+    return r;
+  }
+
+  OSDMap osdmap;
+  osdmap.decode(bl);
+  creating_pgs_t creating;
+  for (auto& i : osdmap.get_pools()) {
+    creating.created_pools.insert(i.first);
+  }
+  creating.last_scan_epoch = last_osdmap_epoch;
+
+  bufferlist newbl;
+  encode(creating, newbl, CEPH_FEATURES_ALL);
+
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put("osd_pg_creating", "creating", newbl);
+  st.apply_transaction(t);
+  return 0;
+}
+
+// rebuild
+//  - mgr
+//  - mgr_command_desc
+static int update_mgrmap(MonitorDBStore& st)
+{
+  auto t = make_shared<MonitorDBStore::Transaction>();
+
+  {
+    MgrMap map;
+    // mgr expects epoch > 1
+    map.epoch++;
+    auto initial_modules =
+      get_str_vec(g_ceph_context->_conf.get_val<string>("mgr_initial_modules"));
+    copy(begin(initial_modules),
+	 end(initial_modules),
+	 inserter(map.modules, end(map.modules)));
+    bufferlist bl;
+    map.encode(bl, CEPH_FEATURES_ALL);
+    t->put("mgr", map.epoch, bl);
+    t->put("mgr", "last_committed", map.epoch);
+  }
+  {
+    auto mgr_command_descs = mgr_commands;
+    for (auto& c : mgr_command_descs) {
+      c.set_flag(MonCommand::FLAG_MGR);
+    }
+    bufferlist bl;
+    encode(mgr_command_descs, bl);
+    t->put("mgr_command_descs", "", bl);
+  }
+  return st.apply_transaction(t);
+}
+
+static int update_paxos(MonitorDBStore& st)
+{
+  // build a pending paxos proposal from all non-permanent k/v pairs. once the
+  // proposal is committed, it will gets applied. on the sync provider side, it
+  // will be a no-op, but on its peers, the paxos commit will help to build up
+  // the necessary epochs.
+  bufferlist pending_proposal;
+  {
+    MonitorDBStore::Transaction t;
+    vector<string> prefixes = {"auth", "osdmap",
+			       "mgr", "mgr_command_desc"};
+    for (const auto& prefix : prefixes) {
+      for (auto i = st.get_iterator(prefix); i->valid(); i->next()) {
+	auto key = i->raw_key();
+	auto val = i->value();
+	t.put(key.first, key.second, val);
+      }
+    }
+    t.encode(pending_proposal);
+  }
+  const string prefix("paxos");
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put(prefix, "first_committed", 0);
+  t->put(prefix, "last_committed", 0);
+  auto pending_v = 1;
+  t->put(prefix, pending_v, pending_proposal);
+  t->put(prefix, "pending_v", pending_v);
+  t->put(prefix, "pending_pn", 400);
+  st.apply_transaction(t);
+  return 0;
+}
+
+int rebuild_monstore(const char* progname,
+		     vector<string>& subcmds,
+		     MonitorDBStore& st)
+{
+  po::options_description op_desc("Allowed 'rebuild' options");
+  string keyring_path;
+  string monmap_path;
+  vector<string> mon_ids;
+  op_desc.add_options()
+    ("keyring", po::value<string>(&keyring_path),
+     "path to the client.admin key")
+    ("monmap", po::value<string>(&monmap_path),
+     "path to the initial monmap")
+    ("mon-ids", po::value<vector<string>>(&mon_ids)->multitoken(),
+     "mon ids, use 'a', 'b', ... if not specified");
+  po::positional_options_description pos_desc;
+  pos_desc.add("mon-ids", -1);
+  po::variables_map op_vm;
+  int r = parse_cmd_args(&op_desc, nullptr, &pos_desc, subcmds, &op_vm);
+  if (r) {
+    return -r;
+  }
+  if (op_vm.count("help")) {
+    usage(progname, op_desc);
+    return 0;
+  }
+  if (!keyring_path.empty())
+    update_auth(st, keyring_path);
+  if ((r = update_creating_pgs(st))) {
+    return r;
+  }
+  if ((r = update_mgrmap(st))) {
+    return r;
+  }
+  if ((r = update_paxos(st))) {
+    return r;
+  }
+  if ((r = update_mkfs(st, monmap_path, mon_ids))) {
+    return r;
+  }
+  if ((r = update_monitor(st))) {
+    return r;
+  }
   return 0;
 }
 
@@ -511,7 +794,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
@@ -519,12 +802,12 @@ int main(int argc, char **argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_MON,
-    CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(
+    NULL, ceph_options, CEPH_ENTITY_TYPE_MON,
+    CODE_ENVIRONMENT_UTILITY,
+    CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
-  g_conf = g_ceph_context->_conf;
+  cct->_conf.apply_changes(nullptr);
 
   // this is where we'll write *whatever*, on a per-command basis.
   // not all commands require some place to write their things.
@@ -559,6 +842,7 @@ int main(int argc, char **argv) {
        "output file (default: stdout)")
       ("version,v", po::value<unsigned>(&v),
        "map version to obtain")
+      ("readable,r", "print the map information in human readable format")
       ;
     // this is going to be a positional argument; we don't want to show
     // it as an option during --help, but we do want to have it captured
@@ -586,7 +870,11 @@ int main(int argc, char **argv) {
     }
 
     if (v == 0) {
-      v = st.get(map_type, "last_committed");
+      if (map_type == "crushmap") {
+        v = st.get("osdmap", "last_committed");
+      } else {
+        v = st.get(map_type, "last_committed");
+      }
     }
 
     int fd = STDOUT_FILENO;
@@ -600,26 +888,116 @@ int main(int argc, char **argv) {
       }
     }
 
+    BOOST_SCOPE_EXIT((&r) (&fd) (&outpath)) {
+      ::close(fd);
+      if (r < 0 && fd != STDOUT_FILENO) {
+        ::remove(outpath.c_str());
+      }
+    } BOOST_SCOPE_EXIT_END
+
     bufferlist bl;
     r = 0;
     if (map_type == "osdmap") {
       r = st.get(map_type, st.combine_strings("full", v), bl);
+    } else if (map_type == "crushmap") {
+      bufferlist tmp;
+      r = st.get("osdmap", st.combine_strings("full", v), tmp);
+      if (r >= 0) {
+        OSDMap osdmap;
+        osdmap.decode(tmp);
+        osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      }
     } else {
       r = st.get(map_type, v, bl);
     }
     if (r < 0) {
       std::cerr << "Error getting map: " << cpp_strerror(r) << std::endl;
       err = EINVAL;
-      ::close(fd);
       goto done;
     }
-    bl.write_fd(fd);
+
+    if (op_vm.count("readable")) {
+      stringstream ss;
+      bufferlist out;
+      try {
+        if (map_type == "monmap") {
+          MonMap monmap;
+          monmap.decode(bl);
+          monmap.print(ss);
+        } else if (map_type == "osdmap") {
+          OSDMap osdmap;
+          osdmap.decode(bl);
+          osdmap.print(ss);
+        } else if (map_type == "mdsmap") {
+          FSMap fs_map;
+          fs_map.decode(bl);
+          fs_map.print(ss);
+        } else if (map_type == "mgr") {
+          MgrMap mgr_map;
+          auto p = bl.cbegin();
+          mgr_map.decode(p);
+          JSONFormatter f;
+          f.dump_object("mgrmap", mgr_map);
+          f.flush(ss);
+        } else if (map_type == "crushmap") {
+          CrushWrapper cw;
+          auto it = bl.cbegin();
+          cw.decode(it);
+          CrushCompiler cc(cw, std::cerr, 0);
+          cc.decompile(ss);
+        } else {
+          std::cerr << "This type of readable map does not exist: " << map_type
+                    << std::endl << "You can only specify[osdmap|monmap|mdsmap"
+                    "|crushmap|mgr]" << std::endl;
+        }
+      } catch (const buffer::error &err) {
+        std::cerr << "Could not decode for human readable output (you may still"
+	  " use non-readable mode).  Detail: " << err.what() << std::endl;
+      }
+
+      out.append(ss);
+      out.write_fd(fd);
+    } else {
+      bl.write_fd(fd);
+    }
 
     if (!outpath.empty()) {
       std::cout << "wrote " << map_type
                 << " version " << v << " to " << outpath
                 << std::endl;
     }
+  } else if (cmd == "show-versions") {
+    string map_type; //map type:osdmap,monmap...
+    // visible options for this command
+    po::options_description op_desc("Allowed 'show-versions' options");
+    op_desc.add_options()
+      ("help,h", "produce this help message")
+      ("map-type", po::value<string>(&map_type), "map_type");
+
+    po::positional_options_description op_positional;
+    op_positional.add("map-type", 1);
+
+    po::variables_map op_vm;
+    int r = parse_cmd_args(&op_desc, NULL, &op_positional,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      err = -r;
+      goto done;
+    }
+
+    if (op_vm.count("help") || map_type.empty()) {
+      usage(argv[0], op_desc);
+      err = 0;
+      goto done;
+    }
+
+    unsigned int v_first = 0;
+    unsigned int v_last = 0;
+    v_first = st.get(map_type, "first_committed");
+    v_last = st.get(map_type, "last_committed");
+
+    std::cout << "first committed:\t" << v_first << "\n"
+              << "last  committed:\t" << v_last << std::endl;
   } else if (cmd == "dump-paxos") {
     unsigned dstart = 0;
     unsigned dstop = ~0;
@@ -661,7 +1039,7 @@ int main(int argc, char **argv) {
       if (bl.length() == 0)
 	break;
       cout << "\n--- " << v << " ---" << std::endl;
-      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+      auto tx(std::make_shared<MonitorDBStore::Transaction>());
       Paxos::decode_append_transaction(tx, bl);
       JSONFormatter f(true);
       tx->dump(&f);
@@ -841,7 +1219,7 @@ int main(int argc, char **argv) {
     unsigned num = 0;
     for (unsigned i = 0; i < ntrans; ++i) {
       std::cerr << "Applying trans " << i << std::endl;
-      MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+      auto t(std::make_shared<MonitorDBStore::Transaction>());
       string prefix;
       prefix.push_back((i%26)+'a');
       for (unsigned j = 0; j < tsize; ++j) {
@@ -883,7 +1261,7 @@ int main(int argc, char **argv) {
     do {
       uint64_t num_keys = 0;
 
-      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+      auto tx(std::make_shared<MonitorDBStore::Transaction>());
 
       while (it->valid() && num_keys < 128) {
         pair<string,string> k = it->raw_key();
@@ -903,17 +1281,19 @@ int main(int argc, char **argv) {
         out_store.apply_transaction(tx);
 
       std::cout << "copied " << total_keys << " keys so far ("
-                << stringify(si_t(total_size)) << ")" << std::endl;
+                << stringify(byte_u_t(total_size)) << ")" << std::endl;
 
     } while (it->valid());
     out_store.close();
     std::cout << "summary: copied " << total_keys << " keys, using "
               << total_tx << " transactions, totalling "
-              << stringify(si_t(total_size)) << std::endl;
+              << stringify(byte_u_t(total_size)) << std::endl;
     std::cout << "from '" << store_path << "' to '" << out_path << "'"
               << std::endl;
   } else if (cmd == "rewrite-crush") {
     err = rewrite_crush(argv[0], subcmds, st);
+  } else if (cmd == "rebuild") {
+    err = rebuild_monstore(argv[0], subcmds, st);
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     usage(argv[0], desc);

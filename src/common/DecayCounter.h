@@ -15,13 +15,18 @@
 #ifndef CEPH_DECAYCOUNTER_H
 #define CEPH_DECAYCOUNTER_H
 
-#include "include/utime.h"
+#include "include/buffer.h"
+#include "common/Formatter.h"
+#include "common/StackStringStream.h"
+#include "common/ceph_time.h"
 
-#include <math.h>
+#include <cmath>
+#include <list>
+#include <sstream>
 
 /**
  *
- * TODO: normalize value based on some fucntion of half_life, 
+ * TODO: normalize value based on some function of half_life, 
  *  so that it can be interpreted as an approximation of a
  *  moving average of N seconds.  currently, changing half-life
  *  skews the scale of the value, even at steady state.  
@@ -29,64 +34,52 @@
  */
 
 class DecayRate {
-  double k;             // k = ln(.5)/half_life
-
+public:
   friend class DecayCounter;
 
-public:
-  DecayRate() : k(0) {}
+  DecayRate() {}
+  // cppcheck-suppress noExplicitConstructor
   DecayRate(double hl) { set_halflife(hl); }
+  DecayRate(const DecayRate &dr) : k(dr.k) {}
+
   void set_halflife(double hl) {
-    k = ::log(.5) / hl;
-  }    
+    k = log(.5) / hl;
+  }
+  double get_halflife() const {
+    return log(.5) / k;
+  }
+
+private:
+  double k = 0;             // k = ln(.5)/half_life
 };
 
 class DecayCounter {
- protected:
 public:
-  double val;           // value
-  double delta;         // delta since last decay
-  double vel;           // recent velocity
-  utime_t last_decay;   // time of last decay
+  using time = ceph::coarse_mono_time;
+  using clock = ceph::coarse_mono_clock;
 
- public:
+  DecayCounter() : DecayCounter(DecayRate()) {}
+  explicit DecayCounter(const DecayRate &rate) : last_decay(clock::now()), rate(rate) {}
 
-  void encode(bufferlist& bl) const;
-  void decode(const utime_t &t, bufferlist::iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<DecayCounter*>& ls);
-
-  DecayCounter(const utime_t &now)
-    : val(0), delta(0), vel(0), last_decay(now)
-  {
-  }
-
-  // these two functions are for the use of our dencoder testing infrastructure
-  DecayCounter() : val(0), delta(0), vel(0), last_decay() {}
-
-  void decode(bufferlist::iterator& p) {
-    utime_t fake_time;
-    decode(fake_time, p);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<DecayCounter*>& ls);
 
   /**
    * reading
    */
 
-  double get(utime_t now, const DecayRate& rate) {
-    decay(now, rate);
+  double get() const {
+    decay();
     return val;
   }
 
-  double get_last() {
+  double get_last() const {
     return val;
   }
   
-  double get_last_vel() {
-    return vel;
-  }
-
-  utime_t get_last_decay() { 
+  time get_last_decay() const {
     return last_decay; 
   }
 
@@ -94,41 +87,50 @@ public:
    * adjusting
    */
 
-  double hit(utime_t now, const DecayRate& rate, double v = 1.0) {
-    decay(now, rate);
-    delta += v;
-    return val+delta;
+  double hit(double v = 1.0) {
+    decay(v);
+    return val;
+  }
+  void adjust(double v = 1.0) {
+    decay(v);
   }
 
-  void adjust(double a) {
-    val += a;
-  }
-  void adjust(utime_t now, const DecayRate& rate, double a) {
-    decay(now, rate);
-    val += a;
-  }
   void scale(double f) {
     val *= f;
-    delta *= f;    
-    vel *= f;
   }
 
   /**
    * decay etc.
    */
 
-  void reset(utime_t now) {
-    last_decay = now;
-    val = delta = 0;
+  void reset() {
+    last_decay = clock::now();
+    val = 0;
   }
 
-  void decay(utime_t now, const DecayRate &rate);
+protected:
+  void decay(double delta) const;
+  void decay() const {decay(0.0);}
+
+private:
+  mutable double val = 0.0;           // value
+  mutable time last_decay = clock::zero();   // time of last decay
+  DecayRate rate;
 };
 
-inline void encode(const DecayCounter &c, bufferlist &bl) { c.encode(bl); }
-inline void decode(DecayCounter &c, const utime_t &t, bufferlist::iterator &p) {
-  c.decode(t, p);
+inline void encode(const DecayCounter &c, ceph::buffer::list &bl) {
+  c.encode(bl);
+}
+inline void decode(DecayCounter &c, ceph::buffer::list::const_iterator &p) {
+  c.decode(p);
 }
 
+inline std::ostream& operator<<(std::ostream& out, const DecayCounter& d) {
+  CachedStackStringStream css;
+  css->precision(2);
+  double val = d.get();
+  *css << "[C " << std::scientific << val << "]";
+  return out << css->strv();
+}
 
 #endif

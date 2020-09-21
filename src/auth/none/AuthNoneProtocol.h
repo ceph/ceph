@@ -15,18 +15,24 @@
 #ifndef CEPH_AUTHNONEPROTOCOL_H
 #define CEPH_AUTHNONEPROTOCOL_H
 
-#include "../Auth.h"
+#include "auth/Auth.h"
+#include "include/common_fwd.h"
 
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
   bool build_authorizer(const EntityName &ename, uint64_t global_id) {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(ename, bl);
-    ::encode(global_id, bl);
+    __u8 struct_v = 1; // see AUTH_MODE_* in Auth.h
+    using ceph::encode;
+    encode(struct_v, bl);
+    encode(ename, bl);
+    encode(global_id, bl);
     return 0;
   }
-  bool verify_reply(bufferlist::iterator& reply) { return true; }
+  bool verify_reply(ceph::buffer::list::const_iterator& reply,
+		    std::string *connection_secret) override { return true; }
+  bool add_challenge(CephContext *cct, const ceph::buffer::list& ch) override {
+    return true;
+  }
 };
 
 #endif

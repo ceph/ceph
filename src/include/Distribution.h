@@ -17,7 +17,6 @@
 #define CEPH_DISTRIBUTION_H
 
 #include <vector>
-using namespace std;
 
 class Distribution {
   vector<float> p;
@@ -56,7 +55,7 @@ class Distribution {
       if (s < p[i]) return v[i];
       s -= p[i];
     }
-    assert(0);
+    ceph_abort();
     return v[p.size() - 1];  // hmm.  :/
   }
 

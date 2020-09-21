@@ -22,17 +22,15 @@
 
 #include <stdio.h>
 #include <signal.h>
+#include "gtest/gtest.h"
 #include "common/Thread.h"
 #include "common/shared_cache.hpp"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include <gtest/gtest.h>
 
 class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:
-  Mutex &get_lock() { return lock; }
-  Cond &get_cond() { return cond; }
-  map<unsigned int, pair< weak_ptr<int>, int* > > &get_weak_refs() {
+  auto& get_lock() { return lock; }
+  auto& get_cond() { return cond; }
+  map<unsigned int, pair< std::weak_ptr<int>, int* > > &get_weak_refs() {
     return weak_refs;
   }
 };
@@ -45,7 +43,7 @@ public:
     SharedLRUTest &cache;
     unsigned int key;
     int value;
-    shared_ptr<int> ptr;
+    std::shared_ptr<int> ptr;
     enum in_method_t { LOOKUP, LOWER_BOUND } in_method;
 
     Thread_wait(SharedLRUTest& _cache, unsigned int _key, 
@@ -55,13 +53,13 @@ public:
       value(_value),
       in_method(_in_method) { }
 
-    virtual void * entry() {
+    void * entry() override {
       switch (in_method) {
       case LOWER_BOUND:
         ptr = cache.lower_bound(key);
         break;
       case LOOKUP:
-        ptr = shared_ptr<int>(new int);
+        ptr = std::shared_ptr<int>(new int);
         *ptr = value;
         ptr = cache.lookup(key);
         break;
@@ -84,7 +82,7 @@ public:
       if (delay > 0)
         usleep(delay);
       {
-        Mutex::Locker l(cache.get_lock());
+        std::lock_guard l{cache.get_lock()};
         if (cache.waiting == waitting) {
           break;
         }
@@ -105,15 +103,17 @@ TEST_F(SharedLRU_all, add) {
   int value1 = 2;
   bool existed = false;
   {
-    shared_ptr<int> ptr = cache.add(key, new int(value1), &existed);
+    std::shared_ptr<int> ptr = cache.add(key, new int(value1), &existed);
     ASSERT_EQ(value1, *ptr);
     ASSERT_FALSE(existed);
   }
   {
     int value2 = 3;
-    shared_ptr<int> ptr = cache.add(key, new int(value2), &existed);
+    auto p = new int(value2);
+    std::shared_ptr<int> ptr = cache.add(key, p, &existed);
     ASSERT_EQ(value1, *ptr);
     ASSERT_TRUE(existed);
+    delete p;
   }
 }
 TEST_F(SharedLRU_all, empty) {
@@ -124,7 +124,7 @@ TEST_F(SharedLRU_all, empty) {
   ASSERT_TRUE(cache.empty());
   {
     int value1 = 2;
-    shared_ptr<int> ptr = cache.add(key, new int(value1), &existed);
+    std::shared_ptr<int> ptr = cache.add(key, new int(value1), &existed);
     ASSERT_EQ(value1, *ptr);
     ASSERT_FALSE(existed);
   }
@@ -169,21 +169,21 @@ TEST_F(SharedLRU_all, wait_lookup) {
   int value = 2;
 
   {
-    shared_ptr<int> ptr(new int);
+    std::shared_ptr<int> ptr(new int);
     cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
   }
   EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
-  t.create();
+  t.create("wait_lookup_1");
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_EQ(value, *t.ptr);
   // waiting on a key does not block lookups on other keys
   EXPECT_FALSE(cache.lookup(key + 12345));
   {
-    Mutex::Locker l(cache.get_lock());
+    std::lock_guard l{cache.get_lock()};
     cache.get_weak_refs().erase(key);
-    cache.get_cond().Signal();
+    cache.get_cond().notify_one();
   }
   ASSERT_TRUE(wait_for(cache, 0));
   t.join();
@@ -195,21 +195,21 @@ TEST_F(SharedLRU_all, wait_lookup_or_create) {
   int value = 2;
 
   {
-    shared_ptr<int> ptr(new int);
+    std::shared_ptr<int> ptr(new int);
     cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
   }
   EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
-  t.create();
+  t.create("wait_lookup_2");
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_EQ(value, *t.ptr);
   // waiting on a key does not block lookups on other keys
   EXPECT_TRUE(cache.lookup_or_create(key + 12345).get());
   {
-    Mutex::Locker l(cache.get_lock());
+    std::lock_guard l{cache.get_lock()};
     cache.get_weak_refs().erase(key);
-    cache.get_cond().Signal();
+    cache.get_cond().notify_one();
   }
   ASSERT_TRUE(wait_for(cache, 0));
   t.join();
@@ -240,21 +240,21 @@ TEST_F(SharedLRU_all, wait_lower_bound) {
   ASSERT_TRUE(cache.add(other_key, new int(other_value)).get());
 
   {
-    shared_ptr<int> ptr(new int);
+    std::shared_ptr<int> ptr(new int);
     cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
   }
   EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOWER_BOUND);
-  t.create();
+  t.create("wait_lower_bnd");
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_FALSE(t.ptr);
   // waiting on a key does not block getting lower_bound on other keys
   EXPECT_TRUE(cache.lower_bound(other_key).get());
   {
-    Mutex::Locker l(cache.get_lock());
+    std::lock_guard l{cache.get_lock()};
     cache.get_weak_refs().erase(key);
-    cache.get_cond().Signal();
+    cache.get_cond().notify_one();
   }
   ASSERT_TRUE(wait_for(cache, 0));
   t.join();
@@ -272,15 +272,15 @@ TEST_F(SharedLRU_all, get_next) {
     SharedLRUTest cache;
 
     const unsigned int key2 = 333;
-    shared_ptr<int> ptr2 = cache.lookup_or_create(key2);
+    std::shared_ptr<int> ptr2 = cache.lookup_or_create(key2);
     const int value2 = *ptr2 = 400;
 
     // entries with expired pointers are silently ignored
     const unsigned int key_gone = 222;
-    cache.get_weak_refs()[key_gone] = make_pair(shared_ptr<int>(), (int*)0);
+    cache.get_weak_refs()[key_gone] = make_pair(std::shared_ptr<int>(), (int*)0);
 
     const unsigned int key1 = 111;
-    shared_ptr<int> ptr1 = cache.lookup_or_create(key1);
+    std::shared_ptr<int> ptr1 = cache.lookup_or_create(key1);
     const int value1 = *ptr1 = 800;
 
     pair<unsigned int, int> i;
@@ -299,11 +299,11 @@ TEST_F(SharedLRU_all, get_next) {
   {
     SharedLRUTest cache;
     const unsigned int key1 = 111;
-    shared_ptr<int> *ptr1 = new shared_ptr<int>(cache.lookup_or_create(key1));
+    std::shared_ptr<int> *ptr1 = new shared_ptr<int>(cache.lookup_or_create(key1));
     const unsigned int key2 = 222;
-    shared_ptr<int> ptr2 = cache.lookup_or_create(key2);
+    std::shared_ptr<int> ptr2 = cache.lookup_or_create(key2);
 
-    pair<unsigned int, shared_ptr<int> > i;
+    pair<unsigned int, std::shared_ptr<int> > i;
     EXPECT_TRUE(cache.get_next(i.first, &i));
     EXPECT_EQ(key1, i.first);
     delete ptr1;
@@ -317,7 +317,7 @@ TEST_F(SharedLRU_all, clear) {
   unsigned int key = 1;
   int value = 2;
   {
-    ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
+    std::shared_ptr<int> ptr = cache.add(key, new int(value));
     ASSERT_EQ(value, *cache.lookup(key));
   }
   ASSERT_TRUE(cache.lookup(key).get());
@@ -325,7 +325,7 @@ TEST_F(SharedLRU_all, clear) {
   ASSERT_FALSE(cache.lookup(key));
 
   {
-    ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
+    std::shared_ptr<int> ptr = cache.add(key, new int(value));
   }
   ASSERT_TRUE(cache.lookup(key).get());
   cache.clear(key);
@@ -336,14 +336,14 @@ TEST_F(SharedLRU_all, clear_all) {
   unsigned int key = 1;
   int value = 2;
   {
-    ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
+    std::shared_ptr<int> ptr = cache.add(key, new int(value));
     ASSERT_EQ(value, *cache.lookup(key));
   }
   ASSERT_TRUE(cache.lookup(key).get());
   cache.clear();
   ASSERT_FALSE(cache.lookup(key));
 
-  ceph::shared_ptr<int> ptr2 = cache.add(key, new int(value));
+  std::shared_ptr<int> ptr2 = cache.add(key, new int(value));
   ASSERT_TRUE(cache.lookup(key).get());
   cache.clear();
   ASSERT_TRUE(cache.lookup(key).get());
@@ -354,7 +354,7 @@ TEST(SharedCache_all, add) {
   SharedLRU<int, int> cache;
   unsigned int key = 1;
   int value = 2;
-  shared_ptr<int> ptr = cache.add(key, new int(value));
+  std::shared_ptr<int> ptr = cache.add(key, new int(value));
   ASSERT_EQ(ptr, cache.lookup(key));
   ASSERT_EQ(value, *cache.lookup(key));
 }
@@ -364,11 +364,11 @@ TEST(SharedCache_all, lru) {
   SharedLRU<int, int> cache(NULL, SIZE);
 
   bool existed = false;
-  shared_ptr<int> ptr = cache.add(0, new int(0), &existed);
+  std::shared_ptr<int> ptr = cache.add(0, new int(0), &existed);
   ASSERT_FALSE(existed);
   {
     int *tmpint = new int(0);
-    shared_ptr<int> ptr2 = cache.add(0, tmpint, &existed);
+    std::shared_ptr<int> ptr2 = cache.add(0, tmpint, &existed);
     ASSERT_TRUE(existed);
     delete tmpint;
   }
@@ -387,21 +387,10 @@ TEST(SharedCache_all, lru) {
 
   cache.purge(0);
   ASSERT_FALSE(cache.lookup(0));
-  shared_ptr<int> ptr2 = cache.add(0, new int(0), &existed);
+  std::shared_ptr<int> ptr2 = cache.add(0, new int(0), &existed);
   ASSERT_FALSE(ptr == ptr2);
-  ptr = shared_ptr<int>();
+  ptr = std::shared_ptr<int>();
   ASSERT_TRUE(cache.lookup(0).get());
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 // Local Variables:

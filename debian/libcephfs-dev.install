@@ -1,4 +1,4 @@
+usr/include/cephfs/ceph_ll_client.h
 usr/include/cephfs/libcephfs.h
-usr/lib/libcephfs.a
-usr/lib/libcephfs.la
+usr/include/cephfs/metrics/Types.h
 usr/lib/libcephfs.so

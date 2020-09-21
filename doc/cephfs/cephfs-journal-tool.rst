@@ -6,7 +6,7 @@ Purpose
 -------
 
 If a CephFS journal has become damaged, expert intervention may be required
-to restore the filesystem to a working state.
+to restore the file system to a working state.
 
 The ``cephfs-journal-tool`` utility provides functionality to aid experts in
 examining, modifying, and extracting data from journals.
@@ -14,7 +14,7 @@ examining, modifying, and extracting data from journals.
 .. warning::
 
     This tool is **dangerous** because it directly modifies internal
-    data structures of the filesystem.  Make backups, be careful, and
+    data structures of the file system.  Make backups, be careful, and
     seek expert advice.  If you are unsure, do not run this tool.
 
 Syntax
@@ -24,7 +24,7 @@ Syntax
 
     cephfs-journal-tool journal <inspect|import|export|reset>
     cephfs-journal-tool header <get|set>
-    cephfs-journal-tool event <get|splice|apply> [filter] <list|json|summary>
+    cephfs-journal-tool event <get|splice|apply> [filter] <list|json|summary|binary>
 
 
 The tool operates in three modes: ``journal``, ``header`` and ``event``,
@@ -133,13 +133,13 @@ Actions:
 
 * ``get`` read the events from the log
 * ``splice`` erase events or regions in the journal
-* ``apply`` extract filesystem metadata from events and attempt to apply it to the metadata store.
+* ``apply`` extract file system metadata from events and attempt to apply it to the metadata store.
 
 Filtering:
 
 * ``--range <int begin>..[int end]`` only include events within the range begin (inclusive) to end (exclusive)
 * ``--path <path substring>`` only include events referring to metadata containing the specified string
-* ``--inode <int>`` only include events referring to metadata containing the specified string
+* ``--inode <int>`` only include events referring to metadata containing the specified inode
 * ``--type <type string>`` only include events of this type
 * ``--frag <ino>[.frag id]`` only include events referring to this directory fragment
 * ``--dname <string>`` only include events referring to this named dentry within a directory
@@ -197,7 +197,7 @@ Example: event mode
     0x404032 UPDATE:  (openc)
       dirbravo/.filebravo1.swpx
 
-    # cephfs-journal-tool event get --path /filebravo1 list
+    # cephfs-journal-tool event get --path filebravo1 list
     0x40785a UPDATE:  (openc)
       dirbravo/filebravo1
     0x4103ee UPDATE:  (cap update)

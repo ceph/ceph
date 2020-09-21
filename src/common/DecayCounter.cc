@@ -15,68 +15,65 @@
 #include "DecayCounter.h"
 #include "Formatter.h"
 
-void DecayCounter::encode(bufferlist& bl) const
+#include "include/encoding.h"
+
+void DecayCounter::encode(ceph::buffer::list& bl) const
 {
-  ENCODE_START(4, 4, bl);
-  ::encode(val, bl);
-  ::encode(delta, bl);
-  ::encode(vel, bl);
+  decay();
+  ENCODE_START(5, 4, bl);
+  encode(val, bl);
   ENCODE_FINISH(bl);
 }
 
-void DecayCounter::decode(const utime_t &t, bufferlist::iterator &p)
+void DecayCounter::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
   if (struct_v < 2) {
-    double half_life;
-    ::decode(half_life, p);
+    double k = 0.0;
+    decode(k, p);
   }
   if (struct_v < 3) {
-    double k;
-    ::decode(k, p);
+    double k = 0.0;
+    decode(k, p);
   }
-  ::decode(val, p);
-  ::decode(delta, p);
-  ::decode(vel, p);
+  decode(val, p);
+  if (struct_v < 5) {
+    double delta, _;
+    decode(delta, p);
+    val += delta;
+    decode(_, p); /* velocity */
+  }
+  last_decay = clock::now();
   DECODE_FINISH(p);
 }
 
-void DecayCounter::dump(Formatter *f) const
+void DecayCounter::dump(ceph::Formatter *f) const
 {
+  decay();
   f->dump_float("value", val);
-  f->dump_float("delta", delta);
-  f->dump_float("velocity", vel);
+  f->dump_float("halflife", rate.get_halflife());
 }
 
-void DecayCounter::generate_test_instances(list<DecayCounter*>& ls)
+void DecayCounter::generate_test_instances(std::list<DecayCounter*>& ls)
 {
-  utime_t fake_time;
-  DecayCounter *counter = new DecayCounter(fake_time);
+  DecayCounter *counter = new DecayCounter();
   counter->val = 3.0;
-  counter->delta = 2.0;
-  counter->vel = 1.0;
   ls.push_back(counter);
-  counter = new DecayCounter(fake_time);
+  counter = new DecayCounter();
   ls.push_back(counter);
 }
 
-void DecayCounter::decay(utime_t now, const DecayRate &rate)
+void DecayCounter::decay(double delta) const
 {
-  utime_t el = now;
-  el -= last_decay;
+  auto now = clock::now();
+  double el = std::chrono::duration<double>(now - last_decay).count();
 
-  if (el.sec() >= 1) {
-    // calculate new value
-    double newval = (val+delta) * exp((double)el * rate.k);
-    if (newval < .01)
-      newval = 0.0;
-
-    // calculate velocity approx
-    vel += (newval - val) * (double)el;
-    vel *= exp((double)el * rate.k);
-
-    val = newval;
-    delta = 0;
-    last_decay = now;
+  // calculate new value
+  double newval = val * exp(el * rate.k) + delta;
+  if (newval < .01) {
+    newval = 0.0;
   }
+
+  val = newval;
+  last_decay = now;
 }

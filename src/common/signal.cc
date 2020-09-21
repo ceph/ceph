@@ -12,19 +12,25 @@
  *
  */
 
-#include "common/BackTrace.h"
-#include "common/perf_counters.h"
-#include "global/pidfile.h"
-#include "common/debug.h"
-#include "common/signal.h"
-#include "common/config.h"
-
-#include <signal.h>
+#include <cstdlib>
 #include <sstream>
-#include <stdlib.h>
+
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <signal.h>
+
+#include "common/BackTrace.h"
+#include "common/config.h"
+#include "common/debug.h"
+#include "common/signal.h"
+#include "common/perf_counters.h"
+
+#include "global/pidfile.h"
+
+using namespace std::literals;
+
+#ifndef _WIN32
 std::string signal_mask_to_str()
 {
   sigset_t old_sigset;
@@ -32,9 +38,9 @@ std::string signal_mask_to_str()
     return "(pthread_signmask failed)";
   }
 
-  ostringstream oss;
+  std::ostringstream oss;
   oss << "show_signal_mask: { ";
-  string sep("");
+  auto sep = ""s;
   for (int signum = 0; signum < NSIG; ++signum) {
     if (sigismember(&old_sigset, signum) == 1) {
       oss << sep << signum;
@@ -61,13 +67,13 @@ void block_signals(const int *siglist, sigset_t *old_sigset)
     }
   }
   int ret = pthread_sigmask(SIG_BLOCK, &sigset, old_sigset);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 void restore_sigset(const sigset_t *old_sigset)
 {
   int ret = pthread_sigmask(SIG_SETMASK, old_sigset, NULL);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 void unblock_all_signals(sigset_t *old_sigset)
@@ -76,5 +82,16 @@ void unblock_all_signals(sigset_t *old_sigset)
   sigfillset(&sigset);
   sigdelset(&sigset, SIGKILL);
   int ret = pthread_sigmask(SIG_UNBLOCK, &sigset, old_sigset);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
+#else
+std::string signal_mask_to_str()
+{
+  return "(unsupported signal)";
+}
+
+// Windows provides limited signal functionality.
+void block_signals(const int *siglist, sigset_t *old_sigset) {}
+void restore_sigset(const sigset_t *old_sigset) {}
+void unblock_all_signals(sigset_t *old_sigset) {}
+#endif /* _WIN32 */

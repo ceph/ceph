@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 #
 # Add some objects to the data PGs, and then test splitting those PGs
@@ -55,7 +56,7 @@ split1() {
 many_pools() {
         setup 3
         for i in `seq 1 3000`; do
-                ./rados -c ./ceph.conf mkpool "pool${i}" || die "mkpool failed"
+                ./ceph -c ./ceph.conf osd pool create "pool${i}" 8 || die "pool create failed"
         done
         my_write_objects 1 10
 }

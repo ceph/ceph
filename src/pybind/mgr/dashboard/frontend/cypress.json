@@ -1,0 +1,13 @@
+{
+  "baseUrl": "http://localhost:4200/",
+  "ignoreTestFiles": [
+    "*.po.ts",
+    "**/orchestrator/**"
+  ],
+  "supportFile": "cypress/support/index.ts",
+  "video": false,
+  "defaultCommandTimeout": 120000,
+  "viewportHeight": 1080,
+  "viewportWidth": 1920,
+  "projectId": "k7ab29"
+}

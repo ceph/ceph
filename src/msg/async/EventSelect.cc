@@ -17,12 +17,14 @@
 #include "common/errno.h"
 #include "EventSelect.h"
 
+#include <unistd.h>
+#include <sys/select.h>
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
 #define dout_prefix *_dout << "SelectDriver."
 
-int SelectDriver::init(int nevent)
+int SelectDriver::init(EventCenter *c, int nevent)
 {
   ldout(cct, 0) << "Select isn't suitable for production env, just avoid "
                 << "compiling error or special purpose" << dendl;
@@ -65,7 +67,7 @@ int SelectDriver::resize_events(int newsize)
   return 0;
 }
 
-int SelectDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tvp)
+int SelectDriver::event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tvp)
 {
   int retval, numevents = 0;
 

@@ -1,0 +1,43 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.about-container {
+  background-color: bd.$secondary;
+  background-image: url('../../../../assets/ceph_background.gif');
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  color: bd.$white;
+  text-shadow: 1px 1px bd.$secondary;
+}
+
+.product-versions {
+  margin-top: 30px;
+}
+
+.product-versions strong {
+  margin-right: 10px;
+}
+
+.modal-header {
+  border-bottom: 0;
+}
+
+.modal-header .close {
+  color: bd.$white;
+  font-size: 2em;
+}
+
+.modal-body {
+  padding-left: 80px;
+  padding-right: 80px;
+}
+
+.ceph-logo {
+  margin-bottom: 30px;
+  width: 25%;
+}
+
+.modal-footer {
+  border-top: 0;
+  display: block;
+  padding: 15px 80px 35px;
+}

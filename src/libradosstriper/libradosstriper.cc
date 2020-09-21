@@ -34,7 +34,8 @@
 
 libradosstriper::MultiAioCompletion::~MultiAioCompletion()
 {
-  delete pc;
+  ceph_assert(pc->ref == 1);
+  pc->put();
 }
 
 int libradosstriper::MultiAioCompletion::set_complete_callback
@@ -269,9 +270,48 @@ int libradosstriper::RadosStriper::stat(const std::string& soid, uint64_t *psize
   return rados_striper_impl->stat(soid, psize, pmtime);
 }
 
+int libradosstriper::RadosStriper::aio_stat(const std::string& soid,
+					    librados::AioCompletion *c,
+					    uint64_t *psize,
+					    time_t *pmtime)
+{
+  return rados_striper_impl->aio_stat(soid, c->pc, psize, pmtime);
+}
+
+int libradosstriper::RadosStriper::stat2(const std::string& soid, uint64_t *psize, struct timespec *pts)
+{
+  return rados_striper_impl->stat2(soid, psize, pts);
+}
+
+int libradosstriper::RadosStriper::aio_stat2(const std::string& soid,
+					    librados::AioCompletion *c,
+					    uint64_t *psize,
+					    struct timespec *pts)
+{
+  return rados_striper_impl->aio_stat2(soid, c->pc, psize, pts);
+}
+
 int libradosstriper::RadosStriper::remove(const std::string& soid)
 {
   return rados_striper_impl->remove(soid);
+}
+
+int libradosstriper::RadosStriper::aio_remove(const std::string& soid,
+					      librados::AioCompletion *c)
+{
+  return rados_striper_impl->aio_remove(soid, c->pc);
+}
+
+int libradosstriper::RadosStriper::remove(const std::string& soid, int flags)
+{
+  return rados_striper_impl->remove(soid, flags); 
+}
+
+int libradosstriper::RadosStriper::aio_remove(const std::string& soid,
+					      librados::AioCompletion *c,
+					      int flags)
+{
+  return rados_striper_impl->aio_remove(soid, c->pc, flags);
 }
 
 int libradosstriper::RadosStriper::trunc(const std::string& soid, uint64_t size)
@@ -297,7 +337,7 @@ libradosstriper::RadosStriper::multi_aio_create_completion(void *cb_arg,
 {
   MultiAioCompletionImpl *c;
   int r = rados_striper_multi_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
-  assert(r == 0);
+  ceph_assert(r == 0);
   return new MultiAioCompletion(c);
 }
 
@@ -391,8 +431,8 @@ extern "C" int rados_striper_read(rados_striper_t striper,
   if (ret >= 0) {
     if (bl.length() > len)
       return -ERANGE;
-    if (bl.c_str() != buf)
-      bl.copy(0, bl.length(), buf);
+    if (!bl.is_provided_buffer(buf))
+      bl.begin().copy(bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
   return ret;
@@ -423,7 +463,7 @@ extern "C" int rados_striper_getxattr(rados_striper_t striper,
   if (ret >= 0) {
     if (bl.length() > len)
       return -ERANGE;
-    bl.copy(0, bl.length(), buf);
+    bl.begin().copy(bl.length(), buf);
     ret = bl.length();
   }
   return ret;
@@ -466,8 +506,6 @@ extern "C" int rados_striper_getxattrs(rados_striper_t striper,
     return ret;
   }
   it->i = it->attrset.begin();
-  librados::RadosXattrsIter **iret = (librados::RadosXattrsIter**)iter;
-  *iret = it;
   *iter = it;
   return 0;
 }
@@ -606,8 +644,26 @@ extern "C" int rados_striper_aio_read(rados_striper_t striper,
   return impl->aio_read(soid, (librados::AioCompletionImpl*)completion, buf, len, off);
 }
 
+extern "C" int rados_striper_aio_remove(rados_striper_t striper,
+					const char* soid,
+					rados_completion_t completion)
+{
+  libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  return impl->aio_remove(soid, (librados::AioCompletionImpl*)completion);
+}
+
 extern "C" void rados_striper_aio_flush(rados_striper_t striper)
 {
   libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
   impl->aio_flush();
+}
+
+extern "C" int rados_striper_aio_stat(rados_striper_t striper,
+				      const char* soid,
+				      rados_completion_t completion,
+				      uint64_t *psize,
+				      time_t *pmtime)
+{
+  libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  return impl->aio_stat(soid, (librados::AioCompletionImpl*)completion, psize, pmtime);
 }

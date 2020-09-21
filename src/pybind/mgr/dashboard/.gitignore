@@ -1,0 +1,15 @@
+.coverage*
+htmlcov
+.tox
+coverage.xml
+junit*xml
+.cache
+ceph.conf
+
+# IDE
+.vscode
+*.egg
+.env
+
+# virtualenv
+venv

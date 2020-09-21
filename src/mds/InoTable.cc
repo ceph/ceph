@@ -19,6 +19,7 @@
 
 #include "common/config.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
@@ -43,7 +44,7 @@ void InoTable::reset_state()
 inodeno_t InoTable::project_alloc_id(inodeno_t id) 
 {
   dout(10) << "project_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
-  assert(is_active());
+  ceph_assert(is_active());
   if (!id)
     id = projected_free.range_start();
   projected_free.erase(id);
@@ -59,7 +60,7 @@ void InoTable::apply_alloc_id(inodeno_t id)
 
 void InoTable::project_alloc_ids(interval_set<inodeno_t>& ids, int want) 
 {
-  assert(is_active());
+  ceph_assert(is_active());
   while (want > 0) {
     inodeno_t start = projected_free.range_start();
     inodeno_t end = projected_free.end_after(start);
@@ -81,13 +82,13 @@ void InoTable::apply_alloc_ids(interval_set<inodeno_t>& ids)
 }
 
 
-void InoTable::project_release_ids(interval_set<inodeno_t>& ids) 
+void InoTable::project_release_ids(const interval_set<inodeno_t>& ids) 
 {
   dout(10) << "project_release_ids " << ids << " to " << projected_free << "/" << free << dendl;
   projected_free.insert(ids);
   ++projected_version;
 }
-void InoTable::apply_release_ids(interval_set<inodeno_t>& ids) 
+void InoTable::apply_release_ids(const interval_set<inodeno_t>& ids) 
 {
   dout(10) << "apply_release_ids " << ids << " to " << projected_free << "/" << free << dendl;
   free.insert(ids);
@@ -99,7 +100,7 @@ void InoTable::apply_release_ids(interval_set<inodeno_t>& ids)
 
 void InoTable::replay_alloc_id(inodeno_t id) 
 {
-  assert(mds);  // Only usable in online mode
+  ceph_assert(mds);  // Only usable in online mode
 
   dout(10) << "replay_alloc_id " << id << dendl;
   if (free.contains(id)) {
@@ -107,26 +108,24 @@ void InoTable::replay_alloc_id(inodeno_t id)
     projected_free.erase(id);
   } else {
     mds->clog->error() << "journal replay alloc " << id
-      << " not in free " << free << "\n";
+      << " not in free " << free;
   }
   projected_version = ++version;
 }
 void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids) 
 {
-  assert(mds);  // Only usable in online mode
+  ceph_assert(mds);  // Only usable in online mode
 
   dout(10) << "replay_alloc_ids " << ids << dendl;
   interval_set<inodeno_t> is;
   is.intersection_of(free, ids);
-  if (is == ids) {
-    free.subtract(ids);
-    projected_free.subtract(ids);
-  } else {
+  if (!(is==ids)) {
     mds->clog->error() << "journal replay alloc " << ids << ", only "
-	<< is << " is in free " << free << "\n";
-    free.subtract(is);
-    projected_free.subtract(is);
+	<< is << " is in free " << free;
   }
+  free.subtract(is);
+  projected_free.subtract(is);
+
   projected_version = ++version;
 }
 void InoTable::replay_release_ids(interval_set<inodeno_t>& ids) 
@@ -186,7 +185,51 @@ void InoTable::dump(Formatter *f) const
 }
 
 
-void InoTable::generate_test_instances(list<InoTable*>& ls)
+void InoTable::generate_test_instances(std::list<InoTable*>& ls)
 {
   ls.push_back(new InoTable());
+}
+
+
+bool InoTable::is_marked_free(inodeno_t id) const
+{
+  return free.contains(id) || projected_free.contains(id);
+}
+
+bool InoTable::intersects_free(
+    const interval_set<inodeno_t> &other,
+    interval_set<inodeno_t> *intersection)
+{
+  interval_set<inodeno_t> i;
+  i.intersection_of(free, other);
+  if (intersection != nullptr) {
+    *intersection = i;
+  }
+  return !(i.empty());
+}
+
+bool InoTable::repair(inodeno_t id)
+{
+  if (projected_version != version) {
+    // Can't do the repair while other things are in flight
+    return false;
+  }
+
+  ceph_assert(is_marked_free(id));
+  dout(10) << "repair: before status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
+  free.erase(id);
+  projected_free.erase(id);
+  projected_version = ++version;
+  dout(10) << "repair: after status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
+  return true;
+}
+
+bool InoTable::force_consume_to(inodeno_t ino)
+{
+  inodeno_t first = free.range_start();
+  if (first > ino)
+    return false;
+
+  skip_inos(inodeno_t(ino + 1 - first));
+  return true;
 }

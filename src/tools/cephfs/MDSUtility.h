@@ -15,12 +15,14 @@
 #define MDS_UTILITY_H_
 
 #include "osdc/Objecter.h"
-#include "mds/MDSMap.h"
-#include "messages/MMDSMap.h"
+#include "mds/FSMap.h"
+#include "messages/MFSMap.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
+#include "common/async/context_pool.h"
 #include "common/Finisher.h"
+#include "common/Timer.h"
 
 /// MDS Utility
 /**
@@ -31,26 +33,26 @@
 class MDSUtility : public Dispatcher {
 protected:
   Objecter *objecter;
-  MDSMap *mdsmap;
+  FSMap *fsmap;
   Messenger *messenger;
   MonClient *monc;
 
-  Mutex lock;
-  SafeTimer timer;
+  ceph::mutex lock = ceph::make_mutex("MDSUtility::lock");
   Finisher finisher;
+  ceph::async::io_context_pool poolctx;
 
   Context *waiting_for_mds_map;
 
+  bool inited;
 public:
   MDSUtility();
-  ~MDSUtility();
+  ~MDSUtility() override;
 
-  void handle_mds_map(MMDSMap* m);
-  bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new);
+  void handle_fs_map(MFSMap* m);
+  bool ms_dispatch(Message *m) override;
+  bool ms_handle_reset(Connection *con) override { return false; }
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override { return false; }
   int init();
   void shutdown();
 };

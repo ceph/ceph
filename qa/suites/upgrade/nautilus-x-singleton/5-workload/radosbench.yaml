@@ -1,0 +1,41 @@
+meta:
+- desc: |
+   run randomized correctness test for rados operations
+   generate write load with rados bench
+split_tasks:
+  sequential:
+  - full_sequential:
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+    - radosbench:
+        clients: [client.0]
+        time: 150
+  - print: "**** done radosbench 7-workload"

@@ -18,7 +18,6 @@
 #include <stdint.h>
 
 #include "common/TrackedOp.h"
-#include "include/memory.h"
 #include "mon/Session.h"
 #include "msg/Message.h"
 
@@ -39,28 +38,28 @@ struct MonOpRequest : public TrackedOp {
     forwarded_to_leader = true;
   }
 
-  void mark_svc_event(const string &service, const string &event) {
-    string s = service;
+  void mark_svc_event(const std::string &service, const std::string &event) {
+    std::string s = service;
     s.append(":").append(event);
     mark_event(s);
   }
 
-  void mark_logmon_event(const string &event) {
+  void mark_logmon_event(const std::string &event) {
     mark_svc_event("logm", event);
   }
-  void mark_osdmon_event(const string &event) {
+  void mark_osdmon_event(const std::string &event) {
     mark_svc_event("osdmap", event);
   }
-  void mark_pgmon_event(const string &event) {
+  void mark_pgmon_event(const std::string &event) {
     mark_svc_event("pgmap", event);
   }
-  void mark_mdsmon_event(const string &event) {
+  void mark_mdsmon_event(const std::string &event) {
     mark_svc_event("mdsmap", event);
   }
-  void mark_authmon_event(const string &event) {
+  void mark_authmon_event(const std::string &event) {
     mark_svc_event("auth", event);
   }
-  void mark_paxos_event(const string &event) {
+  void mark_paxos_event(const std::string &event) {
     mark_svc_event("paxos", event);
   }
 
@@ -74,46 +73,53 @@ struct MonOpRequest : public TrackedOp {
     OP_TYPE_COMMAND,          ///< is a command
   };
 
+  MonOpRequest(const MonOpRequest &other) = delete;
+  MonOpRequest & operator = (const MonOpRequest &other) = delete;
+
 private:
   Message *request;
   utime_t dequeued_time;
-  MonSession *session;
+  RefCountedPtr session;
   ConnectionRef con;
   bool forwarded_to_leader;
   op_type_t op_type;
 
   MonOpRequest(Message *req, OpTracker *tracker) :
-    TrackedOp(tracker, req->get_recv_stamp()),
-    request(req->get()),
-    session(NULL),
+    TrackedOp(tracker,
+      req->get_recv_stamp().is_zero() ?
+      ceph_clock_now() : req->get_recv_stamp()),
+    request(req),
     con(NULL),
     forwarded_to_leader(false),
     op_type(OP_TYPE_NONE)
   {
-    tracker->mark_event(this, "header_read", request->get_recv_stamp());
-    tracker->mark_event(this, "throttled", request->get_throttle_stamp());
-    tracker->mark_event(this, "all_read", request->get_recv_complete_stamp());
-    tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
-
     if (req) {
       con = req->get_connection();
       if (con) {
-        session = static_cast<MonSession*>(con->get_priv());
+        session = con->get_priv();
       }
     }
   }
 
-  void _dump(utime_t now, Formatter *f) const {
+  void _dump(ceph::Formatter *f) const override {
     {
       f->open_array_section("events");
-      Mutex::Locker l(lock);
-      for (list<pair<utime_t,string> >::const_iterator i = events.begin();
-           i != events.end(); ++i) {
-        f->open_object_section("event");
-        f->dump_stream("time") << i->first;
-        f->dump_string("event", i->second);
-        f->close_section();
+      std::lock_guard l(lock);
+    for (auto i = events.begin(); i != events.end(); ++i) {
+      f->open_object_section("event");
+      f->dump_string("event", i->str);
+      f->dump_stream("time") << i->stamp;
+
+      auto i_next = i + 1;
+
+      if (i_next < events.end()) {
+	f->dump_float("duration", i_next->stamp - i->stamp);
+      } else {
+	f->dump_float("duration", events.rbegin()->stamp - get_initiated());
       }
+
+      f->close_section();
+    }
       f->close_section();
       f->open_object_section("info");
       f->dump_int("seq", seq);
@@ -125,22 +131,17 @@ private:
   }
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const {
+  void _dump_op_descriptor_unlocked(std::ostream& stream) const override {
     get_req()->print(stream);
   }
 
 public:
-  ~MonOpRequest() {
+  ~MonOpRequest() override {
     request->put();
-    // certain ops may not have a session (e.g., AUTH or PING)
-    if (session)
-      session->put();
   }
 
   MonSession *get_session() const {
-    if (!session)
-      return NULL;
-    return (MonSession*)session->get();
+    return static_cast<MonSession*>(session.get());
   }
 
   template<class T>
@@ -157,23 +158,14 @@ public:
   ConnectionRef get_connection() { return con; }
 
   void set_session(MonSession *s) {
-    if (session) {
-      // we will be rewriting the existing session; drop the ref.
-      session->put();
-    }
-
-    if (s == NULL) {
-      session = NULL;
-    } else {
-      session = static_cast<MonSession*>(s->get());
-    }
+    session.reset(s);
   }
 
   bool is_src_mon() const {
     return (con && con->get_peer_type() & CEPH_ENTITY_TYPE_MON);
   }
 
-  typedef ceph::shared_ptr<MonOpRequest> Ref;
+  typedef boost::intrusive_ptr<MonOpRequest> Ref;
 
   void set_op_type(op_type_t t) {
     op_type = t;
@@ -187,7 +179,7 @@ public:
   void set_type_paxos() {
     set_op_type(OP_TYPE_PAXOS);
   }
-  void set_type_election() {
+  void set_type_election_or_ping() {
     set_op_type(OP_TYPE_ELECTION);
   }
   void set_type_command() {
@@ -207,7 +199,7 @@ public:
   bool is_type_paxos() {
     return (get_op_type() == OP_TYPE_PAXOS);
   }
-  bool is_type_election() {
+  bool is_type_election_or_ping() {
     return (get_op_type() == OP_TYPE_ELECTION);
   }
   bool is_type_command() {
@@ -216,5 +208,31 @@ public:
 };
 
 typedef MonOpRequest::Ref MonOpRequestRef;
+
+struct C_MonOp : public Context
+{
+  MonOpRequestRef op;
+
+  explicit C_MonOp(MonOpRequestRef o) :
+    op(o) { }
+
+  void finish(int r) override {
+    if (op && r == -ECANCELED) {
+      op->mark_event("callback canceled");
+    } else if (op && r == -EAGAIN) {
+      op->mark_event("callback retry");
+    } else if (op && r == 0) {
+      op->mark_event("callback finished");
+    }
+    _finish(r);
+  }
+
+  void mark_op_event(const std::string &event) {
+    if (op)
+      op->mark_event(event);
+  }
+
+  virtual void _finish(int r) = 0;
+};
 
 #endif /* MON_OPREQUEST_H_ */

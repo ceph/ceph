@@ -18,15 +18,13 @@
  *
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
 #include <algorithm>
 #include "common/debug.h"
 #include "ErasureCodeShec.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
 extern "C" {
 #include "jerasure/include/jerasure.h"
 #include "jerasure/include/galois.h"
@@ -35,45 +33,29 @@ extern int calc_determinant(int *matrix, int dim);
 extern int* reed_sol_vandermonde_coding_matrix(int k, int m, int w);
 }
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
+
+using namespace std;
+using namespace ceph;
+
 
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeShec: ";
 }
 
-int ErasureCodeShec::create_ruleset(const string &name,
-				    CrushWrapper &crush,
-				    ostream *ss) const
-{
-  int ruleid = crush.add_simple_ruleset(name, ruleset_root, ruleset_failure_domain,
-					"indep", pg_pool_t::TYPE_ERASURE, ss);
-  if (ruleid < 0) {
-    return ruleid;
-  } else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
-  }
-}
-
 int ErasureCodeShec::init(ErasureCodeProfile &profile,
 			  ostream *ss)
 {
   int err = 0;
-  err |= to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
   err |= parse(profile);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
@@ -82,11 +64,11 @@ unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
   unsigned tail = object_size % alignment;
   unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
 
-  assert(padded_length % k == 0);
+  ceph_assert(padded_length % k == 0);
   return padded_length / k;
 }
 
-int ErasureCodeShec::minimum_to_decode(const set<int> &want_to_read,
+int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
 				       const set<int> &available_chunks,
 				       set<int> *minimum_chunks)
 {
@@ -151,7 +133,7 @@ int ErasureCodeShec::minimum_to_decode_with_cost(const set<int> &want_to_read,
        ++i)
     available_chunks.insert(i->first);
 
-  return minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
+  return _minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
 }
 
 int ErasureCodeShec::encode(const set<int> &want_to_encode,
@@ -188,7 +170,7 @@ int ErasureCodeShec::encode_chunks(const set<int> &want_to_encode,
   return 0;
 }
 
-int ErasureCodeShec::decode(const set<int> &want_to_read,
+int ErasureCodeShec::_decode(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded)
 {
@@ -218,8 +200,11 @@ int ErasureCodeShec::decode(const set<int> &want_to_read,
   unsigned blocksize = (*chunks.begin()).second.length();
   for (unsigned int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
+      bufferlist tmp;
       bufferptr ptr(buffer::create_aligned(blocksize, SIMD_ALIGN));
-      (*decoded)[i].push_front(ptr);
+      tmp.push_back(ptr);
+      tmp.claim_append((*decoded)[i]);
+      (*decoded)[i].swap(tmp);
     } else {
       (*decoded)[i] = chunks.find(i)->second;
       (*decoded)[i].rebuild_aligned(SIMD_ALIGN);
@@ -301,7 +286,7 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profi
   } else if (profile.find("k") == profile.end() ||
 	     profile.find("m") == profile.end() ||
 	     profile.find("c") == profile.end()){
-    dout(10) << "(k, m, c) must be choosed" << dendl;
+    dout(10) << "(k, m, c) must be chosen" << dendl;
     err = -EINVAL;
   } else {
     std::string err_k, err_m, err_c, value_k, value_m, value_c;
@@ -425,7 +410,7 @@ void ErasureCodeShecReedSolomonVandermonde::prepare()
   dout(10) << " [ technique ] = " <<
     ((technique == MULTIPLE) ? "multiple" : "single") << dendl;
 
-  assert((technique == SINGLE) || (technique == MULTIPLE));
+  ceph_assert((technique == SINGLE) || (technique == MULTIPLE));
 
 }
 
@@ -501,7 +486,8 @@ int* ErasureCodeShec::shec_reedsolomon_coding_matrix(int is_single)
         if (true) {
           double r_e1;
           r_e1 = shec_calc_recovery_efficiency1(k, m1, m2, c1, c2);
-          if (r_e1 < min_r_e1){
+          if (min_r_e1 - r_e1 > std::numeric_limits<double>::epsilon() &&
+	      r_e1 < min_r_e1) {
             min_r_e1 = r_e1;
             c1_best = c1;
             m1_best = m1;
@@ -548,6 +534,9 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 {
   int mindup = k+1, minp = k+1;
   int want[k + m];
+
+  memset(want, 0, sizeof(want));
+
   for (int i = 0; i < k + m; ++i) {
     want[i] = want_[i];
   }
@@ -560,6 +549,14 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
         }
       }
     }
+  }
+
+  if (tcache.getDecodingTableFromCache(decoding_matrix,
+                                       dm_row, dm_column, minimum,
+                                       technique,
+                                       k, m, c, w,
+                                       want, avails)) {
+    return 0;
   }
 
   for (unsigned long long pp = 0; pp < (1ull << m); ++pp) {
@@ -754,6 +751,9 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
   }
 
   int ret = jerasure_invert_matrix(tmpmat, decoding_matrix, mindup, w);
+
+  tcache.putDecodingTableToCache(decoding_matrix, dm_row, dm_column, minimum, technique,
+                                 k, m, c, w, want, avails);
 
   return ret;
 }

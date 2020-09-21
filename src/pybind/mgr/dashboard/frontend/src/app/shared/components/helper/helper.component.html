@@ -1,0 +1,11 @@
+<ng-template #popoverTpl>
+  <div [class]="class"
+       [innerHtml]="html">
+  </div>
+  <ng-content></ng-content>
+</ng-template>
+<i [ngClass]="[icons.questionCircle]"
+   aria-hidden="true"
+   [ngbPopover]="popoverTpl"
+   (click)="$event.preventDefault();">
+</i>

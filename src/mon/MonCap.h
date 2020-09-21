@@ -5,12 +5,11 @@
 #define CEPH_MONCAP_H
 
 #include <ostream>
-using std::ostream;
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/entity_name.h"
-
-class CephContext;
+#include "mds/mdstypes.h"
 
 static const __u8 MON_CAP_R     = (1 << 1);      // read
 static const __u8 MON_CAP_W     = (1 << 2);      // write
@@ -21,6 +20,7 @@ static const __u8 MON_CAP_ANY   = 0xff;          // *
 struct mon_rwxa_t {
   __u8 val;
 
+  // cppcheck-suppress noExplicitConstructor
   mon_rwxa_t(__u8 v = 0) : val(v) {}
   mon_rwxa_t& operator=(__u8 v) {
     val = v;
@@ -31,21 +31,30 @@ struct mon_rwxa_t {
   }
 };
 
-ostream& operator<<(ostream& out, mon_rwxa_t p);
+std::ostream& operator<<(std::ostream& out, const mon_rwxa_t& p);
 
 struct StringConstraint {
-  string value;
-  string prefix;
+  enum MatchType {
+    MATCH_TYPE_NONE,
+    MATCH_TYPE_EQUAL,
+    MATCH_TYPE_PREFIX,
+    MATCH_TYPE_REGEX
+  };
+
+  MatchType match_type = MATCH_TYPE_NONE;
+  std::string value;
 
   StringConstraint() {}
-  StringConstraint(string a, string b) : value(a), prefix(b) {}
+  StringConstraint(MatchType match_type, std::string value)
+    : match_type(match_type), value(value) {
+  }
 };
 
-ostream& operator<<(ostream& out, const StringConstraint& c);
+std::ostream& operator<<(std::ostream& out, const StringConstraint& c);
 
 struct MonCapGrant {
   /*
-   * A grant can come in one of four forms:
+   * A grant can come in one of five forms:
    *
    *  - a blanket allow ('allow rw', 'allow *')
    *    - this will match against any service and the read/write/exec flags
@@ -64,27 +73,45 @@ struct MonCapGrant {
    *      of key/value pairs that constrain use of that command.  if no pairs
    *      are specified, any arguments are allowed; if a pair is specified, that
    *      argument must be present and equal or match a prefix.
+   *
+   *  - an fs name ('allow fsname foo')
+   *    - this will restrict access to MDSMaps in the FSMap to the provided
+   *      fs name.
    */
   std::string service;
   std::string profile;
   std::string command;
-  map<std::string,StringConstraint> command_args;
+  std::map<std::string, StringConstraint> command_args;
+  std::string fs_name;
+
+  // restrict by network
+  std::string network;
+
+  // these are filled in by parse_network(), called by MonCap::parse()
+  entity_addr_t network_parsed;
+  unsigned network_prefix = 0;
+  bool network_valid = true;
+
+  void parse_network();
 
   mon_rwxa_t allow;
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() (via is_match()) and cached here.
-  mutable list<MonCapGrant> profile_grants;
+  mutable std::list<MonCapGrant> profile_grants;
 
-  void expand_profile(EntityName name) const;
+  void expand_profile(const EntityName& name) const;
 
   MonCapGrant() : allow(0) {}
+  // cppcheck-suppress noExplicitConstructor
   MonCapGrant(mon_rwxa_t a) : allow(a) {}
-  MonCapGrant(string s, mon_rwxa_t a) : service(s), allow(a) {}
-  MonCapGrant(string c) : command(c) {}
-  MonCapGrant(string c, string a, StringConstraint co) : command(c) {
+  MonCapGrant(std::string s, mon_rwxa_t a) : service(std::move(s)), allow(a) {}
+  // cppcheck-suppress noExplicitConstructor
+  MonCapGrant(std::string c) : command(std::move(c)) {}
+  MonCapGrant(std::string c, std::string a, StringConstraint co) : command(std::move(c)) {
     command_args[a] = co;
   }
+  MonCapGrant(mon_rwxa_t a, std::string fsname) : fs_name(fsname), allow(a) {}
 
   /**
    * check if given request parameters match our constraints
@@ -100,33 +127,34 @@ struct MonCapGrant {
 			 EntityName name,
 			 const std::string& service,
 			 const std::string& command,
-			 const map<string,string>& command_args) const;
+			 const std::map<std::string, std::string>& command_args) const;
 
   bool is_allow_all() const {
     return
       allow == MON_CAP_ANY &&
       service.length() == 0 &&
       profile.length() == 0 &&
-      command.length() == 0;
+      command.length() == 0 &&
+      fs_name.empty();
   }
 };
 
-ostream& operator<<(ostream& out, const MonCapGrant& g);
+std::ostream& operator<<(std::ostream& out, const MonCapGrant& g);
 
 struct MonCap {
-  string text;
+  std::string text;
   std::vector<MonCapGrant> grants;
 
   MonCap() {}
-  MonCap(std::vector<MonCapGrant> g) : grants(g) {}
+  explicit MonCap(const std::vector<MonCapGrant> &g) : grants(g) {}
 
-  string get_str() const {
+  std::string get_str() const {
     return text;
   }
 
   bool is_allow_all() const;
   void set_allow_all();
-  bool parse(const std::string& str, ostream *err=NULL);
+  bool parse(const std::string& str, std::ostream *err=NULL);
 
   /**
    * check if we are capable of something
@@ -144,17 +172,56 @@ struct MonCap {
    */
   bool is_capable(CephContext *cct,
 		  EntityName name,
-		  const string& service,
-		  const string& command, const map<string,string>& command_args,
-		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
+		  const std::string& service,
+		  const std::string& command,
+		  const std::map<std::string, std::string>& command_args,
+		  bool op_may_read, bool op_may_write, bool op_may_exec,
+		  const entity_addr_t& addr) const;
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<MonCap*>& ls);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<MonCap*>& ls);
+
+  std::vector<string> allowed_fs_names() const {
+    std::vector<string> ret;
+    for (auto& g : grants) {
+      if (not g.fs_name.empty()) {
+	ret.push_back(g.fs_name);
+      } else {
+	return {};
+      }
+    }
+    return ret;
+  }
+
+  bool fs_name_capable(const EntityName& ename, string_view fs_name,
+		       __u8 mask) {
+    for (auto& g : grants) {
+      if (g.is_allow_all()) {
+	return true;
+      }
+
+      if ((g.fs_name.empty() || g.fs_name == fs_name) && (mask & g.allow)) {
+	  return true;
+      }
+
+      g.expand_profile(ename);
+      for (auto& pg : g.profile_grants) {
+	if ((pg.service == "fs" || pg.service == "mds") &&
+	    (pg.fs_name.empty() || pg.fs_name == fs_name) &&
+	    (pg.allow & mask)) {
+	  return true;
+	}
+      }
+    }
+
+    return false;
+  }
+
 };
 WRITE_CLASS_ENCODER(MonCap)
 
-ostream& operator<<(ostream& out, const MonCap& cap);
+std::ostream& operator<<(std::ostream& out, const MonCap& cap);
 
 #endif

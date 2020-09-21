@@ -21,34 +21,36 @@
 class MGetPoolStats : public PaxosServiceMessage {
 public:
   uuid_d fsid;
-  list<string> pools;
+  std::vector<std::string> pools;
 
-  MGetPoolStats() : PaxosServiceMessage(MSG_GETPOOLSTATS, 0) {}
-  MGetPoolStats(const uuid_d& f, ceph_tid_t t, list<string>& ls, version_t l) :
-    PaxosServiceMessage(MSG_GETPOOLSTATS, l),
+  MGetPoolStats() : PaxosServiceMessage{MSG_GETPOOLSTATS, 0} {}
+  MGetPoolStats(const uuid_d& f, ceph_tid_t t, std::vector<std::string>& ls, version_t l) :
+    PaxosServiceMessage{MSG_GETPOOLSTATS, l},
     fsid(f), pools(ls) {
     set_tid(t);
   }
 
 private:
-  ~MGetPoolStats() {}
+  ~MGetPoolStats() override {}
 
 public:
-  const char *get_type_name() const { return "getpoolstats"; }
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "getpoolstats"; }
+  void print(std::ostream& out) const override {
     out << "getpoolstats(" << get_tid() << " " << pools << " v" << version << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(pools, payload);
+    encode(fsid, payload);
+    encode(pools, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(pools, p);
+    decode(fsid, p);
+    decode(pools, p);
   }
 };
 

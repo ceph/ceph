@@ -1,27 +1,13 @@
 Maintainer
 ----------
-
 Sage Weil <sage@redhat.com>
-
 
 Component Technical Leads
 -------------------------
-
-Core, RADOS   - Samuel Just <sam.just@inktank.com>
-RBD           - Josh Durgin <josh.durgin@inktank.com>
-RBD (kernel)  - Ilya Dryomov <ilya.dryomov@inktank.com>
-RGW           - Yehuda Sadeh <yehuda@inktank.com>
-CephFS        - Greg Farnum <greg@inktank.com>
-                Yan, Zheng <zheng.z.yan@intel.com>
-Deployment    - Alfredo Deza <alfredo.deza@inktank.com>
-Teuthology    - Zack Cerza <zack.cerza@inktank.com>
-Calamari      - Gregory Meno <gmeno@redhat.com>
-Chef Cookbook - Guilhem Lettron <guilhem@lettron.fr>
-
+For a full list of CTLs and maintainers visit: http://ceph.com/team/
 
 Contributors
 ------------
-
 For a complete contributor list:
 
   git shortlog -sn

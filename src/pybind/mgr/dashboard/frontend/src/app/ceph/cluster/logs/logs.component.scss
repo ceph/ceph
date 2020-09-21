@@ -1,0 +1,44 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+p {
+  font-family: monospace;
+}
+
+.card {
+  div p {
+    display: flex;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .timestamp {
+    flex-shrink: 0;
+    font-weight: bold;
+  }
+
+  .priority {
+    margin-left: 0.5rem;
+  }
+
+  .message {
+    margin-left: 1rem;
+  }
+
+  .err {
+    color: bd.$danger;
+  }
+
+  .warn {
+    color: bd.$warning;
+  }
+
+  .info {
+    color: bd.$info;
+  }
+}
+
+::ng-deep cd-logs ngb-timepicker input.ngb-tp-input {
+  width: 3.5rem !important;
+}

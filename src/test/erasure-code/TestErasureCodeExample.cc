@@ -13,11 +13,10 @@
  *  version 2.1 of the License, or (at your option) any later version.
  * 
  */
+#include <stdlib.h>
 
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "ErasureCodeExample.h"
-#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
@@ -36,7 +35,7 @@ TEST(ErasureCodeExample, minimum_to_decode)
   want_to_read.insert(1);
   {
     set<int> minimum;
-    EXPECT_EQ(-EIO, example.minimum_to_decode(want_to_read,
+    EXPECT_EQ(-EIO, example._minimum_to_decode(want_to_read,
                                               available_chunks,
                                               &minimum));
   }
@@ -44,9 +43,9 @@ TEST(ErasureCodeExample, minimum_to_decode)
   available_chunks.insert(2);
   {
     set<int> minimum;
-    EXPECT_EQ(0, example.minimum_to_decode(want_to_read,
-                                           available_chunks,
-                                           &minimum));
+    EXPECT_EQ(0, example._minimum_to_decode(want_to_read,
+					    available_chunks,
+					    &minimum));
     EXPECT_EQ(available_chunks, minimum);
     EXPECT_EQ(2u, minimum.size());
     EXPECT_EQ(1u, minimum.count(0));
@@ -55,9 +54,9 @@ TEST(ErasureCodeExample, minimum_to_decode)
   {
     set<int> minimum;
     available_chunks.insert(1);
-    EXPECT_EQ(0, example.minimum_to_decode(want_to_read,
-                                           available_chunks,
-                                           &minimum));
+    EXPECT_EQ(0, example._minimum_to_decode(want_to_read,
+					    available_chunks,
+					    &minimum));
     EXPECT_EQ(1u, minimum.size());
     EXPECT_EQ(1u, minimum.count(1));
   }
@@ -133,9 +132,9 @@ TEST(ErasureCodeExample, encode_decode)
   {
     int want_to_decode[] = { 0, 1 };
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, example.decode(set<int>(want_to_decode, want_to_decode+2),
-                                encoded,
-                                &decoded));
+    EXPECT_EQ(0, example._decode(set<int>(want_to_decode, want_to_decode+2),
+				 encoded,
+				 &decoded));
     EXPECT_EQ(2u, decoded.size());
     EXPECT_EQ(3u, decoded[0].length());
     EXPECT_EQ('A', decoded[0][0]);
@@ -152,9 +151,9 @@ TEST(ErasureCodeExample, encode_decode)
     EXPECT_EQ(2u, degraded.size());
     int want_to_decode[] = { 0, 1 };
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, example.decode(set<int>(want_to_decode, want_to_decode+2),
-                                degraded,
-                                &decoded));
+    EXPECT_EQ(0, example._decode(set<int>(want_to_decode, want_to_decode+2),
+				 degraded,
+				 &decoded));
     EXPECT_EQ(2u, decoded.size());
     EXPECT_EQ(3u, decoded[0].length());
     EXPECT_EQ('A', decoded[0][0]);
@@ -181,7 +180,7 @@ TEST(ErasureCodeExample, decode)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
   int want_to_encode[] = { 0, 1, 2 };
   map<int, bufferlist> encoded;
   EXPECT_EQ(0, example.encode(set<int>(want_to_encode, want_to_encode+3),
@@ -202,9 +201,9 @@ TEST(ErasureCodeExample, decode)
   EXPECT_EQ(-ERANGE, example.decode_concat(degraded, &out));
 }
 
-TEST(ErasureCodeExample, create_ruleset)
+TEST(ErasureCodeExample, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   c->set_type_name(2, "root");
   c->set_type_name(1, "host");
@@ -230,20 +229,7 @@ TEST(ErasureCodeExample, create_ruleset)
 
   stringstream ss;
   ErasureCodeExample example;
-  EXPECT_EQ(0, example.create_ruleset("myrule", *c, &ss));
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  g_conf->set_val("erasure_code_dir", ".libs", false, false);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  EXPECT_EQ(0, example.create_rule("myrule", *c, &ss));
 }
 
 /*

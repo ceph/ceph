@@ -1,4 +1,4 @@
-#!/bin/bash -
+#!/usr/bin/env bash
 #
 # File:        git-archive-all.sh
 #
@@ -48,8 +48,7 @@ IFS='
  	'
 
 function cleanup () {
-    rm -f $TMPFILE
-    rm -f $TOARCHIVE
+    rm -rf $TMPDIR
     IFS="$OLD_IFS"
 }
 
@@ -105,7 +104,7 @@ readonly PROGRAM=`basename "$0"`
 readonly VERSION=0.2
 
 OLD_PWD="`pwd`"
-TMPDIR=${TMPDIR:-/tmp}
+TMPDIR=`mktemp -d "${TMPDIR:-/tmp}/$PROGRAM.XXXXXX"`
 TMPFILE=`mktemp "$TMPDIR/$PROGRAM.XXXXXX"` # Create a place to store our work's progress
 TOARCHIVE=`mktemp "$TMPDIR/$PROGRAM.toarchive.XXXXXX"`
 OUT_FILE=$OLD_PWD # assume "this directory" without a name change by default

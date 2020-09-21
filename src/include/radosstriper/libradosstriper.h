@@ -56,7 +56,7 @@ void rados_striper_destroy(rados_striper_t striper);
  * This layout will be used when new objects are created (by writing to them)
  * Already existing objects will be opened with their own layout.
  *
- * @param striper the targetted striper
+ * @param striper the targeted striper
  * @param stripe_unit the stripe_unit value of the new object layout
  * @returns 0 on success, negative error code on failure
  */
@@ -68,7 +68,7 @@ int rados_striper_set_object_layout_stripe_unit(rados_striper_t striper,
  * This layout will be used when new objects are created (by writing to them)
  * Already existing objects will be opened with their own layout.
  *
- * @param striper the targetted striper
+ * @param striper the targeted striper
  * @param stripe_count the stripe_count value of the new object layout
  * @returns 0 on success, negative error code on failure
  */
@@ -80,7 +80,7 @@ int rados_striper_set_object_layout_stripe_count(rados_striper_t striper,
  * This layout will be used when new objects are created (by writing to them)
  * Already existing objects will be opened with their own layout.
  *
- * @param striper the targetted striper
+ * @param striper the targeted striper
  * @param object_size the object_size value of the new object layout
  * @returns 0 on success, negative error code on failure
  */
@@ -207,7 +207,7 @@ int rados_striper_remove(rados_striper_t striper,
  * @param size the new size of the object in bytes
  * @returns 0 on success, negative error code on failure
  */
-int rados_striper_trunc(rados_ioctx_t io, const char *soid, uint64_t size);
+int rados_striper_trunc(rados_striper_t striper, const char *soid, uint64_t size);
 
 /** @} Synchronous I/O */
 
@@ -554,6 +554,26 @@ int rados_striper_aio_read(rados_striper_t striper,
                            uint64_t off);
 
 /**
+ * Asynchronously removes a striped object
+ *
+ * @note There is no atomicity of the deletion and the striped
+ * object may be left incomplete if an error is returned (metadata
+ * all present, but some stripes missing)
+ * However, there is a atomicity of the metadata deletion and
+ * the deletion can not happen if any I/O is ongoing (it
+ * will return EBUSY). Identically, no I/O will be able to start
+ * during deletion (same EBUSY return code)
+ * @param striper the striper in which the remove will occur
+ * @param soid the name of the striped object
+ * @param completion what to do when the remove is safe and complete
+ * @returns 0 on success, negative error code on failure
+ */
+
+int rados_striper_aio_remove(rados_striper_t striper,
+                             const char* soid,
+                             rados_completion_t completion);
+
+/**
  * Block until all pending writes in a striper are safe
  *
  * This is not equivalent to calling rados_striper_multi_aio_wait_for_safe() on all
@@ -564,6 +584,22 @@ int rados_striper_aio_read(rados_striper_t striper,
  * @returns 0 on success, negative error code on failure
 */
 void rados_striper_aio_flush(rados_striper_t striper);
+
+/**
+ * Asynchronously get object stats (size/mtime)
+ *
+ * @param striper the striper in which the stat will occur
+ * @param soid the id of the striped object
+ * @param psize where to store object size
+ * @param pmtime where to store modification time
+ * @param completion what to do when the stats is complete
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_striper_aio_stat(rados_striper_t striper,
+                           const char* soid,
+                           rados_completion_t completion,
+                           uint64_t *psize,
+                           time_t *pmtime);
 
 /** @} Asynchronous I/O */
 

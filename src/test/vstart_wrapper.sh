@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2015 Red Hat <contact@redhat.com>
@@ -16,12 +16,15 @@
 # GNU Library Public License for more details.
 #
 
-source ../qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 export CEPH_VSTART_WRAPPER=1
-export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"
+export CEPH_DIR="${TMPDIR:-$PWD}/td/t-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
 export CEPH_OUT_DIR="$CEPH_DIR/out"
+export CEPH_ASOK_DIR="$CEPH_DIR/out"
+
+export MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
 
 function vstart_setup()
 {
@@ -30,9 +33,15 @@ function vstart_setup()
     trap "teardown $CEPH_DIR" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
     export PATH="$(pwd):${PATH}"
-    ./vstart.sh \
+    OBJSTORE_ARGS=""
+    if [ "bluestore" = "${CEPH_OBJECTSTORE}" ]; then
+        OBJSTORE_ARGS="-b"
+    fi
+    $CEPH_ROOT/src/vstart.sh \
+        --short \
+        $OBJSTORE_ARGS \
         -o 'paxos propose interval = 0.01' \
-        -n -l $CEPH_START || return 1
+        -d -n -l || return 1
     export CEPH_CONF=$CEPH_DIR/ceph.conf
 
     crit=$(expr 100 - $(ceph-conf --show-config-value mon_data_avail_crit))
@@ -54,7 +63,13 @@ function main()
 {
     teardown $CEPH_DIR
     vstart_setup || return 1
-    CEPH_CONF=$CEPH_DIR/ceph.conf "$@" || return 1
+    if CEPH_CONF=$CEPH_DIR/ceph.conf "$@"; then
+        code=0
+    else
+        code=1
+        display_logs $CEPH_OUT_DIR
+    fi
+    return $code
 }
 
 main "$@"

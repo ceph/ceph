@@ -15,104 +15,95 @@
 #ifndef CEPH_LIBRADOS_POOLASYNCCOMPLETIONIMPL_H
 #define CEPH_LIBRADOS_POOLASYNCCOMPLETIONIMPL_H
 
-#include "common/Cond.h"
-#include "common/Mutex.h"
-#include "include/Context.h"
+#include "common/ceph_mutex.h"
+
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 
 namespace librados {
   struct PoolAsyncCompletionImpl {
-    Mutex lock;
-    Cond cond;
-    int ref, rval;
-    bool released;
-    bool done;
+    ceph::mutex lock = ceph::make_mutex("PoolAsyncCompletionImpl lock");
+    ceph::condition_variable cond;
+    int ref = 1;
+    int rval = 0;
+    bool released = false;
+    bool done = false;
 
-    rados_callback_t callback;
-    void *callback_arg;
+    rados_callback_t callback = nullptr;
+    void *callback_arg = nullptr;
 
-    PoolAsyncCompletionImpl() : lock("PoolAsyncCompletionImpl lock"),
-				ref(1), rval(0), released(false), done(false),
-				callback(0), callback_arg(0) {}
+    PoolAsyncCompletionImpl() = default;
 
     int set_callback(void *cb_arg, rados_callback_t cb) {
-      lock.Lock();
+      std::scoped_lock l(lock);
       callback = cb;
       callback_arg = cb_arg;
-      lock.Unlock();
       return 0;
     }
     int wait() {
-      lock.Lock();
+      std::unique_lock l(lock);
       while (!done)
-	cond.Wait(lock);
-      lock.Unlock();
+	cond.wait(l);
       return 0;
     }
     int is_complete() {
-      lock.Lock();
-      int r = done;
-      lock.Unlock();
-      return r;
+      std::scoped_lock l(lock);
+      return done;
     }
     int get_return_value() {
-      lock.Lock();
-      int r = rval;
-      lock.Unlock();
-      return r;
+      std::scoped_lock l(lock);
+      return rval;
     }
     void get() {
-      lock.Lock();
-      assert(ref > 0);
+      std::scoped_lock l(lock);
+      ceph_assert(ref > 0);
       ref++;
-      lock.Unlock();
     }
     void release() {
-      lock.Lock();
-      assert(!released);
+      std::scoped_lock l(lock);
+      ceph_assert(!released);
       released = true;
-      put_unlock();
     }
     void put() {
-      lock.Lock();
-      put_unlock();
-    }
-    void put_unlock() {
-      assert(ref > 0);
+      std::unique_lock l(lock);
       int n = --ref;
-      lock.Unlock();
+      l.unlock();
       if (!n)
 	delete this;
     }
   };
 
-  class C_PoolAsync_Safe : public Context {
-    PoolAsyncCompletionImpl *c;
+  inline void intrusive_ptr_add_ref(PoolAsyncCompletionImpl* p) {
+    p->get();
+  }
+  inline void intrusive_ptr_release(PoolAsyncCompletionImpl* p) {
+    p->put();
+  }
+
+  class CB_PoolAsync_Safe {
+    boost::intrusive_ptr<PoolAsyncCompletionImpl> p;
 
   public:
-    C_PoolAsync_Safe(PoolAsyncCompletionImpl *_c) : c(_c) {
-      c->get();
-    }
-    ~C_PoolAsync_Safe() {
-      c->put();
-    }
-  
-    void finish(int r) {
-      c->lock.Lock();
+    explicit CB_PoolAsync_Safe(boost::intrusive_ptr<PoolAsyncCompletionImpl> p)
+      : p(p) {}
+    ~CB_PoolAsync_Safe() = default;
+
+    void operator()(int r) {
+      auto c(std::move(p));
+      std::unique_lock l(c->lock);
       c->rval = r;
       c->done = true;
-      c->cond.Signal();
+      c->cond.notify_all();
 
       if (c->callback) {
 	rados_callback_t cb = c->callback;
 	void *cb_arg = c->callback_arg;
-	c->lock.Unlock();
-	cb(c, cb_arg);
-	c->lock.Lock();
+	l.unlock();
+	cb(c.get(), cb_arg);
+	l.lock();
       }
-
-      c->lock.Unlock();
     }
   };
 }

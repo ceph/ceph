@@ -47,13 +47,13 @@ Should return something like:
 '''
 
 # Copyright: Wido den Hollander <wido@42on.com> 2014
-# License:   LGPL2.1
+# License:   LGPL-2.1 or LGPL-3.0
 
 from ConfigParser import SafeConfigParser, NoSectionError
 from flask import abort, Flask, request, Response
 from hashlib import sha1 as sha
 from time import gmtime, strftime
-from urlparse import urlparse
+from urllib.parse import urlparse
 import argparse
 import base64
 import hmac
@@ -145,7 +145,7 @@ def parse_region_map(map):
     for region in map['regions']:
         url = urlparse(region['val']['endpoints'][0])
         regions.update({region['key']: url.netloc})
- 
+
     return regions
 
 def str2bool(s):
@@ -176,7 +176,7 @@ def init_config():
         cfg.read(config_locations)
     else:
         if not os.path.isfile(args.config):
-            print "Could not open configuration file %s" % args.config
+            print("Could not open configuration file %s" % args.config)
             sys.exit(1)
 
         cfg.read(args.config)
@@ -210,7 +210,7 @@ def init_config():
 def generate_app(config):
     # The Flask App
     app = Flask(__name__)
-    
+
     # Get the RGW Region Map
     region_map = parse_region_map(do_rgw_request('config'))
 
@@ -268,7 +268,8 @@ def generate_app(config):
 # Initialize the configuration and generate the Application
 config = init_config()
 if config == None:
-    print "Could not parse configuration file. Tried to parse %s" % config_locations
+    print("Could not parse configuration file. "
+          "Tried to parse %s" % config_locations)
     sys.exit(1)
 
 app = generate_app(config)

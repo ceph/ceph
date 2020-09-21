@@ -1,0 +1,27 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.bg-info {
+  background-color: bd.$primary !important;
+}
+
+.bg-freespace {
+  background-color: bd.$gray-400 !important;
+}
+
+.progress {
+  height: 20px;
+  margin-bottom: 0;
+  position: relative;
+
+  div.progress-bar {
+    position: static;
+  }
+
+  span {
+    color: bd.$black;
+    display: block;
+    font-weight: normal;
+    position: absolute;
+    width: 100%;
+  }
+}

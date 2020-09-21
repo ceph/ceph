@@ -27,9 +27,8 @@
 extern "C" {
 #include <unistd.h>
 }
-
+#include <atomic>
 #include "Common/String.h"
-#include "Common/atomic.h"
 #include "Common/Properties.h"
 
 #include "DfsBroker/Lib/Broker.h"
@@ -58,7 +57,7 @@ namespace Hypertable {
   class OpenFileDataCephPtr : public OpenFileDataPtr {
   public:
     OpenFileDataCephPtr() : OpenFileDataPtr() { }
-    OpenFileDataCephPtr(OpenFileDataCeph *ofdl) : OpenFileDataPtr(ofdl, true) { }
+    explicit OpenFileDataCephPtr(OpenFileDataCeph *ofdl) : OpenFileDataPtr(ofdl, true) { }
     OpenFileDataCeph *operator->() const { return static_cast<OpenFileDataCeph *>(get()); }
   };
 
@@ -67,7 +66,7 @@ namespace Hypertable {
    */
   class CephBroker : public DfsBroker::Broker {
   public:
-    CephBroker(PropertiesPtr& cfg);
+    explicit CephBroker(PropertiesPtr& cfg);
     virtual ~CephBroker();
 
     virtual void open(ResponseCallbackOpen *cb, const char *fname,
@@ -97,7 +96,7 @@ namespace Hypertable {
 
   private:
     struct ceph_mount_info *cmount;
-    static atomic_t ms_next_fd;
+    static std::atomic<int> ms_next_fd;
 
     virtual void report_error(ResponseCallback *cb, int error);
 

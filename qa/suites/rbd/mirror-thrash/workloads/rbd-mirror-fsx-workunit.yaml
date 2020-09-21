@@ -1,0 +1,33 @@
+meta:
+- desc: run multiple FSX workloads to simulate cluster load and then verify
+        that the images were replicated
+tasks:
+- workunit:
+    clients:
+      cluster1.client.mirror: [rbd/rbd_mirror_fsx_prepare.sh]
+    env:
+      # override workunit setting of CEPH_ARGS='--cluster'
+      CEPH_ARGS: ''
+      RBD_MIRROR_NOCLEANUP: '1'
+      RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
+      RBD_MIRROR_USE_RBD_MIRROR: '1'
+- rbd_fsx:
+    clients:
+      - cluster1.client.mirror.0
+      - cluster1.client.mirror.1
+      - cluster1.client.mirror.2
+      - cluster1.client.mirror.3
+      - cluster1.client.mirror.4
+      - cluster1.client.mirror.5
+    ops: 6000
+    keep_images: true
+    pool_name: mirror
+- workunit:
+    clients:
+      cluster1.client.mirror: [rbd/rbd_mirror_fsx_compare.sh]
+    env:
+      # override workunit setting of CEPH_ARGS='--cluster'
+      CEPH_ARGS: ''
+      RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
+      RBD_MIRROR_USE_RBD_MIRROR: '1'
+    timeout: 6h

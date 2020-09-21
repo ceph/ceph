@@ -18,60 +18,17 @@
 
 #include "SimpleLock.h"
 
+#include "MDSContext.h"
+
 class ScatterLock : public SimpleLock {
-
-  struct more_bits_t {
-    int state_flags;
-    utime_t last_scatter;
-    xlist<ScatterLock*>::item item_updated;
-    utime_t update_stamp;
-
-    more_bits_t(ScatterLock *lock) :
-      state_flags(0),
-      item_updated(lock)
-    {}
-
-    bool empty() const {
-      return
-	!state_flags &&
-	!item_updated.is_on_list();
-    }
-  };
-  more_bits_t *_more;
-
-  bool have_more() const { return _more ? true : false; }
-  void try_clear_more() {
-    if (_more && _more->empty()) {
-      delete _more;
-      _more = NULL;
-    }
-  }
-  more_bits_t *more() {
-    if (!_more)
-      _more = new more_bits_t(this);
-    return _more;
-  }
-
-  enum flag_values {  // flag values for more_bits_t state
-    SCATTER_WANTED   = 1 << 0,
-    UNSCATTER_WANTED = 1 << 1,
-    DIRTY            = 1 << 2,
-    FLUSHING         = 1 << 3,
-    FLUSHED          = 1 << 4,
-  };
-
 public:
-  ScatterLock(MDSCacheObject *o, LockType *lt) : 
-    SimpleLock(o, lt), _more(NULL)
-  {}
-  ~ScatterLock() {
-    if (_more) {
-      _more->item_updated.remove_myself();   // FIXME this should happen sooner, i think...
-      delete _more;
-    }
+  ScatterLock(MDSCacheObject *o, LockType *lt) :
+    SimpleLock(o, lt) {}
+  ~ScatterLock() override {
+    ceph_assert(!_more);
   }
 
-  bool is_scatterlock() const {
+  bool is_scatterlock() const override {
     return true;
   }
 
@@ -96,48 +53,52 @@ public:
       get_state() == LOCK_MIX;
   }
 
+  void set_xlock_snap_sync(MDSContext *c)
+  {
+    ceph_assert(get_type() == CEPH_LOCK_IFILE);
+    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    state = LOCK_XLOCKSNAP;
+    add_waiter(WAIT_STABLE, c);
+  }
+
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }
 
   utime_t get_update_stamp() {
-    return more()->update_stamp;
+    return _more ? _more->update_stamp : utime_t();
   }
 
   void set_update_stamp(utime_t t) { more()->update_stamp = t; }
 
   void set_scatter_wanted() {
-    more()->state_flags |= SCATTER_WANTED;
+    state_flags |= SCATTER_WANTED;
   }
   void set_unscatter_wanted() {
-    more()->state_flags |= UNSCATTER_WANTED;
+    state_flags |= UNSCATTER_WANTED;
   }
   void clear_scatter_wanted() {
-    if (have_more())
-      _more->state_flags &= ~SCATTER_WANTED;
-    try_clear_more();
+    state_flags &= ~SCATTER_WANTED;
   }
   void clear_unscatter_wanted() {
-    if (have_more())
-      _more->state_flags &= ~UNSCATTER_WANTED;
-    try_clear_more();
+    state_flags &= ~UNSCATTER_WANTED;
   }
   bool get_scatter_wanted() const {
-    return have_more() ? _more->state_flags & SCATTER_WANTED : false;
+    return state_flags & SCATTER_WANTED;
   }
   bool get_unscatter_wanted() const {
-    return have_more() ? _more->state_flags & UNSCATTER_WANTED : false;
+    return state_flags & UNSCATTER_WANTED;
   }
 
-  bool is_dirty() const {
-    return have_more() ? _more->state_flags & DIRTY : false;
+  bool is_dirty() const override {
+    return state_flags & DIRTY;
   }
-  bool is_flushing() const {
-    return have_more() ? _more->state_flags & FLUSHING: false;
+  bool is_flushing() const override {
+    return state_flags & FLUSHING;
   }
-  bool is_flushed() const {
-    return have_more() ? _more->state_flags & FLUSHED: false;
+  bool is_flushed() const override {
+    return state_flags & FLUSHED;
   }
   bool is_dirty_or_flushing() const {
-    return have_more() ? (is_dirty() || is_flushing()) : false;
+    return is_dirty() || is_flushing();
   }
 
   void mark_dirty() { 
@@ -163,33 +124,25 @@ public:
       }
     }
   }
+  void clear_flushed() override {
+    state_flags &= ~FLUSHED;
+  }
   void remove_dirty() {
     start_flush();
     finish_flush();
-  }
-  void clear_flushed() {
-    if (have_more()) {
-      _more->state_flags &= ~FLUSHED;
-      try_clear_more();
-    }
-  }
-
-  void set_last_scatter(utime_t t) { more()->last_scatter = t; }
-  utime_t get_last_scatter() {
-    return more()->last_scatter;
+    clear_flushed();
   }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
     if (rstate == LOCK_MIX || 
 	rstate == LOCK_MIX_LOCK || // replica still has wrlocks?
-	rstate == LOCK_MIX_SYNC || // "
-	rstate == LOCK_MIX_TSYN)  // "
+	rstate == LOCK_MIX_SYNC)
       state = LOCK_MIX;
     else if (locktoo && rstate == LOCK_LOCK)
       state = LOCK_LOCK;
   }
 
-  void encode_state_for_rejoin(bufferlist& bl, int rep) const {
+  void encode_state_for_rejoin(ceph::buffer::list& bl, int rep) {
     __s16 s = get_replica_state();
     if (is_gathering(rep)) {
       // the recovering mds may hold rejoined wrlocks
@@ -198,11 +151,28 @@ public:
       else
 	s = LOCK_MIX_LOCK;
     }
-    ::encode(s, bl);
+
+    // If there is a recovering mds who replcated an object when it failed
+    // and scatterlock in the object was in MIX state, It's possible that
+    // the recovering mds needs to take wrlock on the scatterlock when it
+    // replays unsafe requests. So this mds should delay taking rdlock on
+    // the scatterlock until the recovering mds finishes replaying unsafe.
+    // Otherwise unsafe requests may get replayed after current request.
+    //
+    // For example:
+    // The recovering mds is auth mds of a dirfrag, this mds is auth mds
+    // of corresponding inode. when 'rm -rf' the direcotry, this mds should
+    // delay the rmdir request until the recovering mds has replayed unlink
+    // requests.
+    if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)
+      mark_need_recover();
+
+    using ceph::encode;
+    encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters) {
-    SimpleLock::decode_state_rejoin(p, waiters);
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
+    SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();
       clear_flushing();
@@ -220,7 +190,7 @@ public:
     return SimpleLock::remove_replica(from);
   }
 
-  virtual void print(ostream& out) const {
+  void print(std::ostream& out) const override {
     out << "(";
     _print(out);
     if (is_dirty())
@@ -235,25 +205,50 @@ public:
   }
 
 private:
+  struct more_bits_t {
+    xlist<ScatterLock*>::item item_updated;
+    utime_t update_stamp;
+
+    explicit more_bits_t(ScatterLock *lock) :
+      item_updated(lock)
+    {}
+  };
+
+  more_bits_t *more() {
+    if (!_more)
+      _more.reset(new more_bits_t(this));
+    return _more.get();
+  }
+
+  enum {
+    SCATTER_WANTED   = 1 << 8,
+    UNSCATTER_WANTED = 1 << 9,
+    DIRTY            = 1 << 10,
+    FLUSHING         = 1 << 11,
+    FLUSHED          = 1 << 12,
+  };
+
   void set_flushing() {
-    more()->state_flags |= FLUSHING;
+    state_flags |= FLUSHING;
   }
   void clear_flushing() {
-    if (have_more()) {
-      _more->state_flags &= ~FLUSHING;
-    }
+    state_flags &= ~FLUSHING;
   }
   void set_flushed() {
-    more()->state_flags |= FLUSHED;
+    state_flags |= FLUSHED;
   }
   void set_dirty() {
-    more()->state_flags |= DIRTY;
+    state_flags |= DIRTY;
   }
   void clear_dirty() {
-    if (have_more()) {
-      _more->state_flags &= ~DIRTY;
+    state_flags &= ~DIRTY;
+    if (_more) {
+      _more->item_updated.remove_myself();
+      _more.reset();
     }
   }
+
+  mutable std::unique_ptr<more_bits_t> _more;
 };
 
 #endif

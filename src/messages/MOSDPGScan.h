@@ -15,13 +15,12 @@
 #ifndef CEPH_MOSDPGSCAN_H
 #define CEPH_MOSDPGSCAN_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
-class MOSDPGScan : public Message {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDPGScan : public MOSDFastDispatchOp {
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   enum {
@@ -36,20 +35,31 @@ public:
     }
   }
 
-  __u32 op;
-  epoch_t map_epoch, query_epoch;
+  __u32 op = 0;
+  epoch_t map_epoch = 0, query_epoch = 0;
   pg_shard_t from;
   spg_t pgid;
   hobject_t begin, end;
 
-  virtual void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(op, p);
-    ::decode(map_epoch, p);
-    ::decode(query_epoch, p);
-    ::decode(pgid.pgid, p);
-    ::decode(begin, p);
-    ::decode(end, p);
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  epoch_t get_min_epoch() const override {
+    return query_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(op, p);
+    decode(map_epoch, p);
+    decode(query_epoch, p);
+    decode(pgid.pgid, p);
+    decode(begin, p);
+    decode(end, p);
 
     // handle hobject_t format upgrade
     if (!begin.is_max() && begin.pool == -1)
@@ -57,50 +67,53 @@ public:
     if (!end.is_max() && end.pool == -1)
       end.pool = pgid.pool();
 
-    if (header.version >= 2) {
-      ::decode(from, p);
-      ::decode(pgid.shard, p);
+    decode(from, p);
+    decode(pgid.shard, p);
+  }
+
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(op, payload);
+    encode(map_epoch, payload);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      // pre-nautilus OSDs do not set last_peering_reset properly
+      encode(map_epoch, payload);
     } else {
-      from = pg_shard_t(
-	get_source().num(),
-	shard_id_t::NO_SHARD);
-      pgid.shard = shard_id_t::NO_SHARD;
+      encode(query_epoch, payload);
     }
+    encode(pgid.pgid, payload);
+    encode(begin, payload);
+    encode(end, payload);
+    encode(from, payload);
+    encode(pgid.shard, payload);
   }
 
-  virtual void encode_payload(uint64_t features) {
-    ::encode(op, payload);
-    ::encode(map_epoch, payload);
-    ::encode(query_epoch, payload);
-    ::encode(pgid.pgid, payload);
-    ::encode(begin, payload);
-    ::encode(end, payload);
-    ::encode(from, payload);
-    ::encode(pgid.shard, payload);
-  }
-
-  MOSDPGScan() : Message(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGScan()
+    : MOSDFastDispatchOp{MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDPGScan(__u32 o, pg_shard_t from,
 	     epoch_t e, epoch_t qe, spg_t p, hobject_t be, hobject_t en)
-    : Message(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION},
       op(o),
-      map_epoch(e), query_epoch(e),
+      map_epoch(e), query_epoch(qe),
       from(from),
       pgid(p),
       begin(be), end(en) {
   }
 private:
-  ~MOSDPGScan() {}
+  ~MOSDPGScan() override {}
 
 public:
-  const char *get_type_name() const { return "pg_scan"; }
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "pg_scan"; }
+  void print(std::ostream& out) const override {
     out << "pg_scan(" << get_op_name(op)
 	<< " " << pgid
 	<< " " << begin << "-" << end
 	<< " e " << map_epoch << "/" << query_epoch
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

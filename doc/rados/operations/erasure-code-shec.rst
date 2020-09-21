@@ -3,7 +3,7 @@ SHEC erasure code plugin
 ========================
 
 The *shec* plugin encapsulates the `multiple SHEC
-<https://wiki.ceph.com/Planning/Blueprints/Hammer/Shingled_Erasure_Code_(SHEC)>`_
+<http://tracker.ceph.com/projects/ceph/wiki/Shingled_Erasure_Code_(SHEC)>`_
 library. It allows ceph to recover data more efficiently than Reed Solomon codes.
 
 Create an SHEC profile
@@ -16,8 +16,9 @@ To create a new *shec* erasure code profile::
              [k={data-chunks}] \
              [m={coding-chunks}] \
              [c={durability-estimator}] \
-             [ruleset-root={root}] \
-             [ruleset-failure-domain={bucket-type}] \
+             [crush-root={root}] \
+             [crush-failure-domain={bucket-type}] \
+             [crush-device-class={device-class}] \
              [directory={directory}] \
              [--force]
 
@@ -52,26 +53,36 @@ Where:
 :Required: No.
 :Default: 2
 
-``ruleset-root={root}``
+``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the ruleset. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.
 :Default: default
 
-``ruleset-failure-domain={bucket-type}``
+``crush-failure-domain={bucket-type}``
 
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
               **host** no two chunks will be stored on the same
-              host. It is used to create a ruleset step such as **step
+              host. It is used to create a CRUSH rule step such as **step
               chooseleaf host**.
 
 :Type: String
 :Required: No.
 :Default: host
+
+``crush-device-class={device-class}``
+
+:Description: Restrict placement to devices of a specific class (e.g.,
+              ``ssd`` or ``hdd``), using the crush device class names
+              in the CRUSH map.
+
+:Type: String
+:Required: No.
+:Default:
 
 ``directory={directory}``
 
@@ -97,11 +108,9 @@ Space Efficiency
 
 Space efficiency is a ratio of data chunks to all ones in a object and
 represented as k/(k+m).
-In order to improve space efficiency, you should increase k or decrease m.
+In order to improve space efficiency, you should increase k or decrease m:
 
-::
-
-        space efficiency of SHEC(4,3,2) = 4/(4+3) = 0.57
+        space efficiency of SHEC(4,3,2) = :math:`\frac{4}{4+3}` = 0.57
         SHEC(5,3,2) or SHEC(4,2,2) improves SHEC(4,3,2)'s space efficiency
 
 Durability
@@ -129,5 +138,5 @@ Erasure code profile examples
         $ ceph osd erasure-code-profile set SHECprofile \
              plugin=shec \
              k=8 m=4 c=3 \
-             ruleset-failure-domain=host
-        $ ceph osd pool create shecpool 256 256 erasure SHECprofile
+             crush-failure-domain=host
+        $ ceph osd pool create shecpool erasure SHECprofile

@@ -1,27 +1,57 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_ACL_SWIFT_H
 #define CEPH_RGW_ACL_SWIFT_H
 
 #include <map>
-#include <string>
 #include <vector>
+#include <string>
 #include <include/types.h>
+
+#include <boost/optional.hpp>
 
 #include "rgw_acl.h"
 
-using namespace std;
+class RGWUserCtl;
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
-public:
-  RGWAccessControlPolicy_SWIFT(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
-  ~RGWAccessControlPolicy_SWIFT() {}
+  int add_grants(RGWUserCtl *user_ctl,
+                 const std::vector<std::string>& uids,
+                 uint32_t perm);
 
-  void add_grants(RGWRados *store, vector<string>& uids, int perm);
-  bool create(RGWRados *store, string& id, string& name, string& read_list, string& write_list);
-  void to_str(string& read, string& write);
+public:
+  explicit RGWAccessControlPolicy_SWIFT(CephContext* const cct)
+    : RGWAccessControlPolicy(cct) {
+  }
+  ~RGWAccessControlPolicy_SWIFT() override = default;
+
+  int create(RGWUserCtl *user_ctl,
+             const rgw_user& id,
+             const std::string& name,
+             const char* read_list,
+             const char* write_list,
+             uint32_t& rw_mask);
+  void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
+  void to_str(std::string& read, std::string& write);
 };
 
+class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
+{
+public:
+  explicit RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
+    : RGWAccessControlPolicy(cct) {
+  }
+  ~RGWAccessControlPolicy_SWIFTAcct() override {}
+
+  void add_grants(RGWUserCtl *user_ctl,
+                  const std::vector<std::string>& uids,
+                  uint32_t perm);
+  bool create(RGWUserCtl *user_ctl,
+              const rgw_user& id,
+              const std::string& name,
+              const std::string& acl_str);
+  boost::optional<std::string> to_str() const;
+};
 #endif

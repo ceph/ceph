@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    crush_tunables: bobtail
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    conf:
+      global:
+        ms bind msgr2: false
+tasks:
+- install:
+- ceph:
+- exec:
+    client.0:
+    - "ceph osd getcrushmap -o /dev/stdout | crushtool -d - | sed -e 's/alg straw2/alg straw/g' | crushtool -c /dev/stdin -o /dev/stdout | ceph osd setcrushmap -i /dev/stdin"

@@ -1,0 +1,49 @@
+<cd-iscsi-tabs></cd-iscsi-tabs>
+
+<legend i18n>Gateways</legend>
+<cd-table [data]="gateways"
+          (fetchData)="refresh()"
+          [columns]="gatewaysColumns">
+</cd-table>
+
+<legend i18n>Images</legend>
+<cd-table [data]="images"
+          [columns]="imagesColumns">
+</cd-table>
+
+<ng-template #iscsiSparklineTpl
+             let-row="row"
+             let-value="value">
+  <span *ngIf="row.backstore === 'user:rbd'">
+    <cd-sparkline [data]="value"
+                  [isBinary]="row.cdIsBinary"></cd-sparkline>
+  </span>
+  <span *ngIf="row.backstore !== 'user:rbd'"
+        class="text-muted">
+    n/a
+  </span>
+</ng-template>
+
+<ng-template #iscsiPerSecondTpl
+             let-row="row"
+             let-value="value">
+  <span *ngIf="row.backstore === 'user:rbd'">
+    {{ value }} /s
+  </span>
+  <span *ngIf="row.backstore !== 'user:rbd'"
+        class="text-muted">
+    n/a
+  </span>
+</ng-template>
+
+<ng-template #iscsiRelativeDateTpl
+             let-row="row"
+             let-value="value">
+  <span *ngIf="row.backstore === 'user:rbd'">
+    {{ value | relativeDate }}
+  </span>
+  <span *ngIf="row.backstore !== 'user:rbd'"
+        class="text-muted">
+    n/a
+  </span>
+</ng-template>

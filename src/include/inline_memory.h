@@ -70,20 +70,19 @@ void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 
 #if defined(__GNUC__) && defined(__x86_64__)
 
+namespace ceph {
 typedef unsigned uint128_t __attribute__ ((mode (TI)));
+}
+using ceph::uint128_t;
 
 static inline bool mem_is_zero(const char *data, size_t len)
   __attribute__((always_inline));
 
 bool mem_is_zero(const char *data, size_t len)
 {
-  const char *max = data + len;
-  const char* max32 = data + (len / sizeof(uint32_t))*sizeof(uint32_t);
-#if defined(__GNUC__) && defined(__x86_64__)
   // we do have XMM registers in x86-64, so if we need to check at least
-  // 16 bytes, make use of them 
-  int left = len;
-  if (left / sizeof(uint128_t) > 0) {
+  // 16 bytes, make use of them
+  if (len / sizeof(uint128_t) > 0) {
     // align data pointer to 16 bytes, otherwise it'll segfault due to bug
     // in (at least some) GCC versions (using MOVAPS instead of MOVUPS).
     // check up to 15 first bytes while at it.
@@ -92,10 +91,11 @@ bool mem_is_zero(const char *data, size_t len)
 	return false;
       }
       data += sizeof(uint8_t);
-      left--;
+      --len;
     }
 
-    const char* max128 = data + (left / sizeof(uint128_t))*sizeof(uint128_t);
+    const char* data_start = data;
+    const char* max128 = data + (len / sizeof(uint128_t))*sizeof(uint128_t);
 
     while (data < max128) {
       if (*(uint128_t*)data != 0) {
@@ -103,8 +103,11 @@ bool mem_is_zero(const char *data, size_t len)
       }
       data += sizeof(uint128_t);
     }
+    len -= (data - data_start);
   }
-#endif
+
+  const char* max = data + len;
+  const char* max32 = data + (len / sizeof(uint32_t))*sizeof(uint32_t);
   while (data < max32) {
     if (*(uint32_t*)data != 0) {
       return false;
@@ -124,6 +127,15 @@ bool mem_is_zero(const char *data, size_t len)
 
 static inline bool mem_is_zero(const char *data, size_t len) {
   const char *end = data + len;
+  const char* end64 = data + (len / sizeof(uint64_t))*sizeof(uint64_t);
+
+  while (data < end64) {
+    if (*(uint64_t*)data != 0) {
+      return false;
+    }
+    data += sizeof(uint64_t);
+  }
+
   while (data < end) {
     if (*data != 0) {
       return false;

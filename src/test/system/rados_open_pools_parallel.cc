@@ -49,17 +49,21 @@ class StRadosOpenPool : public SysTestRunnable
 {
 public:
   StRadosOpenPool(int argc, const char **argv,
-		  CrossProcessSem *pool_setup_sem, CrossProcessSem *open_pool_sem)
+                  CrossProcessSem *pool_setup_sem,
+                  CrossProcessSem *open_pool_sem,
+                  const std::string& pool_name)
     : SysTestRunnable(argc, argv),
-      m_pool_setup_sem(pool_setup_sem), m_open_pool_sem(open_pool_sem)
+      m_pool_setup_sem(pool_setup_sem),
+      m_open_pool_sem(open_pool_sem),
+      m_pool_name(pool_name)
   {
   }
 
-  ~StRadosOpenPool()
+  ~StRadosOpenPool() override
   {
   }
 
-  int run()
+  int run() override
   {
     rados_t cl;
     RETURN1_IF_NONZERO(rados_create(&cl, NULL));
@@ -74,13 +78,14 @@ public:
       m_pool_setup_sem->wait();
 
     printf("%s: rados_pool_create.\n", get_id_str());
-    rados_pool_create(cl, "foo");
+    rados_pool_create(cl, m_pool_name.c_str());
     rados_ioctx_t io_ctx;
     printf("%s: rados_ioctx_create.\n", get_id_str());
-    RETURN1_IF_NOT_VAL(0, rados_ioctx_create(cl, "foo", &io_ctx));
+    RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
     if (m_open_pool_sem)
       m_open_pool_sem->post();
     rados_ioctx_destroy(io_ctx);
+    rados_pool_delete(cl, m_pool_name.c_str());
     rados_shutdown(cl);
     return 0;
   }
@@ -88,6 +93,7 @@ public:
 private:
   CrossProcessSem *m_pool_setup_sem;
   CrossProcessSem *m_open_pool_sem;
+  std::string m_pool_name;
 };
 
 const char *get_id_str()
@@ -97,13 +103,14 @@ const char *get_id_str()
 
 int main(int argc, const char **argv)
 {
+  const std::string pool = get_temp_pool_name(argv[0]);
   // first test: create a pool, shut down the client, access that 
   // pool in a different process.
   CrossProcessSem *pool_setup_sem = NULL;
   RETURN1_IF_NONZERO(CrossProcessSem::create(0, &pool_setup_sem));
   StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
-					   "foo", 50, ".obj");
-  StRadosOpenPool r2(argc, argv, pool_setup_sem, NULL);
+					   pool, 50, ".obj");
+  StRadosOpenPool r2(argc, argv, pool_setup_sem, NULL, pool);
   vector < SysTestRunnable* > vec;
   vec.push_back(&r1);
   vec.push_back(&r2);
@@ -120,8 +127,8 @@ int main(int argc, const char **argv)
   CrossProcessSem *open_pool_sem2 = NULL;
   RETURN1_IF_NONZERO(CrossProcessSem::create(0, &open_pool_sem2));
   StRadosCreatePool r3(argc, argv, NULL, pool_setup_sem2, open_pool_sem2,
-					   "foo", 50, ".obj");
-  StRadosOpenPool r4(argc, argv, pool_setup_sem2, open_pool_sem2);
+					   pool, 50, ".obj");
+  StRadosOpenPool r4(argc, argv, pool_setup_sem2, open_pool_sem2, pool);
   vector < SysTestRunnable* > vec2;
   vec2.push_back(&r3);
   vec2.push_back(&r4);

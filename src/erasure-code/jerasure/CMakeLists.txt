@@ -1,40 +1,51 @@
 # jerasure plugin
 
-include_directories(gf-complete/include)
-include_directories(jerasure/include)
+set(jerasure_utils_src
+  ErasureCodePluginJerasure.cc
+  ErasureCodeJerasure.cc)
 
-## detect sse support
+add_library(jerasure_utils OBJECT ${jerasure_utils_src})
 
-# create a tmp file with an empty main()
-set(sse_srcs "${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/tmp_sse.c")
-file(WRITE ${sse_srcs} "void main() {}")
+# Set the CFLAGS correctly for gf-complete based on SIMD compiler support
+set(GF_COMPILE_FLAGS)
+if(HAVE_ARMV8_SIMD)
+  list(APPEND GF_COMPILE_FLAGS ARM_NEON ARCH_AARCH64)
+endif()
+if(HAVE_ARM_NEON)
+  list(APPEND GF_COMPILE_FLAGS ARM_NEON)
+endif()
+if(HAVE_INTEL_SSE)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE)
+endif()
+if(HAVE_INTEL_SSE2)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE2)
+endif()
+if(HAVE_INTEL_SSE3)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE3)
+endif()
+if(HAVE_INTEL_SSSE3)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSSE3)
+endif()
+if(HAVE_INTEL_PCLMUL)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE4_PCLMUL)
+endif()
+if(HAVE_INTEL_SSE4_1)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE4)
+endif()
+if(HAVE_INTEL_SSE4_2)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE4)
+endif()
 
-# try each -msse flag
-try_compile(INTEL_SSE ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse")
-try_compile(INTEL_SSE2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse2")
-try_compile(INTEL_SSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse3")
-try_compile(INTEL_SSSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-mssse3")
-try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.1")
-try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.2")
+# set this to TRUE to enable debugging of SIMD detection
+# inside gf-complete. gf-complete will printf the SIMD
+# instructions detected to stdout.
+if (FALSE)
+  list(APPEND GF_COMPILE_FLAGS DEBUG_CPU_DETECTION)
+endif()
 
-# clean up tmp file
-file(REMOVE ${sse_srcs})
-
-
-set(jerasure_srcs
-  jerasure/src/cauchy.c
-  jerasure/src/galois.c
-  jerasure/src/jerasure.c
-  jerasure/src/liberation.c
-  jerasure/src/reed_sol.c
+set(gf-complete_srcs
+  gf-complete/src/gf_cpu.c
   gf-complete/src/gf_wgen.c
-  gf-complete/src/gf_method.c
   gf-complete/src/gf_w16.c
   gf-complete/src/gf.c
   gf-complete/src/gf_w32.c
@@ -43,58 +54,50 @@ set(jerasure_srcs
   gf-complete/src/gf_general.c
   gf-complete/src/gf_w4.c
   gf-complete/src/gf_rand.c
-  gf-complete/src/gf_w8.c
-  ErasureCodePluginJerasure.cc
-  ErasureCodeJerasure.cc
-  $<TARGET_OBJECTS:erasure_code_objs>
-)
+  gf-complete/src/gf_w8.c)
 
-add_library(ec_jerasure_generic SHARED ${jerasure_srcs})
-add_dependencies(ec_jerasure_generic ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_jerasure_generic ${EXTRALIBS})
-set_target_properties(ec_jerasure_generic PROPERTIES VERSION 2.0.0 SOVERSION 2)
-install(TARGETS ec_jerasure_generic DESTINATION lib/erasure-code)
+if(HAVE_ARM_NEON OR HAVE_ARMV8_SIMD)
+  list(APPEND gf-complete_srcs
+    gf-complete/src/neon/gf_w4_neon.c
+    gf-complete/src/neon/gf_w8_neon.c
+    gf-complete/src/neon/gf_w16_neon.c
+    gf-complete/src/neon/gf_w32_neon.c
+    gf-complete/src/neon/gf_w64_neon.c)
+endif()
 
-# ec_jerasure_sse3
-if(INTEL_SSE)
-  set(JERASURE_SSE3_FLAGS "-msse")
-  if (INTEL_SSE2)
-    set(JERASURE_SSE3_FLAGS "${JERASURE_SSE3_FLAGS} -msse2")
-  endif (INTEL_SSE2)
-  if (INTEL_SSE3)
-    set(JERASURE_SSE3_FLAGS "${JERASURE_SSE3_FLAGS} -msse3")
-  endif (INTEL_SSE3)
-  if (INTEL_SSSE3)
-    set(JERASURE_SSE3_FLAGS "${JERASURE_SSE3_FLAGS} -mssse3")
-  endif (INTEL_SSSE3)
-  add_library(ec_jerasure_sse3 SHARED ${jerasure_srcs})
-  add_dependencies(ec_jerasure_sse3 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-  target_link_libraries(ec_jerasure_sse3 ${EXTRALIBS})
-  set_target_properties(ec_jerasure_sse3 PROPERTIES VERSION 2.0.0 SOVERSION 2
-    COMPILE_FLAGS ${JERASURE_SSE3_FLAGS})
-  install(TARGETS ec_jerasure_sse3 DESTINATION lib/erasure-code)
-else(INTEL_SSE)
-  message(STATUS "Skipping target ec_jerasure_sse3: -msse not supported")
-endif(INTEL_SSE)
+add_library(gf-complete_objs OBJECT ${gf-complete_srcs})
+set_target_properties(gf-complete_objs PROPERTIES 
+  COMPILE_FLAGS "${SIMD_COMPILE_FLAGS}")
+set_target_properties(gf-complete_objs PROPERTIES 
+  COMPILE_DEFINITIONS "${GF_COMPILE_FLAGS}")
 
-# ec_jerasure_sse4
-if(INTEL_SSE4_1)
-  set(JERASURE_SSE4_FLAGS "${JERASURE_SSE3_FLAGS} -msse4.1")
-  if (INTEL_SSE4_2)
-    set(JERASURE_SSE4_FLAGS "${JERASURE_SSE4_FLAGS} -msse4.2")
-  endif (INTEL_SSE4_2)
-  add_library(ec_jerasure_sse4 SHARED ${jerasure_srcs})
-  add_dependencies(ec_jerasure_sse4 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-  target_link_libraries(ec_jerasure_sse4 ${EXTRALIBS})
-  set_target_properties(ec_jerasure_sse4 PROPERTIES VERSION 2.0.0 SOVERSION 2
-    COMPILE_FLAGS ${JERASURE_SSE4_FLAGS})
-  install(TARGETS ec_jerasure_sse4 DESTINATION lib/erasure-code)
-else(INTEL_SSE4_1)
-  message(STATUS "Skipping target ec_jerasure_sse4: -msse4.1 not supported")
-endif(INTEL_SSE4_1)
+set(jerasure_srcs
+  jerasure/src/cauchy.c
+  jerasure/src/galois.c
+  jerasure/src/jerasure.c
+  jerasure/src/liberation.c
+  jerasure/src/reed_sol.c
+  jerasure_init.cc)
+add_library(jerasure_objs OBJECT ${jerasure_srcs}) 
 
-add_library(ec_jerasure SHARED ErasureCodePluginSelectJerasure.cc)
-add_dependencies(ec_jerasure ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+set(ec_jerasure_objs
+  $<TARGET_OBJECTS:gf-complete_objs>
+  $<TARGET_OBJECTS:jerasure_objs>
+  $<TARGET_OBJECTS:jerasure_utils>
+  $<TARGET_OBJECTS:erasure_code_objs>)
+
+add_library(ec_jerasure SHARED ${ec_jerasure_objs})
+set_target_properties(ec_jerasure PROPERTIES
+  INSTALL_RPATH "")
 target_link_libraries(ec_jerasure ${EXTRALIBS})
-set_target_properties(ec_jerasure PROPERTIES VERSION 2.0.0 SOVERSION 2)
-install(TARGETS ec_jerasure DESTINATION lib/erasure-code)
+install(TARGETS ec_jerasure DESTINATION ${erasure_plugin_dir})
+
+# legacy libraries
+foreach(flavor ${jerasure_legacy_flavors})
+  set(plugin_name "ec_jerasure_${flavor}")
+  add_library(${plugin_name} SHARED ${ec_jerasure_objs})
+  set_target_properties(${plugin_name} PROPERTIES
+    INSTALL_RPATH "")
+  install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
+  add_dependencies(ec_jerasure ${plugin_name})
+endforeach()

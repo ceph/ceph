@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms die on skipped message: false
+      client:
+        rbd default map options: read_from_replica=balance

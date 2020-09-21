@@ -11,29 +11,26 @@ See `Ceph Storage Cluster APIs`_.
 .. _Ceph Storage Cluster APIs: ../rados/api/
 
 
-Ceph Filesystem APIs
-====================
+Ceph File System APIs
+=====================
 
-See `libcephfs (javadoc)`_.
+See `libcephfs`_
 
-.. _libcephfs (javadoc): libcephfs-java
-
+.. _libcephfs: ../cephfs/api
 
 Ceph Block Device APIs
 ======================
 
 See `librbdpy`_.
 
-.. _librbdpy: ../rbd/librbdpy
+.. _librbdpy: ../rbd/api/librbdpy
 
+Ceph RADOS Gateway APIs
+=======================
 
-Calamari APIs
-=============
+See `librgw-py`_.
 
-See `Calamari API`_.
-
-.. _Calamari API: http://ceph.com/calamari/docs/calamari_rest/index.html
-
+.. _librgw-py: ../radosgw/api
 
 Ceph Object Store APIs
 ======================
@@ -42,6 +39,18 @@ Ceph Object Store APIs
 - See `Swift-compatible API`_.
 - See `Admin Ops API`_.
 
+Ceph MON Command API
+====================
+
+- See `Mon command API`_.
+
 .. _S3-compatible API: ../radosgw/s3/
 .. _Swift-compatible API: ../radosgw/swift/
 .. _Admin Ops API: ../radosgw/adminops
+.. _Mon command API: mon_command_api
+
+
+.. toctree::
+    :hidden:
+    
+    mon_command_api

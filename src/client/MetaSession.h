@@ -6,62 +6,63 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "msg/msg_types.h"
 #include "include/xlist.h"
-
-#include "messages/MClientCapRelease.h"
 #include "mds/MDSMap.h"
+#include "mds/mdstypes.h"
+#include "messages/MClientCapRelease.h"
 
 struct Cap;
 struct Inode;
 struct CapSnap;
 struct MetaRequest;
-class MClientCapRelease;
 
 struct MetaSession {
   mds_rank_t mds_num;
   ConnectionRef con;
-  version_t seq;
-  uint64_t cap_gen;
+  version_t seq = 0;
+  uint64_t cap_gen = 0;
   utime_t cap_ttl, last_cap_renew_request;
-  uint64_t cap_renew_seq;
-  int num_caps;
-  entity_inst_t inst;
+  uint64_t cap_renew_seq = 0;
+  entity_addrvec_t addrs;
+  feature_bitset_t mds_features;
 
   enum {
-    STATE_NEW,
+    STATE_NEW, // Unused
     STATE_OPENING,
     STATE_OPEN,
     STATE_CLOSING,
     STATE_CLOSED,
     STATE_STALE,
-  } state;
+    STATE_REJECTED,
+  } state = STATE_OPENING;
 
-  bool readonly;
+  enum {
+    RECLAIM_NULL,
+    RECLAIMING,
+    RECLAIM_OK,
+    RECLAIM_FAIL,
+  } reclaim_state = RECLAIM_NULL;
+
+  int mds_state = MDSMap::STATE_NULL;
+  bool readonly = false;
 
   list<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
   xlist<Inode*> flushing_caps;
-  xlist<CapSnap*> flushing_capsnaps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
+  std::set<ceph_tid_t> flushing_caps_tids;
 
-  Cap *s_cap_iterator;
+  ceph::ref_t<MClientCapRelease> release;
 
-  MClientCapRelease *release;
-  
-  MetaSession()
-    : mds_num(-1), con(NULL),
-      seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
-      state(STATE_NEW), readonly(false), s_cap_iterator(NULL),
-      release(NULL)
-  {}
-  ~MetaSession();
+  MetaSession(mds_rank_t mds_num, ConnectionRef con, const entity_addrvec_t& addrs)
+    : mds_num(mds_num), con(con), addrs(addrs) {
+  }
 
   const char *get_state_name() const;
 
-  void dump(Formatter *f) const;
+  void dump(Formatter *f, bool cap_dump=false) const;
 
   void enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
       ceph_seq_t mseq, epoch_t osd_barrier);

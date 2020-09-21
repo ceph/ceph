@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2014 Inktank <info@inktank.com>
  *
- * LGPL2.1 (see COPYING-LGPL2.1) or later
+ * LGPL-2.1 (see COPYING-LGPL2.1) or later
  */
 
 #include <iostream>

@@ -10,13 +10,17 @@
  *
  */
 
+#include "acconfig.h"
+#include "include/compat.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__FreeBSD__)
 #include <sys/wait.h>
-#include <unistd.h>
+#endif 
 
+#ifndef _WIN32
 /*
  * TODO: Switch to libkmod when we abandon older platforms.  The APIs
  * we want are:
@@ -40,8 +44,9 @@ static int run_command(const char *command)
 
 	if (status < 0) {
 		char error_buf[80];
+		char* errp = ceph_strerror_r(errno, error_buf, sizeof(error_buf));
 		fprintf(stderr, "couldn't run '%s': %s\n", command,
-			strerror_r(errno, error_buf, sizeof(error_buf)));
+			errp);
 	} else if (WIFSIGNALED(status)) {
 		fprintf(stderr, "'%s' killed by signal %d\n", command,
 			WTERMSIG(status));
@@ -73,3 +78,23 @@ int module_load(const char *module, const char *options)
 
 	return run_command(command);
 }
+
+#else
+
+// We're stubbing out those functions, for now.
+static int run_command(const char *command)
+{
+	return -1;
+}
+
+int module_has_param(const char *module, const char *param)
+{
+	return -1;
+}
+
+int module_load(const char *module, const char *options)
+{
+	return -1;
+}
+
+#endif /* _WIN32 */

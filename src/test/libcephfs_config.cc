@@ -26,12 +26,12 @@ TEST(LibCephConfig, SimpleSet) {
   int ret = ceph_create(&cmount, NULL);
   ASSERT_EQ(ret, 0);
 
-  ret = ceph_conf_set(cmount, "max_open_files", "21");
+  ret = ceph_conf_set(cmount, "leveldb_max_open_files", "21");
   ASSERT_EQ(ret, 0);
 
   char buf[128];
   memset(buf, 0, sizeof(buf));
-  ret = ceph_conf_get(cmount, "max_open_files", buf, sizeof(buf));
+  ret = ceph_conf_get(cmount, "leveldb_max_open_files", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("21"), string(buf));
 
@@ -43,19 +43,19 @@ TEST(LibCephConfig, ArgV) {
   int ret = ceph_create(&cmount, NULL);
   ASSERT_EQ(ret, 0);
 
-  const char *argv[] = { "foo", "--max-open-files", "2",
-			 "--keyfile", "/tmp/my-keyfile", NULL };
+  const char *argv[] = { "foo", "--leveldb-max-open-files", "2",
+			 "--key", "my-key", NULL };
   size_t argc = (sizeof(argv) / sizeof(argv[0])) - 1;
   ceph_conf_parse_argv(cmount, argc, argv);
 
   char buf[128];
   memset(buf, 0, sizeof(buf));
-  ret = ceph_conf_get(cmount, "keyfile", buf, sizeof(buf));
+  ret = ceph_conf_get(cmount, "key", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(string("/tmp/my-keyfile"), string(buf));
+  ASSERT_EQ(string("my-key"), string(buf));
 
   memset(buf, 0, sizeof(buf));
-  ret = ceph_conf_get(cmount, "max_open_files", buf, sizeof(buf));
+  ret = ceph_conf_get(cmount, "leveldb_max_open_files", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("2"), string(buf));
 

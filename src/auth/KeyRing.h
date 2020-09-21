@@ -15,59 +15,60 @@
 #ifndef CEPH_KEYRING_H
 #define CEPH_KEYRING_H
 
-#include "common/config.h"
-
-#include "auth/Crypto.h"
 #include "auth/Auth.h"
-
+#include "include/common_fwd.h"
 
 class KeyRing : public KeyStore {
-  map<EntityName, EntityAuth> keys;
+  std::map<EntityName, EntityAuth> keys;
 
-  int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
+  int set_modifier(const char *type, const char *val, EntityName& name, std::map<std::string, ceph::buffer::list>& caps);
 public:
-  void decode_plaintext(bufferlist::iterator& bl);
+  void decode_plaintext(ceph::buffer::list::const_iterator& bl);
   /* Create a KeyRing from a Ceph context.
    * We will use the configuration stored inside the context. */
   int from_ceph_context(CephContext *cct);
 
-  /* Create an empty KeyRing */
-  static KeyRing *create_empty();
-
-  map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
+  std::map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
   int load(CephContext *cct, const std::string &filename);
-  void print(ostream& out);
+  void print(std::ostream& out);
 
   // accessors
+  bool exists(const EntityName& name) const {
+    auto p = keys.find(name);
+    return p != keys.end();
+  }
   bool get_auth(const EntityName& name, EntityAuth &a) const {
-    map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
+    std::map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
     if (k == keys.end())
       return false;
     a = k->second;
     return true;
   }
-  bool get_secret(const EntityName& name, CryptoKey& secret) const {
-    map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
+  bool get_secret(const EntityName& name, CryptoKey& secret) const override {
+    std::map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
     if (k == keys.end())
       return false;
     secret = k->second.key;
     return true;
   }
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-			  CryptoKey& secret) const {
+			  CryptoKey& secret) const override {
     return false;
   }
   bool get_caps(const EntityName& name,
 		const std::string& type, AuthCapsInfo& caps) const {
-    map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
+    std::map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
     if (k == keys.end())
       return false;
-    map<string,bufferlist>::const_iterator i = k->second.caps.find(type);
+    std::map<std::string,ceph::buffer::list>::const_iterator i = k->second.caps.find(type);
     if (i != k->second.caps.end()) {
       caps.caps = i->second;
     }
     return true;
+  }
+  size_t size() const {
+    return keys.size();
   }
 
   // modifiers
@@ -82,11 +83,8 @@ public:
   void remove(const EntityName& name) {
     keys.erase(name);
   }
-  void set_caps(EntityName& name, map<string, bufferlist>& caps) {
+  void set_caps(EntityName& name, std::map<std::string, ceph::buffer::list>& caps) {
     keys[name].caps = caps;
-  }
-  void set_uid(EntityName& ename, uint64_t auid) {
-    keys[ename].auid = auid;
   }
   void set_key(EntityName& ename, CryptoKey& key) {
     keys[ename].key = key;
@@ -94,16 +92,16 @@ public:
   void import(CephContext *cct, KeyRing& other);
 
   // encoders
-  void decode(bufferlist::iterator& bl);
+  void decode(ceph::buffer::list::const_iterator& bl);
 
-  void encode_plaintext(bufferlist& bl);
-  void encode_formatted(string label, Formatter *f, bufferlist& bl);
+  void encode_plaintext(ceph::buffer::list& bl);
+  void encode_formatted(std::string label, ceph::Formatter *f, ceph::buffer::list& bl);
 };
 
 // don't use WRITE_CLASS_ENCODER macro because we don't have an encode
 // macro.  don't juse encode_plaintext in that case because it is not
-// wrappable; it assumes it gets the entire bufferlist.
-static inline void decode(KeyRing& kr, bufferlist::iterator& p) {
+// wrappable; it assumes it gets the entire ceph::buffer::list.
+static inline void decode(KeyRing& kr, ceph::buffer::list::const_iterator& p) {
   kr.decode(p);
 }
 

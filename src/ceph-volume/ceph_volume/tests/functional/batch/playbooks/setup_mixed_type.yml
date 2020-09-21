@@ -1,0 +1,215 @@
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: install lvm2
+      package:
+        name: lvm2
+        state: present
+    - name: tell lvm to ignore loop devices
+      lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: '        global_filter = [ "r|loop|", "a|.*|" ]'
+        insertafter: '^devices {'
+    - name: lvm allow changes depsite duplicate PVIDs
+      lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: '        allow_changes_with_duplicate_pvs = 1'
+        insertafter: '^devices {'
+        regexp: 'allow_changes_with_duplicate_pvs = 0'
+    - name: create mount points
+      command: "mkdir /opt/{{ item }}"
+      loop:
+        - vdd
+        - vde
+      ignore_errors: yes
+
+    - name: add part
+      shell: echo "type=83" | sfdisk /dev/{{ item }}
+      loop:
+        - vdd
+        - vde
+
+    - name: add fs
+      command: "mkfs.ext4 /dev/{{ item }}1"
+      loop:
+        - vdd
+        - vde
+
+    - name: mount additional drives
+      command: "mount /dev/{{ item }}1 /opt/{{ item }}"
+      loop:
+        - vdd
+        - vde
+
+    - name: create the nvme image systemd unit
+      copy:
+        content: |
+          [Unit]
+          Description=NVMe loop device
+          After=local-fs.target
+          Wants=local-fs.target
+
+          [Service]
+          Type=simple
+          ExecStart=/bin/bash /opt/ceph-nvme.sh
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/ceph-nvme.service"
+
+    - name: create the ceph-nvme startup script
+      copy:
+        content: |
+          set -x
+          set -e
+          mount /dev/vdd1 /opt/vdd
+          mount /dev/vde1 /opt/vde
+          modprobe nvmet
+          modprobe nvme_loop
+          modprobe nvme_fabrics
+          modprobe loop
+          losetup -v /dev/loop0 /opt/vdd/loop0_nvme0
+          losetup -v /dev/loop1 /opt/vde/loop1_nvme1
+          losetup -l
+          nvmetcli restore /opt/loop.json
+          nvme connect -t loop -n testnqn1 -q hostnqn
+          nvme connect -t loop -n testnqn2 -q hostnqn
+          nvme list
+        dest: "/opt/ceph-nvme.sh"
+
+    - name: ensure ceph-nvme is enabled
+      service:
+        name: ceph-nvme
+        state: stopped
+        enabled: yes
+
+    - name: install nvme dependencies
+      package:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - nvme-cli
+        - nvmetcli
+
+    - name: enable NVME kernel modules
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - nvmet
+        - nvme_loop
+        - nvme_fabrics
+
+    - name: detach nvme files from loop devices
+      command: "losetup -d /dev/{{ item }}"
+      failed_when: false
+      loop:
+        - loop0
+        - loop1
+
+    - name: remove previous nvme files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /opt/vdd/loop0_nvme0
+        - /opt/vde/loop1_nvme1
+
+    - name: create 11GB sparse files for NVMe
+      command: "fallocate -l 11G {{ item }}"
+      loop:
+        - /opt/vdd/loop0_nvme0
+        - /opt/vde/loop1_nvme1
+
+    - name: setup loop devices with sparse files 0
+      command: "losetup /dev/loop0 /opt/vdd/loop0_nvme0"
+      failed_when: false
+
+    - name: setup loop devices with sparse files 1
+      command: "losetup /dev/loop1 /opt/vde/loop1_nvme1"
+      failed_when: false
+
+    - name: create the loop.json file for nvmetcli
+      copy:
+        content: |
+            {
+              "hosts": [
+                {
+                  "nqn": "hostnqn"
+                }
+              ],
+              "ports": [
+                {
+                  "addr": {
+                    "adrfam": "",
+                    "traddr": "",
+                    "treq": "not specified",
+                    "trsvcid": "",
+                    "trtype": "loop"
+                  },
+                  "portid": 1,
+                  "referrals": [],
+                  "subsystems": [
+                    "testnqn1",
+                    "testnqn2"
+                  ]
+                }
+              ],
+              "subsystems": [
+                {
+                  "allowed_hosts": [
+                    "hostnqn"
+                  ],
+                  "attr": {
+                    "allow_any_host": "0"
+                  },
+                  "namespaces": [
+                    {
+                      "device": {
+                        "nguid": "ef90689c-6c46-d44c-89c1-4067801309a8",
+                        "path": "/dev/loop0"
+                      },
+                      "enable": 1,
+                      "nsid": 1
+                    }
+                  ],
+                  "nqn": "testnqn1"
+                },
+                {
+                  "allowed_hosts": [
+                    "hostnqn"
+                  ],
+                  "attr": {
+                    "allow_any_host": "0"
+                  },
+                  "namespaces": [
+                    {
+                      "device": {
+                        "nguid": "ef90689c-6c46-d44c-89c1-4067801309a7",
+                        "path": "/dev/loop1"
+                      },
+                      "enable": 1,
+                      "nsid": 2
+                    }
+                  ],
+                  "nqn": "testnqn2"
+                }
+              ]
+            }
+        dest: "/opt/loop.json"
+
+    - name: setup the /dev/loop0 target with nvmetcli
+      command: nvmetcli restore /opt/loop.json
+
+    - name: connect the new target as an nvme device
+      command: "nvme connect -t loop -n testnqn{{ item }} -q hostnqn"
+      loop:
+        - 1
+        - 2
+
+    - name: debug output for nvme list
+      command: nvme list

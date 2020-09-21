@@ -20,76 +20,70 @@
 #include "mds/MDSMap.h"
 #include "include/ceph_features.h"
 
-class MMDSMap : public Message {
- public:
-  /*
-  map<epoch_t, bufferlist> maps;
-  map<epoch_t, bufferlist> incremental_maps;
-
-  epoch_t get_first() {
-    epoch_t e = 0;
-    map<epoch_t, bufferlist>::iterator i = maps.begin();
-    if (i != maps.end())  e = i->first;
-    i = incremental_maps.begin();    
-    if (i != incremental_maps.end() &&
-        (e == 0 || i->first < e)) e = i->first;
-    return e;
-  }
-  epoch_t get_last() {
-    epoch_t e = 0;
-    map<epoch_t, bufferlist>::reverse_iterator i = maps.rbegin();
-    if (i != maps.rend())  e = i->first;
-    i = incremental_maps.rbegin();    
-    if (i != incremental_maps.rend() &&
-        (e == 0 || i->first > e)) e = i->first;
-    return e;
-  }
-  */
-  
+class MMDSMap : public SafeMessage {
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
+public:
   uuid_d fsid;
-  epoch_t epoch;
-  bufferlist encoded;
+  epoch_t epoch = 0;
+  ceph::buffer::list encoded;
+  std::string map_fs_name;
 
   version_t get_epoch() const { return epoch; }
-  bufferlist& get_encoded() { return encoded; }
+  const ceph::buffer::list& get_encoded() const { return encoded; }
 
+protected:
   MMDSMap() : 
-    Message(CEPH_MSG_MDS_MAP) {}
-  MMDSMap(const uuid_d &f, MDSMap *mm) :
-    Message(CEPH_MSG_MDS_MAP),
-    fsid(f) {
-    epoch = mm->get_epoch();
-    mm->encode(encoded, -1);  // we will reencode with fewer features as necessary
+    SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
+
+  MMDSMap(const uuid_d &f, const MDSMap &mm,
+          const std::string mf = std::string()) :
+    SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
+    fsid(f), map_fs_name(mf) {
+    epoch = mm.get_epoch();
+    mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
-private:
-  ~MMDSMap() {}
+
+  ~MMDSMap() override {}
 
 public:
-  const char *get_type_name() const { return "mdsmap"; }
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "mdsmap"; }
+  void print(std::ostream& out) const override {
     out << "mdsmap(e " << epoch << ")";
   }
 
   // marshalling
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(epoch, p);
-    ::decode(encoded, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(epoch, p);
+    decode(encoded, p);
+    if (header.version >= 2) {
+      decode(map_fs_name, p);
+    }
   }
-  void encode_payload(uint64_t features) {
-    ::encode(fsid, payload);
-    ::encode(epoch, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	(features & CEPH_FEATURE_MDSENC) == 0) {
+	(features & CEPH_FEATURE_MDSENC) == 0 ||
+	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
+	!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       // reencode for old clients.
       MDSMap m;
       m.decode(encoded);
       encoded.clear();
       m.encode(encoded, features);
     }
-    ::encode(encoded, payload);
+    encode(encoded, payload);
+    encode(map_fs_name, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

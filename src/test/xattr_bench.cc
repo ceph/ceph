@@ -17,12 +17,12 @@
 #include <string.h>
 #include <iostream>
 #include <sstream>
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
+#include "global/global_init.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -52,24 +52,24 @@ typename T::iterator rand_choose(T &cont) {
 
 class OnApplied : public Context {
 public:
-  Mutex *lock;
-  Cond *cond;
+  ceph::mutex *lock;
+  ceph::condition_variable *cond;
   int *in_progress;
   ObjectStore::Transaction *t;
-  OnApplied(Mutex *lock,
-	    Cond *cond,
+  OnApplied(ceph::mutex *lock,
+	    ceph::condition_variable *cond,
 	    int *in_progress,
 	    ObjectStore::Transaction *t)
     : lock(lock), cond(cond),
       in_progress(in_progress), t(t) {
-    Mutex::Locker l(*lock);
+    std::lock_guard l{*lock};
     (*in_progress)++;
   }
 
-  void finish(int r) {
-    Mutex::Locker l(*lock);
+  void finish(int r) override {
+    std::lock_guard l{*lock};
     (*in_progress)--;
-    cond->Signal();
+    cond->notify_all();
   }
 };
 
@@ -87,9 +87,10 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 		int run,
 		int transsize, int ops,
 		ostream &out) {
-  Mutex lock("lock");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("lock");
+  ceph::condition_variable cond;
   int in_flight = 0;
+  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   map<coll_t, pair<set<string>, ObjectStore::Sequencer*> > collections;
   for (int i = 0; i < 3*THREADS; ++i) {
@@ -105,7 +106,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
     }
     collections[coll] = make_pair(objects, new ObjectStore::Sequencer(coll.to_str()));
   }
-  store->apply_transaction(t);
+  store->queue_transaction(&osr, std::move(t));
 
   bufferlist bl;
   for (int i = 0; i < attrsize; ++i) {
@@ -115,9 +116,8 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
   uint64_t start = get_time();
   for (int i = 0; i < ops; ++i) {
     {
-      Mutex::Locker l(lock);
-      while (in_flight >= THREADS)
-	cond.Wait(lock);
+      std::unique_lock l{lock};
+      cond.wait(l, [&] { in_flight < THREADS; });
     }
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     map<coll_t, pair<set<string>, ObjectStore::Sequencer*> >::iterator iter =
@@ -134,14 +134,14 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 		   bl);
       }
     }
-    store->queue_transaction(iter->second.second, t,
+    store->queue_transaction(iter->second.second, std::move(*t),
 			     new OnApplied(&lock, &cond, &in_flight,
 					   t));
+    delete t;
   }
   {
-    Mutex::Locker l(lock);
-    while (in_flight)
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [&] { return in_flight == 0; });
   }
   return get_time() - start;
 }
@@ -149,17 +149,19 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(0, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  if (args[0] == string("omap")) {
-    std::cerr << "using omap xattrs" << std::endl;
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "true");
-  } else {
-    std::cerr << "not using omap xattrs" << std::endl;
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "false");
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
   }
-  g_ceph_context->_conf->apply_changes(NULL);
+  if (ceph_argparse_need_usage(args)) {
+    usage(argv[0]);
+    exit(0);
+  }
+
+  auto cct = global_init(0, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
 
   std::cerr << "args: " << args << std::endl;
   if (args.size() < 3) {
@@ -170,11 +172,12 @@ int main(int argc, char **argv) {
   string store_path(args[1]);
   string store_dev(args[2]);
 
-  boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
+  boost::scoped_ptr<ObjectStore> store(new FileStore(cct.get(), store_path,
+						     store_dev));
 
   std::cerr << "mkfs starting" << std::endl;
-  assert(!store->mkfs());
-  assert(!store->mount());
+  ceph_assert(!store->mkfs());
+  ceph_assert(!store->mount());
   std::cerr << "mounted" << std::endl;
 
   std::cerr << "attrsize\tnumattrs\ttranssize\tops\ttime" << std::endl;

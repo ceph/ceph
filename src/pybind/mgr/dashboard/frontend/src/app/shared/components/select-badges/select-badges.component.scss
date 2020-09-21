@@ -1,0 +1,9 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.badge-remove {
+  color: bd.$white;
+}
+
+i.fa-pencil {
+  font-size: 1.1rem;
+}

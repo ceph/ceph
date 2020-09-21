@@ -13,7 +13,7 @@ tier. So the cache tier and the backing storage tier are completely transparent
 to Ceph clients.
 
 
-.. ditaa:: 
+.. ditaa::
            +-------------+
            | Ceph Client |
            +------+------+
@@ -42,9 +42,10 @@ to Ceph clients.
 
 The cache tiering agent handles the migration of data between the cache tier 
 and the backing storage tier automatically. However, admins have the ability to
-configure how this migration takes place. There are two main scenarios: 
+configure how this migration takes place by setting the ``cache-mode``. There are
+two main scenarios:
 
-- **Writeback Mode:** When admins configure tiers with ``writeback`` mode, Ceph
+- **writeback** mode: When admins configure tiers with ``writeback`` mode, Ceph
   clients write data to the cache tier and receive an ACK from the cache tier.
   In time, the data written to the cache tier migrates to the storage tier
   and gets flushed from the cache tier. Conceptually, the cache tier is 
@@ -55,18 +56,93 @@ configure how this migration takes place. There are two main scenarios:
   data becomes inactive. This is ideal for mutable data (e.g., photo/video 
   editing, transactional data, etc.).
 
-- **Read-only Mode:** When admins configure tiers with ``readonly`` mode, Ceph
-  clients write data to the backing tier. On read, Ceph copies the requested
-  object(s) from the backing tier to the cache tier. Stale objects get removed
-  from the cache tier based on the defined policy. This approach is ideal 
-  for immutable data (e.g., presenting pictures/videos on a social network, 
-  DNA data, X-Ray imaging, etc.), because reading data from a cache pool that 
-  might contain out-of-date data provides weak consistency. Do not use 
-  ``readonly`` mode for mutable data.
+- **readproxy** mode: This mode will use any objects that already
+  exist in the cache tier, but if an object is not present in the
+  cache the request will be proxied to the base tier.  This is useful
+  for transitioning from ``writeback`` mode to a disabled cache as it
+  allows the workload to function properly while the cache is drained,
+  without adding any new objects to the cache.
 
-Since all Ceph clients can use cache tiering, it has the potential to 
-improve I/O performance for Ceph Block Devices, Ceph Object Storage, 
-the Ceph Filesystem and native bindings.
+Other cache modes are:
+
+- **readonly** promotes objects to the cache on read operations only; write
+  operations are forwarded to the base tier. This mode is intended for
+  read-only workloads that do not require consistency to be enforced by the
+  storage system. (**Warning**: when objects are updated in the base tier,
+  Ceph makes **no** attempt to sync these updates to the corresponding objects
+  in the cache. Since this mode is considered experimental, a
+  ``--yes-i-really-mean-it`` option must be passed in order to enable it.)
+
+- **none** is used to completely disable caching.
+
+
+A word of caution
+=================
+
+Cache tiering will *degrade* performance for most workloads.  Users should use
+extreme caution before using this feature.
+
+* *Workload dependent*: Whether a cache will improve performance is
+  highly dependent on the workload.  Because there is a cost
+  associated with moving objects into or out of the cache, it can only
+  be effective when there is a *large skew* in the access pattern in
+  the data set, such that most of the requests touch a small number of
+  objects.  The cache pool should be large enough to capture the
+  working set for your workload to avoid thrashing.
+
+* *Difficult to benchmark*: Most benchmarks that users run to measure
+  performance will show terrible performance with cache tiering, in
+  part because very few of them skew requests toward a small set of
+  objects, it can take a long time for the cache to "warm up," and
+  because the warm-up cost can be high.
+
+* *Usually slower*: For workloads that are not cache tiering-friendly,
+  performance is often slower than a normal RADOS pool without cache
+  tiering enabled.
+
+* *librados object enumeration*: The librados-level object enumeration
+  API is not meant to be coherent in the presence of the case.  If
+  your application is using librados directly and relies on object
+  enumeration, cache tiering will probably not work as expected.
+  (This is not a problem for RGW, RBD, or CephFS.)
+
+* *Complexity*: Enabling cache tiering means that a lot of additional
+  machinery and complexity within the RADOS cluster is being used.
+  This increases the probability that you will encounter a bug in the system
+  that other users have not yet encountered and will put your deployment at a
+  higher level of risk.
+
+Known Good Workloads
+--------------------
+
+* *RGW time-skewed*: If the RGW workload is such that almost all read
+  operations are directed at recently written objects, a simple cache
+  tiering configuration that destages recently written objects from
+  the cache to the base tier after a configurable period can work
+  well.
+
+Known Bad Workloads
+-------------------
+
+The following configurations are *known to work poorly* with cache
+tiering.
+
+* *RBD with replicated cache and erasure-coded base*: This is a common
+  request, but usually does not perform well.  Even reasonably skewed
+  workloads still send some small writes to cold objects, and because
+  small writes are not yet supported by the erasure-coded pool, entire
+  (usually 4 MB) objects must be migrated into the cache in order to
+  satisfy a small (often 4 KB) write.  Only a handful of users have
+  successfully deployed this configuration, and it only works for them
+  because their data is extremely cold (backups) and they are not in
+  any way sensitive to performance.
+
+* *RBD with replicated cache and base*: RBD with a replicated base
+  tier does better than when the base is erasure coded, but it is
+  still highly dependent on the amount of skew in the workload, and
+  very difficult to validate.  The user will need to have a good
+  understanding of their workload and will need to tune the cache
+  tiering parameters carefully.
 
 
 Setting Up Pools
@@ -87,15 +163,15 @@ Setting up a backing storage pool typically involves one of two scenarios:
 - **Erasure Coding:** In this scenario, the pool uses erasure coding to 
   store data much more efficiently with a small performance tradeoff.
 
-In the standard storage scenario, you can setup a CRUSH ruleset to establish 
+In the standard storage scenario, you can setup a CRUSH rule to establish 
 the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD 
-Daemons perform optimally when all storage drives in the ruleset are of the 
+Daemons perform optimally when all storage drives in the rule are of the 
 same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_ 
-for details on creating a ruleset. Once you have created a ruleset, create 
+for details on creating a rule. Once you have created a rule, create 
 a backing storage pool. 
 
 In the erasure coding scenario, the pool creation arguments will generate the
-appropriate ruleset automatically. See `Create a Pool`_ for details.
+appropriate rule automatically. See `Create a Pool`_ for details.
 
 In subsequent examples, we will refer to the backing storage pool 
 as ``cold-storage``.
@@ -107,9 +183,9 @@ Setting Up a Cache Pool
 Setting up a cache pool follows the same procedure as the standard storage
 scenario, but with this difference: the drives for the cache tier are typically
 high performance drives that reside in their own servers and have their own
-ruleset.  When setting up a ruleset, it should take account of the hosts that
-have the high performance drives while omitting the hosts that don't. See
-`Placing Different Pools on Different OSDs`_ for details.
+CRUSH rule.  When setting up such a rule, it should take account of the hosts
+that have the high performance drives while omitting the hosts that don't. See
+:ref:`CRUSH Device Class<crush-map-device-class>` for details.
 
 
 In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
@@ -173,22 +249,40 @@ For example::
 
 	ceph osd pool set hot-storage hit_set_type bloom
 
-The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
-should cover, and how many such HitSets to store. Currently there is minimal
-benefit for ``hit_set_count`` > 1 since the agent does not yet act intelligently
-on that information. ::
+The ``hit_set_count`` and ``hit_set_period`` define how many such HitSets to
+store, and how much time each HitSet should cover. ::
 
-	ceph osd pool set {cachepool} hit_set_count 1
-	ceph osd pool set {cachepool} hit_set_period 3600
+	ceph osd pool set {cachepool} hit_set_count 12
+	ceph osd pool set {cachepool} hit_set_period 14400
 	ceph osd pool set {cachepool} target_max_bytes 1000000000000
+
+.. note:: A larger ``hit_set_count`` results in more RAM consumed by
+          the ``ceph-osd`` process.
 
 Binning accesses over time allows Ceph to determine whether a Ceph client
 accessed an object at least once, or more than once over a time period 
 ("age" vs "temperature").
 
-.. note:: The longer the period and the higher the count, the more RAM the
-   ``ceph-osd`` daemon consumes.  In particular, when the agent is active to 
-   flush or evict cache objects, all ``hit_set_count`` HitSets are loaded 
+The ``min_read_recency_for_promote`` defines how many HitSets to check for the
+existence of an object when handling a read operation. The checking result is
+used to decide whether to promote the object asynchronously. Its value should be
+between 0 and ``hit_set_count``. If it's set to 0, the object is always promoted.
+If it's set to 1, the current HitSet is checked. And if this object is in the
+current HitSet, it's promoted. Otherwise not. For the other values, the exact
+number of archive HitSets are checked. The object is promoted if the object is
+found in any of the most recent ``min_read_recency_for_promote`` HitSets.
+
+A similar parameter can be set for the write operation, which is
+``min_write_recency_for_promote``. ::
+
+	ceph osd pool set {cachepool} min_read_recency_for_promote 2
+	ceph osd pool set {cachepool} min_write_recency_for_promote 2
+
+.. note:: The longer the period and the higher the
+   ``min_read_recency_for_promote`` and
+   ``min_write_recency_for_promote``values, the more RAM the ``ceph-osd``
+   daemon consumes. In particular, when the agent is active to flush
+   or evict cache objects, all ``hit_set_count`` HitSets are loaded
    into RAM.
 
 
@@ -204,13 +298,44 @@ The cache tiering agent performs two main functions:
   (or clean) and evicts the least recently used among them from the cache.
 
 
+Absolute Sizing
+~~~~~~~~~~~~~~~
+
+The cache tiering agent can flush or evict objects based upon the total number
+of bytes or the total number of objects. To specify a maximum number of bytes,
+execute the following::
+
+	ceph osd pool set {cachepool} target_max_bytes {#bytes}
+
+For example, to flush or evict at 1 TB, execute the following::
+
+	ceph osd pool set hot-storage target_max_bytes 1099511627776
+
+
+To specify the maximum number of objects, execute the following::
+
+	ceph osd pool set {cachepool} target_max_objects {#objects}
+
+For example, to flush or evict at 1M objects, execute the following::
+
+	ceph osd pool set hot-storage target_max_objects 1000000
+
+.. note:: Ceph is not able to determine the size of a cache pool automatically, so
+   the configuration on the absolute size is required here, otherwise the
+   flush/evict will not work. If you specify both limits, the cache tiering
+   agent will begin flushing or evicting when either threshold is triggered.
+
+.. note:: All client requests will be blocked only when  ``target_max_bytes`` or
+   ``target_max_objects`` reached
+
 Relative Sizing
 ~~~~~~~~~~~~~~~
 
 The cache tiering agent can flush or evict objects relative to the size of the
-cache pool. When the cache pool consists of a certain percentage of
+cache pool(specified by ``target_max_bytes`` / ``target_max_objects`` in
+`Absolute sizing`_).  When the cache pool consists of a certain percentage of
 modified (or dirty) objects, the cache tiering agent will flush them to the
-storage pool. To set the ``cache_target_dirty_ratio``, execute the following:: 
+storage pool. To set the ``cache_target_dirty_ratio``, execute the following::
 
 	ceph osd pool set {cachepool} cache_target_dirty_ratio {0.0..1.0}
 
@@ -224,7 +349,7 @@ objects with a higher speed. To set the ``cache_target_dirty_high_ratio``::
 
 	ceph osd pool set {cachepool} cache_target_dirty_high_ratio {0.0..1.0}
 
-For example, setting the value to ``0.6`` will begin aggressively flush diryt objects
+For example, setting the value to ``0.6`` will begin aggressively flush dirty objects
 when they reach 60% of the cache pool's capacity. obviously, we'd better set the value
 between dirty_ratio and full_ratio::
 
@@ -240,32 +365,6 @@ For example, setting the value to ``0.8`` will begin flushing unmodified
 (clean) objects when they reach 80% of the cache pool's capacity:: 
 
 	ceph osd pool set hot-storage cache_target_full_ratio 0.8
-
-
-Absolute Sizing
-~~~~~~~~~~~~~~~
-
-The cache tiering agent can flush or evict objects based upon the total number 
-of bytes or the total number of objects. To specify a maximum number of bytes,
-execute the following::
-
-	ceph osd pool set {cachepool} target_max_bytes {#bytes}
-
-For example, to flush or evict at 1 TB, execute the following:: 
-
-	ceph osd pool set hot-storage target_max_bytes 1000000000000
-
-
-To specify the maximum number of objects, execute the following:: 
-
-	ceph osd pool set {cachepool} target_max_objects {#objects}
-	
-For example, to flush or evict at 1M objects, execute the following::
-
-	ceph osd pool set hot-storage target_max_objects 1000000
-
-.. note:: If you specify both limits, the cache tiering agent will 
-   begin flushing or evicting when either threshold is triggered.
 
 
 Cache Age
@@ -289,7 +388,6 @@ the cache tier::
 For example, to evict objects after 30 minutes, execute the following:: 
 
 	ceph osd pool set hot-storage cache_min_evict_age 1800
-
 
 
 Removing a Cache Tier
@@ -331,14 +429,14 @@ that you do not lose any recent changes to objects in the cache before you
 disable and remove it.
 
 
-#. Change the cache mode to ``forward`` so that new and modified objects will 
+#. Change the cache mode to ``proxy`` so that new and modified objects will 
    flush to the backing storage pool. ::
 
-	ceph osd tier cache-mode {cachepool} forward
+	ceph osd tier cache-mode {cachepool} proxy
 
    For example:: 
 
-	ceph osd tier cache-mode hot-storage forward
+	ceph osd tier cache-mode hot-storage proxy
 
 
 #. Ensure that the cache pool has been flushed. This may take a few minutes::
@@ -371,6 +469,6 @@ disable and remove it.
 
 .. _Create a Pool: ../pools#create-a-pool
 .. _Pools - Set Pool Values: ../pools#set-pool-values
-.. _Placing Different Pools on Different OSDs: ../crush-map/#placing-different-pools-on-different-osds
-.. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
+.. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _CRUSH Maps: ../crush-map
+.. _Absolute Sizing: #absolute-sizing

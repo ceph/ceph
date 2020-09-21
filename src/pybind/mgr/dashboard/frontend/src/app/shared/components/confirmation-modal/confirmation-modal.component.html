@@ -1,0 +1,26 @@
+<cd-modal (hide)="cancel()">
+  <ng-container class="modal-title">{{ titleText }}</ng-container>
+  <ng-container class="modal-content">
+    <form name="confirmationForm"
+          #formDir="ngForm"
+          [formGroup]="confirmationForm"
+          novalidate>
+      <div class="modal-body">
+        <ng-container *ngTemplateOutlet="bodyTpl; context: bodyContext"></ng-container>
+        <p *ngIf="description">
+          {{description}}
+        </p>
+      </div>
+      <div class="modal-footer">
+        <cd-submit-button [form]="confirmationForm"
+                          (submitAction)="onSubmit(confirmationForm.value)">
+          {{ buttonText }}
+        </cd-submit-button>
+        <cd-back-button [back]="boundCancel"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

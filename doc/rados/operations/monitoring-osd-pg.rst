@@ -10,7 +10,7 @@ particular OSD addresses. This means that tracking down system faults requires
 finding the `placement group`_ and the underlying OSDs at root of the problem.
 
 .. tip:: A fault in one part of the cluster may prevent you from accessing a 
-   particular object, but that doesn't mean that you can't access other objects.
+   particular object, but that doesn't mean that you cannot access other objects.
    When you run into a fault, don't panic. Just follow the steps for monitoring
    your OSDs and placement groups. Then, begin troubleshooting.
 
@@ -33,7 +33,9 @@ not assign placement groups to the OSD. If an OSD is ``down``, it should also be
 .. note:: If an OSD is ``down`` and ``in``, there is a problem and the cluster 
    will not be in a healthy state.
 
-.. ditaa:: +----------------+        +----------------+
+.. ditaa::
+
+           +----------------+        +----------------+
            |                |        |                |
            |   OSD #n In    |        |   OSD #n Up    |
            |                |        |                |
@@ -66,34 +68,32 @@ running, too. To see if all OSDs are running, execute::
 
 	ceph osd stat
 
-The result should tell you the map epoch (eNNNN), the total number of OSDs (x),
-how many are ``up`` (y) and how many are ``in`` (z). ::
+The result should tell you the total number of OSDs (x),
+how many are ``up`` (y), how many are ``in`` (z) and the map epoch (eNNNN). ::
 
-	eNNNN: x osds: y up, z in
+	x osds: y up, z in; epoch: eNNNN
 
 If the number of OSDs that are ``in`` the cluster is more than the number of
 OSDs that are ``up``, execute the following command to identify the ``ceph-osd``
-daemons that aren't running:: 
+daemons that are not running:: 
 
 	ceph osd tree
 
 :: 
 
-	dumped osdmap tree epoch 1
-	# id	weight	type name	up/down	reweight
-	-1	2	pool openstack
-	-3	2		rack dell-2950-rack-A
-	-2	2			host dell-2950-A1
-	0	1				osd.0	up	1	
-	1	1				osd.1	down	1
-
+	#ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
+	 -1       2.00000 pool openstack
+	 -3       2.00000 rack dell-2950-rack-A
+	 -2       2.00000 host dell-2950-A1
+	  0   ssd 1.00000      osd.0                up  1.00000 1.00000
+	  1   ssd 1.00000      osd.1              down  1.00000 1.00000
 
 .. tip:: The ability to search through a well-designed CRUSH hierarchy may help
-   you troubleshoot your cluster by identifying the physcial locations faster.
+   you troubleshoot your cluster by identifying the physical locations faster.
 
 If an OSD is ``down``, start it:: 
 
-	sudo /etc/init.d/ceph -a start osd.1
+	sudo systemctl start ceph-osd@1
 
 See `OSD Not Running`_ for problems associated with OSDs that stopped, or won't
 restart.
@@ -118,7 +118,7 @@ arise, don't panic. Common examples include:
 - You added or removed an OSD. Then, CRUSH reassigned the placement group to 
   other OSDs--thereby changing the composition of the Acting Set and spawning
   the migration of data with a "backfill" process.
-- An OSD was ``down``, was restared, and is now ``recovering``.
+- An OSD was ``down``, was restarted, and is now ``recovering``.
 - An OSD in the Acting Set is ``down`` or unable to service requests, 
   and another OSD has temporarily assumed its duties.
 
@@ -142,7 +142,7 @@ The result should tell you the osdmap epoch (eNNN), the placement group number
 ({pg-num}),  the OSDs in the Up Set (up[]), and the OSDs in the acting set
 (acting[]). ::
 
-	osdmap eNNN pg {pg-num} -> up [0,1,2] acting [0,1,2]
+	osdmap eNNN pg {raw-pg-num} ({pg-num}) -> up [0,1,2] acting [0,1,2]
 
 .. note:: If the Up Set and Acting Set do not match, this may be an indicator
    that the cluster rebalancing itself or of a potential problem with 
@@ -160,7 +160,9 @@ OSDs to establish agreement on the current state of the placement group
 (assuming a pool with 3 replicas of the PG).
 
 
-.. ditaa:: +---------+     +---------+     +-------+
+.. ditaa::
+
+           +---------+     +---------+     +-------+
            |  OSD 1  |     |  OSD 2  |     | OSD 3 |
            +---------+     +---------+     +-------+
                 |               |              |
@@ -207,21 +209,21 @@ placement groups, execute::
 
 	ceph pg stat
 
-The result should tell you the placement group map version (vNNNNNN), the total
-number of placement groups (x), and how many placement groups are in a
-particular state such as ``active+clean`` (y). ::
+The result should tell you the total number of placement groups (x), how many
+placement groups are in a particular state such as ``active+clean`` (y) and the
+amount of data stored (z). ::
 
-	vNNNNNN: x pgs: y active+clean; z bytes data, aa MB used, bb GB / cc GB avail
+	x pgs: y active+clean; z bytes data, aa MB used, bb GB / cc GB avail
 
 .. note:: It is common for Ceph to report multiple states for placement groups.
 
-In addition to the placement group states, Ceph will also echo back the amount
-of data used (aa), the amount of storage capacity remaining (bb), and the total
+In addition to the placement group states, Ceph will also echo back the amount of
+storage capacity used (aa), the amount of storage capacity remaining (bb), and the total
 storage capacity for the placement group. These numbers can be important in a
 few cases: 
 
 - You are reaching your ``near full ratio`` or ``full ratio``. 
-- Your data isn't getting distributed across the cluster due to an 
+- Your data is not getting distributed across the cluster due to an 
   error in your CRUSH configuration.
 
 
@@ -230,15 +232,15 @@ few cases:
    Placement group IDs consist of the pool number (not pool name) followed 
    by a period (.) and the placement group ID--a hexadecimal number. You
    can view pool numbers and their names from the output of ``ceph osd 
-   lspools``. The default pool names ``data``, ``metadata`` and ``rbd`` 
-   correspond to pool numbers ``0``, ``1`` and ``2`` respectively. A fully 
-   qualified placement group ID has the following form::
+   lspools``. For example, the first pool created corresponds to
+   pool number ``1``. A fully qualified placement group ID has the
+   following form::
    
    	{pool-num}.{pg-id}
    
    And it typically looks like this:: 
    
-   	0.1f
+	1.1f
    
 
 To retrieve a list of placement groups, execute the following:: 
@@ -255,113 +257,7 @@ To query a particular placement group, execute the following::
 	
 Ceph will output the query in JSON format.
 
-.. code-block:: javascript
-	
-	{
-	  "state": "active+clean",
-	  "up": [
-	    1,
-	    0
-	  ],
-	  "acting": [
-	    1,
-	    0
-	  ],
-	  "info": {
-	    "pgid": "1.e",
-	    "last_update": "4'1",
-	    "last_complete": "4'1",
-	    "log_tail": "0'0",
-	    "last_backfill": "MAX",
-	    "purged_snaps": "[]",
-	    "history": {
-	      "epoch_created": 1,
-	      "last_epoch_started": 537,
-	      "last_epoch_clean": 537,
-	      "last_epoch_split": 534,
-	      "same_up_since": 536,
-	      "same_interval_since": 536,
-	      "same_primary_since": 536,
-	      "last_scrub": "4'1",
-	      "last_scrub_stamp": "2013-01-25 10:12:23.828174"
-	    },
-	    "stats": {
-	      "version": "4'1",
-	      "reported": "536'782",
-	      "state": "active+clean",
-	      "last_fresh": "2013-01-25 10:12:23.828271",
-	      "last_change": "2013-01-25 10:12:23.828271",
-	      "last_active": "2013-01-25 10:12:23.828271",
-	      "last_clean": "2013-01-25 10:12:23.828271",
-	      "last_unstale": "2013-01-25 10:12:23.828271",
-	      "mapping_epoch": 535,
-	      "log_start": "0'0",
-	      "ondisk_log_start": "0'0",
-	      "created": 1,
-	      "last_epoch_clean": 1,
-	      "parent": "0.0",
-	      "parent_split_bits": 0,
-	      "last_scrub": "4'1",
-	      "last_scrub_stamp": "2013-01-25 10:12:23.828174",
-	      "log_size": 128,
-	      "ondisk_log_size": 128,
-	      "stat_sum": {
-	        "num_bytes": 205,
-	        "num_objects": 1,
-	        "num_object_clones": 0,
-	        "num_object_copies": 0,
-	        "num_objects_missing_on_primary": 0,
-	        "num_objects_degraded": 0,
-	        "num_objects_unfound": 0,
-	        "num_read": 1,
-	        "num_read_kb": 0,
-	        "num_write": 3,
-	        "num_write_kb": 1
-	      },
-	      "stat_cat_sum": {
-	        
-	      },
-	      "up": [
-	        1,
-	        0
-	      ],
-	      "acting": [
-	        1,
-	        0
-	      ]
-	    },
-	    "empty": 0,
-	    "dne": 0,
-	    "incomplete": 0
-	  },
-	  "recovery_state": [
-	    {
-	      "name": "Started\/Primary\/Active",
-	      "enter_time": "2013-01-23 09:35:37.594691",
-	      "might_have_unfound": [
-	        
-	      ],
-	      "scrub": {
-	        "scrub_epoch_start": "536",
-	        "scrub_active": 0,
-	        "scrub_block_writes": 0,
-	        "finalizing_scrub": 0,
-	        "scrub_waiting_on": 0,
-	        "scrub_waiting_on_whom": [
-	          
-	        ]
-	      }
-	    },
-	    {
-	      "name": "Started",
-	      "enter_time": "2013-01-23 09:35:31.581160"
-	    }
-	  ]
-	}
-
-
-
-The following subsections describe common states in greater detail.
+The following subsections describe the common pg states in detail.
 
 Creating
 --------
@@ -373,8 +269,8 @@ group's Acting Set will peer. Once peering is complete, the placement group
 status should be ``active+clean``, which means a Ceph client can begin writing
 to the placement group.
 
-.. ditaa:: 
-         
+.. ditaa::
+
        /-----------\       /-----------\       /-----------\
        | Creating  |------>|  Peering  |------>|  Active   |
        \-----------/       \-----------/       \-----------/
@@ -389,7 +285,7 @@ this means that the OSDs that store the placement group agree about the current
 state of the placement group. However, completion of the peering process does
 **NOT** mean that each replica has the latest contents.
 
-.. topic:: Authoratative History
+.. topic:: Authoritative History
 
    Ceph will **NOT** acknowledge a write operation to a client, until 
    all OSDs of the acting set persist the write operation. This practice 
@@ -439,7 +335,7 @@ still write a new object to a ``degraded`` placement group if it is ``active``.
 If an OSD is ``down`` and the ``degraded`` condition persists, Ceph may mark the
 ``down`` OSD as ``out`` of the cluster and remap the data from the ``down`` OSD
 to another OSD. The time between being marked ``down`` and being marked ``out``
-is controlled by ``mon osd down out interval``, which is set to ``300`` seconds
+is controlled by ``mon osd down out interval``, which is set to ``600`` seconds
 by default.
 
 A placement group can also be ``degraded``, because Ceph cannot find one or more
@@ -458,7 +354,7 @@ back ``up``, the contents of the placement groups must be updated to reflect the
 current state. During that time period, the OSD may reflect a ``recovering``
 state.
 
-Recovery isn't always trivial, because a hardware failure might cause a
+Recovery is not always trivial, because a hardware failure might cause a
 cascading failure of multiple OSDs. For example, a network switch for a rack or
 cabinet may fail, which can cause the OSDs of a number of host machines to fall
 behind the current state  of the cluster. Each one of the OSDs must recover once
@@ -468,8 +364,7 @@ Ceph provides a number of settings to balance the resource contention between
 new service requests and the need to recover data objects and restore the
 placement groups to the current state. The ``osd recovery delay start`` setting
 allows an OSD to restart, re-peer and even process some replay requests before
-starting the recovery process. The ``osd recovery threads`` setting limits the
-number of threads for the recovery process (1 thread by default).  The ``osd
+starting the recovery process.  The ``osd
 recovery thread timeout`` sets a thread timeout, because multiple OSDs may fail,
 restart and re-peer at staggered rates. The ``osd recovery max active`` setting
 limits the  number of recovery requests an OSD will entertain simultaneously to
@@ -488,19 +383,25 @@ the background.  Once backfilling is complete, the new OSD will begin serving
 requests when it is ready.
 
 During the backfill operations, you may see one of several states:
-``backfill_wait`` indicates that a backfill operation is pending, but isn't
-underway yet; ``backfill`` indicates that a backfill operation is underway;
-and, ``backfill_too_full`` indicates that a backfill operation was requested,
+``backfill_wait`` indicates that a backfill operation is pending, but is not
+underway yet; ``backfilling`` indicates that a backfill operation is underway;
+and, ``backfill_toofull`` indicates that a backfill operation was requested,
 but couldn't be completed due to insufficient storage capacity. When a 
-placement group can't be backfilled, it may be considered ``incomplete``.
+placement group cannot be backfilled, it may be considered ``incomplete``.
+
+The ``backfill_toofull`` state may be transient.  It is possible that as PGs
+are moved around, space may become available.  The ``backfill_toofull`` is
+similar to ``backfill_wait`` in that as soon as conditions change
+backfill can proceed.
 
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
-``osd_max_backfills`` sets the maximum number of concurrent backfills to or from
-an OSD to 10. The ``osd backfill full ratio`` enables an OSD to refuse a
-backfill request if the OSD is approaching its full ratio (85%, by default).
+``osd_max_backfills`` sets the maximum number of concurrent backfills to and from
+an OSD to 1. The ``backfill full ratio`` enables an OSD to refuse a
+backfill request if the OSD is approaching its full ratio (90%, by default) and
+change with ``ceph osd set-backfillfull-ratio`` command.
 If an OSD refuses a backfill request, the ``osd backfill retry interval``
-enables an OSD to retry the request (after 10 seconds, by default). OSDs can
+enables an OSD to retry the request (after 30 seconds, by default). OSDs can
 also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan
 intervals (64 and 512, by default).
 
@@ -519,9 +420,9 @@ Stale
 -----
 
 While Ceph uses heartbeats to ensure that hosts and daemons are running, the
-``ceph-osd`` daemons may also get into a ``stuck`` state where they aren't
+``ceph-osd`` daemons may also get into a ``stuck`` state where they are not
 reporting statistics in a timely manner (e.g., a temporary network fault). By
-default, OSD daemons report their placement group, up thru, boot and failure
+default, OSD daemons report their placement group, up through, boot and failure
 statistics every half second (i.e., ``0.5``),  which is more frequent than the
 heartbeat thresholds. If the **Primary OSD** of a placement group's acting set
 fails to report to the monitor or if other OSDs have reported the primary OSD
@@ -537,8 +438,8 @@ to the monitor.
 Identifying Troubled PGs
 ========================
 
-As previously noted, a placement group isn't necessarily problematic just 
-because its state isn't ``active+clean``. Generally, Ceph's ability to self
+As previously noted, a placement group is not necessarily problematic just 
+because its state is not ``active+clean``. Generally, Ceph's ability to self
 repair may not be working when placement groups get stuck. The stuck states
 include:
 
@@ -571,7 +472,7 @@ calculates how to map the object to a `placement group`_, and then calculates
 how to assign the placement group to an OSD dynamically. To find the object
 location, all you need is the object name and the pool name. For example:: 
 
-	ceph osd map {poolname} {object-name}
+	ceph osd map {poolname} {object-name} [namespace]
 
 .. topic:: Exercise: Locate an Object
 
@@ -593,7 +494,7 @@ location, all you need is the object name and the pool name. For example::
    
 	Ceph should output the object's location. For example:: 
    
-		osdmap e537 pool 'data' (0) object 'test-object-1' -> pg 0.d1743484 (0.4) -> up [1,0] acting [1,0]
+		osdmap e537 pool 'data' (1) object 'test-object-1' -> pg 1.d1743484 (1.4) -> up ([0,1], p0) acting ([0,1], p0)
    
 	To remove the test object, simply delete it using the ``rados rm`` command.
 	For example:: 

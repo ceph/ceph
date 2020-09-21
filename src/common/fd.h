@@ -15,7 +15,7 @@
 #ifndef CEPH_COMMON_FD_H
 #define CEPH_COMMON_FD_H
 
-class CephContext;
+#include "include/common_fwd.h"
 
 void dump_open_fds(CephContext *cct);
 

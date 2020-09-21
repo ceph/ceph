@@ -1,0 +1,301 @@
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <form name="bucketForm"
+        #frm="ngForm"
+        [formGroup]="bucketForm"
+        novalidate>
+    <div class="card">
+      <div i18n="form title|Example: Create Pool@@formTitle"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+
+      <div class="card-body">
+        <!-- Id -->
+        <div class="form-group row"
+             *ngIf="editing">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="id">Id</label>
+          <div class="cd-col-form-input">
+            <input id="id"
+                   name="id"
+                   class="form-control"
+                   type="text"
+                   formControlName="id"
+                   readonly>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{required: !editing}"
+                 for="bid"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input id="bid"
+                   name="bid"
+                   class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Name..."
+                   formControlName="bid"
+                   [readonly]="editing"
+                   [autofocus]="!editing">
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'bucketNameInvalid')"
+                  i18n>The value is not valid.</span>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('bid', frm, 'bucketNameExists')"
+                  i18n>The chosen name is already in use.</span>
+          </div>
+        </div>
+
+        <!-- Owner -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="owner"
+                 i18n>Owner</label>
+          <div class="cd-col-form-input">
+            <select id="owner"
+                    name="owner"
+                    class="form-control custom-select"
+                    formControlName="owner"
+                    [autofocus]="editing">
+              <option i18n
+                      *ngIf="owners === null"
+                      [ngValue]="null">Loading...</option>
+              <option i18n
+                      *ngIf="owners !== null"
+                      [ngValue]="null">-- Select a user --</option>
+              <option *ngFor="let owner of owners"
+                      [value]="owner">{{ owner }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="bucketForm.showError('owner', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Placement target -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{required: !editing}"
+                 for="placement-target"
+                 i18n>Placement target</label>
+          <div class="cd-col-form-input">
+            <ng-template #placementTargetSelect>
+              <select id="placement-target"
+                      name="placement-target"
+                      formControlName="placement-target"
+                      class="form-control custom-select">
+                <option i18n
+                        *ngIf="placementTargets === null"
+                        [ngValue]="null">Loading...</option>
+                <option i18n
+                        *ngIf="placementTargets !== null"
+                        [ngValue]="null">-- Select a placement target --</option>
+                <option *ngFor="let placementTarget of placementTargets"
+                        [value]="placementTarget.name">{{ placementTarget.description }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('placement-target', frm, 'required')"
+                    i18n>This field is required.</span>
+            </ng-template>
+            <ng-container *ngIf="editing; else placementTargetSelect">
+              <input id="placement-target"
+                     name="placement-target"
+                     formControlName="placement-target"
+                     class="form-control"
+                     type="text"
+                     readonly>
+            </ng-container>
+          </div>
+        </div>
+
+        <!-- Versioning -->
+        <fieldset *ngIf="editing">
+          <legend class="cd-header"
+                  i18n>Versioning</legend>
+
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="versioning"
+                       name="versioning"
+                       formControlName="versioning"
+                       (change)="setMfaDeleteValidators()">
+                <label class="custom-control-label"
+                       for="versioning"
+                       i18n>Enabled</label>
+                <cd-helper>
+                  <span i18n>Enables versioning for the objects in the bucket.</span>
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Multi-Factor Authentication -->
+        <fieldset *ngIf="editing">
+          <!-- MFA Delete -->
+          <legend class="cd-header"
+                  i18n>Multi-Factor Authentication</legend>
+
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="mfa-delete"
+                       name="mfa-delete"
+                       formControlName="mfa-delete"
+                       (change)="setMfaDeleteValidators()">
+                <label class="custom-control-label"
+                       for="mfa-delete"
+                       i18n>Delete enabled</label>
+                <cd-helper>
+                  <span i18n>Enables MFA (multi-factor authentication) Delete, which requires additional authentication for changing the bucket versioning state.</span>
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+          <div *ngIf="areMfaCredentialsRequired()"
+               class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="mfa-token-serial">Token Serial Number</label>
+            <div class="cd-col-form-input">
+              <input type="text"
+                     id="mfa-token-serial"
+                     name="mfa-token-serial"
+                     formControlName="mfa-token-serial"
+                     class="form-control">
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('mfa-token-serial', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <div *ngIf="areMfaCredentialsRequired()"
+               class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="mfa-token-pin">Token PIN</label>
+            <div class="cd-col-form-input">
+              <input type="text"
+                     id="mfa-token-pin"
+                     name="mfa-token-pin"
+                     formControlName="mfa-token-pin"
+                     class="form-control">
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('mfa-token-pin', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Locking -->
+        <fieldset>
+          <legend class="cd-header"
+                  i18n>Locking</legend>
+
+          <!-- Locking enabled -->
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="lock_enabled"
+                       formControlName="lock_enabled"
+                       type="checkbox">
+                <label class="custom-control-label"
+                       for="lock_enabled"
+                       i18n>Enabled</label>
+                <cd-helper>
+                  <span i18n>Enables locking for the objects in the bucket. Locking can only be enabled while creating a bucket.</span>
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+
+          <!-- Locking mode -->
+          <div *ngIf="bucketForm.getValue('lock_enabled')"
+               class="form-group row">
+            <label class="cd-col-form-label"
+                   for="lock_mode"
+                   i18n>Mode</label>
+            <div class="cd-col-form-input">
+              <select class="form-control custom-select"
+                      formControlName="lock_mode"
+                      name="lock_mode"
+                      id="lock_mode">
+                <option i18n
+                        value="COMPLIANCE">Compliance</option>
+                <option i18n
+                        value="GOVERNANCE">Governance</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Retention period (days) -->
+          <div *ngIf="bucketForm.getValue('lock_enabled')"
+               class="form-group row">
+            <label class="cd-col-form-label"
+                   for="lock_retention_period_days">
+              <ng-container i18n>Days</ng-container>
+              <cd-helper i18n>The number of days that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input class="form-control"
+                     type="number"
+                     id="lock_retention_period_days"
+                     formControlName="lock_retention_period_days"
+                     min="0">
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'pattern')"
+                    i18n>The entered value must be a positive integer.</span>
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'eitherDaysOrYears')"
+                    i18n>Retention period requires either Days or Years.</span>
+            </div>
+          </div>
+
+          <!-- Retention period (years) -->
+          <div *ngIf="bucketForm.getValue('lock_enabled')"
+               class="form-group row">
+            <label class="cd-col-form-label"
+                   for="lock_retention_period_years">
+              <ng-container i18n>Years</ng-container>
+              <cd-helper i18n>The number of years that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input class="form-control"
+                     type="number"
+                     id="lock_retention_period_years"
+                     formControlName="lock_retention_period_years"
+                     min="0">
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'pattern')"
+                    i18n>The entered value must be a positive integer.</span>
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('lock_retention_period_years', frm, 'eitherDaysOrYears')"
+                    i18n>Retention period requires either Days or Years.</span>
+            </div>
+          </div>
+        </fieldset>
+
+      </div>
+      <div class="card-footer">
+        <div class="text-right">
+          <cd-submit-button (submitAction)="submit()"
+                            i18n="form action button|Example: Create Pool@@formActionButton"
+                            [form]="bucketForm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

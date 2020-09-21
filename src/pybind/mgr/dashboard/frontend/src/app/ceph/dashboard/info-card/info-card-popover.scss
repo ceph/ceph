@@ -1,0 +1,42 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.info-card-popover-cluster-status {
+  max-height: 20vh;
+  max-width: 23vw;
+
+  .popover-body {
+    font-size: 1rem;
+    max-height: 19vh;
+    max-width: 100%;
+    overflow: auto;
+  }
+}
+
+@media (max-width: bd.$screen-lg-max) {
+  .info-card-popover-cluster-status {
+    max-width: 31vw;
+  }
+}
+
+@media (max-width: bd.$screen-md-max) {
+  .info-card-popover-cluster-status {
+    max-width: 46vw;
+  }
+}
+@media (max-width: bd.$screen-sm-max) {
+  .info-card-popover-cluster-status {
+    max-width: 83vw;
+  }
+}
+
+.info-card-content-clickable {
+  border: 1px solid bd.$gray-200;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 7px;
+}
+
+.info-card-content-clickable:hover {
+  background-color: bd.$gray-200;
+  border-color: bd.$gray-400;
+}

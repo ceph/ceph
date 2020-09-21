@@ -1,0 +1,4 @@
+{
+  "available": false,
+  "message": "Ganesha config location is not configured. Please set the GANESHA_RADOS_POOL_NAMESPACE setting."
+}

@@ -14,9 +14,10 @@
 
 #include "AuthServiceHandler.h"
 #include "cephx/CephxServiceHandler.h"
+#ifdef HAVE_GSSAPI
+#include "krb/KrbServiceHandler.hpp"
+#endif
 #include "none/AuthNoneServiceHandler.h"
-#include "AuthMethodList.h"
-#include "common/config.h"
 
 #define dout_subsys ceph_subsys_auth
 
@@ -28,6 +29,11 @@ AuthServiceHandler *get_auth_service_handler(int type, CephContext *cct, KeyServ
     return new CephxServiceHandler(cct, ks);
   case CEPH_AUTH_NONE:
     return new AuthNoneServiceHandler(cct);
+#ifdef HAVE_GSSAPI
+  case CEPH_AUTH_GSS: 
+    return new KrbServiceHandler(cct, ks);
+#endif
+  default:
+    return nullptr;
   }
-  return NULL;
 }

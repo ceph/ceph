@@ -25,28 +25,9 @@
 
 find_path(BLKID_INCLUDE_DIR blkid/blkid.h)
 
-set(BLKID_NAMES ${BLKID_NAMES} blkid)
-find_library(BLKID_LIBRARY NAMES ${BLKID_NAMES})
+find_library(BLKID_LIBRARIES blkid)
 
-if (BLKID_INCLUDE_DIR AND BLKID_LIBRARY)
-  set(BLKID_FOUND TRUE)
-  set( BLKID_LIBRARIES ${BLKID_LIBRARY} )
-else ()
-  set(BLKID_FOUND FALSE)
-  set( BLKID_LIBRARIES )
-endif ()
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(blkid DEFAULT_MSG BLKID_LIBRARIES BLKID_INCLUDE_DIR)
 
-if (BLKID_FOUND)
-  message(STATUS "Found libblkid: ${BLKID_LIBRARY}")
-else ()
-  message(STATUS "Not Found libblkid: ${BLKID_LIBRARY}")
-  if (BLKID_FIND_REQUIRED)
-    message(STATUS "Looked for libblkid named ${BLKID_NAMES}.")
-    message(FATAL_ERROR "Could NOT find libblkid")
-  endif ()
-endif ()
-
-mark_as_advanced(
-  BLKID_LIBRARY
-  BLKID_I
-)
+mark_as_advanced(BLKID_LIBRARIES BLKID_INCLUDE_DIR)

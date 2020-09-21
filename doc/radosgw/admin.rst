@@ -22,7 +22,8 @@ There are two user types:
 - **Subuser:** The term 'subuser' reflects a user of the Swift interface. A subuser
   is associated to a user .
   
-.. ditaa:: +---------+
+.. ditaa::
+           +---------+
            |   User  |
            +----+----+  
                 |     
@@ -56,7 +57,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [],
     "keys": [
           { "user": "johndoe",
@@ -109,7 +109,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [
           { "id": "johndoe:swift",
             "permissions": "full-control"}],
@@ -150,9 +149,9 @@ email addresses, display names and access levels. For example::
 
 	radosgw-admin user modify --uid=johndoe --display-name="John E. Doe"
 
-To modify subuser values, specify ``subuser modify`` and the subuser ID. For example::
+To modify subuser values, specify ``subuser modify``, user ID and the subuser ID. For example::
 
-	radosgw-admin subuser modify --uid=johndoe:swift --access=full
+	radosgw-admin subuser modify --uid=johndoe --subuser=johndoe:swift --access=full
 
 
 User Enable/Suspend
@@ -182,7 +181,7 @@ subuser), specify ``user rm`` and the user ID. ::
 
 To remove the subuser only, specify ``subuser rm`` and the subuser ID. ::
 
-	radosgw-admin subuser rm --uid=johndoe:swift
+	radosgw-admin subuser rm --subuser=johndoe:swift
 
 
 Options include:
@@ -198,10 +197,10 @@ Remove a Subuser
 ----------------
 
 When you remove a sub user, you are removing access to the Swift interface. 
-The user will remain in the system. The Ceph Object Gateway  To remove the subuser, specify 
+The user will remain in the system. To remove the subuser, specify 
 ``subuser rm`` and the subuser ID. ::
 
-	radosgw-admin subuser rm --uid=johndoe:swift
+	radosgw-admin subuser rm --subuser=johndoe:swift
 
 
 
@@ -211,61 +210,89 @@ Options include:
   to the UID.
 
 
-Create a Key
-------------
+Add / Remove a Key
+------------------------
 
-To create a key for a user, you must specify ``key create``. For a user, specify
-the user ID and the ``s3`` key type. To create a key for subuser, you must
-specify the subuser ID and the ``swift`` keytype. For example::
+Both users and subusers require the key to access the S3 or Swift interface. To
+use S3, the user needs a key pair which is composed of an access key and a 
+secret key. On the other hand, to use Swift, the user typically needs a secret 
+key (password), and use it together with the associated user ID. You may create
+a key and either specify or generate the access key and/or secret key. You may 
+also remove a key. Options include:
 
-	radosgw-admin key create --subuser=johndoe:swift --key-type=swift --gen-secret
+- ``--key-type=<type>`` specifies the key type. The options are: s3, swift
+- ``--access-key=<key>`` manually specifies an S3 access key.
+- ``--secret-key=<key>`` manually specifies a S3 secret key or a Swift secret key.
+- ``--gen-access-key`` automatically generates a random S3 access key.
+- ``--gen-secret`` automatically generates a random S3 secret key or a random Swift secret key.
+
+An example how to add a specified S3 key pair for a user. ::
+
+	radosgw-admin key create --uid=foo --key-type=s3 --access-key fooAccessKey --secret-key fooSecretKey
 
 .. code-block:: javascript
 
-  { "user_id": "johndoe",
+  { "user_id": "foo",
     "rados_uid": 0,
-    "display_name": "John Doe",
-    "email": "john@example.com",
+    "display_name": "foo",
+    "email": "foo@example.com",
+    "suspended": 0,
+    "keys": [
+      { "user": "foo",
+        "access_key": "fooAccessKey",
+        "secret_key": "fooSecretKey"}],
+  }
+
+Note that you may create multiple S3 key pairs for a user.
+
+To attach a specified swift secret key for a subuser. ::
+
+	radosgw-admin key create --subuser=foo:bar --key-type=swift --secret-key barSecret
+
+.. code-block:: javascript
+
+  { "user_id": "foo",
+    "rados_uid": 0,
+    "display_name": "foo",
+    "email": "foo@example.com",
     "suspended": 0,
     "subusers": [
-       { "id": "johndoe:swift",
+       { "id": "foo:bar",
+         "permissions": "full-control"}],
+    "swift_keys": [
+      { "user": "foo:bar",
+        "secret_key": "asfghjghghmgm"}]}
+
+Note that a subuser can have only one swift secret key.
+
+Subusers can also be used with S3 APIs if the subuser is associated with a S3 key pair. ::	
+
+	radosgw-admin key create --subuser=foo:bar --key-type=s3 --access-key barAccessKey --secret-key barSecretKey
+	
+.. code-block:: javascript
+
+  { "user_id": "foo",
+    "rados_uid": 0,
+    "display_name": "foo",
+    "email": "foo@example.com",
+    "suspended": 0,
+    "subusers": [
+       { "id": "foo:bar",
          "permissions": "full-control"}],
     "keys": [
-      { "user": "johndoe",
-        "access_key": "QFAMEDSJP5DEKJO0DDXY",
-        "secret_key": "iaSFLDVvDdQt6lkNzHyW4fPLZugBAI1g17LO0+87"}],
-    "swift_keys": [
-      { "user": "johndoe:swift",
-        "secret_key": "E9T2rUZNu2gxUjcwUBO8n\/Ev4KX6\/GprEuH4qhu1"}]}
+      { "user": "foo:bar",
+        "access_key": "barAccessKey",
+        "secret_key": "barSecretKey"}],
+  }
 
 
+To remove a S3 key pair, specify the access key. :: 
 
-Add / Remove Access Keys
-------------------------
+	radosgw-admin key rm --uid=foo --key-type=s3 --access-key=fooAccessKey 
 
-Users and subusers must have access keys to use the S3 and Swift
-interfaces. When you create a user or subuser and you do not specify 
-an access key and secret, the key and secret get generated automatically. 
-You may create a key and either specify or generate the access key and/or
-secret. You may also remove an access key and secret. Options include:
+To remove the swift secret key. ::
 
-
-- ``--secret=<key>`` specifies a secret key (e.g,. manually generated).
-- ``--gen-access-key`` generates random access key (for S3 user by default).
-- ``--gen-secret`` generates a random secret key.
-- ``--key-type=<type>`` specifies a key type. The options are: swift, s3
-
-
-To add a key, specify the user. ::
-
-	radosgw-admin key create --uid=johndoe --key-type=s3 --gen-access-key --gen-secret
-
-You may also specify a key and a secret.
-
-To remove an access key, specify the user. :: 
-
-	radosgw-admin key rm --uid=johndoe
-
+	radosgw-admin key rm --subuser=foo:bar --key-type=swift
 
 
 Add / Remove Admin Capabilities
@@ -288,12 +315,12 @@ usage (utilization). For example::
 
 For example::
 
-	radosgw-admin caps add --uid=johndoe --caps="users=*"
+	radosgw-admin caps add --uid=johndoe --caps="users=*;buckets=*"
 
 
 To remove administrative capabilities from a user, execute the following:: 
 
-	radosgw-admin caps remove --uid=johndoe --caps={caps}
+	radosgw-admin caps rm --uid=johndoe --caps={caps}
 
 
 Quota Management
@@ -301,7 +328,7 @@ Quota Management
 
 The Ceph Object Gateway enables you to set quotas on users and buckets owned by
 users. Quotas include the maximum number of objects in a bucket and the maximum
-storage size in megabytes.
+storage size a bucket can hold.
 
 - **Bucket:** The ``--bucket`` option allows you to specify a quota for
   buckets the user owns.
@@ -310,7 +337,7 @@ storage size in megabytes.
   the maximum number of objects. A negative value disables this setting.
   
 - **Maximum Size:** The ``--max-size`` option allows you to specify a quota
-  for the maximum number of bytes. A negative value disables this setting.
+  size in B/K/M/G/T, where B is the default. A negative value disables this setting.
   
 - **Quota Scope:** The ``--quota-scope`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``. Bucket quotas apply to buckets a 
@@ -327,7 +354,7 @@ For example::
 
 For example:: 
 
-	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024
+	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024B
 
 
 A negative value for num objects and / or max size means that the
@@ -343,7 +370,7 @@ Once you set a user quota, you may enable it. For example::
 
 You may disable an enabled user quota. For example:: 
 
-	radosgw-admin quota-disable --quota-scope=user --uid=<uid>
+	radosgw-admin quota disable --quota-scope=user --uid=<uid>
 
 
 Set Bucket Quota
@@ -367,7 +394,7 @@ Once you set a bucket quota, you may enable it. For example::
 
 You may disable an enabled bucket quota. For example:: 
 
-	radosgw-admin quota-disable --quota-scope=bucket --uid=<uid>
+	radosgw-admin quota disable --quota-scope=bucket --uid=<uid>
 
 
 Get Quota Settings
@@ -389,6 +416,7 @@ the latest quota stats. ::
 
 	radosgw-admin user stats --uid=<uid> --sync-stats
 
+.. _rgw_user_usage_stats:
 
 Get User Usage Stats
 --------------------
@@ -400,22 +428,49 @@ To see how much of the quota a user has consumed, execute the following::
 .. note:: You should execute ``radosgw-admin user stats`` with the 
    ``--sync-stats`` option to receive the latest data.
 
+Default Quotas
+--------------
+
+You can set default quotas in the config.  These defaults are used when
+creating a new user and have no effect on existing users. If the
+relevant default quota is set in config, then that quota is set on the
+new user, and that quota is enabled.  See ``rgw bucket default quota max objects``,
+``rgw bucket default quota max size``, ``rgw user default quota max objects``, and
+``rgw user default quota max size`` in `Ceph Object Gateway Config Reference`_
+
+Quota Cache
+-----------
+
+Quota statistics are cached on each RGW instance.  If there are multiple
+instances, then the cache can keep quotas from being perfectly enforced, as
+each instance will have a different view of quotas.  The options that control
+this are ``rgw bucket quota ttl``, ``rgw user quota bucket sync interval`` and
+``rgw user quota sync interval``.  The higher these values are, the more
+efficient quota operations are, but the more out-of-sync multiple instances
+will be.  The lower these values are, the closer to perfect enforcement
+multiple instances will achieve.  If all three are 0, then quota caching is
+effectively disabled, and multiple instances will have perfect quota
+enforcement.  See `Ceph Object Gateway Config Reference`_
 
 Reading / Writing Global Quotas
 -------------------------------
 
-You can read and write quota settings in a region map. To get a
-region map, execute the following. :: 
+You can read and write global quota settings in the period configuration. To
+view the global quota settings::
 
-	radosgw-admin regionmap get > regionmap.json
+	radosgw-admin global quota get
 
-To set quota settings for the entire region, simply modify the 
-quota settings in the region map. Then, use ``region set`` to 
-update the region map. ::
+The global quota settings can be manipulated with the ``global quota``
+counterparts of the ``quota set``, ``quota enable``, and ``quota disable``
+commands. ::
 
-	radosgw-admin region set < regionmap.json
+	radosgw-admin global quota set --quota-scope bucket --max-objects 1024
+	radosgw-admin global quota enable --quota-scope bucket
 
-.. note:: After updating the region map, you must restart the gateway.
+.. note:: In a multisite configuration, where there is a realm and period
+   present, changes to the global quotas must be committed using ``period
+   update --commit``. If there is no period present, the rados gateway(s) must
+   be restarted for the changes to take effect.
 
 
 Usage
@@ -423,6 +478,8 @@ Usage
 
 The Ceph Object Gateway logs usage for each user. You can track
 user usage within date ranges too.
+
+- Add ``rgw enable usage log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service. 
 
 Options include: 
 
@@ -468,3 +525,4 @@ ranges for trim operations. ::
 
 .. _radosgw-admin: ../../man/8/radosgw-admin/
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
+.. _Ceph Object Gateway Config Reference: ../config-ref/

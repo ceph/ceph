@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Replacing daemon mds
+
+tasks:
+- mds_thrash:

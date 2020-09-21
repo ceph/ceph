@@ -15,21 +15,29 @@
 #include <sstream>
 #include "Paxos.h"
 #include "Monitor.h"
-#include "MonitorDBStore.h"
-
 #include "messages/MMonPaxos.h"
 
+#include "mon/mon_types.h"
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
-#include "common/Formatter.h"
+#include "common/Timer.h"
+#include "messages/PaxosServiceMessage.h"
+
+using std::string;
+using std::unique_lock;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::to_timespan;
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mon->name, mon->rank, paxos_name, state, first_committed, last_committed)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
-		        int rank, const string& paxos_name, int state,
-			version_t first_committed, version_t last_committed)
+static std::ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
+			     int rank, const string& paxos_name, int state,
+			     version_t first_committed, version_t last_committed)
 {
   return *_dout << "mon." << name << "@" << rank
 		<< "(" << mon->get_state_name() << ")"
@@ -37,6 +45,15 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< " c " << first_committed << ".." << last_committed
 		<< ") ";
 }
+
+class Paxos::C_Trimmed : public Context {
+  Paxos *paxos;
+public:
+  explicit C_Trimmed(Paxos *p) : paxos(p) { }
+  void finish(int r) override {
+    paxos->trimming = false;
+  }
+};
 
 MonitorDBStore *Paxos::get_store()
 {
@@ -51,8 +68,8 @@ void Paxos::read_and_prepare_transactions(MonitorDBStore::TransactionRef tx,
     dout(30) << __func__ << " apply version " << v << dendl;
     bufferlist bl;
     int err = get_store()->get(get_name(), v, bl);
-    assert(err == 0);
-    assert(bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(bl.length());
     decode_append_transaction(tx, bl);
   }
   dout(15) << __func__ << " total versions " << (last-first) << dendl;
@@ -71,12 +88,17 @@ void Paxos::init()
 	   << " first_committed: " << first_committed << dendl;
 
   dout(10) << "init" << dendl;
-  assert(is_consistent());
+  ceph_assert(is_consistent());
 }
 
 void Paxos::init_logger()
 {
   PerfCountersBuilder pcb(g_ceph_context, "paxos", l_paxos_first, l_paxos_last);
+
+  // Because monitors are so few in number, the resource cost of capturing
+  // almost all their perf counters at USEFUL is trivial.
+  pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
   pcb.add_u64_counter(l_paxos_start_leader, "start_leader", "Starts in leader role");
   pcb.add_u64_counter(l_paxos_start_peon, "start_peon", "Starts in peon role");
   pcb.add_u64_counter(l_paxos_restart, "restart", "Restarts");
@@ -84,17 +106,17 @@ void Paxos::init_logger()
   pcb.add_time_avg(l_paxos_refresh_latency, "refresh_latency", "Refresh latency");
   pcb.add_u64_counter(l_paxos_begin, "begin", "Started and handled begins");
   pcb.add_u64_avg(l_paxos_begin_keys, "begin_keys", "Keys in transaction on begin");
-  pcb.add_u64_avg(l_paxos_begin_bytes, "begin_bytes", "Data in transaction on begin");
+  pcb.add_u64_avg(l_paxos_begin_bytes, "begin_bytes", "Data in transaction on begin", NULL, 0, unit_t(UNIT_BYTES));
   pcb.add_time_avg(l_paxos_begin_latency, "begin_latency", "Latency of begin operation");
   pcb.add_u64_counter(l_paxos_commit, "commit",
       "Commits", "cmt");
   pcb.add_u64_avg(l_paxos_commit_keys, "commit_keys", "Keys in transaction on commit");
-  pcb.add_u64_avg(l_paxos_commit_bytes, "commit_bytes", "Data in transaction on commit");
+  pcb.add_u64_avg(l_paxos_commit_bytes, "commit_bytes", "Data in transaction on commit", NULL, 0, unit_t(UNIT_BYTES));
   pcb.add_time_avg(l_paxos_commit_latency, "commit_latency",
       "Commit latency", "clat");
   pcb.add_u64_counter(l_paxos_collect, "collect", "Peon collects");
   pcb.add_u64_avg(l_paxos_collect_keys, "collect_keys", "Keys in transaction on peon collect");
-  pcb.add_u64_avg(l_paxos_collect_bytes, "collect_bytes", "Data in transaction on peon collect");
+  pcb.add_u64_avg(l_paxos_collect_bytes, "collect_bytes", "Data in transaction on peon collect", NULL, 0, unit_t(UNIT_BYTES));
   pcb.add_time_avg(l_paxos_collect_latency, "collect_latency", "Peon collect latency");
   pcb.add_u64_counter(l_paxos_collect_uncommitted, "collect_uncommitted", "Uncommitted values in started and handled collects");
   pcb.add_u64_counter(l_paxos_collect_timeout, "collect_timeout", "Collect timeouts");
@@ -103,11 +125,11 @@ void Paxos::init_logger()
   pcb.add_u64_counter(l_paxos_lease_timeout, "lease_timeout", "Lease timeouts");
   pcb.add_u64_counter(l_paxos_store_state, "store_state", "Store a shared state on disk");
   pcb.add_u64_avg(l_paxos_store_state_keys, "store_state_keys", "Keys in transaction in stored state");
-  pcb.add_u64_avg(l_paxos_store_state_bytes, "store_state_bytes", "Data in transaction in stored state");
+  pcb.add_u64_avg(l_paxos_store_state_bytes, "store_state_bytes", "Data in transaction in stored state", NULL, 0, unit_t(UNIT_BYTES));
   pcb.add_time_avg(l_paxos_store_state_latency, "store_state_latency", "Storing state latency");
   pcb.add_u64_counter(l_paxos_share_state, "share_state", "Sharings of state");
   pcb.add_u64_avg(l_paxos_share_state_keys, "share_state_keys", "Keys in shared state");
-  pcb.add_u64_avg(l_paxos_share_state_bytes, "share_state_bytes", "Data in shared state");
+  pcb.add_u64_avg(l_paxos_share_state_bytes, "share_state_bytes", "Data in shared state", NULL, 0, unit_t(UNIT_BYTES));
   pcb.add_u64_counter(l_paxos_new_pn, "new_pn", "New proposal number queries");
   pcb.add_time_avg(l_paxos_new_pn_latency, "new_pn_latency", "New proposal number getting latency");
   logger = pcb.create_perf_counters();
@@ -133,7 +155,7 @@ void Paxos::collect(version_t oldpn)
 {
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
-  assert(mon->is_leader());
+  ceph_assert(mon->is_leader());
 
   // reset the number of lasts received
   uncommitted_v = 0;
@@ -156,7 +178,7 @@ void Paxos::collect(version_t oldpn)
     uncommitted_v = last_committed+1;
 
     get_store()->get(get_name(), last_committed+1, uncommitted_value);
-    assert(uncommitted_value.length());
+    ceph_assert(uncommitted_value.length());
     dout(10) << "learned uncommitted " << (last_committed+1)
 	     << " pn " << uncommitted_pn
 	     << " (" << uncommitted_value.length() << " bytes) from myself" 
@@ -166,46 +188,56 @@ void Paxos::collect(version_t oldpn)
   }
 
   // pick new pn
-  accepted_pn = get_new_proposal_number(MAX(accepted_pn, oldpn));
+  accepted_pn = get_new_proposal_number(std::max(accepted_pn, oldpn));
   accepted_pn_from = last_committed;
   num_last = 1;
   dout(10) << "collect with pn " << accepted_pn << dendl;
 
   // send collect
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
     if (*p == mon->rank) continue;
-    
+
     MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT,
-				       ceph_clock_now(g_ceph_context));
+				       ceph_clock_now());
     collect->last_committed = last_committed;
     collect->first_committed = first_committed;
     collect->pn = accepted_pn;
-    mon->messenger->send_message(collect, mon->monmap->get_inst(*p));
+    mon->send_mon_message(collect, *p);
   }
 
   // set timeout event
-  collect_timeout_event = new C_CollectTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_accept_timeout, collect_timeout_event);
+  collect_timeout_event = mon->timer.add_event_after(
+    g_conf()->mon_accept_timeout_factor *
+    g_conf()->mon_lease,
+    new C_MonContext{mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	collect_timeout();
+    }});
 }
 
 
 // peon
 void Paxos::handle_collect(MonOpRequestRef op)
 {
+  
   op->mark_paxos_event("handle_collect");
 
-  MMonPaxos *collect = static_cast<MMonPaxos*>(op->get_req());
+  auto collect = op->get_req<MMonPaxos>();
   dout(10) << "handle_collect " << *collect << dendl;
 
-  assert(mon->is_peon()); // mon epoch filter should catch strays
+  ceph_assert(mon->is_peon()); // mon epoch filter should catch strays
 
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
 
+  //update the peon recovery timeout 
+  reset_lease_timeout();
+
   if (collect->first_committed > last_committed+1) {
-    dout(5) << __func__
+    dout(2) << __func__
             << " leader's lowest version is too high for our last committed"
             << " (theirs: " << collect->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
@@ -216,7 +248,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
 
   // reply
   MMonPaxos *last = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LAST,
-				  ceph_clock_now(g_ceph_context));
+				  ceph_clock_now());
   last->last_committed = last_committed;
   last->first_committed = first_committed;
   
@@ -230,7 +262,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
     dout(10) << "accepting pn " << accepted_pn << " from " 
 	     << accepted_pn_from << dendl;
   
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->put(get_name(), "accepted_pn", accepted_pn);
 
     dout(30) << __func__ << " transaction dump:\n";
@@ -242,12 +274,12 @@ void Paxos::handle_collect(MonOpRequestRef op)
     logger->inc(l_paxos_collect);
     logger->inc(l_paxos_collect_keys, t->get_keys());
     logger->inc(l_paxos_collect_bytes, t->get_bytes());
-    utime_t start = ceph_clock_now(NULL);
 
+    auto start = ceph::coarse_mono_clock::now();
     get_store()->apply_transaction(t);
+    auto end = ceph::coarse_mono_clock::now();
 
-    utime_t end = ceph_clock_now(NULL);
-    logger->tinc(l_paxos_collect_latency, end - start);
+    logger->tinc(l_paxos_collect_latency, to_timespan(end - start));
   } else {
     // don't accept!
     dout(10) << "NOT accepting pn " << collect->pn << " from " << collect->pn_from
@@ -267,7 +299,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
   if (collect->last_committed <= last_committed &&
       get_store()->exists(get_name(), last_committed+1)) {
     get_store()->get(get_name(), last_committed+1, bl);
-    assert(bl.length() > 0);
+    ceph_assert(bl.length() > 0);
     dout(10) << " sharing our accepted but uncommitted value for " 
 	     << last_committed+1 << " (" << bl.length() << " bytes)" << dendl;
     last->values[last_committed+1] = bl;
@@ -306,7 +338,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
 void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
 			version_t peer_last_committed)
 {
-  assert(peer_last_committed < last_committed);
+  ceph_assert(peer_last_committed < last_committed);
 
   dout(10) << "share_state peer has fc " << peer_first_committed 
 	   << " lc " << peer_last_committed << dendl;
@@ -317,7 +349,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
   for ( ; v <= last_committed; v++) {
     if (get_store()->exists(get_name(), v)) {
       get_store()->get(get_name(), v, m->values[v]);
-      assert(m->values[v].length());
+      ceph_assert(m->values[v].length());
       dout(10) << " sharing " << v << " ("
 	       << m->values[v].length() << " bytes)" << dendl;
       bytes += m->values[v].length() + 16;  // paxos_ + 10 digits = 16
@@ -344,8 +376,8 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
  */
 bool Paxos::store_state(MMonPaxos *m)
 {
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  map<version_t,bufferlist>::iterator start = m->values.begin();
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto start = m->values.begin();
   bool changed = false;
 
   // build map of values to store
@@ -355,7 +387,7 @@ bool Paxos::store_state(MMonPaxos *m)
     // ignore everything if values start in the future.
     dout(10) << "store_state ignoring all values, they start at " << start->first
 	     << " > last_committed+1" << dendl;
-    start = m->values.end();
+    return false;
   }
 
   // push forward the start position on the message's values iterator, up until
@@ -366,7 +398,7 @@ bool Paxos::store_state(MMonPaxos *m)
 
   // make sure we get the right interval of values to apply by pushing forward
   // the 'end' iterator until it matches the message's 'last_committed'.
-  map<version_t,bufferlist>::iterator end = start;
+  auto end = start;
   while (end != m->values.end() && end->first <= m->last_committed) {
     last_committed = end->first;
     ++end;
@@ -381,8 +413,7 @@ bool Paxos::store_state(MMonPaxos *m)
 
     // we should apply the state here -- decode every single bufferlist in the
     // map and append the transactions to 't'.
-    map<version_t,bufferlist>::iterator it;
-    for (it = start; it != end; ++it) {
+    for (auto it = start; it != end; ++it) {
       // write the bufferlist as the version's value
       t->put(get_name(), it->first, it->second);
       // decode the bufferlist and append it to the transaction we will shortly
@@ -409,12 +440,12 @@ bool Paxos::store_state(MMonPaxos *m)
     logger->inc(l_paxos_store_state);
     logger->inc(l_paxos_store_state_bytes, t->get_bytes());
     logger->inc(l_paxos_store_state_keys, t->get_keys());
-    utime_t start = ceph_clock_now(NULL);
 
+    auto start = ceph::coarse_mono_clock::now();
     get_store()->apply_transaction(t);
+    auto end = ceph::coarse_mono_clock::now();
 
-    utime_t end = ceph_clock_now(NULL);
-    logger->tinc(l_paxos_store_state_latency, end - start);
+    logger->tinc(l_paxos_store_state_latency, to_timespan(end-start));
 
     // refresh first_committed; this txn may have trimmed.
     first_committed = get_store()->get(get_name(), "first_committed");
@@ -423,30 +454,13 @@ bool Paxos::store_state(MMonPaxos *m)
     changed = true;
   }
 
-  remove_legacy_versions();
-
   return changed;
-}
-
-void Paxos::remove_legacy_versions()
-{
-  if (get_store()->exists(get_name(), "conversion_first")) {
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-    version_t v = get_store()->get(get_name(), "conversion_first");
-    dout(10) << __func__ << " removing pre-conversion paxos states from " << v
-	     << " until " << first_committed << dendl;
-    for (; v < first_committed; ++v) {
-      t->erase(get_name(), v);
-    }
-    t->erase(get_name(), "conversion_first");
-    get_store()->apply_transaction(t);
-  }
 }
 
 void Paxos::_sanity_check_store()
 {
   version_t lc = get_store()->get(get_name(), "last_committed");
-  assert(lc == last_committed);
+  ceph_assert(lc == last_committed);
 }
 
 
@@ -454,7 +468,7 @@ void Paxos::_sanity_check_store()
 void Paxos::handle_last(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_last");
-  MMonPaxos *last = static_cast<MMonPaxos*>(op->get_req());
+  auto last = op->get_req<MMonPaxos>();
   bool need_refresh = false;
   int from = last->get_source().num();
 
@@ -481,15 +495,15 @@ void Paxos::handle_last(MonOpRequestRef op)
     return;
   }
 
-  assert(g_conf->paxos_kill_at != 1);
+  ceph_assert(g_conf()->paxos_kill_at != 1);
 
   // store any committed values if any are specified in the message
   need_refresh = store_state(last);
 
-  assert(g_conf->paxos_kill_at != 2);
+  ceph_assert(g_conf()->paxos_kill_at != 2);
 
   // is everyone contiguous and up to date?
-  for (map<int,version_t>::iterator p = peer_last_committed.begin();
+  for (auto p = peer_last_committed.begin();
        p != peer_last_committed.end();
        ++p) {
     if (p->second + 1 < first_committed && first_committed > 1) {
@@ -507,9 +521,9 @@ void Paxos::handle_last(MonOpRequestRef op)
       dout(10) << " sending commit to mon." << p->first << dendl;
       MMonPaxos *commit = new MMonPaxos(mon->get_epoch(),
 					MMonPaxos::OP_COMMIT,
-					ceph_clock_now(g_ceph_context));
+					ceph_clock_now());
       share_state(commit, peer_first_committed[p->first], p->second);
-      mon->messenger->send_message(commit, mon->monmap->get_inst(p->first));
+      mon->send_mon_message(commit, p->first);
     }
   }
 
@@ -590,7 +604,7 @@ void Paxos::collect_timeout()
   dout(1) << "collect timeout, calling fresh election" << dendl;
   collect_timeout_event = 0;
   logger->inc(l_paxos_collect_timeout);
-  assert(mon->is_leader());
+  ceph_assert(mon->is_leader());
   mon->bootstrap();
 }
 
@@ -602,15 +616,15 @@ void Paxos::begin(bufferlist& v)
 	   << v.length() << " bytes"
 	   << dendl;
 
-  assert(mon->is_leader());
-  assert(is_updating() || is_updating_previous());
+  ceph_assert(mon->is_leader());
+  ceph_assert(is_updating() || is_updating_previous());
 
   // we must already have a majority for this to work.
-  assert(mon->get_quorum().size() == 1 ||
+  ceph_assert(mon->get_quorum().size() == 1 ||
 	 num_last > (unsigned)mon->monmap->size()/2);
   
   // and no value, yet.
-  assert(new_value.length() == 0);
+  ceph_assert(new_value.length() == 0);
 
   // accept it ourselves
   accepted.clear();
@@ -618,7 +632,7 @@ void Paxos::begin(bufferlist& v)
   new_value = v;
 
   if (last_committed == 0) {
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     // initial base case; set first_committed too
     t->put(get_name(), "first_committed", 1);
     decode_append_transaction(t, new_value);
@@ -631,7 +645,7 @@ void Paxos::begin(bufferlist& v)
 
   // store the proposed value in the store. IF it is accepted, we will then
   // have to decode it into a transaction and apply it.
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(get_name(), last_committed+1, new_value);
 
   // note which pn this pending value is for.
@@ -642,8 +656,8 @@ void Paxos::begin(bufferlist& v)
   JSONFormatter f(true);
   t->dump(&f);
   f.flush(*_dout);
-  MonitorDBStore::TransactionRef debug_tx(new MonitorDBStore::Transaction);
-  bufferlist::iterator new_value_it = new_value.begin();
+  auto debug_tx(std::make_shared<MonitorDBStore::Transaction>());
+  auto new_value_it = new_value.cbegin();
   debug_tx->decode(new_value_it);
   debug_tx->dump(&f);
   *_dout << "\nbl dump:\n";
@@ -653,14 +667,14 @@ void Paxos::begin(bufferlist& v)
   logger->inc(l_paxos_begin);
   logger->inc(l_paxos_begin_keys, t->get_keys());
   logger->inc(l_paxos_begin_bytes, t->get_bytes());
-  utime_t start = ceph_clock_now(NULL);
 
+  auto start = ceph::coarse_mono_clock::now();
   get_store()->apply_transaction(t);
+  auto end = ceph::coarse_mono_clock::now();
 
-  utime_t end = ceph_clock_now(NULL);
-  logger->tinc(l_paxos_begin_latency, end - start);
+  logger->tinc(l_paxos_begin_latency, to_timespan(end - start));
 
-  assert(g_conf->paxos_kill_at != 3);
+  ceph_assert(g_conf()->paxos_kill_at != 3);
 
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
@@ -669,31 +683,36 @@ void Paxos::begin(bufferlist& v)
   }
 
   // ask others to accept it too!
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
     if (*p == mon->rank) continue;
     
     dout(10) << " sending begin to mon." << *p << dendl;
     MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN,
-				     ceph_clock_now(g_ceph_context));
+				     ceph_clock_now());
     begin->values[last_committed+1] = new_value;
     begin->last_committed = last_committed;
     begin->pn = accepted_pn;
     
-    mon->messenger->send_message(begin, mon->monmap->get_inst(*p));
+    mon->send_mon_message(begin, *p);
   }
 
   // set timeout event
-  accept_timeout_event = new C_AcceptTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_accept_timeout, accept_timeout_event);
+  accept_timeout_event = mon->timer.add_event_after(
+    g_conf()->mon_accept_timeout_factor * g_conf()->mon_lease,
+    new C_MonContext{mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	accept_timeout();
+      }});
 }
 
 // peon
 void Paxos::handle_begin(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_begin");
-  MMonPaxos *begin = static_cast<MMonPaxos*>(op->get_req());
+  auto begin = op->get_req<MMonPaxos>();
   dout(10) << "handle_begin " << *begin << dendl;
 
   // can we accept this?
@@ -702,23 +721,23 @@ void Paxos::handle_begin(MonOpRequestRef op)
     op->mark_paxos_event("have higher pn, ignore");
     return;
   }
-  assert(begin->pn == accepted_pn);
-  assert(begin->last_committed == last_committed);
+  ceph_assert(begin->pn == accepted_pn);
+  ceph_assert(begin->last_committed == last_committed);
   
-  assert(g_conf->paxos_kill_at != 4);
+  ceph_assert(g_conf()->paxos_kill_at != 4);
 
   logger->inc(l_paxos_begin);
 
   // set state.
   state = STATE_UPDATING;
-  lease_expire = utime_t();  // cancel lease
+  lease_expire = {};  // cancel lease
 
   // yes.
   version_t v = last_committed+1;
   dout(10) << "accepting value for " << v << " pn " << accepted_pn << dendl;
   // store the accepted value onto our store. We will have to decode it and
   // apply its transaction once we receive permission to commit.
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(get_name(), v, begin->values[v]);
 
   // note which pn this pending value is for.
@@ -732,18 +751,18 @@ void Paxos::handle_begin(MonOpRequestRef op)
   *_dout << dendl;
 
   logger->inc(l_paxos_begin_bytes, t->get_bytes());
-  utime_t start = ceph_clock_now(NULL);
 
+  auto start = ceph::coarse_mono_clock::now();
   get_store()->apply_transaction(t);
+  auto end = ceph::coarse_mono_clock::now();
 
-  utime_t end = ceph_clock_now(NULL);
-  logger->tinc(l_paxos_begin_latency, end - start);
+  logger->tinc(l_paxos_begin_latency, to_timespan(end - start));
 
-  assert(g_conf->paxos_kill_at != 5);
+  ceph_assert(g_conf()->paxos_kill_at != 5);
 
   // reply
   MMonPaxos *accept = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_ACCEPT,
-				    ceph_clock_now(g_ceph_context));
+				    ceph_clock_now());
   accept->pn = accepted_pn;
   accept->last_committed = last_committed;
   begin->get_connection()->send_message(accept);
@@ -753,7 +772,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
 void Paxos::handle_accept(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_accept");
-  MMonPaxos *accept = static_cast<MMonPaxos*>(op->get_req());
+  auto accept = op->get_req<MMonPaxos>();
   dout(10) << "handle_accept " << *accept << dendl;
   int from = accept->get_source().num();
 
@@ -769,15 +788,15 @@ void Paxos::handle_accept(MonOpRequestRef op)
     op->mark_paxos_event("old round, ignore");
     return;
   }
-  assert(accept->last_committed == last_committed ||   // not committed
+  ceph_assert(accept->last_committed == last_committed ||   // not committed
 	 accept->last_committed == last_committed-1);  // committed
 
-  assert(is_updating() || is_updating_previous());
-  assert(accepted.count(from) == 0);
+  ceph_assert(is_updating() || is_updating_previous());
+  ceph_assert(accepted.count(from) == 0);
   accepted.insert(from);
   dout(10) << " now " << accepted << " have accepted" << dendl;
 
-  assert(g_conf->paxos_kill_at != 6);
+  ceph_assert(g_conf()->paxos_kill_at != 6);
 
   // only commit (and expose committed state) when we get *all* quorum
   // members to accept.  otherwise, they may still be sharing the now
@@ -796,8 +815,8 @@ void Paxos::accept_timeout()
 {
   dout(1) << "accept timeout, calling fresh election" << dendl;
   accept_timeout_event = 0;
-  assert(mon->is_leader());
-  assert(is_updating() || is_updating_previous() || is_writing() ||
+  ceph_assert(mon->is_leader());
+  ceph_assert(is_updating() || is_updating_previous() || is_writing() ||
 	 is_writing_previous());
   logger->inc(l_paxos_accept_timeout);
   mon->bootstrap();
@@ -805,21 +824,33 @@ void Paxos::accept_timeout()
 
 struct C_Committed : public Context {
   Paxos *paxos;
-  C_Committed(Paxos *p) : paxos(p) {}
-  void finish(int r) {
-    assert(r >= 0);
-    Mutex::Locker l(paxos->mon->lock);
+  explicit C_Committed(Paxos *p) : paxos(p) {}
+  void finish(int r) override {
+    ceph_assert(r >= 0);
+    std::lock_guard l(paxos->mon->lock);
+    if (paxos->is_shutdown()) {
+      paxos->abort_commit();
+      return;
+    }
     paxos->commit_finish();
   }
 };
+
+void Paxos::abort_commit()
+{
+  ceph_assert(commits_started > 0);
+  --commits_started;
+  if (commits_started == 0)
+    shutdown_cond.notify_all();
+}
 
 void Paxos::commit_start()
 {
   dout(10) << __func__ << " " << (last_committed+1) << dendl;
 
-  assert(g_conf->paxos_kill_at != 7);
+  ceph_assert(g_conf()->paxos_kill_at != 7);
 
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
 
   // commit locally
   t->put(get_name(), "last_committed", last_committed + 1);
@@ -837,7 +868,7 @@ void Paxos::commit_start()
   logger->inc(l_paxos_commit);
   logger->inc(l_paxos_commit_keys, t->get_keys());
   logger->inc(l_paxos_commit_bytes, t->get_bytes());
-  commit_start_stamp = ceph_clock_now(NULL);
+  commit_start_stamp = ceph_clock_now();
 
   get_store()->queue_transaction(t, new C_Committed(this));
 
@@ -846,7 +877,8 @@ void Paxos::commit_start()
   else if (is_updating())
     state = STATE_WRITING;
   else
-    assert(0);
+    ceph_abort();
+  ++commits_started;
 
   if (mon->get_quorum().size() > 1) {
     // cancel timeout event
@@ -858,18 +890,18 @@ void Paxos::commit_start()
 void Paxos::commit_finish()
 {
   dout(20) << __func__ << " " << (last_committed+1) << dendl;
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   logger->tinc(l_paxos_commit_latency, end - commit_start_stamp);
 
-  assert(g_conf->paxos_kill_at != 8);
+  ceph_assert(g_conf()->paxos_kill_at != 8);
 
   // cancel lease - it was for the old value.
   //  (this would only happen if message layer lost the 'begin', but
   //   leader still got a majority and committed with out us.)
-  lease_expire = utime_t();  // cancel lease
+  lease_expire = {};  // cancel lease
 
   last_committed++;
-  last_commit_time = ceph_clock_now(NULL);
+  last_commit_time = ceph_clock_now();
 
   // refresh first_committed; this txn may have trimmed.
   first_committed = get_store()->get(get_name(), "first_committed");
@@ -877,33 +909,34 @@ void Paxos::commit_finish()
   _sanity_check_store();
 
   // tell everyone
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
     if (*p == mon->rank) continue;
 
     dout(10) << " sending commit to mon." << *p << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT,
-				      ceph_clock_now(g_ceph_context));
+				      ceph_clock_now());
     commit->values[last_committed] = new_value;
     commit->pn = accepted_pn;
     commit->last_committed = last_committed;
 
-    mon->messenger->send_message(commit, mon->monmap->get_inst(*p));
+    mon->send_mon_message(commit, *p);
   }
 
-  assert(g_conf->paxos_kill_at != 9);
+  ceph_assert(g_conf()->paxos_kill_at != 9);
 
   // get ready for a new round.
   new_value.clear();
 
-  remove_legacy_versions();
-
   // WRITING -> REFRESH
-  // among other things, this lets do_refresh() -> mon->bootstrap() know
-  // it doesn't need to flush the store queue
-  assert(is_writing() || is_writing_previous());
+  // among other things, this lets do_refresh() -> mon->bootstrap() ->
+  // wait_for_paxos_write() know that it doesn't need to flush the store
+  // queue. and it should not, as we are in the async completion thread now!
+  ceph_assert(is_writing() || is_writing_previous());
   state = STATE_REFRESH;
+  ceph_assert(commits_started > 0);
+  --commits_started;
 
   if (do_refresh()) {
     commit_proposal();
@@ -911,9 +944,7 @@ void Paxos::commit_finish()
       extend_lease();
     }
 
-    finish_contexts(g_ceph_context, waiting_for_commit);
-
-    assert(g_conf->paxos_kill_at != 10);
+    ceph_assert(g_conf()->paxos_kill_at != 10);
 
     finish_round();
   }
@@ -923,79 +954,86 @@ void Paxos::commit_finish()
 void Paxos::handle_commit(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_commit");
-  MMonPaxos *commit = static_cast<MMonPaxos*>(op->get_req());
+  auto commit = op->get_req<MMonPaxos>();
   dout(10) << "handle_commit on " << commit->last_committed << dendl;
 
   logger->inc(l_paxos_commit);
 
   if (!mon->is_peon()) {
     dout(10) << "not a peon, dropping" << dendl;
-    assert(0);
+    ceph_abort();
     return;
   }
 
   op->mark_paxos_event("store_state");
   store_state(commit);
 
-  if (do_refresh()) {
-    finish_contexts(g_ceph_context, waiting_for_commit);
-  }
+  (void)do_refresh();
 }
 
 void Paxos::extend_lease()
 {
-  assert(mon->is_leader());
+  ceph_assert(mon->is_leader());
   //assert(is_active());
 
-  lease_expire = ceph_clock_now(g_ceph_context);
-  lease_expire += g_conf->mon_lease;
+  lease_expire = ceph::real_clock::now();
+  lease_expire += ceph::make_timespan(g_conf()->mon_lease);
   acked_lease.clear();
   acked_lease.insert(mon->rank);
 
-  dout(7) << "extend_lease now+" << g_conf->mon_lease 
+  dout(7) << "extend_lease now+" << g_conf()->mon_lease
 	  << " (" << lease_expire << ")" << dendl;
 
   // bcast
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
       p != mon->get_quorum().end(); ++p) {
 
     if (*p == mon->rank) continue;
     MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE,
-				     ceph_clock_now(g_ceph_context));
+				     ceph_clock_now());
     lease->last_committed = last_committed;
-    lease->lease_timestamp = lease_expire;
+    lease->lease_timestamp = utime_t{lease_expire};
     lease->first_committed = first_committed;
-    mon->messenger->send_message(lease, mon->monmap->get_inst(*p));
+    mon->send_mon_message(lease, *p);
   }
 
   // set timeout event.
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
-    lease_ack_timeout_event = new C_LeaseAckTimeout(this);
-    mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, 
-			       lease_ack_timeout_event);
+    lease_ack_timeout_event = mon->timer.add_event_after(
+      g_conf()->mon_lease_ack_timeout_factor * g_conf()->mon_lease,
+      new C_MonContext{mon, [this](int r) {
+	  if (r == -ECANCELED)
+	    return;
+	  lease_ack_timeout();
+	}});
   }
 
   // set renew event
-  lease_renew_event = new C_LeaseRenew(this);
-  utime_t at = lease_expire;
-  at -= g_conf->mon_lease;
-  at += g_conf->mon_lease_renew_interval;
-  mon->timer.add_event_at(at, lease_renew_event);
+  auto at = lease_expire;
+  at -= ceph::make_timespan(g_conf()->mon_lease);
+  at += ceph::make_timespan(g_conf()->mon_lease_renew_interval_factor *
+			    g_conf()->mon_lease);
+  lease_renew_event = mon->timer.add_event_at(
+    at, new C_MonContext{mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	lease_renew_timeout();
+    }});
 }
 
 void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 {
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   if (t > now) {
     utime_t diff = t - now;
-    if (diff > g_conf->mon_clock_drift_allowed) {
+    if (diff > g_conf()->mon_clock_drift_allowed) {
       utime_t warn_diff = now - last_clock_drift_warn;
       if (warn_diff >
-	  pow(g_conf->mon_clock_drift_warn_backoff, clock_drift_warned)) {
+	  pow(g_conf()->mon_clock_drift_warn_backoff, clock_drift_warned)) {
 	mon->clog->warn() << "message from " << from << " was stamped " << diff
 			 << "s in the future, clocks not synchronized";
-	last_clock_drift_warn = ceph_clock_now(g_ceph_context);
+	last_clock_drift_warn = ceph_clock_now();
 	++clock_drift_warned;
       }
     }
@@ -1007,14 +1045,13 @@ bool Paxos::do_refresh()
 {
   bool need_bootstrap = false;
 
-  utime_t start = ceph_clock_now(NULL);
-
   // make sure we have the latest state loaded up
+  auto start = ceph::coarse_mono_clock::now();
   mon->refresh_from_paxos(&need_bootstrap);
+  auto end = ceph::coarse_mono_clock::now();
 
-  utime_t end = ceph_clock_now(NULL);
   logger->inc(l_paxos_refresh);
-  logger->tinc(l_paxos_refresh_latency, end - start);
+  logger->tinc(l_paxos_refresh_latency, to_timespan(end - start));
 
   if (need_bootstrap) {
     dout(10) << " doing requested bootstrap" << dendl;
@@ -1028,18 +1065,16 @@ bool Paxos::do_refresh()
 void Paxos::commit_proposal()
 {
   dout(10) << __func__ << dendl;
-  assert(mon->is_leader());
-  assert(is_refresh());
+  ceph_assert(mon->is_leader());
+  ceph_assert(is_refresh());
 
-  list<Context*> ls;
-  ls.swap(committing_finishers);
-  finish_contexts(g_ceph_context, ls);
+  finish_contexts(g_ceph_context, committing_finishers);
 }
 
 void Paxos::finish_round()
 {
   dout(10) << __func__ << dendl;
-  assert(mon->is_leader());
+  ceph_assert(mon->is_leader());
 
   // ok, now go active!
   state = STATE_ACTIVE;
@@ -1051,7 +1086,7 @@ void Paxos::finish_round()
   dout(20) << __func__ << " waiting_for_writeable" << dendl;
   finish_contexts(g_ceph_context, waiting_for_writeable);
   
-  dout(10) << __func__ << " done w/ waiters, state " << state << dendl;
+  dout(10) << __func__ << " done w/ waiters, state " << get_statename(state) << dendl;
 
   if (should_trim()) {
     trim();
@@ -1067,7 +1102,7 @@ void Paxos::finish_round()
 void Paxos::handle_lease(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_lease");
-  MMonPaxos *lease = static_cast<MMonPaxos*>(op->get_req());
+  auto lease = op->get_req<MMonPaxos>();
   // sanity
   if (!mon->is_peon() ||
       last_committed != lease->last_committed) {
@@ -1080,12 +1115,13 @@ void Paxos::handle_lease(MonOpRequestRef op)
   warn_on_future_time(lease->sent_timestamp, lease->get_source());
 
   // extend lease
-  if (lease_expire < lease->lease_timestamp) {
-    lease_expire = lease->lease_timestamp;
+  if (auto new_expire = lease->lease_timestamp.to_real_time();
+      lease_expire < new_expire) {
+    lease_expire = new_expire;
 
-    utime_t now = ceph_clock_now(g_ceph_context);
+    auto now = ceph::real_clock::now();
     if (lease_expire < now) {
-      utime_t diff = now - lease_expire;
+      auto diff = now - lease_expire;
       derr << "lease_expire from " << lease->get_source_inst() << " is " << diff << " seconds in the past; mons are probably laggy (or possibly clocks are too skewed)" << dendl;
     }
   }
@@ -1097,10 +1133,11 @@ void Paxos::handle_lease(MonOpRequestRef op)
 
   // ack
   MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK,
-				 ceph_clock_now(g_ceph_context));
+				 ceph_clock_now());
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
-  ack->lease_timestamp = ceph_clock_now(g_ceph_context);
+  ack->lease_timestamp = ceph_clock_now();
+  encode(mon->session_map.feature_map, ack->feature_map);
   lease->get_connection()->send_message(ack);
 
   // (re)set timeout event.
@@ -1115,32 +1152,36 @@ void Paxos::handle_lease(MonOpRequestRef op)
 void Paxos::handle_lease_ack(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_lease_ack");
-  MMonPaxos *ack = static_cast<MMonPaxos*>(op->get_req());
+  auto ack = op->get_req<MMonPaxos>();
   int from = ack->get_source().num();
 
   if (!lease_ack_timeout_event) {
-    dout(10) << "handle_lease_ack from " << ack->get_source() 
+    dout(10) << "handle_lease_ack from " << ack->get_source()
 	     << " -- stray (probably since revoked)" << dendl;
-  }
-  else if (acked_lease.count(from) == 0) {
+
+  } else if (acked_lease.count(from) == 0) {
     acked_lease.insert(from);
-    
+    if (ack->feature_map.length()) {
+      auto p = ack->feature_map.cbegin();
+      FeatureMap& t = mon->quorum_feature_map[from];
+      decode(t, p);
+    }
     if (acked_lease == mon->get_quorum()) {
       // yay!
-      dout(10) << "handle_lease_ack from " << ack->get_source() 
+      dout(10) << "handle_lease_ack from " << ack->get_source()
 	       << " -- got everyone" << dendl;
       mon->timer.cancel_event(lease_ack_timeout_event);
       lease_ack_timeout_event = 0;
 
 
     } else {
-      dout(10) << "handle_lease_ack from " << ack->get_source() 
+      dout(10) << "handle_lease_ack from " << ack->get_source()
 	       << " -- still need "
 	       << mon->get_quorum().size() - acked_lease.size()
 	       << " more" << dendl;
     }
   } else {
-    dout(10) << "handle_lease_ack from " << ack->get_source() 
+    dout(10) << "handle_lease_ack from " << ack->get_source()
 	     << " dup (lagging!), ignoring" << dendl;
   }
 
@@ -1150,8 +1191,8 @@ void Paxos::handle_lease_ack(MonOpRequestRef op)
 void Paxos::lease_ack_timeout()
 {
   dout(1) << "lease_ack_timeout -- calling new election" << dendl;
-  assert(mon->is_leader());
-  assert(is_active());
+  ceph_assert(mon->is_leader());
+  ceph_assert(is_active());
   logger->inc(l_paxos_lease_ack_timeout);
   lease_ack_timeout_event = 0;
   mon->bootstrap();
@@ -1162,14 +1203,19 @@ void Paxos::reset_lease_timeout()
   dout(20) << "reset_lease_timeout - setting timeout event" << dendl;
   if (lease_timeout_event)
     mon->timer.cancel_event(lease_timeout_event);
-  lease_timeout_event = new C_LeaseTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
+  lease_timeout_event = mon->timer.add_event_after(
+    g_conf()->mon_lease_ack_timeout_factor * g_conf()->mon_lease,
+    new C_MonContext{mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	lease_timeout();
+      }});
 }
 
 void Paxos::lease_timeout()
 {
   dout(1) << "lease_timeout -- calling new election" << dendl;
-  assert(mon->is_peon());
+  ceph_assert(mon->is_peon());
   logger->inc(l_paxos_lease_timeout);
   lease_timeout_event = 0;
   mon->bootstrap();
@@ -1187,9 +1233,9 @@ void Paxos::lease_renew_timeout()
  */
 void Paxos::trim()
 {
-  assert(should_trim());
-  version_t end = MIN(get_version() - g_conf->paxos_min,
-		      get_first_committed() + g_conf->paxos_trim_max);
+  ceph_assert(should_trim());
+  version_t end = std::min(get_version() - g_conf()->paxos_min,
+		      get_first_committed() + g_conf()->paxos_trim_max);
 
   if (first_committed >= end)
     return;
@@ -1203,7 +1249,7 @@ void Paxos::trim()
     t->erase(get_name(), v);
   }
   t->put(get_name(), "first_committed", end);
-  if (g_conf->mon_compact_on_trim) {
+  if (g_conf()->mon_compact_on_trim) {
     dout(10) << " compacting trimmed range" << dendl;
     t->compact_range(get_name(), stringify(first_committed - 1), stringify(end));
   }
@@ -1227,7 +1273,7 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   last_pn += (version_t)mon->rank;
 
   // write
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(get_name(), "last_pn", last_pn);
 
   dout(30) << __func__ << " transaction dump:\n";
@@ -1237,12 +1283,12 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   *_dout << dendl;
 
   logger->inc(l_paxos_new_pn);
-  utime_t start = ceph_clock_now(NULL);
 
+  auto start = ceph::coarse_mono_clock::now();
   get_store()->apply_transaction(t);
+  auto end = ceph::coarse_mono_clock::now();
 
-  utime_t end = ceph_clock_now(NULL);
-  logger->tinc(l_paxos_new_pn_latency, end - start);
+  logger->tinc(l_paxos_new_pn_latency, to_timespan(end - start));
 
   dout(10) << "get_new_proposal_number = " << last_pn << dendl;
   return last_pn;
@@ -1277,11 +1323,20 @@ void Paxos::shutdown()
 {
   dout(10) << __func__ << " cancel all contexts" << dendl;
 
+  state = STATE_SHUTDOWN;
+
   // discard pending transaction
   pending_proposal.reset();
 
+  // Let store finish commits in progress
+  // XXX: I assume I can't use finish_contexts() because the store
+  // is going to trigger
+  unique_lock l{mon->lock, std::adopt_lock};
+  shutdown_cond.wait(l, [this] { return commits_started <= 0; });
+  // Monitor::shutdown() will unlock it
+  l.release();
+
   finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
-  finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
   finish_contexts(g_ceph_context, pending_finishers, -ECANCELED);
@@ -1299,8 +1354,7 @@ void Paxos::leader_init()
   // discard pending transaction
   pending_proposal.reset();
 
-  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
+  reset_pending_committing_finishers();
 
   logger->inc(l_paxos_start_leader);
 
@@ -1310,7 +1364,7 @@ void Paxos::leader_init()
   }
 
   state = STATE_RECOVERING;
-  lease_expire = utime_t();
+  lease_expire = {};
   dout(10) << "leader_init -- starting paxos recovery" << dendl;
   collect(0);
 }
@@ -1321,7 +1375,7 @@ void Paxos::peon_init()
   new_value.clear();
 
   state = STATE_RECOVERING;
-  lease_expire = utime_t();
+  lease_expire = {};
   dout(10) << "peon_init -- i am a peon" << dendl;
 
   // start a timer, in case the leader never manages to issue a lease
@@ -1331,10 +1385,8 @@ void Paxos::peon_init()
   pending_proposal.reset();
 
   // no chance to write now!
+  reset_pending_committing_finishers();
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
-  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
-  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
 
   logger->inc(l_paxos_start_peon);
 }
@@ -1347,9 +1399,9 @@ void Paxos::restart()
 
   if (is_writing() || is_writing_previous()) {
     dout(10) << __func__ << " flushing" << dendl;
-    mon->lock.Unlock();
+    mon->lock.unlock();
     mon->store->flush();
-    mon->lock.Lock();
+    mon->lock.lock();
     dout(10) << __func__ << " flushed" << dendl;
   }
   state = STATE_RECOVERING;
@@ -1357,68 +1409,67 @@ void Paxos::restart()
   // discard pending transaction
   pending_proposal.reset();
 
-  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
+  reset_pending_committing_finishers();
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 
   logger->inc(l_paxos_restart);
 }
 
+void Paxos::reset_pending_committing_finishers()
+{
+  committing_finishers.splice(committing_finishers.end(), pending_finishers);
+  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
+}
 
 void Paxos::dispatch(MonOpRequestRef op)
 {
-  assert(op->is_type_paxos());
+  ceph_assert(op->is_type_paxos());
   op->mark_paxos_event("dispatch");
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+
+  if (op->get_req()->get_type() != MSG_MON_PAXOS) {
+    dout(0) << "Got unexpected message type " << op->get_req()->get_type()
+	    << " in Paxos::dispatch, aborting!" << dendl;
+    ceph_abort();
+  }
+  
+  auto *req = op->get_req<MMonPaxos>();
+
   // election in progress?
   if (!mon->is_leader() && !mon->is_peon()) {
-    dout(5) << "election in progress, dropping " << *m << dendl;
+    dout(5) << "election in progress, dropping " << *req << dendl;
     return;    
   }
 
   // check sanity
-  assert(mon->is_leader() || 
-	 (mon->is_peon() && m->get_source().num() == mon->get_leader()));
-  
-  switch (m->get_type()) {
+  ceph_assert(mon->is_leader() || 
+	      (mon->is_peon() && req->get_source().num() == mon->get_leader()));  
 
-  case MSG_MON_PAXOS:
-    {
-      MMonPaxos *pm = reinterpret_cast<MMonPaxos*>(m);
-
-      // NOTE: these ops are defined in messages/MMonPaxos.h
-      switch (pm->op) {
-	// learner
-      case MMonPaxos::OP_COLLECT:
-	handle_collect(op);
-	break;
-      case MMonPaxos::OP_LAST:
-	handle_last(op);
-	break;
-      case MMonPaxos::OP_BEGIN:
-	handle_begin(op);
-	break;
-      case MMonPaxos::OP_ACCEPT:
-	handle_accept(op);
-	break;		
-      case MMonPaxos::OP_COMMIT:
-	handle_commit(op);
-	break;
-      case MMonPaxos::OP_LEASE:
-	handle_lease(op);
-	break;
-      case MMonPaxos::OP_LEASE_ACK:
-	handle_lease_ack(op);
-	break;
-      default:
-	assert(0);
-      }
-    }
+  // NOTE: these ops are defined in messages/MMonPaxos.h
+  switch (req->op) {
+    // learner
+  case MMonPaxos::OP_COLLECT:
+    handle_collect(op);
     break;
-    
+  case MMonPaxos::OP_LAST:
+    handle_last(op);
+    break;
+  case MMonPaxos::OP_BEGIN:
+    handle_begin(op);
+    break;
+  case MMonPaxos::OP_ACCEPT:
+    handle_accept(op);
+    break;		
+  case MMonPaxos::OP_COMMIT:
+    handle_commit(op);
+    break;
+  case MMonPaxos::OP_LEASE:
+    handle_lease(op);
+    break;
+  case MMonPaxos::OP_LEASE_ACK:
+    handle_lease_ack(op);
+    break;
   default:
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -1437,11 +1488,9 @@ bool Paxos::is_readable(version_t v)
     ret =
       (mon->is_peon() || mon->is_leader()) &&
       (is_active() || is_updating() || is_writing()) &&
-      last_committed > 0 &&           // must have a value
-      (mon->get_quorum().size() == 1 ||  // alone, or
-       is_lease_valid()); // have lease
+      last_committed > 0 && is_lease_valid(); // must have a value alone, or have lease
   dout(5) << __func__ << " = " << (int)ret
-	  << " - now=" << ceph_clock_now(g_ceph_context)
+	  << " - now=" << ceph_clock_now()
 	  << " lease_expire=" << lease_expire
 	  << " has v" << v << " lc " << last_committed
 	  << dendl;
@@ -1466,7 +1515,7 @@ version_t Paxos::read_current(bufferlist &bl)
 bool Paxos::is_lease_valid()
 {
   return ((mon->get_quorum().size() == 1)
-      || (ceph_clock_now(g_ceph_context) < lease_expire));
+	  || (ceph::real_clock::now() < lease_expire));
 }
 
 // -- WRITE --
@@ -1481,8 +1530,8 @@ bool Paxos::is_writeable()
 
 void Paxos::propose_pending()
 {
-  assert(is_active());
-  assert(pending_proposal);
+  ceph_assert(is_active());
+  ceph_assert(pending_proposal);
 
   cancel_events();
 
@@ -1507,23 +1556,26 @@ void Paxos::propose_pending()
 void Paxos::queue_pending_finisher(Context *onfinished)
 {
   dout(5) << __func__ << " " << onfinished << dendl;
-  assert(onfinished);
+  ceph_assert(onfinished);
   pending_finishers.push_back(onfinished);
 }
 
 MonitorDBStore::TransactionRef Paxos::get_pending_transaction()
 {
-  assert(mon->is_leader());
+  ceph_assert(mon->is_leader());
   if (!pending_proposal) {
     pending_proposal.reset(new MonitorDBStore::Transaction);
-    assert(pending_finishers.empty());
+    ceph_assert(pending_finishers.empty());
   }
   return pending_proposal;
 }
 
 bool Paxos::trigger_propose()
 {
-  if (is_active()) {
+  if (plugged) {
+    dout(10) << __func__ << " plugged, not proposing now" << dendl;
+    return false;
+  } else if (is_active()) {
     dout(10) << __func__ << " active, proposing now" << dendl;
     propose_pending();
     return true;

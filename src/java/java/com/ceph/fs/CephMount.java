@@ -42,13 +42,14 @@ public class CephMount {
    *
    * Must be synchronized with JNI if changed.
    */
-  public static final int O_RDONLY = 1;
-  public static final int O_RDWR   = 2;
-  public static final int O_APPEND = 4;
-  public static final int O_CREAT  = 8;
-  public static final int O_TRUNC  = 16;
-  public static final int O_EXCL   = 32;
-  public static final int O_WRONLY = 64;
+  public static final int O_RDONLY    = 1;
+  public static final int O_RDWR      = 2;
+  public static final int O_APPEND    = 4;
+  public static final int O_CREAT     = 8;
+  public static final int O_TRUNC     = 16;
+  public static final int O_EXCL      = 32;
+  public static final int O_WRONLY    = 64;
+  public static final int O_DIRECTORY = 128;
 
   /*
    * Whence flags for seek().
@@ -937,6 +938,22 @@ public class CephMount {
   }
 
   private static native String native_ceph_get_file_pool_name(long mountp, int fd);
+  
+  /**
+   * Get the default data pool of cephfs.
+   * 
+   * @return The pool name.
+   */ 
+  public String get_default_data_pool_name() {
+    rlock.lock();
+    try {
+      return native_ceph_get_default_data_pool_name(instance_ptr);
+    } finally {
+      rlock.unlock();
+    }
+  }
+  
+  private static native String native_ceph_get_default_data_pool_name(long mountp);
 
   /**
    * Get the replication of a file.

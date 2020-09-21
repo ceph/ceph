@@ -19,7 +19,6 @@
 #include "msg/Message.h"
 
 #include "MOSDOp.h"
-#include "os/ObjectStore.h"
 #include "common/errno.h"
 
 /*
@@ -31,20 +30,22 @@
  */
 
 class MOSDOpReply : public Message {
-
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 2;
+private:
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
   pg_t pgid;
-  vector<OSDOp> ops;
-  int64_t flags;
-  int32_t result;
+  std::vector<OSDOp> ops;
+  bool bdata_encode;
+  int64_t flags = 0;
+  errorcode32_t result;
   eversion_t bad_replay_version;
   eversion_t replay_version;
-  version_t user_version;
-  epoch_t osdmap_epoch;
-  int32_t retry_attempt;
+  version_t user_version = 0;
+  epoch_t osdmap_epoch = 0;
+  int32_t retry_attempt = -1;
+  bool do_redirect;
   request_redirect_t redirect;
 
 public:
@@ -91,18 +92,29 @@ public:
 
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
-  bool is_redirect_reply() const { return !redirect.empty(); }
+  bool is_redirect_reply() const { return do_redirect; }
 
   void add_flags(int f) { flags |= f; }
 
-  void claim_op_out_data(vector<OSDOp>& o) {
-    assert(ops.size() == o.size());
+  void claim_op_out_data(std::vector<OSDOp>& o) {
+    ceph_assert(ops.size() == o.size());
     for (unsigned i = 0; i < o.size(); i++) {
-      ops[i].outdata.claim(o[i].outdata);
+      ops[i].outdata = std::move(o[i].outdata);
     }
   }
-  void claim_ops(vector<OSDOp>& o) {
+  void claim_ops(std::vector<OSDOp>& o) {
     o.swap(ops);
+    bdata_encode = false;
+  }
+  void set_op_returns(const std::vector<pg_log_op_return_item_t>& op_returns) {
+    if (op_returns.size()) {
+      ceph_assert(ops.empty() || ops.size() == op_returns.size());
+      ops.resize(op_returns.size());
+      for (unsigned i = 0; i < op_returns.size(); ++i) {
+	ops[i].rval = op_returns[i].rval;
+	ops[i].outdata = op_returns[i].bl;
+      }
+    }
   }
 
   /**
@@ -124,10 +136,15 @@ public:
 
 public:
   MOSDOpReply()
-    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype, bool ignore_out_data)
-    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
-      oid(req->oid), pgid(req->pgid), ops(req->ops) {
+    : Message{CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION},
+    bdata_encode(false) {
+    do_redirect = false;
+  }
+  MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
+	      bool ignore_out_data)
+    : Message{CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION},
+      oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
+      bdata_encode(false) {
 
     set_tid(req->get_tid());
     result = r;
@@ -136,21 +153,27 @@ public:
     osdmap_epoch = e;
     user_version = 0;
     retry_attempt = req->get_retry_attempt();
+    do_redirect = false;
 
-    // zero out ops payload_len and possibly out data
     for (unsigned i = 0; i < ops.size(); i++) {
-      ops[i].op.payload_len = 0;
-      if (ignore_out_data)
+      // zero out input data
+      ops[i].indata.clear();
+      if (ignore_out_data) {
+	// original request didn't set the RETURNVEC flag
 	ops[i].outdata.clear();
+      }
     }
   }
 private:
-  ~MOSDOpReply() {}
+  ~MOSDOpReply() override {}
 
 public:
-  virtual void encode_payload(uint64_t features) {
-
-    OSDOp::merge_osd_op_vector_out_data(ops, data);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    if(false == bdata_encode) {
+      OSDOp::merge_osd_op_vector_out_data(ops, data);
+      bdata_encode = true;
+    }
 
     if ((features & CEPH_FEATURE_PGID64) == 0) {
       header.version = 1;
@@ -163,94 +186,144 @@ public:
       head.result = result;
       head.num_ops = ops.size();
       head.object_len = oid.name.length();
-      ::encode(head, payload);
+      encode(head, payload);
       for (unsigned i = 0; i < head.num_ops; i++) {
-	::encode(ops[i].op, payload);
+	encode(ops[i].op, payload);
       }
-      ::encode_nohead(oid.name, payload);
+      ceph::encode_nohead(oid.name, payload);
     } else {
       header.version = HEAD_VERSION;
-      ::encode(oid, payload);
-      ::encode(pgid, payload);
-      ::encode(flags, payload);
-      ::encode(result, payload);
-      ::encode(bad_replay_version, payload);
-      ::encode(osdmap_epoch, payload);
+      encode(oid, payload);
+      encode(pgid, payload);
+      encode(flags, payload);
+      encode(result, payload);
+      encode(bad_replay_version, payload);
+      encode(osdmap_epoch, payload);
 
       __u32 num_ops = ops.size();
-      ::encode(num_ops, payload);
+      encode(num_ops, payload);
       for (unsigned i = 0; i < num_ops; i++)
-	::encode(ops[i].op, payload);
+	encode(ops[i].op, payload);
 
-      ::encode(retry_attempt, payload);
+      encode(retry_attempt, payload);
 
       for (unsigned i = 0; i < num_ops; i++)
-	::encode(ops[i].rval, payload);
+	encode(ops[i].rval, payload);
 
-      ::encode(replay_version, payload);
-      ::encode(user_version, payload);
-      ::encode(redirect, payload);
+      encode(replay_version, payload);
+      encode(user_version, payload);
+      if ((features & CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING) == 0) {
+        header.version = 6;
+        encode(redirect, payload);
+      } else {
+        do_redirect = !redirect.empty();
+        encode(do_redirect, payload);
+        if (do_redirect) {
+          encode(redirect, payload);
+        }
+      }
+      encode_trace(payload, features);
     }
   }
-  virtual void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    if (header.version < 2) {
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+
+    // Always keep here the newest version of decoding order/rule
+    if (header.version == HEAD_VERSION) {
+      decode(oid, p);
+      decode(pgid, p);
+      decode(flags, p);
+      decode(result, p);
+      decode(bad_replay_version, p);
+      decode(osdmap_epoch, p);
+
+      __u32 num_ops = ops.size();
+      decode(num_ops, p);
+      ops.resize(num_ops);
+      for (unsigned i = 0; i < num_ops; i++)
+	decode(ops[i].op, p);
+      decode(retry_attempt, p);
+
+      for (unsigned i = 0; i < num_ops; ++i)
+	decode(ops[i].rval, p);
+
+      OSDOp::split_osd_op_vector_out_data(ops, data);
+
+      decode(replay_version, p);
+      decode(user_version, p);
+      decode(do_redirect, p);
+      if (do_redirect)
+	decode(redirect, p);
+      decode_trace(p);
+    } else if (header.version < 2) {
       ceph_osd_reply_head head;
-      ::decode(head, p);
+      decode(head, p);
       ops.resize(head.num_ops);
       for (unsigned i = 0; i < head.num_ops; i++) {
-	::decode(ops[i].op, p);
+	decode(ops[i].op, p);
       }
-      ::decode_nohead(head.object_len, oid.name, p);
+      ceph::decode_nohead(head.object_len, oid.name, p);
       pgid = pg_t(head.layout.ol_pgid);
-      result = head.result;
+      result = (int32_t)head.result;
       flags = head.flags;
       replay_version = head.reassert_version;
       user_version = replay_version.version;
       osdmap_epoch = head.osdmap_epoch;
       retry_attempt = -1;
     } else {
-      ::decode(oid, p);
-      ::decode(pgid, p);
-      ::decode(flags, p);
-      ::decode(result, p);
-      ::decode(bad_replay_version, p);
-      ::decode(osdmap_epoch, p);
+      decode(oid, p);
+      decode(pgid, p);
+      decode(flags, p);
+      decode(result, p);
+      decode(bad_replay_version, p);
+      decode(osdmap_epoch, p);
 
       __u32 num_ops = ops.size();
-      ::decode(num_ops, p);
+      decode(num_ops, p);
       ops.resize(num_ops);
       for (unsigned i = 0; i < num_ops; i++)
-	::decode(ops[i].op, p);
+	decode(ops[i].op, p);
 
       if (header.version >= 3)
-	::decode(retry_attempt, p);
+	decode(retry_attempt, p);
       else
 	retry_attempt = -1;
 
       if (header.version >= 4) {
 	for (unsigned i = 0; i < num_ops; ++i)
-	  ::decode(ops[i].rval, p);
+	  decode(ops[i].rval, p);
 
 	OSDOp::split_osd_op_vector_out_data(ops, data);
       }
 
       if (header.version >= 5) {
-	::decode(replay_version, p);
-	::decode(user_version, p);
+	decode(replay_version, p);
+	decode(user_version, p);
       } else {
 	replay_version = bad_replay_version;
 	user_version = replay_version.version;
       }
 
-      if (header.version >= 6)
-	::decode(redirect, p);
+      if (header.version == 6) {
+	decode(redirect, p);
+        do_redirect = !redirect.empty();
+      }
+      if (header.version >= 7) {
+        decode(do_redirect, p);
+        if (do_redirect) {
+	  decode(redirect, p);
+        }
+      }
+      if (header.version >= 8) {
+        decode_trace(p);
+      }
     }
   }
 
-  const char *get_type_name() const { return "osd_op_reply"; }
-  
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "osd_op_reply"; }
+
+  void print(std::ostream& out) const override {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops
 	<< " v" << get_replay_version()
@@ -271,6 +344,9 @@ public:
     out << ")";
   }
 
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 

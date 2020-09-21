@@ -1,0 +1,130 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+
+        <!-- Username -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': !viewing}"
+                 for="user"
+                 i18n>Username</label>
+          <div class="cd-col-form-input">
+            <input id="user"
+                   class="form-control"
+                   type="text"
+                   *ngIf="viewing"
+                   [readonly]="true"
+                   formControlName="user">
+            <select id="user"
+                    class="form-control custom-select"
+                    formControlName="user"
+                    *ngIf="!viewing"
+                    autofocus>
+              <option i18n
+                      *ngIf="userCandidates !== null"
+                      [ngValue]="null">-- Select a username --</option>
+              <option *ngFor="let userCandidate of userCandidates"
+                      [value]="userCandidate">{{ userCandidate }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('user', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Auto-generate key -->
+        <div class="form-group row"
+             *ngIf="!viewing">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="generate_key"
+                     type="checkbox"
+                     formControlName="generate_key">
+              <label class="custom-control-label"
+                     for="generate_key"
+                     i18n>Auto-generate key</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Access key -->
+        <div class="form-group row"
+             *ngIf="!formGroup.getValue('generate_key')">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': !viewing}"
+                 for="access_key"
+                 i18n>Access key</label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input id="access_key"
+                     class="form-control"
+                     type="password"
+                     [readonly]="viewing"
+                     formControlName="access_key">
+              <span class="input-group-append">
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="access_key">
+                </button>
+                <button type="button"
+                        class="btn btn-light"
+                        cdCopy2ClipboardButton="access_key">
+                </button>
+              </span>
+            </div>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('access_key', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Secret key -->
+        <div class="form-group row"
+             *ngIf="!formGroup.getValue('generate_key')">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': !viewing}"
+                 for="secret_key"
+                 i18n>Secret key</label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input id="secret_key"
+                     class="form-control"
+                     type="password"
+                     [readonly]="viewing"
+                     formControlName="secret_key">
+              <span class="input-group-append">
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="secret_key">
+                </button>
+                <button type="button"
+                        class="btn btn-light"
+                        cdCopy2ClipboardButton="secret_key">
+                </button>
+              </span>
+            </div>
+            <span class="invalid-feedback"
+                  *ngIf="formGroup.showError('secret_key', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button *ngIf="!viewing"
+                          (submitAction)="onSubmit()"
+                          i18n="form action button|Example: Create Pool@@formActionButton"
+                          [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"></cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

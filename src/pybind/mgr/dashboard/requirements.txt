@@ -1,0 +1,12 @@
+bcrypt
+CherryPy
+enum34; python_version<'3.4'
+more-itertools
+PyJWT
+pyopenssl
+python3-saml
+requests
+Routes
+-e ../../../python-common
+prettytable
+pyyaml

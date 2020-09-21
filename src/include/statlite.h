@@ -11,6 +11,8 @@ extern "C" {
 #include <unistd.h>
 #include <dirent.h>
 
+#include "include/compat.h"
+
 struct statlite {
   dev_t         st_dev;      /* device */
   ino_t         st_ino;      /* inode */

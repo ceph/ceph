@@ -3,9 +3,8 @@
 #include <map>
 #include <set>
 #include <string>
-#include "include/memory.h"
 
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 
@@ -16,16 +15,16 @@ public:
   std::map<std::pair<string,string>,bufferlist> db;
 
   KeyValueDBMemory() { }
-  KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
-  virtual ~KeyValueDBMemory() { }
+  explicit KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
+  ~KeyValueDBMemory() override { }
 
-  virtual int init(string _opt) {
+  int init(string _opt) override {
     return 0;
   }
-  virtual int open(ostream &out) {
+  int open(std::ostream &out, const std::string& cfs="") override {
     return 0;
   }
-  virtual int create_and_open(ostream &out) {
+  int create_and_open(ostream &out, const std::string& cfs="") override {
     return 0;
   }
 
@@ -33,7 +32,8 @@ public:
     const string &prefix,
     const std::set<string> &key,
     std::map<string, bufferlist> *out
-    );
+    ) override;
+  using KeyValueDB::get;
 
   int get_keys(
     const string &prefix,
@@ -56,12 +56,18 @@ public:
     const string &prefix
     );
 
+  int rm_range_keys(
+      const string &prefix,
+      const string &start,
+      const string &end
+      );
+
   class TransactionImpl_ : public TransactionImpl {
   public:
     list<Context *> on_commit;
     KeyValueDBMemory *db;
 
-    TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
+    explicit TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
 
 
     struct SetOp : public Context {
@@ -72,12 +78,12 @@ public:
 	    const std::pair<string,string> &key,
 	    const bufferlist &value)
 	: db(db), key(key), value(value) {}
-      void finish(int r) {
+      void finish(int r) override {
 	db->set(key.first, key.second, value);
       }
     };
 
-    void set(const string &prefix, const string &k, const bufferlist& bl) {
+    void set(const string &prefix, const string &k, const bufferlist& bl) override {
       on_commit.push_back(new SetOp(db, std::make_pair(prefix, k), bl));
     }
 
@@ -87,12 +93,14 @@ public:
       RmKeysOp(KeyValueDBMemory *db,
 	       const std::pair<string,string> &key)
 	: db(db), key(key) {}
-      void finish(int r) {
+      void finish(int r) override {
 	db->rmkey(key.first, key.second);
       }
     };
 
-    void rmkey(const string &prefix, const string &key) {
+    using KeyValueDB::TransactionImpl::rmkey;
+    using KeyValueDB::TransactionImpl::set;
+    void rmkey(const string &prefix, const string &key) override {
       on_commit.push_back(new RmKeysOp(db, std::make_pair(prefix, key)));
     }
 
@@ -102,12 +110,26 @@ public:
       RmKeysByPrefixOp(KeyValueDBMemory *db,
 		       const string &prefix)
 	: db(db), prefix(prefix) {}
-      void finish(int r) {
+      void finish(int r) override {
 	db->rmkeys_by_prefix(prefix);
       }
     };
-    void rmkeys_by_prefix(const string &prefix) {
+    void rmkeys_by_prefix(const string &prefix) override {
       on_commit.push_back(new RmKeysByPrefixOp(db, prefix));
+    }
+
+    struct RmRangeKeys: public Context {
+      KeyValueDBMemory *db;
+      string prefix, start, end;
+      RmRangeKeys(KeyValueDBMemory *db, const string &prefix, const string &s, const string &e)
+	: db(db), prefix(prefix), start(s), end(e) {}
+      void finish(int r) {
+	db->rm_range_keys(prefix, start, end);
+      }
+    };
+
+    void rm_range_keys(const string &prefix, const string &start, const string &end) {
+      on_commit.push_back(new RmRangeKeys(db, prefix, start, end));
     }
 
     int complete() {
@@ -119,7 +141,7 @@ public:
       return 0;
     }
 
-    ~TransactionImpl_() {
+    ~TransactionImpl_() override {
       for (list<Context *>::iterator i = on_commit.begin();
 	   i != on_commit.end();
 	   on_commit.erase(i++)) {
@@ -128,15 +150,15 @@ public:
     }
   };
 
-  Transaction get_transaction() {
+  Transaction get_transaction() override {
     return Transaction(new TransactionImpl_(this));
   }
 
-  int submit_transaction(Transaction trans) {
+  int submit_transaction(Transaction trans) override {
     return static_cast<TransactionImpl_*>(trans.get())->complete();
   }
 
-  uint64_t get_estimated_size(map<string,uint64_t> &extras) {
+  uint64_t get_estimated_size(map<string,uint64_t> &extras) override {
     uint64_t total_size = 0;
 
     for (map<pair<string,string>,bufferlist>::iterator p = db.begin();
@@ -163,7 +185,6 @@ private:
 
   friend class WholeSpaceMemIterator;
 
-protected:
-  WholeSpaceIterator _get_iterator();
-  WholeSpaceIterator _get_snapshot_iterator();
+public:
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 };

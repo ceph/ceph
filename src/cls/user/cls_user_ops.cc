@@ -1,16 +1,19 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "cls/user/cls_user_types.h"
 #include "cls/user/cls_user_ops.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
+
+using std::list;
+
+using ceph::Formatter;
 
 void cls_user_set_buckets_op::dump(Formatter *f) const
 {
   encode_json("entries", entries, f);
   encode_json("add", add, f);
-  encode_json("time", time, f);
+  encode_json("time", utime_t(time), f);
 }
 
 void cls_user_set_buckets_op::generate_test_instances(list<cls_user_set_buckets_op*>& ls)
@@ -23,7 +26,7 @@ void cls_user_set_buckets_op::generate_test_instances(list<cls_user_set_buckets_
     op->entries.push_back(e);
   }
   op->add = true;
-  op->time = utime_t(1, 0);
+  op->time = utime_t(1, 0).to_real_time();
   ls.push_back(op);
 }
 
@@ -101,14 +104,14 @@ void cls_user_get_header_ret::generate_test_instances(list<cls_user_get_header_r
 
 void cls_user_complete_stats_sync_op::dump(Formatter *f) const
 {
-  encode_json("time", time, f);
+  encode_json("time", utime_t(time), f);
 }
 
 void cls_user_complete_stats_sync_op::generate_test_instances(list<cls_user_complete_stats_sync_op*>& ls)
 {
   ls.push_back(new cls_user_complete_stats_sync_op);
   cls_user_complete_stats_sync_op *op = new cls_user_complete_stats_sync_op;
-  op->time = utime_t(12345, 0);
+  op->time = utime_t(12345, 0).to_real_time();
   ls.push_back(op);
 }
 

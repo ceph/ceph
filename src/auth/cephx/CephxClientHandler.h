@@ -15,10 +15,12 @@
 #ifndef CEPH_CEPHXCLIENTHANDLER_H
 #define CEPH_CEPHXCLIENTHANDLER_H
 
-#include "../AuthClientHandler.h"
+#include "auth/AuthClientHandler.h"
 #include "CephxProtocol.h"
+#include "auth/RotatingKeyRing.h"
+#include "include/common_fwd.h"
 
-class CephContext;
+class KeyRing;
 
 class CephxClientHandler : public AuthClientHandler {
   bool starting;
@@ -29,11 +31,12 @@ class CephxClientHandler : public AuthClientHandler {
   CephXTicketManager tickets;
   CephXTicketHandler* ticket_handler;
 
-  RotatingKeyRing *rotating_secrets;
+  RotatingKeyRing* rotating_secrets;
   KeyRing *keyring;
 
 public:
-  CephxClientHandler(CephContext *cct_, RotatingKeyRing *rsecrets) 
+  CephxClientHandler(CephContext *cct_,
+		     RotatingKeyRing *rsecrets)
     : AuthClientHandler(cct_),
       starting(false),
       server_challenge(0),
@@ -45,29 +48,27 @@ public:
     reset();
   }
 
-  void reset() {
-    RWLock::WLocker l(lock);
-    starting = true;
-    server_challenge = 0;
-  }
-  void prepare_build_request();
-  int build_request(bufferlist& bl) const;
-  int handle_response(int ret, bufferlist::iterator& iter);
-  bool build_rotating_request(bufferlist& bl) const;
+  void reset() override;
+  void prepare_build_request() override;
+  int build_request(ceph::buffer::list& bl) const override;
+  int handle_response(int ret, ceph::buffer::list::const_iterator& iter,
+		      CryptoKey *session_key,
+		      std::string *connection_secret) override;
+  bool build_rotating_request(ceph::buffer::list& bl) const override;
 
-  int get_protocol() const { return CEPH_AUTH_CEPHX; }
+  int get_protocol() const override { return CEPH_AUTH_CEPHX; }
 
-  AuthAuthorizer *build_authorizer(uint32_t service_id) const;
+  AuthAuthorizer *build_authorizer(uint32_t service_id) const override;
 
-  bool need_tickets();
+  bool need_tickets() override;
 
-  void set_global_id(uint64_t id) {
-    RWLock::WLocker l(lock);
+  void set_global_id(uint64_t id) override {
     global_id = id;
     tickets.global_id = id;
   }
 private:
-  void validate_tickets();
+  void validate_tickets() override;
+  bool _need_tickets() const;
 };
 
 #endif

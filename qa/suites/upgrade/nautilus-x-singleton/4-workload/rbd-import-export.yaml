@@ -1,0 +1,13 @@
+meta:
+- desc: |
+   run basic import/export cli tests for rbd
+split_tasks:
+  sequential:
+  - workunit:
+      branch: nautilus
+      clients:
+        client.0:
+          - rbd/import_export.sh
+      env:
+        RBD_CREATE_ARGS: --new-format
+  - print: "**** done rbd/import_export.sh 5-workload"

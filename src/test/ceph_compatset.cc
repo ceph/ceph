@@ -23,9 +23,7 @@
 
 #include "include/types.h"
 #include "include/compat.h"
-
-//#undef assert
-//#define	assert(foo) if (!(foo)) abort();
+#include "include/coredumpctl.h"
 
 #include "include/CompatSet.h"
 
@@ -37,8 +35,11 @@ TEST(CephCompatSet, AllSet) {
   CompatSet::FeatureSet ro;
   CompatSet::FeatureSet incompat;
 
-  EXPECT_THROW(compat.insert(CompatSet::Feature(0, "test")), FailedAssertion);
-  EXPECT_THROW(compat.insert(CompatSet::Feature(64, "test")), FailedAssertion);
+  {
+    PrCtl unset_dumpable;
+    EXPECT_DEATH(compat.insert(CompatSet::Feature(0, "test")), "");
+    EXPECT_DEATH(compat.insert(CompatSet::Feature(64, "test")), "");
+  }
 
   for (int i = 1; i < 64; i++) {
     stringstream cname;

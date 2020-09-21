@@ -22,15 +22,15 @@ namespace libradosstriper
     MultiAioCompletion(MultiAioCompletionImpl *pc_) : pc(pc_) {}
     ~MultiAioCompletion();
     int set_complete_callback(void *cb_arg, librados::callback_t cb);
-    int set_safe_callback(void *cb_arg, librados::callback_t cb);
+    int set_safe_callback(void *cb_arg, librados::callback_t cb) __attribute__ ((deprecated));
     void wait_for_complete();
-    void wait_for_safe();
+    void wait_for_safe() __attribute__ ((deprecated));
     void wait_for_complete_and_cb();
-    void wait_for_safe_and_cb();
+    void wait_for_safe_and_cb() __attribute__ ((deprecated));
     bool is_complete();
-    bool is_safe();
+    bool is_safe() __attribute__ ((deprecated));
     bool is_complete_and_cb();
-    bool is_safe_and_cb();
+    bool is_safe_and_cb() __attribute__ ((deprecated));
     int get_return_value();
     void release();
     MultiAioCompletionImpl *pc;
@@ -178,6 +178,15 @@ namespace libradosstriper
      * synchronously get striped object stats (size/mtime)
      */
     int stat(const std::string& soid, uint64_t *psize, time_t *pmtime);
+    int stat2(const std::string& soid, uint64_t *psize, struct timespec *pts);
+
+    /**
+     * asynchronously get striped object stats (size/mtime)
+     */
+    int aio_stat(const std::string& soid, librados::AioCompletion *c,
+                 uint64_t *psize, time_t *pmtime);
+    int aio_stat2(const std::string& soid, librados::AioCompletion *c,
+                  uint64_t *psize, struct timespec *pts);
 
     /**
      * deletes a striped object.
@@ -190,6 +199,14 @@ namespace libradosstriper
      * during deletion (same EBUSY return code)
      */
     int remove(const std::string& soid);
+    int remove(const std::string& soid, int flags);
+
+    /**
+     * asynchronous remove of striped objects
+     * See synchronous version for comments on (lack of) atomicity
+     */
+    int aio_remove(const std::string& soid, librados::AioCompletion *c);
+    int aio_remove(const std::string& soid, librados::AioCompletion *c, int flags);
 
     /**
      * Resizes a striped object
