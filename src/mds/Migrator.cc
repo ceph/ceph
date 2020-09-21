@@ -1793,7 +1793,8 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     if (dn->get_linkage()->is_remote()) {
       inodeno_t ino = dn->get_linkage()->get_remote_ino();
       unsigned char d_type = dn->get_linkage()->get_remote_d_type();
-      CDentry::encode_remote(ino, d_type, exportbl); // remote link
+      // remote link
+      CDentry::encode_remote(ino, d_type, dn->get_alternate_name(), exportbl);
       continue;
     }
 
@@ -1801,8 +1802,9 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     // -- inode
     exportbl.append("i", 1);    // inode dentry
 
-    ENCODE_START(1, 1, exportbl);
+    ENCODE_START(2, 1, exportbl);
     encode_export_inode(in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
+    encode(dn->get_alternate_name(), exportbl);
     ENCODE_FINISH(exportbl);
 
     // directory?
@@ -3445,7 +3447,12 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      CDentry::decode_remote(icode, ino, d_type, blp);
+      mempool::mds_co::string alternate_name;
+
+      CDentry::decode_remote(icode, ino, d_type, alternate_name, blp);
+      if (alternate_name.length())
+        dn->set_alternate_name(std::move(alternate_name));
+
       if (dn->get_linkage()->is_remote()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
       } else {
@@ -3456,9 +3463,11 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       // inode
       ceph_assert(le);
       if (icode == 'i') {
-        DECODE_START(1, blp);
+        DECODE_START(2, blp);
         decode_import_inode(dn, blp, oldauth, ls,
                             peer_exports, updated_scatterlocks);
+	if (struct_v >= 2)
+          dn->decode_alternate_name(blp);
         DECODE_FINISH(blp);
       } else {
         decode_import_inode(dn, blp, oldauth, ls,

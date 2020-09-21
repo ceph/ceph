@@ -18,6 +18,7 @@
 
 #include "include/types.h"
 #include "include/fs_types.h"
+#include "include/mempool.h"
 #include "MClientRequest.h"
 
 #include "msg/Message.h"
@@ -50,6 +51,7 @@ struct LeaseStat {
   __u16 mask;
   __u32 duration_ms;  
   __u32 seq;
+  std::string alternate_name;
 
   LeaseStat() : mask(0), duration_ms(0), seq(0) {}
   LeaseStat(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
@@ -57,10 +59,12 @@ struct LeaseStat {
   void decode(ceph::buffer::list::const_iterator &bl, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       decode(mask, bl);
       decode(duration_ms, bl);
       decode(seq, bl);
+      if (struct_v >= 2)
+        decode(alternate_name, bl);
       DECODE_FINISH(bl);
     }
     else {

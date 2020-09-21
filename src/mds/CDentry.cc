@@ -235,6 +235,12 @@ void CDentry::make_path(filepath& fp, bool projected) const
   fp.push_dentry(get_name());
 }
 
+void CDentry::set_alternate_name(std::string_view _alternate_name)
+{
+  dout(10) << "setting alternate_name on " << *this << dendl;
+  alternate_name = _alternate_name;
+}
+
 /*
  * we only add ourselves to remote_parents when the linkage is
  * active (no longer projected).  if the passed dnl is projected,
@@ -530,24 +536,30 @@ void CDentry::_put()
   }
 }
 
-void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type, bufferlist &bl)
+void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl)
 {
-  bl.append("l", 1);  // remote link
+  bl.append('l');  // remote link
 
   // marker, name, ino
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(ino, bl);
   encode(d_type, bl);
+  encode(alternate_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void CDentry::decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
                             ceph::buffer::list::const_iterator& bl)
 {
   if (icode == 'l') {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(ino, bl);
     decode(d_type, bl);
+    if (struct_v >= 2)
+      decode(alternate_name, bl);
     DECODE_FINISH(bl);
   } else if (icode == 'L') {
     decode(ino, bl);

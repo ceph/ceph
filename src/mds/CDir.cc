@@ -1766,8 +1766,11 @@ CDentry *CDir::_load_dentry(
     // hard link
     inodeno_t ino;
     unsigned char d_type;
+    mempool::mds_co::string alternate_name;
 
-    CDentry::decode_remote(type, ino, d_type, q);
+    CDentry::decode_remote(type, ino, d_type, alternate_name, q);
+    if (alternate_name.length())
+      dn->set_alternate_name(std::move(alternate_name));
 
     if (stale) {
       if (!dn) {
@@ -1808,7 +1811,9 @@ CDentry *CDir::_load_dentry(
     // inode
     // Load inode data before looking up or constructing CInode
     if (type == 'i') {
-      DECODE_START(1, q);
+      DECODE_START(2, q);
+      if (struct_v >= 2)
+        dn->decode_alternate_name(q);
       inode_data.decode(q);
       DECODE_FINISH(q);
     } else {
@@ -2228,6 +2233,7 @@ void CDir::_encode_primary_inode_base(dentry_commit_item &item, bufferlist &dfts
 
   encode(item.oldest_snap, bl);
   encode(item.damage_flags, bl);
+  encode(item.alternate_name, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2317,12 +2323,13 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   for (auto &item : to_set) {
     encode(item.first, bl);
     if (item.is_remote) {
-      CDentry::encode_remote(item.ino, item.d_type, bl); // remote link
+      // remote link
+      CDentry::encode_remote(item.ino, item.d_type, item.alternate_name, bl);
     } else {
       // marker, name, inode, [symlink string]
       bl.append('i');         // inode
 
-      ENCODE_START(1, 1, bl);
+      ENCODE_START(2, 1, bl);
       _encode_primary_inode_base(item, dfts, bl);
       ENCODE_FINISH(bl);
     }
@@ -2378,6 +2385,7 @@ void CDir::_omap_commit(int op_prio)
   // reverve enough memories, which maybe larger than the actually needed
   to_set.reserve(count);
 
+  // for dir fragtrees
   bufferlist dfts(CEPH_PAGE_SIZE);
 
   auto write_one = [&](CDentry *dn) {
@@ -2441,6 +2449,10 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
   dn->clear_new();
 
   item.first = dn->first;
+
+  // Only in very rare case the dn->alternate_name not empty,
+  // so it won't cost much to copy it here
+  item.alternate_name = dn->get_alternate_name();
 
   // primary or remote?
   if (dn->linkage.is_remote()) {

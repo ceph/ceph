@@ -926,8 +926,9 @@ int MetaTool::show_child(std::string_view key,
     // hard link
     inodeno_t ino;
     unsigned char d_type;
+    mempool::mds_co::string alternate_name;
 
-    CDentry::decode_remote(type, ino, d_type, q);
+    CDentry::decode_remote(type, ino, d_type, alternate_name, q);
 
     if (sp_ino > 0) {
       if (sp_ino == ino) {
@@ -942,7 +943,11 @@ int MetaTool::show_child(std::string_view key,
     // load inode data before lookuping up or constructing CInode
     InodeStore& inode_data = *(new InodeStore);
     if (type == 'i') {
-      DECODE_START(1, q);
+      mempool::mds_co::string alternate_name;
+
+      DECODE_START(2, q);
+      if (struct_v >= 2)
+        decode(alternate_name, q);
       inode_data.decode(q);
       DECODE_FINISH(q);
     } else {
