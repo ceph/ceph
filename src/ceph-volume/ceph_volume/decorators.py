@@ -73,6 +73,18 @@ def catches(catch=None, handler=None, exit=True):
 
     return decorate
 
+
+def memoize(func):
+    cache = func.cache = {}
+
+    @wraps(func)
+    def memoizer(*args, **kwargs):
+        key = str(args) + str(kwargs)
+        if key not in cache:
+            cache[key] = func(*args, **kwargs)
+        return cache[key]
+    return memoizer
+
 #
 # Decorator helpers
 #
