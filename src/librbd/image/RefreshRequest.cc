@@ -922,7 +922,7 @@ void RefreshRequest<I>::send_v2_open_journal() {
           send_v2_block_writes();
         });
       m_image_ctx.exclusive_lock->set_require_lock(
-        librbd::io::DIRECTION_BOTH, ctx);
+        true, librbd::io::DIRECTION_BOTH, ctx);
       return;
     }
 
@@ -1245,9 +1245,9 @@ Context *RefreshRequest<I>::send_flush_aio() {
       RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
     auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
-    auto req = io::ImageDispatchSpec<I>::create_flush(
-      m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-      io::FLUSH_SOURCE_INTERNAL, {});
+    auto req = io::ImageDispatchSpec::create_flush(
+      m_image_ctx, io::IMAGE_DISPATCH_LAYER_REFRESH, aio_comp,
+      io::FLUSH_SOURCE_REFRESH, {});
     req->send();
     return nullptr;
   } else if (m_error_result < 0) {

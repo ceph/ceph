@@ -27,9 +27,6 @@ public:
 
   virtual void unblock_writes() = 0;
   virtual void wait_on_writes_unblocked(Context *on_unblocked) = 0;
-
-  virtual void finish(int r, ImageDispatchLayer image_dispatch_layer,
-                      uint64_t tid) = 0;
 };
 
 } // namespace io

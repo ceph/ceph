@@ -1330,8 +1330,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	ctx, src, io::AIO_TYPE_READ);
 
       io::ImageReadRequest<> req(*src, comp, {{offset, len}},
-				 io::ReadResult{bl}, fadvise_flags,
-				 std::move(trace));
+				 io::ReadResult{bl}, src->get_data_io_context(),
+                                 fadvise_flags, std::move(trace));
       ctx->read_trace = req.get_trace();
 
       req.send();
@@ -1541,7 +1541,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       auto c = io::AioCompletion::create_and_start(&ctx, ictx,
                                                    io::AIO_TYPE_READ);
       io::ImageRequest<>::aio_read(ictx, c, {{off, read_len}},
-                                   io::ReadResult{&bl}, 0, std::move(trace));
+                                   io::ReadResult{&bl},
+                                   ictx->get_data_io_context(), 0,
+                                   std::move(trace));
 
       int ret = ctx.wait();
       if (ret < 0) {

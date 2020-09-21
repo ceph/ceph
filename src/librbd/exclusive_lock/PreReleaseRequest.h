@@ -37,22 +37,25 @@ private:
    * <start>
    *    |
    *    v
-   * PREPARE_LOCK
-   *    |
-   *    v
    * CANCEL_OP_REQUESTS
    *    |
    *    v
-   * BLOCK_WRITES
+   * SET_REQUIRE_LOCK
    *    |
    *    v
    * WAIT_FOR_OPS
+   *    |
+   *    v
+   * PREPARE_LOCK
    *    |
    *    v
    * SHUT_DOWN_IMAGE_CACHE
    *    |
    *    v
    * INVALIDATE_CACHE
+   *    |
+   *    v
+   * FLUSH_IO
    *    |
    *    v
    * FLUSH_NOTIFIES . . . . . . . . . . . . . .
@@ -85,23 +88,26 @@ private:
   decltype(m_image_ctx.object_map) m_object_map = nullptr;
   decltype(m_image_ctx.journal) m_journal = nullptr;
 
-  void send_prepare_lock();
-  void handle_prepare_lock(int r);
-
   void send_cancel_op_requests();
   void handle_cancel_op_requests(int r);
 
-  void send_block_writes();
-  void handle_block_writes(int r);
+  void send_set_require_lock();
+  void handle_set_require_lock(int r);
 
   void send_wait_for_ops();
   void handle_wait_for_ops(int r);
+
+  void send_prepare_lock();
+  void handle_prepare_lock(int r);
 
   void send_shut_down_image_cache();
   void handle_shut_down_image_cache(int r);
 
   void send_invalidate_cache();
   void handle_invalidate_cache(int r);
+
+  void send_flush_io();
+  void handle_flush_io(int r);
 
   void send_flush_notifies();
   void handle_flush_notifies(int r);

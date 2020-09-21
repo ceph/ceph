@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "common/zipkin_trace.h"
+#include "librbd/Types.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 #include <atomic>
@@ -17,11 +18,11 @@ namespace librbd {
 namespace io {
 
 struct AioCompletion;
-template <typename> struct ImageDispatchSpec;
+struct ImageDispatchSpec;
 
 struct ImageDispatchInterface {
   typedef ImageDispatchLayer DispatchLayer;
-  typedef ImageDispatchSpec<librbd::ImageCtx> DispatchSpec;
+  typedef ImageDispatchSpec DispatchSpec;
 
   virtual ~ImageDispatchInterface() {
   }
@@ -32,39 +33,43 @@ struct ImageDispatchInterface {
 
   virtual bool read(
       AioCompletion* aio_comp, Extents &&image_extents,
-      ReadResult &&read_result, int op_flags,
+      ReadResult &&read_result, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) = 0;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) = 0;
   virtual bool write(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-      std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) = 0;
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) = 0;
   virtual bool discard(
       AioCompletion* aio_comp, Extents &&image_extents,
       uint32_t discard_granularity_bytes,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      IOContext io_context, const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) = 0;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) = 0;
   virtual bool write_same(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-      std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) = 0;
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) = 0;
   virtual bool compare_and_write(
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&cmp_bl,
-      bufferlist &&bl, uint64_t *mismatch_offset, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      bufferlist &&bl, uint64_t *mismatch_offset, IOContext io_context,
+      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) = 0;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) = 0;
   virtual bool flush(
       AioCompletion* aio_comp, FlushSource flush_source,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) = 0;
-
-  virtual void handle_finished(int r, uint64_t tid) = 0;
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) = 0;
 
 };
 

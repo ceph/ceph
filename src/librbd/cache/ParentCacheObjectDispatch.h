@@ -44,7 +44,7 @@ public:
   }
 
   bool read(
-      uint64_t object_no, const io::Extents &extents, librados::snap_t snap_id,
+      uint64_t object_no, const io::Extents &extents, IOContext io_context,
       int op_flags, const ZTracer::Trace &parent_trace,
       ceph::bufferlist* read_data, io::Extents* extent_map,
       uint64_t* version, int* object_dispatch_flags,
@@ -52,8 +52,8 @@ public:
       Context* on_dispatched) override;
 
   bool discard(
-      uint64_t object_no, uint64_t object_off, uint64_t object_len, 
-      const ::SnapContext &snapc, int discard_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      IOContext io_context, int discard_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
@@ -62,7 +62,7 @@ public:
 
   bool write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags, int write_flags,
+      IOContext io_context, int op_flags, int write_flags,
       std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
@@ -72,8 +72,8 @@ public:
 
   bool write_same(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data, 
-      const ::SnapContext &snapc, int op_flags,
+      io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
+      IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
@@ -81,8 +81,8 @@ public:
   }
 
   bool compare_and_write(
-      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data, 
-      ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
+      ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
       int* object_dispatch_flags, uint64_t* journal_tid,
       io::DispatchResult* dispatch_result, Context** on_finish,
@@ -124,7 +124,7 @@ private:
                   uint64_t offset, uint64_t length, Context *on_finish);
   void handle_read_cache(ceph::immutable_obj_cache::ObjectCacheRequest* ack,
                          uint64_t object_no, uint64_t read_off,
-                         uint64_t read_len, librados::snap_t snap_id,
+                         uint64_t read_len, IOContext io_context,
                          const ZTracer::Trace &parent_trace,
                          ceph::bufferlist* read_data,
                          io::DispatchResult* dispatch_result,

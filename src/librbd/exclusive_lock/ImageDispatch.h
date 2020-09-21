@@ -23,7 +23,6 @@ struct ImageCtx;
 
 namespace io {
 struct AioCompletion;
-template <typename> struct FlushTracker;
 }
 
 namespace exclusive_lock {
@@ -39,52 +38,56 @@ public:
   }
 
   ImageDispatch(ImageCtxT* image_ctx);
-  ~ImageDispatch() override;
 
   io::ImageDispatchLayer get_dispatch_layer() const override {
     return io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK;
   }
 
-  void set_require_lock(io::Direction direction, Context* on_finish);
+  void set_require_lock(bool init_shutdown,
+                        io::Direction direction, Context* on_finish);
   void unset_require_lock(io::Direction direction);
 
   void shut_down(Context* on_finish) override;
 
   bool read(
       io::AioCompletion* aio_comp, io::Extents &&image_extents,
-      io::ReadResult &&read_result, int op_flags,
+      io::ReadResult &&read_result, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      io::DispatchResult* dispatch_result, Context* on_dispatched) override;
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool write(
       io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-      std::atomic<uint32_t>* image_dispatch_flags,
-      io::DispatchResult* dispatch_result, Context* on_dispatched) override;
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool discard(
       io::AioCompletion* aio_comp, io::Extents &&image_extents,
-      uint32_t discard_granularity_bytes,
+      uint32_t discard_granularity_bytes, IOContext io_context,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      io::DispatchResult* dispatch_result, Context* on_dispatched) override;
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool write_same(
       io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-      std::atomic<uint32_t>* image_dispatch_flags,
-      io::DispatchResult* dispatch_result, Context* on_dispatched) override;
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool compare_and_write(
       io::AioCompletion* aio_comp, io::Extents &&image_extents,
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-      std::atomic<uint32_t>* image_dispatch_flags,
-      io::DispatchResult* dispatch_result, Context* on_dispatched) override;
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
   bool flush(
       io::AioCompletion* aio_comp, io::FlushSource flush_source,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      io::DispatchResult* dispatch_result, Context* on_dispatched) override;
-
-  void handle_finished(int r, uint64_t tid) override;
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
 
 private:
   typedef std::list<Context*> Contexts;
@@ -96,7 +99,6 @@ private:
   bool m_require_lock_on_read = false;
   bool m_require_lock_on_write = false;
 
-  io::FlushTracker<ImageCtxT>* m_flush_tracker = nullptr;
   Contexts m_on_dispatches;
 
   bool set_require_lock(io::Direction direction, bool enabled);

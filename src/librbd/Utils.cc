@@ -7,6 +7,7 @@
 #include "librbd/Utils.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
+#include "include/neorados/RADOS.hpp"
 #include "include/rbd/features.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
@@ -177,6 +178,19 @@ uint32_t get_default_snap_create_flags(ImageCtx *ictx) {
   } else {
     ceph_abort_msg("invalid rbd_default_snapshot_quiesce_mode");
   }
+}
+
+SnapContext get_snap_context(
+    const std::optional<
+      std::pair<std::uint64_t,
+                std::vector<std::uint64_t>>>& write_snap_context) {
+  SnapContext snapc;
+  if (write_snap_context) {
+    snapc = SnapContext{write_snap_context->first,
+                        {write_snap_context->second.begin(),
+                         write_snap_context->second.end()}};
+  }
+  return snapc;
 }
 
 } // namespace util

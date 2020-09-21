@@ -43,13 +43,10 @@ public:
   void unblock_writes() override;
   void wait_on_writes_unblocked(Context *on_unblocked) override;
 
-  void finish(int r, ImageDispatchLayer image_dispatch_layer,
-              uint64_t tid) override;
-
 protected:
   bool send_dispatch(
     ImageDispatchInterface* image_dispatch,
-    ImageDispatchSpec<ImageCtxT>* image_dispatch_spec) override;
+    ImageDispatchSpec* image_dispatch_spec) override;
 
 private:
   struct SendVisitor;

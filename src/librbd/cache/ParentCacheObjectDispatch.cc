@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/errno.h"
+#include "include/neorados/RADOS.hpp"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
@@ -64,7 +65,7 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
 
 template <typename I>
 bool ParentCacheObjectDispatch<I>::read(
-    uint64_t object_no, const io::Extents &extents, librados::snap_t snap_id,
+    uint64_t object_no, const io::Extents &extents, IOContext io_context,
     int op_flags, const ZTracer::Trace &parent_trace,
     ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
@@ -94,24 +95,26 @@ bool ParentCacheObjectDispatch<I>::read(
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
-   ([this, read_data, dispatch_result, on_dispatched, object_no, 
-     object_off = object_off, object_len = object_len, snap_id, &parent_trace]
+   ([this, read_data, dispatch_result, on_dispatched, object_no,
+     object_off = object_off, object_len = object_len, io_context,
+      &parent_trace]
    (ObjectCacheRequest* ack) {
-      handle_read_cache(ack, object_no, object_off, object_len, snap_id,
+      handle_read_cache(ack, object_no, object_off, object_len, io_context,
                         parent_trace, read_data, dispatch_result,
                         on_dispatched);
   });
 
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
                                 m_image_ctx->data_ctx.get_id(),
-                                (uint64_t)snap_id, oid, std::move(ctx));
+                                io_context->read_snap().value_or(CEPH_NOSNAP),
+                                oid, std::move(ctx));
   return true;
 }
 
 template <typename I>
 void ParentCacheObjectDispatch<I>::handle_read_cache(
      ObjectCacheRequest* ack, uint64_t object_no, uint64_t read_off,
-     uint64_t read_len, librados::snap_t snap_id,
+     uint64_t read_len, IOContext io_context,
      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
      io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -137,7 +140,8 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
         on_dispatched->complete(r);
       });
     m_plugin_api.read_parent(m_image_ctx, object_no, {{read_off, read_len}},
-                             snap_id, parent_trace, read_data, ctx);
+                             io_context->read_snap().value_or(CEPH_NOSNAP),
+                             parent_trace, read_data, ctx);
     return;
   }
 

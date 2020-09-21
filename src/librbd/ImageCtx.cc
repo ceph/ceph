@@ -912,9 +912,13 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   void ImageCtx::rebuild_data_io_context() {
     auto ctx = std::make_shared<neorados::IOContext>(
       data_ctx.get_id(), data_ctx.get_namespace());
-    ctx->read_snap(snap_id);
-    ctx->write_snap_context(
-      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+    if (snap_id != CEPH_NOSNAP) {
+      ctx->read_snap(snap_id);
+    }
+    if (!snapc.snaps.empty()) {
+      ctx->write_snap_context(
+        {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+    }
 
     // atomically reset the data IOContext to new version
     atomic_store(&data_io_context, ctx);
@@ -922,6 +926,11 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
   IOContext ImageCtx::get_data_io_context() const {
     return atomic_load(&data_io_context);
+  }
+
+  IOContext ImageCtx::duplicate_data_io_context() const {
+    auto ctx = get_data_io_context();
+    return std::make_shared<neorados::IOContext>(*ctx);
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,

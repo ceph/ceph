@@ -30,9 +30,10 @@ void RefreshImageDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool RefreshImageDispatch<I>::read(
     AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -47,9 +48,10 @@ bool RefreshImageDispatch<I>::read(
 template <typename I>
 bool RefreshImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -64,9 +66,11 @@ bool RefreshImageDispatch<I>::write(
 template <typename I>
 bool RefreshImageDispatch<I>::discard(
     AioCompletion* aio_comp, Extents &&image_extents,
-    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    uint32_t discard_granularity_bytes, IOContext io_context,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -81,9 +85,10 @@ bool RefreshImageDispatch<I>::discard(
 template <typename I>
 bool RefreshImageDispatch<I>::write_same(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -98,10 +103,11 @@ bool RefreshImageDispatch<I>::write_same(
 template <typename I>
 bool RefreshImageDispatch<I>::compare_and_write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&cmp_bl,
-    bufferlist &&bl, uint64_t *mismatch_offset, int op_flags,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
+    bufferlist &&bl, uint64_t *mismatch_offset, IOContext io_context,
+    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
@@ -118,11 +124,16 @@ bool RefreshImageDispatch<I>::flush(
     AioCompletion* aio_comp, FlushSource flush_source,
     const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  if (flush_source != FLUSH_SOURCE_USER) {
+  // The refresh state machine can initiate a flush and it can
+  // enable the exclusive-lock which will also attmept to flush.
+  if (flush_source == FLUSH_SOURCE_REFRESH ||
+      flush_source == FLUSH_SOURCE_EXCLUSIVE_LOCK_SKIP_REFRESH ||
+      flush_source == FLUSH_SOURCE_SHUTDOWN) {
     return false;
   }
 

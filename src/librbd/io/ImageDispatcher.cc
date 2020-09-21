@@ -28,75 +28,84 @@ namespace io {
 template <typename I>
 struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
   ImageDispatchInterface* image_dispatch;
-  ImageDispatchSpec<I>* image_dispatch_spec;
+  ImageDispatchSpec* image_dispatch_spec;
 
   SendVisitor(ImageDispatchInterface* image_dispatch,
-              ImageDispatchSpec<I>* image_dispatch_spec)
+              ImageDispatchSpec* image_dispatch_spec)
     : image_dispatch(image_dispatch),
       image_dispatch_spec(image_dispatch_spec) {
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Read& read) const {
+  bool operator()(ImageDispatchSpec::Read& read) const {
     return image_dispatch->read(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
-      std::move(read.read_result), image_dispatch_spec->op_flags,
-      image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
+      std::move(read.read_result), image_dispatch_spec->io_context,
+      image_dispatch_spec->op_flags, image_dispatch_spec->parent_trace,
+      image_dispatch_spec->tid,
       &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
+      &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Discard& discard) const {
+  bool operator()(ImageDispatchSpec::Discard& discard) const {
     return image_dispatch->discard(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
-      discard.discard_granularity_bytes,
+      discard.discard_granularity_bytes, image_dispatch_spec->io_context,
       image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
       &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
+      &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Write& write) const {
+  bool operator()(ImageDispatchSpec::Write& write) const {
     return image_dispatch->write(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents), std::move(write.bl),
-      image_dispatch_spec->op_flags, image_dispatch_spec->parent_trace,
-      image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
+      image_dispatch_spec->io_context, image_dispatch_spec->op_flags,
+      image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
+      &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
+      &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool  operator()(typename ImageDispatchSpec<I>::WriteSame& write_same) const {
+  bool  operator()(ImageDispatchSpec::WriteSame& write_same) const {
     return image_dispatch->write_same(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents), std::move(write_same.bl),
-      image_dispatch_spec->op_flags, image_dispatch_spec->parent_trace,
-      image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
+      image_dispatch_spec->io_context, image_dispatch_spec->op_flags,
+      image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
+      &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
+      &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 
   bool  operator()(
-      typename ImageDispatchSpec<I>::CompareAndWrite& compare_and_write) const {
+      ImageDispatchSpec::CompareAndWrite& compare_and_write) const {
     return image_dispatch->compare_and_write(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
       std::move(compare_and_write.cmp_bl), std::move(compare_and_write.bl),
-      compare_and_write.mismatch_offset, image_dispatch_spec->op_flags,
-      image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
-      &image_dispatch_spec->image_dispatch_flags,
+      compare_and_write.mismatch_offset, image_dispatch_spec->io_context,
+      image_dispatch_spec->op_flags, image_dispatch_spec->parent_trace,
+      image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
+      &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Flush& flush) const {
+  bool operator()(ImageDispatchSpec::Flush& flush) const {
     return image_dispatch->flush(
       image_dispatch_spec->aio_comp, flush.flush_source,
       image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
       &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
+      &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 };
@@ -177,41 +186,9 @@ void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
 }
 
 template <typename I>
-void ImageDispatcher<I>::finish(int r, ImageDispatchLayer image_dispatch_layer,
-                                uint64_t tid) {
-  auto cct = this->m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << ", tid=" << tid << dendl;
-
-  // loop in reverse order from last invoked dispatch layer calling its
-  // handle_finished method
-  while (image_dispatch_layer != IMAGE_DISPATCH_LAYER_NONE) {
-    std::shared_lock locker{this->m_lock};
-    auto it = this->m_dispatches.find(image_dispatch_layer);
-    image_dispatch_layer = static_cast<ImageDispatchLayer>(
-      image_dispatch_layer - 1);
-
-    if (it == this->m_dispatches.end()) {
-      continue;
-    }
-
-    // track callback while lock is dropped so that the layer cannot be shutdown
-    auto& dispatch_meta = it->second;
-    auto dispatch = dispatch_meta.dispatch;
-    auto async_op_tracker = dispatch_meta.async_op_tracker;
-    async_op_tracker->start_op();
-    locker.unlock();
-
-    dispatch->handle_finished(r, tid);
-
-    // safe since dispatch_meta cannot be deleted until ops finished
-    async_op_tracker->finish_op();
-  }
-}
-
-template <typename I>
 bool ImageDispatcher<I>::send_dispatch(
     ImageDispatchInterface* image_dispatch,
-    ImageDispatchSpec<I>* image_dispatch_spec) {
+    ImageDispatchSpec* image_dispatch_spec) {
   if (image_dispatch_spec->tid == 0) {
     image_dispatch_spec->tid = ++m_next_tid;
   }

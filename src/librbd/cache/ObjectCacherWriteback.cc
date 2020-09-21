@@ -9,6 +9,7 @@
 #include "common/ceph_mutex.h"
 #include "osdc/Striper.h"
 #include "include/Context.h"
+#include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
@@ -136,9 +137,15 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
   auto req_comp = new io::ReadResult::C_ObjectReadRequest(
     aio_comp, off, len, {{0, len}});
 
+  auto io_context = m_ictx->duplicate_data_io_context();
+  if (snapid != CEPH_NOSNAP) {
+    io_context->read_snap(snapid);
+  }
+
   auto req = io::ObjectDispatchSpec::create_read(
-    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, {{off, len}}, snapid,
-    op_flags, trace, &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
+    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, {{off, len}},
+    io_context, op_flags, trace, &req_comp->bl,
+    &req_comp->extent_map, nullptr, req_comp);
   req->send();
 }
 
@@ -195,9 +202,15 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
   Context *ctx = new C_OrderedWrite(m_ictx->cct, result, trace, this);
   ctx = util::create_async_context_callback(*m_ictx, ctx);
 
+  auto io_context = m_ictx->duplicate_data_io_context();
+  if (!snapc.empty()) {
+    io_context->write_snap_context(
+      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+  }
+
   auto req = io::ObjectDispatchSpec::create_write(
     m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, off, std::move(bl_copy),
-    snapc, 0, 0, std::nullopt, journal_tid, trace, ctx);
+    io_context, 0, 0, std::nullopt, journal_tid, trace, ctx);
   req->object_dispatch_flags = (
     io::OBJECT_DISPATCH_FLAG_FLUSH |
     io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR);

@@ -406,8 +406,6 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
     return;
   }
 
-  ::SnapContext snapc = m_image_ctx.snapc;
-
   uint64_t overlap;
   int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &overlap);
   ceph_assert(r == 0);
@@ -420,7 +418,7 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
 
   operation::FlattenRequest<I> *req = new operation::FlattenRequest<I>(
     m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), overlap_objects,
-    snapc, prog_ctx);
+    prog_ctx);
   req->send();
 }
 

@@ -116,15 +116,16 @@ void QosImageDispatch<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
 template <typename I>
 bool QosImageDispatch<I>::read(
     AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
   if (needs_throttle(true, image_extents, tid, image_dispatch_flags,
-                     dispatch_result, on_dispatched)) {
+                     dispatch_result, on_finish, on_dispatched)) {
     return true;
   }
 
@@ -134,15 +135,16 @@ bool QosImageDispatch<I>::read(
 template <typename I>
 bool QosImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
-                     dispatch_result, on_dispatched)) {
+                     dispatch_result, on_finish, on_dispatched)) {
     return true;
   }
 
@@ -152,15 +154,17 @@ bool QosImageDispatch<I>::write(
 template <typename I>
 bool QosImageDispatch<I>::discard(
     AioCompletion* aio_comp, Extents &&image_extents,
-    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    uint32_t discard_granularity_bytes, IOContext io_context,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
-                     dispatch_result, on_dispatched)) {
+                     dispatch_result, on_finish, on_dispatched)) {
     return true;
   }
 
@@ -170,15 +174,16 @@ bool QosImageDispatch<I>::discard(
 template <typename I>
 bool QosImageDispatch<I>::write_same(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
-                     dispatch_result, on_dispatched)) {
+                     dispatch_result, on_finish, on_dispatched)) {
     return true;
   }
 
@@ -188,16 +193,17 @@ bool QosImageDispatch<I>::write_same(
 template <typename I>
 bool QosImageDispatch<I>::compare_and_write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&cmp_bl,
-    bufferlist &&bl, uint64_t *mismatch_offset, int op_flags,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
+    bufferlist &&bl, uint64_t *mismatch_offset, IOContext io_context,
+    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
-                     dispatch_result, on_dispatched)) {
+                     dispatch_result, on_finish, on_dispatched)) {
     return true;
   }
 
@@ -209,7 +215,8 @@ bool QosImageDispatch<I>::flush(
     AioCompletion* aio_comp, FlushSource flush_source,
     const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
@@ -243,13 +250,18 @@ template <typename I>
 bool QosImageDispatch<I>::needs_throttle(
     bool read_op, const Extents& image_extents, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   auto extent_length = get_extent_length(image_extents);
   bool all_qos_flags_set = false;
 
   if (!read_op) {
     m_flush_tracker->start_io(tid);
+    *on_finish = new LambdaContext([this, tid, on_finish=*on_finish](int r) {
+        handle_finished(r, tid);
+        on_finish->complete(r);
+      });
   }
   *dispatch_result = DISPATCH_RESULT_CONTINUE;
 

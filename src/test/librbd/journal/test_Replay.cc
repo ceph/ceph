@@ -870,7 +870,7 @@ TEST_F(TestJournalReplay, ObjectPosition) {
   C_SaferCond flush_ctx;
   aio_comp = librbd::io::AioCompletion::create_and_start(
     &flush_ctx, ictx, librbd::io::AIO_TYPE_FLUSH);
-  auto req = librbd::io::ImageDispatchSpec<>::create_flush(
+  auto req = librbd::io::ImageDispatchSpec::create_flush(
     *ictx, librbd::io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
     librbd::io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
