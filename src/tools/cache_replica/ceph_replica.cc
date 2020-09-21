@@ -61,6 +61,11 @@ static void usage()
   generic_server_usage();
 }
 
+static void handle_replica_signal(int signum)
+{
+  //TODO: deal with SIGINT & SIGTERM signal
+}
+
 int main(int argc, const char **argv)
 {
   ceph_pthread_setname(pthread_self(), "ceph-replica");
@@ -160,9 +165,22 @@ int main(int argc, const char **argv)
     return r;
   }
 
+  // set up signal handlers, see: man 7 signal
+  init_async_signal_handler();
+  // 1) SIGHUP
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  // 2) SIGINT: Interrupt from keyboard
+  register_async_signal_handler_oneshot(SIGINT, handle_replica_signal);
+  // 3) SIGTERM: Termination signal
+  register_async_signal_handler_oneshot(SIGTERM, handle_replica_signal);
+
   msgr_public->start();
 
   msgr_public->wait();
+
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_replica_signal);
+  unregister_async_signal_handler(SIGTERM, handle_replica_signal);
 
   return 0;
 }
