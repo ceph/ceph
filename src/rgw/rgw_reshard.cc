@@ -347,7 +347,7 @@ static int set_target_layout(rgw::sal::RadosStore *store,
 
 int RGWBucketReshard::set_target_layout(int new_num_shards, const DoutPrefixProvider *dpp)
 {
-  int ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::InProgress, dpp);
+  int ret = update_bucket(rgw::BucketReshardState::InProgress, dpp);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
@@ -660,7 +660,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
   //overwrite current_index for the next reshard process
   bucket_info.layout.current_index = *bucket_info.layout.target_index;
   bucket_info.layout.target_index = std::nullopt; // target_layout doesn't need to exist after reshard
-  ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::None, dpp);
+
+  ret = update_bucket(rgw::BucketReshardState::None, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed writing bucket instance info: " << dendl;
       return ret;
@@ -675,7 +676,7 @@ int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_buc
   return store->svc()->bi_rados->get_reshard_status(dpp, bucket_info, status);
 }
 
-int RGWBucketReshard::set_reshard_status(rgw::BucketReshardState s, const DoutPrefixProvider* dpp) {
+int RGWBucketReshard::update_bucket(rgw::BucketReshardState s, const DoutPrefixProvider* dpp) {
     bucket_info.layout.resharding = s;
     int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), nullptr, dpp);
     if (ret < 0) {
@@ -744,27 +745,23 @@ error_out:
 
   reshard_lock.unlock();
 
-
   //TODO: Cleanup failed incomplete resharding
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->svc()->bi->clean_index(dpp, bucket_info, bucket_info.layout.current_index);
-  if (ret2 < 0) {
-    ldpp_dout(dpp, -1) << "Error: " << __func__ <<
-      " failed to clean up shards from failed incomplete resharding; " <<
-      "RGWRados::clean_bucket_index returned " << ret2 << dendl;
-  }
 
-  // restore old index if reshard fails
+  if (bucket_info.layout.target_index != std::nullopt) {
+    int ret2 = store->svc()->bi->clean_index(dpp, bucket_info, *(bucket_info.layout.target_index));
+    if (ret2 < 0) {
+      ldpp_dout(dpp, -1) << "Error: " << __func__ <<
+        " failed to clean up shards from failed incomplete resharding; " <<
+        "RGWRados::clean_bucket_index returned " << ret2 << dendl;
+    }
+  }
+    // restore old index
   bucket_info.layout.current_index = prev_index;
-  ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), nullptr, dpp);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing bucket instance info: " << dendl;
-      return ret;
-  }
 
-  ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::None, dpp);
+  ret = update_bucket(rgw::BucketReshardState::None, dpp);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
