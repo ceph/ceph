@@ -662,7 +662,7 @@ public:
   bool dne() { return info.dne(); }
 
   virtual void send_cluster_message(
-    int osd, Message *m, epoch_t epoch, bool share_map_update) override;
+    int osd, MessageRef m, epoch_t epoch, bool share_map_update) override;
 
 protected:
   epoch_t get_last_peering_reset() const {

@@ -282,7 +282,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
       virtual void send_message_osd_cluster(
        std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
      virtual void send_message_osd_cluster(
-       Message *m, Connection *con) = 0;
+       MessageRef, Connection *con) = 0;
      virtual void send_message_osd_cluster(
        Message *m, const ConnectionRef& con) = 0;
      virtual ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) = 0;
