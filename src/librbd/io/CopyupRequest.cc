@@ -247,6 +247,7 @@ void CopyupRequest<I>::deep_copy() {
   ceph_assert(m_image_ctx->parent != nullptr);
 
   m_lock.lock();
+  m_deep_copied = true;
   m_flatten = is_copyup_required() ? true : m_image_ctx->migration_info.flatten;
   m_lock.unlock();
 
@@ -401,7 +402,7 @@ void CopyupRequest<I>::copyup() {
 
   ldout(cct, 20) << dendl;
 
-  bool copy_on_read = m_pending_requests.empty();
+  bool copy_on_read = m_pending_requests.empty() && !m_deep_copied;
   bool deep_copyup = !snapc.snaps.empty() && !m_copyup_is_zero;
   if (m_copyup_is_zero) {
     m_copyup_data.clear();

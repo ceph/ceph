@@ -615,9 +615,6 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyOnRead) {
   expect_object_map_update(mock_image_ctx, CEPH_NOSNAP, 0, OBJECT_EXISTS, true,
                            0);
 
-  expect_sparse_copyup(mock_image_ctx, CEPH_NOSNAP, ictx->get_object_name(0),
-                       {}, "", 0);
-
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
