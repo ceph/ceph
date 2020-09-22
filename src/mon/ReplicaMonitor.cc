@@ -6,3 +6,75 @@
  *
  * Author: Changcheng Liu <changcheng.liu@aliyun.com>
  */
+
+#include "ReplicaMonitor.h"
+
+#define FN_NAME (__CEPH_ASSERT_FUNCTION == nullptr ? __func__ : __CEPH_ASSERT_FUNCTION)
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_cache_replica
+#undef dout_prefix
+#define dout_prefix _prefix(_dout, FN_NAME, mon, this)
+static ostream& _prefix(std::ostream *_dout,
+                        std::string_view func_name,
+                        const Monitor& mon,
+                        const ReplicaMonitor *replica_monitor) {
+  return *_dout << func_name << ": " << "mon." << mon.name << "@" << mon.rank
+                << "(" << mon.get_state_name() << ").ReplicaMonitor: ";
+}
+
+ReplicaMonitor::ReplicaMonitor(Monitor& monitor, Paxos& paxos, std::string service_name)
+  : PaxosService(monitor, paxos, service_name)
+{
+}
+
+void ReplicaMonitor::init()
+{
+  dout(10) << dendl;
+}
+
+void ReplicaMonitor::create_initial()
+{
+// TODO: Must implement pure virtual function
+}
+
+void ReplicaMonitor::update_from_paxos(bool *need_bootstrap)
+{
+// TODO: Must implement pure virtual function
+}
+
+void ReplicaMonitor::create_pending()
+{
+// TODO: Must implement pure virtual function
+}
+
+void ReplicaMonitor::encode_pending(MonitorDBStore::TransactionRef mon_dbstore_tran)
+{
+// TODO: Must implement pure virtual function
+}
+
+void ReplicaMonitor::encode_full(MonitorDBStore::TransactionRef mon_dbstore_tran)
+{
+// Empty function
+}
+
+bool ReplicaMonitor::preprocess_query(MonOpRequestRef mon_op_req)
+{
+// TODO: Must implement pure virtual function
+  return false;
+}
+
+bool ReplicaMonitor::prepare_update(MonOpRequestRef mon_op_req)
+{
+// TODO: Must implement pure virtual function
+  return false;
+}
+
+void ReplicaMonitor::on_restart()
+{
+// TODO: Clear the pending map
+}
+
+void ReplicaMonitor::check_sub(Subscription *sub)
+{
+// TODO:
+}

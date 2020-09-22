@@ -10,4 +10,33 @@
 #ifndef CEPH_REPLICA_MONITOR_H
 #define CEPH_REPLICA_MONITOR_H
 
+#include "ReplicaDaemonMap.h"
+#include "PaxosService.h"
+
+constexpr std::string_view REPLICAMAP_DB_PREFIX{"replicamap_db"};
+
+class ReplicaMonitor : public PaxosService
+{
+public:
+  ReplicaMonitor(Monitor& monitor, Paxos& paxos, std::string service_name);
+  void init() override;
+  bool is_leader() {
+    return mon.is_leader();
+  }
+
+  //service pure virtual function
+  void create_initial() override;
+  void update_from_paxos(bool *need_boostrap) override;
+  void create_pending() override;
+  void encode_pending(MonitorDBStore::TransactionRef mon_dbstore_tran) override;
+  //Do we need full version? If not, empty implementation
+  void encode_full(MonitorDBStore::TransactionRef mon_dbstore_tran) override;
+  //return true if being processed
+  bool preprocess_query(MonOpRequestRef mon_op_req) override;
+  bool prepare_update(MonOpRequestRef mon_op_req) override;
+  void on_restart() override;
+
+  void check_sub(Subscription *sub);
+};
+
 #endif // defined CEPH_REPLICA_MONITOR_H

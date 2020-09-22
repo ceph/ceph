@@ -681,6 +681,11 @@ public:
     return (class KVMonitor*) paxos_service[PAXOS_KV].get();
   }
 
+#if defined(WITH_CACHE_REPLICA)
+   class ReplicaMonitor *replicamon() {
+     return (class ReplicaMonitor*) paxos_service[PAXOS_REPLICAMAP].get();
+   }
+#endif
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;

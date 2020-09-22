@@ -83,6 +83,7 @@
 #include "MgrMonitor.h"
 #include "MgrStatMonitor.h"
 #include "ConfigMonitor.h"
+#include "ReplicaMonitor.h"
 #include "KVMonitor.h"
 #include "mon/HealthMonitor.h"
 #include "common/config.h"
@@ -247,6 +248,9 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
   paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
   paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv"));
+#if defined(WITH_CACHE_REPLICA)
+  paxos_service[PAXOS_REPLICAMAP].reset(new ReplicaMonitor(*this, *paxos, "replicamap"));
+#endif
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);
@@ -5192,6 +5196,11 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
         ceph_assert(sub != nullptr);
         mdsmon()->check_sub(sub);
       }
+#if defined(WITH_CACHE_REPLICA)
+    } else if (p->first == "replicamap") {
+      dout(10) << __func__ << ": ReplicaDaemon sub '" << p->first << "'" << dendl;
+      replicamon()->check_sub(s->sub_map[p->first]);
+#endif
     } else if (p->first == "osdmap") {
       if ((int)s->is_capable("osd", MON_CAP_R)) {
 	if (s->osd_epoch > p->second.start) {
