@@ -6,6 +6,45 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/circular_buffer.hh>
 
+class read_lock {
+public:
+  seastar::future<> lock();
+  void unlock();
+};
+
+class write_lock {
+public:
+  seastar::future<> lock();
+  void unlock();
+};
+
+class excl_lock {
+public:
+  seastar::future<> lock();
+  void unlock();
+};
+
+// promote from read to excl
+class excl_lock_from_read {
+public:
+  seastar::future<> lock();
+  void unlock();
+};
+
+// promote from write to excl
+class excl_lock_from_write {
+public:
+  seastar::future<> lock();
+  void unlock();
+};
+
+// promote from excl to excl
+class excl_lock_from_excl {
+public:
+  seastar::future<> lock();
+  void unlock();
+};
+
 /// shared/exclusive mutual exclusion
 ///
 /// this lock design uses reader and writer is entirely and completely
@@ -19,17 +58,49 @@
 /// - readers
 /// - writers
 /// - exclusive users
-class tri_mutex {
+class tri_mutex : private read_lock,
+                          write_lock,
+                          excl_lock,
+                          excl_lock_from_read,
+                          excl_lock_from_write,
+                          excl_lock_from_excl
+{
 public:
   tri_mutex() = default;
+
+  read_lock& for_read() {
+    return *this;
+  }
+  write_lock& for_write() {
+    return *this;
+  }
+  excl_lock& for_excl() {
+    return *this;
+  }
+  excl_lock_from_read& excl_from_read() {
+    return *this;
+  }
+  excl_lock_from_write& excl_from_write() {
+    return *this;
+  }
+  excl_lock_from_write& excl_from_excl() {
+    return *this;
+  }
+
   // for shared readers
   seastar::future<> lock_for_read();
   bool try_lock_for_read() noexcept;
   void unlock_for_read();
+  void promote_from_read();
+  void demote_to_read();
+
   // for shared writers
   seastar::future<> lock_for_write(bool greedy);
   bool try_lock_for_write(bool greedy) noexcept;
   void unlock_for_write();
+  void promote_from_write();
+  void demote_to_write();
+
   // for exclusive users
   seastar::future<> lock_for_excl();
   bool try_lock_for_excl() noexcept;
@@ -66,4 +137,10 @@ private:
     type_t type;
   };
   seastar::circular_buffer<waiter_t> waiters;
+  friend class read_lock;
+  friend class write_lock;
+  friend class excl_lock;
+  friend class excl_lock_from_read;
+  friend class excl_lock_from_write;
+  friend class excl_lock_from_excl;
 };
