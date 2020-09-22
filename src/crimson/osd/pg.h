@@ -482,9 +482,8 @@ public:
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rctx);
 
-  static std::pair<hobject_t, RWState::State> get_oid_and_lock(
-    const MOSDOp &m,
-    const OpInfo &op_info);
+  static hobject_t get_oid(const MOSDOp &m);
+  static RWState::State get_lock_type(const OpInfo &op_info);
   static std::optional<hobject_t> resolve_oid(
     const SnapSet &snapset,
     const hobject_t &oid);
@@ -500,6 +499,9 @@ public:
     std::pair<crimson::osd::ObjectContextRef, bool>>
   get_or_load_head_obc(hobject_t oid);
 
+  load_obc_ertr::future<crimson::osd::ObjectContextRef>
+  load_head_obc(ObjectContextRef obc);
+
   load_obc_ertr::future<ObjectContextRef> get_locked_obc(
     Operation *op,
     const hobject_t &oid,
@@ -514,8 +516,8 @@ public:
     if (__builtin_expect(stopping, false)) {
       throw crimson::common::system_shutdown_exception();
     }
-    auto [oid, type] = get_oid_and_lock(*m, op_info);
-    return get_locked_obc(op, oid, type)
+    RWState::State type = get_lock_type(op_info);
+    return get_locked_obc(op, get_oid(*m), type)
       .safe_then([f=std::forward<F>(f), type=type](auto obc) {
 	return f(obc).finally([obc, type=type] {
 	  obc->put_lock_type(type);

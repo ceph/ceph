@@ -592,23 +592,26 @@ private:
       return seastar::future<ValuesT...>::get0();
     }
 
-
     template <class FuncT>
     auto finally(FuncT &&func) {
-      using func_result_t = std::invoke_result_t<FuncT>;
-      using func_errorator_t = get_errorator_t<func_result_t>;
-      using return_errorator_t = func_errorator_t;
-      using futurator_t =
-        typename return_errorator_t::template futurize<func_result_t>;
-
       return this->then_wrapped(
-	[ func = std::forward<FuncT>(func)
-	] (auto&& future) mutable noexcept {
-	  return futurator_t::invoke(std::forward<FuncT>(func)).safe_then(
-	    [future = std::forward<decltype(future)>(future)]() mutable {
-	      return std::move(future);
-	    });
-	});
+        [func = std::forward<FuncT>(func)](auto &&result) mutable noexcept {
+        if constexpr (seastar::is_future<std::invoke_result_t<FuncT>>::value) {
+          return ::seastar::futurize_invoke(std::forward<FuncT>(func)).then_wrapped(
+            [result = std::move(result)](auto&& f_res) mutable {
+            // TODO: f_res.failed()
+            f_res.discard_result();
+            return std::move(result);
+          });
+        } else {
+          try {
+            func();
+          } catch (...) {
+            // TODO: rethrow
+          }
+          return std::move(result);
+        }
+      });
     }
 
     // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail

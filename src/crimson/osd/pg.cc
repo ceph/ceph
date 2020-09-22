@@ -717,23 +717,24 @@ seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
   });
 }
 
-std::pair<hobject_t, RWState::State> PG::get_oid_and_lock(
-  const MOSDOp &m,
-  const OpInfo &op_info)
+hobject_t PG::get_oid(const MOSDOp &m)
 {
-  auto oid = m.get_snapid() == CEPH_SNAPDIR ?
-    m.get_hobj().get_head() : m.get_hobj();
+  return (m.get_snapid() == CEPH_SNAPDIR ?
+          m.get_hobj().get_head() :
+          m.get_hobj());
+}
 
-  RWState::State lock_type = RWState::RWNONE;
+RWState::State PG::get_lock_type(const OpInfo &op_info)
+{
+
   if (op_info.rwordered() && op_info.may_read()) {
-    lock_type = RWState::RWState::RWEXCL;
+    return RWState::RWEXCL;
   } else if (op_info.rwordered()) {
-    lock_type = RWState::RWState::RWWRITE;
+    return RWState::RWWRITE;
   } else {
     ceph_assert(op_info.may_read());
-    lock_type = RWState::RWState::RWREAD;
+    return RWState::RWREAD;
   }
-  return std::make_pair(oid, lock_type);
 }
 
 std::optional<hobject_t> PG::resolve_oid(
@@ -831,28 +832,36 @@ PG::get_or_load_head_obc(hobject_t oid)
       oid);
     bool got = obc->maybe_get_excl();
     ceph_assert(got);
-    return backend->load_metadata(oid).safe_then(
-      [oid, obc=std::move(obc)](auto md) ->
-        load_obc_ertr::future<
-          std::pair<crimson::osd::ObjectContextRef, bool>>
-      {
-	logger().debug(
-	  "get_or_load_head_obc: loaded obs {} for {}", md->os.oi, oid);
-	if (!md->ss) {
-	  logger().error(
-	    "get_or_load_head_obc: oid {} missing snapset", oid);
-	  return crimson::ct_error::object_corrupted::make();
-	}
-	obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
-	  logger().debug(
-	    "get_or_load_head_obc: returning obc {} for {}",
-	    obc->obs.oi, obc->obs.oi.soid);
-	  return load_obc_ertr::make_ready_future<
-	    std::pair<crimson::osd::ObjectContextRef, bool>>(
-	      std::make_pair(obc, false)
-	    );
-      });
+    return load_head_obc(obc).safe_then([](auto obc) {
+      return load_obc_ertr::make_ready_future<
+        std::pair<crimson::osd::ObjectContextRef, bool>>(
+          std::make_pair(std::move(obc), false)
+        );
+    });
   }
+}
+
+PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
+PG::load_head_obc(ObjectContextRef obc)
+{
+  hobject_t oid = obc->get_oid();
+  return backend->load_metadata(oid).safe_then([obc=std::move(obc)](auto md)
+    -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
+    const hobject_t& oid = md->os.oi.soid;
+    logger().debug(
+      "get_or_load_head_obc: loaded obs {} for {}", md->os.oi, oid);
+    if (!md->ss) {
+      logger().error(
+        "get_or_load_head_obc: oid {} missing snapset", oid);
+      return crimson::ct_error::object_corrupted::make();
+    }
+    obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
+    logger().debug(
+      "get_or_load_head_obc: returning obc {} for {}",
+      obc->obs.oi, obc->obs.oi.soid);
+    return load_obc_ertr::make_ready_future<
+      crimson::osd::ObjectContextRef>(obc);
+  });
 }
 
 PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
