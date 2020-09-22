@@ -100,7 +100,7 @@ class item_iterator_t {
   void next_item_range(const char* p_end) const {
     auto p_item_end = p_end - sizeof(node_offset_t);
     assert(p_items_start < p_item_end);
-    back_offset = *reinterpret_cast<const node_offset_t*>(p_item_end);
+    back_offset = reinterpret_cast<const node_offset_packed_t*>(p_item_end)->value;
     assert(back_offset);
     const char* p_item_start = p_item_end - back_offset;
     assert(p_items_start <= p_item_start);

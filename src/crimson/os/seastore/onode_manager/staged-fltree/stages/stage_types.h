@@ -284,7 +284,7 @@ struct memory_range_t {
 enum class ContainerType { ITERATIVE, INDEXABLE };
 
 template <node_type_t> struct value_type;
-template<> struct value_type<node_type_t::INTERNAL> { using type = laddr_t; };
+template<> struct value_type<node_type_t::INTERNAL> { using type = laddr_packed_t; };
 template<> struct value_type<node_type_t::LEAF> { using type = onode_t; };
 template <node_type_t NODE_TYPE>
 using value_type_t = typename value_type<NODE_TYPE>::type;

@@ -34,6 +34,10 @@ template<> struct _full_key_type<KeyT::HOBJ> { using type = key_hobj_t; };
 template <KeyT type>
 using full_key_t = typename _full_key_type<type>::type;
 
+struct node_offset_packed_t {
+  node_offset_t value;
+} __attribute__((packed));
+
 // TODO: consider alignments
 struct shard_pool_t {
   bool operator==(const shard_pool_t& x) const {

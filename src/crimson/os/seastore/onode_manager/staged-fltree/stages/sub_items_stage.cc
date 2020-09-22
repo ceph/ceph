@@ -8,9 +8,9 @@
 namespace crimson::os::seastore::onode {
 
 template <KeyT KT>
-const laddr_t* internal_sub_items_t::insert_at(
+const laddr_packed_t* internal_sub_items_t::insert_at(
     NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
-    const full_key_t<KT>& key, const laddr_t& value,
+    const full_key_t<KT>& key, const laddr_packed_t& value,
     size_t index, node_offset_t size, const char* p_left_bound) {
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
@@ -24,9 +24,9 @@ const laddr_t* internal_sub_items_t::insert_at(
   mut.copy_in_absolute(p_insert, item);
   return &reinterpret_cast<internal_sub_item_t*>(p_insert)->value;
 }
-template const laddr_t* internal_sub_items_t::insert_at<KeyT::VIEW>(
+template const laddr_packed_t* internal_sub_items_t::insert_at<KeyT::VIEW>(
     NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KeyT::VIEW>&,
-    const laddr_t&, size_t, node_offset_t, const char*);
+    const laddr_packed_t&, size_t, node_offset_t, const char*);
 
 size_t internal_sub_items_t::trim_until(
     NodeExtentMutable&, internal_sub_items_t& items, size_t index) {
@@ -55,8 +55,8 @@ void internal_sub_items_t::Appender<KT>::append(
 
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
-    const full_key_t<KT>& key, const laddr_t& value, const laddr_t*& p_value) {
-  assert(pp_value == nullptr);
+    const full_key_t<KT>& key, const laddr_packed_t& value,
+    const laddr_packed_t*& p_value) {
   p_append -= sizeof(internal_sub_item_t);
   auto item = internal_sub_item_t{snap_gen_t::from_key<KT>(key), value};
   p_mut->copy_in_absolute(p_append, item);
@@ -86,8 +86,8 @@ const onode_t* leaf_sub_items_t::insert_at(
   // c. compensate affected offsets
   auto item_size = value.size + sizeof(snap_gen_t);
   for (auto i = index; i < sub_items.keys(); ++i) {
-    const node_offset_t& offset_i = sub_items.get_offset(i);
-    mut.copy_in_absolute((void*)&offset_i, node_offset_t(offset_i + item_size));
+    const node_offset_packed_t& offset_i = sub_items.get_offset(i);
+    mut.copy_in_absolute((void*)&offset_i, node_offset_t(offset_i.value + item_size));
   }
 
   // d. [item(index-1) ... item(0) ... offset(index)] <<< sizeof(node_offset_t)
@@ -162,7 +162,7 @@ char* leaf_sub_items_t::Appender<KT>::wrap() {
         int compensate = (last_offset - op_src->get_offset_to_end(arg.from));
         node_offset_t offset;
         for (auto i = arg.from; i < arg.from + arg.items; ++i) {
-          offset = op_src->get_offset(i) + compensate;
+          offset = op_src->get_offset(i).value + compensate;
           p_cur -= sizeof(node_offset_t);
           p_mut->copy_in_absolute(p_cur, offset);
         }

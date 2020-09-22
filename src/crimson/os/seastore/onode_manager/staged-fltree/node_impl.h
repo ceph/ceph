@@ -50,7 +50,7 @@ class InternalNodeImpl : public NodeImpl {
   virtual ~InternalNodeImpl() = default;
 
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
-  virtual const laddr_t* get_p_value(
+  virtual const laddr_packed_t* get_p_value(
       const search_position_t&,
       key_view_t* = nullptr, internal_marker_t = {}) const {
     assert(false && "impossible path");
@@ -62,13 +62,13 @@ class InternalNodeImpl : public NodeImpl {
     assert(false && "impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
-  virtual const laddr_t* insert(
-      const key_view_t&, const laddr_t&, search_position_t&, match_stage_t&, node_offset_t&) {
+  virtual const laddr_packed_t* insert(
+      const key_view_t&, const laddr_packed_t&, search_position_t&, match_stage_t&, node_offset_t&) {
     assert(false && "impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
-  virtual std::tuple<search_position_t, bool, const laddr_t*> split_insert(
-      NodeExtentMutable&, NodeImpl&, const key_view_t&, const laddr_t&,
+  virtual std::tuple<search_position_t, bool, const laddr_packed_t*> split_insert(
+      NodeExtentMutable&, NodeImpl&, const key_view_t&, const laddr_packed_t&,
       search_position_t&, match_stage_t&, node_offset_t&) {
     assert(false && "impossible path");
   }

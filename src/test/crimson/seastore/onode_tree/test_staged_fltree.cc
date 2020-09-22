@@ -167,6 +167,7 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
   onode_t value = {2};
 #define _STAGE_T(NodeType) node_to_stage_t<typename NodeType::node_stage_t>
 #define NXT_T(StageType)  staged<typename StageType::next_param_t>
+  laddr_packed_t i_value{0};
   logger().info("\n"
     "Bytes of a key-value insertion (full-string):\n"
     "  s-p-c, 'n'-'o', s-g => onode_t(2): typically internal 41B, leaf 35B\n"
@@ -178,15 +179,15 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
     "  LeafNode1: {} {} {}\n"
     "  LeafNode2: {} {}\n"
     "  LeafNode3: {}",
-    _STAGE_T(InternalNode0)::template insert_size<KeyT::VIEW>(key_view, 0),
-    NXT_T(_STAGE_T(InternalNode0))::template insert_size<KeyT::VIEW>(key_view, 0),
-    NXT_T(NXT_T(_STAGE_T(InternalNode0)))::template insert_size<KeyT::VIEW>(key_view, 0),
-    _STAGE_T(InternalNode1)::template insert_size<KeyT::VIEW>(key_view, 0),
-    NXT_T(_STAGE_T(InternalNode1))::template insert_size<KeyT::VIEW>(key_view, 0),
-    NXT_T(NXT_T(_STAGE_T(InternalNode1)))::template insert_size<KeyT::VIEW>(key_view, 0),
-    _STAGE_T(InternalNode2)::template insert_size<KeyT::VIEW>(key_view, 0),
-    NXT_T(_STAGE_T(InternalNode2))::template insert_size<KeyT::VIEW>(key_view, 0),
-    _STAGE_T(InternalNode3)::template insert_size<KeyT::VIEW>(key_view, 0),
+    _STAGE_T(InternalNode0)::template insert_size<KeyT::VIEW>(key_view, i_value),
+    NXT_T(_STAGE_T(InternalNode0))::template insert_size<KeyT::VIEW>(key_view, i_value),
+    NXT_T(NXT_T(_STAGE_T(InternalNode0)))::template insert_size<KeyT::VIEW>(key_view, i_value),
+    _STAGE_T(InternalNode1)::template insert_size<KeyT::VIEW>(key_view, i_value),
+    NXT_T(_STAGE_T(InternalNode1))::template insert_size<KeyT::VIEW>(key_view, i_value),
+    NXT_T(NXT_T(_STAGE_T(InternalNode1)))::template insert_size<KeyT::VIEW>(key_view, i_value),
+    _STAGE_T(InternalNode2)::template insert_size<KeyT::VIEW>(key_view, i_value),
+    NXT_T(_STAGE_T(InternalNode2))::template insert_size<KeyT::VIEW>(key_view, i_value),
+    _STAGE_T(InternalNode3)::template insert_size<KeyT::VIEW>(key_view, i_value),
     _STAGE_T(LeafNode0)::template insert_size<KeyT::HOBJ>(key, value),
     NXT_T(_STAGE_T(LeafNode0))::template insert_size<KeyT::HOBJ>(key, value),
     NXT_T(NXT_T(_STAGE_T(LeafNode0)))::template insert_size<KeyT::HOBJ>(key, value),
