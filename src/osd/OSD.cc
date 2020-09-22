@@ -3512,7 +3512,7 @@ int OSD::init()
     service.set_statfs(stbuf, alerts);
   }
 
-  // client_messenger auth_client is already set up by monc.
+  // client_messenger's auth_client will be set up by monc->init() later.
   for (auto m : { cluster_messenger,
 	objecter_messenger,
 	hb_front_client_messenger,
