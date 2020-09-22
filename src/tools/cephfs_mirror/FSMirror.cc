@@ -96,10 +96,14 @@ FSMirror::FSMirror(CephContext *cct, std::string_view fs_name, uint64_t pool_id,
 FSMirror::~FSMirror() {
   dout(20) << dendl;
 
-  std::scoped_lock locker(m_lock);
-  delete m_instance_watcher;
-  delete m_mirror_watcher;
-  m_cluster.reset();
+  {
+    std::scoped_lock locker(m_lock);
+    delete m_instance_watcher;
+    delete m_mirror_watcher;
+    m_cluster.reset();
+  }
+  // outside the lock so that in-progress commands can acquire
+  // lock and finish executing.
   delete m_asok_hook;
 }
 
