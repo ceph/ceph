@@ -86,6 +86,7 @@ private:
   bool m_flatten = false;
   bool m_copyup_required = true;
   bool m_copyup_is_zero = true;
+  bool m_deep_copied = false;
 
   std::map<uint64_t, uint64_t> m_copyup_extent_map;
   ceph::bufferlist m_copyup_data;
