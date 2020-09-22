@@ -126,6 +126,9 @@ function run_in_docker() {
     local cmd="$dockercmd run $opts --rm --name $image --privileged $ccache"
     cmd+=" --volume $downstream:$downstream"
     cmd+=" --volume $upstream:$upstream"
+    if test "$dockercmd" = "podman" ; then
+        cmd+=" --userns=keep-id"
+    fi
     local status=0
     if test "$script" = "SHELL" ; then
         $cmd --tty --interactive --workdir $downstream $user $image bash
