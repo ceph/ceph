@@ -8124,10 +8124,12 @@ next:
     if (opt_source_bucket) {
       ret = init_bucket(*opt_source_bucket, _source_bucket_info, source_bucket);
       if (ret < 0) {
-        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
+        cerr << "WARNING: could not init source bucket: " << cpp_strerror(-ret) << std::endl;
+        source_bucket = *opt_source_bucket;
+        psal_source_bucket.reset(new rgw::sal::RGWRadosBucket(store, source_bucket));
+      } else {
+        psal_source_bucket.reset(new  rgw::sal::RGWRadosBucket(store, _source_bucket_info));
       }
-      psource_bucket_info = &_source_bucket_info;
     } else {
       source_bucket = dest_bucket;
       psal_source_bucket.reset(new  rgw::sal::RGWRadosBucket(store, dest_bucket_info));
