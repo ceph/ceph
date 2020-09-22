@@ -240,10 +240,10 @@ inline std::ostream& operator<<(std::ostream& os, const string_key_view_t& view)
     return os << "MAX";
   } else {
     if (view.length <= 12) {
-      os << "\"" << std::string(view.p_key, 0, view.length) << "\"";
+      os << "\"" << std::string_view(view.p_key, view.length) << "\"";
     } else {
-      os << "\"" << std::string(view.p_key, 0, 4) << ".."
-         << std::string(view.p_key + view.length - 2, 0, 2)
+      os << "\"" << std::string_view(view.p_key, 4) << ".."
+         << std::string_view(view.p_key + view.length - 2, 2)
          << "/" << view.length << "B\"";
     }
     return os;
