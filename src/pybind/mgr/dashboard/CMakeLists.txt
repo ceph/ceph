@@ -27,17 +27,21 @@ if(WITH_SYSTEM_NPM)
 else()
   set(mgr-dashboard-nodeenv-dir ${CMAKE_CURRENT_BINARY_DIR}/node-env)
   set(nodeenv NODEENV)
+  set(mgr-dashboard-userconfig --userconfig ${mgr-dashboard-nodeenv-dir}/.npmrc)
+  set(virt-activate . ${mgr-dashboard-nodeenv-dir}/bin/activate)
 
   add_custom_command(
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=12.16.2
+    COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
   )
   add_custom_target(mgr-dashboard-nodeenv
-    COMMAND . ${mgr-dashboard-nodeenv-dir}/bin/activate && npm config set python ${MGR_PYTHON_EXECUTABLE} && deactivate
+    COMMAND ${virt-activate} && npm config set python ${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-userconfig} && deactivate
+    COMMAND ${virt-activate} && npm config set cache ${mgr-dashboard-nodeenv-dir}/.npm ${mgr-dashboard-userconfig} && deactivate
     DEPENDS ${mgr-dashboard-nodeenv-dir}/bin/npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
@@ -49,7 +53,7 @@ endif()
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
-  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress npm ci
+  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress npm ci ${mgr-dashboard-userconfig}
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend dependencies are being installed"
