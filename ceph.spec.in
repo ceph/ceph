@@ -21,6 +21,7 @@
 # bcond syntax!
 #################################################################################
 %bcond_with make_check
+%bcond_with zbd
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
 %ifarch s390 s390x
@@ -195,6 +196,9 @@ BuildRequires:	python%{python3_pkgversion}-virtualenv
 BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
+%endif
+%if 0%{with zbd}
+BuildRequires:  libzbd-devel
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
