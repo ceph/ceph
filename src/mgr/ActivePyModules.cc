@@ -986,12 +986,14 @@ void ActivePyModules::get_health_checks(health_check_map_t *checks)
 void ActivePyModules::update_progress_event(
   const std::string& evid,
   const std::string& desc,
-  float progress)
+  float progress,
+  bool add_to_ceph_s)
 {
   std::lock_guard l(lock);
   auto& pe = progress_events[evid];
   pe.message = desc;
   pe.progress = progress;
+  pe.add_to_ceph_s = add_to_ceph_s;
 }
 
 void ActivePyModules::complete_progress_event(const std::string& evid)
