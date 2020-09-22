@@ -101,7 +101,7 @@ class NodeExtentT {
   }
 
   void update_child_addr_replayable(
-      const laddr_t new_addr, laddr_t* p_addr) {
+      const laddr_t new_addr, laddr_packed_t* p_addr) {
     assert(state != state_t::PENDING_MUTATE);
     // TODO: encode params to recorder as delta
     return layout_t::update_child_addr(*mut, new_addr, p_addr);

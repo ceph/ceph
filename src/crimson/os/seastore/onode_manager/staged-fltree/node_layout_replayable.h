@@ -64,7 +64,7 @@ struct NodeLayoutReplayableT {
   }
 
   static void update_child_addr(
-      NodeExtentMutable& mut, const laddr_t new_addr, laddr_t* p_addr) {
+      NodeExtentMutable& mut, const laddr_t new_addr, laddr_packed_t* p_addr) {
     assert(NODE_TYPE == node_type_t::INTERNAL);
     mut.copy_in_absolute(p_addr, new_addr);
   }

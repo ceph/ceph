@@ -262,6 +262,7 @@ node_future<> InternalNode::apply_child_split(
 
   // update pos => left_child to pos => right_child
   auto left_child_addr = left_child->impl->laddr();
+  auto left_child_addr_packed = laddr_packed_t{left_child_addr};
   auto right_child_addr = right_child->impl->laddr();
   impl->replace_child_addr(pos, right_child_addr, left_child_addr);
   replace_track(pos, right_child, left_child);
@@ -273,11 +274,11 @@ node_future<> InternalNode::apply_child_split(
   auto free_size = impl->free_size();
   if (free_size >= insert_size) {
     // insert
-    auto p_value = impl->insert(left_key, left_child_addr,
+    auto p_value = impl->insert(left_key, left_child_addr_packed,
                                 insert_pos, insert_stage, insert_size);
     assert(impl->free_size() == free_size - insert_size);
     assert(insert_pos <= pos);
-    assert(*p_value == left_child_addr);
+    assert(p_value->value == left_child_addr);
     track_insert(insert_pos, insert_stage, left_child, right_child);
     validate_tracked_children();
     return node_ertr::now();
@@ -297,10 +298,11 @@ node_future<> InternalNode::apply_child_split(
                 insert_pos, insert_stage, insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
     auto left_child_addr = left_child->impl->laddr();
+    auto left_child_addr_packed = laddr_packed_t{left_child_addr};
     auto [split_pos, is_insert_left, p_value] = impl->split_insert(
-        fresh_right.mut, *right_node->impl, left_key, left_child_addr,
+        fresh_right.mut, *right_node->impl, left_key, left_child_addr_packed,
         insert_pos, insert_stage, insert_size);
-    assert(*p_value == left_child_addr);
+    assert(p_value->value == left_child_addr);
     track_split(split_pos, right_node);
     if (is_insert_left) {
       track_insert(insert_pos, insert_stage, left_child);
@@ -324,9 +326,9 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
   ).safe_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
     auto root = fresh_node.node;
-    const laddr_t* p_value = root->impl->get_p_value(search_position_t::end());
+    auto p_value = root->impl->get_p_value(search_position_t::end());
     fresh_node.mut.copy_in_absolute(
-        const_cast<laddr_t*>(p_value), old_root_addr);
+        const_cast<laddr_packed_t*>(p_value), old_root_addr);
     root->make_root_from(c, std::move(super), old_root_addr);
     return root;
   });
@@ -335,7 +337,7 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
 node_future<Ref<tree_cursor_t>>
 InternalNode::lookup_smallest(context_t c) {
   auto position = search_position_t::begin();
-  laddr_t child_addr = *impl->get_p_value(position);
+  laddr_t child_addr = impl->get_p_value(position)->value;
   return get_or_track_child(c, position, child_addr
   ).safe_then([c](auto child) {
     return child->lookup_smallest(c);
@@ -347,7 +349,7 @@ InternalNode::lookup_largest(context_t c) {
   // NOTE: unlike LeafNode::lookup_largest(), this only works for the tail
   // internal node to return the tail child address.
   auto position = search_position_t::end();
-  laddr_t child_addr = *impl->get_p_value(position);
+  laddr_t child_addr = impl->get_p_value(position)->value;
   return get_or_track_child(c, position, child_addr).safe_then([c](auto child) {
     return child->lookup_largest(c);
   });
@@ -357,7 +359,7 @@ node_future<Node::search_result_t>
 InternalNode::lower_bound_tracked(
     context_t c, const key_hobj_t& key, MatchHistory& history) {
   auto result = impl->lower_bound(key, history);
-  return get_or_track_child(c, result.position, *result.p_value
+  return get_or_track_child(c, result.position, result.p_value->value
   ).safe_then([c, &key, &history](auto child) {
     // XXX(multi-type): pass result.mstat to child
     return child->lower_bound_tracked(c, key, history);
@@ -473,7 +475,7 @@ void InternalNode::validate_child(const Node& child) const {
   assert(impl->level() - 1 == child.impl->level());
   assert(this == child.parent_info().ptr);
   auto& child_pos = child.parent_info().position;
-  assert(*impl->get_p_value(child_pos) == child.impl->laddr());
+  assert(impl->get_p_value(child_pos)->value == child.impl->laddr());
   if (child_pos.is_end()) {
     assert(impl->is_level_tail());
     assert(child.impl->is_level_tail());
