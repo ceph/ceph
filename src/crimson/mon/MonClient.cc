@@ -975,7 +975,7 @@ seastar::future<> Client::reopen_session(int rank)
           });
       }
     }).then([peer, this](auto result) {
-      if (result != Connection::auth_result_t::canceled) {
+      if (result == Connection::auth_result_t::success) {
         _finish_auth(peer);
       }
       logger().debug("reopen_session mon connection attempts complete");
