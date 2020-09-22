@@ -764,11 +764,24 @@ Per mapping (block device) `rbd device map` options:
   solid-state drives).  For filestore with filestore_punch_hole = false, the
   recommended setting is image object size (typically 4M).
 
+* udev - Wait for udev device manager to finish executing all matching
+  "add" rules and release the device before exiting (default).  This option
+  is not passed to the kernel.
+
+* noudev - Don't wait for udev device manager.  When enabled, the device may
+  not be fully usable immediately on exit.
+
 `rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
   driver will wait for running requests to complete and then unmap; requests
   sent to the driver after initiating the unmap will be failed.
+
+* udev - Wait for udev device manager to finish executing all matching
+  "remove" rules and clean up after the device before exiting (default).
+  This option is not passed to the kernel.
+
+* noudev - Don't wait for udev device manager.
 
 
 Examples
