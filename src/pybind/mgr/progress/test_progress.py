@@ -17,7 +17,7 @@ class TestPgRecoveryEvent(object):
         # Creating the class and Mocking 
         # a bunch of attributes for testing
         module._module = mock.Mock() # just so Event._refresh() works
-        self.test_event = module.PgRecoveryEvent(None, None, [module.PgId(1,i) for i in range(3)], [0], 30)
+        self.test_event = module.PgRecoveryEvent(None, None, [module.PgId(1,i) for i in range(3)], [0], 30, False)
 
     def test_pg_update(self):
         # Test for a completed event when the pg states show active+clear
