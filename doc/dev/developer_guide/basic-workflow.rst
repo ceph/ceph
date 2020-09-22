@@ -207,7 +207,7 @@ Automated PR validation
 When your PR hits GitHub, the Ceph project's `Continuous Integration (CI)
 <https://en.wikipedia.org/wiki/Continuous_integration>`_
 infrastructure will test it automatically. At the time of this writing
-(March 2016), the automated CI testing included a test to check that the
+(September 2020), the automated CI testing included a test to check that the
 commits in the PR are properly signed (see :ref:`submitting-patches`) and a
 :ref:`make-check` test.
 
