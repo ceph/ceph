@@ -110,7 +110,7 @@ private:
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point auth_start;
   crimson::auth::method_t auth_method = 0;
-  seastar::promise<auth_result_t> auth_done;
+  std::optional<seastar::promise<auth_result_t>> auth_done;
   // v1 and v2
   const AuthRegistry& auth_registry;
   crimson::net::ConnectionRef conn;
@@ -325,7 +325,8 @@ seastar::future<Connection::auth_result_t> Connection::authenticate_v2()
 {
   auth_start = seastar::lowres_system_clock::now();
   return conn->send(make_message<MMonGetMap>()).then([this] {
-    return auth_done.get_future();
+    auth_done.emplace();
+    return auth_done->get_future();
   });
 }
 
@@ -397,7 +398,10 @@ Connection::handle_auth_done(uint64_t new_global_id,
   secret_t connection_secret;
   int r = auth->handle_response(0, p, &session_key, &connection_secret);
   conn->set_last_keepalive_ack(auth_start);
-  auth_done.set_value(auth_result_t::success);
+  if (auth_done) {
+    auth_done->set_value(auth_result_t::success);
+    auth_done.reset();
+  }
   return {session_key, connection_secret, r};
 }
 
@@ -418,7 +422,8 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
   if (p == auth_supported.end()) {
     logger().error("server allowed_methods {} but i only support {}",
                    allowed_methods, auth_supported);
-    auth_done.set_exception(std::system_error(make_error_code(
+    assert(auth_done);
+    auth_done->set_exception(std::system_error(make_error_code(
       crimson::net::error::negotiation_failure)));
     return -EACCES;
   }
@@ -431,8 +436,10 @@ void Connection::close()
 {
   reply.set_value(Ref<MAuthReply>(nullptr));
   reply = {};
-  auth_done.set_value(auth_result_t::canceled);
-  auth_done = {};
+  if (auth_done) {
+    auth_done->set_value(auth_result_t::canceled);
+    auth_done.reset();
+  }
   if (conn && !std::exchange(closed, true)) {
     conn->mark_down();
   }
