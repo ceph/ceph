@@ -72,11 +72,15 @@ struct C_EncryptedObjectReadRequest : public Context {
     void finish(int r) override {
       ldout(image_ctx->cct, 20) << "r=" << r << dendl;
       if (r > 0) {
-        crypto->decrypt(
-                std::move(*read_data),
+        auto crypto_ret = crypto->decrypt(
+                read_data,
                 Striper::get_file_offset(
                         image_ctx->cct, &image_ctx->layout, object_no,
                         object_off));
+        if (crypto_ret != 0) {
+          ceph_assert(crypto_ret < 0);
+          r = crypto_ret;
+        }
       }
       onfinish->complete(r);
     }
@@ -151,13 +155,13 @@ bool CryptoObjectDispatch<I>::write(
                  << object_off << "~" << data.length() << dendl;
   ceph_assert(m_crypto != nullptr);
 
-  m_crypto->encrypt(
-          std::move(data),
+  auto r = m_crypto->encrypt(
+          &data,
           Striper::get_file_offset(
                   m_image_ctx->cct, &m_image_ctx->layout, object_no,
                   object_off));
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  on_dispatched->complete(0);
+  on_dispatched->complete(r);
   return true;
 }
 
@@ -211,10 +215,12 @@ bool CryptoObjectDispatch<I>::compare_and_write(
 
   uint64_t image_offset = Striper::get_file_offset(
           m_image_ctx->cct, &m_image_ctx->layout, object_no, object_off);
-  m_crypto->encrypt(std::move(cmp_data), image_offset);
-  m_crypto->encrypt(std::move(write_data), image_offset);
+  auto r = m_crypto->encrypt(&cmp_data, image_offset);
+  if (r == 0) {
+    r = m_crypto->encrypt(&write_data, image_offset);
+  }
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  on_dispatched->complete(0);
+  on_dispatched->complete(r);
   return true;
 }
 

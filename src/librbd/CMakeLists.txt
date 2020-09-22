@@ -46,7 +46,10 @@ set(librbd_internal_srcs
   cache/pwl/InitRequest.cc
   cache/pwl/ShutdownRequest.cc
   cache/WriteAroundObjectDispatch.cc
+  crypto/BlockCrypto.cc
+  crypto/CryptoContextPool.cc
   crypto/CryptoObjectDispatch.cc
+  crypto/openssl/DataCryptor.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
   deep_copy/ObjectCopyRequest.cc
@@ -209,6 +212,7 @@ if(WITH_EVENTTRACE)
 endif()
 target_link_libraries(rbd_internal PRIVATE
   osdc rbd_types)
+target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 if(WITH_RBD_RWL)
   target_link_libraries(rbd_internal
