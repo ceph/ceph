@@ -6568,7 +6568,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   int r = 0;
   Dentry *dn = NULL;
   // can only request shared caps
-  mask &= CEPH_CAP_ANY_SHARED;
+  mask &= CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT;
 
   if (dname == "..") {
     if (dir->dentries.empty()) {
