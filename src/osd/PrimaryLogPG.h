@@ -361,8 +361,8 @@ public:
     return gen_prefix(out);
   }
 
-  const std::map<hobject_t, std::set<pg_shard_t>>
-    &get_missing_loc_shards() const override {
+  const HobjToShardSetMapping& get_missing_loc_shards() const override
+  {
     return recovery_state.get_missing_loc().get_missing_locs();
   }
   const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
@@ -567,6 +567,11 @@ public:
 
   OstreamTemp clog_error() override { return osd->clog->error(); }
   OstreamTemp clog_warn() override { return osd->clog->warn(); }
+
+  /**
+   * a scrub-map arrived from a replica
+   */
+  void do_replica_scrub_map(OpRequestRef op);
 
   struct watch_disconnect_t {
     uint64_t cookie;

@@ -4,13 +4,21 @@
 #pragma once
 
 #include "include/types.h"
+#include "os/ObjectStore.h"
 
 #include "OpRequest.h"
 
+namespace ceph {
+class Formatter;
+}
+
 namespace Scrub {
 
-// high/low OP priority
+/// high/low OP priority
 enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
+
+///
+
 }  // namespace Scrub
 
 
@@ -92,8 +100,7 @@ struct requested_scrub_t {
 
 ostream& operator<<(ostream& out, const requested_scrub_t& sf);
 
-
-// to fix: class Formatter;
+class ObjectStore;
 
 /**
  *  The interface used by the PG when requesting scrub-related info or services
@@ -102,9 +109,15 @@ struct ScrubPgIF {
 
   virtual ~ScrubPgIF(){};
 
+  friend ostream& operator<<(ostream& out, const ScrubPgIF& s) { return s.show(out); }
+
+  virtual ostream& show(ostream& out) const = 0;
+
   // --------------- triggering state-machine events:
 
   virtual void send_start_scrub() = 0;
+
+  virtual void send_start_after_rec() = 0;
 
   virtual void send_sched_scrub() = 0;
 
@@ -131,6 +144,9 @@ struct ScrubPgIF {
 
   virtual bool is_scrub_active() const = 0;  // RRR must doc
 
+  /// are we waiting for resource reservation grants form our replicas?
+  virtual bool is_reserving() const = 0;
+
   /// handle a message carrying a replica map
   virtual void map_from_replica(OpRequestRef op) = 0;
 
@@ -140,11 +156,12 @@ struct ScrubPgIF {
 
   virtual void set_op_parameters(requested_scrub_t&) = 0;
 
-  virtual void scrub_clear_state(bool has_error = false) = 0;
+  virtual void scrub_clear_state(bool keep_repair_state = false) = 0;
 
-  // to fix: virtual void void handle_query_state(Formatter* f) = 0;
+  virtual void handle_query_state(ceph::Formatter* f) = 0;
 
-  /** we allow some number of preemptions of the scrub, which mean we do
+  /**
+   * we allow some number of preemptions of the scrub, which mean we do
    *  not block.  Then we start to block.  Once we start blocking, we do
    *  not stop until the scrub range is completed.
    */
@@ -159,10 +176,16 @@ struct ScrubPgIF {
   /// the priority of the on-going scrub (used when requeuing events)
   virtual unsigned int scrub_requeue_priority(
     Scrub::scrub_prio_t with_priority) const = 0;
-  // virtual unsigned int scrub_requeue_priority(bool is_high_priority) const = 0;
+  virtual unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority,
+					      unsigned int suggested_priority) const = 0;
 
   virtual void queue_pushes_update(bool is_high_priority) = 0;
   virtual void queue_pushes_update(Scrub::scrub_prio_t with_priority) = 0;
+
+  virtual void add_callback(Context* context) = 0;
+
+  /// should we requeue blocked ops?
+  virtual bool should_requeue_blocked_ops(eversion_t last_recovery_applied) = 0;
 
 
   // --------------- until after we move the reservations flow into the FSM:
@@ -170,21 +193,21 @@ struct ScrubPgIF {
   /**
    *  message all replicas with a request to "unreserve" scrub
    */
-  virtual void scrub_unreserve_replicas() = 0;
+  virtual void unreserve_replicas() = 0;
 
   /**
    * clear both local and OSD-managed resource reservation flags
    * (note: no replica res/unres messages are involved!)
    */
-  virtual void clear_scrub_reserved() = 0;
+  virtual void clear_scrub_reservations() = 0;
 
   /**
-   * Reserve local scrub resources. Request reservations at replicas.
+   * Reserve local scrub resources (managed by the OSD)
    *
    * Fail if OSD's local-scrubs budget was exhausted
    * \retval 'true' if local resources reserved.
    */
-  virtual bool reserve_local_n_remotes() = 0;
+  virtual bool reserve_local() = 0;
 
   // on the replica:
   virtual void handle_scrub_reserve_request(OpRequestRef op) = 0;
@@ -205,28 +228,38 @@ struct ScrubPgIF {
 			       bool need_auto,
 			       requested_scrub_t& req_flags) = 0;
 
-  // scrub_reg_stamp
-
-
   // -------------------------------------------------------
 
 
   virtual bool is_chunky_scrub_active() const = 0;
 
+  /// add to scrub statistics, but only if the soid is below the scrub start
+  virtual void add_stats_if_lower(const object_stat_sum_t& delta_stats,
+				  const hobject_t& soid) = 0;
+
+  /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
+  /// (thus can be called from FSM reactions)
+  virtual void clear_pgscrub_state(bool keep_repair_state) = 0;
+
+  /**
+   *  triggers the 'RemotesReserved' (all replicas granted scrub resources)
+   *  state-machine event
+   */
+  virtual void send_remotes_reserved() = 0;
+
+  /**
+   *  triggers the 'ReservationFailure' (at least one replica denied us the requested
+   * resources) state-machine event
+   */
+  virtual void send_reservation_failure() = 0;
+
+  virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
+
   /*
    require work:
 
-  - access to reserved_peers
   - access to saved_req_scrub - will be reworked as part of the 'abort' integration
   - access to req_scrub - will be reworked as part of the 'abort' integration
-
-
-  all the members and methods related to reservations. Will be removed in phase 2,
-  when the reservation process will be integrated into the scrub FSM:
-
-  - local_reserved
-  - reserve_failed
-  - clear_scrub_reserved()
-  - reserved_peers
+  - clear_scrub_reservations()
   */
 };

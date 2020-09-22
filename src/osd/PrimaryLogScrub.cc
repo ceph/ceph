@@ -13,7 +13,7 @@
 #define dout_context (pg_->cct)
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix *_dout << "primLogScrb.pg(" << pg_->pg_id << ") "
+#define dout_prefix *_dout << "primLogScrb.pg(~" << pg_->pg_id << "~) "
 
 using namespace Scrub;
 using Scrub::ScrubMachine;
@@ -49,7 +49,7 @@ void PrimaryLogScrub::_scrub_finish()
 
   if (info.stats.stats_invalid) {
     pl_pg_->recovery_state.update_stats([=](auto& history, auto& stats) {
-      stats.stats = scrub_cstat;
+      stats.stats = scrub_cstat_;
       stats.stats_invalid = false;
       return false;
     });
@@ -58,73 +58,73 @@ void PrimaryLogScrub::_scrub_finish()
       pl_pg_->agent_choose_mode();
   }
 
-  dout(10) << mode << " got " << scrub_cstat.sum.num_objects << "/"
+  dout(10) << mode << " got " << scrub_cstat_.sum.num_objects << "/"
 	   << info.stats.stats.sum.num_objects << " objects, "
-	   << scrub_cstat.sum.num_object_clones << "/"
+	   << scrub_cstat_.sum.num_object_clones << "/"
 	   << info.stats.stats.sum.num_object_clones << " clones, "
-	   << scrub_cstat.sum.num_objects_dirty << "/"
+	   << scrub_cstat_.sum.num_objects_dirty << "/"
 	   << info.stats.stats.sum.num_objects_dirty << " dirty, "
-	   << scrub_cstat.sum.num_objects_omap << "/"
+	   << scrub_cstat_.sum.num_objects_omap << "/"
 	   << info.stats.stats.sum.num_objects_omap << " omap, "
-	   << scrub_cstat.sum.num_objects_pinned << "/"
+	   << scrub_cstat_.sum.num_objects_pinned << "/"
 	   << info.stats.stats.sum.num_objects_pinned << " pinned, "
-	   << scrub_cstat.sum.num_objects_hit_set_archive << "/"
+	   << scrub_cstat_.sum.num_objects_hit_set_archive << "/"
 	   << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
-	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes
-	   << " bytes, " << scrub_cstat.sum.num_objects_manifest << "/"
+	   << scrub_cstat_.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes
+	   << " bytes, " << scrub_cstat_.sum.num_objects_manifest << "/"
 	   << info.stats.stats.sum.num_objects_manifest << " manifest objects, "
-	   << scrub_cstat.sum.num_bytes_hit_set_archive << "/"
+	   << scrub_cstat_.sum.num_bytes_hit_set_archive << "/"
 	   << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes."
 	   << dendl;
 
-  if (scrub_cstat.sum.num_objects != info.stats.stats.sum.num_objects ||
-      scrub_cstat.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
-      (scrub_cstat.sum.num_objects_dirty != info.stats.stats.sum.num_objects_dirty &&
+  if (scrub_cstat_.sum.num_objects != info.stats.stats.sum.num_objects ||
+      scrub_cstat_.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
+      (scrub_cstat_.sum.num_objects_dirty != info.stats.stats.sum.num_objects_dirty &&
        !info.stats.dirty_stats_invalid) ||
-      (scrub_cstat.sum.num_objects_omap != info.stats.stats.sum.num_objects_omap &&
+      (scrub_cstat_.sum.num_objects_omap != info.stats.stats.sum.num_objects_omap &&
        !info.stats.omap_stats_invalid) ||
-      (scrub_cstat.sum.num_objects_pinned != info.stats.stats.sum.num_objects_pinned &&
+      (scrub_cstat_.sum.num_objects_pinned != info.stats.stats.sum.num_objects_pinned &&
        !info.stats.pin_stats_invalid) ||
-      (scrub_cstat.sum.num_objects_hit_set_archive !=
+      (scrub_cstat_.sum.num_objects_hit_set_archive !=
 	 info.stats.stats.sum.num_objects_hit_set_archive &&
        !info.stats.hitset_stats_invalid) ||
-      (scrub_cstat.sum.num_bytes_hit_set_archive !=
+      (scrub_cstat_.sum.num_bytes_hit_set_archive !=
 	 info.stats.stats.sum.num_bytes_hit_set_archive &&
        !info.stats.hitset_bytes_stats_invalid) ||
-      (scrub_cstat.sum.num_objects_manifest !=
+      (scrub_cstat_.sum.num_objects_manifest !=
 	 info.stats.stats.sum.num_objects_manifest &&
        !info.stats.manifest_stats_invalid) ||
-      scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
-      scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
+      scrub_cstat_.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
+      scrub_cstat_.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osds_->clog->error() << info.pgid << " " << mode << " : stat mismatch, got "
-			 << scrub_cstat.sum.num_objects << "/"
+			 << scrub_cstat_.sum.num_objects << "/"
 			 << info.stats.stats.sum.num_objects << " objects, "
-			 << scrub_cstat.sum.num_object_clones << "/"
+			 << scrub_cstat_.sum.num_object_clones << "/"
 			 << info.stats.stats.sum.num_object_clones << " clones, "
-			 << scrub_cstat.sum.num_objects_dirty << "/"
+			 << scrub_cstat_.sum.num_objects_dirty << "/"
 			 << info.stats.stats.sum.num_objects_dirty << " dirty, "
-			 << scrub_cstat.sum.num_objects_omap << "/"
+			 << scrub_cstat_.sum.num_objects_omap << "/"
 			 << info.stats.stats.sum.num_objects_omap << " omap, "
-			 << scrub_cstat.sum.num_objects_pinned << "/"
+			 << scrub_cstat_.sum.num_objects_pinned << "/"
 			 << info.stats.stats.sum.num_objects_pinned << " pinned, "
-			 << scrub_cstat.sum.num_objects_hit_set_archive << "/"
+			 << scrub_cstat_.sum.num_objects_hit_set_archive << "/"
 			 << info.stats.stats.sum.num_objects_hit_set_archive
-			 << " hit_set_archive, " << scrub_cstat.sum.num_whiteouts << "/"
+			 << " hit_set_archive, " << scrub_cstat_.sum.num_whiteouts << "/"
 			 << info.stats.stats.sum.num_whiteouts << " whiteouts, "
-			 << scrub_cstat.sum.num_bytes << "/"
+			 << scrub_cstat_.sum.num_bytes << "/"
 			 << info.stats.stats.sum.num_bytes << " bytes, "
-			 << scrub_cstat.sum.num_objects_manifest << "/"
+			 << scrub_cstat_.sum.num_objects_manifest << "/"
 			 << info.stats.stats.sum.num_objects_manifest
 			 << " manifest objects, "
-			 << scrub_cstat.sum.num_bytes_hit_set_archive << "/"
+			 << scrub_cstat_.sum.num_bytes_hit_set_archive << "/"
 			 << info.stats.stats.sum.num_bytes_hit_set_archive
 			 << " hit_set_archive bytes.";
-    ++shallow_errors;
+    ++shallow_errors_;
 
     if (repair) {
-      ++fixed_count;
+      ++fixed_count_;
       pl_pg_->recovery_state.update_stats([this](auto& history, auto& stats) {
-	stats.stats = scrub_cstat;
+	stats.stats = scrub_cstat_;
 	stats.dirty_stats_invalid = false;
 	stats.omap_stats_invalid = false;
 	stats.hitset_stats_invalid = false;
@@ -149,7 +149,6 @@ static bool doing_clones(const std::optional<SnapSet>& snapset,
 }
 
 
-
 void PrimaryLogScrub::log_missing(int missing,
 				  const std::optional<hobject_t>& head,
 				  LogChannelRef clog,
@@ -167,7 +166,6 @@ void PrimaryLogScrub::log_missing(int missing,
 		 << " missing clone(s)";
   }
 }
-
 
 
 int PrimaryLogScrub::process_clones_to(const std::optional<hobject_t>& head,
@@ -194,8 +192,8 @@ int PrimaryLogScrub::process_clones_to(const std::optional<hobject_t>& head,
     if (!allow_incomplete_clones) {
       next_clone.snap = **curclone;
       clog->error() << mode << " " << pgid << " " << *head << " : expected clone "
-		    << next_clone << " " << missing << " missing";
-      ++shallow_errors;
+		    << next_clone << " " << missing_ << " missing";
+      ++shallow_errors_;
       e.set_clone_missing(next_clone.snap);
     }
     // Clones are descending
@@ -237,10 +235,9 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	   << dendl;
 
   auto& info = pl_pg_->info;
-  const PGPool& pool = pl_pg_->pool;  // pl_pg_->get_pool();
+  const PGPool& pool = pl_pg_->pool;
   // auto& pool = pl_pg_->recovery_state.pool;
   bool allow_incomplete_clones = pool.info.allow_incomplete_clones();
-
 
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
@@ -258,8 +255,6 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
   int soid_error_count = 0;
 
   for (auto p = scrubmap.objects.rbegin(); p != scrubmap.objects.rend(); ++p) {
-
-    /// \todo RRR make this into a range-loop
 
     const hobject_t& soid = p->first;
     ceph_assert(!soid.is_snapdir());
@@ -282,7 +277,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       oi = std::nullopt;
       osds_->clog->error() << mode << " " << info.pgid << " " << soid << " : no '"
 			   << OI_ATTR << "' attr";
-      ++shallow_errors;
+      ++shallow_errors_;
       soid_error.set_info_missing();
     } else {
       bufferlist bv;
@@ -294,7 +289,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	oi = std::nullopt;
 	osds_->clog->error() << mode << " " << info.pgid << " " << soid
 			     << " : can't decode '" << OI_ATTR << "' attr " << e.what();
-	++shallow_errors;
+	++shallow_errors_;
 	soid_error.set_info_corrupted();
 	soid_error.set_info_missing();	// Not available too
       }
@@ -308,7 +303,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 			     << ") adjusted for ondisk to ("
 			     << pl_pg_->pgbackend->be_get_ondisk_size(oi->size) << ")";
 	soid_error.set_size_mismatch();
-	++shallow_errors;
+	++shallow_errors_;
       }
 
       dout(20) << mode << "  " << soid << " " << *oi << dendl;
@@ -376,7 +371,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	osds_->clog->error() << mode << " " << info.pgid << " " << soid
 			     << " : is an unexpected clone";
       }
-      ++shallow_errors;
+      ++shallow_errors_;
       soid_error.set_headless();
       store_->add_snap_error(pool.id, soid_error);
       ++soid_error_count;
@@ -407,7 +402,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       if (p->second.attrs.count(SS_ATTR) == 0) {
 	osds_->clog->error() << mode << " " << info.pgid << " " << soid << " : no '"
 			     << SS_ATTR << "' attr";
-	++shallow_errors;
+	++shallow_errors_;
 	snapset = std::nullopt;
 	head_error.set_snapset_missing();
       } else {
@@ -422,7 +417,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	  snapset = std::nullopt;
 	  osds_->clog->error() << mode << " " << info.pgid << " " << soid
 			       << " : can't decode '" << SS_ATTR << "' attr " << e.what();
-	  ++shallow_errors;
+	  ++shallow_errors_;
 	  head_error.set_snapset_corrupted();
 	}
       }
@@ -436,7 +431,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	  if (snapset->seq == 0) {
 	    osds_->clog->error()
 	      << mode << " " << info.pgid << " " << soid << " : snaps.seq not set";
-	    ++shallow_errors;
+	    ++shallow_errors_;
 	    head_error.set_snapset_error();
 	  }
 	}
@@ -452,21 +447,21 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       if (snapset->clone_size.count(soid.snap) == 0) {
 	osds_->clog->error() << mode << " " << info.pgid << " " << soid
 			     << " : is missing in clone_size";
-	++shallow_errors;
+	++shallow_errors_;
 	soid_error.set_size_mismatch();
       } else {
 	if (oi && oi->size != snapset->clone_size[soid.snap]) {
 	  osds_->clog->error() << mode << " " << info.pgid << " " << soid << " : size "
 			       << oi->size << " != clone_size "
 			       << snapset->clone_size[*curclone];
-	  ++shallow_errors;
+	  ++shallow_errors_;
 	  soid_error.set_size_mismatch();
 	}
 
 	if (snapset->clone_overlap.count(soid.snap) == 0) {
 	  osds_->clog->error() << mode << " " << info.pgid << " " << soid
 			       << " : is missing in clone_overlap";
-	  ++shallow_errors;
+	  ++shallow_errors_;
 	  soid_error.set_size_mismatch();
 	} else {
 	  // This checking is based on get_clone_bytes().  The first 2 asserts
@@ -489,7 +484,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	  if (bad_interval_set) {
 	    osds_->clog->error() << mode << " " << info.pgid << " " << soid
 				 << " : bad interval_set in clone_overlap";
-	    ++shallow_errors;
+	    ++shallow_errors_;
 	    soid_error.set_size_mismatch();
 	  } else {
 	    stat.num_bytes += snapset->get_clone_bytes(soid.snap);
@@ -504,14 +499,8 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	++soid_error_count;
       }
     }
-    // dout(10) << __func__ << stat.num_objects << " ---RRR --- " <<
-    // scrub_cstat.sum.num_objects << dendl;
-    scrub_cstat.add(stat);
-    // dout(10) << __func__ << stat.num_objects << " ---RRR --- " <<
-    // scrub_cstat.sum.num_objects << dendl;
+    scrub_cstat_.add(stat);
   }
-
-  // dout(10) << __func__ << dendl;
 
   if (doing_clones(snapset, curclone)) {
     dout(10) << __func__ << " " << mode << " " << info.pgid
@@ -521,6 +510,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       process_clones_to(head, snapset, osds_->clog, info.pgid, mode,
 			allow_incomplete_clones, all_clones, &curclone, head_error);
   }
+
   // There could be missing found by the test above or even
   // before dropping out of the loop for the last head.
   if (missing) {
@@ -566,7 +556,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
     ctx->register_on_success([this]() {
       dout(7 /* 20 */) << "updating scrub digest " << num_digest_updates_pending << dendl;
       if (--num_digest_updates_pending <= 0) {
-	osds_->queue_scrub_digest_update(pl_pg_, pl_pg_->ops_blocked_by_scrub());
+	osds_->queue_scrub_digest_update(pl_pg_, pl_pg_->is_scrub_blocking_ops());
       }
     });
 
@@ -584,7 +574,7 @@ PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg)
 void PrimaryLogScrub::_scrub_clear_state()
 {
   dout(7) << __func__ << " - pg(" << pl_pg_->pg_id << dendl;
-  scrub_cstat = object_stat_collection_t();
+  scrub_cstat_ = object_stat_collection_t();
 }
 
 void PrimaryLogScrub::add_stats_if_lower(const object_stat_sum_t& delta_stats,
@@ -592,16 +582,15 @@ void PrimaryLogScrub::add_stats_if_lower(const object_stat_sum_t& delta_stats,
 {
   // RRR not sure I understand the idea here...
 
-  dout(8) << __func__ << " " << soid << " a? " << is_scrub_active() << dendl;
+  dout(15) << __func__ << " " << soid << " a? " << is_scrub_active() << dendl;
   if (is_primary() && is_scrub_active()) {
-
     if (soid < start_) {
-      dout(8 /*20*/) << __func__ << " " << soid << " < [" << start_ << "," << end_ << ")"
-		     << dendl;
-      scrub_cstat.add(delta_stats);
+      dout(20) << __func__ << " " << soid << " < [" << start_ << "," << end_ << ")"
+	       << dendl;
+      scrub_cstat_.add(delta_stats);
     } else {
-      dout(8 /*20*/) << __func__ << " " << soid << " >= [" << start_ << "," << end_ << ")"
-		     << dendl;
+      dout(20) << __func__ << " " << soid << " >= [" << start_ << "," << end_ << ")"
+	       << dendl;
     }
   }
 }
@@ -614,5 +603,5 @@ bool PrimaryLogScrub::should_requeue_blocked_ops(eversion_t last_recovery_applie
     return false;
   }
 
-  return last_recovery_applied >= subset_last_update;  // RRR ask why >= and not >
+  return last_recovery_applied >= subset_last_update_;	// RRR ask why >= and not >
 }

@@ -305,220 +305,147 @@ public:
 
 class PGScrub : public PGOpQueueable {
   epoch_t epoch_queued;
-public:
-  PGScrub(
-    spg_t pg,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
+
+ public:
+  PGScrub(spg_t pg, epoch_t epoch_queued) : PGOpQueueable(pg), epoch_queued(epoch_queued)
+  {}
+  op_type_t get_op_type() const final { return op_type_t::bg_scrub; }
+  std::ostream& print(std::ostream& rhs) const final
+  {
+    return rhs << "PGScrub(pgid=" << get_pgid() << "epoch_queued=" << epoch_queued << ")";
   }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrub(pgid=" << get_pgid()
-	       << "epoch_queued=" << epoch_queued
-	       << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+  op_scheduler_class get_scheduler_class() const final
+  {
     return op_scheduler_class::background_best_effort;
   }
 };
 
-class PGScrubResched : public PGOpQueueable {
+class PGScrubItem : public PGOpQueueable {
+ protected:
   epoch_t epoch_queued;
-public:
-  PGScrubResched(
-    spg_t pg,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
+  std::string_view message_name;
+  PGScrubItem(spg_t pg, epoch_t epoch_queued, std::string_view derivative_name)
+      : PGOpQueueable{pg}, epoch_queued{epoch_queued}, message_name{derivative_name}
+  {}
+  op_type_t get_op_type() const final { return op_type_t::bg_scrub; }
+  std::ostream& print(std::ostream& rhs) const final
+  {
+    return rhs << message_name << "(pgid=" << get_pgid()
+	       << "epoch_queued=" << epoch_queued << ")";
   }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrubResched(pgid=" << get_pgid()
-               << "epoch_queued=" << epoch_queued
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
+  void run(OSD* osd,
+	   OSDShard* sdata,
+	   PGRef& pg,
+	   ThreadPool::TPHandle& handle) override = 0;
+  op_scheduler_class get_scheduler_class() const final
+  {
     return op_scheduler_class::background_best_effort;
   }
 };
 
-
-class PGScrubPushesUpdate : public PGOpQueueable {
-  epoch_t epoch_queued;
-public:
-  PGScrubPushesUpdate(
-    spg_t pg,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg) , epoch_queued(epoch_queued) {}
-
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrubPushesUpdate(pgid=" << get_pgid()
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+class PGScrubResched : public PGScrubItem {
+ public:
+  PGScrubResched(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubResched"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-class PGScrubAppliedUpdate : public PGOpQueueable {
-  epoch_t epoch_queued;
-public:
-  PGScrubAppliedUpdate(
-    spg_t pg,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrubAppliedUpdate(pgid=" << get_pgid()
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+/**
+ *  all replicas have granted our scrub resources request
+ */
+class PGScrubResourcesOK : public PGScrubItem {
+ public:
+  PGScrubResourcesOK(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubResourcesOK"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-class PGScrubUnblocked : public PGOpQueueable {
-  epoch_t epoch_queued;
-public:
-  PGScrubUnblocked(
-    spg_t pg,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrubUnblocked(pgid=" << get_pgid()
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+/**
+ *  scrub resources requests denied by replica(s)
+ */
+class PGScrubDenied : public PGScrubItem {
+ public:
+  PGScrubDenied(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubDenied"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-class PGScrubDigestUpdate : public PGOpQueueable {
-public:
-  PGScrubDigestUpdate(
-    spg_t pg)
-    : PGOpQueueable(pg) {}
-
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrubAppliedUpdate(pgid=" << get_pgid()
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+/**
+ *  called when a recovery process completes, to initiate scrubbing. No local/remote
+ *  resources are allocated.
+ */
+class PGScrubAfterRec : public PGScrubItem {
+ public:
+  PGScrubAfterRec(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubAfterRec"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-class PGScrubGotReplMaps : public PGOpQueueable {
-public:
-  PGScrubGotReplMaps(
-    spg_t pg)
-    : PGOpQueueable(pg) {}
-
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrubGotReplMaps(pgid=" << get_pgid()
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+class PGScrubPushesUpdate : public PGScrubItem {
+ public:
+  PGScrubPushesUpdate(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubPushesUpdate"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-class PGScrubEvent : public PGOpQueueable {
-  epoch_t epoch_queued;
-public:
-  PGScrubEvent(
-    spg_t pg,
-    boost::statechart::event_base& evb,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGScrubEvent(pgid=" << get_pgid()
-               << "epoch_queued=" << epoch_queued
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+class PGScrubAppliedUpdate : public PGScrubItem {
+ public:
+  PGScrubAppliedUpdate(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubAppliedUpdate"}
+  {}
+  void run(OSD* osd,
+	   OSDShard* sdata,
+	   PGRef& pg,
+	   [[maybe_unused]] ThreadPool::TPHandle& handle) final;
 };
 
-class PGRepScrub : public PGOpQueueable {
-  epoch_t epoch_queued;
-public:
-  PGRepScrub(
-    spg_t pg,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGRepScrub(pgid=" << get_pgid()
-               << "epoch_queued=" << epoch_queued
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+class PGScrubUnblocked : public PGScrubItem {
+ public:
+  PGScrubUnblocked(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubUnblocked"}
+  {}
+  void run(OSD* osd,
+	   OSDShard* sdata,
+	   PGRef& pg,
+	   [[maybe_unused]] ThreadPool::TPHandle& handle) final;
 };
 
-class PGRepScrubResched : public PGOpQueueable {
-  epoch_t epoch_queued;
-public:
-  PGRepScrubResched(
-    spg_t pg,
-    epoch_t epoch_queued)
-    : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
-  std::ostream &print(std::ostream &rhs) const final {
-    return rhs << "PGRepScrubResched(pgid=" << get_pgid()
-               << "epoch_queued=" << epoch_queued
-               << ")";
-  }
-  void run(
-    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
-  op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_best_effort;
-  }
+class PGScrubDigestUpdate : public PGScrubItem {
+ public:
+  PGScrubDigestUpdate(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubDigestUpdate"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+class PGScrubGotReplMaps : public PGScrubItem {
+ public:
+  PGScrubGotReplMaps(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubGotReplMaps"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+class PGRepScrub : public PGScrubItem {
+ public:
+  PGRepScrub(spg_t pg, epoch_t epoch_queued) : PGScrubItem{pg, epoch_queued, "PGRepScrub"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+
+class PGRepScrubResched : public PGScrubItem {
+ public:
+  PGRepScrubResched(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGRepScrubResched"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
 class PGRecovery : public PGOpQueueable {

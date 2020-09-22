@@ -79,7 +79,7 @@ class PrimaryLogScrub : public PgScrubber {
 
   // handle our part in stats collection
 
-  object_stat_collection_t scrub_cstat;
+  object_stat_collection_t scrub_cstat_;
 
   void _scrub_clear_state() final;  // which just clears the stats
 };

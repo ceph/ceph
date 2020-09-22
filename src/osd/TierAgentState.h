@@ -25,6 +25,8 @@
 
 #include "osd/HitSet.h"
 
+// RRR missing description: what is a tier agent
+
 struct TierAgentState {
   /// current position iterating across pool
   hobject_t position;

@@ -52,7 +52,7 @@ struct ScrubMachineListener {
 
   virtual bool select_range() = 0;
 
-  // walk the log to find the latest update that affects our chunk
+  /// walk the log to find the latest update that affects our chunk
   virtual eversion_t search_log_for_updates() const = 0;
 
   virtual eversion_t get_last_update_applied() const = 0;
@@ -63,7 +63,7 @@ struct ScrubMachineListener {
 
   virtual int build_primary_map_chunk() = 0;
 
-  virtual int build_replica_map_chunk(bool qu_priority) = 0;
+  virtual int build_replica_map_chunk() = 0;
 
   virtual void scrub_compare_maps() = 0;
 
@@ -72,6 +72,10 @@ struct ScrubMachineListener {
   virtual void on_replica_init() = 0;
 
   virtual void replica_handling_done() = 0;
+
+  /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
+  /// (thus can be called from FSM reactions)
+  virtual void clear_pgscrub_state(bool keep_repair_state) = 0;
 
   virtual void add_delayed_scheduling() = 0;
 
@@ -87,6 +91,8 @@ struct ScrubMachineListener {
 
   virtual void set_subset_last_update(eversion_t e) = 0;
 
+  virtual bool was_epoch_changed() const = 0;
+
   virtual Scrub::preemption_t* get_preemptor() = 0;
 
   /**
@@ -98,9 +104,25 @@ struct ScrubMachineListener {
    */
   virtual void done_comparing_maps() = 0;
 
-  /// \todo handle the following:
-  // waiting_on_whom
-  // pg_whoami_
-  // cleanup()
-  // was_epoch_changed()
+  /**
+   * order the PgScrubber to initiate the process of reserving replicas' scrub
+   * resources.
+   */
+  virtual void reserve_replicas() = 0;
+
+  virtual void unreserve_replicas() = 0;
+
+  /**
+   * the FSM interface into the "are we waiting for maps, either our own or from
+   * replicas" state.
+   * The FSM can only:
+   * - mark the local map as available, and
+   * - query status
+   */
+  virtual void mark_local_map_ready() = 0;
+
+  virtual bool are_all_maps_available() const = 0;
+
+  /// a log/debug interface
+  virtual std::string dump_awaited_maps() const = 0;
 };

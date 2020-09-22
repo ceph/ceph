@@ -11671,11 +11671,10 @@ void PrimaryLogPG::_applied_recovered_object_replica()
 {
   dout(20) << __func__ << " active_pushes: " << active_pushes
 		 << " replica_op_priority: " << (bool)m_scrubber->replica_op_priority() << dendl;
-  ceph_assert(active_pushes >= 1); // RRR \todo verify we won't get here with active_pushes==0
-                                   // after is_deleting() is cleared.
+  ceph_assert(active_pushes >= 1);
   --active_pushes;
 
-  // requeue an active chunky scrub waiting on recovery ops
+  // requeue an active scrub waiting on recovery ops
   if (!recovery_state.is_deleting() && active_pushes == 0 &&
       m_scrubber->is_scrub_active()) {
 
@@ -12088,9 +12087,7 @@ void PrimaryLogPG::on_shutdown()
     osd->clear_queued_recovery(this);
   }
 
-  //clear_scrub_reserved();
   m_scrubber->scrub_clear_state();
-  //planned_scrub_ = requested_scrub_t{};
 
   m_scrubber->unreg_next_scrub();
 
@@ -12240,9 +12237,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     finish_degraded_object(p->first);
   }
 
-  //dout(13) << __func__ << " (primarylog) flags b4: " << planned_scrub_ << dendl;
   m_scrubber->scrub_clear_state();
-
 
   for (auto p = waiting_for_blocked_object.begin();
        p != waiting_for_blocked_object.end();

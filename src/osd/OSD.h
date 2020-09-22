@@ -291,7 +291,7 @@ public:
   };
   std::set<ScrubJob> sched_scrub_pg;
 
-  /// @returns the scrub_reg_stamp used for unregister the scrub job
+  /// @returns the scrub_reg_stamp used for unregister'ing the scrub job
   utime_t reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
 		       double pool_scrub_max_interval, bool must);
   void unreg_pg_scrub(spg_t pgid, utime_t t);
@@ -579,12 +579,19 @@ public:
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_after_recovery(PG *pg, Scrub::scrub_prio_t with_priority);
+
+  /// queue the message (-> event) that all replicas reserved scrub resources for us
+  void queue_for_scrub_granted(PG *pg, Scrub::scrub_prio_t with_priority);
+  /// queue the message (-> event) that some replicas denied our scrub resources request
+  void queue_for_scrub_denied(PG *pg, Scrub::scrub_prio_t with_priority);
+
   void queue_for_scrub_resched(PG *pg, Scrub::scrub_prio_t with_priority);
   void queue_scrub_pushes_update(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_scrub_applied_update(PG *pg, bool is_high_priority);
-  void queue_scrub_unblocking(PG *pg, bool is_high_priority);
-  void queue_scrub_digest_update(PG *pg, bool is_high_priority);
-  void queue_scrub_got_repl_maps(PG *pg, bool is_high_priority);
+  void queue_scrub_applied_update(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_unblocking(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_digest_update(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_got_repl_maps(PG *pg, Scrub::scrub_prio_t with_priority);
   void queue_for_rep_scrub(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority);
   void queue_for_rep_scrub_resched(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority);
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
@@ -594,6 +601,11 @@ private:
   // -- pg recovery and associated throttling --
   ceph::mutex recovery_lock = ceph::make_mutex("OSDService::recovery_lock");
   std::list<std::pair<epoch_t, PGRef> > awaiting_throttle;
+
+  template<class MSG_TYPE>
+  void queue_scrub_event_msg(PG *pg, Scrub::scrub_prio_t with_priority, unsigned int qu_priority);
+  template<class MSG_TYPE>
+  void queue_scrub_event_msg(PG *pg, Scrub::scrub_prio_t with_priority);
 
   utime_t defer_recovery_until;
   uint64_t recovery_ops_active;

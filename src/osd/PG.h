@@ -70,6 +70,9 @@ class PgScrubber;
 
 namespace Scrub {
   class Store;
+  class ReplicaReservations;
+  class LocalReservation;
+  class ReservedByRemotePrimary;
 }
 
 #ifdef PG_DEBUG_REFS
@@ -168,12 +171,15 @@ class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend class PeeringState;
   friend class PgScrubber;
   friend class PrimaryLogScrub;
+  friend class Scrub::ReplicaReservations;
+  friend class Scrub::LocalReservation;  // only used for log data
+  friend class Scrub::ReservedByRemotePrimary;  // only used for log data
 
 public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
 
-  std::unique_ptr<PgScrubber> scrubber_;
+  std::unique_ptr<ScrubPgIF> scrubber_;
   /// flags detailing scheduling/operation characteristics of the next scrub 
   requested_scrub_t planned_scrub_;
 
@@ -372,15 +378,19 @@ public:
 			  ObjectStore::Transaction &t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
-  void replica_scrub(epoch_t queued, [[maybe_unused]] ThreadPool::TPHandle &handle);
-  void replica_scrub_resched(epoch_t queued, [[maybe_unused]] ThreadPool::TPHandle &handle);
-  void scrub_send_scrub_resched(epoch_t queued, [[maybe_unused]] ThreadPool::TPHandle &handle);
-  
-  void scrub_send_pushes_update(epoch_t queued, [[maybe_unused]] ThreadPool::TPHandle &handle);
-  void scrub_send_applied_update(epoch_t queued, [[maybe_unused]] ThreadPool::TPHandle &handle);
-  void scrub_send_unblocking(epoch_t epoch_queued, [[maybe_unused]] ThreadPool::TPHandle &handle);
-  void scrub_send_digest_update([[maybe_unused]] ThreadPool::TPHandle &handle);
-  void scrub_send_replmaps_ready([[maybe_unused]] ThreadPool::TPHandle &handle);
+  void recovery_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void replica_scrub_resched(epoch_t queued, ThreadPool::TPHandle &handle);
+
+  /// Queues a PGScrubResourcesOK message. Will translate into 'RemotesReserved' FSM event
+  void scrub_send_resources_granted(epoch_t queued, ThreadPool::TPHandle &handle);
+  void scrub_send_resources_denied(epoch_t queued, ThreadPool::TPHandle &handle);
+  void scrub_send_scrub_resched(epoch_t queued, ThreadPool::TPHandle &handle);
+  void scrub_send_pushes_update(epoch_t queued, ThreadPool::TPHandle &handle);
+  void scrub_send_applied_update(epoch_t queued, ThreadPool::TPHandle &handle);
+  void scrub_send_unblocking(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
+  void scrub_send_digest_update(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
+  void scrub_send_replmaps_ready(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
 
   void reg_next_scrub();
 
@@ -521,6 +531,9 @@ public:
 
   bool get_must_scrub() const;
   bool sched_scrub();
+
+  unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const;
+  /// the version that refers to flags_.priority
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const;
   unsigned int scrub_requeue_priority(bool is_high_priority) const; ///< the legacy version of the previous method
 protected:
@@ -1016,31 +1029,21 @@ protected:
 
   int active_pushes;
 
-  //bool scrub_can_preempt = false;
-  //bool scrub_preempted = false;
-
   void repair_object(
     const hobject_t &soid,
     const std::list<std::pair<ScrubMap::object, pg_shard_t> > &ok_peers,
     const std::set<pg_shard_t> &bad_peers);
 
-//   void chunky_scrub(ThreadPool::TPHandle &handle);
   /**
    * return true if any inconsistency/missing is repaired, false otherwise
    */
   bool scrub_process_inconsistent();
-  bool ops_blocked_by_scrub() const;
-  //void scrub_finish();
+
+  [[nodiscard]] bool ops_blocked_by_scrub() const;
+  [[nodiscard]] Scrub::scrub_prio_t is_scrub_blocking_ops() const;
+
   void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(const std::vector<ghobject_t> &rollback_obs);
-//   void _request_scrub_map(pg_shard_t replica, eversion_t version,
-//                           hobject_t start, hobject_t end, bool deep,
-// 			  bool allow_preemption);
-//   int build_scrub_map_chunk(
-//     ScrubMap &map,
-//     ScrubMapBuilder &pos,
-//     hobject_t start, hobject_t end, bool deep,
-//     ThreadPool::TPHandle &handle);
   /**
    * returns true if [begin, end) is good to scrub at this time
    * a false return value obliges the implementer to requeue scrub when the
@@ -1048,25 +1051,10 @@ protected:
    */
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) = 0;
-  virtual void scrub_snapshot_metadata(
-    ScrubMap &map,
-    const missing_map_t& missing_digest) { }
-  virtual void _scrub_clear_state() { }
-  virtual void _scrub_finish() { }
-  void clear_scrub_reserved();
-  void scrub_unreserve_replicas();
-  bool scrub_all_replicas_reserved() const; /// RRR never implemented! but makes sense. \todo
 
   void replica_scrub(
     OpRequestRef op,
     ThreadPool::TPHandle &handle);
-
-  /**
-   * a scrub-map arrived from a replica
-   *
-   *  \todo short-circuit this function. PrimaryLogPG can access PgScrubber itself.
-   */
-  void do_replica_scrub_map(OpRequestRef op);
 
   // -- recovery state --
 
@@ -1181,9 +1169,8 @@ protected:
   virtual void snap_trimmer_scrub_complete() = 0;
 
 protected:
-  bool requeue_scrub(Scrub::scrub_prio_t with_priority);
   void queue_recovery();
-  bool queue_scrub();
+  void queue_scrub_after_recovery();
   unsigned int get_scrub_priority();
 
   bool try_flush_or_schedule_async() override;

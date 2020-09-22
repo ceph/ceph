@@ -1742,170 +1742,129 @@ void OSDService::queue_for_snap_trim(PG *pg)
       pg->get_osdmap_epoch()));
 }
 
-void OSDService::queue_for_scrub(PG *pg, Scrub::scrub_prio_t with_priority)
+/// queue a scrub-related message for a PG
+template <class MSG_TYPE>
+void OSDService::queue_scrub_event_msg(PG* pg,
+				       Scrub::scrub_prio_t with_priority,
+				       unsigned int qu_priority)
 {
   const auto epoch = pg->get_osdmap_epoch();
-  dout(7) << " queueing " << *pg << " for scrub. Ep: " << epoch << dendl;
+  auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
+  dout(7) << " qu scrub event (" << *msg << ") for " << *pg << ". Ep: " << epoch << dendl;
 
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrub(pg->get_pgid(), epoch)),
-      cct->_conf->osd_scrub_cost,
-      pg->scrub_requeue_priority(with_priority),
-      ceph_clock_now(),
-      0,
-      epoch));
+  enqueue_back(OpSchedulerItem(
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
+    pg->scrub_requeue_priority(with_priority, qu_priority), ceph_clock_now(), 0, epoch));
+}
+
+/// and if the queuing priority should be provided by the executing scrub
+/// (pgscrubber::flags_):
+template <class MSG_TYPE>
+void OSDService::queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  const auto epoch = pg->get_osdmap_epoch();
+  auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
+  dout(7) << " qu scrub event (" << *msg << ") for " << *pg << ". Ep: " << epoch << dendl;
+
+  enqueue_back(OpSchedulerItem(
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
+    pg->scrub_requeue_priority(with_priority), ceph_clock_now(), 0, epoch));
+}
+
+void OSDService::queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  queue_scrub_event_msg<PGScrub>(pg, with_priority);
+}
+
+void OSDService::queue_scrub_after_recovery(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  // what qu_priority should we use here?  RRR
+  queue_scrub_event_msg<PGScrubAfterRec>(pg, with_priority);
+}
+
+void OSDService::queue_for_rep_scrub(PG* pg,
+				     Scrub::scrub_prio_t with_priority,
+				     unsigned int qu_priority)
+{
+  queue_scrub_event_msg<PGRepScrub>(pg, with_priority, qu_priority);
+}
+
+void OSDService::queue_for_rep_scrub_resched(PG* pg,
+					     Scrub::scrub_prio_t with_priority,
+					     unsigned int qu_priority)
+{
+  queue_scrub_event_msg<PGRepScrubResched>(pg, with_priority, qu_priority);
+}
+
+/// queue the message (-> event) that all replicas reserved scrub resources for us
+void OSDService::queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  queue_scrub_event_msg<PGScrubResourcesOK>(pg, with_priority);
+}
+
+/// queue the message (-> event) that some replicas denied our scrub resources request
+void OSDService::queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  queue_scrub_event_msg<PGScrubDenied>(pg, with_priority);
 }
 
 /**
  *  Queue a PGScrubResched message, that will translate into a InternalSchedScrub event
  *  in the scrub state machine.
- *  
- *  Used to signal (a) the end of a sleep period, or (b) a recheck of the availability of 
+ *
+ *  Used to signal (a) the end of a sleep period, or (b) a recheck of the availability of
  *  the primary map being created by the backend.
- */  
-void OSDService::queue_for_scrub_resched(PG *pg, Scrub::scrub_prio_t with_priority)
+ */
+void OSDService::queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority)
 {
-  const auto epoch = pg->get_osdmap_epoch();
-  dout(7) << " queuing " << *pg << " for scrub-resched. Ep: " << epoch << dendl;
-
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrubResched(pg->get_pgid(), epoch)),
-      cct->_conf->osd_scrub_cost,
-      pg->scrub_requeue_priority(with_priority),
-      ceph_clock_now(),
-      0,
-      epoch));
+  queue_scrub_event_msg<PGScrubResched>(pg, with_priority);
 }
 
 /**
  *  Queue a PGScrubPushesUpdate message, that will translate into a ActivePushesUpd event
  *  in the scrub state machine.
- *  
+ *
  *  Signals a change in the number of in-flight recovery writes.
- */  
+ */
 void OSDService::queue_scrub_pushes_update(PG *pg, Scrub::scrub_prio_t with_priority)
 {
-  const auto epoch = pg->get_osdmap_epoch(); // RRR do we have to have this? and should we check for epoch change when handling in pg.cc?
-  dout(7) << " queuing " << *pg << " for active-pushes. Ep: " << epoch << dendl;
-
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrubPushesUpdate(pg->get_pgid(), epoch)),
-      cct->_conf->osd_scrub_cost,
-      pg->scrub_requeue_priority(with_priority),
-      ceph_clock_now(),
-      0,
-      epoch));
+  queue_scrub_event_msg<PGScrubPushesUpdate>(pg, with_priority);
 }
 
 /**
  *  Sends an UpdatesApplied event to the scrubber state-machine.
  *  Used when all pending updates were applied.
  */
-void OSDService::queue_scrub_applied_update(PG *pg, bool with_priority)
+void OSDService::queue_scrub_applied_update(PG *pg, Scrub::scrub_prio_t with_priority)
 {
-  const auto epoch = pg->get_osdmap_epoch();
-  dout(7) << " queuing " << *pg << " for applied-update. Ep: " << epoch << dendl;
-
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrubAppliedUpdate(pg->get_pgid(), epoch)),
-      cct->_conf->osd_scrub_cost,
-      pg->scrub_requeue_priority(with_priority),
-      ceph_clock_now(),
-      0,
-      epoch));
+  queue_scrub_event_msg<PGScrubAppliedUpdate>(pg, with_priority);
 }
 
 /**
  *  The block-range that was locked and prevented the scrubbing - is freed. 
  *  Sends an 'Unblocked' event to the scrubber state-machine. 
  */
-void OSDService::queue_scrub_unblocking(PG *pg, bool with_priority)
+void OSDService::queue_scrub_unblocking(PG *pg, Scrub::scrub_prio_t with_priority)
 {
-  const auto epoch = pg->get_osdmap_epoch();
-  dout(7) << " queuing " << *pg << " for scrub-unblocking. Ep: " << epoch << dendl;
-
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrubUnblocked(pg->get_pgid(), epoch)),
-      cct->_conf->osd_scrub_cost,
-      pg->scrub_requeue_priority(with_priority),
-      ceph_clock_now(),
-      0,
-      epoch));
+  queue_scrub_event_msg<PGScrubUnblocked>(pg, with_priority);
 }
 
 /**
  *  Sends a DigestUpdate event to the scrubber state-machine.
  *  Signals that all write OPs are done.
  */
-void OSDService::queue_scrub_digest_update(PG *pg, bool is_high_priority)
+void OSDService::queue_scrub_digest_update(PG *pg, Scrub::scrub_prio_t with_priority)
 {
-  const auto epoch = pg->get_osdmap_epoch();
-  dout(7) << " queuing " << *pg << " for digest-update. Ep: " << epoch << dendl;
-
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrubDigestUpdate(pg->get_pgid())),
-      cct->_conf->osd_scrub_cost,
-      pg->scrub_requeue_priority(is_high_priority),
-      ceph_clock_now(),
-      0,
-      epoch));
+  queue_scrub_event_msg<PGScrubDigestUpdate>(pg, with_priority);
 }
 
 /**
  *  Sends a GotReplicas event to the scrubber state-machine.
  *  Signals that we (the Primary) got all waited-for scrub-maps from our replica.
  */
-void OSDService::queue_scrub_got_repl_maps(PG *pg, bool is_high_priority)
+void OSDService::queue_scrub_got_repl_maps(PG *pg, Scrub::scrub_prio_t with_priority)
 {
-  const auto epoch = pg->get_osdmap_epoch();
-  dout(7) << " queuing " << *pg << " for received scrub replica maps. Ep: " << epoch << dendl;
-
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrubGotReplMaps(pg->get_pgid())),
-      cct->_conf->osd_scrub_cost,
-      pg->scrub_requeue_priority(is_high_priority),
-      ceph_clock_now(),
-      0,
-      epoch));
-}
-
-void OSDService::queue_for_rep_scrub(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority)
-{
-  if ((bool)with_high_priority) {
-    qu_priority = std::max(qu_priority, (unsigned int)cct->_conf->osd_client_op_priority);
-  }
-  const auto epoch = pg->get_osdmap_epoch();
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGRepScrub(pg->get_pgid(), epoch)),
-      cct->_conf->osd_scrub_cost,
-      qu_priority,
-      ceph_clock_now(),
-      0,
-      epoch));
-}
-
-void OSDService::queue_for_rep_scrub_resched(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority)
-{
-  if ((bool)with_high_priority) {
-    qu_priority = std::max(qu_priority, (unsigned int)cct->_conf->osd_client_op_priority);
-  }
-  const auto epoch = pg->get_osdmap_epoch();
-  enqueue_back(
-    OpSchedulerItem(
-      unique_ptr<OpSchedulerItem::OpQueueable>(new PGRepScrubResched(pg->get_pgid(), epoch)),
-      cct->_conf->osd_scrub_cost,
-      qu_priority,
-      ceph_clock_now(),
-      0,
-      epoch));
+  queue_scrub_event_msg<PGScrubGotReplMaps>(pg, with_priority);
 }
 
 void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
@@ -7670,10 +7629,11 @@ void OSD::sched_scrub()
   if (service.first_scrub_stamp(&scrub_job)) {
     do {
       dout(8/*30*/) << "sched_scrub examine " << scrub_job.pgid << " at " << scrub_job.sched_time << dendl;
+      dout(8/*30*/) << "sched_scrub examine (~" << scrub_job.pgid << "~) at " << scrub_job.sched_time << dendl;
 
       if (scrub_job.sched_time > now) {
 	// save ourselves some effort
-	dout(10) << "sched_scrub " << scrub_job.pgid << " scheduled at " << scrub_job.sched_time
+	dout(10/*30*/) << "sched_scrub " << scrub_job.pgid << " scheduled at " << scrub_job.sched_time
 		 << " > " << now << dendl;
 	break;
       }
@@ -7709,9 +7669,9 @@ void OSD::sched_scrub()
       }
 
       // If it is reserving, let it resolve before going to the next scrub job
-      if (pg->scrubber_->local_reserved && !pg->scrubber_->is_scrub_active()) {
+      if (pg->scrubber_->is_reserving() && !pg->scrubber_->is_scrub_active()) {
 	pg->unlock();
-	dout(30) << __func__ << ": reserve in progress pgid " << scrub_job.pgid << dendl;
+	dout(10) << __func__ << ": reserve in progress pgid " << scrub_job.pgid << dendl;
 	break;
       }
       dout(10) << "sched_scrub scrubbing " << scrub_job.pgid << " at " << scrub_job.sched_time
@@ -7720,7 +7680,7 @@ void OSD::sched_scrub()
 	       << dendl;
       if (pg->sched_scrub()) {
 	pg->unlock();
-        dout(10/*20*/) << __func__ << " scheduled a a scrub!" << dendl;
+        dout(10/*20*/) << __func__ << " scheduled a scrub!" << " (~" << scrub_job.pgid << "~)" << dendl;
 	break;
       }
       pg->unlock();
