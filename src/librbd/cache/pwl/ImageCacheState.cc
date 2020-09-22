@@ -53,10 +53,10 @@ ImageCacheState<I>::ImageCacheState(
   present = (bool)f["present"];
   empty = (bool)f["empty"];
   clean = (bool)f["clean"];
-  host = (string)f["rwl_host"];
-  path = (string)f["rwl_path"];
+  host = (string)f["pwl_host"];
+  path = (string)f["pwl_path"];
   uint64_t pwl_size;
-  std::istringstream iss(f["rwl_size"]);
+  std::istringstream iss(f["pwl_size"]);
   iss >> pwl_size;
   size = pwl_size;
 

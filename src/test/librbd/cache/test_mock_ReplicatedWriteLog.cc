@@ -156,9 +156,9 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_json_write) {
 
   JSONFormattable f;
   string strf = "{ \"present\": \"1\", \"empty\": \"0\", \"clean\": \"0\", \
-                   \"rwl_host\": \"testhost\", \
-                   \"rwl_path\": \"/tmp\", \
-                   \"rwl_size\": \"1024\" }";
+                   \"pwl_host\": \"testhost\", \
+                   \"pwl_path\": \"/tmp\", \
+                   \"pwl_size\": \"1024\" }";
   get_jf(strf, &f);
   MockImageCacheStateRWL image_cache_state(&mock_image_ctx, f);
 
