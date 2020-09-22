@@ -975,41 +975,9 @@ seastar::future<> Client::reopen_session(int rank)
           });
       }
     }).then([peer, this](auto result) {
-      if (result == Connection::AuthResult::canceled) {
-	return seastar::now();
+      if (result != Connection::AuthResult::canceled) {
+        _finish_auth(peer);
       }
-
-      if (!is_hunting()) {
-        return seastar::now();
-      }
-      logger().info("found mon.{}", monmap.get_name(peer));
-
-      auto found = std::find_if(
-	pending_conns.begin(), pending_conns.end(),
-	[peer](auto& conn) {
-	  return conn->is_my_peer(peer);
-	});
-      if (found == pending_conns.end()) {
-	// Happens if another connection has won the race
-	ceph_assert(active_con && pending_conns.empty());
-	logger().info(
-	  "no pending connection for mon.{}, peer {}",
-	  monmap.get_name(peer),
-	  peer);
-	return seastar::now();
-      }
-
-      ceph_assert(!active_con && !pending_conns.empty());
-      active_con = std::move(*found);
-      found->reset();
-      for (auto& conn : pending_conns) {
-        if (conn) {
-          conn->close();
-        }
-      }
-      pending_conns.clear();
-      return seastar::now();
-    }).then([]() {
       logger().debug("reopen_session mon connection attempts complete");
     }).handle_exception([](auto ep) {
       logger().error("mon connections failed with ep {}", ep);
@@ -1022,6 +990,37 @@ seastar::future<> Client::reopen_session(int rank)
     }
     return active_con->renew_rotating_keyring();
   });
+}
+
+void Client::_finish_auth(const entity_addr_t& peer)
+{
+  if (!is_hunting()) {
+    return;
+  }
+  logger().info("found mon.{}", monmap.get_name(peer));
+
+  auto found = std::find_if(
+    pending_conns.begin(), pending_conns.end(),
+    [peer](auto& conn) {
+      return conn->is_my_peer(peer);
+  });
+  if (found == pending_conns.end()) {
+    // Happens if another connection has won the race
+    ceph_assert(active_con && pending_conns.empty());
+    logger().info("no pending connection for mon.{}, peer {}",
+      monmap.get_name(peer), peer);
+    return;
+  }
+
+  ceph_assert(!active_con && !pending_conns.empty());
+  active_con = std::move(*found);
+  found->reset();
+  for (auto& conn : pending_conns) {
+    if (conn) {
+      conn->close();
+    }
+  }
+  pending_conns.clear();
 }
 
 Client::command_result_t
