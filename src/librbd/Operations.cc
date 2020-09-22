@@ -1484,24 +1484,21 @@ int Operations<I>::metadata_set(const std::string &key,
     return -EROFS;
   }
 
-  C_SaferCond metadata_ctx;
-  {
-    std::shared_lock owner_lock{m_image_ctx.owner_lock};
-    r = prepare_image_update(exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
-                             true);
-    if (r < 0) {
-      return r;
-    }
+  r = invoke_async_request("metadata_set",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                           true,
+                           boost::bind(&Operations<I>::execute_metadata_set,
+                                       this, key, value, _1),
+                           boost::bind(&ImageWatcher<I>::notify_metadata_set,
+                                       m_image_ctx.image_watcher,
+                                       key, value, _1));
 
-    execute_metadata_set(key, value, &metadata_ctx);
-  }
-
-  r = metadata_ctx.wait();
   if (config_override && r >= 0) {
     // apply new config key immediately
     r = m_image_ctx.state->refresh_if_required();
   }
 
+  ldout(cct, 20) << "metadata_set finished" << dendl;
   return r;
 }
 
@@ -1546,19 +1543,16 @@ int Operations<I>::metadata_remove(const std::string &key) {
   if(r < 0)
     return r;
 
-  C_SaferCond metadata_ctx;
-  {
-    std::shared_lock owner_lock{m_image_ctx.owner_lock};
-    r = prepare_image_update(exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
-                             true);
-    if (r < 0) {
-      return r;
-    }
-
-    execute_metadata_remove(key, &metadata_ctx);
+  r = invoke_async_request("metadata_remove",
+                           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                           true,
+                           boost::bind(&Operations<I>::execute_metadata_remove,
+                                       this, key, _1),
+                           boost::bind(&ImageWatcher<I>::notify_metadata_remove,
+                                       m_image_ctx.image_watcher, key, _1));
+  if (r == -ENOENT) {
+    r = 0;
   }
-
-  r = metadata_ctx.wait();
 
   std::string config_key;
   if (util::is_metadata_config_override(key, &config_key) && r >= 0) {
@@ -1566,6 +1560,7 @@ int Operations<I>::metadata_remove(const std::string &key) {
     r = m_image_ctx.state->refresh_if_required();
   }
 
+  ldout(cct, 20) << "metadata_remove finished" << dendl;
   return r;
 }
 

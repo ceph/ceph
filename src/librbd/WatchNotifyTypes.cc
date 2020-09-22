@@ -284,6 +284,23 @@ void SparsifyPayload::dump(Formatter *f) const {
   f->dump_unsigned("sparse_size", sparse_size);
 }
 
+void MetadataUpdatePayload::encode(bufferlist &bl) const {
+  using ceph::encode;
+  encode(key, bl);
+  encode(value, bl);
+}
+
+void MetadataUpdatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  decode(key, iter);
+  decode(value, iter);
+}
+
+void MetadataUpdatePayload::dump(Formatter *f) const {
+  f->dump_string("key", key);
+  f->dump_string("value", *value);
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
@@ -373,6 +390,9 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   case NOTIFY_OP_UNQUIESCE:
     payload.reset(new UnquiescePayload());
     break;
+  case NOTIFY_OP_METADATA_UPDATE:
+    payload.reset(new MetadataUpdatePayload());
+    break;
   }
 
   payload->decode(struct_v, iter);
@@ -409,6 +429,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(new SparsifyPayload(AsyncRequestId(ClientId(0, 1), 2), 1)));
   o.push_back(new NotifyMessage(new QuiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(new UnquiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(new NotifyMessage(new MetadataUpdatePayload("foo", std::optional<std::string>{"xyz"})));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -495,6 +516,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_UNQUIESCE:
     out << "Unquiesce";
+    break;
+  case NOTIFY_OP_METADATA_UPDATE:
+    out << "MetadataUpdate";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

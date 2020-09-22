@@ -78,6 +78,10 @@ public:
                       Context *on_finish);
   void notify_unquiesce(uint64_t request_id, Context *on_finish);
 
+  void notify_metadata_set(const std::string &key, const std::string &value,
+                           Context *on_finish);
+  void notify_metadata_remove(const std::string &key, Context *on_finish);
+
 private:
   enum TaskCode {
     TASK_CODE_REQUEST_LOCK,
@@ -261,6 +265,8 @@ private:
   bool handle_payload(const watch_notify::QuiescePayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnquiescePayload& payload,
+                      C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::MetadataUpdatePayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
