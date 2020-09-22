@@ -69,6 +69,69 @@ namespace {
 
     return {key_view, p_mem};
   }
+
+  class Onodes {
+   public:
+    Onodes(size_t n) {
+      for (size_t i = 1; i <= n; ++i) {
+        auto p_onode = &create(i * 8);
+        onodes.push_back(p_onode);
+      }
+    }
+
+    ~Onodes() {
+      std::for_each(tracked_onodes.begin(), tracked_onodes.end(),
+                    [] (onode_t* onode) {
+        std::free(onode);
+      });
+    }
+
+    const onode_t& create(size_t size) {
+      assert(size >= sizeof(onode_t) + sizeof(uint32_t));
+      uint32_t target = size * 137;
+      auto p_mem = (char*)std::malloc(size);
+      auto p_onode = (onode_t*)p_mem;
+      tracked_onodes.push_back(p_onode);
+      p_onode->size = size;
+      p_onode->id = id++;
+      p_mem += (size - sizeof(uint32_t));
+      std::memcpy(p_mem, &target, sizeof(uint32_t));
+      validate(*p_onode);
+      return *p_onode;
+    }
+
+    const onode_t& pick() const {
+      auto index = rd() % onodes.size();
+      return *onodes[index];
+    }
+
+    const onode_t& pick_largest() const {
+      return *onodes[onodes.size() - 1];
+    }
+
+    static void validate_cursor(
+        const Btree::Cursor& cursor, const ghobject_t& key, const onode_t& onode) {
+      assert(!cursor.is_end());
+      assert(cursor.get_ghobj() == key);
+      assert(cursor.value());
+      assert(cursor.value() != &onode);
+      assert(*cursor.value() == onode);
+      validate(*cursor.value());
+    }
+
+   private:
+    static void validate(const onode_t& node) {
+      auto p_target = (const char*)&node + node.size - sizeof(uint32_t);
+      uint32_t target;
+      std::memcpy(&target, p_target, sizeof(uint32_t));
+      assert(target == node.size * 137);
+    }
+
+    uint16_t id = 0;
+    mutable std::random_device rd;
+    std::vector<const onode_t*> onodes;
+    std::vector<onode_t*> tracked_onodes;
+  };
 }
 
 struct a_basic_test_t : public seastar_test_suite_t {};
@@ -106,7 +169,7 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
 #define NXT_T(StageType)  staged<typename StageType::next_param_t>
   logger().info("\n"
     "Bytes of a key-value insertion (full-string):\n"
-    "  s-p-c, 'n'-'o', s-g => onode_t{2}: typically internal 41B, leaf 35B\n"
+    "  s-p-c, 'n'-'o', s-g => onode_t(2): typically internal 41B, leaf 35B\n"
     "  InternalNode0: {} {} {}\n"
     "  InternalNode1: {} {} {}\n"
     "  InternalNode2: {} {}\n"
@@ -172,69 +235,6 @@ TEST_F(a_basic_test_t, 2_node_sizes)
   });
 }
 
-class Onodes {
- public:
-  Onodes(size_t n) {
-    for (size_t i = 1; i <= n; ++i) {
-      auto p_onode = &create(i * 8);
-      onodes.push_back(p_onode);
-    }
-  }
-
-  ~Onodes() {
-    std::for_each(tracked_onodes.begin(), tracked_onodes.end(),
-                  [] (onode_t* onode) {
-      std::free(onode);
-    });
-  }
-
-  const onode_t& create(size_t size) {
-    assert(size >= sizeof(onode_t) + sizeof(uint32_t));
-    uint32_t target = size * 137;
-    auto p_mem = (char*)std::malloc(size);
-    auto p_onode = (onode_t*)p_mem;
-    tracked_onodes.push_back(p_onode);
-    p_onode->size = size;
-    p_onode->id = id++;
-    p_mem += (size - sizeof(uint32_t));
-    std::memcpy(p_mem, &target, sizeof(uint32_t));
-    validate(*p_onode);
-    return *p_onode;
-  }
-
-  const onode_t& pick() const {
-    auto index = rd() % onodes.size();
-    return *onodes[index];
-  }
-
-  const onode_t& pick_largest() const {
-    return *onodes[onodes.size() - 1];
-  }
-
-  static void validate_cursor(
-      const Btree::Cursor& cursor, const ghobject_t& key, const onode_t& onode) {
-    assert(!cursor.is_end());
-    assert(cursor.get_ghobj() == key);
-    assert(cursor.value());
-    assert(cursor.value() != &onode);
-    assert(*cursor.value() == onode);
-    validate(*cursor.value());
-  }
-
- private:
-  static void validate(const onode_t& node) {
-    auto p_target = (const char*)&node + node.size - sizeof(uint32_t);
-    uint32_t target;
-    std::memcpy(&target, p_target, sizeof(uint32_t));
-    assert(target == node.size * 137);
-  }
-
-  uint16_t id = 0;
-  mutable std::random_device rd;
-  std::vector<const onode_t*> onodes;
-  std::vector<onode_t*> tracked_onodes;
-};
-
 struct b_dummy_tree_test_t : public seastar_test_suite_t {
   NodeExtentManagerURef moved_nm;
   TransactionRef ref_t;
@@ -280,6 +280,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       insert_history.emplace_back(key, &value, cursor);
       Onodes::validate_cursor(cursor, key, value);
       auto cursor_ = tree.lower_bound(t, key).unsafe_get0();
+      assert(cursor_.get_ghobj() == key);
       assert(cursor_.value() == cursor.value());
       return cursor.value();
     };
@@ -293,6 +294,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     // validate lookup
     {
       auto cursor1_s = tree.lower_bound(t, key_s).unsafe_get0();
+      assert(cursor1_s.get_ghobj() == key1);
       assert(cursor1_s.value() == p_value1);
       auto cursor1_e = tree.lower_bound(t, key_e).unsafe_get0();
       assert(cursor1_e.is_end());
