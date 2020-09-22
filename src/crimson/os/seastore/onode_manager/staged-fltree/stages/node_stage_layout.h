@@ -373,7 +373,7 @@ struct _internal_fields_3_t {
   node_header_t header;
   num_keys_t num_keys = 0u;
   snap_gen_t keys[MAX_NUM_KEYS];
-  laddr_t child_addrs[MAX_NUM_KEYS];
+  laddr_packed_t child_addrs[MAX_NUM_KEYS];
 } __attribute__((packed));
 static_assert(_internal_fields_3_t<MAX_NUM_KEYS_I3>::SIZE <= NODE_BLOCK_SIZE &&
               _internal_fields_3_t<MAX_NUM_KEYS_I3 + 1>::SIZE > NODE_BLOCK_SIZE);

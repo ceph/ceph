@@ -43,4 +43,8 @@ inline std::ostream& operator<<(std::ostream &os, const node_type_t& type) {
   return os;
 }
 
+struct laddr_packed_t {
+  laddr_t value;
+} __attribute__((packed));
+
 }

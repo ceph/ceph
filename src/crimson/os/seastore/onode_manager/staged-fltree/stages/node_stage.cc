@@ -302,7 +302,7 @@ char* APPEND_T::wrap() {
   assert(p_src);
   if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
     if (p_src->is_level_tail()) {
-      laddr_t tail_value = *p_src->get_end_p_laddr();
+      laddr_t tail_value = p_src->get_end_p_laddr()->value;
       p_append_right -= sizeof(laddr_t);
       assert(p_append_left <= p_append_right);
       p_mut->copy_in_absolute(p_append_right, tail_value);

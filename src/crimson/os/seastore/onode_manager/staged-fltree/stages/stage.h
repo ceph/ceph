@@ -1246,7 +1246,7 @@ struct staged {
         if constexpr (NODE_TYPE == node_type_t::LEAF) {
           os << *value_ptr;
         } else {
-          os << "0x" << std::hex << *value_ptr << std::dec;
+          os << "0x" << std::hex << value_ptr->value << std::dec;
         }
         os << " " << size << "B"
            << "  @" << offset << "B";

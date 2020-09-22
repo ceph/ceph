@@ -15,11 +15,10 @@ class NodeExtentMutable;
 
 struct internal_sub_item_t {
   const snap_gen_t& get_key() const { return key; }
-  #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
-  const laddr_t* get_p_value() const { return &value; }
+  const laddr_packed_t* get_p_value() const { return &value; }
 
   snap_gen_t key;
-  laddr_t value;
+  laddr_packed_t value;
 } __attribute__((packed));
 
 /*
@@ -56,7 +55,7 @@ class internal_sub_items_t {
   size_t size_before(size_t index) const {
     return index * sizeof(internal_sub_item_t);
   }
-  const laddr_t* get_p_value(size_t index) const {
+  const laddr_packed_t* get_p_value(size_t index) const {
     assert(index < num_items);
     return (p_first_item - index)->get_p_value();
   }
@@ -64,14 +63,15 @@ class internal_sub_items_t {
   static node_offset_t header_size() { return 0u; }
 
   template <KeyT KT>
-  static node_offset_t estimate_insert(const full_key_t<KT>&, const laddr_t&) {
+  static node_offset_t estimate_insert(
+      const full_key_t<KT>&, const laddr_packed_t&) {
     return sizeof(internal_sub_item_t);
   }
 
   template <KeyT KT>
-  static const laddr_t* insert_at(
+  static const laddr_packed_t* insert_at(
       NodeExtentMutable&, const internal_sub_items_t&,
-      const full_key_t<KT>&, const laddr_t&,
+      const full_key_t<KT>&, const laddr_packed_t&,
       size_t index, node_offset_t size, const char* p_left_bound);
 
   static size_t trim_until(NodeExtentMutable&, internal_sub_items_t&, size_t);
@@ -90,10 +90,9 @@ class internal_sub_items_t::Appender {
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {}
   void append(const internal_sub_items_t& src, size_t from, size_t items);
-  void append(const full_key_t<KT>&, const laddr_t&, const laddr_t*&);
+  void append(const full_key_t<KT>&, const laddr_packed_t&, const laddr_packed_t*&);
   char* wrap() { return p_append; }
  private:
-  const laddr_t** pp_value = nullptr;
   NodeExtentMutable* p_mut;
   char* p_append;
 };
@@ -127,7 +126,7 @@ class leaf_sub_items_t {
     assert(keys());
     auto _p_offsets = _p_num_keys - sizeof(node_offset_t);
     assert(range.p_start < _p_offsets);
-    p_offsets = reinterpret_cast<const node_offset_t*>(_p_offsets);
+    p_offsets = reinterpret_cast<const node_offset_packed_t*>(_p_offsets);
     p_items_end = reinterpret_cast<const char*>(&get_offset(keys() - 1));
     assert(range.p_start < p_items_end);
     assert(range.p_start == p_start());
@@ -141,18 +140,18 @@ class leaf_sub_items_t {
 
   const char* p_start() const { return get_item_end(keys()); }
 
-  const node_offset_t& get_offset(size_t index) const {
+  const node_offset_packed_t& get_offset(size_t index) const {
     assert(index < keys());
     return *(p_offsets - index);
   }
 
   const node_offset_t get_offset_to_end(size_t index) const {
     assert(index <= keys());
-    return index == 0 ? 0 : get_offset(index - 1);
+    return index == 0 ? 0 : get_offset(index - 1).value;
   }
 
   const char* get_item_start(size_t index) const {
-    return p_items_end - get_offset(index);
+    return p_items_end - get_offset(index).value;
   }
 
   const char* get_item_end(size_t index) const {
@@ -179,7 +178,7 @@ class leaf_sub_items_t {
     --index;
     auto ret = sizeof(num_keys_t) +
                (index + 1) * sizeof(node_offset_t) +
-               get_offset(index);
+               get_offset(index).value;
     return ret;
   }
   const onode_t* get_p_value(size_t index) const {
@@ -211,7 +210,7 @@ class leaf_sub_items_t {
  private:
   // TODO: support unaligned access
   const num_keys_t* p_num_keys;
-  const node_offset_t* p_offsets;
+  const node_offset_packed_t* p_offsets;
   const char* p_items_end;
 };
 

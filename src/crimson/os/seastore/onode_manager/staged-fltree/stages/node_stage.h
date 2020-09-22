@@ -51,18 +51,17 @@ class node_extent_t {
   size_t total_size() const { return p_fields->total_size(); }
   const char* p_left_bound() const;
   template <node_type_t T = NODE_TYPE>
-  std::enable_if_t<T == node_type_t::INTERNAL, const laddr_t*>
+  std::enable_if_t<T == node_type_t::INTERNAL, const laddr_packed_t*>
   get_end_p_laddr() const {
     assert(is_level_tail());
     if constexpr (FIELD_TYPE == field_type_t::N3) {
-      #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
       return &p_fields->child_addrs[keys()];
     } else {
       auto offset_start = p_fields->get_item_end_offset(keys());
       assert(offset_start <= FieldType::SIZE);
-      offset_start -= sizeof(laddr_t);
+      offset_start -= sizeof(laddr_packed_t);
       auto p_addr = p_start() + offset_start;
-      return reinterpret_cast<const laddr_t*>(p_addr);
+      return reinterpret_cast<const laddr_packed_t*>(p_addr);
     }
   }
 
@@ -84,7 +83,6 @@ class node_extent_t {
   get_p_value(size_t index) const {
     assert(index < keys());
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
       return &p_fields->child_addrs[index];
     } else {
       auto range = get_nxt_container(index);

@@ -124,7 +124,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         auto value_ptr = node_stage.get_end_p_laddr();
         int offset = reinterpret_cast<const char*>(value_ptr) - p_start;
         os << "\n  tail value: 0x"
-           << std::hex << *value_ptr << std::dec
+           << std::hex << value_ptr->value << std::dec
            << " " << size << "B"
            << "  @" << offset << "B";
       }
@@ -322,9 +322,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   void replace_child_addr(
       const search_position_t& pos, laddr_t dst, laddr_t src) override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      const laddr_t* p_value = get_p_value(pos);
-      assert(*p_value == src);
-      extent.update_child_addr_replayable(dst, const_cast<laddr_t*>(p_value));
+      const laddr_packed_t* p_value = get_p_value(pos);
+      assert(p_value->value == src);
+      extent.update_child_addr_replayable(dst, const_cast<laddr_packed_t*>(p_value));
     } else {
       assert(false && "impossible path");
     }
@@ -334,16 +334,17 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const key_view_t& key, const laddr_t& value,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      auto packed_value = laddr_packed_t{value};
       auto& node_stage = extent.read();
       match_stage_t insert_stage;
       node_offset_t insert_size;
       if (unlikely(!node_stage.keys())) {
         assert(insert_pos.is_end());
         insert_stage = STAGE;
-        insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, value);
+        insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, packed_value);
       } else {
         std::tie(insert_stage, insert_size) = STAGE_T::evaluate_insert(
-            node_stage, key, value, cast_down<STAGE>(insert_pos), true);
+            node_stage, key, packed_value, cast_down<STAGE>(insert_pos), true);
       }
       return {insert_stage, insert_size};
     } else {
