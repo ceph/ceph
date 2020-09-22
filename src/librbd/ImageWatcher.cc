@@ -439,6 +439,30 @@ void ImageWatcher<I>::notify_unquiesce(uint64_t request_id, Context *on_finish) 
 }
 
 template <typename I>
+void ImageWatcher<I>::notify_metadata_set(const std::string &key,
+                                          const std::string &value,
+                                          Context *on_finish) {
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  ceph_assert(m_image_ctx.exclusive_lock &&
+              !m_image_ctx.exclusive_lock->is_lock_owner());
+
+  notify_lock_owner(new MetadataUpdatePayload(key,
+                    std::optional<std::string>{value}),
+                    on_finish);
+}
+
+template <typename I>
+void ImageWatcher<I>::notify_metadata_remove(const std::string &key,
+                                             Context *on_finish) {
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  ceph_assert(m_image_ctx.exclusive_lock &&
+              !m_image_ctx.exclusive_lock->is_lock_owner());
+
+  notify_lock_owner(new MetadataUpdatePayload(key, std::nullopt),
+                    on_finish);
+}
+
+template <typename I>
 void ImageWatcher<I>::schedule_cancel_async_requests() {
   auto ctx = new LambdaContext(
     boost::bind(&ImageWatcher<I>::cancel_async_requests, this));
@@ -1302,6 +1326,37 @@ bool ImageWatcher<I>::handle_payload(const UnquiescePayload &payload,
 }
 
 template <typename I>
+bool ImageWatcher<I>::handle_payload(const MetadataUpdatePayload &payload,
+                                     C_NotifyAck *ack_ctx) {
+  std::shared_lock l{m_image_ctx.owner_lock};
+  if (m_image_ctx.exclusive_lock != nullptr) {
+    int r;
+    if (m_image_ctx.exclusive_lock->accept_request(
+          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
+      if (payload.value) {
+        ldout(m_image_ctx.cct, 10) << this << " remote metadata_set request: key="
+                                   << payload.key << ", value="
+                                   << *payload.value << dendl;
+
+        m_image_ctx.operations->execute_metadata_set(payload.key, *payload.value,
+                                                     new C_ResponseMessage(ack_ctx));
+        return false;
+      } else {
+        ldout(m_image_ctx.cct, 10) << this << " remote metadata_remove request: key="
+                                   << payload.key << dendl;
+
+        m_image_ctx.operations->execute_metadata_remove(payload.key,
+                                                        new C_ResponseMessage(ack_ctx));
+        return false;
+      }
+    } else if (r < 0) {
+      encode(ResponseMessage(r), ack_ctx->out);
+    }
+  }
+  return true;
+}
+
+template <typename I>
 bool ImageWatcher<I>::handle_payload(const UnknownPayload &payload,
 			             C_NotifyAck *ack_ctx) {
   std::shared_lock l{m_image_ctx.owner_lock};
@@ -1394,6 +1449,9 @@ void ImageWatcher<I>::process_payload(uint64_t notify_id, uint64_t handle,
     break;
   case NOTIFY_OP_UNQUIESCE:
     complete = handle_payload(*(static_cast<UnquiescePayload *>(payload)), ctx);
+    break;
+  case NOTIFY_OP_METADATA_UPDATE:
+    complete = handle_payload(*(static_cast<MetadataUpdatePayload *>(payload)), ctx);
     break;
   default:
     ceph_assert(payload->get_notify_op() == static_cast<NotifyOp>(-1));
