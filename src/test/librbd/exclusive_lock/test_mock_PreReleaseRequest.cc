@@ -99,8 +99,10 @@ public:
                                MockImageDispatch &mock_image_dispatch,
                                bool init_shutdown, int r) {
     expect_test_features(mock_image_ctx, RBD_FEATURE_EXCLUSIVE_LOCK, true);
-    expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
-                         ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0));
+    if (!mock_image_ctx.clone_copy_on_read) {
+      expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
+                           ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0));
+    }
     if (mock_image_ctx.clone_copy_on_read ||
         (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
       expect_set_require_lock(mock_image_dispatch, init_shutdown,
