@@ -50,8 +50,14 @@ public:
       coll{coll},
       backend{backend} {}
   virtual ~RecoveryBackend() {}
+  WaitForObjectRecovery& add_recovering(const hobject_t& soid) {
+    auto [it, added] = recovering.emplace(soid, WaitForObjectRecovery{});
+    assert(added);
+    return it->second;
+  }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
-    return recovering[soid];
+    assert(is_recovering(soid));
+    return recovering.at(soid);
   }
   void remove_recovering(const hobject_t& soid) {
     recovering.erase(soid);
