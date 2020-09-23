@@ -565,6 +565,13 @@ on your preferred hosts, proceed with the following steps.
       [security]
       allow_embedding = true
 
+Enabling RBD-Image monitoring
+"""""""""""""""""""""""""""""
+
+Due to performance reasons, monitoring of RBD images is disabled by default. For
+more information please see :ref:`prometheus-rbd-io-statistics`. If disabled,
+the overview and details dashboards will stay empty in Grafana and the metrics
+will not be visible in Prometheus.
 
 Configuring Dashboard
 """""""""""""""""""""
