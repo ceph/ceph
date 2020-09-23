@@ -3245,9 +3245,9 @@ class JSONFormatter_PrettyZone : public JSONFormatter {
     void encode_json(const char *name, const void *pval, ceph::Formatter *f) const override {
       auto zone_id = *(static_cast<const rgw_zone_id *>(pval));
       string zone_name;
-      RGWZone *zone;
-      if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(zone_id, &zone)) {
-        zone_name = zone->name;
+      RGWDataProvider *dp;
+      if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(zone_id, &dp)) {
+        zone_name = dp->name;
       } else {
         cerr << "WARNING: cannot find zone name for id=" << zone_id << std::endl;
         zone_name = zone_id.id;
@@ -9387,10 +9387,10 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_CREATE) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
     CHECK_TRUE(require_opt(opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_flow_type,
-                           (symmetrical_flow_opt(*opt_flow_type) ||
-                            directional_flow_opt(*opt_flow_type))),
-                           "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
+    CHECK_TRUE((opt_flow_type &&
+                (symmetrical_flow_opt(*opt_flow_type) ||
+                 directional_flow_opt(*opt_flow_type))),
+               "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
 
     SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
     ret = sync_policy_ctx.init();
