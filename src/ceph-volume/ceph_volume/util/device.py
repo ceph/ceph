@@ -2,7 +2,7 @@
 
 import os
 from functools import total_ordering
-from ceph_volume import sys_info, process
+from ceph_volume import process
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
@@ -28,10 +28,8 @@ class Devices(object):
     """
 
     def __init__(self, devices=None, filter_for_batch=False):
-        if not sys_info.devices:
-            sys_info.devices = disk.get_devices()
         self.devices = [Device(k) for k in
-                            sys_info.devices.keys()]
+                            disk.get_devices().keys()]
         if filter_for_batch:
             self.devices = [d for d in self.devices if d.available_lvm_batch]
 
@@ -142,13 +140,11 @@ class Device(object):
         return hash(self.path)
 
     def _parse(self):
-        if not sys_info.devices:
-            sys_info.devices = disk.get_devices()
-        self.sys_api = sys_info.devices.get(self.abspath, {})
+        self.sys_api = disk.get_devices().get(self.abspath, {})
         if not self.sys_api:
             # if no device was found check if we are a partition
             partname = self.abspath.split('/')[-1]
-            for device, info in sys_info.devices.items():
+            for device, info in disk.get_devices().items():
                 part = info['partitions'].get(partname, {})
                 if part:
                     self.sys_api = part
