@@ -148,6 +148,56 @@
         </div>
 
         <div class="form-group row"
+             *ngIf="plugin === 'clay'">
+          <label for="d"
+                 class="cd-col-form-label">
+            <span class="required"
+                  i18n>Helper chunks (d)</span>
+            <cd-helper [html]="tooltips.plugins.clay.d">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input type="number"
+                     id="d"
+                     name="d"
+                     class="form-control"
+                     placeholder="Helper chunks..."
+                     formControlName="d">
+              <span class="input-group-append">
+                <button class="btn btn-light"
+                        id="d-calc-btn"
+                        ngbTooltip="Set d manually or use the plugin's default calculation that maximizes d."
+                        i18n-ngbTooltip
+                        type="button"
+                        (click)="toggleDCalc()">
+                  <i [ngClass]="dCalc ? icons.unlock : icons.lock"
+                     aria-hidden="true"></i>
+                </button>
+              </span>
+            </div>
+            <span class="form-text text-muted"
+                  *ngIf="dCalc"
+                  i18n>D is automatically updated on k and m changes</span>
+            <ng-container
+              *ngIf="!dCalc">
+              <span class="form-text text-muted"
+                    *ngIf="getDMin() < getDMax()"
+                    i18n>D can be set from {{getDMin()}} to {{getDMax()}}</span>
+              <span class="form-text text-muted"
+                    *ngIf="getDMin() === getDMax()"
+                    i18n>D can only be set to {{getDMax()}}</span>
+            </ng-container>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('d', frm, 'dMin')"
+                  i18n>D has to be greater than k ({{getDMin()}}).</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('d', frm, 'dMax')"
+                  i18n>D has to be lower than k + m ({{getDMax()}}).</span>
+          </div>
+        </div>
+
+        <div class="form-group row"
              *ngIf="plugin === PLUGIN.LRC">
           <label class="cd-col-form-label"
                  for="l">
@@ -228,7 +278,28 @@
         </div>
 
         <div class="form-group row"
-             *ngIf="[PLUGIN.JERASURE, PLUGIN.ISA].includes(plugin)">
+             *ngIf="PLUGIN.CLAY === plugin">
+          <label for="scalar_mds"
+                 class="cd-col-form-label">
+            <ng-container i18n>Scalar mds</ng-container>
+            <cd-helper [html]="tooltips.plugins.clay.scalar_mds">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="scalar_mds"
+                    name="scalar_mds"
+                    formControlName="scalar_mds">
+              <option *ngFor="let plugin of [PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.SHEC]"
+                      [ngValue]="plugin">
+                {{ plugin }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="[PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.CLAY].includes(plugin)">
           <label for="technique"
                  class="cd-col-form-label">
             <ng-container i18n>Technique</ng-container>
