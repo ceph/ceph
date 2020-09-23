@@ -16,12 +16,13 @@
 #pragma once
 
 #include "rgw_user.h"
-#include "rgw_obj_manifest.h"
 
 class RGWGetDataCB;
 struct RGWObjState;
 class RGWAccessListFilter;
 class RGWLC;
+class RGWObjManifest;
+struct RGWZoneGroup;
 
 struct RGWUsageIter {
   string read_iter;
@@ -102,6 +103,9 @@ class RGWStore : public DoutPrefixProvider {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
     virtual RGWLC* get_rgwlc(void) = 0;
+    virtual int delete_raw_obj(const rgw_raw_obj& obj) = 0;
+    virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) = 0;
+    virtual int get_raw_chunk_size(const rgw_raw_obj& obj, uint64_t* chunk_size) = 0;
 
     virtual void finalize(void)=0;
 
@@ -228,6 +232,7 @@ class RGWBucket {
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) = 0;
     virtual bool is_owner(RGWUser* user) = 0;
     virtual RGWUser* get_owner(void) { return owner; };
+    virtual ACLOwner get_acl_owner(void) { return ACLOwner(info.owner); };
     virtual int check_empty(optional_yield y) = 0;
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) = 0;
@@ -424,7 +429,7 @@ class RGWObject {
     virtual int delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
-			      std::string& version_id,optional_yield y) = 0;
+			      std::string& version_id, optional_yield y) = 0;
     virtual int copy_object(RGWObjectCtx& obj_ctx, RGWUser* user,
                req_info *info, const rgw_zone_id& source_zone,
                rgw::sal::RGWObject* dest_object, rgw::sal::RGWBucket* dest_bucket,
@@ -455,7 +460,22 @@ class RGWObject {
     virtual int delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y) = 0;
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual bool is_expired() = 0;
+    virtual void gen_rand_obj_instance_name() = 0;
+    virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) = 0;
+    virtual void get_raw_obj(rgw_raw_obj* raw_obj) = 0;
     virtual MPSerializer* get_serializer(const std::string& lock_name) = 0;
+    virtual int transition(RGWObjectCtx& rctx,
+			   RGWBucket* bucket,
+			   const rgw_placement_rule& placement_rule,
+			   const real_time& mtime,
+			   uint64_t olh_epoch,
+			   const DoutPrefixProvider *dpp,
+			   optional_yield y) = 0;
+    virtual int get_max_chunk_size(rgw_placement_rule placement_rule,
+				   uint64_t* max_chunk_size,
+				   uint64_t* alignment = nullptr) = 0;
+    virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t *max_size) = 0;
+    virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
 
     RGWAttrs& get_attrs(void) { return attrs; }
     ceph::real_time get_mtime(void) const { return mtime; }
@@ -469,6 +489,15 @@ class RGWObject {
     bool get_in_extra_data(void) { return in_extra_data; }
     void set_in_extra_data(bool i) { in_extra_data = i; }
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
+    void set_obj_size(uint64_t s) { obj_size = s; }
+    virtual void set_name(const std::string& n) { key = n; }
+    virtual void set_key(const rgw_obj_key& k) { key = k; }
+    virtual rgw_obj get_obj(void) const {
+      rgw_obj obj(bucket->get_key(), key);
+      obj.set_in_extra_data(in_extra_data);
+      obj.index_hash_source = index_hash_source;
+      return obj;
+    }
 
     /* Swift versioning */
     virtual int swift_versioning_restore(RGWObjectCtx* obj_ctx,
@@ -486,29 +515,13 @@ class RGWObject {
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
 			      RGWAttrs *vals) = 0;
+    virtual int omap_set_val_by_key(const std::string& key, bufferlist& val,
+				    bool must_exist, optional_yield y) = 0;
 
     static bool empty(RGWObject* o) { return (!o || o->empty()); }
     virtual std::unique_ptr<RGWObject> clone() = 0;
 
     /* dang - Not sure if we want this, but it simplifies things a lot */
-    void set_obj_size(uint64_t s) { obj_size = s; }
-    virtual void set_name(const std::string& n) { key = n; }
-    virtual void set_key(const rgw_obj_key& k) { key = k; }
-    virtual rgw_obj get_obj(void) const {
-      rgw_obj obj(bucket->get_key(), key);
-      obj.set_in_extra_data(in_extra_data);
-      return obj;
-    }
-    virtual void gen_rand_obj_instance_name() = 0;
-    virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) = 0;
-    virtual void get_raw_obj(rgw_raw_obj* raw_obj) = 0;
-    virtual int transition(RGWObjectCtx& rctx,
-			   RGWBucket* bucket,
-			   const rgw_placement_rule& placement_rule,
-			   const real_time& mtime,
-			   uint64_t olh_epoch,
-			   const DoutPrefixProvider *dpp,
-			   optional_yield y) = 0;
 
     /* dang - This is temporary, until the API is completed */
     rgw_obj_key& get_key() { return key; }
@@ -517,6 +530,8 @@ class RGWObject {
     bool have_instance(void) { return key.have_instance(); }
 
     friend inline ostream& operator<<(ostream& out, const RGWObject& o) {
+      if (o.bucket)
+	out << o.bucket << ":";
       out << o.key;
       return out;
     }
@@ -524,7 +539,7 @@ class RGWObject {
       if (!o)
 	out << "<NULL>";
       else
-	out << o->key;
+	out << *o;
       return out;
     }
     friend inline ostream& operator<<(ostream& out, const std::unique_ptr<RGWObject>& p) {

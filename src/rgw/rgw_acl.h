@@ -401,6 +401,7 @@ protected:
   string display_name;
 public:
   ACLOwner() {}
+  ACLOwner(const rgw_user& _id) : id(_id) {}
   ~ACLOwner() {}
 
   void encode(bufferlist& bl) const {
