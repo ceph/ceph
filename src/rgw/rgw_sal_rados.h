@@ -144,6 +144,11 @@ class RGWRadosObject : public RGWObject {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider *dpp,
 			   optional_yield y) override;
+    virtual int get_max_chunk_size(rgw_placement_rule placement_rule,
+				   uint64_t *max_chunk_size,
+				   uint64_t *alignment = nullptr) override;
+    virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t *max_size) override;
+    virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
 
     /* Swift versioning */
     virtual int swift_versioning_restore(RGWObjectCtx* obj_ctx,
@@ -161,6 +166,8 @@ class RGWRadosObject : public RGWObject {
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
 			      RGWAttrs *vals) override;
+    virtual int omap_set_val_by_key(const std::string& key, bufferlist& val,
+				    bool must_exist, optional_yield y) override;
 
   private:
     int read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj = nullptr);
@@ -297,6 +304,9 @@ class RGWRadosStore : public RGWStore {
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual RGWLC* get_rgwlc(void) { return rados->get_lc(); }
+    virtual int delete_raw_obj(const rgw_raw_obj& obj) override;
+    virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) override;
+    virtual int get_raw_chunk_size(const rgw_raw_obj& obj, uint64_t* chunk_size) override;
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados *getRados(void) { return rados; }

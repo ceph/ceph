@@ -561,6 +561,20 @@ int RGWRadosObject::omap_get_vals_by_keys(const std::string& oid,
   return cur_ioctx.omap_get_vals_by_keys(oid, keys, vals);
 }
 
+int RGWRadosObject::omap_set_val_by_key(const std::string& key, bufferlist& val,
+					bool must_exist, optional_yield y)
+{
+  rgw_raw_obj raw_meta_obj;
+  rgw_obj obj = get_obj();
+
+  store->getRados()->obj_to_raw(bucket->get_placement_rule(), obj, &raw_meta_obj);
+
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_meta_obj);
+
+  return sysobj.omap().set_must_exist(must_exist).set(key, val, y);
+}
+
 MPSerializer* RGWRadosObject::get_serializer(const std::string& lock_name)
 {
   return new MPRadosSerializer(store, this, lock_name);
@@ -575,6 +589,37 @@ int RGWRadosObject::transition(RGWObjectCtx& rctx,
 			       optional_yield y)
 {
   return store->getRados()->transition_obj(rctx, bucket, *this, placement_rule, mtime, olh_epoch, dpp, y);
+}
+
+int RGWRadosObject::get_max_chunk_size(rgw_placement_rule placement_rule, uint64_t *max_chunk_size, uint64_t *alignment)
+{
+  return store->getRados()->get_max_chunk_size(placement_rule, get_obj(), max_chunk_size, alignment);
+}
+
+void RGWRadosObject::get_max_aligned_size(uint64_t size, uint64_t alignment,
+				     uint64_t *max_size)
+{
+  store->getRados()->get_max_aligned_size(size, alignment, max_size);
+}
+
+bool RGWRadosObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
+{
+  rgw_obj obj;
+  rgw_pool p1, p2;
+
+  obj = get_obj();
+
+  if (r1 == r2)
+    return true;
+
+  if (!store->getRados()->get_obj_data_pool(r1, obj, &p1)) {
+    return false;
+  }
+  if (!store->getRados()->get_obj_data_pool(r2, obj, &p2)) {
+    return false;
+  }
+
+  return p1 == p2;
 }
 
 std::unique_ptr<RGWObject::ReadOp> RGWRadosObject::get_read_op(RGWObjectCtx *ctx)
@@ -1069,6 +1114,20 @@ std::unique_ptr<Lifecycle> RGWRadosStore::get_lifecycle(void)
   return std::unique_ptr<Lifecycle>(new RadosLifecycle(this));
 }
 
+int RGWRadosStore::delete_raw_obj(const rgw_raw_obj& obj)
+{
+  return rados->delete_raw_obj(obj);
+}
+
+void RGWRadosStore::get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj)
+{
+    rados->obj_to_raw(placement_rule, obj, raw_obj);
+}
+
+int RGWRadosStore::get_raw_chunk_size(const rgw_raw_obj& obj, uint64_t* chunk_size)
+{
+  return rados->get_max_chunk_size(obj.pool, chunk_size);
+}
 
 MPRadosSerializer::MPRadosSerializer(RGWRadosStore* store, RGWRadosObject* obj, const std::string& lock_name) :
   lock(lock_name)

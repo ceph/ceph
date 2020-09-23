@@ -3836,7 +3836,7 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 20) << "dest_placement for part=" << upload_info.dest_placement << dendl;
     processor.emplace<MultipartObjectProcessor>(
         &*aio, store, s->bucket.get(), pdest_placement,
-        s->owner.get_id(), obj_ctx, s->object->get_obj(),
+        s->owner.get_id(), obj_ctx, std::move(s->object->clone()),
         multipart_upload_id, multipart_part_num, multipart_part_str,
         this, s->yield);
   } else if(append) {
@@ -3847,7 +3847,7 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     processor.emplace<AppendObjectProcessor>(
             &*aio, store, s->bucket.get(), pdest_placement, s->bucket_owner.get_id(),
-	    obj_ctx, s->object->get_obj(),
+	    obj_ctx, std::move(s->object->clone()),
             s->req_id, position, &cur_accounted_size, this, s->yield);
   } else {
     if (s->bucket->versioning_enabled()) {
@@ -3861,8 +3861,8 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     processor.emplace<AtomicObjectProcessor>(
         &*aio, store, s->bucket.get(), pdest_placement,
-        s->bucket_owner.get_id(), obj_ctx, s->object->get_obj(), olh_epoch,
-        s->req_id, this, s->yield);
+        s->bucket_owner.get_id(), obj_ctx,  std::move(s->object->clone()),
+	olh_epoch, s->req_id, this, s->yield);
   }
 
   op_ret = processor->prepare(s->yield);
@@ -4200,7 +4200,7 @@ void RGWPostObj::execute(optional_yield y)
                                     &s->dest_placement,
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
-                                    obj->get_obj(), 0, s->req_id, this, s->yield);
+                                    std::move(obj), 0, s->req_id, this, s->yield);
     op_ret = processor.prepare(s->yield);
     if (op_ret < 0) {
       return;
@@ -7027,7 +7027,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&*aio, store, bucket.get(), &s->dest_placement, bowner.get_id(),
-                                  obj_ctx, obj->get_obj(), 0, s->req_id, this, s->yield);
+                                  obj_ctx, std::move(obj), 0, s->req_id, this, s->yield);
 
   op_ret = processor.prepare(s->yield);
   if (op_ret < 0) {

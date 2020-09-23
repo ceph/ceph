@@ -439,7 +439,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
             max_aio = concurrent_max;
           }
 
-          rgw_raw_obj last_obj = miter.get_location().get_raw_obj(store->getRados());
+          rgw_raw_obj last_obj = miter.get_location().get_raw_obj(store);
           if (last_obj == raw_head_obj) {
             // have the head obj deleted at the end
             continue;
