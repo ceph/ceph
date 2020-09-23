@@ -207,11 +207,10 @@ Automated PR validation
 When your PR hits GitHub, the Ceph project's `Continuous Integration (CI)
 <https://en.wikipedia.org/wiki/Continuous_integration>`_
 infrastructure will test it automatically. At the time of this writing
-(September 2020), the automated CI testing included a test to check that the
-commits in the PR are properly signed (see :ref:`submitting-patches`) and a
-:ref:`make-check` test.
+(September 2020), the automated CI testing included five tests to check that the
+commits in the PR are properly signed (see :ref:`submitting-patches`), to check that the documentation builds, to check that the submodules are unmodified, to check that the API is in order,  and a :ref:`make-check` test.
 
-The latter, :ref:`make-check`, builds the PR and runs it through a battery of
+The :ref:`make-check`, builds the PR and runs it through a battery of
 tests. These tests run on machines operated by the Ceph Continuous
 Integration (CI) team. When the tests complete, the result will be shown
 on GitHub in the pull request itself.
