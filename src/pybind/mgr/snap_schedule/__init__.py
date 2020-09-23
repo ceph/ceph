@@ -6,6 +6,6 @@ if 'SNAP_SCHED_UNITTEST' in environ:
     import tests
 elif 'UNITTEST' in environ:
     import tests
-    from .module import Module
+    tests.mock_ceph_modules()  # type: ignore
 else:
     from .module import Module
