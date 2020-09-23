@@ -195,9 +195,9 @@ For example, if the tracker issue number is 55555::
 The script needs to know your https://tracker.ceph.com credentials in order to
 authenticate to Redmine. In lieu of providing your literal username and password
 on the command line, you could also obtain a REST API key ("My account" -> "API
-access key") and run the script like so::
+access key"), put it in ``~/.redmine_key`` and run the script like so::
 
-    backport-create-issue --key <tracker_api_key> 55555
+    backport-create-issue 55555
 
 
 .. _`stage backports`:
