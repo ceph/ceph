@@ -189,6 +189,63 @@ extern const WriteReadSnapIds INITIAL_WRITE_READ_SNAP_IDS;
 
 typedef std::map<WriteReadSnapIds, SparseExtents> SnapshotDelta;
 
+struct SparseBufferlistExtent : public SparseExtent {
+  ceph::bufferlist bl;
+
+  SparseBufferlistExtent(SparseExtentState state, size_t length)
+    : SparseExtent(state, length) {
+    ceph_assert(state != SPARSE_EXTENT_STATE_DATA);
+  }
+  SparseBufferlistExtent(SparseExtentState state, size_t length,
+                         ceph::bufferlist&& bl_)
+    : SparseExtent(state, length), bl(std::move(bl_)) {
+    ceph_assert(state != SPARSE_EXTENT_STATE_DATA || length == bl.length());
+  }
+
+  bool operator==(const SparseBufferlistExtent& rhs) const {
+    return (state == rhs.state &&
+            length == rhs.length &&
+            bl.contents_equal(rhs.bl));
+  }
+};
+
+struct SparseBufferlistExtentSplitMerge {
+  SparseBufferlistExtent split(uint64_t offset, uint64_t length,
+                               SparseBufferlistExtent& sbe) const {
+    ceph::bufferlist bl;
+    if (sbe.state == SPARSE_EXTENT_STATE_DATA) {
+      bl.substr_of(bl, offset, length);
+    }
+    return SparseBufferlistExtent(sbe.state, length, std::move(bl));
+  }
+
+  bool can_merge(const SparseBufferlistExtent& left,
+                 const SparseBufferlistExtent& right) const {
+    return left.state == right.state;
+  }
+
+  SparseBufferlistExtent merge(SparseBufferlistExtent&& left,
+                               SparseBufferlistExtent&& right) const {
+    if (left.state == SPARSE_EXTENT_STATE_DATA) {
+      ceph::bufferlist bl{std::move(left.bl)};
+      bl.claim_append(std::move(right.bl));
+      return SparseBufferlistExtent(SPARSE_EXTENT_STATE_DATA,
+                                    bl.length(), std::move(bl));
+    } else {
+      return SparseBufferlistExtent(left.state, left.length + right.length, {});
+    }
+  }
+
+  uint64_t length(const SparseBufferlistExtent& sbe) const {
+    return sbe.length;
+  }
+};
+
+typedef interval_map<uint64_t,
+                     SparseBufferlistExtent,
+                     SparseBufferlistExtentSplitMerge> SparseBufferlist;
+typedef std::map<uint64_t, SparseBufferlist> SnapshotSparseBufferlist;
+
 using striper::LightweightBufferExtents;
 using striper::LightweightObjectExtent;
 using striper::LightweightObjectExtents;
