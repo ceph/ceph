@@ -163,6 +163,7 @@ private:
   seastar::future<> reopen_session(int rank);
   std::vector<unsigned> get_random_mons(unsigned n) const;
   seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
+  void _finish_auth(const entity_addr_t& peer);
   crimson::common::Gated gate;
 
   // messages that are waiting for the active_con to be available
