@@ -62,10 +62,10 @@ public:
   void remove_recovering(const hobject_t& soid) {
     recovering.erase(soid);
   }
-  bool is_recovering(const hobject_t& soid) {
+  bool is_recovering(const hobject_t& soid) const {
     return recovering.count(soid) != 0;
   }
-  uint64_t total_recovering() {
+  uint64_t total_recovering() const {
     return recovering.size();
   }
 
