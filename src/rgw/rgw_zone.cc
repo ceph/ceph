@@ -174,6 +174,16 @@ int RGWZoneGroup::create_default(const DoutPrefixProvider *dpp, optional_yield y
   return 0;
 }
 
+void RGWZoneGroup::init_combined_zones()
+{
+  for (auto& entry : zones) {
+    combined_zones.emplace(entry.first, entry.second.name);
+  }
+  for (auto& entry : foreign_zones) {
+    combined_zones.emplace(entry.first, entry.second.name);
+  }
+}
+
 const string RGWZoneGroup::get_default_oid(bool old_region_format) const
 {
   if (old_region_format) {
@@ -2574,6 +2584,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   for (auto& fz : fz_vec) {
     foreign_zones.emplace(fz.id, std::move(fz));
   }
+  init_combined_zones();
 }
 
 void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)

@@ -299,14 +299,17 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
-  for (auto ziter : zonegroup->zones) {
-    auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, ziter.second.id);
-    ret = zone_handler->init(dpp, y);
+  for (auto ziter : zonegroup->combined_zones) {
+    auto& zid = ziter.first;
+    auto& zname = ziter.second;
+
+    auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, zid);
+    ret = zone_handler->init(y);
     if (ret < 0) {
-      ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << zname << dendl;
       return ret;
-      }
-    sync_policy_handlers[ziter.second.id] = zone_handler;
+    }
+    sync_policy_handlers[zid] = zone_handler;
   }
 
   sync_policy_handler = sync_policy_handlers[zone_id()]; /* we made sure earlier that zonegroup->zones has our zone */
@@ -1042,6 +1045,16 @@ bool RGWSI_Zone::find_zonegroup_by_zone(const rgw_zone_id& zid, std::shared_ptr<
   }
 
   *zonegroup = iter->second;
+  return true;
+}
+
+bool RGWSI_Zone::find_data_provider(const rgw_zone_id& id, RGWDataProvider **dp)
+{
+  auto iter = data_provider_by_id.find(id);
+  if (iter == data_provider_by_id.end()) {
+    return false;
+  }
+  *dp = iter->second.get();
   return true;
 }
 

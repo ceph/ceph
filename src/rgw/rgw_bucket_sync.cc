@@ -635,15 +635,15 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
     auto& id1 = ziter1.first;
     const RGWZone& z1 = ziter1.second;
 
-    for (const auto& ziter2 : zonegroup.zones) {
+    for (const auto& ziter2 : zonegroup.combined_zones) {
       auto& id2 = ziter2.first;
-      const RGWZone& z2 = ziter2.second;
+      const auto& z2_name = ziter2.second;
 
       if (id1 == id2) {
         continue;
       }
 
-      if (z1.syncs_from(z2.name)) {
+      if (z1.syncs_from(z2_name)) {
         found = true;
         rgw_sync_directional_rule *rule;
         group.data_flow.find_or_create_directional(id2,
