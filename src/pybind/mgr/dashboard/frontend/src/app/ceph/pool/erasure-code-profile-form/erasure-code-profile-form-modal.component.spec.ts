@@ -1,6 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -15,6 +14,7 @@ import {
   Mocks
 } from '../../../../testing/unit-test-helper';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
+import { CrushNode } from '../../../shared/models/crush-node';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { PoolModule } from '../pool.module';
@@ -26,7 +26,26 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   let fixture: ComponentFixture<ErasureCodeProfileFormModalComponent>;
   let formHelper: FormHelper;
   let fixtureHelper: FixtureHelper;
-  let data: {};
+  let data: { plugins: string[]; names: string[]; nodes: CrushNode[] };
+
+  const expectTechnique = (current: string) =>
+    expect(component.form.getValue('technique')).toBe(current);
+
+  const expectTechniques = (techniques: string[], current: string) => {
+    expect(component.techniques).toEqual(techniques);
+    expectTechnique(current);
+  };
+
+  const expectRequiredControls = (controlNames: string[]) => {
+    controlNames.forEach((name) => {
+      const value = component.form.getValue(name);
+      formHelper.expectValid(name);
+      formHelper.expectErrorChange(name, null, 'required');
+      // This way other fields won't fail through getting invalid.
+      formHelper.expectValidChange(name, value);
+    });
+    fixtureHelper.expectIdElementsVisible(controlNames, true);
+  };
 
   configureTestBed({
     imports: [
@@ -143,18 +162,46 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       showDefaults('isa');
     });
 
+    it('should change technique to default if not available in other plugin', () => {
+      expectTechnique('reed_sol_van');
+      formHelper.setValue('technique', 'blaum_roth');
+      expectTechnique('blaum_roth');
+      formHelper.setValue('plugin', 'isa');
+      expectTechnique('reed_sol_van');
+      formHelper.setValue('plugin', 'clay');
+      formHelper.expectValidChange('scalar_mds', 'shec');
+      expectTechnique('single');
+    });
+
     describe(`for 'jerasure' plugin (default)`, () => {
       it(`requires 'm' and 'k'`, () => {
-        formHelper.expectErrorChange('k', null, 'required');
-        formHelper.expectErrorChange('m', null, 'required');
+        expectRequiredControls(['k', 'm']);
       });
 
       it(`should show 'packetSize' and 'technique'`, () => {
         fixtureHelper.expectIdElementsVisible(['packetSize', 'technique'], true);
       });
 
+      it('should show available techniques', () => {
+        expectTechniques(
+          [
+            'reed_sol_van',
+            'reed_sol_r6_op',
+            'cauchy_orig',
+            'cauchy_good',
+            'liberation',
+            'blaum_roth',
+            'liber8tion'
+          ],
+          'reed_sol_van'
+        );
+      });
+
       it(`should not show any other plugin specific form control`, () => {
-        fixtureHelper.expectIdElementsVisible(['c', 'l', 'crushLocality'], false);
+        fixtureHelper.expectIdElementsVisible(
+          ['c', 'l', 'crushLocality', 'd', 'scalar_mds'],
+          false
+        );
       });
 
       it('should not allow "k" to be changed more than possible', () => {
@@ -172,17 +219,22 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it(`does require 'm' and 'k'`, () => {
-        formHelper.expectErrorChange('k', null, 'required');
-        formHelper.expectErrorChange('m', null, 'required');
+        expectRequiredControls(['k', 'm']);
       });
 
       it(`should show 'technique'`, () => {
         fixtureHelper.expectIdElementsVisible(['technique'], true);
-        expect(fixture.debugElement.query(By.css('#technique'))).toBeTruthy();
+      });
+
+      it('should show available techniques', () => {
+        expectTechniques(['reed_sol_van', 'cauchy'], 'reed_sol_van');
       });
 
       it(`should not show any other plugin specific form control`, () => {
-        fixtureHelper.expectIdElementsVisible(['c', 'l', 'crushLocality', 'packetSize'], false);
+        fixtureHelper.expectIdElementsVisible(
+          ['c', 'l', 'crushLocality', 'packetSize', 'd', 'scalar_mds'],
+          false
+        );
       });
 
       it('should not allow "k" to be changed more than possible', () => {
@@ -203,9 +255,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it(`requires 'm', 'l' and 'k'`, () => {
-        formHelper.expectErrorChange('k', null, 'required');
-        formHelper.expectErrorChange('m', null, 'required');
-        formHelper.expectErrorChange('l', null, 'required');
+        expectRequiredControls(['k', 'm', 'l']);
       });
 
       it(`should show 'l' and 'crushLocality'`, () => {
@@ -213,7 +263,10 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it(`should not show any other plugin specific form control`, () => {
-        fixtureHelper.expectIdElementsVisible(['c', 'packetSize', 'technique'], false);
+        fixtureHelper.expectIdElementsVisible(
+          ['c', 'packetSize', 'technique', 'd', 'scalar_mds'],
+          false
+        );
       });
 
       it('should not allow "k" to be changed more than possible', () => {
@@ -324,18 +377,12 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it(`does require 'm', 'c' and 'k'`, () => {
-        formHelper.expectErrorChange('k', null, 'required');
-        formHelper.expectErrorChange('m', null, 'required');
-        formHelper.expectErrorChange('c', null, 'required');
-      });
-
-      it(`should show 'c'`, () => {
-        fixtureHelper.expectIdElementsVisible(['c'], true);
+        expectRequiredControls(['k', 'm', 'c']);
       });
 
       it(`should not show any other plugin specific form control`, () => {
         fixtureHelper.expectIdElementsVisible(
-          ['l', 'crushLocality', 'packetSize', 'technique'],
+          ['l', 'crushLocality', 'packetSize', 'technique', 'd', 'scalar_mds'],
           false
         );
       });
@@ -358,6 +405,90 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         formHelper.expectValidChange('m', 1);
         formHelper.expectError('c', 'cGreaterM');
         formHelper.expectValid('k');
+      });
+    });
+
+    describe(`for 'clay' plugin`, () => {
+      beforeEach(() => {
+        formHelper.setValue('plugin', 'clay');
+        // Through this change d has a valid range from 4 to 7
+        formHelper.expectValidChange('k', 3);
+        formHelper.expectValidChange('m', 5);
+      });
+
+      it(`does require 'm', 'c', 'd', 'scalar_mds' and 'k'`, () => {
+        fixtureHelper.clickElement('#d-calc-btn');
+        expectRequiredControls(['k', 'm', 'd', 'scalar_mds']);
+      });
+
+      it(`should not show any other plugin specific form control`, () => {
+        fixtureHelper.expectIdElementsVisible(['l', 'crushLocality', 'packetSize', 'c'], false);
+      });
+
+      it('should show default values for d and scalar_mds', () => {
+        expect(component.form.getValue('d')).toBe(7); // (k+m-1)
+        expect(component.form.getValue('scalar_mds')).toBe('jerasure');
+      });
+
+      it('should auto change d if auto calculation is enabled (default)', () => {
+        formHelper.expectValidChange('k', 4);
+        expect(component.form.getValue('d')).toBe(8);
+      });
+
+      it('should have specific techniques for scalar_mds jerasure', () => {
+        expectTechniques(
+          ['reed_sol_van', 'reed_sol_r6_op', 'cauchy_orig', 'cauchy_good', 'liber8tion'],
+          'reed_sol_van'
+        );
+      });
+
+      it('should have specific techniques for scalar_mds isa', () => {
+        formHelper.expectValidChange('scalar_mds', 'isa');
+        expectTechniques(['reed_sol_van', 'cauchy'], 'reed_sol_van');
+      });
+
+      it('should have specific techniques for scalar_mds shec', () => {
+        formHelper.expectValidChange('scalar_mds', 'shec');
+        expectTechniques(['single', 'multiple'], 'single');
+      });
+
+      describe('Validity of d', () => {
+        beforeEach(() => {
+          // Don't automatically change d - the only way to get d invalid
+          fixtureHelper.clickElement('#d-calc-btn');
+        });
+
+        it('should not automatically change d if k or m have been changed', () => {
+          formHelper.expectValidChange('m', 4);
+          formHelper.expectValidChange('k', 5);
+          expect(component.form.getValue('d')).toBe(7);
+        });
+
+        it('should trigger dMin through change of d', () => {
+          formHelper.expectErrorChange('d', 3, 'dMin');
+        });
+
+        it('should trigger dMax through change of d', () => {
+          formHelper.expectErrorChange('d', 8, 'dMax');
+        });
+
+        it('should trigger dMin through change of k and m', () => {
+          formHelper.expectValidChange('m', 2);
+          formHelper.expectValidChange('k', 7);
+          formHelper.expectError('d', 'dMin');
+        });
+
+        it('should trigger dMax through change of m', () => {
+          formHelper.expectValidChange('m', 3);
+          formHelper.expectError('d', 'dMax');
+        });
+
+        it('should remove dMax through change of k', () => {
+          formHelper.expectValidChange('m', 3);
+          formHelper.expectError('d', 'dMax');
+          formHelper.expectValidChange('k', 5);
+          formHelper.expectValid('d');
+        });
       });
     });
   });
@@ -510,6 +641,52 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         formHelper.setMultipleValues(ecp, true);
         formHelper.setValue('crushDeviceClass', 'ssd', true);
         submittedEcp['crush-device-class'] = 'ssd';
+        testCreation();
+      });
+
+      it('should not send the profile with unsupported fields', () => {
+        formHelper.setMultipleValues(ecp, true);
+        formHelper.setValue('l', 8, true);
+        testCreation();
+      });
+    });
+
+    describe(`'clay' usage`, () => {
+      beforeEach(() => {
+        ecpChange('name', 'clayProfile');
+        ecpChange('plugin', 'clay');
+        // Setting expectations
+        submittedEcp.k = 4;
+        submittedEcp.m = 2;
+        submittedEcp.d = 5;
+        submittedEcp.scalar_mds = 'jerasure';
+        delete submittedEcp.packetsize;
+      });
+
+      it('should be able to create a profile with only plugin and name', () => {
+        formHelper.setMultipleValues(ecp, true);
+        testCreation();
+      });
+
+      it('should send profile with a changed d', () => {
+        formHelper.setMultipleValues(ecp, true);
+        ecpChange('d', '5');
+        submittedEcp.d = 5;
+        testCreation();
+      });
+
+      it('should send profile with a changed k which automatically changes d', () => {
+        ecpChange('k', 5);
+        formHelper.setMultipleValues(ecp, true);
+        submittedEcp.d = 6;
+        testCreation();
+      });
+
+      it('should send profile with a changed sclara_mds', () => {
+        ecpChange('scalar_mds', 'shec');
+        formHelper.setMultipleValues(ecp, true);
+        submittedEcp.scalar_mds = 'shec';
+        submittedEcp.technique = 'single';
         testCreation();
       });
 
