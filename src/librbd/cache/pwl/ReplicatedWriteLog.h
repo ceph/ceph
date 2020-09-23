@@ -33,10 +33,8 @@ namespace pwl {
 template <typename ImageCtxT>
 class ReplicatedWriteLog : public AbstractWriteLog<ImageCtxT> {
 public:
-  typedef io::Extent Extent;
-  typedef io::Extents Extents;
-
-  ReplicatedWriteLog(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
+  ReplicatedWriteLog(
+      ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
   ~ReplicatedWriteLog();
   ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
   ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
@@ -50,6 +48,45 @@ private:
   using C_WriteSameRequestT = pwl::C_WriteSameRequest<This>;
   using C_CompAndWriteRequestT = pwl::C_CompAndWriteRequest<This>;
 
+  PMEMobjpool *m_log_pool = nullptr;
+
+  void remove_pool_file();
+  void load_existing_entries(pwl::DeferredContexts &later);
+  void alloc_op_log_entries(pwl::GenericLogOperations &ops);
+  int append_op_log_entries(pwl::GenericLogOperations &ops);
+  void flush_then_append_scheduled_ops(void);
+  void enlist_op_flusher();
+  void flush_op_log_entries(pwl::GenericLogOperationsVector &ops);
+  template <typename V>
+  void flush_pmem_buffer(V& ops);
+
+protected:
+  using AbstractWriteLog<ImageCtxT>::m_lock;
+  using AbstractWriteLog<ImageCtxT>::m_log_entries;
+  using AbstractWriteLog<ImageCtxT>::m_image_ctx;
+  using AbstractWriteLog<ImageCtxT>::m_perfcounter;
+  using AbstractWriteLog<ImageCtxT>::m_ops_to_flush;
+  using AbstractWriteLog<ImageCtxT>::m_cache_state;
+  using AbstractWriteLog<ImageCtxT>::m_first_free_entry;
+  using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
+
+  void process_work() override;
+  void schedule_append_ops(pwl::GenericLogOperations &ops) override;
+  void append_scheduled_ops(void) override;
+  void reserve_pmem(C_BlockIORequestT *req, bool &alloc_succeeds, bool &no_space) override;
+  bool retire_entries(const unsigned long int frees_per_tx) override;
+  void persist_last_flushed_sync_gen() override;
+  bool alloc_resources(C_BlockIORequestT *req) override;
+  void schedule_flush_and_append(pwl::GenericLogOperationsVector &ops) override;
+  void setup_schedule_append(
+      pwl::GenericLogOperationsVector &ops, bool do_early_flush) override;
+  Context *construct_flush_entry_ctx(
+        const std::shared_ptr<pwl::GenericLogEntry> log_entry) override;
+  void get_pool_name(const std::string log_poolset_name) override;
+  void initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;
+  void write_data_to_buffer(
+      std::shared_ptr<pwl::WriteLogEntry> ws_entry,
+      pwl::WriteLogPmemEntry *pmem_entry) override;
 };
 
 } // namespace pwl
