@@ -545,3 +545,26 @@ void cls_rgw_get_bucket_resharding_op::generate_test_instances(
 void cls_rgw_get_bucket_resharding_op::dump(Formatter *f) const
 {
 }
+
+void cls_rgw_head_prefetch_op::generate_test_instances(list<cls_rgw_head_prefetch_op*>& ls)
+{
+  ls.push_back(new cls_rgw_head_prefetch_op);
+}
+
+void cls_rgw_head_prefetch_op::dump(Formatter *f) const
+{
+  encode_json("offset", offset, f);
+  encode_json("length", length, f);
+  encode_json("max_length", max_length, f);
+}
+
+void cls_rgw_head_prefetch_ret::generate_test_instances(list<cls_rgw_head_prefetch_ret*>& ls)
+{
+  ls.push_back(new cls_rgw_head_prefetch_ret);
+}
+
+void cls_rgw_head_prefetch_ret::dump(Formatter *f) const
+{
+  encode_json("offset", offset, f);
+  encode_json("length", data.length(), f);
+}

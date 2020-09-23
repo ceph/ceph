@@ -1085,3 +1085,49 @@ int CLSRGWIssueSetBucketResharding::issue_op(int shard_id, const string& oid)
 {
   return issue_set_bucket_resharding(io_ctx, oid, entry, &manager);
 }
+
+void cls_rgw_head_prefetch(librados::ObjectReadOperation& op,
+                           uint64_t offset, uint64_t length,
+                           uint64_t max_length,
+                           int* ret_code, uint64_t* offset_out,
+                           bufferlist* data_out)
+{
+  bufferlist in;
+  cls_rgw_head_prefetch_op call;
+  call.offset = offset;
+  call.length = length;
+  call.max_length = max_length;
+  encode(call, in);
+
+  class PrefetchCompletion : public librados::ObjectOperationCompletion {
+    uint64_t* offset;
+    bufferlist* data;
+    int* ret_code;
+   public:
+    PrefetchCompletion(uint64_t* offset, bufferlist* data, int* ret_code)
+      : offset(offset), data(data), ret_code(ret_code) {}
+
+    void handle_completion(int r, bufferlist& outbl) override {
+      if (r >= 0) {
+        try {
+          cls_rgw_head_prefetch_ret result;
+          auto p = outbl.cbegin();
+          decode(result, p);
+          if (offset) {
+            *offset = result.offset;
+          }
+          if (data) {
+            *data = std::move(result.data);
+          }
+        } catch (ceph::buffer::error& err) {
+          r = -EIO;
+        }
+      }
+      if (ret_code) {
+        *ret_code = r;
+      }
+    }
+  };
+  op.exec(RGW_CLASS, RGW_HEAD_PREFETCH, in,
+	  new PrefetchCompletion(offset_out, data_out, ret_code));
+}

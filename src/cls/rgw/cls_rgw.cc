@@ -4065,6 +4065,111 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
   return 0;
 }
 
+#define RGW_ATTR_COMPRESSION "user.rgw.compression" // from rgw_common.h
+
+static void to_compressed_range(const bufferlist& compression,
+                                uint64_t logical_offset,
+                                uint64_t logical_length,
+                                uint64_t max_length,
+                                uint64_t& new_logical_offset,
+                                uint64_t& compressed_offset,
+                                uint64_t& compressed_length)
+{
+  RGWCompressionInfo info;
+  try {
+    auto p = compression.cbegin();
+    decode(info, p);
+  } catch (const buffer::error&) {
+    // we can't decode the attribute, but a newer radosgw may be able to. so
+    // don't return an error, just disable prefetch if we don't know where
+    // to start
+    if (logical_offset > 0) {
+      compressed_length = 0;
+    }
+    return;
+  }
+  if (info.compression_type == "none") {
+    return;
+  }
+  auto& blocks = info.blocks;
+  // find the first block with a bigger logical offset
+  auto i = std::upper_bound(blocks.begin(), blocks.end(), logical_offset,
+      [] (uint64_t o, const compression_block& b) { return o < b.old_ofs; });
+  if (i == blocks.begin()) {
+    compressed_length = 0; // no block contains this offset, disable prefetch
+    return;
+  }
+  --i; // the block before the upper bound must contain logical_offset
+  new_logical_offset = i->old_ofs; // logical offset of starting block
+  compressed_offset = i->new_ofs; // compressed offset for prefetch
+
+  const auto logical_end = logical_offset + logical_length;
+  compressed_length = 0;
+
+  // stop at logical_end or max_length, whichever comes first
+  for ( ; i != blocks.end() && i->old_ofs < logical_end; ++i) {
+    if (compressed_length + i->len > max_length) {
+      compressed_length = max_length;
+      break;
+    }
+    compressed_length += i->len;
+  }
+
+  CLS_LOG(20, "rgw_head_prefetch transformed range "
+          "%" PRIu64 "+%" PRIu64 " to %" PRIu64 "+%" PRIu64
+          " starting at %" PRIu64,
+          logical_offset, logical_length,
+          compressed_offset, compressed_length,
+          new_logical_offset);
+}
+
+static int rgw_head_prefetch(cls_method_context_t hctx,
+                             bufferlist *in, bufferlist *out)
+{
+  cls_rgw_head_prefetch_op op;
+
+  try {
+    auto p = in->cbegin();
+    decode(op, p);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s(): failed to decode entry", __func__);
+    return -EINVAL;
+  }
+
+  uint64_t logical_offset = op.offset;
+  uint64_t offset = op.offset;
+  uint64_t length = op.length;
+
+  // if the object is compressed, prefetch any compression blocks that overlap
+  // the given range
+  bufferlist compression;
+  int ret = cls_cxx_getxattr(hctx, RGW_ATTR_COMPRESSION, &compression);
+  if (ret == -ENODATA) {
+    // not compressed, use given offset/length
+  } else if (ret < 0) {
+    CLS_LOG(1, "ERROR: %s(): failed to read compression attribute", __func__);
+    return ret;
+  } else {
+    to_compressed_range(compression, offset, length, op.max_length,
+                        logical_offset, offset, length);
+  }
+
+  bufferlist data;
+  if (length) {
+    ret = cls_cxx_read2(hctx, offset, length, &data, 0);
+    if (ret < 0) {
+      return ret;
+    }
+    CLS_LOG(20, "rgw_head_prefetch read %d bytes", ret);
+  }
+
+  cls_rgw_head_prefetch_ret op_ret;
+  op_ret.offset = logical_offset;
+  op_ret.data = std::move(data);
+  encode(op_ret, *out);
+  return 0;
+}
+
 CLS_INIT(rgw)
 {
   CLS_LOG(1, "Loaded rgw class!");
@@ -4116,6 +4221,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_clear_bucket_resharding;
   cls_method_handle_t h_rgw_guard_bucket_resharding;
   cls_method_handle_t h_rgw_get_bucket_resharding;
+  cls_method_handle_t h_rgw_head_prefetch;
 
   cls_register(RGW_CLASS, &h_class);
 
@@ -4186,6 +4292,8 @@ CLS_INIT(rgw)
 			  rgw_guard_bucket_resharding, &h_rgw_guard_bucket_resharding);
   cls_register_cxx_method(h_class, RGW_GET_BUCKET_RESHARDING, CLS_METHOD_RD ,
 			  rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
+  cls_register_cxx_method(h_class, RGW_HEAD_PREFETCH, CLS_METHOD_RD,
+			  rgw_head_prefetch, &h_rgw_head_prefetch);
 
   return;
 }

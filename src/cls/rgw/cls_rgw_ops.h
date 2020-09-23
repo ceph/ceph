@@ -1485,4 +1485,53 @@ struct cls_rgw_get_bucket_resharding_ret  {
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
 
+struct cls_rgw_head_prefetch_op {
+  uint64_t offset; // starting logical offset of range request
+  uint64_t length; // logical length of range request (or uint64-max)
+  uint64_t max_length; // maximum length of returned data
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(offset, bl);
+    encode(length, bl);
+    encode(max_length, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(offset, bl);
+    decode(length, bl);
+    decode(max_length, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(std::list<cls_rgw_head_prefetch_op*>& o);
+  void dump(ceph::Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_head_prefetch_op)
+
+struct cls_rgw_head_prefetch_ret {
+  // logical offset of data. if compressed, this is the starting offset of a
+  // compression block and may be smaller than the requested offset
+  uint64_t offset;
+  bufferlist data;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(offset, bl);
+    encode(data, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(offset, bl);
+    decode(data, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(std::list<cls_rgw_head_prefetch_ret*>& o);
+  void dump(ceph::Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_head_prefetch_ret)
+
 #endif /* CEPH_CLS_RGW_OPS_H */

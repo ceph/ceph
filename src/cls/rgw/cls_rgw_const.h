@@ -72,4 +72,7 @@
 #define RGW_GUARD_BUCKET_RESHARDING "guard_bucket_resharding"
 #define RGW_GET_BUCKET_RESHARDING "get_bucket_resharding"
 
+/* head object */
+#define RGW_HEAD_PREFETCH "head_prefetch"
+
 #endif
