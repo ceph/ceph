@@ -1792,20 +1792,24 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     
     if (dn->get_linkage()->is_remote()) {
       // remote link
-      exportbl.append("L", 1);  // remote link
+      exportbl.append("l", 1);  // remote link
       
       inodeno_t ino = dn->get_linkage()->get_remote_ino();
       unsigned char d_type = dn->get_linkage()->get_remote_d_type();
+      ENCODE_START(1, 1, exportbl);
       encode(ino, exportbl);
       encode(d_type, exportbl);
+      ENCODE_FINISH(exportbl);
       continue;
     }
 
     // primary link
     // -- inode
-    exportbl.append("I", 1);    // inode dentry
-    
+    exportbl.append("i", 1);    // inode dentry
+
+    ENCODE_START(1, 1, exportbl);
     encode_export_inode(in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
+    ENCODE_FINISH(exportbl);
 
     // directory?
     auto&& dfs = in->get_dirfrags();
@@ -3443,23 +3447,37 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       
       // fall thru
     }
-    else if (icode == 'L') {
+    else if (icode == 'L' || icode == 'l') {
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      decode(ino, blp);
-      decode(d_type, blp);
+      if (icode == 'l') {
+        DECODE_START(1, blp);
+        decode(ino, blp);
+        decode(d_type, blp);
+        DECODE_FINISH(blp);
+      } else {
+        decode(ino, blp);
+        decode(d_type, blp);
+      }
       if (dn->get_linkage()->is_remote()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
       } else {
 	dir->link_remote_inode(dn, ino, d_type);
       }
     }
-    else if (icode == 'I') {
+    else if (icode == 'I' || icode == 'i') {
       // inode
       ceph_assert(le);
-      decode_import_inode(dn, blp, oldauth, ls,
-			  peer_exports, updated_scatterlocks);
+      if (icode == 'i') {
+        DECODE_START(1, blp);
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+        DECODE_FINISH(blp);
+      } else {
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+      }
     }
     
     // add dentry to journal entry
