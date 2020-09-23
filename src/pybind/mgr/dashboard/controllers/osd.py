@@ -118,6 +118,22 @@ class Osd(RESTController):
             'osd_metadata': mgr.get_metadata('osd', svc_id),
         }
 
+    @RESTController.Resource('GET')
+    @handle_send_command_error('osd')
+    def histogram(self, svc_id):
+        # type: (int) -> Dict[str, Any]
+        """
+        :return: Returns the histogram data.
+        """
+        try:
+            histogram = CephService.send_command(
+                'osd', srv_spec=svc_id, prefix='perf histogram dump')
+        except SendCommandError as e:  # pragma: no cover - the handling is too obvious
+            raise DashboardException(
+                component='osd', http_status_code=400, msg=str(e))
+
+        return histogram
+
     def set(self, svc_id, device_class):  # pragma: no cover
         old_device_class = CephService.send_command('mon', 'osd crush get-device-class',
                                                     ids=[svc_id])
