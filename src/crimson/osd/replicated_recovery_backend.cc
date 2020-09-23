@@ -23,10 +23,9 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
-  [[maybe_unused]] auto [r, added] =
-    recovering.emplace(soid, WaitForObjectRecovery{});
+  // always add_recovering(soid) before recover_object(soid)
+  assert(is_recovering(soid));
   // start tracking the recovery of soid
-  assert(added);
   return seastar::do_with(std::map<pg_shard_t, PushOp>(), get_shards_to_push(soid),
     [this, soid, need](auto& pops, auto& shards) {
     return maybe_pull_missing_obj(soid, need).then([this, soid](bool pulled) {
