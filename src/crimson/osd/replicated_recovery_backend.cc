@@ -177,7 +177,7 @@ seastar::future<> ReplicatedRecoveryBackend::push_delete(
       return shard_services.send_to_osd(shard.osd, std::move(msg),
 					pg.get_osdmap_epoch()).then(
 	[this, soid, shard] {
-	return recovering[soid].wait_for_pushes(shard);
+	return recovering.at(soid).wait_for_pushes(shard);
       });
     }
     return seastar::make_ready_future<>();
@@ -307,7 +307,7 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
     return seastar::parallel_for_each(shards,
       [this, soid, pops, &data_subsets](auto pg_shard) mutable {
       pops->emplace(pg_shard->first, PushOp());
-      auto& recovery_waiter = recovering[soid];
+      auto& recovery_waiter = recovering.at(soid);
       auto& obc = recovery_waiter.obc;
       auto& data_subset = data_subsets[pg_shard->first];
 
@@ -344,7 +344,7 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
       return build_push_op(pi.recovery_info, pi.recovery_progress,
 			   &pi.stat, &(*pops)[pg_shard->first]).then(
 	[this, soid, pg_shard](auto new_progress) {
-	auto& recovery_waiter = recovering[soid];
+	auto& recovery_waiter = recovering.at(soid);
 	auto& pi = recovery_waiter.pushing[pg_shard->first];
 	pi.recovery_progress = new_progress;
 	return seastar::make_ready_future<>();
@@ -627,7 +627,7 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
       pop.recovery_info, pop.after_progress, pop.data.length(), pop.data_included);
 
   const hobject_t &hoid = pop.soid;
-  auto& recovery_waiter = recovering[hoid];
+  auto& recovery_waiter = recovering.at(hoid);
   auto& pi = *recovery_waiter.pi;
   if (pi.recovery_info.size == (uint64_t(-1))) {
     pi.recovery_info.size = pop.recovery_info.size;
@@ -693,8 +693,9 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
 
 	if (complete) {
 	  pi.stat.num_objects_recovered++;
-	  pg.get_recovery_handler()->on_local_recover(pop.soid, recovering[pop.soid].pi->recovery_info,
-			      false, *t);
+	  pg.get_recovery_handler()->on_local_recover(
+	      pop.soid, recovering.at(pop.soid).pi->recovery_info,
+	      false, *t);
 	  return seastar::make_ready_future<bool>(true);
 	} else {
 	  response->soid = pop.soid;
