@@ -989,9 +989,16 @@ int DataScan::scan_links()
 	  }
 	  char dentry_type;
 	  decode(dentry_type, q);
-	  if (dentry_type == 'I') {
+	  if (dentry_type == 'I' || dentry_type == 'i') {
 	    InodeStore inode;
-	    inode.decode_bare(q);
+            if (dentry_type == 'i') {
+	      DECODE_START(1, q);
+	      inode.decode(q);
+	      DECODE_FINISH(q);
+	    } else {
+	      inode.decode_bare(q);
+	    }
+
 	    inodeno_t ino = inode.inode->ino;
 
 	    if (step == SCAN_INOS) {
@@ -1048,11 +1055,18 @@ int DataScan::scan_links()
 	      if (dnfirst == CEPH_NOSNAP)
 		injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
 	    }
-	  } else if (dentry_type == 'L') {
+	  } else if (dentry_type == 'L' || dentry_type == 'l') {
 	    inodeno_t ino;
 	    unsigned char d_type;
-	    decode(ino, q);
-	    decode(d_type, q);
+            if (dentry_type == 'l') {
+	      DECODE_START(1, q);
+	      decode(ino, q);
+	      decode(d_type, q);
+	      DECODE_FINISH(q);
+	    } else {
+	      decode(ino, q);
+	      decode(d_type, q);
+	    }
 
 	    if (step == SCAN_INOS) {
 	      remote_links[ino]++;
@@ -1472,8 +1486,14 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
     decode(first, q);
     char dentry_type;
     decode(dentry_type, q);
-    if (dentry_type == 'I') {
-      inode->decode_bare(q);
+    if (dentry_type == 'I' || dentry_type == 'i') {
+      if (dentry_type == 'i') {
+        DECODE_START(1, q);
+        inode->decode(q);
+        DECODE_FINISH(q);
+      } else {
+        inode->decode_bare(q);
+      }
     } else {
       dout(20) << "dentry type '" << dentry_type << "': cannot"
                   "read an inode out of that" << dendl;

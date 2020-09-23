@@ -675,6 +675,8 @@ protected:
 			vector<dentry_commit_item> &to_set, bufferlist &dfts,
 			vector<string> &to_remove,
 			mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
+  void _encode_primary_inode_base(dentry_commit_item &item, bufferlist &dfts,
+                                  bufferlist &bl);
   void _omap_commit(int op_prio);
   void _parse_dentry(CDentry *dn, dentry_commit_item &item,
                      const set<snapid_t> *snaps, bufferlist &bl);

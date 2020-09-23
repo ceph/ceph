@@ -1762,12 +1762,20 @@ CDentry *CDir::_load_dentry(
   else
     dn = lookup(dname, last);
 
-  if (type == 'L') {
+  if (type == 'L' || type == 'l') {
     // hard link
     inodeno_t ino;
     unsigned char d_type;
-    decode(ino, q);
-    decode(d_type, q);
+
+    if (type == 'l') {
+      DECODE_START(1, q);
+      decode(ino, q);
+      decode(d_type, q);
+      DECODE_FINISH(q);
+    } else {
+      decode(ino, q);
+      decode(d_type, q);
+    }
 
     if (stale) {
       if (!dn) {
@@ -1803,12 +1811,17 @@ CDentry *CDir::_load_dentry(
       }
     }
   }
-  else if (type == 'I') {
-    // inode
-
-    // Load inode data before looking up or constructing CInode
+  else if (type == 'I' || type == 'i') {
     InodeStore inode_data;
-    inode_data.decode_bare(q);
+    // inode
+    // Load inode data before looking up or constructing CInode
+    if (type == 'i') {
+      DECODE_START(1, q);
+      inode_data.decode(q);
+      DECODE_FINISH(q);
+    } else {
+      inode_data.decode_bare(q);
+    }
 
     if (stale) {
       if (!dn) {
@@ -2190,6 +2203,42 @@ private:
   mempool::mds_co::compact_set<mempool::mds_co::string> stale_items;
 };
 
+// This is doing the same thing with the InodeStoreBase::encode()
+void CDir::_encode_primary_inode_base(dentry_commit_item &item, bufferlist &dfts,
+                                      bufferlist &bl)
+{
+  ENCODE_START(6, 4, bl);
+  encode(*item.inode, bl, item.features);
+
+  if (!item.symlink.empty())
+    encode(item.symlink, bl);
+
+  // dirfragtree
+  dfts.splice(0, item.dft_len, &bl);
+
+  if (item.xattrs)
+    encode(*item.xattrs, bl);
+  else
+    encode((__u32)0, bl);
+
+  if (item.snaprealm) {
+    bufferlist snapr_bl;
+    encode(item.srnode, snapr_bl);
+    encode(snapr_bl, bl);
+  } else {
+    encode(bufferlist(), bl);
+  }
+
+  if (item.old_inodes)
+    encode(*item.old_inodes, bl, item.features);
+  else
+    encode((__u32)0, bl);
+
+  encode(item.oldest_snap, bl);
+  encode(item.damage_flags, bl);
+  ENCODE_FINISH(bl);
+}
+
 // This is not locked by mds_lock
 void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t version, bool _new,
 			    vector<dentry_commit_item> &to_set, bufferlist &dfts,
@@ -2276,40 +2325,19 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   for (auto &item : to_set) {
     encode(item.first, bl);
     if (item.is_remote) {
-      bl.append('L');         // remote link
+      // marker, name, ino
+      bl.append('l');         // remote link
+      ENCODE_START(1, 1, bl);
       encode(item.ino, bl);
       encode(item.d_type, bl);
+      ENCODE_FINISH(bl);
     } else {
-      bl.append('I');         // inode
+      // marker, name, inode, [symlink string]
+      bl.append('i');         // inode
 
-      encode(*item.inode, bl, item.features);
-
-      if (!item.symlink.empty())
-        encode(item.symlink, bl);
-
-      // dirfragtree
-      dfts.splice(0, item.dft_len, &bl);
-
-      if (item.xattrs)
-        encode(*item.xattrs, bl);
-      else
-        encode((__u32)0, bl);
-
-      if (item.snaprealm) {
-        bufferlist snapr_bl;
-        encode(item.srnode, snapr_bl);
-        encode(snapr_bl, bl);
-      } else {
-        encode(bufferlist(), bl);
-      }
-
-      if (item.old_inodes)
-        encode(*item.old_inodes, bl, item.features);
-      else
-        encode((__u32)0, bl);
-
-      encode(item.oldest_snap, bl);
-      encode(item.damage_flags, bl);
+      ENCODE_START(1, 1, bl);
+      _encode_primary_inode_base(item, dfts, bl);
+      ENCODE_FINISH(bl);
     }
     off += item.dft_len;
 
@@ -2439,7 +2467,6 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
     ceph_assert(in);
 
     dout(14) << " dn '" << dn->get_name() << "' inode " << *in << dendl;
-    // marker, name, inode, [symlink string]
 
     if (in->is_multiversion()) {
       if (!in->snaprealm) {

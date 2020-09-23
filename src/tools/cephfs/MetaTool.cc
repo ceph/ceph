@@ -921,12 +921,20 @@ int MetaTool::show_child(std::string_view key,
   //    dn = lookup_exact_snap(dname, last);
   //else
   //    dn = lookup(dname, last);
-  if (type == 'L') {
+  if (type == 'L' || type == 'l') {
     // hard link
     inodeno_t ino;
     unsigned char d_type;
-    ::decode(ino, q);
-    ::decode(d_type, q);
+    if (type == 'l') {
+      DECODE_START(1, q);
+      ::decode(ino, q);
+      ::decode(d_type, q);
+      DECODE_FINISH(q);
+    } else {
+      ::decode(ino, q);
+      ::decode(d_type, q);
+    }
+
     if (sp_ino > 0) {
       if (sp_ino == ino) {
         std::cout << "find hard link : " << ino << "," << d_type << std::endl;
@@ -935,11 +943,17 @@ int MetaTool::show_child(std::string_view key,
     }
 
     std::cout << "hard link : " << ino << "," << d_type << std::endl;
-  } else if (type == 'I') {
+  } else if (type == 'I' || type == 'i') {
     // inode
     // load inode data before lookuping up or constructing CInode
     InodeStore& inode_data = *(new InodeStore);
-    inode_data.decode_bare(q);
+    if (type == 'i') {
+      DECODE_START(1, q);
+      inode_data.decode(q);
+      DECODE_FINISH(q);
+    } else {
+      inode_data.decode_bare(q);
+    }
 
     std::stringstream ds;
     std::string format = "json";
