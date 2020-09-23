@@ -260,14 +260,25 @@ node_future<> InternalNode::apply_child_split(
 #endif
   impl->prepare_mutate(c);
 
-  // update pos => left_child to pos => right_child
+  auto left_key = left_child->impl->get_largest_key_view();
   auto left_child_addr = left_child->impl->laddr();
   auto left_child_addr_packed = laddr_packed_t{left_child_addr};
+  auto right_key = right_child->impl->get_largest_key_view();
   auto right_child_addr = right_child->impl->laddr();
+  std::cout << "internal insert at pos(" << pos << "), "
+            << "left-child[" << left_key << ", 0x"
+            << std::hex << left_child_addr << std::dec
+            << "], right-child[" << right_key << ", 0x" <<
+            std::hex << right_child_addr << std::dec << "]" << std::endl;
+#if 0
+  std::cout << "before insert:" << std::endl;
+  dump(std::cout) << std::endl;
+#endif
+
+  // update pos => left_child to pos => right_child
   impl->replace_child_addr(pos, right_child_addr, left_child_addr);
   replace_track(pos, right_child, left_child);
 
-  auto left_key = left_child->impl->get_largest_key_view();
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
       left_key, left_child_addr, insert_pos);
@@ -284,11 +295,6 @@ node_future<> InternalNode::apply_child_split(
     return node_ertr::now();
   }
   // split and insert
-  std::cout << "  try insert at: " << insert_pos
-            << ", insert_stage=" << (int)insert_stage
-            << ", insert_size=" << insert_size
-            << ", values=0x" << std::hex << left_child_addr
-            << ",0x" << right_child_addr << std::dec << std::endl;
   Ref<InternalNode> this_ref = this;
   return (is_root() ? upgrade_root(c) : node_ertr::now()
   ).safe_then([this, c] {
@@ -586,6 +592,12 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     assert(impl->is_level_tail());
   }
 #endif
+  std::cout << "leaf insert at pos(" << pos << "), "
+            << key << ", " << value << std::endl;
+#if 0
+  std::cout << "before insert:" << std::endl;
+  dump(std::cout) << std::endl;
+#endif
 
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
@@ -604,10 +616,6 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(ret);
   }
   // split and insert
-  std::cout << "  try insert at: " << insert_pos
-            << ", insert_stage=" << (int)insert_stage
-            << ", insert_size=" << insert_size
-            << std::endl;
   Ref<LeafNode> this_ref = this;
   return (is_root() ? upgrade_root(c) : node_ertr::now()
   ).safe_then([this, c] {

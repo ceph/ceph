@@ -243,8 +243,18 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const full_key_t<KEY_TYPE>& key, const value_t& value,
       search_position_t& insert_pos, match_stage_t& insert_stage,
       node_offset_t& insert_size) override {
+    std::cout << "INSERT start: insert_pos(" << insert_pos
+              << "), insert_stage=" << (int)insert_stage
+              << ", insert_size=" << insert_size << " ..." << std::endl;
     auto ret = extent.template insert_replayable<KEY_TYPE>(
         key, value, cast_down<STAGE>(insert_pos), insert_stage, insert_size);
+#if 0
+    dump(std::cout) << std::endl;
+#endif
+    std::cout << "INSERT done: insert_pos(" << insert_pos
+              << "), insert_stage=" << (int)insert_stage
+              << ", insert_size=" << insert_size
+              << std::endl << std::endl;
     assert(get_key_view(insert_pos) == key);
     return ret;
   }
@@ -254,20 +264,36 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const full_key_t<KEY_TYPE>& key, const value_t& value,
       search_position_t& _insert_pos, match_stage_t& insert_stage,
       node_offset_t& insert_size) override {
+    std::cout << "SPLIT-INSERT start: insert_pos(" << _insert_pos
+              << "), insert_stage=" << (int)insert_stage
+              << ", insert_size=" << insert_size
+              << std::endl;
     auto& insert_pos = cast_down<STAGE>(_insert_pos);
     auto& node_stage = extent.read();
-    size_t empty_size = node_stage.size_before(0);
-    size_t available_size = node_stage.total_size() - empty_size;
-    size_t target_split_size = empty_size + (available_size + insert_size) / 2;
-    // TODO adjust NODE_BLOCK_SIZE according to this requirement
-    assert(insert_size < available_size / 2);
     typename STAGE_T::StagedIterator split_at;
-    bool is_insert_left = STAGE_T::locate_split(
-        node_stage, target_split_size, insert_pos, insert_stage, insert_size, split_at);
+    bool is_insert_left;
+    {
+      size_t empty_size = node_stage.size_before(0);
+      size_t available_size = node_stage.total_size() - empty_size;
+      size_t target_split_size = empty_size + (available_size + insert_size) / 2;
+      // TODO adjust NODE_BLOCK_SIZE according to this requirement
+      assert(insert_size < available_size / 2);
 
-    std::cout << "  split at: " << split_at << ", is_insert_left=" << is_insert_left
-              << ", now insert at: " << insert_pos
-              << std::endl;
+      size_t split_size = 0;
+      std::optional<bool> _is_insert_left;
+      split_at.set(node_stage);
+      STAGE_T::recursively_locate_split_inserted(
+          split_size, 0, target_split_size, insert_pos,
+          insert_stage, insert_size, _is_insert_left, split_at);
+      is_insert_left = *_is_insert_left;
+      std::cout << "located_split: split_at(" << split_at << "), insert_pos(" << insert_pos
+                << "), is_insert_left=" << is_insert_left
+                << ", estimated_split_size=" << split_size
+                << "(target=" << target_split_size
+                << ", current=" << node_stage.size_before(node_stage.keys())
+                << ")" << std::endl;
+      assert(split_size <= target_split_size);
+    }
 
     auto append_at = split_at;
     // TODO(cross-node string dedup)
@@ -278,14 +304,17 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       // right node: append [start(append_at), insert_pos)
       STAGE_T::template append_until<KEY_TYPE>(
           append_at, right_appender, insert_pos, insert_stage);
-      std::cout << "insert to right: " << insert_pos
-                << ", insert_stage=" << (int)insert_stage << std::endl;
+      std::cout << "append-insert right: insert_pos(" << insert_pos
+                << "), insert_stage=" << (int)insert_stage
+                << " ..." << std::endl;
       // right node: append [insert_pos(key, value)]
       bool is_front_insert = (insert_pos == position_t::begin());
       bool is_end = STAGE_T::template append_insert<KEY_TYPE>(
           key, value, append_at, right_appender,
           is_front_insert, insert_stage, p_value);
       assert(append_at.is_end() == is_end);
+    } else {
+      std::cout << "append right ..." << std::endl;
     }
 
     // right node: append (insert_pos, end)
@@ -298,10 +327,14 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
     // mutate left node
     if (is_insert_left) {
+      std::cout << "trim-insert left: insert_pos(" << insert_pos
+                << "), insert_stage=" << (int)insert_stage
+                << " ..." << std::endl;
       p_value = extent.template split_insert_replayable<KEY_TYPE>(
           split_at, key, value, insert_pos, insert_stage, insert_size);
       assert(get_key_view(_insert_pos) == key);
     } else {
+      std::cout << "trim left ..." << std::endl;
       assert(right_impl.get_key_view(_insert_pos) == key);
       extent.split_replayable(split_at);
     }
@@ -309,10 +342,11 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(p_value);
 
     auto split_pos = normalize(split_at.get_pos());
-    std::cout << "split at " << split_pos
-              << ", insert at " << _insert_pos
-              << ", is_insert_left=" << is_insert_left
-              << ", insert_stage=" << (int)insert_stage << std::endl;
+    std::cout << "SPLIT-INSERT done: split_pos(" << split_pos
+              << "), insert_pos(" << _insert_pos
+              << "), insert_stage=" << (int)insert_stage
+              << ", insert_size=" << insert_size
+              << std::endl << std::endl;
     return {split_pos, is_insert_left, p_value};
   }
 

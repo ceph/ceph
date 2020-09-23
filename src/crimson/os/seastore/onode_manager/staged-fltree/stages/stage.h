@@ -6,8 +6,6 @@
 #include <cassert>
 #include <optional>
 #include <ostream>
-// TODO: remove
-#include <iostream>
 #include <sstream>
 #include <type_traits>
 
@@ -1442,24 +1440,6 @@ struct staged {
           target_size, split_at.nxt());
     }
     return;
-  }
-
-  static bool locate_split(
-      const container_t& container, size_t target_size,
-      position_t& i_position, match_stage_t i_stage, size_t i_size,
-      StagedIterator& split_at) {
-    split_at.set(container);
-    size_t current_size = 0;
-    std::optional<bool> i_to_left;
-    recursively_locate_split_inserted(
-        current_size, 0, target_size,
-        i_position, i_stage, i_size, i_to_left, split_at);
-    std::cout << "  locate_split(): size_to_left=" << current_size
-              << ", target_split_size=" << target_size
-              << ", original_size=" << container.size_before(container.keys())
-              << std::endl;
-    assert(current_size <= target_size);
-    return *i_to_left;
   }
 
   /*

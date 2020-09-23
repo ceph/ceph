@@ -56,8 +56,6 @@ struct NodeLayoutReplayableT {
       node_offset_t& insert_size) {
     node_stage_t::update_is_level_tail(mut, node_stage, false);
     STAGE_T::trim(mut, split_at);
-    std::cout << "insert to left: " << insert_pos
-              << ", insert_stage=" << (int)insert_stage << std::endl;
     auto p_value = STAGE_T::template proceed_insert<KT, true>(
         mut, node_stage, key, value, insert_pos, insert_stage, insert_size);
     return p_value;
