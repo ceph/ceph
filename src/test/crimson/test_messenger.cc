@@ -1599,8 +1599,18 @@ class FailoverTestPeer : public Dispatcher {
     cmd_msgr->set_auth_server(&dummy_auth);
     auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
     chained_dispatchers->push_back(*this);
-    return cmd_msgr->bind(entity_addrvec_t{cmd_peer_addr}).then([this, chained_dispatchers]() mutable {
+    return cmd_msgr->bind(entity_addrvec_t{cmd_peer_addr}).then(
+      [this, chained_dispatchers]() mutable {
       return cmd_msgr->start(chained_dispatchers);
+    }).handle_exception_type([cmd_peer_addr](const std::system_error& e) {
+      if (e.code() == std::errc::address_in_use) {
+        logger().error("FailoverTestPeer::init({}) "
+                       "likely there is another instance of "
+                       "unittest_seastar_messenger running", cmd_peer_addr);
+      } else {
+        logger().error("FailoverTestPeer::init({}): {}", cmd_peer_addr, e.what());
+      }
+      abort();
     });
   }
 
