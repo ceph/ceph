@@ -70,15 +70,15 @@ public:
   using secret_t = string;
   tuple<CryptoKey, secret_t, bufferlist>
   handle_auth_reply_more(const ceph::buffer::list& bl);
-  tuple<CryptoKey, secret_t, int>
-  handle_auth_done(uint64_t new_global_id,
-                   const ceph::buffer::list& bl);
   int handle_auth_bad_method(uint32_t old_auth_method,
                              int result,
                              const std::vector<uint32_t>& allowed_methods,
                              const std::vector<uint32_t>& allowed_modes);
 
   // v1 and v2
+  tuple<CryptoKey, secret_t, int>
+  handle_auth_done(uint64_t new_global_id,
+                   const ceph::buffer::list& bl);
   void close();
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(entity_type_t peer) const;
