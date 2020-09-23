@@ -258,10 +258,10 @@ std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
   const hobject_t &soid, eversion_t need)
 {
   if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
-    return pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    return pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
 	pg->get_recovery_backend()->recover_delete(soid, need));
   } else {
-    return pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    return pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
       pg->get_recovery_backend()->recover_object(soid, need).handle_exception(
 	[=, soid = std::move(soid)] (auto e) {
 	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
@@ -277,7 +277,7 @@ size_t PGRecovery::prep_object_replica_deletes(
   std::vector<crimson::osd::blocking_future<>> *in_progress)
 {
   in_progress->push_back(
-    pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
       pg->get_recovery_backend()->push_delete(soid, need).then([=] {
 	object_stat_sum_t stat_diff;
 	stat_diff.num_objects_recovered = 1;
@@ -295,7 +295,7 @@ size_t PGRecovery::prep_object_replica_pushes(
   std::vector<crimson::osd::blocking_future<>> *in_progress)
 {
   in_progress->push_back(
-    pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
       pg->get_recovery_backend()->recover_object(soid, need).handle_exception(
 	[=, soid = std::move(soid)] (auto e) {
 	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
