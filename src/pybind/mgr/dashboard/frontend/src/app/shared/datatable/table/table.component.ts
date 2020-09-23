@@ -149,6 +149,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Input()
   status = new TableStatus();
 
+  // Table title
+  @Input()
+  title: string = undefined;
+
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *

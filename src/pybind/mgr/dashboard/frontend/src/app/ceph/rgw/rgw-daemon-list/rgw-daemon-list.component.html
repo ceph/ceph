@@ -5,7 +5,8 @@
     <a ngbNavLink
        i18n>Daemons List</a>
     <ng-template ngbNavContent>
-      <cd-table [data]="daemons"
+      <cd-table title="Daemons"
+                [data]="daemons"
                 [columns]="columns"
                 columnMode="flex"
                 [hasDetails]="true"

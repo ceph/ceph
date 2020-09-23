@@ -1,3 +1,4 @@
+<h3 i18n>{{ title }}</h3>
 <div class="dataTables_wrapper">
 
   <div *ngIf="onlyActionHeader"
@@ -160,6 +161,7 @@
   </div>
   <ngx-datatable #table
                  class="bootstrap cd-datatable"
+                 [title]="title"
                  [cssClasses]="paginationClasses"
                  [selectionType]="selectionType"
                  [selected]="selection.selected"

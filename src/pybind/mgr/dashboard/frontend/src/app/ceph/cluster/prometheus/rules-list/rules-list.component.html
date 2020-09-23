@@ -7,6 +7,7 @@
   the <cd-doc section="prometheus"></cd-doc>.</cd-alert-panel>
 
 <cd-table *ngIf="isPrometheusConfigured"
+          title="Alerts"
           [data]="prometheusAlertService.rules"
           [columns]="columns"
           [hasDetails]="true"

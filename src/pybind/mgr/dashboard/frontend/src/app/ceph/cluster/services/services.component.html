@@ -1,6 +1,7 @@
 <cd-orchestrator-doc-panel *ngIf="!orchStatus?.available"></cd-orchestrator-doc-panel>
 <ng-container *ngIf="orchStatus?.available">
-  <cd-table [data]="services"
+  <cd-table title="Services"
+            [data]="services"
             [columns]="columns"
             identifier="service_name"
             forceIdentifier="true"

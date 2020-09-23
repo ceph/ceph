@@ -5,7 +5,8 @@
     <a ngbNavLink
        i18n>OSDs List</a>
     <ng-template ngbNavContent>
-      <cd-table [data]="osds"
+      <cd-table title="OSDs"
+                [data]="osds"
                 (fetchData)="getOsdList()"
                 [columns]="columns"
                 selectionType="multiClick"

@@ -1,6 +1,7 @@
 <cd-rbd-tabs></cd-rbd-tabs>
 
-<cd-table [data]="namespaces"
+<cd-table title="Namespaces"
+          [data]="namespaces"
           (fetchData)="refresh()"
           columnMode="flex"
           [columns]="columns"

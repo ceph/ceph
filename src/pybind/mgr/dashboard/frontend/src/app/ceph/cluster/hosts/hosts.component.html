@@ -5,7 +5,8 @@
     <a ngbNavLink
        i18n>Hosts List</a>
     <ng-template ngbNavContent>
-      <cd-table [data]="hosts"
+      <cd-table title="Hosts"
+                [data]="hosts"
                 [columns]="columns"
                 columnMode="flex"
                 (fetchData)="getHosts($event)"
