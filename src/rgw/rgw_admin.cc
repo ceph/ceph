@@ -2481,8 +2481,8 @@ static void sync_status(Formatter *formatter)
 
   auto& source_zones = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_data_sync_source_zones();
 
-  for (auto& source_zone : source_zones) {
-    rgw_zone_id source_id = source_zone->id;
+  for (auto& entry : source_zones) {
+    auto& source_id = entry.first;
     string source_str = "source: ";
     string s = source_str + source_id.id;
     RGWZone *sz;

@@ -368,7 +368,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
     if (zone_is_source || zone_is_target) {
       if (zone_is_source && sync_modules->supports_data_export(z.tier_type)) {
-        data_sync_source_zones.push_back(&z);
+        data_sync_source_zones.push_back(make_pair(z.id, z.name));
       }
       if (zone_is_target) {
         zone_data_notify_set.insert(id);
@@ -385,6 +385,20 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     auto shared_zone = std::make_shared<RGWDataProvider>(z);
     zone_id_by_name[z.name] = id;
     data_provider_by_id[id] = shared_zone;
+
+    bool zone_is_source = source_zones.find(z.id) != source_zones.end();
+    bool zone_is_target = target_zones.find(z.id) != target_zones.end();
+
+    if (zone_is_source || zone_is_target) {
+      if (zone_is_source) {
+        data_sync_source_zones.push_back(make_pair(z.id, z.name));
+      }
+      if (zone_is_target) {
+        zone_data_notify_set.insert(id);
+      }
+    } else {
+      ldout(cct, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
+    }
   }
 
   ldpp_dout(dpp, 20) << "started zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << 

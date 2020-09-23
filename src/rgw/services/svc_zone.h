@@ -48,7 +48,7 @@ class RGWSI_Zone : public RGWServiceInstance
   std::map<rgw_zone_id, std::shared_ptr<RGWBucketSyncPolicyHandler> > sync_policy_handlers;
 
   RGWRESTConn *rest_master_conn{nullptr};
-  std::vector<const RGWZone*> data_sync_source_zones;
+  std::vector<std::pair<rgw_zone_id, std::string> > data_sync_source_zones;
   std::set<rgw_zone_id> zone_data_notify_set;
   std::map<std::string, RGWRESTConn *> zonegroup_conn_map;
 
@@ -118,7 +118,7 @@ public:
     return zonegroup_conn_map;
   }
 
-  std::vector<const RGWZone*>& get_data_sync_source_zones() {
+  std::vector<std::pair<rgw_zone_id, std::string> >& get_data_sync_source_zones() {
     return data_sync_source_zones;
   }
 

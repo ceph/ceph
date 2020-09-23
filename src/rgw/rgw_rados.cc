@@ -551,11 +551,12 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
     sync.stop();
   }
 public:
-  RGWDataSyncProcessorThread(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
-                             const RGWZone* source_zone)
+  RGWDataSyncProcessorThread(rgw::sal::RadosStore *_store, RGWAsyncRadosProcessor *async_rados,
+                             const rgw_zone_id& zid,
+                             const string& zname)
     : RGWSyncProcessorThread(_store->getRados(), "data-sync"),
-      counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
-      sync(_store, async_rados, source_zone->id, counters.get()),
+      counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + zname)),
+      sync(_store, async_rados, zid, counters.get()),
       initialized(false) {}
 
   void wakeup_sync_shards(map<int, set<string> >& shard_ids) {
@@ -1290,16 +1291,19 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
     svc.datalog_rados->set_observer(&*bucket_trim);
 
     std::lock_guard dl{data_sync_thread_lock};
-    for (auto source_zone : svc.zone->get_data_sync_source_zones()) {
+    for (auto entry : svc.zone->get_data_sync_source_zones()) {
+      auto& zid = entry.first;
+      auto& zname = entry.second;
+
       ldpp_dout(dpp, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
-      auto *thread = new RGWDataSyncProcessorThread(this->store, svc.rados->get_async_processor(), source_zone);
-      ret = thread->init(dpp);
+      auto *thread = new RGWDataSyncProcessorThread(this->store, svc.rados->get_async_processor(), zid, zname);
+      ret = thread->init();
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to initialize data sync thread" << dendl;
         return ret;
       }
       thread->start();
-      data_sync_processor_threads[rgw_zone_id(source_zone->id)] = thread;
+      data_sync_processor_threads[rgw_zone_id(zid)] = thread;
     }
     auto interval = cct->_conf->rgw_sync_log_trim_interval;
     if (interval > 0) {
