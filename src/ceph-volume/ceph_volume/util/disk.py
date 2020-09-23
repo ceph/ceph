@@ -6,6 +6,10 @@ from ceph_volume import process
 from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
 
+try:
+    from functools import lru_cache
+except ImportError:
+    from backports.functools_lru_cache import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -735,6 +739,7 @@ def get_block_devs_lsblk():
     return [re.split(r'\s+', line) for line in stdout]
 
 
+@lru_cache(maxsize=8)
 def get_devices(_sys_block_path='/sys/block'):
     """
     Captures all available block devices as reported by lsblk.
