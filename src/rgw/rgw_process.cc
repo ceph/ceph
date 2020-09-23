@@ -320,6 +320,11 @@ done:
 	  << " op status=" << op_ret
 	  << " http_status=" << s->err.http_ret
 	  << " latency=" << s->time_elapsed()
+	  << " op_method=" << s->info.method
+	  << " op_target=" << s->info.request_uri
+	  << " bytes_sent=" << client_io->get_bytes_sent()
+	  << " bytes_received=" << client_io->get_bytes_received()
+	  << " op_user=" << s->user
 	  << " ======"
 	  << dendl;
 
