@@ -335,11 +335,8 @@ Client::~Client()
 void Client::tear_down_cache()
 {
   // fd's
-  for (ceph::unordered_map<int, Fh*>::iterator it = fd_map.begin();
-       it != fd_map.end();
-       ++it) {
-    Fh *fh = it->second;
-    ldout(cct, 1) << __func__ << " forcing close of fh " << it->first << " ino " << fh->inode->ino << dendl;
+  for (auto &[fd, fh] : fd_map) {
+    ldout(cct, 1) << __func__ << " forcing close of fh " << fd << " ino " << fh->inode->ino << dendl;
     _release_fh(fh);
   }
   fd_map.clear();

@@ -852,10 +852,10 @@ protected:
    * Resolve file descriptor, or return NULL.
    */
   Fh *get_filehandle(int fd) {
-    ceph::unordered_map<int, Fh*>::iterator p = fd_map.find(fd);
-    if (p == fd_map.end())
+    auto it = fd_map.find(fd);
+    if (it == fd_map.end())
       return NULL;
-    return p->second;
+    return it->second;
   }
 
   // helpers
