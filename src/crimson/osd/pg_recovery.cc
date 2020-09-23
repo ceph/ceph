@@ -433,6 +433,7 @@ void PGRecovery::enqueue_push(
 {
   logger().debug("{}: target={} obj={} v={}",
                  __func__, target, obj, v);
+  pg->get_recovery_backend()->add_recovering(obj);
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
