@@ -696,21 +696,37 @@ class RequiredClientFeaturesHandler : public FileSystemCommandHandler
       }
 
       if (subop == "add") {
+	bool ret = false;
 	fsmap.modify_filesystem(
 	    fs->fscid,
-	    [feature](std::shared_ptr<Filesystem> fs)
+	    [feature, &ret](auto&& fs)
 	{
+	  if (fs->mds_map.get_required_client_features().test(feature))
+	    return;
 	  fs->mds_map.add_required_client_feature(feature);
+	  ret = true;
 	});
-	ss << "added feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+	if (ret) {
+	  ss << "added feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+	} else {
+	  ss << "feature '" << cephfs_feature_name(feature) << "' is already set";
+	}
       } else {
+	bool ret = false;
 	fsmap.modify_filesystem(
 	    fs->fscid,
-	    [feature](std::shared_ptr<Filesystem> fs)
+	    [feature, &ret](auto&& fs)
 	{
-	  fs->mds_map.remove_required_client_feature(feature);
+          if (!fs->mds_map.get_required_client_features().test(feature))
+            return;
+          fs->mds_map.remove_required_client_feature(feature);
+          ret = true;
 	});
-	ss << "removed feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+	if (ret) {
+	  ss << "removed feature '" << cephfs_feature_name(feature) << "' from required_client_features";
+	} else {
+	  ss << "feature '" << cephfs_feature_name(feature) << "' is already unset";
+	}
       }
       return 0;
    }
