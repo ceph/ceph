@@ -16,7 +16,7 @@ from ..services.rgw_client import RgwClient
 from ..tools import json_str_to_object, str_to_bool
 
 try:
-    from typing import List
+    from typing import Any, List
 except ImportError:  # pragma: no cover
     pass  # Just for type checking
 
@@ -215,9 +215,15 @@ class RgwBucket(RgwRESTController):
             bucket_name = '{}:{}'.format(tenant, bucket_name)
         return bucket_name
 
-    def list(self):
-        # type: () -> List[str]
-        return self.proxy('GET', 'bucket')
+    def list(self, stats=False):
+        # type: (bool) -> List[Any]
+        query_params = '?stats' if stats else ''
+        result = self.proxy('GET', 'bucket{}'.format(query_params))
+
+        if stats:
+            result = [self._append_bid(bucket) for bucket in result]
+
+        return result
 
     def get(self, bucket):
         # type: (str) -> dict
