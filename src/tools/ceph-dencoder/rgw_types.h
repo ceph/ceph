@@ -81,6 +81,8 @@ TYPE(cls_rgw_lc_obj_head)
 TYPE(rgw_bi_log_entry)
 TYPE(cls_rgw_reshard_entry)
 TYPE(cls_rgw_bucket_instance_entry)
+TYPE(compression_block)
+TYPE(RGWCompressionInfo)
 
 #include "cls/user/cls_user_types.h"
 TYPE(cls_user_bucket)

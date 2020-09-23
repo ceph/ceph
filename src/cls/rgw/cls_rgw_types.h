@@ -9,6 +9,7 @@
 #include "common/Formatter.h"
 
 #include "rgw/rgw_basic_types.h"
+#include "rgw/rgw_compression_types.h"
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
