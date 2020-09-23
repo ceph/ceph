@@ -681,7 +681,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   onSelect($event: any) {
-    this.selection.selected = $event['selected'];
+    // Ensure we do not process DOM 'select' events.
+    // https://github.com/swimlane/ngx-datatable/issues/899
+    if (_.has($event, 'selected')) {
+      this.selection.selected = $event['selected'];
+    }
     this.updateSelection.emit(_.clone(this.selection));
   }
 
