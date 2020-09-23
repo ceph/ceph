@@ -9659,24 +9659,16 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
-  while (left > 0) {
-    C_SaferCond onfinish("Client::_read_sync flock");
-    bufferlist tbl;
-
-    int wanted = left;
-    filer->read_trunc(in->ino, &in->layout, in->snapid,
-		      pos, left, &tbl, 0,
-		      in->truncate_size, in->truncate_seq,
-		      &onfinish);
-    client_lock.unlock();
+  // 0 success, 1 continue and < 0 error happen.
+  auto wait_and_copy = [&](C_SaferCond &onfinish, bufferlist &tbl, int wanted) {
     int r = onfinish.wait();
-    client_lock.lock();
 
     // if we get ENOENT from OSD, assume 0 bytes returned
     if (r == -ENOENT)
       r = 0;
     if (r < 0)
       return r;
+
     if (tbl.length()) {
       r = tbl.length();
 
@@ -9699,12 +9691,31 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 	pos += some;
 	left -= some;
 	if (left == 0)
-	  return read;
+          return 0;
       }
 
       *checkeof = true;
-      return read;
+      return 0;
     }
+    return 1;
+  };
+
+  while (left > 0) {
+    C_SaferCond onfinish("Client::_read_sync flock");
+    bufferlist tbl;
+
+    int wanted = left;
+    filer->read_trunc(in->ino, &in->layout, in->snapid,
+		      pos, left, &tbl, 0,
+		      in->truncate_size, in->truncate_seq,
+		      &onfinish);
+    client_lock.unlock();
+    int r = wait_and_copy(onfinish, tbl, wanted);
+    client_lock.lock();
+    if (!r)
+      return read;
+    if (r < 0)
+      return r;
   }
   return read;
 }
@@ -9744,7 +9755,7 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 
 int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
 				   unsigned iovcnt, int64_t offset, bool write,
-				   bool clamp_to_int)
+				   bool clamp_to_int, std::unique_lock<ceph::mutex> &cl)
 {
 #if defined(__linux__) && defined(O_PATH)
     if (fh->flags & O_PATH)
@@ -9774,18 +9785,20 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
         if (r <= 0)
           return r;
 
+        cl.unlock();
         auto iter = bl.cbegin();
         for (unsigned j = 0, resid = r; j < iovcnt && resid > 0; j++) {
                /*
-                * This piece of code aims to handle the case that bufferlist does not have enough data 
-                * to fill in the iov 
+                * This piece of code aims to handle the case that bufferlist
+                * does not have enough data to fill in the iov
                 */
                const auto round_size = std::min<unsigned>(resid, iov[j].iov_len);
                iter.copy(round_size, reinterpret_cast<char*>(iov[j].iov_base));
                resid -= round_size;
                /* iter is self-updating */
         }
-        return r;  
+        cl.lock();
+        return r;
     }
 }
 
@@ -9798,11 +9811,11 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     tout(cct) << fd << std::endl;
     tout(cct) << offset << std::endl;
 
-    std::scoped_lock lock(client_lock);
+    std::unique_lock cl(client_lock);
     Fh *fh = get_filehandle(fd);
     if (!fh)
-        return -EBADF;
-    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true);
+      return -EBADF;
+    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true, cl);
 }
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
@@ -13833,8 +13846,8 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::scoped_lock lock(client_lock);
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
+  std::unique_lock cl(client_lock);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false, cl);
 }
 
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
@@ -13843,8 +13856,8 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::scoped_lock lock(client_lock);
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
+  std::unique_lock cl(client_lock);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false, cl);
 }
 
 int Client::ll_flush(Fh *fh)

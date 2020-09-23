@@ -1234,8 +1234,10 @@ private:
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
           const struct iovec *iov, int iovcnt);
-  int64_t _preadv_pwritev_locked(Fh *f, const struct iovec *iov,
-	      unsigned iovcnt, int64_t offset, bool write, bool clamp_to_int);
+  int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
+                                 unsigned iovcnt, int64_t offset,
+                                 bool write, bool clamp_to_int,
+                                 std::unique_lock<ceph::mutex> &cl);
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
