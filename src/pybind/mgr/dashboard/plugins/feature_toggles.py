@@ -132,8 +132,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
                 404, "Feature='{}' disabled by option '{}'".format(
                     feature.value,
                     self.OPTION_FMT.format(feature.value),
-                    )
                 )
+            )
 
     @PM.add_hook
     def get_controllers(self):

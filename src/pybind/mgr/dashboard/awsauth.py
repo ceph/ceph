@@ -31,6 +31,8 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from requests.auth import AuthBase
+from email.utils import formatdate
 import hmac
 
 from hashlib import sha1 as sha
@@ -43,10 +45,6 @@ except ImportError:
     py3k = True
     from urllib.parse import urlparse, unquote
     from base64 import encodebytes as encodestring
-
-from email.utils import formatdate
-
-from requests.auth import AuthBase
 
 
 class S3Auth(AuthBase):

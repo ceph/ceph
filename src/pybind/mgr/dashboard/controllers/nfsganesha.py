@@ -8,7 +8,7 @@ import cherrypy
 import cephfs
 
 from . import ApiController, RESTController, UiApiController, BaseController, \
-              Endpoint, Task, ReadPermission, ControllerDoc, EndpointDoc
+    Endpoint, Task, ReadPermission, ControllerDoc, EndpointDoc
 from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.cephx import CephX

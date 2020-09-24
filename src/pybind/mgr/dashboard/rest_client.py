@@ -39,6 +39,7 @@ class TimeoutRequestsSession(requests.Session):
     """
     Set timeout argument for all requests if this is not already done.
     """
+
     def request(self, *args, **kwargs):
         if ((args[8] if len(args) > 8 else None) is None) \
                 and kwargs.get('timeout') is None:

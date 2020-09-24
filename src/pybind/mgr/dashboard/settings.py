@@ -85,7 +85,7 @@ class Options(object):
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
-               getattr(Settings, name) == getattr(Options, name)[0]
+            getattr(Settings, name) == getattr(Options, name)[0]
 
 
 class SettingsMeta(type):

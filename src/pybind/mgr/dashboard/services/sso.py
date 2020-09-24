@@ -154,7 +154,7 @@ def handle_sso_command(cmd):
             Saml2Settings(mgr.SSO_DB.saml2.onelogin_settings)
         except Saml2Error:
             return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
-                          'use `ceph dashboard sso setup saml2`'
+                'use `ceph dashboard sso setup saml2`'
         mgr.SSO_DB.protocol = 'saml2'
         mgr.SSO_DB.save()
         return 0, 'SSO is "enabled" with "SAML2" protocol.', ''

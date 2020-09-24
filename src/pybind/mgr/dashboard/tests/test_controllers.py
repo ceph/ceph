@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 from . import ControllerTestCase
 from ..controllers import BaseController, RESTController, Controller, \
-                          ApiController, Endpoint
+    ApiController, Endpoint
 
 
 @Controller("/btest/{key}", base_url="/ui", secure=False)

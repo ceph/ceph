@@ -13,9 +13,9 @@ except ImportError:
 from . import ControllerTestCase
 from ..services.exception import handle_rados_error
 from ..controllers import RESTController, ApiController, Controller, \
-                          BaseController, Proxy
+    BaseController, Proxy
 from ..tools import dict_contains_path, json_str_to_object, partial_dict,\
-                    dict_get, RequestLoggingTool
+    dict_get, RequestLoggingTool
 
 
 # pylint: disable=W0613

@@ -137,7 +137,7 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
             'mgr_map': {
                 'services': {
                     'dashboard': 'https://ceph.dev:11000/'
-                    },
+                },
             }
         }[key]
         mgr.url_prefix = ''

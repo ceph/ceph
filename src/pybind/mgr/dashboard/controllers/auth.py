@@ -29,6 +29,7 @@ class Auth(RESTController):
     """
     Provide authenticates and returns JWT token.
     """
+
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None

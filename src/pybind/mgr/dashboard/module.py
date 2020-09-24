@@ -3,6 +3,18 @@
 ceph dashboard mgr plugin (based on CherryPy)
 """
 from __future__ import absolute_import
+from .plugins import PLUGIN_MANAGER
+from .settings import options_command_list, options_schema_list, \
+    handle_option_command
+from .services.exception import dashboard_exception_handler
+from .services.sso import SSO_COMMANDS, \
+    handle_sso_command
+from .services.auth import AuthManager, AuthManagerTool, JwtManager
+from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
+    prepare_url_prefix, str_to_bool
+from .grafana import push_local_dashboards
+from .controllers import generate_routes, json_error_page
+from . import mgr
 
 import collections
 import errno
@@ -31,19 +43,7 @@ if cherrypy is not None:
     patch_cherrypy(cherrypy.__version__)
 
 # pylint: disable=wrong-import-position
-from . import mgr
-from .controllers import generate_routes, json_error_page
-from .grafana import push_local_dashboards
-from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
-                   prepare_url_prefix, str_to_bool
-from .services.auth import AuthManager, AuthManagerTool, JwtManager
-from .services.sso import SSO_COMMANDS, \
-                          handle_sso_command
-from .services.exception import dashboard_exception_handler
-from .settings import options_command_list, options_schema_list, \
-                      handle_option_command
 
-from .plugins import PLUGIN_MANAGER
 from .plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
 
 
@@ -355,7 +355,7 @@ class Module(MgrModule, CherryPyConfig):
     def set_ssl_certificate(self, mgr_id=None, inbuf=None):
         if inbuf is None:
             return -errno.EINVAL, '',\
-                   'Please specify the certificate file with "-i" option'
+                'Please specify the certificate file with "-i" option'
         if mgr_id is not None:
             self.set_store('{}/crt'.format(mgr_id), inbuf)
         else:
@@ -367,7 +367,7 @@ class Module(MgrModule, CherryPyConfig):
     def set_ssl_certificate_key(self, mgr_id=None, inbuf=None):
         if inbuf is None:
             return -errno.EINVAL, '',\
-                   'Please specify the certificate key file with "-i" option'
+                'Please specify the certificate key file with "-i" option'
         if mgr_id is not None:
             self.set_store('{}/key'.format(mgr_id), inbuf)
         else:

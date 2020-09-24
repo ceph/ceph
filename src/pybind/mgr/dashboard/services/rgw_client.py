@@ -11,7 +11,7 @@ from ..exceptions import DashboardException
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
 from ..tools import build_url, dict_contains_path, json_str_to_object,\
-                    partial_dict, dict_get
+    partial_dict, dict_get
 from .. import mgr
 
 try:

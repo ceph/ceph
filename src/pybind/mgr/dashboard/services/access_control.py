@@ -22,9 +22,9 @@ from .. import mgr
 from ..security import Scope, Permission
 from ..settings import Settings
 from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
-                         PermissionNotValid, RoleIsAssociatedWithUser, \
-                         UserAlreadyExists, UserDoesNotExist, ScopeNotInRole, \
-                         RoleNotInUser, PasswordPolicyException, PwdExpirationDateNotValid
+    PermissionNotValid, RoleIsAssociatedWithUser, \
+    UserAlreadyExists, UserDoesNotExist, ScopeNotInRole, \
+    RoleNotInUser, PasswordPolicyException, PwdExpirationDateNotValid
 
 
 logger = logging.getLogger('access_control')
@@ -628,7 +628,7 @@ def ac_role_delete_cmd(_, rolename):
     except RoleDoesNotExist as ex:
         if rolename in SYSTEM_ROLES:
             return -errno.EPERM, '', "Cannot delete system role '{}'" \
-                                        .format(rolename)
+                .format(rolename)
         return -errno.ENOENT, '', str(ex)
     except RoleIsAssociatedWithUser as ex:
         return -errno.EPERM, '', str(ex)
@@ -650,15 +650,15 @@ def ac_role_add_scope_perms_cmd(_, rolename, scopename, permissions):
     except RoleDoesNotExist as ex:
         if rolename in SYSTEM_ROLES:
             return -errno.EPERM, '', "Cannot update system role '{}'" \
-                                        .format(rolename)
+                .format(rolename)
         return -errno.ENOENT, '', str(ex)
     except ScopeNotValid as ex:
         return -errno.EINVAL, '', str(ex) + "\n Possible values: {}" \
                                             .format(Scope.all_scopes())
     except PermissionNotValid as ex:
         return -errno.EINVAL, '', str(ex) + \
-                                    "\n Possible values: {}" \
-                                    .format(Permission.all_permissions())
+            "\n Possible values: {}" \
+            .format(Permission.all_permissions())
 
 
 @CLIWriteCommand('dashboard ac-role-del-scope-perms',
@@ -675,7 +675,7 @@ def ac_role_del_scope_perms_cmd(_, rolename, scopename):
     except RoleDoesNotExist as ex:
         if rolename in SYSTEM_ROLES:
             return -errno.EPERM, '', "Cannot update system role '{}'" \
-                                        .format(rolename)
+                .format(rolename)
         return -errno.ENOENT, '', str(ex)
     except ScopeNotInRole as ex:
         return -errno.ENOENT, '', str(ex)

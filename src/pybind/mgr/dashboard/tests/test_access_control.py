@@ -13,8 +13,8 @@ from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
 from ..services.access_control import load_access_control_db, \
-                                      password_hash, AccessControlDB, \
-                                      SYSTEM_ROLES, PasswordPolicy
+    password_hash, AccessControlDB, \
+    SYSTEM_ROLES, PasswordPolicy
 from ..settings import Settings
 
 

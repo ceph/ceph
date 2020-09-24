@@ -17,7 +17,7 @@ from .. import mgr
 
 cherrypy.config.update({
     'response.headers.server': 'Ceph-Dashboard'
-    })
+})
 
 
 class JwtManager(object):
