@@ -107,7 +107,7 @@ int RGWRole::delete_policy(const DoutPrefixProvider* dpp, const string& policy_n
   } else {
     perm_policy_map.erase(it);
   }
-  return 0;
+    return 0;
 }
 
 void RGWRole::dump(Formatter *f) const
@@ -176,12 +176,11 @@ bool RGWRole::validate_input(const DoutPrefixProvider* dpp)
   return true;
 }
 
-void RGWRole::extract_name_tenant(const std::string& str)
-{
-  size_t pos = str.find('$');
-  if (pos != std::string::npos) {
+void RGWRole::extract_name_tenant(const std::string& str) {
+  if (auto pos = str.find('$');
+      pos != std::string::npos) {
     tenant = str.substr(0, pos);
-    name = str.substr(pos + 1);
+    name = str.substr(pos+1);
   }
 }
 
