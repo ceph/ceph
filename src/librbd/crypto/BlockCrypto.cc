@@ -2,9 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/crypto/BlockCrypto.h"
-#include <alloca.h>
 #include "include/byteorder.h"
 #include "include/ceph_assert.h"
+
+#include <stdlib.h>
 
 namespace librbd {
 namespace crypto {
