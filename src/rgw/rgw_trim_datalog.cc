@@ -49,9 +49,8 @@ class DatalogTrimImplCR : public RGWSimpleCoroutine {
   }
   int request_complete() override {
     int r = cn->completion()->get_return_value();
-    ldout(cct, 0) << __PRETTY_FUNCTION__ << "(): trim of shard=" << shard
-		  << " marker=" << marker << "failed with r=" << r
-		  << ", " << cpp_strerror(r) << dendl;
+    ldout(cct, 20) << __PRETTY_FUNCTION__ << "(): trim of shard=" << shard
+		  << " marker=" << marker << " returned r=" << r << dendl;
 
     set_status() << "request complete; ret=" << r;
     if (r != -ENODATA) {
