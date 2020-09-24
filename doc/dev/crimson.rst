@@ -8,11 +8,42 @@ the art technologies like DPDK and SPDK, for better performance. And it will
 keep the support of HDDs and low-end SSDs via BlueStore. Crismon will try to
 be backward compatible with classic OSD.
 
+.. highlight:: console
+
+Building Crimson
+================
+
+Crismon is not enabled by default. To enable it::
+
+  $ mkdir build && cd build
+  $ cmake -DWITH_SEASTAR=ON ..
+
+Please note, `ASan`_ is enabled by default if crimson is built from a source
+cloned using git.
+
+Also, Seastar uses its own lockless allocator which does not play well with
+the alien threads. So, to use alienstore / bluestore backend, you might want to
+pass ``-DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR`` to ``cmake`` when
+configuring this project to use the libc allocator, like::
+
+  $ cmake -DWITH_SEASTAR=ON -DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR ..
+
+.. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
 Running Crimson
 ===============
 
 As you might expect, crimson is not featurewise on par with its predecessor yet.
+
+object store backend
+--------------------
+
+At the moment ``crimson-osd`` offers two object store backends:
+
+- CyanStore: CyanStore is modeled after memstore in classic OSD.
+- AlienStore: AlienStore is short for Alienized BlueStore.
+
+Seastore is still under active development.
 
 daemonize
 ---------
@@ -33,8 +64,6 @@ to do the trick.
 
 
 .. _fork(): http://pubs.opengroup.org/onlinepubs/9699919799/functions/fork.html
-
-.. highlight:: console
 
 logging
 -------
@@ -83,7 +112,20 @@ using ``vstart.sh``,
 
 ``--osd-args``
     pass extra command line options to crimson-osd or ceph-osd. It's quite
-    useful for passing Seastar options to crimson-osd.
+    useful for passing Seastar options to crimson-osd. For instance, you could
+    use ``--osd-args "--memory 2G"`` to set the memory to use. Please refer
+    the output of::
+
+      crimson-osd --help-seastar
+
+    for more Seastar specific command line options.
+
+``--memstore``
+    use the CyanStore as the object store backend.
+
+``--bluestore``
+    use the AlienStore as the object store backend. This is the default setting,
+    if not specified otherwise.
 
 So, a typical command to start a single-crimson-node cluster is::
 
@@ -93,8 +135,6 @@ So, a typical command to start a single-crimson-node cluster is::
     --osd-args "--memory 4G"
 
 Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
-Please refer ``crimson-osd --help-seastar`` for more Seastar specific command
-line options.
 
 You could stop the vstart cluster using::
 
@@ -142,11 +182,17 @@ corresponding test results are highlighted.
 Debugging Crimson
 =================
 
+Debugging with GDB
+------------------
 
-debugging in your workspace
----------------------------
+The `tips`_ for debugging Scylla also apply to Crimson.
 
-When a seastar application crashes, it leaves us a serial of addresses, like::
+.. _tips: https://github.com/scylladb/scylla/blob/master/docs/debugging.md#tips-and-tricks
+
+Human-readable backtraces with addr2line
+----------------------------------------
+
+When a seastar application crashes, it leaves us with a serial of addresses, like::
 
   Segmentation fault.
   Backtrace:
@@ -205,9 +251,6 @@ the input, so you can also paste the log messages like::
   2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e3e8b8
   2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e3e985
   2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  /lib64/libpthread.so.0+0x0000000000012dbf
-
-debugging crashes of teuthology based tests
--------------------------------------------
 
 Unlike classic OSD, crimson does not print a human-readable backtrace when it
 handles fatal signals like `SIGSEGV` or `SIGABRT`. And it is more complicated
