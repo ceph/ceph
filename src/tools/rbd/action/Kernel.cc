@@ -499,20 +499,6 @@ int execute_map(const po::variables_map &vm,
   }
 
   MapOptions map_options;
-  if (vm["quiesce"].as<bool>()) {
-    std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
-  }
-  if (vm["read-only"].as<bool>()) {
-    put_map_option("rw", "ro", &map_options);
-  }
-  if (vm["exclusive"].as<bool>()) {
-    put_map_option("exclusive", "exclusive", &map_options);
-  }
-
-  if (vm.count("quiesce-hook")) {
-    std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
-  }
-
   if (vm.count("options")) {
     for (auto &options : vm["options"].as<std::vector<std::string>>()) {
       r = parse_map_options(options, &map_options);
@@ -521,6 +507,22 @@ int execute_map(const po::variables_map &vm,
         return r;
       }
     }
+  }
+
+  // parse options common to all device types after parsing krbd-specific
+  // options so that common options win (in particular "-o rw --read-only"
+  // should result in read-only mapping)
+  if (vm["read-only"].as<bool>()) {
+    put_map_option("rw", "ro", &map_options);
+  }
+  if (vm["exclusive"].as<bool>()) {
+    put_map_option("exclusive", "exclusive", &map_options);
+  }
+  if (vm["quiesce"].as<bool>()) {
+    std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
+  }
+  if (vm.count("quiesce-hook")) {
+    std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
   }
 
   // connect to the cluster to get the default pool and the default map
