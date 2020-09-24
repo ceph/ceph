@@ -2717,11 +2717,43 @@ void Client::handle_fs_map_user(const MConstRef<MFSMapUser>& m)
   signal_cond_list(waiting_for_fsmap);
 }
 
+// Cancel all the commands for missing or laggy GIDs
+void Client::cancel_commands(const MDSMap& newmap)
+{
+  std::vector<ceph_tid_t> cancel_ops;
+
+  std::scoped_lock cmd_lock(command_lock);
+  auto &commands = command_table.get_commands();
+  for (const auto &[tid, op] : commands) {
+    const mds_gid_t op_mds_gid = op.mds_gid;
+    if (newmap.is_dne_gid(op_mds_gid) || newmap.is_laggy_gid(op_mds_gid)) {
+      ldout(cct, 1) << __func__ << ": cancelling command op " << tid << dendl;
+      cancel_ops.push_back(tid);
+      if (op.outs) {
+        std::ostringstream ss;
+        ss << "MDS " << op_mds_gid << " went away";
+        *(op.outs) = ss.str();
+      }
+      /*
+       * No need to make the con->mark_down under
+       * client_lock here, because the con will
+       * has its own lock.
+       */
+      op.con->mark_down();
+      if (op.on_finish)
+        op.on_finish->complete(-ETIMEDOUT);
+    }
+  }
+
+  for (const auto &tid : cancel_ops)
+    command_table.erase(tid);
+}
+
 void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 {
   mds_gid_t old_inc, new_inc;
 
-  std::scoped_lock cl(client_lock);
+  std::unique_lock cl(client_lock);
   if (m->get_epoch() <= mdsmap->get_epoch()) {
     ldout(cct, 1) << __func__ << " epoch " << m->get_epoch()
                   << " is identical to or older than our "
@@ -2729,37 +2761,14 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
     return;
   }
 
+  cl.unlock();
   ldout(cct, 1) << __func__ << " epoch " << m->get_epoch() << dendl;
+  std::unique_ptr<MDSMap> _mdsmap(new MDSMap);
+  _mdsmap->decode(m->get_encoded());
+  cancel_commands(*_mdsmap.get());
+  cl.lock();
 
-  std::unique_ptr<MDSMap> oldmap(new MDSMap);
-
-  oldmap->decode(m->get_encoded());
-
-  // Cancel any commands for missing or laggy GIDs
-  std::list<ceph_tid_t> cancel_ops;
-  auto &commands = command_table.get_commands();
-  for (const auto &i : commands) {
-    auto &op = i.second;
-    const mds_gid_t op_mds_gid = op.mds_gid;
-    if (oldmap->is_dne_gid(op_mds_gid) || oldmap->is_laggy_gid(op_mds_gid)) {
-      ldout(cct, 1) << __func__ << ": cancelling command op " << i.first << dendl;
-      cancel_ops.push_back(i.first);
-      if (op.outs) {
-        std::ostringstream ss;
-        ss << "MDS " << op_mds_gid << " went away";
-        *(op.outs) = ss.str();
-      }
-      op.con->mark_down();
-      if (op.on_finish) {
-        op.on_finish->complete(-ETIMEDOUT);
-      }
-    }
-  }
-
-  for (const auto &tid : cancel_ops)
-    command_table.erase(tid);
-
-  oldmap.swap(mdsmap);
+  _mdsmap.swap(mdsmap);
 
   // reset session
   for (auto p = mds_sessions.begin(); p != mds_sessions.end(); ) {
@@ -2767,12 +2776,12 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
     MetaSession *session = &p->second;
     ++p;
 
-    int oldstate = oldmap->get_state(mds);
+    int oldstate = _mdsmap->get_state(mds);
     int newstate = mdsmap->get_state(mds);
     if (!mdsmap->is_up(mds)) {
       session->con->mark_down();
     } else if (mdsmap->get_addrs(mds) != session->addrs) {
-      old_inc = oldmap->get_incarnation(mds);
+      old_inc = _mdsmap->get_incarnation(mds);
       new_inc = mdsmap->get_incarnation(mds);
       if (old_inc != new_inc) {
         ldout(cct, 1) << "mds incarnation changed from "
@@ -5900,7 +5909,7 @@ int Client::mds_command(
   if (!iref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::scoped_lock lock(client_lock);
+  std::unique_lock cl(client_lock);
 
   int r;
   r = authenticate();
@@ -5948,23 +5957,28 @@ int Client::mds_command(
     // Open a connection to the target MDS
     ConnectionRef conn = messenger->connect_to_mds(info.get_addrs());
 
-    // Generate MDSCommandOp state
-    auto &op = command_table.start_command();
+    cl.unlock();
+    {
+      std::scoped_lock cmd_lock(command_lock);
+      // Generate MDSCommandOp state
+      auto &op = command_table.start_command();
 
-    op.on_finish = gather.new_sub();
-    op.cmd = cmd;
-    op.outbl = outbl;
-    op.outs = outs;
-    op.inbl = inbl;
-    op.mds_gid = target_gid;
-    op.con = conn;
+      op.on_finish = gather.new_sub();
+      op.cmd = cmd;
+      op.outbl = outbl;
+      op.outs = outs;
+      op.inbl = inbl;
+      op.mds_gid = target_gid;
+      op.con = conn;
 
-    ldout(cct, 4) << __func__ << ": new command op to " << target_gid
-      << " tid=" << op.tid << cmd << dendl;
+      ldout(cct, 4) << __func__ << ": new command op to " << target_gid
+        << " tid=" << op.tid << cmd << dendl;
 
-    // Construct and send MCommand
-    auto m = op.get_message(monclient->get_fsid());
-    conn->send_message2(std::move(m));
+      // Construct and send MCommand
+      MessageRef m = op.get_message(monclient->get_fsid());
+      conn->send_message2(std::move(m));
+    }
+    cl.lock();
   }
   gather.activate();
 
@@ -5977,7 +5991,7 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
 
   ldout(cct, 10) << __func__ << ": tid=" << m->get_tid() << dendl;
 
-  std::scoped_lock cl(client_lock);
+  std::scoped_lock cmd_lock(command_lock);
   if (!command_table.exists(tid)) {
     ldout(cct, 1) << __func__ << ": unknown tid " << tid << ", dropping" << dendl;
     return;
