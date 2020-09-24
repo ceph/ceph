@@ -307,6 +307,43 @@ class LocalRemote(object):
         from tempfile import mktemp
         return mktemp(suffix=suffix, dir=parentdir)
 
+    def write_file(self, path, data, sudo=False, mode=None, owner=None,
+                                     mkdir=False, append=False):
+        """
+        Write data to file
+
+        :param path:    file path on host
+        :param data:    str, binary or fileobj to be written
+        :param sudo:    use sudo to write file, defaults False
+        :param mode:    set file mode bits if provided
+        :param owner:   set file owner if provided
+        :param mkdir:   preliminary create the file directory, defaults False
+        :param append:  append data to the file, defaults False
+        """
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' of=' + path
+        if append:
+            args += ' conv=notrunc oflag=append'
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(path)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += '\n' + chmod + ' ' + mode + ' ' + path
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += '\n' + chown + ' ' + owner + ' ' + path
+        omit_sudo = False if sudo else True
+        self.run(args=args, stdin=data, omit_sudo=omit_sudo)
+
+    def sudo_write_file(self, path, data, **kwargs):
+        """
+        Write data to file with sudo, for more info see `write_file()`.
+        """
+        self.write_file(path, data, sudo=True, **kwargs)
+
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
         # Since Python's shell simulation can only work when commands are
         # provided as a list of argumensts...
