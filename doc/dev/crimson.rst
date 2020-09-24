@@ -15,6 +15,7 @@ Building Crimson
 
 Crismon is not enabled by default. To enable it::
 
+  $ WITH_SEASTAR=true ./install-deps.sh
   $ mkdir build && cd build
   $ cmake -DWITH_SEASTAR=ON ..
 
