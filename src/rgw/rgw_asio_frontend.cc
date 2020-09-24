@@ -56,6 +56,10 @@ class StreamIO : public rgw::asio::ClientIO {
     auto bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
     if (ec) {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
+      if (ec==boost::asio::error::broken_pipe) {
+        boost::system::error_code ec_ignored;
+        stream.lowest_layer().shutdown(tcp::socket::shutdown_both, ec_ignored);
+      }
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
     return bytes;
