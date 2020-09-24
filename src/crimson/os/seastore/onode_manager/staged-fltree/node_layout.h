@@ -274,8 +274,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     bool is_insert_left;
     {
       size_t empty_size = node_stage.size_before(0);
-      size_t available_size = node_stage.total_size() - empty_size;
-      size_t target_split_size = empty_size + (available_size + insert_size) / 2;
+      size_t total_size = node_stage.total_size();
+      size_t available_size = total_size - empty_size;
+      size_t filled_size = total_size - node_stage.free_size() - empty_size;
+      size_t target_split_size = empty_size + (filled_size + insert_size) / 2;
       // TODO adjust NODE_BLOCK_SIZE according to this requirement
       assert(insert_size < available_size / 2);
 
