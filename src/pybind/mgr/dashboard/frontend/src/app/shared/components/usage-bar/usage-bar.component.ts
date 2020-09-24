@@ -10,6 +10,8 @@ export class UsageBarComponent implements OnChanges {
   totalBytes: number;
   @Input()
   usedBytes: number;
+  @Input()
+  decimals = 0;
 
   usedPercentage: number;
   freePercentage: number;
@@ -18,7 +20,7 @@ export class UsageBarComponent implements OnChanges {
   constructor() {}
 
   ngOnChanges() {
-    this.usedPercentage = Math.round((this.usedBytes / this.totalBytes) * 100);
+    this.usedPercentage = this.totalBytes > 0 ? (this.usedBytes / this.totalBytes) * 100 : 0;
     this.freePercentage = 100 - this.usedPercentage;
     this.freeBytes = this.totalBytes - this.usedBytes;
   }

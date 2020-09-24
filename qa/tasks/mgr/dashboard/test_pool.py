@@ -6,7 +6,7 @@ import six
 import time
 from contextlib import contextmanager
 
-from .helper import DashboardTestCase, JAny, JList, JObj
+from .helper import DashboardTestCase, JAny, JList, JObj, JUnion
 
 log = logging.getLogger(__name__)
 
@@ -23,14 +23,16 @@ class PoolTest(DashboardTestCase):
     }, allow_unknown=True)
 
     pool_list_stat_schema = JObj(sub_elems={
-        'latest': int,
+        'latest': JUnion([int,float]),
         'rate': float,
         'rates': JList(JAny(none=False)),
     })
 
     pool_list_stats_schema = JObj(sub_elems={
+        'avail_raw': pool_list_stat_schema,
         'bytes_used': pool_list_stat_schema,
         'max_avail': pool_list_stat_schema,
+        'percent_used': pool_list_stat_schema,
         'rd_bytes': pool_list_stat_schema,
         'wr_bytes': pool_list_stat_schema,
         'rd': pool_list_stat_schema,
