@@ -60,7 +60,8 @@ string str_int(string s, int i)
   return s;
 }
 
-void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, uint64_t num_entries, uint64_t total_size)
+void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory category,
+                uint64_t num_entries, uint64_t total_size)
 {
   map<int, struct rgw_cls_list_ret> results;
   map<int, string> oids;
@@ -78,7 +79,7 @@ void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, ui
   ASSERT_EQ(num_entries, entries);
 }
 
-void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
+void index_prepare(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
                    string& tag, const cls_rgw_obj_key& key, string& loc,
                    uint16_t bi_flags = 0, bool log_op = true)
 {
@@ -88,7 +89,7 @@ void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
-void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
+void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
                     string& tag, int epoch, const cls_rgw_obj_key& key,
                     rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0,
                     bool log_op = true)
@@ -112,7 +113,7 @@ void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
 
 TEST_F(cls_rgw, index_basic)
 {
-  string bucket_oid = str_int("bucket", 0);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -144,7 +145,7 @@ TEST_F(cls_rgw, index_basic)
 
 TEST_F(cls_rgw, index_multiple_obj_writers)
 {
-  string bucket_oid = str_int("bucket", 1);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -180,7 +181,7 @@ TEST_F(cls_rgw, index_multiple_obj_writers)
 
 TEST_F(cls_rgw, index_remove_object)
 {
-  string bucket_oid = str_int("bucket", 2);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -271,7 +272,7 @@ TEST_F(cls_rgw, index_remove_object)
 
 TEST_F(cls_rgw, index_suggest)
 {
-  string bucket_oid = str_int("bucket", 3);
+  const string bucket_oid = __PRETTY_FUNCTION__;
   {
     ObjectWriteOperation op;
     cls_rgw_bucket_init_index(op);
@@ -383,7 +384,7 @@ TEST_F(cls_rgw, index_suggest)
  */
 TEST_F(cls_rgw, index_list)
 {
-  string bucket_oid = str_int("bucket", 4);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -459,7 +460,7 @@ TEST_F(cls_rgw, index_list)
  */
 TEST_F(cls_rgw, index_list_delimited)
 {
-  string bucket_oid = str_int("bucket", 7);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -562,7 +563,7 @@ TEST_F(cls_rgw, index_list_delimited)
 
 TEST_F(cls_rgw, bi_list)
 {
-  string bucket_oid = str_int("bucket", 5);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
  CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
 
@@ -684,7 +685,7 @@ static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 TEST_F(cls_rgw, gc_set)
 {
   /* add chains */
-  string oid = "obj";
+  string oid = __PRETTY_FUNCTION__;
   for (int i = 0; i < 10; i++) {
     char buf[32];
     snprintf(buf, sizeof(buf), "chain-%d", i);
@@ -760,7 +761,7 @@ TEST_F(cls_rgw, gc_set)
 TEST_F(cls_rgw, gc_list)
 {
   /* add chains */
-  string oid = "obj";
+  string oid = __PRETTY_FUNCTION__;
   for (int i = 0; i < 10; i++) {
     char buf[32];
     snprintf(buf, sizeof(buf), "chain-%d", i);
@@ -837,7 +838,7 @@ TEST_F(cls_rgw, gc_list)
 
 TEST_F(cls_rgw, gc_defer)
 {
-  string oid = "obj";
+  string oid = __PRETTY_FUNCTION__;
   string tag = "mychain";
 
   librados::ObjectWriteOperation op;
@@ -927,7 +928,7 @@ auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_e
 
 TEST_F(cls_rgw, usage_basic)
 {
-  string oid="usage.1";
+  const string oid = __PRETTY_FUNCTION__;
   string user="user1";
   uint64_t start_epoch{0}, end_epoch{(uint64_t) -1};
   int total_usage_entries = 512;
@@ -1024,7 +1025,7 @@ TEST_F(cls_rgw, usage_clear)
   ASSERT_EQ(0u, usage.size());
 }
 
-static int bilog_list(librados::IoCtx& ioctx, const std::string& oid,
+static int bilog_list(IoCtx& ioctx, const std::string& oid,
                       cls_rgw_bi_log_list_ret *result)
 {
   int retcode = 0;
@@ -1037,7 +1038,7 @@ static int bilog_list(librados::IoCtx& ioctx, const std::string& oid,
   return retcode;
 }
 
-static int bilog_trim(librados::IoCtx& ioctx, const std::string& oid,
+static int bilog_trim(IoCtx& ioctx, const std::string& oid,
                       const std::string& start_marker,
                       const std::string& end_marker)
 {
@@ -1048,7 +1049,7 @@ static int bilog_trim(librados::IoCtx& ioctx, const std::string& oid,
 
 TEST_F(cls_rgw, bi_log_trim)
 {
-  string bucket_oid = str_int("bucket", 6);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
