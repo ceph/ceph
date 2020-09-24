@@ -8816,7 +8816,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
 
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
-  SetVal(g_conf(), "bluestore_volume_selection_policy", "without_slow_dir");
+  SetVal(g_conf(), "bluestore_volume_selection_policy", "fit_to_fast");
 
   g_conf().apply_changes(nullptr);
 

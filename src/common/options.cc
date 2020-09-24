@@ -4687,11 +4687,11 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("use_some_extra")
-    .set_enum_allowed({ "rocksdb_original", "use_some_extra", "without_slow_dir" })
+    .set_enum_allowed({ "rocksdb_original", "use_some_extra", "fit_to_fast" })
     .set_description("Determines bluefs volume selection policy")
     .set_long_description("Determines bluefs volume selection policy. 'use_some_extra' policy allows to override RocksDB level "
                           "granularity and put high level's data to faster device even when the level doesn't completely fit there. "
-                          "'without_slow_dir' policy enables using 100% of faster disk capacity and allows the user to turn on "
+                          "'fit_to_fast' policy enables using 100% of faster disk capacity and allows the user to turn on "
                           "'level_compaction_dynamic_level_bytes' option in RocksDB options."),
 
     Option("bluestore_volume_selection_reserved_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
