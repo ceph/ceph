@@ -4535,7 +4535,7 @@ std::vector<Option> get_global_options() {
     .set_description("Enable use of rocksdb column families for bluestore metadata"),
 
     Option("bluestore_rocksdb_cfs", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("m(3) p(3,0-12) O(3,0-13) L")
+    .set_default("m(3) p(3,0-12) O(3,0-13)=block_cache={high_ratio=1.000} L")
     .set_description("Definition of column families and their sharding")
     .set_long_description("Space separated list of elements: column_def [ '=' rocksdb_options ]. "
 			  "column_def := column_name [ '(' shard_count [ ',' hash_begin '-' [ hash_end ] ] ')' ]. "
