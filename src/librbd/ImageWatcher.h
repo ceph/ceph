@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
+#include "common/AsyncOpTracker.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/Watcher.h"
@@ -171,6 +172,8 @@ private:
 
   Mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
+
+  AsyncOpTracker m_async_op_tracker;
 
   void handle_register_watch(int r);
 

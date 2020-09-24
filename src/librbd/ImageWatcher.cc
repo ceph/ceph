@@ -86,6 +86,9 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
 
   cancel_async_requests();
 
+  on_finish = new FunctionContext([this, on_finish](int r) {
+    m_async_op_tracker.wait_for_ops(on_finish);
+  });
   FunctionContext *ctx = new FunctionContext([this, on_finish](int r) {
     m_task_finisher->cancel_all(on_finish);
   });
@@ -127,6 +130,7 @@ int ImageWatcher<I>::notify_async_progress(const AsyncRequestId &request,
 template <typename I>
 void ImageWatcher<I>::schedule_async_complete(const AsyncRequestId &request,
                                               int r) {
+  m_async_op_tracker.start_op();
   FunctionContext *ctx = new FunctionContext(
     boost::bind(&ImageWatcher<I>::notify_async_complete, this, request, r));
   m_task_finisher->queue(ctx);
@@ -152,13 +156,16 @@ void ImageWatcher<I>::handle_async_complete(const AsyncRequestId &request,
   if (ret_val < 0) {
     lderr(m_image_ctx.cct) << this << " failed to notify async complete: "
 			   << cpp_strerror(ret_val) << dendl;
-    if (ret_val == -ETIMEDOUT) {
+    if (ret_val == -ETIMEDOUT && !is_unregistered()) {
       schedule_async_complete(request, r);
+      m_async_op_tracker.finish_op();
+      return;
     }
-  } else {
-    RWLock::WLocker async_request_locker(m_async_request_lock);
-    m_async_pending.erase(request);
   }
+
+  RWLock::WLocker async_request_locker(m_async_request_lock);
+  m_async_pending.erase(request);
+  m_async_op_tracker.finish_op();
 }
 
 template <typename I>
