@@ -63,7 +63,7 @@ public:
     tags(std::move(tags)) {
     if (this->path.empty())
       this->path = "/";
-    extract_name_tenant(this->name);
+    extract_name_tenant(name);
     if (max_session_duration_str.empty()) {
       max_session_duration = SESSION_DURATION_MIN;
     } else {
