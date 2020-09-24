@@ -437,31 +437,52 @@ static std::set<ghobject_t> build_key_set(
   return ret;
 }
 
-TEST_F(b_dummy_tree_test_t, 4_split_leaf_node)
-{
-  run_async([this] {
-    logger().info("\n---------------------------------------------"
-                  "\nbefore leaf node split:\n");
-    auto keys = build_key_set({2, 5}, {2, 5}, {2, 5});
-    std::vector<std::tuple<ghobject_t,
-                           const onode_t*,
-                           Btree::Cursor>> insert_history;
-    auto onodes = Onodes(0);
-    for (auto& key : keys) {
-      auto& value = onodes.create(120);
-      auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
-      assert(success == true);
-      Onodes::validate_cursor(cursor, key, value);
-      insert_history.emplace_back(key, &value, cursor);
-    }
-    assert(tree.height(t).unsafe_get0() == 1);
-    assert(!tree.test_is_clean());
-    std::ostringstream oss;
-    tree.dump(t, oss);
-    logger().info("\n{}\n", oss.str());
+class TestTree {
+  NodeExtentManagerURef moved_nm;
+  TransactionRef ref_t;
+  Transaction& t;
+  context_t c;
+  Btree tree;
+  Onodes onodes;
+  std::vector<std::tuple<
+    ghobject_t, const onode_t*, Btree::Cursor>> insert_history;
 
-    auto f_split = [this, &insert_history] (
-        const ghobject_t& key, const onode_t& value) {
+ public:
+  TestTree()
+    : moved_nm{NodeExtentManager::create_dummy()},
+      ref_t{make_transaction()},
+      t{*ref_t},
+      c{*moved_nm, t},
+      tree{std::move(moved_nm)},
+      onodes{0} {}
+
+  seastar::future<> build_tree(
+      std::pair<unsigned, unsigned> range_2,
+      std::pair<unsigned, unsigned> range_1,
+      std::pair<unsigned, unsigned> range_0,
+      size_t onode_size) {
+    return seastar::async([this, range_2, range_1, range_0, onode_size] {
+      tree.mkfs(t).unsafe_get0();
+      logger().info("\n---------------------------------------------"
+                    "\nbefore leaf node split:\n");
+      auto keys = build_key_set(range_2, range_1, range_0);
+      for (auto& key : keys) {
+        auto& value = onodes.create(onode_size);
+        auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
+        assert(success == true);
+        Onodes::validate_cursor(cursor, key, value);
+        insert_history.emplace_back(key, &value, cursor);
+      }
+      assert(tree.height(t).unsafe_get0() == 1);
+      assert(!tree.test_is_clean());
+      std::ostringstream oss;
+      tree.dump(t, oss);
+      logger().info("\n{}\n", oss.str());
+    });
+  }
+
+  seastar::future<> split(const ghobject_t& key, const onode_t& value) {
+    return seastar::async([this, key, &value] {
       Btree tree_clone(NodeExtentManager::create_dummy());
       auto ref_t_clone = make_transaction();
       Transaction& t_clone = *ref_t_clone;
@@ -483,83 +504,99 @@ TEST_F(b_dummy_tree_test_t, 4_split_leaf_node)
       }
       auto result = tree_clone.lower_bound(t_clone, key).unsafe_get0();
       Onodes::validate_cursor(result, key, value);
-    };
+    });
+  }
 
-    auto& onode = onodes.create(1280);
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 2; insert to left front at stage 2, 1, 0\n");
-    f_split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode);
-    f_split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode);
-    f_split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode);
+  const onode_t& create_onode(size_t size) {
+    return onodes.create(size);
+  }
+};
 
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1, 0\n");
-    f_split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode);
-    f_split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode);
-    f_split(make_ghobj(2, 3, 3, "ns3", "oid3", 3, 3), onode);
-    f_split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode);
-    f_split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode);
+struct c_dummy_test_t : public seastar_test_suite_t {};
 
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
-    f_split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode);
-    f_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode);
-    f_split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), onode);
-    f_split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode);
-    f_split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode);
+TEST_F(c_dummy_test_t, 4_split_leaf_node)
+{
+  run_async([this] {
+    {
+      TestTree test;
+      test.build_tree({2, 5}, {2, 5}, {2, 5}, 120).get0();
 
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
-    f_split(make_ghobj(4, 4, 4, "ns4", "oid4", 5, 5), onode);
-    f_split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), onode);
-    f_split(make_ghobj(5, 5, 5, "ns3", "oid3", 3, 3), onode);
+      auto& onode = test.create_onode(1280);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 2; insert to left front at stage 2, 1, 0\n");
+      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode).get0();
+      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode).get0();
+      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode).get0();
 
-    auto& onode1 = onodes.create(512);
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 1; insert to left middle at stage 0, 1, 2, 1, 0\n");
-    f_split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode1);
-    f_split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode1);
-    f_split(make_ghobj(2, 2, 3, "ns3", "oid3", 3, 3), onode1);
-    f_split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode1);
-    f_split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode1);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1, 0\n");
+      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode).get0();
+      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode).get0();
+      test.split(make_ghobj(2, 3, 3, "ns3", "oid3", 3, 3), onode).get0();
+      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode).get0();
 
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 1; insert to left back at stage 0, 1, 0\n");
-    f_split(make_ghobj(3, 3, 3, "ns2", "oid2", 5, 5), onode1);
-    f_split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), onode1);
-    f_split(make_ghobj(3, 3, 3, "ns3", "oid3", 1, 1), onode1);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode).get0();
+      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode).get0();
+      test.split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), onode).get0();
+      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode).get0();
+      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode).get0();
 
-    auto& onode2 = onodes.create(256);
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
-    f_split(make_ghobj(3, 3, 3, "ns3", "oid3", 5, 5), onode2);
-    f_split(make_ghobj(3, 3, 3, "ns3", "oid4", 3, 3), onode2);
-    f_split(make_ghobj(3, 3, 3, "ns4", "oid4", 1, 1), onode2);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
+      test.split(make_ghobj(4, 4, 4, "ns4", "oid4", 5, 5), onode).get0();
+      test.split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), onode).get0();
+      test.split(make_ghobj(5, 5, 5, "ns3", "oid3", 3, 3), onode).get0();
 
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 1; insert to right middle at stage 0, 1, 2, 1, 0\n");
-    f_split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode2);
-    f_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode2);
-    f_split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode2);
-    f_split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode2);
-    f_split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode2);
+      auto& onode1 = test.create_onode(512);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 1; insert to left middle at stage 0, 1, 2, 1, 0\n");
+      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode1).get0();
+      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode1).get0();
+      test.split(make_ghobj(2, 2, 3, "ns3", "oid3", 3, 3), onode1).get0();
+      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode1).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode1).get0();
 
-    auto& onode3 = onodes.create(768);
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 0; insert to right middle at stage 0, 1, 2, 1, 0\n");
-    f_split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode3);
-    f_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode3);
-    f_split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode3);
-    f_split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode3);
-    f_split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode3);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 1; insert to left back at stage 0, 1, 0\n");
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 5, 5), onode1).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), onode1).get0();
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 1, 1), onode1).get0();
 
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 0; insert to right front at stage 0\n");
-    f_split(make_ghobj(3, 3, 3, "ns4", "oid4", 2, 3), onode3);
+      auto& onode2 = test.create_onode(256);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 5, 5), onode2).get0();
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid4", 3, 3), onode2).get0();
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 1, 1), onode2).get0();
 
-    logger().info("\n---------------------------------------------"
-                  "\nsplit at stage 0; insert to left back at stage 0\n");
-    f_split(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), onode3);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 1; insert to right middle at stage 0, 1, 2, 1, 0\n");
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode2).get0();
+      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode2).get0();
+      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode2).get0();
+      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode2).get0();
+      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode2).get0();
+
+      auto& onode3 = test.create_onode(768);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 0; insert to right middle at stage 0, 1, 2, 1, 0\n");
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode3).get0();
+      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode3).get0();
+      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode3).get0();
+      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode3).get0();
+      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode3).get0();
+
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 0; insert to right front at stage 0\n");
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 2, 3), onode3).get0();
+
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at stage 0; insert to left back at stage 0\n");
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), onode3).get0();
+    }
 
     // TODO: test split at {0, 0, 0}
     // TODO: test split at {END, END, END}
@@ -853,9 +890,7 @@ class DummyChildPool {
 
 }
 
-struct c_dummy_children_test_t : public seastar_test_suite_t {};
-
-TEST_F(c_dummy_children_test_t, 5_split_internal_node)
+TEST_F(c_dummy_test_t, 5_split_internal_node)
 {
   run_async([this] {
     DummyChildPool pool;
