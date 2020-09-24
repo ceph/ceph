@@ -1551,20 +1551,17 @@ out:
   return mds;
 }
 
-
 void Client::connect_mds_targets(mds_rank_t mds)
 {
   ldout(cct, 10) << __func__ << " for mds." << mds << dendl;
   ceph_assert(mds_sessions.count(mds));
   const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
-  for (set<mds_rank_t>::const_iterator q = info.export_targets.begin();
-       q != info.export_targets.end();
-       ++q) {
-    if (mds_sessions.count(*q) == 0 &&
-	mdsmap->is_clientreplay_or_active_or_stopping(*q)) {
+  for (const auto &rank : info.export_targets) {
+    if (mds_sessions.count(rank) == 0 &&
+	mdsmap->is_clientreplay_or_active_or_stopping(rank)) {
       ldout(cct, 10) << "check_mds_sessions opening mds." << mds
-		     << " export target mds." << *q << dendl;
-      _open_mds_session(*q);
+		     << " export target mds." << rank << dendl;
+      _open_mds_session(rank);
     }
   }
 }
@@ -1585,6 +1582,7 @@ void Client::dump_mds_sessions(Formatter *f, bool cap_dump)
   f->close_section();
   f->dump_int("mdsmap_epoch", mdsmap->get_epoch());
 }
+
 void Client::dump_mds_requests(Formatter *f)
 {
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
@@ -2616,8 +2614,6 @@ bool Client::ms_dispatch2(const MessageRef &m)
     ldout(cct, 10) << "inactive, discarding " << *m << dendl;
     return true;
   }
-//  if (!is_initialized())
-//    return true;
 
   std::scoped_lock l(client_lock);
 
@@ -2751,10 +2747,8 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
     }
   }
 
-  for (std::list<ceph_tid_t>::iterator i = cancel_ops.begin();
-       i != cancel_ops.end(); ++i) {
-    command_table.erase(*i);
-  }
+  for (const auto &tid : cancel_ops)
+    command_table.erase(tid);
 
   // reset session
   for (auto p = mds_sessions.begin(); p != mds_sessions.end(); ) {
