@@ -1139,3 +1139,253 @@ TEST_F(cls_rgw, bi_log_trim)
     EXPECT_FALSE(truncated);
   }
 }
+
+// cls_rgw_head_prefetch
+TEST_F(cls_rgw, head_prefetch_full)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 0xffffffffffffffff;
+  constexpr uint64_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    // initialize uncompressed head object
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_less_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 48;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(prefetch_length, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_more_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 96;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+// compress at 50% ratio with the given block size
+static bufferlist make_compression_attr(uint64_t orig_size, uint64_t block_size)
+{
+  std::vector<compression_block> blocks;
+  uint64_t logical_offset = 0;
+  uint64_t compressed_offset = 0;
+  uint64_t remaining = orig_size;
+  while (remaining) {
+    const uint64_t logical_length = std::min(block_size, remaining);
+    const uint64_t compressed_length = logical_length / 2;
+    blocks.push_back({logical_offset, compressed_offset, compressed_length});
+    logical_offset += logical_length;
+    compressed_offset += compressed_length;
+    remaining -= logical_length;
+  }
+
+  RGWCompressionInfo info;
+  info.compression_type = "test";
+  info.orig_size = orig_size;
+  info.blocks = std::move(blocks);
+
+  bufferlist bl;
+  encode(info, bl);
+  return bl;
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_full)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 0xffffffffffffffff;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    // initialize compressed head object
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_less_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 96; // compressed to 48
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(48, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_more_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 160; // compressed to 80
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_offset_off_boundary)
+{
+  constexpr uint64_t prefetch_offset = 36;
+  constexpr uint64_t prefetch_length = 61; // just enough to span an extra block
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(16, offset); // block boundary before 36
+    EXPECT_EQ(48, data.length()); // round up to 3 compressed blocks
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_single_block_off_boundary)
+{
+  constexpr uint64_t prefetch_offset = 36;
+  constexpr uint64_t prefetch_length = 1;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(16, offset); // block boundary before 36
+    EXPECT_EQ(16, data.length()); // round up to 1 compressed block
+  }
+}
