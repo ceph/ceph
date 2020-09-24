@@ -131,6 +131,8 @@ private:
   bool is_deep_copy() const;
 
   void compute_deep_copy_snap_ids();
+  void convert_copyup_extent_map();
+  void prepare_copyup_data();
 };
 
 } // namespace io
