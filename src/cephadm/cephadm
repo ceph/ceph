@@ -3052,10 +3052,14 @@ def command_bootstrap():
         os.fchmod(f.fileno(), 0o600)
         f.write('[client.admin]\n'
                 '\tkey = ' + admin_key + '\n')
+        if args.ssh_user:
+            shutil.chown(f.name(), user=args.ssh_user, group=args.ssh_user)
     logger.info('Wrote keyring to %s' % args.output_keyring)
 
     with open(args.output_config, 'w') as f:
         f.write(config)
+        if args.ssh_user:
+            shutil.chown(f.name(), user=args.ssh_user, group=args.ssh_user)
     logger.info('Wrote config to %s' % args.output_config)
 
     # wait for the service to become available
