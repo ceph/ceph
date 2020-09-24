@@ -456,26 +456,25 @@ int RocksDBStore::create_and_open(ostream &out,
   return do_open(out, true, false, cfs);
 }
 
-int RocksDBStore::init_block_cache(uint64_t size, rocksdb::BlockBasedTableOptions& bbto) {
-  auto shard_bits = cct->_conf()->rocksdb_cache_shard_bits;
-  if (cct->_conf()->rocksdb_cache_type == "binned_lru") {
-    bbto.block_cache = rocksdb_cache::NewBinnedLRUCache(cct, size, shard_bits);
-  } else if (cct->_conf()->rocksdb_cache_type == "lru") {
-    bbto.block_cache = rocksdb::NewLRUCache(size, shard_bits);
-  } else if (cct->_conf()->rocksdb_cache_type == "clock") {
-    bbto.block_cache = rocksdb::NewClockCache(size, shard_bits);
-    if (!bbto.block_cache) {
-      derr << "rocksdb_cache_type '" << cct->_conf()->rocksdb_cache_type
+std::shared_ptr<rocksdb::Cache> RocksDBStore::create_block_cache(
+    const std::string& cache_type, size_t cache_size, double cache_prio_high) {
+  std::shared_ptr<rocksdb::Cache> cache;
+  auto shard_bits = cct->_conf->rocksdb_cache_shard_bits;
+  if (cache_type == "binned_lru") {
+    cache = rocksdb_cache::NewBinnedLRUCache(cct, cache_size, shard_bits, false, cache_prio_high);
+  } else if (cache_type == "lru") {
+    cache = rocksdb::NewLRUCache(cache_size, shard_bits);
+  } else if (cache_type == "clock") {
+    cache = rocksdb::NewClockCache(cache_size, shard_bits);
+    if (!cache) {
+      derr << "rocksdb_cache_type '" << cache
            << "' chosen, but RocksDB not compiled with LibTBB. "
            << dendl;
-      return -EINVAL;
     }
   } else {
-    derr << "unrecognized rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
-      << "'" << dendl;
-    return -EINVAL;
+    derr << "unrecognized rocksdb_cache_type '" << cache_type << "'" << dendl;
   }
-  return 0;
+  return cache;
 }
 
 int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt)
@@ -547,8 +546,11 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   }
   uint64_t row_cache_size = cache_size * cct->_conf->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
-  init_block_cache(block_cache_size, bbt_opts);
 
+  bbt_opts.block_cache = create_block_cache(cct->_conf->rocksdb_cache_type, block_cache_size);
+  if (!bbt_opts.block_cache) {
+    return -EINVAL;
+  }
   bbt_opts.block_size = cct->_conf->rocksdb_block_size;
 
   if (row_cache_size > 0)
@@ -772,12 +774,19 @@ int RocksDBStore::create_shards(const rocksdb::Options& opt,
     // the base for new CF
     rocksdb::ColumnFamilyOptions cf_opt(opt);
     // user input options will override the base options
+    std::unordered_map<std::string, std::string> column_opts_map;
+    std::string block_cache_opts;
+    int r = extract_block_cache_options(p.options, &column_opts_map, &block_cache_opts);
+    if (r != 0) {
+      derr << __func__ << " failed to parse options; column family=" << p.name <<
+	" options=" << p.options << dendl;
+      return -EINVAL;
+    }
     rocksdb::Status status;
-    status = rocksdb::GetColumnFamilyOptionsFromString(
-						       cf_opt, p.options, &cf_opt);
+    status = rocksdb::GetColumnFamilyOptionsFromMap(cf_opt, column_opts_map, &cf_opt);
     if (!status.ok()) {
-      derr << __func__ << " invalid db column family option string for CF: "
-	   << p.name << dendl;
+      derr << __func__ << " invalid db options; column family="
+	   << p.name << " options=" << p.options << dendl;
       return -EINVAL;
     }
     install_cf_mergeop(p.name, &cf_opt);
@@ -821,6 +830,7 @@ int RocksDBStore::apply_sharding(const rocksdb::Options& opt,
     }
     r = create_shards(opt, sharding_def);
     if (r != 0 ) {
+      derr << __func__ << " create_shards failed error=" << r << dendl;
       return r;
     }
     opt.env->CreateDir(sharding_def_dir);
@@ -837,8 +847,32 @@ int RocksDBStore::apply_sharding(const rocksdb::Options& opt,
 }
 // linking to rocksdb function defined in options_helper.cc
 // it can parse nested params like "nested_opt={opt1=1;opt2=2}"
-extern rocksdb::Status StringToMap(const std::string& opts_str,
+
+extern rocksdb::Status rocksdb::StringToMap(const std::string& opts_str,
 				   std::unordered_map<std::string, std::string>* opts_map);
+
+int RocksDBStore::extract_block_cache_options(const std::string& opts_str,
+					      std::unordered_map<std::string, std::string>* column_opts_map,
+					      std::string* block_cache_opt)
+{
+  dout(5) << __func__ << " opts_str=" << opts_str << dendl;
+  rocksdb::Status status = rocksdb::StringToMap(opts_str, column_opts_map);
+  if (!status.ok()) {
+    dout(5) << __func__ << " error '" << status.getState() <<
+      "' while parsing options '" << opts_str << "'" << dendl;
+    return -EINVAL;
+  }
+  //extract "block_cache" option
+  if (auto it = column_opts_map->find("block_cache"); it != column_opts_map->end()) {
+    *block_cache_opt = it->second;
+    column_opts_map->erase(it);
+  } else {
+    block_cache_opt->clear();
+  }
+  return 0;
+}
+
+
 
 int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
 				  std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
@@ -857,7 +891,9 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
       derr << __func__ << " cannot read from " << sharding_def_file << dendl;
       return -EIO;
     }
+    dout(20) << __func__ << " sharding=" << stored_sharding_text << dendl;
   } else {
+    dout(30) << __func__ << " no sharding" << dendl;
     //no "sharding_def" present
   }
   //check if sharding_def matches stored_sharding_def
@@ -890,72 +926,87 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
 
   for (auto& column : stored_sharding_def) {
     rocksdb::ColumnFamilyOptions cf_opt(opt);
-    //sift column.options into 2 categories:
-    // - column family options
-    // - block cache options
     std::unordered_map<std::string, std::string> options_map;
-    status = StringToMap(column.options, &options_map);
-    if (!status.ok()) {
-      dout(5) << __func__ << " error '" << status.getState() << "' while parsing options '" <<
-	column.options << dendl;
-      return -EIO;
+    std::string block_cache_opt;
+
+    int r = extract_block_cache_options(column.options, &options_map, &block_cache_opt);
+    if (r != 0) {
+      derr << __func__ << " failed to parse options; column family=" << column.name <<
+	" options=" << column.options << dendl;
+      return -EINVAL;
     }
-    //extract "block_cache" options
-    std::unordered_map<std::string, std::string> cache_options_map;
-    for (auto it = options_map.begin; it!= options_map.end() ; /*nop*/ ) {
-      if (it->first.find("block_cache.") == 0) {
-	cache_options_map.insert(it->first.substr(strlen("block_cache.")), it->second);
-	it = erase(it);
-      } else {
-	++it;
-      }
-    }
-    status = rocksdb::GetColumnFamilyOptionsFromMap(
-						    cf_opt, options_map, &cf_opt);
+    status = rocksdb::GetColumnFamilyOptionsFromMap(cf_opt, options_map, &cf_opt);
     if (!status.ok()) {
       derr << __func__ << " invalid db column family options for CF '"
 	   << column.name << "': " << column.options << dendl;
-      derr << __func__ << "error = '" << status.getState() << "'" << dendl;
+      derr << __func__ << " error = '" << status.getState() << "'" << dendl;
       return -EINVAL;
     }
     install_cf_mergeop(column.name, &cf_opt);
-    if (!cache_options_map.empty()) {
-      bool require_new_block_cache = false;
-      std::string cache_type = cct->_conf()->rocksdb_cache_type;      
-      if (auto it = cache_options_map.find("cache_type"); it !=cache_options_map.end()) {
-	cache_type = it->second();
-	cache_options_map.erase(it);
-	require_new_block_cache = true;
-      }
-      size_t cache_size = cct->_conf()->rocksdb_cache_size;
-      if (auto it = cache_options_map.find("cache_size"); it !=cache_options_map.end()) {
-	std::string error;
-	cache_size = strict_iecstrtoll(it->second(), &error);
-	if (!error.empty()) {
-	  derr << __func__ << " invalid size: '" << it->second() << "'" << dendl;
-	}
-	cache_options_map.erase(it);
-	require_new_block_cache = true;
-      }
-      std::shared_ptr<rocksdb::Cache> block_cache;
-      if (require_new_block_cache) {
-	block_cache = create_block_cache(cache_type, case_size);
-	if (!block_cache) {
-	  return -EINVAL;
-	}
-	
-      } else {
-	block_cache = bbt_opts.block_cache;
-      }
-      rocksdb::BlockBasedTableOptions column_bbt_opts;
-      status = GetBlockBasedTableOptionsFromMap(bbt_opts, cache_options_map, column_bbt_opts);
+
+    if (!block_cache_opt.empty()) {
+      std::unordered_map<std::string, std::string> cache_options_map;
+      status = rocksdb::StringToMap(block_cache_opt, &cache_options_map);
       if (!status.ok()) {
-	derr << __func__ << " invalid cache options for CF '"
-	     << column.name << "': " << cache_options_map << dendl;
-	derr << __func__ << "error = '" << status.getState() << "'" << dendl;
+	derr << __func__ << " invalid block cache options; column=" << column.name <<
+	  " options=" << block_cache_opt << dendl;
+	derr << __func__ << " error = '" << status.getState() << "'" << dendl;
 	return -EINVAL;
       }
-         
+      bool require_new_block_cache = false;
+      std::string cache_type = cct->_conf->rocksdb_cache_type;
+      if (const auto it = cache_options_map.find("type"); it !=cache_options_map.end()) {
+	cache_type = it->second;
+	cache_options_map.erase(it);
+	require_new_block_cache = true;
+      }
+      size_t cache_size = cct->_conf->rocksdb_cache_size;
+      if (auto it = cache_options_map.find("size"); it !=cache_options_map.end()) {
+	std::string error;
+	cache_size = strict_iecstrtoll(it->second.c_str(), &error);
+	if (!error.empty()) {
+	  derr << __func__ << " invalid size: '" << it->second << "'" << dendl;
+	}
+	cache_options_map.erase(it);
+	require_new_block_cache = true;
+      }
+      double high_pri_pool_ratio = 0.0;
+      if (auto it = cache_options_map.find("high_ratio"); it !=cache_options_map.end()) {
+	std::string error;
+	high_pri_pool_ratio = strict_strtod(it->second.c_str(), &error);
+	if (!error.empty()) {
+	  derr << __func__ << " invalid high_pri (float): '" << it->second << "'" << dendl;
+	}
+	cache_options_map.erase(it);
+	require_new_block_cache = true;
+      }
+
+      rocksdb::BlockBasedTableOptions column_bbt_opts;
+      status = GetBlockBasedTableOptionsFromMap(bbt_opts, cache_options_map, &column_bbt_opts);
+      if (!status.ok()) {
+	derr << __func__ << " invalid block cache options; column=" << column.name <<
+	  " options=" << block_cache_opt << dendl;
+	derr << __func__ << " error = '" << status.getState() << "'" << dendl;
+	return -EINVAL;
+      }
+      std::shared_ptr<rocksdb::Cache> block_cache;
+      if (column_bbt_opts.no_block_cache) {
+	// clear all settings except no_block_cache
+	// rocksdb does not like then
+	column_bbt_opts = rocksdb::BlockBasedTableOptions();
+	column_bbt_opts.no_block_cache = true;
+      } else {
+	if (require_new_block_cache) {
+	  block_cache = create_block_cache(cache_type, cache_size, high_pri_pool_ratio);
+	  if (!block_cache) {
+	    dout(5) << __func__ << " failed to create block cache for params: " << block_cache_opt << dendl;
+	    return -EINVAL;
+	  }
+	} else {
+	  block_cache = bbt_opts.block_cache;
+	}
+      }
+      column_bbt_opts.block_cache = block_cache;
       cf_bbt_opts[column.name] = column_bbt_opts;
       cf_opt.table_factory.reset(NewBlockBasedTableFactory(cf_bbt_opts[column.name]));
     }
