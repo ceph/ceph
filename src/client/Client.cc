@@ -2122,6 +2122,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
   mds_rank_t from = mds_rank_t(m->get_source().num());
   ldout(cct, 10) << __func__ << " " << *m << " from mds." << from << dendl;
 
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(from, m->get_connection().get());
   if (!session) {
     ldout(cct, 10) << " discarding session message from sessionless mds " << m->get_source_inst() << dendl;
@@ -2330,6 +2331,8 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
 void Client::handle_client_request_forward(const MConstRef<MClientRequestForward>& fwd)
 {
   mds_rank_t mds = mds_rank_t(fwd->get_source().num());
+
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(mds, fwd->get_connection().get());
   if (!session) {
     return;
@@ -2376,6 +2379,8 @@ bool Client::is_dir_operation(MetaRequest *req)
 void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
 {
   mds_rank_t mds_num = mds_rank_t(reply->get_source().num());
+
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(mds_num, reply->get_connection().get());
   if (!session) {
     return;
@@ -2519,6 +2524,8 @@ void Client::_handle_full_flag(int64_t pool)
 void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
   std::set<entity_addr_t> new_blocklists;
+
+  std::scoped_lock cl(client_lock);
   objecter->consume_blocklist_events(&new_blocklists);
 
   const auto myaddrs = messenger->get_myaddrs();
@@ -2615,8 +2622,6 @@ bool Client::ms_dispatch2(const MessageRef &m)
     return true;
   }
 
-  std::scoped_lock l(client_lock);
-
   switch (m->get_type()) {
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
@@ -2674,6 +2679,7 @@ bool Client::ms_dispatch2(const MessageRef &m)
   }
 
   // unmounting?
+  std::scoped_lock cl(client_lock);
   if (is_unmounting()) {
     ldout(cct, 10) << "unmounting: trim pass, size was " << lru.lru_get_size() 
              << "+" << inode_map.size() << dendl;
@@ -2693,6 +2699,7 @@ bool Client::ms_dispatch2(const MessageRef &m)
 
 void Client::handle_fs_map(const MConstRef<MFSMap>& m)
 {
+  std::scoped_lock cl(client_lock);
   fsmap.reset(new FSMap(m->get_fsmap()));
 
   signal_cond_list(waiting_for_fsmap);
@@ -2702,6 +2709,7 @@ void Client::handle_fs_map(const MConstRef<MFSMap>& m)
 
 void Client::handle_fs_map_user(const MConstRef<MFSMapUser>& m)
 {
+  std::scoped_lock cl(client_lock);
   fsmap_user.reset(new FSMapUser);
   *fsmap_user = m->get_fsmap();
 
@@ -2712,6 +2720,8 @@ void Client::handle_fs_map_user(const MConstRef<MFSMapUser>& m)
 void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 {
   mds_gid_t old_inc, new_inc;
+
+  std::scoped_lock cl(client_lock);
   if (m->get_epoch() <= mdsmap->get_epoch()) {
     ldout(cct, 1) << __func__ << " epoch " << m->get_epoch()
                   << " is identical to or older than our "
@@ -3035,8 +3045,9 @@ void Client::handle_lease(const MConstRef<MClientLease>& m)
   ldout(cct, 10) << __func__ << " " << *m << dendl;
 
   ceph_assert(m->get_action() == CEPH_MDS_LEASE_REVOKE);
-
   mds_rank_t mds = mds_rank_t(m->get_source().num());
+
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     return;
@@ -4883,6 +4894,8 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
   mds_rank_t mds = mds_rank_t(m->get_source().num());
+
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     return;
@@ -4953,6 +4966,8 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
 void Client::handle_quota(const MConstRef<MClientQuota>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
+
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     return;
@@ -4977,6 +4992,8 @@ void Client::handle_quota(const MConstRef<MClientQuota>& m)
 void Client::handle_caps(const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
+
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     return;
@@ -5959,6 +5976,7 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
 
   ldout(cct, 10) << __func__ << ": tid=" << m->get_tid() << dendl;
 
+  std::scoped_lock cl(client_lock);
   if (!command_table.exists(tid)) {
     ldout(cct, 1) << __func__ << ": unknown tid " << tid << ", dropping" << dendl;
     return;
@@ -14964,6 +14982,7 @@ void Client::handle_client_reclaim_reply(const MConstRef<MClientReclaimReply>& r
   mds_rank_t from = mds_rank_t(reply->get_source().num());
   ldout(cct, 10) << __func__ << " " << *reply << " from mds." << from << dendl;
 
+  std::scoped_lock cl(client_lock);
   MetaSession *session = _get_mds_session(from, reply->get_connection().get());
   if (!session) {
     ldout(cct, 10) << " discarding reclaim reply from sessionless mds." <<  from << dendl;
