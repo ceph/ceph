@@ -1359,5 +1359,116 @@ namespace crimson {
       EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{3})); // 3 over
     }
 
+
+    TEST(dmclock_server_pull, pull_wait_at_limit) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 52;
+      ClientId client2 = 8;
+
+      // Create client1 with high limit.
+      // Create client2 with low limit and with lower weight than client1
+      dmc::ClientInfo info1(1.0, 2.0, 100.0);
+      dmc::ClientInfo info2(1.0, 1.0, 2.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+        if (client1 == c) {
+          return &info1;
+        } else if (client2 == c) {
+          return &info2;
+        } else {
+          ADD_FAILURE() << "client info looked up for non-existent client";
+          return nullptr;
+        }
+      };
+
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
+
+      ReqParams req_params(1,1);
+
+      // make sure all times are before now
+      auto add_time = dmc::get_time() - 1.0;
+      auto old_time = add_time;
+
+      for (int i = 0; i < 50; ++i) {
+        EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, add_time));
+        EXPECT_EQ(0, pq->add_request_time(Request{}, client2, req_params, add_time));
+        add_time += 0.01;
+      }
+
+      EXPECT_EQ(2u, pq->client_count());
+      EXPECT_EQ(100u, pq->request_count());
+      int c1_count = 0;
+      int c2_count = 0;
+
+      // Pull couple of requests, should come from reservation queue.
+      // One request each from client1 and client2 should be pulled.
+      for (int i = 0; i < 2; ++i) {
+        Queue::PullReq pr = pq->pull_request();
+        EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+        auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+        if (client1 == retn.client) {
+          ++c1_count;
+        } else if (client2 == retn.client) {
+          ++c2_count;
+        } else {
+          ADD_FAILURE() << "got request from neither of two clients";
+        }
+
+        EXPECT_EQ(PhaseType::reservation, retn.phase);
+      }
+
+      EXPECT_EQ(1, c1_count) <<
+        "one request should have come from first client";
+      EXPECT_EQ(1, c2_count) <<
+        "one request should have come from second client";
+
+      EXPECT_EQ(2u, pq->client_count());
+      EXPECT_EQ(98u, pq->request_count());
+
+      // Pull more requests out.
+      // All remaining requests from client1 should be pulled.
+      // Only 1 request from client2 should be pulled.
+      for (int i = 0; i < 50; ++i) {
+        Queue::PullReq pr = pq->pull_request();
+        EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+        auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+        if (client1 == retn.client) {
+          ++c1_count;
+        } else if (client2 == retn.client) {
+          ++c2_count;
+        } else {
+          ADD_FAILURE() << "got request from neither of two clients";
+        }
+
+        EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(2u, pq->client_count());
+      EXPECT_EQ(48u, pq->request_count());
+
+      // Pulling the remaining client2 requests shouldn't succeed.
+      Queue::PullReq pr = pq->pull_request();
+      EXPECT_EQ(Queue::NextReqType::future, pr.type);
+      Time when_ready = pr.getTime();
+      EXPECT_EQ(old_time + 2.0, when_ready);
+
+      EXPECT_EQ(50, c1_count) <<
+        "half of the total requests should have come from first client";
+      EXPECT_EQ(2, c2_count) <<
+        "only two requests should have come from second client";
+
+      // Trying to pull a request after restoring the limit should succeed.
+      pr = pq->pull_request(old_time + 2.0);
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+      auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+      EXPECT_EQ(retn.client, client2);
+      EXPECT_EQ(47u, pq->request_count());
+    } // dmclock_server_pull.pull_wait_at_limit
+
   } // namespace dmclock
 } // namespace crimson
