@@ -426,6 +426,8 @@ void FSMirror::mirror_status(Formatter *f) {
   } else if (is_blocklisted(locker)) {
     f->dump_string("state", "blocklisted");
   } else {
+    // dump rados addr for blocklist test
+    f->dump_string("rados_inst", m_addrs);
     f->open_object_section("peers");
     for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
       peer.dump(f);
