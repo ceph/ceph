@@ -29,6 +29,13 @@ could help daemon placement, crush and hardware support.
 
 <MOCKUP - Host add - labels, BMC, rack location>
 
+Removing a Host
+---------------
+Removing a host from the cluster is probably the most complex host action, since the removal process will revolve around an "impact" plan. Removing a host starts
+with removing the daemons and each daemon type will require different handling.
+
+<MOCKUP - Host remove - impact statement>
+
 Performing Host Maintenance
 ---------------------------
 Hosts must undergo regular maintenance, whether that maintenance is for a software upgrade or hardware component replacement or expansion. The UI should
