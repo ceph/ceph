@@ -1,10 +1,6 @@
 from collections import namedtuple
 
 
-sys_info = namedtuple('sys_info', ['devices'])
-sys_info.devices = dict()
-
-
 class UnloadedConfig(object):
     """
     This class is used as the default value for conf.ceph so that if

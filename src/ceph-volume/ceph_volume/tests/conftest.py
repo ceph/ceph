@@ -282,7 +282,6 @@ def device_info(monkeypatch, patch_bluestore_label):
         blkid = blkid if blkid else {}
         udevadm = udevadm if udevadm else {}
         lv = Factory(**lv) if lv else None
-        monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
         if not devices:
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_first_lv", lambda filters: lv)
