@@ -47,6 +47,15 @@ public:
     return is_blocklisted(locker);
   }
 
+  Peers get_peers() {
+    Peers peers;
+    std::scoped_lock locker(m_lock);
+    for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
+      peers.emplace(peer);
+    }
+    return peers;
+  }
+
   // admin socket helpers
   void mirror_status(Formatter *f);
 
