@@ -5615,7 +5615,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     if (r < 0) {
       return r;
     }
-    if (cct->_conf->bluestore_volume_selection_policy == "without_slow_dir") {
+    if (cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
       vselector = new WithoutSlowDirVolumeSelector(
         bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
