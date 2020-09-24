@@ -179,6 +179,22 @@ corresponding test results are highlighted.
 
 .. _cbt: https://github.com/ceph/cbt
 
+Hacking Crimson
+===============
+
+
+Seastar Documents
+-----------------
+
+See `Seastar Tutorial <https://github.com/scylladb/seastar/blob/master/doc/tutorial.md>`_ .
+Or build a browsable version and start an HTTP server::
+
+  $ cd seastar
+  $ ./configure.py --mode debug
+  $ ninja -C build/debug docs
+  $ python3 -m http.server -d build/debug/doc/html
+
+You might want to install ``pandoc`` and other dependencies beforehand.
 
 Debugging Crimson
 =================
