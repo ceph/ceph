@@ -343,6 +343,15 @@ rw -> ro with open_count > 0
   $ sudo rbd unmap $DEV
 
 
+"-o rw --read-only" should result in read-only mapping
+======================================================
+
+  $ DEV=$(sudo rbd map -o rw --read-only img)
+  $ blockdev --getro $DEV
+  1
+  $ sudo rbd unmap $DEV
+
+
 Teardown
 ========
 
