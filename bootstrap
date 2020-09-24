@@ -157,13 +157,13 @@ fi
 
 
 # Upgrade pip first
-./$VENV/bin/pip install --upgrade pip
+./$VENV/bin/pip install --use-feature=2020-resolver --upgrade pip
 
 # Ensure setuptools is installed
-./$VENV/bin/pip install setuptools --upgrade
+./$VENV/bin/pip install --use-feature=2020-resolver setuptools --upgrade
 
 # Install all requirements
-./$VENV/bin/pip install --upgrade -r requirements.txt
+./$VENV/bin/pip install --use-feature=2020-resolver --upgrade -r requirements.txt
 
 # Check to make sure requirements are met
 ./$VENV/bin/pip check
