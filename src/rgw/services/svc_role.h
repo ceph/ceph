@@ -19,8 +19,6 @@
 #include "rgw/rgw_role.h"
 #include "svc_meta_be.h"
 
-class RGWRole;
-
 class RGWSI_Role: public RGWServiceInstance
 {
  public:
