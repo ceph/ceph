@@ -15,32 +15,41 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <optional>
 
 using namespace librados;
 
-// creates a temporary pool and initializes an IoCtx shared by all tests
-class cls_rgw : public ::testing::Test {
-  static librados::Rados rados;
-  static std::string pool_name;
- protected:
-  static librados::IoCtx ioctx;
+// create/destroy a pool that's shared by all tests in the process
+struct RadosEnv : public ::testing::Environment {
+  static std::optional<std::string> pool_name;
+ public:
+  static Rados rados;
+  static IoCtx ioctx;
 
-  static void SetUpTestCase() {
-    pool_name = get_temp_pool_name();
-    /* create pool */
-    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  void SetUp() override {
+    // create pool
+    std::string name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(name, rados));
+    pool_name = name;
+    ASSERT_EQ(rados.ioctx_create(name.c_str(), ioctx), 0);
   }
-  static void TearDownTestCase() {
-    /* remove pool */
+  void TearDown() override {
     ioctx.close();
-    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+    if (pool_name) {
+      ASSERT_EQ(destroy_one_pool_pp(*pool_name, rados), 0);
+    }
   }
 };
-librados::Rados cls_rgw::rados;
-std::string cls_rgw::pool_name;
-librados::IoCtx cls_rgw::ioctx;
+std::optional<std::string> RadosEnv::pool_name;
+Rados RadosEnv::rados;
+IoCtx RadosEnv::ioctx;
 
+auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
+
+class cls_rgw : public ::testing::Test {
+ protected:
+  IoCtx& ioctx = RadosEnv::ioctx;
+};
 
 string str_int(string s, int i)
 {
@@ -828,14 +837,6 @@ TEST_F(cls_rgw, gc_list)
 
 TEST_F(cls_rgw, gc_defer)
 {
-  librados::IoCtx ioctx;
-  librados::Rados rados;
-
-  string gc_pool_name = get_temp_pool_name();
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(gc_pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(gc_pool_name.c_str(), ioctx));
-
   string oid = "obj";
   string tag = "mychain";
 
@@ -899,10 +900,6 @@ TEST_F(cls_rgw, gc_defer)
   ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
-
-  /* remove pool */
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(gc_pool_name, rados));
 }
 
 auto populate_usage_log_info(std::string user, std::string payer, int total_usage_entries)
