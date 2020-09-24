@@ -79,8 +79,6 @@ struct requested_scrub_t {
    */
   bool auto_repair{false};
 
-  // unsigned int priority;
-
   /// indicating that we are scrubbing post repair to verify everything is fixed
   bool check_repair{false};
 

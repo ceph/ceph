@@ -73,12 +73,9 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
  *
  * relevant only after the initial sched_scrub
  */
-bool PgScrubber::is_event_relevant(epoch_t queued)
+bool PgScrubber::is_event_relevant(epoch_t queued) const
 {
-  return is_primary() && pg_->is_active() && pg_->is_clean() &&
-	 is_scrub_active() && /* note that original checked for
-				 state_test(PG_STATE_SCRUBBING). What we do here is wrong
-				 for start/sched events */
+  return is_primary() && pg_->is_active() && pg_->is_clean() && is_scrub_active() &&
 	 !was_epoch_changed() && (!queued || !pg_->pg_has_reset_since(queued));
 
   // shouldn't we check was_epoch_changed() (i.e. use epoch_start_)? RRR
@@ -131,14 +128,6 @@ void PgScrubber::send_scrub_resched()
     dout(7) << "RRRRRRR --<< " << __func__ << dendl;
   }
 }
-
-// void PgScrubber::send_full_reset()
-//{
-//  dout(7) << "RRRRRRR -->> "  << __func__ <<  dendl;
-//  fsm_->my_states();
-//  fsm_->process_event(FullReset{});
-//  dout(7) << "RRRRRRR --<< "  << __func__ <<  dendl;
-//}
 
 void PgScrubber::send_start_replica()
 {
@@ -606,7 +595,8 @@ void PgScrubber::add_delayed_scheduling()
 	<< "XX" /*state*/ << dendl;
 
       scrbr->sleep_started_at_ = utime_t{};
-      osds->queue_for_scrub_resched(&(*pg), /* RRR  should it be high? */ Scrub::scrub_prio_t::high_priority);
+      osds->queue_for_scrub_resched(
+	&(*pg), /* RRR  should it be high? */ Scrub::scrub_prio_t::high_priority);
       pg->unlock();
     });
 
@@ -676,7 +666,8 @@ bool PgScrubber::was_epoch_changed() const
   dout(10) << __func__ << " epoch_start: " << epoch_start_
 	   << " from pg: " << pg_->get_history().same_interval_since << dendl;
 
-  /// RRR \todo ask: why are we using the same_interval? it's OK for the primary, but for the replica?
+  /// RRR \todo ask: why are we using the same_interval? it's OK for the primary, but for
+  /// the replica?
 
   return epoch_start_ != pg_->get_history().same_interval_since;
 }
@@ -1257,7 +1248,7 @@ void PgScrubber::scrub_compare_maps()
 
     pg_->get_pgbackend()->be_compare_scrubmaps(
       maps, master_set, state_test(PG_STATE_REPAIR), missing_, inconsistent_,
-      authoritative, missing_digest, shallow_errors_, deep_errors, store_.get(),
+      authoritative, missing_digest, shallow_errors_, deep_errors_, store_.get(),
       pg_->info.pgid, pg_->recovery_state.get_acting(), ss);
     dout(2) << ss.str() << dendl;
 
@@ -1322,7 +1313,7 @@ void PgScrubber::replica_update_start_epoch()
 void PgScrubber::send_replica_map(bool was_preempted)
 {
   dout(10) << __func__ << " min epoch:" << replica_min_epoch_
-	  << " ep start:" << replica_epoch_start_ << dendl;
+	   << " ep start:" << replica_epoch_start_ << dendl;
 
   MOSDRepScrubMap* reply = new MOSDRepScrubMap(
     spg_t(pg_->info.pgid.pgid, pg_->get_primary().shard), replica_min_epoch_, pg_whoami_);
@@ -1359,7 +1350,7 @@ void PgScrubber::map_from_replica(OpRequestRef op)
 
   received_maps[m->from].decode(p, pg_->info.pgid.pool());
   dout(10) << "map version is " << received_maps[m->from].valid_through << dendl;
-  //dout(10) << __func__ << " waiting_on_whom was " << waiting_on_whom << dendl;
+  // dout(10) << __func__ << " waiting_on_whom was " << waiting_on_whom << dendl;
 
   ceph_assert(waiting_on_whom.count(m->from));
   waiting_on_whom.erase(m->from);
@@ -1506,7 +1497,7 @@ void PgScrubber::unreserve_replicas()
 
     stringstream ss;
     ss << pg_->info.pgid << " " << mode << " " << missing_.size() << " missing, "
-       << inconsistent_.size() << " inconsistent_ objects";
+       << inconsistent_.size() << " inconsistent objects";
     dout(2) << ss.str() << dendl;
     osds_->clog->error(ss);
 
@@ -1595,7 +1586,7 @@ void PgScrubber::scrub_finish()
   {
     stringstream oss;
     oss << pg_->info.pgid.pgid << " " << mode << " ";
-    int total_errors = shallow_errors_ + deep_errors;
+    int total_errors = shallow_errors_ + deep_errors_;
     if (total_errors)
       oss << total_errors << " errors";
     else
@@ -1617,10 +1608,10 @@ void PgScrubber::scrub_finish()
   // Since we don't know which errors were fixed, we can only clear them
   // when every one has been fixed.
   if (repair) {
-    if (fixed_count_ == shallow_errors_ + deep_errors) {
+    if (fixed_count_ == shallow_errors_ + deep_errors_) {
       ceph_assert(deep_scrub);
       shallow_errors_ = 0;
-      deep_errors = 0;
+      deep_errors_ = 0;
       dout(8 /*20*/) << __func__ << " All may be fixed" << dendl;
     } else if (has_error) {
       // Deep scrub in order to get corrected error counts
@@ -1629,11 +1620,11 @@ void PgScrubber::scrub_finish()
       dout(8 /*20*/) << __func__
 		     << " Set scrub_after_recovery, req_scrub= " << saved_req_scrub
 		     << dendl;
-    } else if (shallow_errors_ || deep_errors) {
+    } else if (shallow_errors_ || deep_errors_) {
       // We have errors but nothing can be fixed, so there is no repair
       // possible.
       state_set(PG_STATE_FAILED_REPAIR);
-      dout(10) << __func__ << " " << (shallow_errors_ + deep_errors)
+      dout(10) << __func__ << " " << (shallow_errors_ + deep_errors_)
 	       << " error(s) present with no repair possible" << dendl;
     }
   }
@@ -1653,10 +1644,10 @@ void PgScrubber::scrub_finish()
 	}
 
 	if (deep_scrub) {
-	  if ((shallow_errors_ == 0) && (deep_errors == 0))
+	  if ((shallow_errors_ == 0) && (deep_errors_ == 0))
 	    history.last_clean_scrub_stamp = now;
 	  stats.stats.sum.num_shallow_scrub_errors = shallow_errors_;
-	  stats.stats.sum.num_deep_scrub_errors = deep_errors;
+	  stats.stats.sum.num_deep_scrub_errors = deep_errors_;
 	  stats.stats.sum.num_large_omap_objects = omap_stats.large_omap_objects;
 	  stats.stats.sum.num_omap_bytes = omap_stats.omap_bytes;
 	  stats.stats.sum.num_omap_keys = omap_stats.omap_keys;
@@ -1856,7 +1847,7 @@ void PgScrubber::replica_handling_done()
   max_end = hobject_t{};
   subset_last_update_ = eversion_t{};
   shallow_errors_ = 0;
-  deep_errors = 0;
+  deep_errors_ = 0;
   fixed_count_ = 0;
   omap_stats = (const struct omap_stat_t){0};
 
@@ -1894,7 +1885,7 @@ void PgScrubber::reset_internal_state()
   max_end = hobject_t{};
   subset_last_update_ = eversion_t{};
   shallow_errors_ = 0;
-  deep_errors = 0;
+  deep_errors_ = 0;
   fixed_count_ = 0;
   omap_stats = (const struct omap_stat_t){0};
 
@@ -1969,9 +1960,9 @@ ReplicaReservations::ReplicaReservations(PG* pg, PgScrubber* scrubber, pg_shard_
     , scrubber_{scrubber}
     , acting_set_{pg->get_actingset()}
     , osds_{static_cast<OSDService*>(pg_->osd)}
+    , pending_{static_cast<int>(acting_set_.size()) - 1}
 {
   epoch_t epoch = pg_->get_osdmap_epoch();
-  pending_ = acting_set_.size() - 1;
 
   // handle the special case of no replicas
   if (!pending_) {
@@ -1986,6 +1977,7 @@ ReplicaReservations::ReplicaReservations(PG* pg, PgScrubber* scrubber, pg_shard_
       Message* m = new MOSDScrubReserve(spg_t(pg_->info.pgid.pgid, p.shard), epoch,
 					MOSDScrubReserve::REQUEST, pg_->pg_whoami);
       osds_->send_message_osd_cluster(p.osd, m, epoch);
+      waited_for_peers_.push_back(p);
       dout(7) << __func__ << " <ReplicaReservations> reserve<-> " << p.osd << dendl;
     }
   }
@@ -2002,6 +1994,7 @@ void ReplicaReservations::send_reject()
   /// \todo find out: which priority should we use here?
   osds_->queue_for_scrub_denied(pg_, scrub_prio_t::low_priority);
 }
+
 void ReplicaReservations::release_all()
 {
   dout(7) << __func__ << " " << reserved_peers_ << dendl;
@@ -2013,6 +2006,16 @@ void ReplicaReservations::release_all()
     release_replica(p, epoch);
   }
   reserved_peers_.clear();
+
+  // note: the release will follow on the heels of the request. When tried otherwise,
+  // grants that followed a reject arrived after the whole scrub machine-state was
+  // reset, causing leaked reservations.
+  if (pending_) {
+    for (auto p : waited_for_peers_) {
+      release_replica(p, epoch);
+    }
+  }
+  waited_for_peers_.clear();
 }
 
 ReplicaReservations::~ReplicaReservations()
@@ -2033,6 +2036,13 @@ void ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
   dout(7) << __func__ << " <ReplicaReservations> granted-> " << from << dendl;
   dout(7) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
+
+  {
+    // reduce the amount of extra release messages. Not a must, but the log is cleaner
+    auto w = find(waited_for_peers_.begin(), waited_for_peers_.end(), from);
+    if (w != waited_for_peers_.end())
+      waited_for_peers_.erase(w);
+  }
 
   // are we forced to reject the reservation?
   if (had_rejections_) {
@@ -2061,6 +2071,13 @@ void ReplicaReservations::handle_reserve_reject(OpRequestRef op, pg_shard_t from
   dout(7) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
 
+  {
+    // reduce the amount of extra release messages. Not a must, but the log is cleaner
+    auto w = find(waited_for_peers_.begin(), waited_for_peers_.end(), from);
+    if (w != waited_for_peers_.end())
+      waited_for_peers_.erase(w);
+  }
+
   if (had_rejections_) {
 
     // our failure was already handled when the first rejection arrived
@@ -2069,7 +2086,6 @@ void ReplicaReservations::handle_reserve_reject(OpRequestRef op, pg_shard_t from
   } else if (std::find(reserved_peers_.begin(), reserved_peers_.end(), from) !=
 	     reserved_peers_.end()) {
 
-    // RRR ask - so we are just ignoring the rejection?
     dout(10) << " already had osd." << from << " reserved" << dendl;
 
   } else {
@@ -2090,18 +2106,18 @@ LocalReservation::LocalReservation(PG* pg, OSDService* osds)
 {
   if (!osds_->inc_scrubs_local()) {
     dout(7) << __func__ << ": failed to reserve locally " << dendl;
-    // the failure is signalled by not having holding_local_resource_ set
+    // the failure is signalled by not having holding_local_reservation set
     return;
   }
 
   dout(20) << __func__ << ": local OSD scrub resources reserved" << dendl;
-  holding_local_resource_ = true;
+  holding_local_reservation = true;
 }
 
 void LocalReservation::early_release()
 {
-  if (holding_local_resource_) {
-    holding_local_resource_ = false;
+  if (holding_local_reservation) {
+    holding_local_reservation = false;
     osds_->dec_scrubs_local();
     dout(20) << __func__ << ": local OSD scrub resources freed" << dendl;
   }
@@ -2121,7 +2137,7 @@ ReservedByRemotePrimary::ReservedByRemotePrimary(PG* pg, OSDService* osds)
 {
   if (!osds_->inc_scrubs_remote()) {
     dout(7) << __func__ << ": failed to reserve at Primary request" << dendl;
-    // the failure is signalled by not having holding_local_resource_ set
+    // the failure is signalled by not having reserved_by_remote_primary_ set
     return;
   }
 

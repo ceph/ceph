@@ -25,32 +25,29 @@ struct BuildMap;
 
 
 /**
-  ReplicaReservations is an RAII wrapper of the process of reserving/freeing scrub
-  resources at the replicas.
-
-  When constructed - sends reservation requests to the acting_set.
-  Handles arriving responses:
-  - a 'grant' is marked by reducing the 'pending_' counter. A list of reserved
-    resources is maintained.
-  - a rejection triggers a "couldn't acquire the replicas' scrub resources" event.
-    All "grants" arriving after the first rejection are denied, and cause an immediate
-    release of the resource.
-
-  Upon destruction - the acting-set (actually - those of the acting-set that have
-  'granted' our request - are freed.
-*/
+ * Reserving/freeing scrub resources at the replicas.
+ *
+ *  When constructed - sends reservation requests to the acting_set.
+ *  A rejection triggers a "couldn't acquire the replicas' scrub resources" event.
+ *  All previous requests, whether already granted or not, are explicitly released.
+ *
+ *  A note re performance: I've measured a few container alternatives for
+ * m_reserved_peers, with its specific usage pattern. Std::set is extremely slow, as
+ * expected. flat_set is only slightly better. Surprisingly - std::vector (with no
+ * sorting) is better than boost::small_vec. And for std::vector: no need to pre-reserve.
+ */
 class ReplicaReservations {
   using OrigSet =
     decltype(std::declval<PG>().get_actingset());  // as I plan to change this type
-  using Vec = std::vector<pg_shard_t>;	// to be replaced with small_vector or small_set
 
-  PG* pg_;  // a pointer, as to not affect ReplicaReservations 'triviality'
+  PG* pg_;
   PgScrubber* scrubber_;
   OrigSet acting_set_;
-  OSDService* osds_;  // a pointer, as to not affect 'triviality'
-  Vec reserved_peers_;
+  OSDService* osds_;
+  std::vector<pg_shard_t> waited_for_peers_;
+  std::vector<pg_shard_t> reserved_peers_;
   bool had_rejections_{false};
-  int pending_;
+  int pending_{-1};
 
   void release_replica(pg_shard_t peer, epoch_t epoch);
 
@@ -59,10 +56,10 @@ class ReplicaReservations {
   /// notify the scrubber that we have failed to reserve replicas' resources
   void send_reject();
 
+  void release_all();
+
  public:
   ReplicaReservations(PG* pg, PgScrubber* scrubber, pg_shard_t whoami);
-
-  void release_all();
 
   ~ReplicaReservations();
 
@@ -73,27 +70,25 @@ class ReplicaReservations {
 
 /**
  *  wraps the local OSD scrub resource reservation in an RAII wrapper
- *  (guaranteeing that we never leak this specific resource)
  */
 class LocalReservation {
-  PG* pg_;	      // a pointer, as to not affect ReplicaReservations 'triviality'
-  OSDService* osds_;  // a pointer, as to not affect 'triviality'
-  bool holding_local_resource_{false};
+  PG* pg_;
+  OSDService* osds_;
+  bool holding_local_reservation{false};
 
  public:
   LocalReservation(PG* pg, OSDService* osds);
   ~LocalReservation();
-  bool is_reserved() const { return holding_local_resource_; }
+  bool is_reserved() const { return holding_local_reservation; }
   void early_release();
 };
 
 /**
  *  wraps the OSD resource we are using when reserved as a replica by a scrubbing master.
- *  (guaranteeing that we never leak this specific resource)
  */
 class ReservedByRemotePrimary {
-  PG* pg_;	      // a pointer, as to not affect ReplicaReservations 'triviality'
-  OSDService* osds_;  // a pointer, as to not affect 'triviality'
+  PG* pg_;
+  OSDService* osds_;
   bool reserved_by_remote_primary_{false};
 
  public:
@@ -363,7 +358,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   bool is_primary() const { return pg_->recovery_state.is_primary(); }
 
-  /*!
+  /**
    * 'is_deep_' - is the running scrub a deep one?
    *
    * Note that most of the code directly checks PG_STATE_DEEP_SCRUB, which is
@@ -389,7 +384,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void run_callbacks();
 
-  bool is_event_relevant(epoch_t queued);
+  bool is_event_relevant(epoch_t queued) const;
 
   void send_epoch_changed();
 
@@ -419,7 +414,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   utime_t sleep_started_at_;
 
  protected:
-  //  protected: but dev code needs access for now
   PG* const pg_;
 
   /**
@@ -427,7 +421,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
    */
   virtual void _scrub_finish() {}
 
-  /*
+  /**
    * Validate consistency of the object info and snap sets.
    */
   virtual void scrub_snapshot_metadata(ScrubMap& map, const missing_map_t& missing_digest)
@@ -500,19 +494,18 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void send_sched_replica();
 
- public:
-  omap_stat_t omap_stats = (const struct omap_stat_t){0};  // -- used by the PGBackend
-
+ protected:
   // collected statistics
   int shallow_errors_{0};
-  int deep_errors{0};
+  int deep_errors_{0};
   int fixed_count_{0};
 
- protected:
   /// Maps from objects with errors to missing peers
   HobjToShardSetMapping missing_;
 
  private:
+  omap_stat_t omap_stats = (const struct omap_stat_t){0};
+
   /// Maps from objects with errors to inconsistent peers
   HobjToShardSetMapping inconsistent_;
 
