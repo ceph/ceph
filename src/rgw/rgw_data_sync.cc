@@ -58,10 +58,6 @@ static string bucket_status_oid_prefix = "bucket.sync-status";
 static string object_status_oid_prefix = "bucket.sync-status";
 
 
-void rgw_datalog_info::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("num_objects", num_shards, obj);
-}
-
 void rgw_datalog_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("key", key, obj);
   utime_t ut;
@@ -363,6 +359,7 @@ public:
                      map<int, RGWDataChangesLogInfo> *_datalog_info) : RGWShardCollectCR(_sc->cct, READ_DATALOG_MAX_CONCURRENT),
                                                                  sc(_sc), sync_env(_sc->env), num_shards(_num_shards),
                                                                  datalog_info(_datalog_info), shard_id(0) {}
+
   bool spawn_next() override;
 };
 
@@ -520,6 +517,8 @@ public:
 
   virtual ~RGWDataSyncInfoCRHandler() {}
 
+  virtual int num_shards() const = 0;
+
   virtual int validate_sync_marker(rgw_data_sync_marker& marker) const = 0;
 };
 
@@ -532,7 +531,7 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncInfoCRHandlerPair dsi;
   rgw::sal::RGWRadosStore* store;
   const rgw_pool& pool;
-  const uint32_t num_shards;
+  uint32_t num_shards;
 
   string sync_status_oid;
 
@@ -545,18 +544,18 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
 public:
   RGWInitDataSyncStatusCoroutine(RGWDataSyncCtx *_sc,
-                                 uint32_t num_shards,
                                  uint64_t instance_id,
                                  RGWSyncTraceNodeRef& _tn_parent,
                                  rgw_data_sync_status *status)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
       dsi(_sc->dsi), store(sync_env->store),
       pool(sync_env->svc->zone->get_zone_params().log_pool),
-      num_shards(num_shards), status(status),
+      status(status),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "init_data_sync_status")) {
     lock_name = "sync_lock";
 
     status->sync_info.instance_id = instance_id;
+    status->sync_info.num_shards = sc->dsi.inc->num_shards();
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -565,7 +564,6 @@ public:
     cookie = buf;
 
     sync_status_oid = RGWDataSyncStatusManager::sync_status_oid(sc->source_zone);
-
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -663,31 +661,9 @@ RGWRemoteDataLog::RGWRemoteDataLog(const DoutPrefixProvider *dpp,
 {
 }
 
-int RGWRemoteDataLog::read_log_info(const DoutPrefixProvider *dpp, rgw_datalog_info *log_info)
-{
-  rgw_http_param_pair pairs[] = { { "type", "data" },
-                                  { NULL, NULL } };
-
-  int ret = sc.conn.data->get_json_resource(dpp, "/admin/log", pairs, null_yield, *log_info);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to fetch datalog info" << dendl;
-    return ret;
-  }
-
-  ldpp_dout(dpp, 20) << "remote datalog, num_shards=" << log_info->num_shards << dendl;
-
-  return 0;
-}
-
 int RGWRemoteDataLog::read_source_log_shards_info(const DoutPrefixProvider *dpp, map<int, RGWDataChangesLogInfo> *shards_info)
 {
-  rgw_datalog_info log_info;
-  int ret = read_log_info(dpp, &log_info);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return run(dpp, new RGWReadRemoteDataLogInfoCR(&sc, log_info.num_shards, shards_info));
+  return run(dpp, new RGWReadRemoteDataLogInfoCR(&sc, sc.dsi.inc->num_shards(), shards_info));
 }
 
 int RGWRemoteDataLog::read_source_log_shards_next(const DoutPrefixProvider *dpp, map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result)
@@ -711,6 +687,18 @@ int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, const RGWRemoteCtl::
   int ret = http_manager.start();
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = run(sc.dsi.full->init_cr());
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to initialize datalog full sync handler: " << ret << dendl;
+    return ret;
+  }
+
+  ret = run(sc.dsi.inc->init_cr());
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to initialize datalog incrementa sync handler: " << ret << dendl;
     return ret;
   }
 
@@ -781,10 +769,9 @@ int RGWRemoteDataLog::read_recovering_shards(const DoutPrefixProvider *dpp, cons
   return ret;
 }
 
-int RGWRemoteDataLog::init_sync_status(const DoutPrefixProvider *dpp, int num_shards)
+int RGWRemoteDataLog::init_sync_status(const DoutPrefixProvider *dpp)
 {
   rgw_data_sync_status sync_status;
-  sync_status.sync_info.num_shards = num_shards;
 
   RGWCoroutinesManager crs(cct, cr_registry);
   RGWHTTPManager http_manager(cct, crs.get_completion_mgr());
@@ -798,7 +785,7 @@ int RGWRemoteDataLog::init_sync_status(const DoutPrefixProvider *dpp, int num_sh
   auto instance_id = ceph::util::generate_random_number<uint64_t>();
   RGWDataSyncCtx sc_local = sc;
   sc_local.env = &sync_env_local;
-  ret = crs.run(dpp, new RGWInitDataSyncStatusCoroutine(&sc_local, num_shards, instance_id, tn, &sync_status));
+  ret = crs.run(dpp, new RGWInitDataSyncStatusCoroutine(&sc_local, instance_id, tn, &sync_status));
   http_manager.stop();
   return ret;
 }
@@ -929,6 +916,10 @@ public:
     return "legacy/data.full";
   }
 
+  int num_shards() const override {
+    return 1;
+  }
+
   RGWCoroutine *init_cr() override {
     /* nothing to init */
     return nullptr;
@@ -949,8 +940,6 @@ public:
 };
 
 class RGWDataIncSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
-  int num_shards;
-
   class ReadDatalogStatusCR : public RGWCoroutine {
     RGWDataSyncCtx *sc;
     int shard_id;
@@ -1051,6 +1040,10 @@ public:
     return "legacy/data.inc";
   }
 
+  int num_shards() const override {
+#warning num_shards in legacy missing
+  }
+
   int validate_sync_marker(rgw_data_sync_marker& marker) const override {
     if (marker.sip_name.empty() ||
         marker.sip_name == "legacy/data.inc") {
@@ -1097,6 +1090,8 @@ protected:
 
   std::unique_ptr<SIProviderCRMgr_REST> sip;
   SIProvider::Info info;
+  SIProvider::stage_id_t sid;
+  SIProvider::StageInfo stage_info;
 
   SIProvider::TypeHandler *type_handler;
 
@@ -1119,6 +1114,13 @@ protected:
         if (siph->info.stages.empty()) {
           ldout(cct, 0) << "ERROR: sip (" << siph->sip_name << ") has no stages, likely a bug!" << dendl;
           return set_cr_error(-EIO);
+        }
+
+        siph->sid = siph->info.stages.front().sid;
+        yield call(siph->sip->get_stage_info_cr(siph->sid, &siph->stage_info));
+        if (retcode < 0) {
+          ldout(cct, 0) << "ERROR: sip (" << siph->sip_name << ") failed to fetch stage info for sid " << siph->sid << ", retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
         }
         return set_cr_done();
       }
@@ -1210,7 +1212,6 @@ public:
   RGWCoroutine *fetch_cr(int shard_id,
                          const string& marker,
                          T *result) override {
-    auto& sid = info.stages.front().sid;
     return new FetchCR(this, sip.get(), sid, shard_id, marker, result);
   }
 };
@@ -1262,6 +1263,10 @@ public:
                                                     _sip_name,
                                                     type_provider.get(),
                                                     nullopt));
+  }
+
+  int num_shards() const override {
+    return stage_info.num_shards;
   }
 
   int validate_sync_marker(rgw_data_sync_marker& marker) const override {
@@ -1369,10 +1374,10 @@ public:
               char buf[16];
               snprintf(buf, sizeof(buf), ":%d", i);
               s = iter->key + buf;
-              yield entries_index->append(s, sync_env->svc->datalog_rados->get_log_shard_id(iter->bucket, i));
+              yield entries_index->append(s, sync_env->svc->datalog_rados->calc_shard(rgw_bucket_shard{iter->bucket, i}, num_shards));
             }
           } else {
-            yield entries_index->append(iter->key, sync_env->svc->datalog_rados->get_log_shard_id(iter->bucket, -1));
+            yield entries_index->append(iter->key, sync_env->svc->datalog_rados->calc_shard(rgw_bucket_shard{iter->bucket, -1}, num_shards));
           }
         }
         truncated = result.truncated;
@@ -2422,7 +2427,7 @@ public:
 class RGWDataSyncCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  uint32_t num_shards;
+  uint32_t num_shards{0};
 
   rgw_data_sync_status sync_status;
 
@@ -2436,9 +2441,8 @@ class RGWDataSyncCR : public RGWCoroutine {
 
   RGWDataSyncModule *data_sync_module{nullptr};
 public:
-  RGWDataSyncCR(RGWDataSyncCtx *_sc, uint32_t _num_shards, RGWSyncTraceNodeRef& _tn, bool *_reset_backoff) : RGWCoroutine(_sc->cct),
+  RGWDataSyncCR(RGWDataSyncCtx *_sc, RGWSyncTraceNodeRef& _tn, bool *_reset_backoff) : RGWCoroutine(_sc->cct),
                                                       sc(_sc), sync_env(_sc->env),
-                                                      num_shards(_num_shards),
                                                       reset_backoff(_reset_backoff), tn(_tn) {
 
   }
@@ -2474,13 +2478,14 @@ public:
         return set_cr_error(retcode);
       }
 
+      num_shards = sc->dsi.inc->num_shards();
+
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         tn->log(20, SSTR("init"));
-        sync_status.sync_info.num_shards = num_shards;
         uint64_t instance_id;
         instance_id = ceph::util::generate_random_number<uint64_t>();
-        yield call(new RGWInitDataSyncStatusCoroutine(sc, num_shards, instance_id, tn, &sync_status));
+        yield call(new RGWInitDataSyncStatusCoroutine(sc, instance_id, tn, &sync_status));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to init sync, retcode=" << retcode));
           return set_cr_error(retcode);
@@ -3158,20 +3163,19 @@ class RGWDataSyncControlCR : public RGWBackoffControlCR
 {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  uint32_t num_shards;
 
   RGWSyncTraceNodeRef tn;
 
   static constexpr bool exit_on_error = false; // retry on all errors
 public:
-  RGWDataSyncControlCR(RGWDataSyncCtx *_sc, uint32_t _num_shards,
+  RGWDataSyncControlCR(RGWDataSyncCtx *_sc,
                        RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sc->cct, exit_on_error),
-                                                          sc(_sc), sync_env(_sc->env), num_shards(_num_shards) {
+                                                          sc(_sc), sync_env(_sc->env) {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "sync");
   }
 
   RGWCoroutine *alloc_cr() override {
-    return new RGWDataSyncCR(sc, num_shards, tn, backoff_ptr());
+    return new RGWDataSyncCR(sc, tn, backoff_ptr());
   }
 
   void wakeup(int shard_id, set<string>& keys) {
@@ -3204,10 +3208,10 @@ void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
   data_sync_cr->wakeup(shard_id, keys);
 }
 
-int RGWRemoteDataLog::run_sync(const DoutPrefixProvider *dpp, int num_shards)
+int RGWRemoteDataLog::run_sync(const DoutPrefixProvider *dpp)
 {
   lock.lock();
-  data_sync_cr = new RGWDataSyncControlCR(&sc, num_shards, tn);
+  data_sync_cr = new RGWDataSyncControlCR(&sc, tn);
   data_sync_cr->get(); // run() will drop a ref, so take another
   lock.unlock();
 
@@ -3232,15 +3236,19 @@ CephContext *RGWDataSyncStatusManager::get_cct() const
 
 int RGWDataSyncStatusManager::init(const DoutPrefixProvider *dpp)
 {
-  RGWZone *zone_def;
+  RGWZone *zone_def{nullptr};
 
   if (!store->svc()->zone->find_zone(source_zone, &zone_def)) {
-    ldpp_dout(this, 0) << "ERROR: failed to find zone config info for zone=" << source_zone << dendl;
-    return -EIO;
-  }
-
-  if (!store->svc()->sync_modules->get_manager()->supports_data_export(zone_def->tier_type)) {
-    return -ENOTSUP;
+    /* zone not found, let's make sure it's a data provider */
+    RGWDataProvider *dp;
+    if (!store->svc()->zone->find_data_provider(source_zone, &dp)) {
+      ldpp_dout(this, 0) << "ERROR: failed to find zone config info for zone=" << source_zone << dendl;
+      return -EIO;
+    }
+  } else { /* it is a zone */
+    if (!store->svc()->sync_modules->get_manager()->supports_data_export(zone_def->tier_type)) {
+      return -ENOTSUP;
+    }
   }
 
   const RGWZoneParams& zone_params = store->svc()->zone->get_zone_params();
@@ -3264,20 +3272,6 @@ int RGWDataSyncStatusManager::init(const DoutPrefixProvider *dpp)
     ldpp_dout(this, 0) << "ERROR: failed to init remote log, r=" << r << dendl;
     finalize();
     return r;
-  }
-
-  rgw_datalog_info datalog_info;
-  r = source_log.read_log_info(dpp, &datalog_info);
-  if (r < 0) {
-    ldpp_dout(this, 5) << "ERROR: master.read_log_info() returned r=" << r << dendl;
-    finalize();
-    return r;
-  }
-
-  num_shards = datalog_info.num_shards;
-
-  for (int i = 0; i < num_shards; i++) {
-    shard_objs[i] = rgw_raw_obj(zone_params.log_pool, shard_obj_name(source_zone, i));
   }
 
   return 0;

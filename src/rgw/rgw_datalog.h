@@ -268,6 +268,8 @@ public:
 
   int change_format(const DoutPrefixProvider *dpp, log_type type, optional_yield y);
   int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
+
+  static int calc_shard(const rgw_bucket_shard& bs, int _num_shards);
 };
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {

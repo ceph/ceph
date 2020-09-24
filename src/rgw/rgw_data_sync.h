@@ -80,14 +80,6 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_bucket_sync_pipe& p
   return out << p.info;
 }
 
-struct rgw_datalog_info {
-  uint32_t num_shards;
-
-  rgw_datalog_info() : num_shards(0) {}
-
-  void decode_json(JSONObj *obj);
-};
-
 struct rgw_data_sync_info {
   enum SyncState {
     StateInit = 0,
@@ -391,14 +383,13 @@ public:
            PerfCounters* _counters);
   void finish();
 
-  int read_log_info(const DoutPrefixProvider *dpp, rgw_datalog_info *log_info);
   int read_source_log_shards_info(const DoutPrefixProvider *dpp, std::map<int, RGWDataChangesLogInfo> *shards_info);
   int read_source_log_shards_next(const DoutPrefixProvider *dpp, std::map<int, std::string> shard_markers, std::map<int, rgw_datalog_shard_data> *result);
   int read_sync_status(const DoutPrefixProvider *dpp, rgw_data_sync_status *sync_status);
   int read_recovering_shards(const DoutPrefixProvider *dpp, const int num_shards, std::set<int>& recovering_shards);
   int read_shard_status(const DoutPrefixProvider *dpp, int shard_id, std::set<std::string>& lagging_buckets,std::set<std::string>& recovering_buckets, rgw_data_sync_marker* sync_marker, const int max_entries);
-  int init_sync_status(const DoutPrefixProvider *dpp, int num_shards);
-  int run_sync(const DoutPrefixProvider *dpp, int num_shards);
+  int init_sync_status(const DoutPrefixProvider *dpp);
+  int run_sync(const DoutPrefixProvider *dpp);
 
   void wakeup(int shard_id, std::set<std::string>& keys);
 };
@@ -417,22 +408,18 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
   std::string source_status_oid;
   std::string source_shard_status_oid_prefix;
 
-  std::map<int, rgw_raw_obj> shard_objs;
-
-  int num_shards;
-
 public:
   RGWDataSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters)
     : store(_store), source_zone(_source_zone), error_logger(NULL),
       sync_module(nullptr), counters(counters),
-      source_log(this, store, async_rados), num_shards(0) {}
+      source_log(this, store, async_rados) {}
   RGWDataSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters,
                            const RGWSyncModuleInstanceRef& _sync_module)
     : store(_store), source_zone(_source_zone), error_logger(NULL),
       sync_module(_sync_module), counters(counters),
-      source_log(this, store, async_rados), num_shards(0) {}
+      source_log(this, store, async_rados) {}
   ~RGWDataSyncStatusManager() {
     finalize();
   }
@@ -453,11 +440,8 @@ public:
   int read_shard_status(const DoutPrefixProvider *dpp, int shard_id, std::set<std::string>& lagging_buckets, std::set<std::string>& recovering_buckets, rgw_data_sync_marker *sync_marker, const int max_entries) {
     return source_log.read_shard_status(dpp, shard_id, lagging_buckets, recovering_buckets,sync_marker, max_entries);
   }
-  int init_sync_status(const DoutPrefixProvider *dpp) { return source_log.init_sync_status(dpp, num_shards); }
+  int init_sync_status(const DoutPrefixProvider *dpp) { return source_log.init_sync_status(dpp); }
 
-  int read_log_info(const DoutPrefixProvider *dpp, rgw_datalog_info *log_info) {
-    return source_log.read_log_info(dpp, log_info);
-  }
   int read_source_log_shards_info(const DoutPrefixProvider *dpp, std::map<int, RGWDataChangesLogInfo> *shards_info) {
     return source_log.read_source_log_shards_info(dpp, shards_info);
   }
@@ -465,7 +449,7 @@ public:
     return source_log.read_source_log_shards_next(dpp, shard_markers, result);
   }
 
-  int run(const DoutPrefixProvider *dpp) { return source_log.run_sync(dpp, num_shards); }
+  int run(const DoutPrefixProvider *dpp) { return source_log.run_sync(dpp); }
 
   void wakeup(int shard_id, std::set<std::string>& keys) { return source_log.wakeup(shard_id, keys); }
   void stop() {

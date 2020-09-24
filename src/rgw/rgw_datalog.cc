@@ -485,12 +485,16 @@ int RGWDataChangesLog::start(const DoutPrefixProvider *dpp, const RGWZone* _zone
   return 0;
 }
 
-int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
-  const auto& name = bs.bucket.name;
-  auto shard_shift = (bs.shard_id > 0 ? bs.shard_id : 0);
-  auto r = (ceph_str_hash_linux(name.data(), name.size()) +
-	    shard_shift) % num_shards;
+int RGWDataChangesLog::calc_shard(const rgw_bucket_shard& bs, int _num_shards) {
+  const string& name = bs.bucket.name;
+  int shard_shift = (bs.shard_id > 0 ? bs.shard_id : 0);
+  uint32_t r = (ceph_str_hash_linux(name.c_str(), name.size()) +
+                shard_shift) % _num_shards;
   return static_cast<int>(r);
+}
+
+int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
+  return calc_shard(bs, num_shards);
 }
 
 int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
