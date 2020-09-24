@@ -16,7 +16,7 @@ setup(
     zip_safe = False,
     install_requires=[
         'ceph',
-        'backports.functools_lru_cache'
+        'backports.functools_lru_cache; python_version < "3.2.0"'
     ],
     dependency_links=[''.join(['file://', os.path.join(os.getcwd(), '../',
                                                        'python-common#egg=ceph-1.0.0')])],
