@@ -22,7 +22,7 @@ void RGWSI_Role_RADOS::init(RGWSI_Zone *_zone_svc,
 }
 
 int RGWSI_Role_RADOS::store_info(RGWSI_MetaBackend::Context *ctx,
-                                 const RGWRole& role,
+                                 const RGWRoleInfo& role,
                                  RGWObjVersionTracker * const objv_tracker,
                                  const real_time& mtime,
                                  bool exclusive,
@@ -33,7 +33,7 @@ int RGWSI_Role_RADOS::store_info(RGWSI_MetaBackend::Context *ctx,
   encode(role, data_bl);
   RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
 
-  return svc.meta_be->put(ctx, get_role_meta_key(role.get_id()),
+  return svc.meta_be->put(ctx, get_role_meta_key(role.id),
                           params, objv_tracker, y);
 }
 
@@ -77,7 +77,7 @@ int RGWSI_Role_RADOS::store_path(RGWSI_MetaBackend::Context *ctx,
 
 int RGWSI_Role_RADOS::read_info(RGWSI_MetaBackend::Context *ctx,
                                 const std::string& role_id,
-                                RGWRole *role,
+                                RGWRoleInfo *role,
                                 RGWObjVersionTracker * const objv_tracker,
                                 real_time * const pmtime,
                                 map<std::string, bufferlist> * pattrs,
@@ -94,7 +94,7 @@ int RGWSI_Role_RADOS::read_info(RGWSI_MetaBackend::Context *ctx,
   try  {
     decode(*role, bl_iter);
   } catch (buffer::error& err) {
-    ldout(svc.meta_be->ctx(),0) << "ERROR: failed to decode RGWRole, caught buffer::err " << dendl;
+    ldout(svc.meta_be->ctx(),0) << "ERROR: failed to decode RGWRoleInfo, caught buffer::err " << dendl;
     return -EIO;
   }
 
@@ -122,7 +122,7 @@ int RGWSI_Role_RADOS::read_name(RGWSI_MetaBackend::Context *ctx,
   try  {
     decode(nameToId, bl_iter);
   } catch (buffer::error& err) {
-    ldout(svc.meta_be->ctx(),0) << "ERROR: failed to decode RGWRole name, caught buffer::err " << dendl;
+    ldout(svc.meta_be->ctx(),0) << "ERROR: failed to decode RGWRoleInfo name, caught buffer::err " << dendl;
     return -EIO;
   }
 

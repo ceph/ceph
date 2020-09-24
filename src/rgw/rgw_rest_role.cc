@@ -142,7 +142,7 @@ void RGWCreateRole::execute()
     s->formatter->open_object_section("CreateRoleResponse");
     s->formatter->open_object_section("CreateRoleResult");
     s->formatter->open_object_section("Role");
-    role.dump(s->formatter);
+    role.get_info().dump(s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
@@ -246,7 +246,7 @@ void RGWGetRole::execute()
     s->formatter->close_section();
     s->formatter->open_object_section("GetRoleResult");
     s->formatter->open_object_section("Role");
-    role.dump(s->formatter);
+    role.get_info().dump(s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
     s->formatter->close_section();
@@ -333,7 +333,7 @@ void RGWListRoles::execute()
     s->formatter->open_object_section("Roles");
     for (const auto& it : result) {
       s->formatter->open_object_section("member");
-      it.dump(s->formatter);
+      it.get_info().dump(s->formatter);
       s->formatter->close_section();
     }
     s->formatter->close_section();

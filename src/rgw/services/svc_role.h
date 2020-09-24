@@ -18,7 +18,7 @@
 #include "rgw/rgw_service.h"
 #include "svc_meta_be.h"
 
-class RGWRole;
+class RGWRoleInfo;
 
 class RGWSI_Role: public RGWServiceInstance
 {
@@ -32,7 +32,7 @@ class RGWSI_Role: public RGWServiceInstance
   static std::string get_role_path_meta_key(const std::string& path, const std::string& role_id, const std::string& tenant);
 
   virtual int store_info(RGWSI_MetaBackend::Context *ctx,
-			 const RGWRole& role,
+			 const RGWRoleInfo& role,
 			 RGWObjVersionTracker * const objv_tracker,
 			 const real_time& mtime,
 			 bool exclusive,
@@ -59,7 +59,7 @@ class RGWSI_Role: public RGWServiceInstance
 
   virtual int read_info(RGWSI_MetaBackend::Context *ctx,
 			const std::string& role_id,
-			RGWRole *role,
+			RGWRoleInfo *role,
 			RGWObjVersionTracker * const objv_tracker,
 			real_time * const pmtime,
 			map<std::string, bufferlist> * pattrs,

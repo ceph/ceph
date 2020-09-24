@@ -11,20 +11,15 @@
 class RGWCtl;
 class RGWRados;
 
-class RGWRole
+struct RGWRoleInfo
 {
-  using string = std::string;
-  static const string role_name_oid_prefix;
-  static const string role_oid_prefix;
-  static const string role_path_oid_prefix;
-  static const string role_arn_prefix;
+
   static constexpr int MAX_ROLE_NAME_LEN = 64;
   static constexpr int MAX_PATH_NAME_LEN = 512;
   static constexpr uint64_t SESSION_DURATION_MIN = 3600; // in seconds
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 
-  CephContext *cct;
-  RGWCtl *ctl;
+  using string = std::string;
   string id;
   string name;
   string path;
@@ -35,32 +30,28 @@ class RGWRole
   string tenant;
   uint64_t max_session_duration;
 
-  int store_info(bool exclusive);
-  int store_name(bool exclusive);
-  int store_path(bool exclusive);
-  int read_id(const string& role_name, const string& tenant, string& role_id);
-  int read_name();
-  int read_info();
+  void extract_name_tenant(std::string_view str);
+  void set_perm_policy(const std::string& policy_name,
+		       const std::string& perm_policy);
   bool validate_input();
-  void extract_name_tenant(const std::string& str);
+  vector<string> get_role_policy_names();
+  int get_role_policy(const std::string& policy_name,
+		      std::string& perm_policy);
+  int delete_policy(const string& policy_name);
 
-public:
-  RGWRole(CephContext *cct,
-          RGWCtl *ctl,
-          string name,
-          string path,
-          string trust_policy,
-          string tenant,
-          string max_session_duration_str="")
-  : cct(cct),
-    ctl(ctl),
-    name(std::move(name)),
+  RGWRoleInfo() = default;
+  ~RGWRoleInfo() = default;
+
+  RGWRoleInfo(std::string name,
+	      std::string path,
+	      std::string trust_policy,
+	      std::string tenant,
+	      std::string max_session_duration_str="") :
     path(std::move(path)),
-    trust_policy(std::move(trust_policy)),
-    tenant(std::move(tenant)) {
+    trust_policy(std::move(trust_policy)) {
     if (this->path.empty())
       this->path = "/";
-    extract_name_tenant(this->name);
+    extract_name_tenant(name);
     if (max_session_duration_str.empty()) {
       max_session_duration = SESSION_DURATION_MIN;
     } else {
@@ -68,32 +59,16 @@ public:
     }
   }
 
-  RGWRole(CephContext *cct,
-          RGWCtl *ctl,
-          string name,
-          string tenant)
-  : cct(cct),
-    ctl(ctl),
-    name(std::move(name)),
-    tenant(std::move(tenant)) {
-    extract_name_tenant(this->name);
+  RGWRoleInfo(std::string _name,
+	      std::string _tenant) {
+    extract_name_tenant(_name);
+    if (tenant.empty()) {
+      tenant = std::move(_tenant);
+    }
   }
 
-  RGWRole(CephContext *cct,
-          RGWCtl *ctl,
-          string id)
-  : cct(cct),
-    ctl(ctl),
-    id(std::move(id)) {}
-
-  RGWRole(CephContext *cct,
-          RGWCtl *ctl)
-  : cct(cct),
-    ctl(ctl) {}
-
-  RGWRole() {}
-
-  ~RGWRole() = default;
+  RGWRoleInfo(std::string _id) :
+    id(std::move(_id)) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
@@ -127,28 +102,85 @@ public:
     DECODE_FINISH(bl);
   }
 
-  const string& get_id() const { return id; }
-  const string& get_name() const { return name; }
-  const string& get_tenant() const { return tenant; }
-  const string& get_path() const { return path; }
-  const string& get_create_date() const { return creation_date; }
-  const string& get_assume_role_policy() const { return trust_policy;}
-  const uint64_t& get_max_session_duration() const { return max_session_duration; }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRoleInfo)
 
-  void set_id(const string& id) { this->id = id; }
 
-  int create(bool exclusive);
-  int delete_obj();
+class RGWRole
+{
+  using string = std::string;
+  static const string role_name_oid_prefix;
+  static const string role_oid_prefix;
+  static const string role_path_oid_prefix;
+  static const string role_arn_prefix;
+
+  CephContext *cct;
+  RGWCtl *ctl;
+  RGWRoleInfo info;
+
+  int store_info(bool exclusive) { return 0; }
+  int store_name(bool exclusive) { return 0; }
+  int store_path(bool exclusive) { return 0; }
+  int read_id(const string& role_name, const string& tenant, string& role_id);
+  int read_name() { return 0; }
+  int read_info() { return 0; };
+  bool validate_input();
+  void extract_name_tenant(const std::string& str);
+  void get_role_policy(const string& policy_name, string& perm_policy);
+public:
+  // args for RGWRoleInfo
+  template <typename ...Args>
+  RGWRole(CephContext *cct,
+          RGWCtl *ctl,
+          Args&& ...args)
+  : cct(cct),
+    ctl(ctl),
+    info(std::forward<Args>(args)...)
+ {}
+
+  RGWRole(CephContext *cct,
+          RGWCtl *ctl)
+  : cct(cct),
+    ctl(ctl) {}
+
+  RGWRole() {}
+
+  ~RGWRole() = default;
+
+  const string& get_id() const { return info.id; }
+  const string& get_name() const { return info.name; }
+  const string& get_tenant() const { return info.tenant; }
+  const string& get_path() const { return info.path; }
+  const string& get_create_date() const { return info.creation_date; }
+  const string& get_assume_role_policy() const { return info.trust_policy;}
+  const uint64_t& get_max_session_duration() const { return info.max_session_duration; }
+  const RGWRoleInfo& get_info() const { return info; }
+
+  void set_id(const string& id) { this->info.id = id; }
+
+  int create(bool exclusive) { return 0; }
+  int delete_obj() {return 0;}
   int get();
   int get_by_id();
   int update();
   void update_trust_policy(string& trust_policy);
-  void set_perm_policy(const string& policy_name, const string& perm_policy);
-  vector<string> get_role_policy_names();
-  int get_role_policy(const string& policy_name, string& perm_policy);
-  int delete_policy(const string& policy_name);
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
+  template <typename ...Args>
+  void set_perm_policy(Args&& ...args) {
+    info.set_perm_policy(std::forward<Args>(args)...);
+  }
+  auto get_role_policy_names() {
+    return info.get_role_policy_names();
+  }
+  template <typename ...Args>
+  int get_role_policy(Args&& ...args) {
+    return info.get_role_policy(std::forward<Args>(args)...);
+  }
+
+  int delete_policy(const string& policy_name) {
+    return info.delete_policy(policy_name);
+  }
 
   static const string& get_names_oid_prefix();
   static const string& get_info_oid_prefix();
@@ -158,7 +190,9 @@ public:
                                       const string& path_prefix,
                                       const string& tenant,
                                       vector<RGWRole>& roles);
-};
-WRITE_CLASS_ENCODER(RGWRole)
-#endif /* CEPH_RGW_ROLE_H */
 
+  void dump(Formatter *f) const {
+    info.dump(f);
+  }
+};
+#endif /* CEPH_RGW_ROLE_H */

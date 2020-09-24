@@ -39,7 +39,7 @@ class RGWSI_Role_RADOS: public RGWSI_Role
   RGWSI_MetaBackend_Handler * get_be_handler() override;
 
   int store_info(RGWSI_MetaBackend::Context *ctx,
-  		 const RGWRole& role,
+  		 const RGWRoleInfo& role,
   		 RGWObjVersionTracker * const objv_tracker,
   		 const real_time& pmtime,
   		 bool exclusive,
@@ -66,7 +66,7 @@ class RGWSI_Role_RADOS: public RGWSI_Role
 
   int read_info(RGWSI_MetaBackend::Context *ctx,
 		const std::string& role_id,
-  		RGWRole *role,
+  		RGWRoleInfo *role,
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,
   		map<std::string, bufferlist> * pattrs,
