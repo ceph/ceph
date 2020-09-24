@@ -79,6 +79,9 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       case RBD_IMAGE_MIGRATION_STATE_EXECUTED:
         migration_state = "executed";
         break;
+      case RBD_IMAGE_MIGRATION_STATE_ABORTING:
+        migration_state = "aborting";
+        break;
       default:
         migration_state = "unknown";
       }
