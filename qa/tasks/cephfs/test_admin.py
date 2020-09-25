@@ -520,7 +520,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
             filepaths.append(filepath.replace(path, ''))
         filepaths = tuple(filepaths)
 
-        keyring = self.fs.authorize(self.client_id, (path[0], perm, path[1],
+        keyring = self.fs.authorize(self.client_id, (paths[0], perm, paths[1],
                                                      perm))
 
         return filepaths, filedata, keyring
