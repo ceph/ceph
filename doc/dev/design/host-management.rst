@@ -19,8 +19,36 @@ It is a fundamental requirement to be able to understand the types of hosts that
 information easily accessible, reduces the reliance the Ceph Administrator has on other 3rd party tools and frameworks -
 ultimately providing a more end-to-end experience.
 
-| <MOCKUP - HOST highlevel details>
-| <MOCKUP - Host low-level information from gather-facts>
+.. image:: mockups/hosts.png
+
+This image shows the highlevel overview of the hosts, providing a quick understanding of the server 
+type, the daemons associated with it and the overall status of the host. The other inclusion is the use of a link
+to the BMC - this allows the Admin to quickly and easily jump from the Ceph UI to BMC boards like iDRAC or iLO. For example
+if a disk shows as failed, the alert can link to the hosts page where the host status would be ONLINE, FAULT - with the Admin
+able to quick click a link to open the physical BMC interface to progress the fault.
+
+The action button is extended to cover the following host tasks
+
+* Edit
+* Enter Maintenance
+* Exit Maintenance
+* Reboot
+* Drain
+* Remove
+
+When a server is selected, the host properties component is shown. This is made up of a tabbed interface; daemons, disks, osds,
+server information and performance details. The default tab selected is daemons, since this is the most common interaction point
+with a host.
+
+.. image:: mockups/hostdaemons.png
+
+As you can see the intent is that the admin is able to manage the cluster daemons directly from the UI.
+
+In addition to management, new capabilities available in Pacific provide more server metadata. A Server Information tab has been added that shows
+metadata about the host's configuration. 
+
+.. image:: mockups/hostinformation.png
+
 
 Adding a Host
 -------------
