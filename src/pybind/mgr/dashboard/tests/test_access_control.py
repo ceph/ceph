@@ -9,7 +9,7 @@ import unittest
 
 from datetime import datetime, timedelta
 
-from . import CmdException, CLICommandTestMixin
+from . import CmdException, CLICommandTestMixin  # pylint: disable=no-name-in-module
 from .. import mgr
 from ..security import Scope, Permission
 from ..services.access_control import load_access_control_db, \

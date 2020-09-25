@@ -8,7 +8,7 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase, FakeFsMixin
+from . import ControllerTestCase, FakeFsMixin  # pylint: disable=no-name-in-module
 from .. import mgr
 
 from ..controllers.home import HomeController, LanguageMixin

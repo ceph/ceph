@@ -8,7 +8,7 @@ except ImportError:
 
 from requests import RequestException
 
-from . import ControllerTestCase, KVStoreMockMixin
+from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
 from ..controllers.grafana import Grafana
 from ..grafana import GrafanaRestClient
 from ..settings import Settings

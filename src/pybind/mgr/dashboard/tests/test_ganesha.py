@@ -9,7 +9,7 @@ except ImportError:
     from unittest.mock import MagicMock, Mock
 
 import orchestrator
-from . import KVStoreMockMixin
+from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 from .. import mgr
 from ..settings import Settings
 from ..services import ganesha

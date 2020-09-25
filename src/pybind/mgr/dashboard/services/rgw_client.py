@@ -15,7 +15,7 @@ from ..tools import build_url, dict_contains_path, json_str_to_object,\
 from .. import mgr
 
 try:
-    from typing import Dict, List, Optional  # pylint: disable=unused-import
+    from typing import Dict, List, Optional
 except ImportError:
     pass  # For typing only
 
@@ -302,6 +302,7 @@ class RgwClient(RestClient):
         if self.userid != RgwClient._SYSTEM_USERID:
             logger.info("Fetching new keys for user: %s", self.userid)
             keys = RgwClient.admin_instance().get_user_keys(self.userid)
+            # pylint: disable=attribute-defined-outside-init
             self.auth = S3Auth(keys['access_key'], keys['secret_key'],
                                service_url=self.service_url)
         else:

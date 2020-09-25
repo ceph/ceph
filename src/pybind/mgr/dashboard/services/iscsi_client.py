@@ -12,7 +12,7 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 
-from .iscsi_config import IscsiGatewaysConfig  # pylint: disable=cyclic-import
+from .iscsi_config import IscsiGatewaysConfig
 from ..settings import Settings
 from ..rest_client import RestClient
 
