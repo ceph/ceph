@@ -12,7 +12,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 
 try:
-    from typing import Dict, Any, Union  # pylint: disable=unused-import
+    from typing import Dict, Any, Union
 except ImportError:
     pass  # For typing only
 

@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import errno
 import unittest
-from . import KVStoreMockMixin, ControllerTestCase
+from . import KVStoreMockMixin, ControllerTestCase  # pylint: disable=no-name-in-module
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
 from ..settings import Settings, handle_option_command

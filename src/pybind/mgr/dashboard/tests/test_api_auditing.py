@@ -9,7 +9,7 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase, KVStoreMockMixin
+from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
 from ..controllers import RESTController, Controller
 from ..tools import RequestLoggingTool
 from .. import mgr

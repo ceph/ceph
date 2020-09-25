@@ -6,7 +6,7 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 from .. import mgr
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringSummary, \
