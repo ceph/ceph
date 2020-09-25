@@ -8487,6 +8487,11 @@ std::vector<Option> get_mds_options() {
      .set_flag(Option::FLAG_RUNTIME)
      .set_description("interval in seconds for sending ping messages to active MDSs.")
      .set_long_description("interval in seconds for rank 0 to send ping messages to all active MDSs."),
+    
+    Option("mds_adopt_homeless_subtree", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+     .set_default(false)
+     .set_flag(Option::FLAG_RUNTIME)
+     .set_description("adopt auth undef subtree"),
 
     Option("mds_metrics_update_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
      .set_default(2)

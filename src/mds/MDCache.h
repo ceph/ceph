@@ -1055,6 +1055,7 @@ class MDCache {
   void discard_delayed_resolve(mds_rank_t who);
   void maybe_resolve_finish();
   void disambiguate_my_imports();
+  void maybe_adopt_homeless_subtrees();
   void disambiguate_other_imports();
   void trim_unlinked_inodes();
 

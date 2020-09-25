@@ -3416,6 +3416,7 @@ void MDCache::maybe_resolve_finish()
 
   dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
   disambiguate_my_imports();
+  maybe_adopt_homeless_subtrees();
   finish_committed_leaders();
 
   if (resolve_done) {
@@ -3646,6 +3647,22 @@ void MDCache::disambiguate_other_imports()
     }
   }
   other_ambiguous_imports.clear();
+}
+
+void MDCache::maybe_adopt_homeless_subtrees() {
+  dout(10) << "maybe_adopt_homeless_subtrees" << dendl;
+  for ([[maybe_unused]] auto& [dir, bounds] : subtrees) {
+    mds_authority_t auth = dir->get_dir_auth();
+    if (auth == CDIR_AUTH_UNDEF) {
+      if(g_conf().get_val<bool>("mds_adopt_homeless_subtree")){
+        dout(1) << " adopt homeless subtree " << *dir << dendl;
+        adjust_bounded_subtree_auth(dir, bounds, mds->get_nodeid());
+        try_subtree_merge(dir);
+      } else {
+        ceph_assert(auth != CDIR_AUTH_UNDEF);
+      }
+    }
+  }
 }
 
 void MDCache::disambiguate_my_imports()
