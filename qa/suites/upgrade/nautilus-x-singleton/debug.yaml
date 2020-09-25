@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug client: 20
