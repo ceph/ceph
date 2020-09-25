@@ -5585,7 +5585,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     pi.inode->layout = layout;
     pip = pi.inode.get();
   } else if (name.compare(0, 10, "ceph.quota") == 0) { 
-    if (!cur->is_dir() || cur->is_root()) {
+    if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
       return;
     }

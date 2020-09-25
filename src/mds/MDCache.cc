@@ -2370,22 +2370,6 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       }
     }
 
-    /* 
-     * the rule here is to follow the _oldest_ parent with dirty rstat
-     * data.  if we don't propagate all data, we add ourselves to the
-     * nudge list.  that way all rstat data will (eventually) get
-     * pushed up the tree.
-     *
-     * actually, no.  for now, silently drop rstats for old parents.  we need 
-     * hard link backpointers to do the above properly.
-     */
-
-    // stop?
-    if (pin->is_base())
-      break;
-    parentdn = pin->get_projected_parent_dn();
-    ceph_assert(parentdn);
-
     // rstat
     dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
 
@@ -2418,8 +2402,12 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     parent->check_rstats();
     broadcast_quota_to_client(pin);
+    if (pin->is_base())
+      break;
     // next parent!
     cur = pin;
+    parentdn = pin->get_projected_parent_dn();
+    ceph_assert(parentdn);
     parent = parentdn->get_dir();
     linkunlink = 0;
     do_parent_mtime = false;
