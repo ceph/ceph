@@ -491,13 +491,13 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
         CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, "cls_queue_urgent_data", ret);
         return ret;
       }
+      CLS_LOG(7, "Spill over to xattrs, Num xattr entries now %u", urgent_data.num_xattr_urgent_entries);
+      CLS_LOG(7, "Num head entries %u", urgent_data.num_head_urgent_entries);
+      CLS_LOG(7, "Total num urgent data (deferred) entries that can be stored %u", urgent_data.num_urgent_data_entries);
     }
   }
 
   if ((urgent_data.num_head_urgent_entries + urgent_data.num_xattr_urgent_entries) > urgent_data.num_urgent_data_entries) {
-    CLS_LOG(20, "Total num entries %u", urgent_data.num_urgent_data_entries);
-    CLS_LOG(20, "Num xattr entries %u", urgent_data.num_xattr_urgent_entries);
-    CLS_LOG(20, "Num head entries %u", urgent_data.num_head_urgent_entries);
     CLS_LOG(0, "ERROR: Number of urgent data entries exceeded that requested by user, returning no space!");
     return -ENOSPC;
   }
