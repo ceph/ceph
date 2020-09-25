@@ -766,6 +766,16 @@ struct staged {
    *   estimate_insert(key, value) -> node_offset_t
    */
   using iterator_t = _iterator_t<CONTAINER_TYPE>;
+  /* TODO: detailed comments
+   * - trim_until(mut) -> trim_size
+   *   * keep 0 to i - 1, and remove the rest, return the size trimmed.
+   *   * if this is the end iterator, do nothing and return 0.
+   *   * if this is the start iterator, normally needs to go to the higher
+   *     stage to trim the entire container.
+   * - trim_at(mut, trimmed) -> trim_size
+   *   * trim happens inside the current iterator, causing the size reduced by
+   *     <trimmed>, return the total size trimmed.
+   */
 
   /*
    * Lookup internals (hide?)
@@ -1200,9 +1210,16 @@ struct staged {
       position_t& position, match_stage_t& stage, node_offset_t& _insert_size) {
     auto p_left_bound = container.p_left_bound();
     if (unlikely(!container.keys())) {
-      assert(position == position_t::end());
-      assert(stage == STAGE);
-      position = position_t::begin();
+      if (position == position_t::end()) {
+        position = position_t::begin();
+        assert(stage == STAGE);
+      } else if (position == position_t::begin()) {
+        // when insert into a trimmed and empty left node
+        stage = STAGE;
+        _insert_size = insert_size<KT>(key, value);
+      } else {
+        assert(false && "impossible path");
+      }
       if constexpr (IS_BOTTOM) {
         return container_t::template insert_at<KT>(
             mut, container, key, value, 0, _insert_size, p_left_bound);
@@ -1675,6 +1692,14 @@ struct staged {
     }
   }
 
+  /* TrimType:
+   *   BEFORE: remove the entire container, normally means the according higher
+   *           stage iterator needs to be trimmed as-a-whole.
+   *   AFTER: retain the entire container, normally means the trim should be
+   *          start from the next iterator at the higher stage.
+   *   AT: trim happens in the current container, and the according higher
+   *       stage iterator needs to be adjusted by the trimmed size.
+   */
   static std::tuple<TrimType, size_t>
   recursively_trim(NodeExtentMutable& mut, StagedIterator& trim_at) {
     if (!trim_at.valid()) {
@@ -1716,9 +1741,9 @@ struct staged {
 
   static void trim(NodeExtentMutable& mut, StagedIterator& trim_at) {
     auto [type, trimmed] = recursively_trim(mut, trim_at);
-    if (type == TrimType::AFTER) {
+    if (type == TrimType::BEFORE) {
+      assert(trim_at.valid());
       auto& iter = trim_at.get();
-      assert(iter.is_end());
       iter.trim_until(mut);
     }
   }

@@ -600,8 +600,17 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), onode4).get0();
     }
 
-    // TODO: test split at {0, 0, 0}
-    // TODO: test split at {END, END, END}
+    {
+      TestTree test;
+      test.build_tree({2, 4}, {2, 4}, {2, 4}, 232).get0();
+      auto& onode = test.create_onode(1996);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at [0, 0, 0]; insert to left front at stage 2, 1, 0\n");
+      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode).get0();
+      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode).get0();
+      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode).get0();
+    }
+    // Impossible to split at [END, END, END]
   });
 }
 
@@ -1048,6 +1057,6 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
     }
 
     // TODO: test split at {0, 0, 0}
-    // TODO: test split at {END, END, END}
+    // Impossible to split at [END, END, END]
   });
 }
