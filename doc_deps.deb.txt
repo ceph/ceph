@@ -3,6 +3,7 @@ gcc
 python3-dev
 python3-pip
 python3-virtualenv
+python3-venv
 virtualenv
 doxygen
 ditaa
@@ -12,3 +13,5 @@ graphviz
 ant
 zlib1g-dev
 cython3
+tox
+enchant
