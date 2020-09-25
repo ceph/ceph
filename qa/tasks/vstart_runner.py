@@ -135,7 +135,6 @@ try:
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
     from tasks.cephfs.mount import CephFSMount
     from tasks.mgr.mgr_test_case import MgrCluster
-    from teuthology.task import interactive
 except ImportError:
     sys.stderr.write("***\nError importing packages, have you activated your teuthology virtualenv "
                      "and set PYTHONPATH to point to teuthology and ceph-qa-suite?\n***\n\n")
@@ -1175,29 +1174,6 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
     def set_clients_block(self, blocked, mds_id=None):
         raise NotImplementedError()
 
-
-class InteractiveFailureResult(unittest.TextTestResult):
-    """
-    Specialization that implements interactive-on-error style
-    behavior.
-    """
-    def addFailure(self, test, err):
-        super(InteractiveFailureResult, self).addFailure(test, err)
-        log.error(self._exc_info_to_string(err, test))
-        log.error("Failure in test '{0}', going interactive".format(
-            self.getDescription(test)
-        ))
-        interactive.task(ctx=None, config=None)
-
-    def addError(self, test, err):
-        super(InteractiveFailureResult, self).addError(test, err)
-        log.error(self._exc_info_to_string(err, test))
-        log.error("Error in test '{0}', going interactive".format(
-            self.getDescription(test)
-        ))
-        interactive.task(ctx=None, config=None)
-
-
 def enumerate_methods(s):
     log.info("e: {0}".format(s))
     for t in s._tests:
@@ -1541,13 +1517,9 @@ def exec_test():
     for s, method in victims:
         s._tests.remove(method)
 
-    if opt_interactive_on_error:
-        result_class = InteractiveFailureResult
-    else:
-        result_class = unittest.TextTestResult
     fail_on_skip = False
 
-    class LoggingResult(result_class):
+    class LoggingResult(unittest.TextTestResult):
         def startTest(self, test):
             log.info("Starting test: {0}".format(self.getDescription(test)))
             test.started_at = datetime.datetime.utcnow()
@@ -1565,6 +1537,10 @@ def exec_test():
                 self.failures.append((test, reason))
             else:
                 super(LoggingResult, self).addSkip(test, reason)
+
+    if opt_interactive_on_error:
+        from tasks.ceph_test_case import CephTestCase
+        CephTestCase.INTERACTIVE = True
 
     # Execute!
     result = unittest.TextTestRunner(

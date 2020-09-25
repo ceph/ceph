@@ -3,6 +3,7 @@ import time
 import logging
 
 from teuthology.orchestra.run import CommandFailedError
+from teuthology.task import interactive
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,9 @@ class CephTestCase(unittest.TestCase):
     # their special needs.  If not met, tests will be skipped.
     REQUIRE_MEMSTORE = False
 
+    # For vstart_runner.py
+    INTERACTIVE = False
+
     def setUp(self):
         self._mon_configs_set = set()
 
@@ -46,6 +50,10 @@ class CephTestCase(unittest.TestCase):
                         "would take too long on full sized OSDs")
 
     def tearDown(self):
+        # Allow interactive shell before tearing down test state.
+        if self.INTERACTIVE and TEST_FAILED:
+            interactive.task(ctx=self.ctx, config=None)
+
         self.config_clear()
 
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
