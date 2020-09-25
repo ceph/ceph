@@ -5,7 +5,7 @@
 
 #include <inttypes.h>
 
-#ifdef HAVE_LINUX_TYPES_H
+#ifdef __linux__
 #include <linux/types.h>
 #else
 #ifndef HAVE___U8
