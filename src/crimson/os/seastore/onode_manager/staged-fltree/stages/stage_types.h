@@ -315,25 +315,10 @@ template<> struct value_type<node_type_t::LEAF> { using type = onode_t; };
 template <node_type_t NODE_TYPE>
 using value_type_t = typename value_type<NODE_TYPE>::type;
 
-using match_stat_t = int8_t;
-constexpr match_stat_t MSTAT_END = -2; // index is search_position_t::end()
-constexpr match_stat_t MSTAT_EQ  = -1; // key == index
-constexpr match_stat_t MSTAT_NE0 =  0; // key == index [pool/shard crush ns/oid]; key < index [snap/gen]
-constexpr match_stat_t MSTAT_NE1 =  1; // key == index [pool/shard crush]; key < index [ns/oid]
-constexpr match_stat_t MSTAT_NE2 =  2; // key < index [pool/shard crush ns/oid] ||
-                                       // key == index [pool/shard]; key < index [crush]
-constexpr match_stat_t MSTAT_NE3 =  3; // key < index [pool/shard]
-constexpr match_stat_t MSTAT_MIN = MSTAT_END;
-constexpr match_stat_t MSTAT_MAX = MSTAT_NE3;
-
 template <node_type_t NODE_TYPE, match_stage_t STAGE>
 struct staged_result_t {
   using me_t = staged_result_t<NODE_TYPE, STAGE>;
   bool is_end() const { return position.is_end(); }
-  MatchKindBS match() const {
-    assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
-    return (mstat == MSTAT_EQ ? MatchKindBS::EQ : MatchKindBS::NE);
-  }
 
   static me_t end() {
     return {staged_position_t<STAGE>::end(), nullptr, MSTAT_END};

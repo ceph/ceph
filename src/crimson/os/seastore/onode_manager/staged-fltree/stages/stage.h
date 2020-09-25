@@ -1091,7 +1091,7 @@ struct staged {
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::LEAF, T> evaluate_insert(
       const full_key_t<KeyT::HOBJ>& key, const onode_t& value,
-      const MatchHistory& history, position_t& position) {
+      const MatchHistory& history, match_stat_t mstat, position_t& position) {
     match_stage_t insert_stage = STAGE_TOP;
     while (*history.get_by_stage(insert_stage) == MatchKindCMP::EQ) {
       assert(insert_stage != STAGE_BOTTOM && "insert conflict!");
@@ -1104,14 +1104,18 @@ struct staged {
         assert(insert_stage <= STAGE && "impossible insert stage");
       } else if (position == position_t::begin()) {
         // I must be short-circuited by staged::smallest_result()
-        // in staged::lower_bound()
-
+        // in staged::lower_bound(), so we need to rely on mstat instead
+        assert(mstat >= MSTAT_NE0 && mstat <= MSTAT_NE3);
+        if (mstat == MSTAT_NE0) {
+          insert_stage = STAGE_RIGHT;
+        } else if (mstat == MSTAT_NE1) {
+          insert_stage = STAGE_STRING;
+        } else {
+          insert_stage = STAGE_LEFT;
+        }
         // XXX(multi-type): need to upgrade node type before inserting an
         // incompatible index at front.
         assert(insert_stage <= STAGE && "incompatible insert");
-
-        // insert at begin and at the top stage
-        insert_stage = STAGE;
       } else {
         assert(insert_stage <= STAGE && "impossible insert stage");
         bool ret = compensate_insert_position_at(insert_stage, position);

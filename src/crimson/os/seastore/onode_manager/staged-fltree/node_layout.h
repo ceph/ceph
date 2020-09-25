@@ -411,11 +411,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   std::tuple<match_stage_t, node_offset_t> evaluate_insert(
-      const key_hobj_t& key, const onode_t& value, const MatchHistory& history,
+      const key_hobj_t& key, const onode_t& value,
+      const MatchHistory& history, match_stat_t mstat,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
       return STAGE_T::evaluate_insert(
-          key, value, history, cast_down<STAGE>(insert_pos));
+          key, value, history, mstat, cast_down<STAGE>(insert_pos));
     } else {
       assert(false && "impossible path");
     }

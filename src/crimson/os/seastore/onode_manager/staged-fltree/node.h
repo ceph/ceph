@@ -93,7 +93,12 @@ class Node
   struct search_result_t {
     bool is_end() const { return p_cursor->is_end(); }
     Ref<tree_cursor_t> p_cursor;
-    MatchKindBS match;
+    match_stat_t mstat;
+
+    MatchKindBS match() const {
+      assert(mstat >= MSTAT_MIN && mstat <= MSTAT_MAX);
+      return (mstat == MSTAT_EQ ? MatchKindBS::EQ : MatchKindBS::NE);
+    }
   };
 
   virtual ~Node();
@@ -283,7 +288,8 @@ class LeafNode final : public Node {
   LeafNode(LeafNodeImpl*, NodeImplURef&&);
   node_future<Ref<tree_cursor_t>> insert_value(
       context_t, const key_hobj_t&, const onode_t&,
-      const search_position_t&, const MatchHistory&);
+      const search_position_t&, const MatchHistory&,
+      match_stat_t mstat);
   static node_future<Ref<LeafNode>> allocate_root(context_t, RootNodeTracker&);
   friend class Node;
 
