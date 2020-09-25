@@ -657,6 +657,8 @@ class DummyChildPool {
       assert(false && "impossible path"); }
     std::ostream& dump_brief(std::ostream&) const override {
       assert(false && "impossible path"); }
+    void validate_layout() const override {
+      assert(false && "impossible path"); }
     void test_copy_to(NodeExtentMutable&) const override {
       assert(false && "impossible path"); }
     void test_set_tail(NodeExtentMutable&) override {
