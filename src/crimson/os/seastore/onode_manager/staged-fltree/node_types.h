@@ -47,4 +47,15 @@ struct laddr_packed_t {
   laddr_t value;
 } __attribute__((packed));
 
+using match_stat_t = int8_t;
+constexpr match_stat_t MSTAT_END = -2; // index is search_position_t::end()
+constexpr match_stat_t MSTAT_EQ  = -1; // key == index
+constexpr match_stat_t MSTAT_NE0 =  0; // key == index [pool/shard crush ns/oid]; key < index [snap/gen]
+constexpr match_stat_t MSTAT_NE1 =  1; // key == index [pool/shard crush]; key < index [ns/oid]
+constexpr match_stat_t MSTAT_NE2 =  2; // key < index [pool/shard crush ns/oid] ||
+                                       // key == index [pool/shard]; key < index [crush]
+constexpr match_stat_t MSTAT_NE3 =  3; // key < index [pool/shard]
+constexpr match_stat_t MSTAT_MIN = MSTAT_END;
+constexpr match_stat_t MSTAT_MAX = MSTAT_NE3;
+
 }

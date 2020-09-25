@@ -125,7 +125,7 @@ class LeafNodeImpl : public NodeImpl {
       search_position_t&, key_view_t&, const onode_t**) const = 0;
   virtual std::tuple<match_stage_t, node_offset_t> evaluate_insert(
       const key_hobj_t&, const onode_t&,
-      const MatchHistory&, search_position_t&) const = 0;
+      const MatchHistory&, match_stat_t, search_position_t&) const = 0;
 
   struct fresh_impl_t {
     LeafNodeImplURef impl;

@@ -125,13 +125,13 @@ node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
     MatchHistory(), [this, c, &key, &value](auto& history) {
       return lower_bound_tracked(c, key, history
       ).safe_then([c, &key, &value, &history](auto result) {
-        if (result.match == MatchKindBS::EQ) {
+        if (result.match() == MatchKindBS::EQ) {
           return node_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
               std::make_pair(result.p_cursor, false));
         } else {
           auto leaf_node = result.p_cursor->get_leaf_node();
           return leaf_node->insert_value(
-              c, key, value, result.p_cursor->get_position(), history
+              c, key, value, result.p_cursor->get_position(), history, result.mstat
           ).safe_then([](auto p_cursor) {
             return node_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
                 std::make_pair(p_cursor, true));
@@ -564,7 +564,7 @@ LeafNode::lower_bound_tracked(
     cursor = get_or_track_cursor(result.position, index_key, result.p_value);
   }
   return node_ertr::make_ready_future<search_result_t>(
-      search_result_t{cursor, result.match()});
+      search_result_t{cursor, result.mstat});
 }
 
 node_future<> LeafNode::test_clone_root(
@@ -586,7 +586,8 @@ node_future<> LeafNode::test_clone_root(
 
 node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     context_t c, const key_hobj_t& key, const onode_t& value,
-    const search_position_t& pos, const MatchHistory& history) {
+    const search_position_t& pos, const MatchHistory& history,
+    match_stat_t mstat) {
 #ifndef NDEBUG
   if (pos.is_end()) {
     assert(impl->is_level_tail());
@@ -594,6 +595,7 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
 #endif
   std::cout << "leaf insert at pos(" << pos << "), "
             << key << ", " << value << ", " << history
+            << ", mstat(" << (int)mstat << ")"
             << std::endl;
 #if 0
   std::cout << "before insert:" << std::endl;
@@ -602,7 +604,7 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
 
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
-      key, value, history, insert_pos);
+      key, value, history, mstat, insert_pos);
   auto free_size = impl->free_size();
   if (free_size >= insert_size) {
     // insert

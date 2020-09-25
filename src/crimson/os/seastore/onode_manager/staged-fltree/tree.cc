@@ -105,7 +105,7 @@ Btree::contains(Transaction& t, const ghobject_t& obj) {
         // TODO: improve lower_bound()
         return root->lower_bound(get_context(t), key);
       }).safe_then([](auto result) {
-        return MatchKindBS::EQ == result.match;
+        return MatchKindBS::EQ == result.match();
       });
     }
   );
@@ -120,7 +120,7 @@ Btree::find(Transaction& t, const ghobject_t& obj) {
         // TODO: improve lower_bound()
         return root->lower_bound(get_context(t), key);
       }).safe_then([this](auto result) {
-        if (result.match == MatchKindBS::EQ) {
+        if (result.match() == MatchKindBS::EQ) {
           return Cursor(this, result.p_cursor);
         } else {
           return Cursor::make_end(this);
