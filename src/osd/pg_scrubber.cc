@@ -641,23 +641,24 @@ bool PgScrubber::get_replicas_maps(bool replica_can_preempt)
   dout(10) << __func__ << " epoch_start: " << epoch_start_
 	   << " pg sis: " << pg_->info.history.same_interval_since << dendl;
 
+  bool do_have_replicas = false;
+
   primary_scrubmap_pos_.reset();
-  waiting_on_whom.insert(pg_whoami_);
 
   // ask replicas to scan and send maps
-  for (auto i : pg_->get_acting_recovery_backfill()) {
+  for (const auto& i : pg_->get_acting_recovery_backfill()) {
 
     if (i == pg_whoami_)
       continue;
 
-    waiting_on_whom.insert(i);
+    do_have_replicas = true;
+    m_maps_status.mark_replica_map_request(i);
     _request_scrub_map(i, subset_last_update_, start_, end_, is_deep_,
 		       replica_can_preempt);
   }
 
-  dout(7) << __func__ << " waiting_on_whom " << waiting_on_whom << dendl;
-  // do we have replicas? if so - as we've already inserted ourselves, size will be >1
-  return waiting_on_whom.size() > 1;
+  dout(7) << __func__ << " awaiting" << m_maps_status << dendl;
+  return do_have_replicas;
 }
 
 bool PgScrubber::was_epoch_changed() const
@@ -674,25 +675,17 @@ bool PgScrubber::was_epoch_changed() const
 
 void PgScrubber::mark_local_map_ready()
 {
-  /// for now - I am keeping the old workaround. \todo change
-  waiting_on_whom.erase(pg_whoami_);
+  m_maps_status.mark_local_map_ready();
 }
 
 bool PgScrubber::are_all_maps_available() const
 {
-  return waiting_on_whom.empty();
+  return m_maps_status.are_all_maps_available();
 }
 
 std::string PgScrubber::dump_awaited_maps() const
 {
-  // note - this is an extremely inefficient implementation. Debug/UT use only!
-  std::string pending;
-  pg_shard_t a;
-  a.get_osd();
-  for_each(waiting_on_whom.begin(), waiting_on_whom.end(),
-	   [&](const auto& n) { pending = pending + n.get_osd(); });
-
-  return pending;
+  return m_maps_status.dump();
 }
 
 void PgScrubber::_request_scrub_map(pg_shard_t replica,
@@ -1350,10 +1343,10 @@ void PgScrubber::map_from_replica(OpRequestRef op)
 
   received_maps[m->from].decode(p, pg_->info.pgid.pool());
   dout(10) << "map version is " << received_maps[m->from].valid_through << dendl;
-  // dout(10) << __func__ << " waiting_on_whom was " << waiting_on_whom << dendl;
+  // dout(10) << __func__ << " waiting_on _whom was " << waiting_on _whom << dendl;
 
-  ceph_assert(waiting_on_whom.count(m->from));
-  waiting_on_whom.erase(m->from);
+  [[maybe_unused]] auto [ is_ok, err_txt ] = m_maps_status.mark_arriving_map(m->from);
+  ceph_assert(is_ok); // and not an error message, as this was the original code
 
   if (m->preempted) {
     dout(10) << __func__ << " replica was preempted, setting flag" << dendl;
@@ -1361,7 +1354,7 @@ void PgScrubber::map_from_replica(OpRequestRef op)
     preemption_data.do_preempt();
   }
 
-  if (waiting_on_whom.empty()) {
+  if (m_maps_status.are_all_maps_available()) {
     dout(10) << __func__ << " osd-queuing GotReplicas" << dendl;
     osds_->queue_scrub_got_repl_maps(pg_, pg_->is_scrub_blocking_ops());
   }
@@ -1739,7 +1732,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
 
   {
     f->open_array_section("scrubber.waiting_on_whom");
-    for (const auto& p : waiting_on_whom) {
+    for (const auto& p : m_maps_status.get_awaited()) {
       f->dump_stream("shard") << p;
     }
     f->close_section();
@@ -1839,7 +1832,7 @@ void PgScrubber::replica_handling_done()
   // make sure we cleared the reservations!
 
   preemption_data.reset();
-  waiting_on_whom.clear();
+  m_maps_status.reset();
   received_maps.clear();
 
   start_ = hobject_t{};
@@ -1877,7 +1870,7 @@ void PgScrubber::reset_internal_state()
   dout(7) << __func__ << dendl;
 
   preemption_data.reset();
-  waiting_on_whom.clear();
+  m_maps_status.reset();
   received_maps.clear();
 
   start_ = hobject_t{};
@@ -2097,7 +2090,6 @@ void ReplicaReservations::handle_reserve_reject(OpRequestRef op, pg_shard_t from
   }
 }
 
-
 // ///////////////////// LocalReservation //////////////////////////////////
 
 LocalReservation::LocalReservation(PG* pg, OSDService* osds)
@@ -2129,7 +2121,7 @@ LocalReservation::~LocalReservation()
 }
 
 
-// ///////////////////// ReservedByRemotePrimary //////////////////////////////////
+// ///////////////////// ReservedByRemotePrimary ///////////////////////////////
 
 ReservedByRemotePrimary::ReservedByRemotePrimary(PG* pg, OSDService* osds)
     : pg_{pg}  // holding the "whole PG" for dout() sake
@@ -2160,4 +2152,46 @@ ReservedByRemotePrimary::~ReservedByRemotePrimary()
 {
   early_release();
 }
+
+// ///////////////////// MapsCollectionStatus ////////////////////////////////
+
+auto MapsCollectionStatus::mark_arriving_map(pg_shard_t from)
+  -> std::tuple<bool, std::string_view>
+{
+  auto fe = std::find(m_maps_awaited_for.begin(), m_maps_awaited_for.end(), from);
+  if (fe != m_maps_awaited_for.end()) {
+    // we are indeed waiting for a map from this replica
+    m_maps_awaited_for.erase(fe);
+    return std::tuple{true, ""sv};
+  } else {
+    return std::tuple{false, "unsolicited scrub-map"sv};
+  }
+}
+
+void MapsCollectionStatus::reset()
+{
+  *this = MapsCollectionStatus{};
+}
+
+std::string MapsCollectionStatus::dump() const
+{
+  std::string all;
+  for (const auto& rp : m_maps_awaited_for) {
+    all.append(rp.get_osd() + " "s);
+  }
+  return all;
+}
+
+ostream& operator<<(ostream& out, const MapsCollectionStatus& sf)
+{
+  out << " [ ";
+  for (const auto& rp : sf.m_maps_awaited_for) {
+    out << rp.get_osd() << " ";
+  }
+  if (!sf.m_local_map_ready) {
+    out << " local ";
+  }
+  return out << " ] ";
+}
+
 }  // namespace Scrub

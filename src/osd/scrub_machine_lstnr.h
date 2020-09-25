@@ -121,7 +121,7 @@ struct ScrubMachineListener {
    */
   virtual void mark_local_map_ready() = 0;
 
-  virtual bool are_all_maps_available() const = 0;
+  [[nodiscard]] virtual bool are_all_maps_available() const = 0;
 
   /// a log/debug interface
   virtual std::string dump_awaited_maps() const = 0;
