@@ -145,6 +145,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return os;
   }
 
+  void validate_layout() const override {
+#ifndef NDEBUG
+    STAGE_T::validate(extent.read());
+#endif
+  }
+
   void test_copy_to(NodeExtentMutable& to) const override {
     extent.test_copy_to(to);
   }
@@ -255,6 +261,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
               << "), insert_stage=" << (int)insert_stage
               << ", insert_size=" << insert_size
               << std::endl << std::endl;
+    validate_layout();
     assert(get_key_view(insert_pos) == key);
     return ret;
   }
@@ -326,6 +333,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(append_at.is_end());
     right_appender.wrap();
     right_impl.dump(std::cout) << std::endl;
+    right_impl.validate_layout();
 
     // mutate left node
     if (is_insert_left) {
@@ -341,6 +349,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       extent.split_replayable(split_at);
     }
     dump(std::cout) << std::endl;
+    validate_layout();
     assert(p_value);
 
     auto split_pos = normalize(split_at.get_pos());

@@ -1276,6 +1276,25 @@ struct staged {
     return os;
   }
 
+  static void validate(const container_t& container) {
+    auto iter = iterator_t(container);
+    assert(!iter.is_end());
+    auto key = iter.get_key();
+    do {
+      if constexpr (!IS_BOTTOM) {
+        auto nxt_container = iter.get_nxt_container();
+        NXT_STAGE_T::validate(nxt_container);
+      }
+      if (iter.is_last()) {
+        break;
+      } else {
+        ++iter;
+        assert(compare_to(key, iter.get_key()) == MatchKindCMP::NE);
+        key = iter.get_key();
+      }
+    } while (true);
+  }
+
   struct _BaseEmpty {};
   class _BaseWithNxtIterator {
    protected:
