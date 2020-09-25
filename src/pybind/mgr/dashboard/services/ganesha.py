@@ -109,7 +109,7 @@ class Ganesha(object):
 
     @classmethod
     def get_ganesha_clusters(cls):
-        return [cluster_id for cluster_id in cls._get_clusters_locations()]
+        return list(cls._get_clusters_locations())
 
     @staticmethod
     def _get_orch_nfs_services() -> List[ServiceDescription]:
@@ -322,7 +322,7 @@ class GaneshaConfParser(object):
         for key, val in block.items():
             if key == 'block_name':
                 continue
-            elif key == '_blocks_':
+            if key == '_blocks_':
                 for blo in val:
                     conf_str += GaneshaConfParser.write_block(blo, depth)
             elif val:
@@ -687,21 +687,21 @@ class Export(object):
             result['attr_expiration_time'] = self.attr_expiration_time
             result['security_label'] = self.security_label
         if 'protocols' not in defaults:
-            result['protocols'] = [p for p in self.protocols]
+            result['protocols'] = list(self.protocols)
         else:
             def_proto = defaults['protocols']
             if not isinstance(def_proto, list):
                 def_proto = set([def_proto])
             if self.protocols != def_proto:
-                result['protocols'] = [p for p in self.protocols]
+                result['protocols'] = list(self.protocols)
         if 'transports' not in defaults:
-            result['transports'] = [t for t in self.transports]
+            result['transports'] = list(self.transports)
         else:
             def_transp = defaults['transports']
             if not isinstance(def_transp, list):
                 def_transp = set([def_transp])
             if self.transports != def_transp:
-                result['transports'] = [t for t in self.transports]
+                result['transports'] = list(self.transports)
 
         result['_blocks_'] = [self.fsal.to_fsal_block()]
         result['_blocks_'].extend([client.to_client_block()
@@ -731,14 +731,14 @@ class Export(object):
             'path': self.path,
             'fsal': self.fsal.to_dict(),
             'cluster_id': self.cluster_id,
-            'daemons': sorted([d for d in self.daemons]),
+            'daemons': sorted(list(self.daemons)),
             'pseudo': self.pseudo,
             'tag': self.tag,
             'access_type': self.access_type,
             'squash': self.squash,
             'security_label': self.security_label,
-            'protocols': sorted([p for p in self.protocols]),
-            'transports': sorted([t for t in self.transports]),
+            'protocols': sorted(list(self.protocols)),
+            'transports': sorted(list(self.transports)),
             'clients': [client.to_dict() for client in self.clients]
         }
 

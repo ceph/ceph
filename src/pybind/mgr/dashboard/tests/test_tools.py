@@ -10,7 +10,7 @@ try:
 except ImportError:
     from unittest.mock import patch
 
-from . import ControllerTestCase
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 from ..services.exception import handle_rados_error
 from ..controllers import RESTController, ApiController, Controller, \
                           BaseController, Proxy

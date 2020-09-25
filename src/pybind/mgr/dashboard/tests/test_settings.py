@@ -6,7 +6,7 @@ import unittest
 
 from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
 
-from . import KVStoreMockMixin, ControllerTestCase
+from . import KVStoreMockMixin, ControllerTestCase  # pylint: disable=no-name-in-module
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
 from ..settings import Settings, handle_option_command

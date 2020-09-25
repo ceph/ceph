@@ -30,7 +30,7 @@ from .services.auth import JwtManager
 
 try:
     from typing import Any, AnyStr, Callable, DefaultDict, Deque,\
-        Dict, List, Set, Tuple, Union  # noqa pylint: disable=unused-import
+        Dict, List, Set, Tuple, Union  # noqa
 except ImportError:
     pass  # For typing only
 

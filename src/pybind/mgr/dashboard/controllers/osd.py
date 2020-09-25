@@ -295,7 +295,7 @@ class Osd(RESTController):
 
     @CreatePermission
     @osd_task('create', {'tracking_id': '{tracking_id}'})
-    def create(self, method, data, tracking_id):  # pylint: disable=W0622
+    def create(self, method, data, tracking_id):  # pylint: disable=unused-argument
         if method == 'bare':
             return self._create_bare(data)
         if method == 'drive_groups':

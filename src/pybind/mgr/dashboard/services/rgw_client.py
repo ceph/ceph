@@ -314,6 +314,7 @@ class RgwClient(RestClient):
         if self.userid != RgwClient._SYSTEM_USERID:
             logger.info("Fetching new keys for user: %s", self.userid)
             keys = RgwClient.admin_instance().get_user_keys(self.userid)
+            # pylint: disable=attribute-defined-outside-init
             self.auth = S3Auth(keys['access_key'], keys['secret_key'],
                                service_url=self.service_url)
         else:

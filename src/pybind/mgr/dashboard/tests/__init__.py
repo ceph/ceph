@@ -21,7 +21,7 @@ from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
 
 from ..plugins import PLUGIN_MANAGER
-from ..plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+from ..plugins import feature_toggles, debug  # noqa
 
 
 PLUGIN_MANAGER.hook.init()
