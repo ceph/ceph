@@ -69,10 +69,36 @@ struct MatchHistory {
     const_cast<std::optional<MatchKindCMP>&>(get<STAGE>()) = match;
   }
 
+  std::ostream& dump(std::ostream& os) const {
+    os << "history(";
+    dump_each(os, left_match) << ", ";
+    dump_each(os, string_match) << ", ";
+    dump_each(os, right_match) << ")";
+    return os;
+  }
+
+  std::ostream& dump_each(
+      std::ostream& os, const std::optional<MatchKindCMP>& match) const {
+    if (!match.has_value()) {
+      return os << "--";
+    } else if (*match == MatchKindCMP::NE) {
+      return os << "NE";
+    } else if (*match == MatchKindCMP::EQ) {
+      return os << "EQ";
+    } else if (*match == MatchKindCMP::PO) {
+      return os << "PO";
+    } else {
+      assert(false && "impossble path");
+    }
+  }
+
   std::optional<MatchKindCMP> left_match;
   std::optional<MatchKindCMP> string_match;
   std::optional<MatchKindCMP> right_match;
 };
+inline std::ostream& operator<<(std::ostream& os, const MatchHistory& pos) {
+  return pos.dump(os);
+}
 
 template <match_stage_t STAGE>
 struct _check_PO_t {

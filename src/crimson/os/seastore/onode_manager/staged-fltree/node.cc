@@ -593,7 +593,8 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   }
 #endif
   std::cout << "leaf insert at pos(" << pos << "), "
-            << key << ", " << value << std::endl;
+            << key << ", " << value << ", " << history
+            << std::endl;
 #if 0
   std::cout << "before insert:" << std::endl;
   dump(std::cout) << std::endl;

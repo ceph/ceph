@@ -54,6 +54,12 @@ struct shard_pool_t {
 inline std::ostream& operator<<(std::ostream& os, const shard_pool_t& sp) {
   return os << (unsigned)sp.shard << "," << sp.pool;
 }
+inline MatchKindCMP compare_to(const shard_pool_t& l, const shard_pool_t& r) {
+  auto ret = toMatchKindCMP(l.shard, r.shard);
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  return toMatchKindCMP(l.pool, r.pool);
+}
 
 struct crush_t {
   bool operator==(const crush_t& x) const { return crush == x.crush; }
@@ -66,6 +72,9 @@ struct crush_t {
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const crush_t& c) {
   return os << c.crush;
+}
+inline MatchKindCMP compare_to(const crush_t& l, const crush_t& r) {
+  return toMatchKindCMP(l.crush, r.crush);
 }
 
 struct shard_pool_crush_t {
@@ -83,6 +92,13 @@ struct shard_pool_crush_t {
 inline std::ostream& operator<<(std::ostream& os, const shard_pool_crush_t& spc) {
   return os << spc.shard_pool << "," << spc.crush;
 }
+inline MatchKindCMP compare_to(
+    const shard_pool_crush_t& l, const shard_pool_crush_t& r) {
+  auto ret = compare_to(l.shard_pool, r.shard_pool);
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  return compare_to(l.crush, r.crush);
+}
 
 struct snap_gen_t {
   bool operator==(const snap_gen_t& x) const {
@@ -98,6 +114,12 @@ struct snap_gen_t {
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const snap_gen_t& sg) {
   return os << sg.snap << "," << sg.gen;
+}
+inline MatchKindCMP compare_to(const snap_gen_t& l, const snap_gen_t& r) {
+  auto ret = toMatchKindCMP(l.snap, r.snap);
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  return toMatchKindCMP(l.gen, r.gen);
 }
 
 struct string_key_view_t {
@@ -301,6 +323,12 @@ struct ns_oid_view_t {
 inline std::ostream& operator<<(std::ostream& os, const ns_oid_view_t& ns_oid) {
   return os << ns_oid.nspace << "," << ns_oid.oid;
 }
+inline MatchKindCMP compare_to(const ns_oid_view_t& l, const ns_oid_view_t& r) {
+  auto ret = compare_to(l.nspace, r.nspace);
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  return compare_to(l.oid, r.oid);
+}
 
 class key_hobj_t {
  public:
@@ -343,29 +371,33 @@ class key_hobj_t {
     return !operator==(o);
   }
 
+  std::ostream& dump(std::ostream& os) const {
+    os << "key_hobj(" << (unsigned)shard() << ","
+       << pool() << "," << crush() << "; ";
+    if (nspace().size() <= 12) {
+      os << "\"" << nspace() << "\",";
+    } else {
+      os << "\"" << nspace().substr(0, 4) << ".."
+         << nspace().substr(nspace().size() - 2, 2)
+         << "/" << nspace().size() << "B\",";
+    }
+    if (oid().size() <= 12) {
+      os << "\"" << oid() << "\"; ";
+    } else {
+      os << "\"" << oid().substr(0, 4) << ".."
+         << oid().substr(oid().size() - 2, 2)
+         << "/" << oid().size() << "B\"; ";
+    }
+    os << snap() << "," << gen() << ")";
+    return os;
+  }
+
  private:
   ns_oid_view_t::Type _dedup_type = ns_oid_view_t::Type::STR;
   ghobject_t ghobj;
 };
 inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
-  os << "key_hobj(" << (unsigned)key.shard() << ","
-     << key.pool() << "," << key.crush() << "; ";
-  if (key.nspace().size() <= 12) {
-    os << "\"" << key.nspace() << "\",";
-  } else {
-    os << "\"" << key.nspace().substr(0, 4) << ".."
-       << key.nspace().substr(key.nspace().size() - 2, 2)
-       << "/" << key.nspace().size() << "B\",";
-  }
-  if (key.oid().size() <= 12) {
-    os << "\"" << key.oid() << "\"; ";
-  } else {
-    os << "\"" << key.oid().substr(0, 4) << ".."
-       << key.oid().substr(key.oid().size() - 2, 2)
-       << "/" << key.oid().size() << "B\"; ";
-  }
-  os << key.snap() << "," << key.gen() << ")";
-  return os;
+  return key.dump(os);
 }
 
 class key_view_t {
@@ -471,6 +503,31 @@ class key_view_t {
     p_snap_gen = &key;
   }
 
+  std::ostream& dump(std::ostream& os) const {
+    os << "key_view(";
+    if (has_shard_pool()) {
+      os << (unsigned)shard() << "," << pool() << ",";
+    } else {
+      os << "X,X,";
+    }
+    if (has_crush()) {
+      os << crush() << "; ";
+    } else {
+      os << "X; ";
+    }
+    if (has_ns_oid()) {
+      os << nspace() << "," << oid() << "; ";
+    } else {
+      os << "X,X; ";
+    }
+    if (has_snap_gen()) {
+      os << snap() << "," << gen() << ")";
+    } else {
+      os << "X,X)";
+    }
+    return os;
+  }
+
  private:
   const shard_pool_t* p_shard_pool = nullptr;
   const crush_t* p_crush = nullptr;
@@ -511,28 +568,7 @@ inline bool key_view_t::operator==(const full_key_t<KeyT::HOBJ>& o) const {
 }
 
 inline std::ostream& operator<<(std::ostream& os, const key_view_t& key) {
-  os << "key_view(";
-  if (key.has_shard_pool()) {
-    os << (unsigned)key.shard() << "," << key.pool() << ",";
-  } else {
-    os << "X,X,";
-  }
-  if (key.has_crush()) {
-    os << key.crush() << "; ";
-  } else {
-    os << "X; ";
-  }
-  if (key.has_ns_oid()) {
-    os << key.nspace() << "," << key.oid() << "; ";
-  } else {
-    os << "X,X; ";
-  }
-  if (key.has_snap_gen()) {
-    os << key.snap() << "," << key.gen() << ")";
-  } else {
-    os << "X,X)";
-  }
-  return os;
+  return key.dump(os);
 }
 
 template <KeyT Type>

@@ -36,6 +36,7 @@ class NodeImpl {
 
   virtual std::ostream& dump(std::ostream&) const = 0;
   virtual std::ostream& dump_brief(std::ostream&) const = 0;
+  virtual void validate_layout() const = 0;
 
   virtual void test_copy_to(NodeExtentMutable&) const = 0;
   virtual void test_set_tail(NodeExtentMutable&) = 0;
