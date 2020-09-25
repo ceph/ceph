@@ -480,6 +480,10 @@ public:
 	    index << " ret=" << ret << dendl;
       return ret;
     }
+    if (perfcounter) {
+      /* log the count of tags retired for rate estimation */
+      perfcounter->inc(l_rgw_gc_retire, num_entries);
+    }
     return 0;
   }
 }; // class RGWGCIOManger
