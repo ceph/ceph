@@ -37,7 +37,8 @@ namespace io {
 template <>
 struct CopyupRequest<librbd::MockImageCtx> {
   MOCK_METHOD0(send, void());
-  MOCK_METHOD1(append_request, void(AbstractObjectWriteRequest<librbd::MockTestImageCtx>*));
+  MOCK_METHOD2(append_request, void(AbstractObjectWriteRequest<librbd::MockTestImageCtx>*,
+                                    const Extents&));
 };
 
 template <>
@@ -244,10 +245,11 @@ struct TestMockIoObjectRequest : public TestMockFixture {
 
   void expect_copyup(MockCopyupRequest& mock_copyup_request,
                      MockAbstractObjectWriteRequest** write_request, int r) {
-    EXPECT_CALL(mock_copyup_request, append_request(_))
-      .WillOnce(Invoke([write_request](MockAbstractObjectWriteRequest *req) {
-                  *write_request = req;
-                }));
+    EXPECT_CALL(mock_copyup_request, append_request(_, _))
+      .WillOnce(WithArg<0>(
+        Invoke([write_request](MockAbstractObjectWriteRequest *req) {
+            *write_request = req;
+          })));
     EXPECT_CALL(mock_copyup_request, send())
       .WillOnce(Invoke([write_request, r]() {
                   (*write_request)->handle_copyup(r);

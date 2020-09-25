@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/interval_set.h"
 #include "common/ceph_mutex.h"
 #include "common/zipkin_trace.h"
 #include "librbd/io/AsyncOperation.h"
@@ -39,7 +40,8 @@ public:
                 const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
-  void append_request(AbstractObjectWriteRequest<ImageCtxT> *req);
+  void append_request(AbstractObjectWriteRequest<ImageCtxT> *req,
+                      const Extents& object_extents);
 
   void send();
 
@@ -103,6 +105,8 @@ private:
 
   WriteRequests m_restart_requests;
   bool m_append_request_permitted = true;
+
+  interval_set<uint64_t> m_write_object_extents;
 
   void read_from_parent();
   void handle_read_from_parent(int r);

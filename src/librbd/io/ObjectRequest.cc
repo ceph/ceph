@@ -564,13 +564,13 @@ void AbstractObjectWriteRequest<I>::copyup() {
     this->m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
-    new_req->append_request(this);
+    new_req->append_request(this, std::move(get_copyup_overwrite_extents()));
     image_ctx->copyup_list[this->m_object_no] = new_req;
 
     image_ctx->copyup_list_lock.unlock();
     new_req->send();
   } else {
-    it->second->append_request(this);
+    it->second->append_request(this, std::move(get_copyup_overwrite_extents()));
     image_ctx->copyup_list_lock.unlock();
   }
 }
