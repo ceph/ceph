@@ -74,13 +74,13 @@ private:
    *    |     /-----------\
    *    |     |           | (repeat for each snapshot)
    *    v     v           |
-   * WRITE_OBJECT --------/
-   *    |
+   * UPDATE_OBJECT_MAP ---/ (skip if object
+   *    |                    map disabled)
    *    |     /-----------\
    *    |     |           | (repeat for each snapshot)
    *    v     v           |
-   * UPDATE_OBJECT_MAP ---/ (skip if object
-   *    |                    map disabled)
+   * WRITE_OBJECT --------/
+   *    |
    *    v
    * <finish>
    *
@@ -159,11 +159,11 @@ private:
   void send_read();
   void handle_read(int r);
 
-  void send_write_object();
-  void handle_write_object(int r);
-
   void send_update_object_map();
   void handle_update_object_map(int r);
+
+  void send_write_object();
+  void handle_write_object(int r);
 
   Context *start_lock_op(ceph::shared_mutex &owner_lock, int* r);
 
