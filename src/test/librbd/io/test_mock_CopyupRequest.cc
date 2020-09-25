@@ -389,7 +389,7 @@ TEST_F(TestMockIoCopyupRequest, Standard) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());
@@ -447,7 +447,7 @@ TEST_F(TestMockIoCopyupRequest, StandardWithSnaps) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());
@@ -580,7 +580,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopy) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());
@@ -685,7 +685,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithPostSnaps) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());
@@ -757,7 +757,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithPreAndPostSnaps) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());
@@ -798,7 +798,7 @@ TEST_F(TestMockIoCopyupRequest, ZeroedCopyup) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());
@@ -873,7 +873,7 @@ TEST_F(TestMockIoCopyupRequest, NoOpCopyup) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());
@@ -922,12 +922,12 @@ TEST_F(TestMockIoCopyupRequest, RestartWrite) {
     mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
   EXPECT_CALL(mock_io_ctx, write(ictx->get_object_name(0), _, 0, 0, _))
     .WillOnce(WithoutArgs(Invoke([req, &mock_write_request2]() {
-                            req->append_request(&mock_write_request2);
+                            req->append_request(&mock_write_request2, {});
                             return 0;
                           })));
 
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request1);
+  req->append_request(&mock_write_request1, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request1.ctx.wait());
@@ -964,7 +964,7 @@ TEST_F(TestMockIoCopyupRequest, ReadFromParentError) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(-EPERM, mock_write_request.ctx.wait());
@@ -1001,7 +1001,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyError) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(-EPERM, mock_write_request.ctx.wait());
@@ -1042,7 +1042,7 @@ TEST_F(TestMockIoCopyupRequest, UpdateObjectMapError) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(-EINVAL, mock_write_request.ctx.wait());
@@ -1096,7 +1096,7 @@ TEST_F(TestMockIoCopyupRequest, CopyupError) {
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(-EPERM, mock_write_request.ctx.wait());
@@ -1142,7 +1142,7 @@ TEST_F(TestMockIoCopyupRequest, SparseCopyupNotSupported) {
 
   auto req = new MockCopyupRequest(&mock_image_ctx, 0, {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
-  req->append_request(&mock_write_request);
+  req->append_request(&mock_write_request, {});
   req->send();
 
   ASSERT_EQ(0, mock_write_request.ctx.wait());

@@ -130,7 +130,8 @@ CopyupRequest<I>::~CopyupRequest() {
 }
 
 template <typename I>
-void CopyupRequest<I>::append_request(AbstractObjectWriteRequest<I> *req) {
+void CopyupRequest<I>::append_request(AbstractObjectWriteRequest<I> *req,
+                                      const Extents& object_extents) {
   std::lock_guard locker{m_lock};
 
   auto cct = m_image_ctx->cct;
@@ -138,6 +139,12 @@ void CopyupRequest<I>::append_request(AbstractObjectWriteRequest<I> *req) {
                  << "append=" << m_append_request_permitted << dendl;
   if (m_append_request_permitted) {
     m_pending_requests.push_back(req);
+
+    for (auto [offset, length] : object_extents) {
+      if (length > 0) {
+        m_write_object_extents.union_insert(offset, length);
+      }
+    }
   } else {
     m_restart_requests.push_back(req);
   }
