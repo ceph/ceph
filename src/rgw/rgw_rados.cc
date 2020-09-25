@@ -3703,7 +3703,8 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
-  ret = conn->complete_request(in_stream_req, nullptr, &set_mtime, psize, nullptr, pheaders);
+  ret = conn->complete_request(in_stream_req, nullptr, &set_mtime, psize,
+                               nullptr, pheaders, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -3917,7 +3918,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
-                               &expected_size, nullptr, nullptr);
+                               &expected_size, nullptr, nullptr, null_yield);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -4126,7 +4127,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
     return ret;
   }
 
-  ret = rest_master_conn->complete_request(out_stream_req, etag, mtime);
+  ret = rest_master_conn->complete_request(out_stream_req, etag, mtime, null_yield);
   if (ret < 0)
     return ret;
 

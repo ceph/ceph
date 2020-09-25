@@ -76,14 +76,7 @@ int RGWRESTConn::get_url(string& endpoint)
 string RGWRESTConn::get_url()
 {
   string endpoint;
-  if (endpoints.empty()) {
-    ldout(cct, 0) << "WARNING: endpoints not configured for upstream zone" << dendl; /* we'll catch this later */
-    return endpoint;
-  }
-
-  int i = ++counter;
-  endpoint = endpoints[i % endpoints.size()];
-
+  get_url(endpoint);
   return endpoint;
 }
 
@@ -159,9 +152,10 @@ int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw::sal::RGWObject* obj, ui
   return 0;
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamS3PutObj *req, string& etag, real_time *mtime)
+int RGWRESTConn::complete_request(RGWRESTStreamS3PutObj *req, string& etag,
+                                  real_time *mtime, optional_yield y)
 {
-  int ret = req->complete_request(&etag, mtime);
+  int ret = req->complete_request(null_yield, &etag, mtime);
   delete req;
 
   return ret;
@@ -300,9 +294,10 @@ int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req,
                                   real_time *mtime,
                                   uint64_t *psize,
                                   map<string, string> *pattrs,
-                                  map<string, string> *pheaders)
+                                  map<string, string> *pheaders,
+                                  optional_yield y)
 {
-  int ret = req->complete_request(etag, mtime, psize, pattrs, pheaders);
+  int ret = req->complete_request(y, etag, mtime, psize, pattrs, pheaders);
   delete req;
 
   return ret;
@@ -313,7 +308,8 @@ int RGWRESTConn::get_resource(const string& resource,
 		     map<string, string> *extra_headers,
 		     bufferlist& bl,
                      bufferlist *send_data,
-		     RGWHTTPManager *mgr)
+		     RGWHTTPManager *mgr,
+		     optional_yield y)
 {
   string url;
   int ret = get_url(url);
@@ -343,7 +339,7 @@ int RGWRESTConn::get_resource(const string& resource,
     return ret;
   }
 
-  return req.complete_request();
+  return req.complete_request(y);
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
@@ -388,7 +384,7 @@ int RGWRESTReadResource::read()
     return ret;
   }
 
-  return req.complete_request();
+  return req.complete_request(null_yield);
 }
 
 int RGWRESTReadResource::aio_read()
@@ -449,7 +445,7 @@ int RGWRESTSendResource::send(bufferlist& outbl)
     return ret;
   }
 
-  return req.complete_request();
+  return req.complete_request(null_yield);
 }
 
 int RGWRESTSendResource::aio_send(bufferlist& outbl)
