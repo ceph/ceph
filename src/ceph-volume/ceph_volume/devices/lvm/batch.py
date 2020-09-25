@@ -485,8 +485,7 @@ class Batch(object):
                 osd.add_fast_device(*fast_allocations.pop(),
                                     type_=fast_type)
             if very_fast_devices and args.bluestore:
-                osd.add_very_fast_device(*very_fast_allocations.pop(),
-                                         type_='block.wal')
+                osd.add_very_fast_device(*very_fast_allocations.pop())
         return plan
 
     def fast_allocations(self, devices, requested_osds, new_osds, type_):
@@ -551,12 +550,12 @@ class Batch(object):
                                 slots=slots,
                                 type_=type_)
 
-        def add_very_fast_device(self, path, rel_size, abs_size, slots, type_):
-            self.fast = self.VolSpec(path=path,
+        def add_very_fast_device(self, path, rel_size, abs_size, slots):
+            self.very_fast = self.VolSpec(path=path,
                                 rel_size=rel_size,
                                 abs_size=abs_size,
                                 slots=slots,
-                                type_=type_)
+                                type_='block_wal')
 
         def _get_osd_plan(self):
             plan = {

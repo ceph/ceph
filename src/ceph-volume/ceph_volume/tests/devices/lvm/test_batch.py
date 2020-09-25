@@ -126,3 +126,31 @@ class TestBatch(object):
         mock_lvs = [mock_lv_device_generator()]
         osds = batch.get_lvm_osds(mock_lvs, args)
         assert len(osds) == 1
+
+
+class TestBatchOsd(object):
+
+    def test_osd_class_ctor(self):
+        osd = batch.Batch.OSD('/dev/data', 1, '5G', 1, 1, None)
+        assert osd.data == batch.Batch.OSD.VolSpec('/dev/data',
+                                                   1,
+                                                   '5G',
+                                                   1,
+                                                   'data')
+    def test_add_fast(self):
+        osd = batch.Batch.OSD('/dev/data', 1, '5G', 1, 1, None)
+        osd.add_fast_device('/dev/db', 1, '5G', 1, 'block_db')
+        assert osd.fast == batch.Batch.OSD.VolSpec('/dev/db',
+                                                   1,
+                                                   '5G',
+                                                   1,
+                                                   'block_db')
+
+    def test_add_very_fast(self):
+        osd = batch.Batch.OSD('/dev/data', 1, '5G', 1, 1, None)
+        osd.add_very_fast_device('/dev/wal', 1, '5G', 1)
+        assert osd.very_fast == batch.Batch.OSD.VolSpec('/dev/wal',
+                                                        1,
+                                                        '5G',
+                                                        1,
+                                                        'block_wal')
