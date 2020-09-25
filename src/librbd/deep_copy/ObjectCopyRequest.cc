@@ -307,8 +307,85 @@ void ObjectCopyRequest<I>::handle_read_from_parent(int r) {
     return;
   }
 
-  send_write_object();
+  send_update_object_map();
   return;
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::send_update_object_map() {
+  if (!m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP) ||
+      m_dst_object_state.empty()) {
+    send_write_object();
+    return;
+  }
+
+  m_dst_image_ctx->owner_lock.lock_shared();
+  m_dst_image_ctx->image_lock.lock_shared();
+  if (m_dst_image_ctx->object_map == nullptr) {
+    // possible that exclusive lock was lost in background
+    lderr(m_cct) << "object map is not initialized" << dendl;
+
+    m_dst_image_ctx->image_lock.unlock_shared();
+    m_dst_image_ctx->owner_lock.unlock_shared();
+    finish(-EINVAL);
+    return;
+  }
+
+  auto &dst_object_state = *m_dst_object_state.begin();
+  auto it = m_snap_map.find(dst_object_state.first);
+  ceph_assert(it != m_snap_map.end());
+  auto dst_snap_id = it->second.front();
+  auto object_state = dst_object_state.second;
+  m_dst_object_state.erase(m_dst_object_state.begin());
+
+  ldout(m_cct, 20) << "dst_snap_id=" << dst_snap_id << ", object_state="
+                   << static_cast<uint32_t>(object_state) << dendl;
+
+  int r;
+  auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock, &r);
+  if (finish_op_ctx == nullptr) {
+    lderr(m_cct) << "lost exclusive lock" << dendl;
+    m_dst_image_ctx->image_lock.unlock_shared();
+    m_dst_image_ctx->owner_lock.unlock_shared();
+    finish(r);
+    return;
+  }
+
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
+      handle_update_object_map(r);
+      finish_op_ctx->complete(0);
+    });
+
+  auto dst_image_ctx = m_dst_image_ctx;
+  bool sent = dst_image_ctx->object_map->template aio_update<
+    Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
+                                 {}, {}, false, ctx);
+
+  // NOTE: state machine might complete before we reach here
+  dst_image_ctx->image_lock.unlock_shared();
+  dst_image_ctx->owner_lock.unlock_shared();
+  if (!sent) {
+    ceph_assert(dst_snap_id == CEPH_NOSNAP);
+    ctx->complete(0);
+  }
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::handle_update_object_map(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to update object map: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (!m_dst_object_state.empty()) {
+    send_update_object_map();
+    return;
+  }
+
+  send_write_object();
 }
 
 template <typename I>
@@ -444,82 +521,6 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
     return;
   }
 
-  send_update_object_map();
-}
-
-template <typename I>
-void ObjectCopyRequest<I>::send_update_object_map() {
-  if (!m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP) ||
-      m_dst_object_state.empty()) {
-    finish(0);
-    return;
-  }
-
-  m_dst_image_ctx->owner_lock.lock_shared();
-  m_dst_image_ctx->image_lock.lock_shared();
-  if (m_dst_image_ctx->object_map == nullptr) {
-    // possible that exclusive lock was lost in background
-    lderr(m_cct) << "object map is not initialized" << dendl;
-
-    m_dst_image_ctx->image_lock.unlock_shared();
-    m_dst_image_ctx->owner_lock.unlock_shared();
-    finish(-EINVAL);
-    return;
-  }
-
-  auto &dst_object_state = *m_dst_object_state.begin();
-  auto it = m_snap_map.find(dst_object_state.first);
-  ceph_assert(it != m_snap_map.end());
-  auto dst_snap_id = it->second.front();
-  auto object_state = dst_object_state.second;
-  m_dst_object_state.erase(m_dst_object_state.begin());
-
-  ldout(m_cct, 20) << "dst_snap_id=" << dst_snap_id << ", object_state="
-                   << static_cast<uint32_t>(object_state) << dendl;
-
-  int r;
-  auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock, &r);
-  if (finish_op_ctx == nullptr) {
-    lderr(m_cct) << "lost exclusive lock" << dendl;
-    m_dst_image_ctx->image_lock.unlock_shared();
-    m_dst_image_ctx->owner_lock.unlock_shared();
-    finish(r);
-    return;
-  }
-
-  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
-      handle_update_object_map(r);
-      finish_op_ctx->complete(0);
-    });
-
-  auto dst_image_ctx = m_dst_image_ctx;
-  bool sent = dst_image_ctx->object_map->template aio_update<
-    Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
-                                 {}, {}, false, ctx);
-
-  // NOTE: state machine might complete before we reach here
-  dst_image_ctx->image_lock.unlock_shared();
-  dst_image_ctx->owner_lock.unlock_shared();
-  if (!sent) {
-    ceph_assert(dst_snap_id == CEPH_NOSNAP);
-    ctx->complete(0);
-  }
-}
-
-template <typename I>
-void ObjectCopyRequest<I>::handle_update_object_map(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to update object map: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  if (!m_dst_object_state.empty()) {
-    send_update_object_map();
-    return;
-  }
   finish(0);
 }
 

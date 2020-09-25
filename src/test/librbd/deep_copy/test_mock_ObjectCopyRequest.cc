@@ -526,10 +526,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
-  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -581,19 +581,20 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadMissingStaleSnapSet) {
 
   InSequence seq;
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, dummy_snap_set1);
+
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[3]);
   expect_sparse_read(mock_src_io_ctx, 0, 123, -ENOENT);
+
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, dummy_snap_set2);
+
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[3]);
   expect_sparse_read(mock_src_io_ctx, 0, 234, -ENOENT);
+
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
+
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[3]);
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(),
-               {m_dst_snap_ids[1], {m_dst_snap_ids[1],
-                                    m_dst_snap_ids[0]}},
-               0);
+
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[2], OBJECT_EXISTS, 0);
@@ -601,6 +602,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadMissingStaleSnapSet) {
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[3], is_fast_diff(mock_dst_image_ctx) ?
                            OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
+
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, 0, one.range_end(),
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1],
+                                    m_dst_snap_ids[0]}},
+               0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -635,6 +642,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadMissingUpToDateSnapMap) {
   InSequence seq;
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
+
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), -ENOENT);
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
 
@@ -708,6 +716,11 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
+
+  expect_start_op(mock_exclusive_lock);
+  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                           m_dst_snap_ids[0], OBJECT_EXISTS, 0);
+
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, -EINVAL);
 
@@ -756,15 +769,13 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
 
   InSequence seq;
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
+
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
+
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[2]);
   expect_sparse_read(mock_src_io_ctx, two, 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, two,
-               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
+
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
@@ -775,6 +786,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[2], is_fast_diff(mock_dst_image_ctx) ?
                            OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
+
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, two,
+               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -822,18 +839,21 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
 
   InSequence seq;
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
+
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_truncate(mock_dst_io_ctx, trim_offset, 0);
+
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_truncate(mock_dst_io_ctx, trim_offset, 0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -877,11 +897,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
   InSequence seq;
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[1]);
+
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_remove(mock_dst_io_ctx, 0);
+
   expect_start_op(mock_exclusive_lock);
   uint8_t state = OBJECT_EXISTS;
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
@@ -890,6 +908,11 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[1], is_fast_diff(mock_dst_image_ctx) ?
                            OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
+
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_start_op(mock_exclusive_lock);
+  expect_remove(mock_dst_io_ctx, 0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -928,10 +951,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ObjectMapUpdateError) {
 
   InSequence seq;
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
+
   expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
   expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, -EBLACKLISTED);
@@ -1014,20 +1037,20 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
   expect_sparse_read(mock_src_io_ctx, three, 0);
 
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, two,
-               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
-
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, three,
-               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}}, 0);
-
-  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[1], OBJECT_EXISTS, 0);
 
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            CEPH_NOSNAP, OBJECT_EXISTS, 0);
+
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, two,
+               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
+
+  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, three,
+               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}}, 0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
