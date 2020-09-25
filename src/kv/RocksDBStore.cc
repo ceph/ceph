@@ -1202,10 +1202,12 @@ int RocksDBStore::do_open(ostream &out,
   plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
-  plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");
-  plb.add_u64_counter(l_rocksdb_compact_range, "compact_range", "Compactions by range");
+  plb.add_time_avg(l_rocksdb_compact_time, "compact_time", "Total compaction time");
+  plb.add_time_avg(l_rocksdb_compact_range_time, "compact_range_time", "Compactions by range time");
   plb.add_u64_counter(l_rocksdb_compact_queue_merge, "compact_queue_merge", "Mergings of ranges in compaction queue");
-  plb.add_u64(l_rocksdb_compact_queue_len, "compact_queue_len", "Length of compaction queue");
+  plb.add_u64(l_rocksdb_delete_ranges, "delete_ranges", "Amount of range deletes invoked");
+  plb.add_u64(l_rocksdb_compact_queue_placed, "compact_queue_placed", "Amount of entries queued for compaction");
+  plb.add_u64(l_rocksdb_compact_queue_processed, "compact_queue_processed", "Amount of entries processed through compaction queue");
   plb.add_time_avg(l_rocksdb_write_wal_time, "rocksdb_write_wal_time", "Rocksdb write wal time");
   plb.add_time_avg(l_rocksdb_write_memtable_time, "rocksdb_write_memtable_time", "Rocksdb write memtable time");
   plb.add_time_avg(l_rocksdb_write_delay_time, "rocksdb_write_delay_time", "Rocksdb write delay time");
@@ -1215,9 +1217,9 @@ int RocksDBStore::do_open(ostream &out,
   cct->get_perfcounters_collection()->add(logger);
 
   if (compact_on_mount) {
-    derr << "Compacting rocksdb store..." << dendl;
+    dout(0) << "Compacting rocksdb store..." << dendl;
     compact();
-    derr << "Finished compacting rocksdb store" << dendl;
+    dout(0) << "Finished compacting rocksdb store" << dendl;
   }
   return 0;
 }
@@ -1683,6 +1685,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
 	bat.DeleteRange(db->default_cf,
                         combine_strings(prefix, string()),
                         combine_strings(endprefix, string()));
+        db->get_perf_counters()->inc(l_rocksdb_delete_ranges);
     } else {
       bat.PopSavePoint();
     }
@@ -1699,6 +1702,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
 	bat.RollbackToSavePoint();
 	string endprefix = "\xff\xff\xff\xff";  // FIXME: this is cheating...
 	bat.DeleteRange(cf, string(), endprefix);
+        db->get_perf_counters()->inc(l_rocksdb_delete_ranges);
       } else {
 	bat.PopSavePoint();
       }
@@ -1711,8 +1715,10 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &end)
 {
   auto p_iter = db->cf_handles.find(prefix);
+  uint64_t cnt0 = db->delete_range_threshold;
+  uint64_t cnt = cnt0;
+
   if (p_iter == db->cf_handles.end()) {
-    uint64_t cnt = db->delete_range_threshold;
     bat.SetSavePoint();
     auto it = db->get_iterator(prefix);
     for (it->lower_bound(start);
@@ -1723,15 +1729,17 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
     if (cnt == 0) {
       bat.RollbackToSavePoint();
       bat.DeleteRange(db->default_cf,
-		      rocksdb::Slice(combine_strings(prefix, start)),
-		      rocksdb::Slice(combine_strings(prefix, end)));
-    } else {
+                     rocksdb::Slice(combine_strings(prefix, start)),
+                     rocksdb::Slice(combine_strings(prefix, end)));
+      db->get_perf_counters()->inc(l_rocksdb_delete_ranges);
+    }  else {
       bat.PopSavePoint();
     }
   } else {
     ceph_assert(p_iter->second.handles.size() >= 1);
     for (auto cf : p_iter->second.handles) {
-      uint64_t cnt = db->delete_range_threshold;
+      cnt = cnt0;
+
       bat.SetSavePoint();
       rocksdb::Iterator* it = db->new_shard_iterator(cf);
       ceph_assert(it != nullptr);
@@ -1743,10 +1751,32 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       if (cnt == 0) {
 	bat.RollbackToSavePoint();
 	bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+        db->get_perf_counters()->inc(l_rocksdb_delete_ranges);
       } else {
 	bat.PopSavePoint();
       }
       delete it;
+    }
+  }
+}
+
+void RocksDBStore::RocksDBTransactionImpl::rm_range_keys_unconditionally(
+  const string& prefix,
+  const string& start,
+  const string& end)
+{
+  auto p_iter = db->cf_handles.find(prefix);
+
+  if (p_iter == db->cf_handles.end()) {
+    bat.DeleteRange(db->default_cf,
+      rocksdb::Slice(combine_strings(prefix, start)),
+      rocksdb::Slice(combine_strings(prefix, end)));
+    db->get_perf_counters()->inc(l_rocksdb_delete_ranges);
+  } else {
+    ceph_assert(p_iter->second.handles.size() >= 1);
+    for (auto cf : p_iter->second.handles) {
+      bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+      db->get_perf_counters()->inc(l_rocksdb_delete_ranges);
     }
   }
 }
@@ -1926,7 +1956,7 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 
 void RocksDBStore::compact()
 {
-  logger->inc(l_rocksdb_compact);
+  auto t0 = ceph_clock_now();
   rocksdb::CompactRangeOptions options;
   db->CompactRange(options, default_cf, nullptr, nullptr);
   for (auto cf : cf_handles) {
@@ -1937,59 +1967,98 @@ void RocksDBStore::compact()
 	nullptr, nullptr);
     }
   }
+  logger->tinc(l_rocksdb_compact_time, ceph_clock_now() - t0);
 }
 
+struct range_t {
+  string start, end, prefix;
+};
 void RocksDBStore::compact_thread_entry()
 {
   std::unique_lock l{compact_queue_lock};
   dout(10) << __func__ << " enter" << dendl;
-  while (!compact_queue_stop) {
-    if (!compact_queue.empty()) {
-      auto range = compact_queue.front();
-      compact_queue.pop_front();
-      logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
-      l.unlock();
-      logger->inc(l_rocksdb_compact_range);
-      if (range.first.empty() && range.second.empty()) {
-        compact();
-      } else {
-        compact_range(range.first, range.second);
-      }
-      l.lock();
-      continue;
+
+  for (;;) {
+    compact_queue_cond.wait(l, [this] {
+      dout(10) << "compact_thread_entry waiting" << dendl;
+      return !compact_queue.empty() || compact_queue_stop;
+    });
+    if (compact_queue_stop) {
+      break;
     }
-    dout(10) << __func__ << " waiting" << dendl;
-    compact_queue_cond.wait(l);
-  }
-  dout(10) << __func__ << " exit" << dendl;
+    compact_queue_t compact_queue_clone;
+    std::swap(compact_queue_clone, compact_queue);
+    l.unlock();
+
+    // compact/remove ops in compact_queue_clone in multiple passes
+    // try to merge the remove ops with the same prefix, and submit them in bulk
+    auto entries_to_process = compact_queue_clone.size();
+    bool global_compact = false;
+    while (!compact_queue_clone.empty()) {
+      auto i = compact_queue_clone.begin();
+      auto& [start, end, remove, prefix] = *i;
+      dout(10) << __func__ << " run " << (remove ? "with remove " : "")
+              << prefix
+              << pretty_binary_string(start) << "-"
+              << pretty_binary_string(end)
+              << dendl;
+      if (remove) {
+        ceph_assert(!start.empty() && !end.empty());
+        ceph_assert(start == end); // the only supported case for now
+        KeyValueDB::Transaction t = get_transaction();
+        t->rmkey(prefix, start);
+        int r = submit_transaction_sync(t);
+        ceph_assert(r == 0);
+      } else if (start.empty() && end.empty()) {
+        // will do full compact after the queue is processed
+        global_compact = true;
+      } else {
+        // start & end already have prefix embedded
+        ceph_assert(prefix.empty());
+        do_compact_range(start, end);
+      } // if( remove) .. else
+      compact_queue_clone.pop_front();
+    } // while (!compact_queue_clone.empty())
+    if (global_compact) {
+      compact();
+    }
+    logger->inc(l_rocksdb_compact_queue_processed, entries_to_process);
+    l.lock();
+  } // for (;;)
 }
 
-void RocksDBStore::compact_range_async(const string& start, const string& end)
+void RocksDBStore::do_compact_range_async(const string& start, const string& end)
 {
   std::lock_guard l(compact_queue_lock);
 
-  // try to merge adjacent ranges.  this is O(n), but the queue should
+  // try to merge adjacent ranges for pure compact.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge
   // opportunities here, but we capture the ones we currently need.
-  list< pair<string,string> >::iterator p = compact_queue.begin();
+  auto p = compact_queue.begin();
   while (p != compact_queue.end()) {
-    if (p->first == start && p->second == end) {
+    const auto& [s, e, r, prefix] = *p;
+
+    if (r ||
+        (s == start && e == end)) {
       // dup; no-op
       return;
     }
-    if (start <= p->first && p->first <= end) {
+    // key for compaction alread have prefix embedded
+    ceph_assert(prefix.empty());
+    if (start <= s && s <= end) {
       // new region crosses start of existing range
       // select right bound that is bigger
-      compact_queue.push_back(make_pair(start, end > p->second ? end : p->second));
+      const std::string& new_end = end > e ? end : e;
+      compact_queue.emplace_back(start, new_end, false, "");
       compact_queue.erase(p);
       logger->inc(l_rocksdb_compact_queue_merge);
       break;
     }
-    if (start <= p->second && p->second <= end) {
+    if (start <= e && e <= end) {
       // new region crosses end of existing range
       //p->first < p->second and p->second <= end, so p->first <= end.
       //But we break if previous condition, so start > p->first.
-      compact_queue.push_back(make_pair(p->first, end));
+      compact_queue.emplace_back(s, end, false, "");
       compact_queue.erase(p);
       logger->inc(l_rocksdb_compact_queue_merge);
       break;
@@ -1998,14 +2067,34 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
   }
   if (p == compact_queue.end()) {
     // no merge, new entry.
-    compact_queue.push_back(make_pair(start, end));
-    logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
+    compact_queue.emplace_back(start, end, false, "");
+    logger->inc(l_rocksdb_compact_queue_placed);
   }
   compact_queue_cond.notify_all();
   if (!compact_thread.is_started()) {
     compact_thread.create("rstore_compact");
   }
 }
+
+void RocksDBStore::remove_key_async(
+  const std::string& prefix,
+  const std::string& key) {
+
+  std::lock_guard l(compact_queue_lock);
+
+  compact_queue.emplace_back(
+    key,
+    key,
+    true,
+    prefix);
+  logger->inc(l_rocksdb_compact_queue_placed);
+
+  compact_queue_cond.notify_all();
+  if (!compact_thread.is_started()) {
+    compact_thread.create("rstore_compact");
+  }
+}
+
 bool RocksDBStore::check_omap_dir(string &omap_dir)
 {
   rocksdb::Options options;
@@ -2017,8 +2106,10 @@ bool RocksDBStore::check_omap_dir(string &omap_dir)
   return status.ok();
 }
 
-void RocksDBStore::compact_range(const string& start, const string& end)
+void RocksDBStore::do_compact_range(const string& start, const string& end)
 {
+  auto t0 = ceph_clock_now();
+
   rocksdb::CompactRangeOptions options;
   rocksdb::Slice cstart(start);
   rocksdb::Slice cend(end);
@@ -2026,6 +2117,14 @@ void RocksDBStore::compact_range(const string& start, const string& end)
   string prefix_end, key_end;
   string key_highest = "\xff\xff\xff\xff"; //cheating
   string key_lowest = "";
+
+  split_key(cstart, &prefix_start, &key_start);
+  split_key(cend, &prefix_end, &key_end);
+  dout(20) << __func__ << " p0:" << prefix_start
+    << " pe:" << prefix_end << " "
+    << pretty_binary_string(key_start) << " to "
+    << pretty_binary_string(key_end)
+    << dendl;
 
   auto compact_range = [&] (const decltype(cf_handles)::iterator column_it,
 			    const std::string& start,
@@ -2037,8 +2136,7 @@ void RocksDBStore::compact_range(const string& start, const string& end)
     }
   };
   db->CompactRange(options, default_cf, &cstart, &cend);
-  split_key(cstart, &prefix_start, &key_start);
-  split_key(cend, &prefix_end, &key_end);
+
   if (prefix_start == prefix_end) {
     const auto& column = cf_handles.find(prefix_start);
     if (column != cf_handles.end()) {
@@ -2059,6 +2157,8 @@ void RocksDBStore::compact_range(const string& start, const string& end)
       compact_range(column, key_lowest, key_end);
     }
   }
+  logger->tinc(l_rocksdb_compact_range_time, ceph_clock_now() - t0);
+  dout(20) << __func__ << " done" << dendl;
 }
 
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()

@@ -122,6 +122,13 @@ public:
       const std::string &start,     ///< [in] The start bound of remove keys
       const std::string &end        ///< [in] The start bound of remove keys
       ) = 0;
+    virtual void rm_range_keys_unconditionally(
+      const std::string& prefix,    ///< [in] Prefix by which to remove keys
+      const std::string& start,     ///< [in] The start bound of remove keys
+      const std::string& end        ///< [in] The start bound of remove keys
+    ) {
+      rm_range_keys(prefix, start, end);
+    }
 
     /// Merge value into key
     virtual void merge(
@@ -384,6 +391,7 @@ public:
 			     const std::string& start, const std::string& end) {}
   virtual void compact_range_async(const std::string& prefix,
 				   const std::string& start, const std::string& end) {}
+  virtual void remove_key_async(const std::string& prefix, const std::string& key) {}
 
   // See RocksDB merge operator definition, we support the basic
   // associative merge only right now.
