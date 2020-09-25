@@ -28,6 +28,7 @@
 #include "rgw_sal.h"
 
 #include "cls/lock/cls_lock_client.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sync_modules.h"
@@ -606,7 +607,7 @@ int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
   rgw_http_param_pair pairs[] = { { "type", "data" },
                                   { NULL, NULL } };
 
-  int ret = sc.conn->get_json_resource("/admin/log", pairs, *log_info);
+  int ret = sc.conn->get_json_resource("/admin/log", pairs, null_yield, *log_info);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch datalog info" << dendl;
     return ret;
@@ -4943,6 +4944,32 @@ string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_bucket_sync_pipe
     prefix += string("/") + sync_pipe.dest_bucket_info.bucket.get_key();
   }
   return prefix + ":" + obj->get_name() + ":" + obj->get_instance();
+}
+
+int rgw_read_remote_bilog_info(RGWRESTConn* conn,
+                               const rgw_bucket& bucket,
+                               BucketIndexShardsManager& markers,
+                               optional_yield y)
+{
+  const auto instance_key = bucket.get_key();
+  const rgw_http_param_pair params[] = {
+    { "type" , "bucket-index" },
+    { "bucket-instance", instance_key.c_str() },
+    { "info" , nullptr },
+    { nullptr, nullptr }
+  };
+  rgw_bucket_index_marker_info result;
+  int r = conn->get_json_resource("/admin/log/", params, y, result);
+  if (r < 0) {
+    lderr(conn->get_ctx()) << "failed to fetch remote log markers: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = markers.from_string(result.max_marker, -1);
+  if (r < 0) {
+    lderr(conn->get_ctx()) << "failed to decode remote log markers" << dendl;
+    return r;
+  }
+  return 0;
 }
 
 class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {

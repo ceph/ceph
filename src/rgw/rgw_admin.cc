@@ -59,6 +59,7 @@ extern "C" {
 #include "rgw_pubsub.h"
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_sync_checkpoint.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -134,6 +135,7 @@ void usage()
   cout << "  bucket chown               link bucket to specified user and update its object ACLs\n";
   cout << "  bucket reshard             reshard bucket\n";
   cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
+  cout << "  bucket sync checkpoint     poll a bucket's sync status until it catches up to its remote\n";
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
   cout << "  bucket radoslist           list rados objects backing bucket's objects\n";
@@ -588,6 +590,7 @@ enum class OPT {
   BUCKET_UNLINK,
   BUCKET_STATS,
   BUCKET_CHECK,
+  BUCKET_SYNC_CHECKPOINT,
   BUCKET_SYNC_INFO,
   BUCKET_SYNC_STATUS,
   BUCKET_SYNC_MARKERS,
@@ -785,6 +788,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket unlink", OPT::BUCKET_UNLINK },
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket check", OPT::BUCKET_CHECK },
+  { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
   { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
   { "bucket sync markers", OPT::BUCKET_SYNC_MARKERS },
@@ -2215,31 +2219,6 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
   return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
 }
 
-static int remote_bilog_markers(rgw::sal::RGWRadosStore *store, const RGWZone& source,
-                                RGWRESTConn *conn, const RGWBucketInfo& info,
-                                BucketIndexShardsManager *markers)
-{
-  const auto instance_key = info.bucket.get_key();
-  const rgw_http_param_pair params[] = {
-    { "type" , "bucket-index" },
-    { "bucket-instance", instance_key.c_str() },
-    { "info" , nullptr },
-    { nullptr, nullptr }
-  };
-  rgw_bucket_index_marker_info result;
-  int r = conn->get_json_resource("/admin/log/", params, result);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to fetch remote log markers: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  r = markers->from_string(result.max_marker, -1);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to decode remote log markers" << dendl;
-    return r;
-  }
-  return 0;
-}
-
 static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
@@ -2302,7 +2281,7 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
 
   BucketIndexShardsManager remote_markers;
-  r = remote_bilog_markers(store, source, conn, source_bucket_info, &remote_markers);
+  r = rgw_read_remote_bilog_info(conn, source_bucket, remote_markers, null_yield);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
@@ -3215,6 +3194,8 @@ int main(int argc, const char **argv)
   std::optional<int> opt_priority;
   std::optional<string> opt_mode;
   std::optional<rgw_user> opt_dest_owner;
+  ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
+  ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
 
@@ -3629,6 +3610,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-owner", (char*)NULL)) {
       opt_dest_owner.emplace(val);
       opt_dest_owner = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--retry-delay-ms", (char*)NULL)) {
+      opt_retry_delay_ms = std::chrono::milliseconds(atoi(val.c_str()));
+    } else if (ceph_argparse_witharg(args, i, &val, "--timeout-sec", (char*)NULL)) {
+      opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -3793,6 +3778,7 @@ int main(int argc, const char **argv)
 			 OPT::BUCKETS_LIST,
 			 OPT::BUCKET_LIMIT_CHECK,
 			 OPT::BUCKET_STATS,
+			 OPT::BUCKET_SYNC_CHECKPOINT,
 			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
 			 OPT::BUCKET_SYNC_MARKERS,
@@ -7945,6 +7931,45 @@ next:
     ret = sync.init_sync_status();
     if (ret < 0) {
       cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::BUCKET_SYNC_CHECKPOINT) {
+    std::optional<rgw_zone_id> opt_source_zone;
+    if (!source_zone.empty()) {
+      opt_source_zone = source_zone;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    rgw_bucket bucket;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    if (!store->ctl()->bucket->bucket_imports_data(bucket_info.bucket, null_yield)) {
+      std::cout << "Sync is disabled for bucket " << bucket_name << std::endl;
+      return 0;
+    }
+
+    RGWBucketSyncPolicyHandlerRef handler;
+    ret = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, bucket, &handler, null_yield);
+    if (ret < 0) {
+      std::cerr << "ERROR: failed to get policy handler for bucket ("
+          << bucket_info.bucket << "): r=" << ret << ": " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto timeout_at = ceph::coarse_mono_clock::now() + opt_timeout_sec;
+    ret = rgw_bucket_sync_checkpoint(dpp(), store, *handler, bucket_info,
+                                     opt_source_zone, opt_source_bucket,
+                                     opt_retry_delay_ms, timeout_at);
+    if (ret < 0) {
+      lderr(store->ctx()) << "bucket sync checkpoint failed: " << cpp_strerror(ret) << dendl;
       return -ret;
     }
   }
