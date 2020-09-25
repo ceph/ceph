@@ -271,6 +271,32 @@ class LocalRemote(object):
         self.hostname = "localhost"
         self.user = getpass.getuser()
 
+    # XXX: Following two methods are vital to compatibility of tests that use
+    # teuthology.misc.sudo_write_file().
+    def sudo_write_file(self, path, data, **kwargs):
+        self.write_file(path, data, sudo=True, **kwargs)
+
+    def write_file(self, path, data, sudo=False, mode=None, owner=None,
+                   mkdir=False, append=False):
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' of=' + path
+        if append:
+            args += ' conv=notrunc oflag=append'
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(path)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += '\n' + chmod + ' ' + mode + ' ' + path
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += '\n' + chown + ' ' + owner + ' ' + path
+
+        for a in args.split('\n'):
+            self.run(args=a, stdin=data) if 'dd' in a else self.run(args=a)
+
     def get_file(self, path, sudo, dest_dir):
         tmpfile = tempfile.NamedTemporaryFile(delete=False).name
         shutil.copy(path, tmpfile)
