@@ -734,7 +734,7 @@ Per client instance `rbd device map` options:
 
 Per mapping (block device) `rbd device map` options:
 
-* rw - Map the image read-write (default).
+* rw - Map the image read-write (default).  Overridden by --read-only.
 
 * ro - Map the image read-only.  Equivalent to --read-only.
 
@@ -744,6 +744,7 @@ Per mapping (block device) `rbd device map` options:
   discards (since 4.9).
 
 * exclusive - Disable automatic exclusive lock transitions (since 4.12).
+  Equivalent to --exclusive.
 
 * lock_timeout=x - A timeout on waiting for the acquisition of exclusive lock
   (since 4.17, default is 0 seconds, meaning no timeout).

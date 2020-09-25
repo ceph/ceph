@@ -452,13 +452,6 @@ int execute_map(const po::variables_map &vm,
     return r;
   }
 
-  if (vm["read-only"].as<bool>()) {
-    put_map_option("rw", "ro");
-  }
-  if (vm["exclusive"].as<bool>()) {
-    put_map_option("exclusive", "exclusive");
-  }
-
   // parse default options first so they can be overwritten by cli options
   r = parse_map_options(
       g_conf().get_val<std::string>("rbd_default_map_options"));
@@ -475,6 +468,16 @@ int execute_map(const po::variables_map &vm,
         return r;
       }
     }
+  }
+
+  // parse options common to all device types after parsing krbd-specific
+  // options so that common options win (in particular "-o rw --read-only"
+  // should result in read-only mapping)
+  if (vm["read-only"].as<bool>()) {
+    put_map_option("rw", "ro");
+  }
+  if (vm["exclusive"].as<bool>()) {
+    put_map_option("exclusive", "exclusive");
   }
 
   utils::init_context();
