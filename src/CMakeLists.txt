@@ -382,6 +382,9 @@ set(libcommon_files
   osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
+if(WITH_JAEGER)
+  list(APPEND libcommon_files common/tracer.cc)
+endif()
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
@@ -411,7 +414,7 @@ if(WITH_JAEGER)
   opentracing::libopentracing
   thrift::libthrift
   jaegertracing::libjaegertracing)
-  include_directories(${CMAKE_BINARY_DIR}/external/include)
+  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
   #with CMake 3.12+ the following can be replaced by:
   #target_link_libraries(common-objs jaeger-base)
   install(DIRECTORY ${CMAKE_BINARY_DIR}/external/include/jaegertracing
@@ -639,7 +642,8 @@ set(ceph_osd_srcs
   # static library (like libosd.a) nullifies the effect of `-rdynamic`.
   osd/objclass.cc
   objclass/class_api.cc
-  ceph_osd.cc)
+  ceph_osd.cc
+  common/tracer.cc)
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common

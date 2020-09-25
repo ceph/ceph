@@ -502,6 +502,10 @@ void ReplicatedBackend::submit_transaction(
   ceph_assert(insert_res.second);
   InProgressOp &op = *insert_res.first->second;
 
+#ifdef HAVE_JAEGER
+  auto rep_sub_trans = jaeger_tracing::child_span("ReplicatedBackend::submit_transaction", orig_op->osd_parent_span);
+//  op->set_osd_parent_span(rep_sub_trans);
+#endif
   op.waiting_for_commit.insert(
     parent->get_acting_recovery_backfill_shards().begin(),
     parent->get_acting_recovery_backfill_shards().end());

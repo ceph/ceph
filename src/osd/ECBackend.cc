@@ -940,6 +940,10 @@ void ECBackend::handle_sub_write(
   if (msg)
     msg->mark_event("sub_op_started");
   trace.event("handle_sub_write");
+#ifdef HAVE_JAEGER
+  auto ec_sub_trans = jaeger_tracing::child_span(__func__, msg->osd_parent_span);
+//  op->set_osd_parent_span(ec_sub_trans);
+#endif
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
@@ -1529,7 +1533,11 @@ void ECBackend::submit_transaction(
   op->client_op = client_op;
   if (client_op)
     op->trace = client_op->pg_trace;
-  
+
+#ifdef HAVE_JAEGER
+  auto ec_sub_trans = jaeger_tracing::child_span("ECBackend::submit_transaction", client_op->osd_parent_span);
+//  op->set_osd_parent_span(ec_sub_trans);
+#endif
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
   start_rmw(op, std::move(t));
 }
@@ -2098,6 +2106,11 @@ bool ECBackend::try_reads_to_commit()
       messages.push_back(std::make_pair(i->osd, r));
     }
   }
+
+#ifdef HAVE_JAEGER
+    auto sub_write_span = jaeger_tracing::child_span("EC sub write", op->client_op->osd_parent_span);
+    //op->set_osd_parent_span(sub_write_span);
+#endif
   if (!messages.empty()) {
     get_parent()->send_message_osd_cluster(messages, get_osdmap_epoch());
   }
