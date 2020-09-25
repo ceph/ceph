@@ -29,7 +29,7 @@ class Jinja2Engine(TemplateEngine):
     def __init__(self):
         self.env = Environment(
             loader=PackageLoader('cephadm', 'templates'),
-            autoescape=select_autoescape(['html', 'xml']),
+            autoescape=select_autoescape(['html', 'xml'], default_for_string=False),
             trim_blocks=True,
             lstrip_blocks=True,
             undefined=StrictUndefined
