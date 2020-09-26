@@ -139,6 +139,25 @@ struct LBANode : CachedExtent {
     mutate_func_t &&f) = 0;
 
   /**
+   * mutate_internal_address
+   *
+   * Looks up internal node mapping at laddr, depth and
+   * updates the mapping to paddr.  Returns previous paddr
+   * (for debugging purposes).
+   */
+  using mutate_internal_address_ertr = crimson::errorator<
+    crimson::ct_error::enoent,            ///< mapping does not exist
+    crimson::ct_error::input_output_error
+    >;
+  using mutate_internal_address_ret = mutate_internal_address_ertr::future<
+    paddr_t>;
+  virtual mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) = 0;
+
+  /**
    * make_split_children
    *
    * Generates appropriately typed left and right nodes formed from the
@@ -183,6 +202,25 @@ struct LBANode : CachedExtent {
   virtual bool at_min_capacity() const = 0;
 
   virtual ~LBANode() = default;
+
+  void on_delta_write(paddr_t record_block_offset) final {
+    // All in-memory relative addrs are necessarily record-relative
+    assert(get_prior_instance());
+    pin.take_pin(get_prior_instance()->cast<LBANode>()->pin);
+    resolve_relative_addrs(record_block_offset);
+  }
+
+  void on_initial_write() final {
+    // All in-memory relative addrs are necessarily block-relative
+    resolve_relative_addrs(get_paddr());
+  }
+
+  void on_clean_read() final {
+    // From initial write of block, relative addrs are necessarily block-relative
+    resolve_relative_addrs(get_paddr());
+  }
+
+  virtual void resolve_relative_addrs(paddr_t base) = 0;
 };
 using LBANodeRef = LBANode::LBANodeRef;
 

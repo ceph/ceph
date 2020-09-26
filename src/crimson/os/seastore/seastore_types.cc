@@ -36,6 +36,14 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
   return out << ">";
 }
 
+std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq)
+{
+  return out << "journal_seq_t(segment_seq="
+	     << seq.segment_seq << ", offset="
+	     << seq.offset
+	     << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, extent_types_t t)
 {
   switch (t) {

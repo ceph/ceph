@@ -109,6 +109,12 @@ struct LBAInternalNode
     laddr_t laddr,
     mutate_func_t &&f) final;
 
+  mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) final;
+
   find_hole_ret find_hole(
     op_context_t c,
     laddr_t min,
@@ -178,22 +184,7 @@ struct LBAInternalNode
    * resolve_relative_addrs fixes up relative internal references
    * based on base.
    */
-  void resolve_relative_addrs(paddr_t base);
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    // All in-memory relative addrs are necessarily record-relative
-    resolve_relative_addrs(record_block_offset);
-  }
-
-  void on_initial_write() final {
-    // All in-memory relative addrs are necessarily block-relative
-    resolve_relative_addrs(get_paddr());
-  }
-
-  void on_clean_read() final {
-    // From initial write of block, relative addrs are necessarily block-relative
-    resolve_relative_addrs(get_paddr());
-  }
+  void resolve_relative_addrs(paddr_t base) final;
 
   extent_types_t get_type() const final {
     return type;
@@ -363,6 +354,12 @@ struct LBALeafNode
     laddr_t laddr,
     mutate_func_t &&f) final;
 
+  mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) final;
+
   find_hole_ret find_hole(
     op_context_t c,
     laddr_t min,
@@ -422,19 +419,7 @@ struct LBALeafNode
   }
 
   // See LBAInternalNode, same concept
-  void resolve_relative_addrs(paddr_t base);
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    resolve_relative_addrs(record_block_offset);
-  }
-
-  void on_initial_write() final {
-    resolve_relative_addrs(get_paddr());
-  }
-
-  void on_clean_read() final {
-    resolve_relative_addrs(get_paddr());
-  }
+  void resolve_relative_addrs(paddr_t base) final;
 
   ceph::bufferlist get_delta() final {
     assert(!delta_buffer.empty());

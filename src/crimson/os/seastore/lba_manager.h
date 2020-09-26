@@ -135,6 +135,20 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
+
+  /**
+   * rewrite_extent
+   *
+   * rewrite extent into passed transaction
+   */
+  using rewrite_extent_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using rewrite_extent_ret = rewrite_extent_ertr::future<>;
+  virtual rewrite_extent_ret rewrite_extent(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
+
+
   virtual void add_pin(LBAPin &pin) = 0;
 
   virtual ~LBAManager() {}

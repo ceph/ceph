@@ -7,6 +7,7 @@ add_library(crimson-seastore STATIC
   journal.cc
   cache.cc
   lba_manager.cc
+  segment_cleaner.cc
   lba_manager/btree/btree_lba_manager.cc
   lba_manager/btree/lba_btree_node_impl.cc
   lba_manager/btree/btree_range_pin.cc

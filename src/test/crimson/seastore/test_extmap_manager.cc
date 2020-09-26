@@ -23,6 +23,7 @@ namespace {
 
 struct extentmap_manager_test_t : public seastar_test_suite_t {
   std::unique_ptr<SegmentManager> segment_manager;
+  SegmentCleaner segment_cleaner;
   Journal journal;
   Cache cache;
   LBAManagerRef lba_manager;
@@ -31,13 +32,18 @@ struct extentmap_manager_test_t : public seastar_test_suite_t {
 
   extentmap_manager_test_t()
     : segment_manager(create_ephemeral(segment_manager::DEFAULT_TEST_EPHEMERAL)),
+      segment_cleaner(SegmentCleaner::config_t::default_from_segment_manager(
+			*segment_manager)),
       journal(*segment_manager),
       cache(*segment_manager),
       lba_manager(
 	lba_manager::create_lba_manager(*segment_manager, cache)),
-      tm(*segment_manager, journal, cache, *lba_manager),
+      tm(*segment_manager, segment_cleaner, journal, cache, *lba_manager),
       extmap_manager(
-        extentmap_manager::create_extentmap_manager(tm)) {}
+        extentmap_manager::create_extentmap_manager(tm)) {
+    journal.set_segment_provider(&segment_cleaner);
+    segment_cleaner.set_extent_callback(&tm);
+  }
 
   seastar::future<> set_up_fut() final {
     return segment_manager->init().safe_then([this] {

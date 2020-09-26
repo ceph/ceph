@@ -19,6 +19,7 @@
 
 #include "crimson/osd/exceptions.h"
 
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -34,26 +35,14 @@ class Journal;
  * Abstraction hiding reading and writing to persistence.
  * Exposes transaction based interface with read isolation.
  */
-class TransactionManager : public JournalSegmentProvider {
+class TransactionManager : public SegmentCleaner::ExtentCallbackInterface {
 public:
   TransactionManager(
     SegmentManager &segment_manager,
+    SegmentCleaner &segment_cleaner,
     Journal &journal,
     Cache &cache,
     LBAManager &lba_manager);
-
-  segment_id_t next = 0;
-  get_segment_ret get_segment() final {
-    // TODO -- part of gc
-    return get_segment_ret(
-      get_segment_ertr::ready_future_marker{},
-      next++);
-  }
-
-  void put_segment(segment_id_t segment) final {
-    // TODO -- part of gc
-    return;
-  }
 
   /// Writes initial metadata to disk
   using mkfs_ertr = crimson::errorator<
@@ -136,10 +125,25 @@ public:
 
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
+    auto &logger = crimson::get_logger(ceph_subsys_filestore);
     auto ret = cache.duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    ret->set_pin(ref->get_pin().duplicate());
+    if (!ret->has_pin()) {
+      logger.debug(
+	"{}: duplicating {} for write: {}",
+	__func__,
+	*ref,
+	*ret);
+      ret->set_pin(ref->get_pin().duplicate());
+    } else {
+      logger.debug(
+	"{}: {} already pending",
+	__func__,
+	*ref);
+      assert(ref->is_pending());
+      assert(&*ref == &*ret);
+    }
     return ret;
   }
 
@@ -207,12 +211,24 @@ public:
     >;
   submit_transaction_ertr::future<> submit_transaction(TransactionRef);
 
+  /// SegmentCleaner::ExtentCallbackInterface
+
+  using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
+  get_next_dirty_extents_ret get_next_dirty_extents(
+    journal_seq_t seq) final;
+
+  using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
+  rewrite_extent_ret rewrite_extent(
+    Transaction &t,
+    CachedExtentRef extent) final;
+
   ~TransactionManager();
 
 private:
   friend class Transaction;
 
   SegmentManager &segment_manager;
+  SegmentCleaner &segment_cleaner;
   Cache &cache;
   LBAManager &lba_manager;
   Journal &journal;

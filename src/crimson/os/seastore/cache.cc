@@ -33,6 +33,7 @@ Cache::retire_extent_ret Cache::retire_extent_if_cached(
   Transaction &t, paddr_t addr)
 {
   if (auto ext = t.write_set.find_offset(addr); ext != t.write_set.end()) {
+    logger().debug("{}: found {} in t.write_set", __func__, addr);
     t.add_to_retired_set(CachedExtentRef(&*ext));
     return retire_extent_ertr::now();
   } else if (auto iter = extents.find_offset(addr);
@@ -52,10 +53,10 @@ void Cache::add_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   extents.insert(*ref);
 
-  ceph_assert(!ref->primary_ref_list_hook.is_linked());
   if (ref->is_dirty()) {
-    intrusive_ptr_add_ref(&*ref);
-    dirty.push_back(*ref);
+    add_to_dirty(ref);
+  } else {
+    ceph_assert(!ref->primary_ref_list_hook.is_linked());
   }
   logger().debug("add_extent: {}", *ref);
 }
@@ -67,18 +68,23 @@ void Cache::mark_dirty(CachedExtentRef ref)
     return;
   }
 
-  assert(ref->is_valid());
-  assert(!ref->primary_ref_list_hook.is_linked());
-  intrusive_ptr_add_ref(&*ref);
-  dirty.push_back(*ref);
+  add_to_dirty(ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
 
   logger().debug("mark_dirty: {}", *ref);
 }
 
-void Cache::retire_extent(CachedExtentRef ref)
+void Cache::add_to_dirty(CachedExtentRef ref)
 {
-  logger().debug("retire_extent: {}", *ref);
+  assert(ref->is_valid());
+  assert(!ref->primary_ref_list_hook.is_linked());
+  intrusive_ptr_add_ref(&*ref);
+  dirty.push_back(*ref);
+}
+
+void Cache::remove_extent(CachedExtentRef ref)
+{
+  logger().debug("remove_extent: {}", *ref);
   assert(ref->is_valid());
   extents.erase(*ref);
 
@@ -88,6 +94,54 @@ void Cache::retire_extent(CachedExtentRef ref)
     intrusive_ptr_release(&*ref);
   } else {
     ceph_assert(!ref->primary_ref_list_hook.is_linked());
+  }
+}
+
+void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
+{
+  assert(next->get_paddr() == prev->get_paddr());
+  assert(next->version == prev->version + 1);
+  extents.replace(*next, *prev);
+
+  if (prev->is_dirty()) {
+    ceph_assert(prev->primary_ref_list_hook.is_linked());
+    auto prev_it = dirty.iterator_to(*prev);
+    dirty.insert(prev_it, *next);
+    dirty.erase(prev_it);
+    intrusive_ptr_release(&*prev);
+    intrusive_ptr_add_ref(&*next);
+  } else {
+    add_to_dirty(next);
+  }
+}
+
+CachedExtentRef Cache::alloc_new_extent_by_type(
+  Transaction &t,       ///< [in, out] current transaction
+  extent_types_t type,  ///< [in] type tag
+  segment_off_t length  ///< [in] length
+)
+{
+  switch (type) {
+  case extent_types_t::ROOT:
+    assert(0 == "ROOT is never directly alloc'd");
+    return CachedExtentRef();
+  case extent_types_t::LADDR_INTERNAL:
+    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length);
+  case extent_types_t::LADDR_LEAF:
+    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length);
+  case extent_types_t::ONODE_BLOCK:
+    return alloc_new_extent<OnodeBlock>(t, length);
+  case extent_types_t::TEST_BLOCK:
+    return alloc_new_extent<TestBlock>(t, length);
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    return alloc_new_extent<TestBlockPhysical>(t, length);
+  case extent_types_t::NONE: {
+    ceph_assert(0 == "NONE is an invalid extent type");
+    return CachedExtentRef();
+  }
+  default:
+    ceph_assert(0 == "impossible");
+    return CachedExtentRef();
   }
 }
 
@@ -104,7 +158,7 @@ CachedExtentRef Cache::duplicate_for_write(
     t.root = ret->cast<RootBlock>();
   } else {
     ret->last_committed_crc = i->last_committed_crc;
-    t.add_to_retired_set(i);
+    ret->prior_instance = i;
     t.add_mutated_extent(ret);
   }
 
@@ -123,16 +177,6 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 
   record_t record;
 
-  // Transaction is now a go, set up in-memory cache state
-  // invalidate now invalid blocks
-  for (auto &i: t.retired_set) {
-    logger().debug("try_construct_record: retiring {}", *i);
-    ceph_assert(!i->is_pending());
-    ceph_assert(i->is_valid());
-    retire_extent(i);
-    i->state = CachedExtent::extent_state_t::INVALID;
-  }
-
   t.write_set.clear();
 
   // Add new copy of mutated blocks, set_io_wait to block until written
@@ -143,9 +187,13 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       continue;
     }
     logger().debug("try_construct_record: mutating {}", *i);
-    add_extent(i);
+
+    assert(i->prior_instance);
+    replace_extent(i, i->prior_instance);
+
     i->prepare_write();
     i->set_io_wait();
+
     assert(i->get_version() > 0);
     auto final_crc = i->get_crc32c();
     record.deltas.push_back(
@@ -165,6 +213,10 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   }
 
   if (t.root) {
+    logger().debug(
+      "{}: writing out root delta for {}",
+      __func__,
+      *t.root);
     record.deltas.push_back(
       delta_info_t{
 	extent_types_t::ROOT,
@@ -176,6 +228,15 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 	t.root->get_version() - 1,
 	t.root->get_delta()
       });
+  }
+
+  // Transaction is now a go, set up in-memory cache state
+  // invalidate now invalid blocks
+  for (auto &i: t.retired_set) {
+    logger().debug("try_construct_record: retiring {}", *i);
+    ceph_assert(i->is_valid());
+    remove_extent(i);
+    i->state = CachedExtent::extent_state_t::INVALID;
   }
 
   record.extents.reserve(t.fresh_block_list.size());
@@ -195,12 +256,16 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 
 void Cache::complete_commit(
   Transaction &t,
-  paddr_t final_block_start)
+  paddr_t final_block_start,
+  journal_seq_t seq)
 {
   if (t.root) {
+    remove_extent(root);
     root = t.root;
-    root->on_delta_write(final_block_start);
     root->state = CachedExtent::extent_state_t::DIRTY;
+    root->on_delta_write(final_block_start);
+    root->dirty_from = seq;
+    add_extent(root);
     logger().debug("complete_commit: new root {}", *t.root);
   }
 
@@ -223,27 +288,34 @@ void Cache::complete_commit(
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
+    logger().debug("complete_commit: mutated {}", *i);
+    assert(i->prior_instance);
+    i->on_delta_write(final_block_start);
+    i->prior_instance = CachedExtentRef();
     if (!i->is_valid()) {
-      logger().debug("complete_commit: ignoring invalid {}", *i);
+      logger().debug("complete_commit: not dirtying invalid {}", *i);
       continue;
     }
     i->state = CachedExtent::extent_state_t::DIRTY;
-    logger().debug("complete_commit: mutated {}", *i);
-    i->on_delta_write(final_block_start);
+    if (i->version == 1) {
+      i->dirty_from = seq;
+    }
   }
 
   for (auto &i: t.mutated_block_list) {
-    if (!i->is_valid()) {
-      logger().debug("complete_commit: ignoring invalid {}", *i);
-      continue;
-    }
     i->complete_io();
   }
 }
 
 void Cache::init() {
+  if (root) {
+    // initial creation will do mkfs followed by mount each of which calls init
+    remove_extent(root);
+    root = nullptr;
+  }
   root = new RootBlock();
   root->state = CachedExtent::extent_state_t::DIRTY;
+  add_extent(root);
 }
 
 Cache::mkfs_ertr::future<> Cache::mkfs(Transaction &t)
@@ -266,33 +338,91 @@ Cache::close_ertr::future<> Cache::close()
 }
 
 Cache::replay_delta_ret
-Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
+Cache::replay_delta(
+  journal_seq_t journal_seq,
+  paddr_t record_base,
+  const delta_info_t &delta)
 {
   if (delta.type == extent_types_t::ROOT) {
     logger().debug("replay_delta: found root delta");
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
+    root->dirty_from = journal_seq;
     return replay_delta_ertr::now();
   } else {
-    return get_extent_by_type(
-      delta.type,
-      delta.paddr,
-      delta.laddr,
-      delta.length).safe_then([this, record_base, delta](auto extent) {
+    auto get_extent_if_cached = [this](paddr_t addr)
+      -> replay_delta_ertr::future<CachedExtentRef> {
+      auto retiter = extents.find_offset(addr);
+      if (retiter != extents.end()) {
+	return replay_delta_ertr::make_ready_future<CachedExtentRef>(&*retiter);
+      } else {
+	return replay_delta_ertr::make_ready_future<CachedExtentRef>();
+      }
+    };
+    auto extent_fut = delta.pversion == 0 ?
+      get_extent_by_type(
+	delta.type,
+	delta.paddr,
+	delta.laddr,
+	delta.length) :
+      get_extent_if_cached(
+	delta.paddr);
+    return extent_fut.safe_then([=, &delta](auto extent) {
+      if (!extent) {
+	assert(delta.pversion > 0);
 	logger().debug(
-	  "replay_delta: replaying {} on {}",
-	  *extent,
+	  "replay_delta: replaying {}, extent not present so delta is obsolete",
 	  delta);
+	return;
+      }
 
-	assert(extent->version == delta.pversion);
+      logger().debug(
+	"replay_delta: replaying {} on {}",
+	  *extent,
+	delta);
 
-	assert(extent->last_committed_crc == delta.prev_crc);
-	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
-	assert(extent->last_committed_crc == delta.final_crc);
+      assert(extent->version == delta.pversion);
 
-	extent->version++;
-	mark_dirty(extent);
-      });
+      assert(extent->last_committed_crc == delta.prev_crc);
+      extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+      assert(extent->last_committed_crc == delta.final_crc);
+
+      if (extent->version == 0) {
+	extent->dirty_from = journal_seq;
+      }
+      extent->version++;
+      mark_dirty(extent);
+    });
   }
+}
+
+Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
+  journal_seq_t seq)
+{
+  std::vector<CachedExtentRef> ret;
+  for (auto i = dirty.begin(); i != dirty.end(); ++i) {
+    CachedExtentRef cand;
+    if (i->dirty_from < seq) {
+      assert(ret.empty() || ret.back()->dirty_from <= i->dirty_from);
+      ret.push_back(&*i);
+    } else {
+      break;
+    }
+  }
+  return seastar::do_with(
+    std::move(ret),
+    [](auto &ret) {
+      return seastar::do_for_each(
+	ret,
+	[](auto &ext) {
+	  logger().debug(
+	    "get_next_dirty_extents: waiting on {}",
+	    *ext);
+	  return ext->wait_io();
+	}).then([&ret]() mutable {
+	  return seastar::make_ready_future<std::vector<CachedExtentRef>>(
+	    std::move(ret));
+	});
+    });
 }
 
 Cache::get_root_ret Cache::get_root(Transaction &t)
