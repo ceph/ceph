@@ -127,7 +127,7 @@ void ConnectionTracker::get_total_connection_score(int peer_rank, double *rating
   double rate = 0;
   int live = 0;
 
-  for (const auto i : peer_reports) { // loop through all the scores
+  for (const auto& i : peer_reports) { // loop through all the scores
     if (i.first == peer_rank) { // ... except the ones it has for itself, of course!
       continue;
     }
@@ -252,7 +252,7 @@ void ConnectionTracker::dump(ceph::Formatter *f) const
   f->dump_float("half_life", half_life);
   f->dump_int("persist_interval", persist_interval);
   f->open_object_section("reports");
-  for (auto i : peer_reports) {
+  for (const auto& i : peer_reports) {
     f->open_object_section("report");
     i.second.dump(f);
     f->close_section();
