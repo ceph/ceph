@@ -89,13 +89,17 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     return;
   }
 
+  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+  void update_journal_tail_committed(journal_seq_t paddr) final {}
+
   seastar::future<> set_up_fut() final {
     journal.reset(new Journal(*segment_manager));
     journal->set_segment_provider(this);
     return segment_manager->init(
     ).safe_then([this] {
       return journal->open_for_write();
-    }).handle_error(
+    }).safe_then(
+      [](auto){},
       crimson::ct_error::all_same_way([] {
 	ASSERT_FALSE("Unable to mount");
       }));
@@ -131,7 +135,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     replay(
       [&advance,
        &delta_checker]
-      (auto base, const auto &di) mutable {
+      (auto seq, auto base, const auto &di) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
 	}
@@ -151,7 +155,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   auto submit_record(T&&... _record) {
     auto record{std::forward<T>(_record)...};
     records.push_back(record);
-    auto addr = journal->submit_record(std::move(record)).unsafe_get0();
+    auto [addr, _] = journal->submit_record(std::move(record)).unsafe_get0();
     records.back().record_final_offset = addr;
     return addr;
   }

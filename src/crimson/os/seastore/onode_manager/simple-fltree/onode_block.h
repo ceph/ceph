@@ -15,10 +15,7 @@ struct OnodeBlock final : LogicalCachedExtent {
 
   template <typename... T>
   OnodeBlock(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
-  OnodeBlock(OnodeBlock&& block) noexcept
-    : LogicalCachedExtent{std::move(block)},
-      deltas{std::move(block.deltas)}
-  {}
+  OnodeBlock(OnodeBlock&& block) = delete;
   OnodeBlock(const OnodeBlock& block, CachedExtent::share_buffer_t tag) noexcept
     : LogicalCachedExtent{block, tag},
       share_buffer{true}
@@ -44,8 +41,7 @@ struct OnodeBlock final : LogicalCachedExtent {
   // before the transaction carrying these mutations is committed to
   // disk
   ceph::bufferlist get_delta() final;
-  void on_initial_write() final;
-  void on_delta_write(paddr_t record_block_offset) final;
+  void logical_on_delta_write() final;
   void apply_delta(const ceph::bufferlist &bl) final;
 
   void sync() {

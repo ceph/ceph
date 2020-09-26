@@ -371,7 +371,7 @@ public:
   const_iterator lower_bound(K l) const {
     auto ret = begin();
     for (; ret != end(); ++ret) {
-      if (ret->get_key() > l)
+      if (ret->get_key() >= l)
 	break;
     }
     return ret;

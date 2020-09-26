@@ -87,6 +87,10 @@ public:
     Transaction &t,
     CachedExtentRef e) final;
 
+  rewrite_extent_ret rewrite_extent(
+    Transaction &t,
+    CachedExtentRef extent);
+
   void add_pin(LBAPin &pin) final {
     pin_set.add_pin(reinterpret_cast<BtreeLBAPin*>(&pin)->pin);
   }
@@ -151,6 +155,14 @@ private:
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);
+
+  using update_internal_mapping_ertr = LBANode::mutate_internal_address_ertr;
+  using update_internal_mapping_ret = LBANode::mutate_internal_address_ret;
+  update_internal_mapping_ret update_internal_mapping(
+    Transaction &t,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

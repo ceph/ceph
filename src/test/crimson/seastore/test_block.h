@@ -74,15 +74,8 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
     set_contents(c, 0, get_length());
   }
 
-  int checksum() {
-    return ceph_crc32c(
-      1,
-      (const unsigned char *)get_bptr().c_str(),
-      get_length());
-  }
-
   test_extent_desc_t get_desc() {
-    return { get_length(), get_crc32c(1) };
+    return { get_length(), get_crc32c() };
   }
 
   void apply_delta(const ceph::bufferlist &bl) final;
@@ -119,8 +112,6 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   ceph::bufferlist get_delta() final { return ceph::bufferlist(); }
 
-  int checksum() { return 0; }
-
   void apply_delta_and_adjust_crc(paddr_t, const ceph::bufferlist &bl) final {}
 };
 using TestBlockPhysicalRef = TCachedExtentRef<TestBlockPhysical>;
@@ -135,20 +126,19 @@ struct test_block_mutator_t {
   offset_distribution = std::uniform_int_distribution<uint16_t>(
     0, TestBlock::SIZE - 1);
 
-  std::default_random_engine generator = std::default_random_engine(0);
-
   std::uniform_int_distribution<uint16_t> length_distribution(uint16_t offset) {
     return std::uniform_int_distribution<uint16_t>(
       0, TestBlock::SIZE - offset - 1);
   }
 
 
-  void mutate(TestBlock &block) {
-    auto offset = offset_distribution(generator);
+  template <typename generator_t>
+  void mutate(TestBlock &block, generator_t &gen) {
+    auto offset = offset_distribution(gen);
     block.set_contents(
-      contents_distribution(generator),
+      contents_distribution(gen),
       offset,
-      length_distribution(offset)(generator));
+      length_distribution(offset)(gen));
   }
 };
 

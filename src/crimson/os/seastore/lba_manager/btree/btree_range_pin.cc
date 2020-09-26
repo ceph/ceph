@@ -13,6 +13,20 @@ namespace {
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+void btree_range_pin_t::take_pin(btree_range_pin_t &other)
+{
+  assert(other.extent);
+  assert(other.pins);
+  other.pins->replace_pin(*this, other);
+  pins = other.pins;
+  other.pins = nullptr;
+
+  if (other.has_ref()) {
+    other.drop_ref();
+    acquire_ref();
+  }
+}
+
 btree_range_pin_t::~btree_range_pin_t()
 {
   assert(!pins == !is_linked());
@@ -22,6 +36,11 @@ btree_range_pin_t::~btree_range_pin_t()
     pins->remove_pin(*this, true);
   }
   extent = nullptr;
+}
+
+void btree_pin_set_t::replace_pin(btree_range_pin_t &to, btree_range_pin_t &from)
+{
+  pins.replace_node(pins.iterator_to(from), to);
 }
 
 void btree_pin_set_t::remove_pin(btree_range_pin_t &pin, bool do_check_parent)
