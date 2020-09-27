@@ -3507,7 +3507,7 @@ BlueStore::Onode* BlueStore::Onode::decode(
   auto p = v.front().begin_deep();
   on->onode.decode(p);
   for (auto& i : on->onode.attrs) {
-    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   }
 
   // initialize extent_map
@@ -14404,10 +14404,10 @@ int BlueStore::_setattr(TransContext *txc,
   if (val.is_partial()) {
     auto& b = o->onode.attrs[name.c_str()] = bufferptr(val.c_str(),
 						       val.length());
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   } else {
     auto& b = o->onode.attrs[name.c_str()] = val;
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
   }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -14430,10 +14430,10 @@ int BlueStore::_setattrs(TransContext *txc,
     if (p->second.is_partial()) {
       auto& b = o->onode.attrs[p->first.c_str()] =
 	bufferptr(p->second.c_str(), p->second.length());
-      b.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
     } else {
       auto& b = o->onode.attrs[p->first.c_str()] = p->second;
-      b.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
     }
   }
   txc->write_onode(o);
