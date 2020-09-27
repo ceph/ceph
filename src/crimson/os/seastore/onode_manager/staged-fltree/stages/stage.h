@@ -150,29 +150,29 @@ struct staged {
   static constexpr auto STAGE = Params::STAGE;
 
   template <bool is_exclusive>
-  static void _left_or_right(size_t& s_index, size_t i_index,
-                             std::optional<bool>& i_to_left) {
-    assert(!i_to_left.has_value());
-    assert(s_index != INDEX_END);
+  static void _left_or_right(size_t& split_index, size_t insert_index,
+                             std::optional<bool>& is_insert_left) {
+    assert(!is_insert_left.has_value());
+    assert(split_index != INDEX_END);
     if constexpr (is_exclusive) {
-      if (s_index <= i_index) {
+      if (split_index <= insert_index) {
         // ...[s_index-1] |!| (i_index) [s_index]...
         // offset i_position to right
-        i_to_left = false;
+        is_insert_left = false;
       } else {
         // ...[s_index-1] (i_index)) |?[s_index]| ...
         // ...(i_index)...[s_index-1] |?[s_index]| ...
-        i_to_left = true;
-        --s_index;
+        is_insert_left = true;
+        --split_index;
       }
     } else {
-      if (s_index < i_index) {
+      if (split_index < insert_index) {
         // ...[s_index-1] |?[s_index]| ...[(i_index)[s_index_k]...
-        i_to_left = false;
-      } else if (s_index > i_index) {
+        is_insert_left = false;
+      } else if (split_index > insert_index) {
         // ...[(i_index)s_index-1] |?[s_index]| ...
         // ...[(i_index)s_index_k]...[s_index-1] |?[s_index]| ...
-        i_to_left = true;
+        is_insert_left = true;
       } else {
         // ...[s_index-1] |?[(i_index)s_index]| ...
         // i_to_left = std::nullopt;
@@ -311,30 +311,31 @@ struct staged {
 
     // Note: possible to return an end iterator when is_exclusive is true
     template <bool is_exclusive>
-    size_t seek_split_inserted(size_t start_size, size_t extra_size,
-                               size_t target_size, size_t& i_index, size_t i_size,
-                               std::optional<bool>& i_to_left) {
+    size_t seek_split_inserted(
+        size_t start_size, size_t extra_size, size_t target_size,
+        size_t& insert_index, size_t insert_size,
+        std::optional<bool>& is_insert_left) {
       assert(!is_end());
       assert(index() == 0);
-      assert(i_index <= container.keys() || i_index == INDEX_END);
+      assert(insert_index <= container.keys() || insert_index == INDEX_END);
       // replace the unknown INDEX_END value
-      if (i_index == INDEX_END) {
+      if (insert_index == INDEX_END) {
         if constexpr (!is_exclusive) {
-          i_index = container.keys() - 1;
+          insert_index = container.keys() - 1;
         } else {
-          i_index = container.keys();
+          insert_index = container.keys();
         }
       }
       auto start_size_1 = start_size + extra_size;
       auto f_get_used_size = [this, start_size, start_size_1,
-                              i_index, i_size] (size_t index) {
+                              insert_index, insert_size] (size_t index) {
         size_t current_size;
         if (unlikely(index == 0)) {
           current_size = start_size;
         } else {
           current_size = start_size_1;
-          if (index > i_index) {
-            current_size += i_size;
+          if (index > insert_index) {
+            current_size += insert_size;
             if constexpr (is_exclusive) {
               --index;
             }
@@ -354,7 +355,7 @@ struct staged {
       size_t current_size = f_get_used_size(_index);
       assert(current_size <= target_size);
 
-      _left_or_right<is_exclusive>(_index, i_index, i_to_left);
+      _left_or_right<is_exclusive>(_index, insert_index, is_insert_left);
       return current_size;
     }
 
@@ -575,38 +576,39 @@ struct staged {
 
     // Note: possible to return an end iterator when is_exclusive is true
     template <bool is_exclusive>
-    size_t seek_split_inserted(size_t start_size, size_t extra_size,
-                               size_t target_size, size_t& i_index, size_t i_size,
-                               std::optional<bool>& i_to_left) {
+    size_t seek_split_inserted(
+        size_t start_size, size_t extra_size, size_t target_size,
+        size_t& insert_index, size_t insert_size,
+        std::optional<bool>& is_insert_left) {
       assert(!is_end());
       assert(index() == 0);
       size_t current_size = start_size;
-      size_t s_index = 0;
+      size_t split_index = 0;
       extra_size += header_size();
       do {
         if constexpr (!is_exclusive) {
           if (is_last()) {
-            assert(s_index == index());
-            if (i_index == INDEX_END) {
-              i_index = index();
+            assert(split_index == index());
+            if (insert_index == INDEX_END) {
+              insert_index = index();
             }
-            assert(i_index <= index());
+            assert(insert_index <= index());
             break;
           }
         }
 
         size_t nxt_size = current_size;
-        if (s_index == 0) {
+        if (split_index == 0) {
           nxt_size += extra_size;
         }
-        if (s_index == i_index) {
-          nxt_size += i_size;
+        if (split_index == insert_index) {
+          nxt_size += insert_size;
           if constexpr (is_exclusive) {
             if (nxt_size > target_size) {
               break;
             }
             current_size = nxt_size;
-            ++s_index;
+            ++split_index;
           }
         }
         nxt_size += size();
@@ -617,27 +619,27 @@ struct staged {
 
         if constexpr (is_exclusive) {
           if (is_last()) {
-            assert(s_index == index());
+            assert(split_index == index());
             set_end();
-            s_index = index();
-            if (i_index == INDEX_END) {
-              i_index = index();
+            split_index = index();
+            if (insert_index == INDEX_END) {
+              insert_index = index();
             }
-            assert(i_index == index());
+            assert(insert_index == index());
             break;
           } else {
             ++(*this);
-            ++s_index;
+            ++split_index;
           }
         } else {
           ++(*this);
-          ++s_index;
+          ++split_index;
         }
       } while (true);
       assert(current_size <= target_size);
 
-      _left_or_right<is_exclusive>(s_index, i_index, i_to_left);
-      assert(s_index == index());
+      _left_or_right<is_exclusive>(split_index, insert_index, is_insert_left);
+      assert(split_index == index());
       return current_size;
     }
 
@@ -752,8 +754,8 @@ struct staged {
    *   (!IS_BOTTOM) update_size(mut, size)
    * split;
    *   seek_split_inserted<bool is_exclusive>(
-   *       start_size, extra_size, target_size, i_index, i_size,
-   *       std::optional<bool>& i_to_left)
+   *       start_size, extra_size, target_size, insert_index, insert_size,
+   *       std::optional<bool>& is_insert_left)
    *           -> insert to left/right/unknown (!exclusive)
    *           -> insert to left/right         (exclusive, can be end)
    *     -> split_size
@@ -1411,63 +1413,63 @@ struct staged {
     }
    private:
     std::optional<iterator_t> iter;
-    size_t end_index;
   };
 
   static void recursively_locate_split(
       size_t& current_size, size_t extra_size,
       size_t target_size, StagedIterator& split_at) {
     assert(current_size <= target_size);
-    iterator_t& iter = split_at.get();
-    current_size = iter.seek_split(current_size, extra_size, target_size);
+    iterator_t& split_iter = split_at.get();
+    current_size = split_iter.seek_split(current_size, extra_size, target_size);
     if constexpr (!IS_BOTTOM) {
       NXT_STAGE_T::recursively_locate_split(
-          current_size, extra_size + iter.size_to_nxt(),
+          current_size, extra_size + split_iter.size_to_nxt(),
           target_size, split_at.nxt());
     }
   }
 
   static void recursively_locate_split_inserted(
       size_t& current_size, size_t extra_size, size_t target_size,
-      position_t& i_position, match_stage_t i_stage, size_t i_size,
-      std::optional<bool>& i_to_left, StagedIterator& split_at) {
+      position_t& insert_pos, match_stage_t insert_stage, size_t insert_size,
+      std::optional<bool>& is_insert_left, StagedIterator& split_at) {
     assert(current_size <= target_size);
-    assert(!i_to_left.has_value());
-    iterator_t& iter = split_at.get();
-    auto& i_index = i_position.index;
-    if (i_stage == STAGE) {
-      current_size = iter.template seek_split_inserted<true>(
+    assert(!is_insert_left.has_value());
+    iterator_t& split_iter = split_at.get();
+    auto& insert_index = insert_pos.index;
+    if (insert_stage == STAGE) {
+      current_size = split_iter.template seek_split_inserted<true>(
           current_size, extra_size, target_size,
-          i_index, i_size, i_to_left);
-      assert(i_to_left.has_value());
-      if (*i_to_left == false && iter.index() == i_index) {
+          insert_index, insert_size, is_insert_left);
+      assert(is_insert_left.has_value());
+      if (*is_insert_left == false && split_iter.index() == insert_index) {
         // ...[s_index-1] |!| (i_index) [s_index]...
         return;
       }
-      assert(!iter.is_end());
-      if (iter.index() == 0) {
+      assert(!split_iter.is_end());
+      if (split_iter.index() == 0) {
         extra_size += iterator_t::header_size();
       } else {
         extra_size = 0;
       }
     } else {
       if constexpr (!IS_BOTTOM) {
-        assert(i_stage < STAGE);
-        current_size = iter.template seek_split_inserted<false>(
+        assert(insert_stage < STAGE);
+        current_size = split_iter.template seek_split_inserted<false>(
             current_size, extra_size, target_size,
-            i_index, i_size, i_to_left);
-        assert(!iter.is_end());
-        if (iter.index() == 0) {
+            insert_index, insert_size, is_insert_left);
+        assert(!split_iter.is_end());
+        if (split_iter.index() == 0) {
           extra_size += iterator_t::header_size();
         } else {
           extra_size = 0;
         }
-        if (!i_to_left.has_value()) {
-          assert(iter.index() == i_index);
+        if (!is_insert_left.has_value()) {
+          assert(split_iter.index() == insert_index);
           NXT_STAGE_T::recursively_locate_split_inserted(
-              current_size, extra_size + iter.size_to_nxt(), target_size,
-              i_position.nxt, i_stage, i_size, i_to_left, split_at.nxt());
-          assert(i_to_left.has_value());
+              current_size, extra_size + split_iter.size_to_nxt(), target_size,
+              insert_pos.nxt, insert_stage, insert_size,
+              is_insert_left, split_at.nxt());
+          assert(is_insert_left.has_value());
           return;
         }
       } else {
@@ -1476,7 +1478,7 @@ struct staged {
     }
     if constexpr (!IS_BOTTOM) {
       NXT_STAGE_T::recursively_locate_split(
-          current_size, extra_size + iter.size_to_nxt(),
+          current_size, extra_size + split_iter.size_to_nxt(),
           target_size, split_at.nxt());
     }
     return;
