@@ -38,9 +38,6 @@ tasks:
     mon.a:
       - while true
       - do sleep 30
-      - echo proxy
-      - sudo ceph osd tier cache-mode cache proxy
-      - sleep 10
       - sudo ceph osd pool set cache cache_target_full_ratio .001
       - echo cache-try-flush-evict-all
       - rados -p cache cache-try-flush-evict-all
