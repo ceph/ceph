@@ -20,6 +20,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/Throttle.h"
+//#include "common/split.h"
 
 #include "rgw_sal.h"
 #include "rgw_zone.h"
@@ -85,6 +86,8 @@ using namespace librados;
 #include "services/svc_mdlog.h"
 
 #include "compressor/Compressor.h"
+
+#include "rgw_d3n_datacache.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -1115,8 +1118,13 @@ int RGWRados::init_rados()
   if (ret < 0) {
     return ret;
   }
-
   cr_registry = crs.release();
+
+  if(use_datacache) {
+    d3n_datacache = new D3nDataCache();
+    d3n_datacache->init(cct);
+  }
+
   return ret;
 }
 
@@ -3306,7 +3314,15 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
+  RGWGetDataCB* client_cb = nullptr;
   std::function<int(map<string, bufferlist>&)> attrs_handler;
+
+  bufferlist chunk_buffer;
+  string chunk_name;
+  uint64_t chunk_id = 0;
+  uint64_t chunk_size = COPY_BUF_SIZE;
+  RGWRados *store;
+  get_obj_data *d;
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -3324,6 +3340,7 @@ public:
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
                        attrs_handler(_attrs_handler) {}
+
 
   int process_attrs(void) {
     if (extra_data_bl.length()) {
@@ -3452,6 +3469,20 @@ public:
     const uint64_t lofs = data_len;
     data_len += size;
 
+    if (client_cb && (g_conf()->rgw_d3n_l1_local_datacache_enabled || g_conf()->rgw_d3n_l2_distributed_datacache_enabled)) {
+      // d3n L2 cache client cb
+      bufferlist bl_temp;
+      bl_temp.append(bl);
+      client_cb->handle_data(bl_temp, 0, size);
+      chunk_buffer.append(bl);
+
+      if (chunk_buffer.length() >= chunk_size) {
+        bufferlist tmp;
+        chunk_buffer.splice(0, chunk_size, &tmp);
+
+        chunk_id += 1;
+      }
+    }
     return filter->process(std::move(bl), lofs);
   }
 
@@ -3600,6 +3631,7 @@ class RGWGetExtraDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
 public:
   RGWGetExtraDataCB() {}
   int handle_data(bufferlist& bl, bool *pause) override {
+    
     int bl_len = (int)bl.length();
     if (extra_data.length() < extra_data_len) {
       off_t max = extra_data_len - extra_data.length();
@@ -6296,9 +6328,10 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
   return bl.length();
 }
 
+/* temporary copy-paste from src/rgw/rgw_rados.h for sake of PR review.
 struct get_obj_data {
   RGWRados* store;
-  RGWGetDataCB* client_cb;
+  RGWGetDataCB* client_cb == nullptr;
   rgw::Aio* aio;
   uint64_t offset; // next offset to write to client
   rgw::AioResultList completed; // completed read results, sorted by offset
@@ -6308,11 +6341,20 @@ struct get_obj_data {
                uint64_t offset, optional_yield yield)
     : store(store), client_cb(cb), aio(aio), offset(offset), yield(yield) {}
 
+  std::mutex d3n_datacache_lock;
+  std::list<bufferlist> d3n_read_list;
+  std::list<string> d3n_pending_oid_list;
+  void d3n_add_pending_oid(std::string oid);
+  std::string d3n_get_pending_oid();
+  std::string d3n_deterministic_hash(std::string oid);
+  bool d3n_deterministic_hash_is_local(string oid);
+
   int flush(rgw::AioResultList&& results) {
     int r = rgw::check_for_errors(results);
     if (r < 0) {
       return r;
     }
+    std::list<bufferlist> bl_list;
 
     auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.id < rhs.id; };
     results.sort(cmp); // merge() requires results to be sorted first
@@ -6322,12 +6364,15 @@ struct get_obj_data {
       auto bl = std::move(completed.front().data);
       completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
 
+      bl_list.push_back(bl);
       offset += bl.length();
       int r = client_cb->handle_data(bl, 0, bl.length());
       if (r < 0) {
         return r;
       }
     }
+
+    d3n_read_list.splice(d3n_read_list.end(), bl_list);
     return 0;
   }
 
@@ -6349,24 +6394,104 @@ struct get_obj_data {
     return flush(std::move(c));
   }
 };
+*/
+
+std::vector<string> split(const string &s, const char * delim)
+{
+  stringstream ss(s);
+  string item;
+  std::vector<string> tokens;
+  while (getline(ss, item, (*delim))) {
+    tokens.push_back(item);
+  }
+  return tokens;
+}
+
+bool get_obj_data::d3n_deterministic_hash_is_local(string oid) {
+  if( g_conf()->rgw_d3n_l2_distributed_datacache_enabled == false ) {
+    return true;
+  } else {
+	  return (d3n_deterministic_hash(oid).compare(g_conf()->rgw_host)==0);
+  }
+}
+
+std::string get_obj_data::d3n_deterministic_hash(std::string oid)
+{
+  std::string location = g_conf()->rgw_d3n_l2_datacache_hosts;
+  string delimiters(",");
+
+  std::vector<std::string> tokens = split(location, ",");
+  int mod = tokens.size();
+
+  std::string::size_type sz;   // alias of size_t
+  std::vector<string> sv = split(oid, "_");
+  /* Make sure the input string to stoi starts with a number */
+  std::string key = sv[sv.size() - 1];
+  std::string key_length = to_string(key.size());
+  int hash = std::stoi(key_length + key, &sz);
+  return tokens[hash%mod];
+}
+
+void get_obj_data::d3n_add_pending_oid(std::string oid)
+{
+  d3n_pending_oid_list.push_back(oid);
+}
+
+string get_obj_data::d3n_get_pending_oid()
+{
+  string str;
+  str.clear();
+  if (!d3n_pending_oid_list.empty()) {
+    str = d3n_pending_oid_list.front();
+    d3n_pending_oid_list.pop_front();
+  }
+  return str;
+}
 
 static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                off_t read_ofs, off_t len, bool is_head_obj,
                                RGWObjState *astate, void *arg)
 {
-  struct get_obj_data *d = (struct get_obj_data *)arg;
-
+  struct get_obj_data* d = static_cast<struct get_obj_data*>(arg);
   return d->store->get_obj_iterate_cb(read_obj, obj_ofs, read_ofs, len,
                                       is_head_obj, astate, arg);
 }
+
+int RGWRados::flush_read_list(struct get_obj_data* d)
+{
+
+  d->d3n_datacache_lock.lock();
+  list<bufferlist> l;
+  l.swap(d->d3n_read_list);
+  d->d3n_read_list.clear();
+  d->d3n_datacache_lock.unlock();
+
+  int r = 0;
+
+  list<bufferlist>::iterator iter;
+  for (iter = l.begin(); iter != l.end(); ++iter) {
+    bufferlist& bl = *iter;
+    r = d->client_cb->handle_data(bl, 0, bl.length());
+    if (r < 0) {
+      dout(0) << "ERROR: flush_read_list(): d->client_cb->handle_data() returned " << r << dendl;
+      break;
+    }
+  }
+
+  return r;
+}
+
+
 
 int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                  off_t read_ofs, off_t len, bool is_head_obj,
                                  RGWObjState *astate, void *arg)
 {
   ObjectReadOperation op;
-  struct get_obj_data *d = (struct get_obj_data *)arg;
+  struct get_obj_data* d = static_cast<struct get_obj_data*>(arg);
   string oid, key;
+
+  int r;
 
   if (is_head_obj) {
     /* only when reading from the head object do we need to do the atomic test */
@@ -6392,7 +6517,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   }
 
   auto obj = d->store->svc.rados->obj(read_obj);
-  int r = obj.open();
+  r = obj.open();
   if (r < 0) {
     ldout(cct, 4) << "failed to open rados context for " << read_obj << dendl;
     return r;
@@ -6407,6 +6532,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
 
   return d->flush(std::move(completed));
+
 }
 
 int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
@@ -6417,20 +6543,29 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
   RGWObjectCtx& obj_ctx = source->get_ctx();
   const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
-
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data, y);
+
   if (r < 0) {
     ldout(cct, 0) << "iterate_obj() failed with " << r << dendl;
     data.cancel(); // drain completions without writing back to client
     return r;
   }
 
-  return data.drain();
+  r = data.drain();
+  if( cct->_conf->rgw_d3n_l1_local_datacache_enabled ) {
+    r = store->flush_read_list(&data);
+    if (r < 0)
+      return r;
+    return 0;
+  } else {
+    return r;
+  }
 }
+
 
 int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
                           const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -6458,11 +6593,15 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
 
   if (astate->manifest) {
     /* now get the relevant object stripe */
-    RGWObjManifest::obj_iterator iter = astate->manifest->obj_find(ofs);
 
-    RGWObjManifest::obj_iterator obj_end = astate->manifest->obj_end();
+    RGWObjManifest& manifest = *astate->manifest;
+
+    RGWObjManifest::obj_iterator iter = manifest.obj_find(ofs);
+
+    RGWObjManifest::obj_iterator obj_end = manifest.obj_end();
 
     for (; iter != obj_end && ofs <= end; ++iter) {
+
       off_t stripe_ofs = iter.get_stripe_ofs();
       off_t next_stripe_ofs = stripe_ofs + iter.get_stripe_size();
 
@@ -6475,12 +6614,12 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
           read_len = max_chunk_size;
         }
 
+        // Check if we have a head object or tail object
         reading_from_head = (read_obj == head_obj);
         r = cb(read_obj, ofs, read_ofs, read_len, reading_from_head, astate, arg);
 	if (r < 0) {
 	  return r;
         }
-
 	len -= read_len;
         ofs += read_len;
       }
@@ -9178,3 +9317,4 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   }
   return ret;
 }
+

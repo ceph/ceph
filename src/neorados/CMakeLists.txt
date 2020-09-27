@@ -1,7 +1,15 @@
 add_library(neorados_objs OBJECT
   RADOSImpl.cc)
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(neorados_objs PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 add_library(neorados_api_obj OBJECT
   RADOS.cc)
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(neorados_api_obj PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 
 add_library(libneorados STATIC
   $<TARGET_OBJECTS:neorados_api_obj>

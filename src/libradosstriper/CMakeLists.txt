@@ -4,6 +4,10 @@ set(libradosstriper_srcs
   MultiAioCompletionImpl.cc)
 add_library(radosstriper ${CEPH_SHARED}
   ${libradosstriper_srcs})
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(radosstriper PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 target_link_libraries(radosstriper
   PRIVATE
     librados
