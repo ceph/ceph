@@ -10997,7 +10997,17 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 
   set<mds_rank_t> who;
   if (bcast) {
-    mds->get_mds_map()->get_active_mds_set(who);
+    set<mds_rank_t> mds_set;
+    mds->get_mds_map()->get_active_mds_set(mds_set);
+
+    set<mds_rank_t> replica_set;
+    for (const auto &p : dir->get_replicas()) {
+      replica_set.insert(p.first);
+    }
+
+    std::set_difference(mds_set.begin(), mds_set.end(),
+                        replica_set.begin(), replica_set.end(),
+                        std::inserter(who, who.end()));
   } else {
     for (const auto &p : dir->get_replicas()) {
       who.insert(p.first);
