@@ -897,8 +897,6 @@ OPTION(bdev_debug_aio_log_age, OPT_DOUBLE)
 OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL)
 OPTION(bdev_enable_discard, OPT_BOOL)
 OPTION(bdev_async_discard, OPT_BOOL)
-OPTION(bdev_flock_retry_interval, OPT_FLOAT)
-OPTION(bdev_flock_retry, OPT_INT)
 
 OPTION(objectstore_blackhole, OPT_BOOL)
 
