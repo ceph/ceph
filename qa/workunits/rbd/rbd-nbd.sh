@@ -107,7 +107,7 @@ unmap_device()
     for s in 0.5 1 2 4 8 16 32; do
 	sleep ${s}
         rbd-nbd list-mapped | expect_false grep "^${pid}\\b" &&
-            ! ps -p ${pid} -C rbd-nbd &&
+            ps -C rbd-nbd | expect_false grep "^${pid}\\b" &&
             return 0
     done
     return 1
@@ -226,6 +226,16 @@ DEV=`_sudo rbd-nbd map ${POOL}/${NS}/${IMAGE}@snap`
 get_pid ${NS}
 unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${PID}
 DEV=
+
+# unmap by image name test 2
+DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
+get_pid
+pid=$PID
+DEV=`_sudo rbd-nbd map ${POOL}/${NS}/${IMAGE}`
+get_pid ${NS}
+unmap_device ${POOL}/${NS}/${IMAGE} ${PID}
+DEV=
+unmap_device ${POOL}/${IMAGE} ${pid}
 
 # auto unmap test
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`

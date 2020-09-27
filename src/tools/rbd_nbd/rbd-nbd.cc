@@ -1408,8 +1408,8 @@ static bool find_mapped_dev_by_spec(Config *cfg) {
   Config c;
   NBDListIterator it;
   while (it.get(&pid, &c)) {
-    if (c.poolname == cfg->poolname && c.imgname == cfg->imgname &&
-        c.snapname == cfg->snapname) {
+    if (c.poolname == cfg->poolname && c.nsname == cfg->nsname &&
+        c.imgname == cfg->imgname && c.snapname == cfg->snapname) {
       *cfg = c;
       return true;
     }
