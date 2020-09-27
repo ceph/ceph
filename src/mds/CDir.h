@@ -488,6 +488,7 @@ public:
     if (dir_rep == REP_NONE) return false;
     return true;
   }
+  bool can_rep() const;
  
   // -- fetch --
   object_t get_ondisk_object() { 
