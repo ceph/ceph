@@ -284,8 +284,78 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       size_t total_size = node_stage.total_size();
       size_t available_size = total_size - empty_size;
       size_t filled_size = total_size - node_stage.free_size() - empty_size;
+      /** NODE_BLOCK_SIZE considerations
+       *
+       * Generally,
+       * target_split_size = (filled_size + insert_size) / 2
+       * We can have two locate_split() strategies:
+       * A. the simpler one is to locate the largest split position where
+       *    the estimated left_node_size <= target_split_size;
+       * B. the fair one takes a further step to calculate the next slot of
+       *    P KiB, and if left_node_size + P/2 < target_split_size, compensate
+       *    the split position to include the next slot; (TODO)
+       *
+       * Say that the node_block_size = N KiB, the largest allowed
+       * insert_size = 1/I * N KiB (I > 1). We want to identify the minimal 'I'
+       * that won't lead to "double split" effect, meaning after a split,
+       * the right node size is still larger than N KiB and need to split
+       * again. I think "double split" makes split much more complicated and
+       * we can no longer identify whether the node is safe under concurrent
+       * operations.
+       *
+       * We need to evaluate the worst case in order to identify 'I'. This means:
+       * - filled_size ~= N KiB
+       * - insert_size == N/I KiB
+       * - target_split_size ~= (I+1)/2I * N KiB
+       * To simplify the below calculations, node_block_size is normalized to 1.
+       *
+       * With strategy A, the worst case is when left_node_size cannot include
+       * the next slot that will just overflow the target_split_size:
+       * - left_node_size + 1/I ~= (I+1)/2I
+       * - left_node_size ~= (I-1)/2I
+       * - right_node_size ~= 1 + 1/I - left_node_size ~= (I+3)/2I
+       * The right_node_size cannot larger than the node_block_size in the
+       * worst case, which means (I+3)/2I < 1, so I > 3, meaning the largest
+       * possible insert_size must be smaller than 1/3 of the node_block_size.
+       *
+       * With strategy B, the worst case is when left_node_size cannot include
+       * the next slot that will just overflow the threshold
+       * target_split_size - 1/2I, thus:
+       * - left_node_size ~= (I+1)/2I - 1/2I ~= 1/2
+       * - right_node_size ~= 1 + 1/I - 1/2 ~= (I+2)/2I < node_block_size(1)
+       * - I > 2
+       * This means the largest possible insert_size must be smaller than 1/2 of
+       * the node_block_size, which is better than strategy A.
+
+       * In order to avoid "double split", there is another side-effect we need
+       * to take into consideration: if split happens with snap-gen indexes, the
+       * according ns-oid string needs to be copied to the right node. That is
+       * to say: right_node_size + string_size < node_block_size.
+       *
+       * Say that the largest allowed string size is 1/S of the largest allowed
+       * insert_size N/I KiB. If we go with stragety B, the equation should be
+       * changed to:
+       * - right_node_size ~= (I+2)/2I + 1/(I*S) < 1
+       * - I > 2 + 2/S (S > 1)
+       *
+       * Now back to NODE_BLOCK_SIZE calculation, if we have limits of at most
+       * X KiB ns-oid string and Y KiB of onode_t to store in this BTree, then:
+       * - largest_insert_size ~= X+Y KiB
+       * - 1/S == X/(X+Y)
+       * - I > (4X+2Y)/(X+Y)
+       * - node_block_size(N) == I * insert_size > 4X+2Y KiB
+       *
+       * In conclusion,
+       * (TODO) the current node block size (4 KiB) is too small to
+       * store entire 2 KiB ns-oid string. We need to consider a larger
+       * node_block_size.
+       *
+       * We are setting X = Y = 640 B in order not to break the current
+       * implementations with 4KiB node.
+       *
+       * (TODO) Implement smarter logics to check when "double split" happens.
+       */
       size_t target_split_size = empty_size + (filled_size + insert_size) / 2;
-      // TODO adjust NODE_BLOCK_SIZE according to this requirement
       assert(insert_size < available_size / 2);
 
       size_t split_size = 0;
