@@ -1,7 +1,8 @@
 Host Management
 ===============
 
-.. note:: This document is intended to promote discussion relating to the types of host management features that the Ceph UI should provide.
+.. note:: This document is intended to promote discussion relating to the types of host management features that the Ceph UI should provide. A number of the mockup
+  also show a refresh icon, which may become redundant during Pacific development as data gathering becomes more optimised.
 
 The hosts that a Ceph cluster consumes are essential components of the cluster, and should be manageable in the same ways as the ceph daemons that they hold.
 However, not all aspects of managing a host should fall to the Ceph UI due to complexity and ownership. This means that there is a line that needs to be
@@ -29,12 +30,13 @@ able to quick click a link to open the physical BMC interface to progress the fa
 
 The action button is extended to cover the following host tasks
 
-* Edit
-* Enter Maintenance
-* Exit Maintenance
-* Reboot
-* Drain
-* Remove
+* Edit *(change labels, BMC information)*
+* Enter Maintenance *(host must be online)*
+* Exit Maintenance *(host must be in maintenance mode)*
+* Reboot *(host must already be in maintenance)*
+* Export *(export the server information as a CSV to support local configuration management processes)*
+* Drain 
+* Remove *(available for hosts in drained state)*
 
 When a server is selected, the host properties component is shown. This is made up of a tabbed interface; daemons, disks, osds,
 server information and performance details. The default tab selected is daemons, since this is the most common interaction point
@@ -42,27 +44,76 @@ with a host.
 
 .. image:: mockups/hostdaemons.png
 
-As you can see the intent is that the admin is able to manage the cluster daemons directly from the UI.
+The intent is that the admin is able to manage the cluster daemons directly from the UI, so the default display focuses on systemd
+information over container image id's. Image information is still available but not visible by default.
 
-In addition to management, new capabilities available in Pacific provide more server metadata. A Server Information tab has been added that shows
+Daemon Management
++++++++++++++++++
+When a daemon is selected the action button would provide the following
+
+* stop *(daemon must be running)*
+* start *(daemon must be stopped)*
+* restart *(daemon must be running)*
+* get logs *(only available to daemons in a running state)*
+
+The **get logs** option uses cephadm's **logs** command to gather the daemons logs, allowing them to be saved on the Admins machine to
+support problem determination workflows and support escalations.
+
+Server Information
+++++++++++++++++++
+The Pacific release provides more server metadata. A Server Information tab has been added that shows
 metadata about the host's configuration. 
 
 .. image:: mockups/hostinformation.png
 
 
+This data is gathered by cephadm's gather-facts command and includes *load* metrics for CPU and RAM, to allow the UI to provide a quick
+appreciation for load without relying on Prometheus.
+
 Adding a Host
 -------------
-On the face of it, adding a host to the cluster could be a simple step - but, there are a number of elements to the host addition process that
-could help daemon placement, crush and hardware support.
+The process of adding a host to the cluster has changed to support a 'bulk' add option which utilises host
+mask syntax, and also includes pre-flight checks performed in the UI to filter out common misconfiguration
+issues.
+The mockup below shows the result of trying to add 3 hosts to the cluster, and illustrates;
 
-<MOCKUP - Host add - labels, BMC, rack location>
+* pre-flight check results
+* the ability to edit host entries before attempting to add to the cluster
+* a holistic view of the hosts prior to adding to the cluster, allowing the admin to visually inspect
+  the desired hosts before selecting "Add to Cluster"
 
-Removing a Host
----------------
-Removing a host from the cluster is probably the most complex host action, since the removal process will revolve around an "impact" plan. Removing a host starts
-with removing the daemons and each daemon type will require different handling.
+.. image:: mockups/hostadd.png
 
-<MOCKUP - Host remove - impact statement>
+You'll also note that within the action menu, there is an item called **Explain**. This option would only be visibile
+when pre-flight checks fail for the host, and would show a modal dialog to explain the reason
+for the failure, when selected.
+
+Add Host Modal
+++++++++++++++
+When the admin selects New Host(s), the New Host modal is displayed
+
+.. image:: mockups/hostaddmodal.png
+
+| **Hostname/mask**
+| The hostname mask would support numeric ranges, to provide a simple method of adding hosts in bulk. 
+| **Rack**
+| Freeform text that can be used to implement a host to rack association in crush
+| **BMC URL**
+| URL string for the BMC http/https address (must be prefixed by http or https)
+| **Labels**
+| A predefined set of labels is provided that align to common ceph roles, with the custom labels also
+  supported via the Other textbox. This field would support a comma separated list of labels.
+
+
+Pre-flight checks
++++++++++++++++++
+In order to avoid cluster expansion issues, the pre-flight process performs the following checks;
+
+* hostname is resolvable
+* SSH is contactable
+* if BMC is provided, ensure it is resolvable
+
+
 
 Performing Host Maintenance
 ---------------------------
@@ -70,13 +121,45 @@ Hosts must undergo regular maintenance, whether that maintenance is for a softwa
 therefore ensure that it is a simple process to initiate maintenance against a host, and also protect against erroneous maintenance requests that could
 undermine data availability within the Ceph Cluster.
 
-<MOCKUP - Host actions - enter maintenance/exit maintenance>
+Since removing a host can impact performance and capacity, the duration of maintenance should be defined along with the maintenance request. A
+default maintenance window of 4hrs would be provided by the UI, but a host in maintenance beyond the predefined limit would generate a healthcheck alert
+to prompt the Admin, to investigate the outage to manage the risk to service.
 
-Daemon Management
------------------
-All daemons running within the cluster are managed through systemd, and just like any other system there is a requirement to be able to manage these
-daemons from time to time.
+Before passing the maintenance request to the orchestrator, there are a number of checks than can be done to catch common issues;
 
-<MOCKUP - daemon interaction - stop/restart/start/fetch logs>
+Deny Outcomes
++++++++++++++
 
+* If the hosts in the cluster have Rack identifiers, and there is another host in maintenance, deny the request if the other host is in a different rack.
+* PG backfill/recovery is active
+* cluster is in an error state
+
+Warning Outcomes
+++++++++++++++++
+If the maintenance request is OK to proceed but would have an impact, a modal should be shown to explain the
+potential impact of the action, requesting the Admin to confirm the maintenance action.
+
+* request is against a host that provides prometheus, and there is only a single prometheus instance
+
+  * **IMPACT** : Alerting based on metrics will be unavailable, all embedded grafana charts will cease to function
+* request is against a host that provides grafana, and there is only a single grafana instance
+  
+  * **IMPACT** : All embedded charts will be unavailable in the UI. Alerting will continue to be available.
+* request would result in only a single backup daemon of the same type active in the cluster
+
+  * **IMPACT**: A service or data availability event could occur if a subsequent failure occurs within the cluster
+    during the maintenance window.
+
+
+
+Draining a Host
+---------------
+Removing a host from the cluster, starts with the drain process. This probably the most complex host action, since the drain process will
+revolve around an "impact" plan. Draining a host is a two-step process
+
+#. Admin requests a host to be drained
+#. UI submits a drain request to the orchestrator in 'dry-run' mode
+
+   #. The orchestrator provides an action plan to describe the drain operation
+   #. Admin confirms the plan, to initiate the drain process
 
