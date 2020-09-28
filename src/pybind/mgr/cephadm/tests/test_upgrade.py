@@ -5,6 +5,7 @@ import pytest
 
 from ceph.deployment.service_spec import ServiceSpec
 from cephadm import CephadmOrchestrator
+from cephadm.upgrade import CephadmUpgrade
 from .fixtures import _run_cephadm, wait, cephadm_module, with_host, with_service
 
 
@@ -85,3 +86,10 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                 assert image == 'to_image@repo_digest'
             else:
                 assert image == 'to_image'
+
+
+def test_upgrade_state_null(cephadm_module: CephadmOrchestrator):
+    # This test validates https://tracker.ceph.com/issues/47580
+    cephadm_module.set_store('upgrade_state', 'null')
+    CephadmUpgrade(cephadm_module)
+    assert CephadmUpgrade(cephadm_module).upgrade_state is None
