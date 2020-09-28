@@ -25,9 +25,7 @@ protected:
   std::unique_ptr<TransactionManager> tm;
 
   TMTestState()
-    : segment_manager(
-      (segment_manager::EphemeralSegmentManager*)create_ephemeral(
-	segment_manager::DEFAULT_TEST_EPHEMERAL).release()) {
+    : segment_manager(segment_manager::create_test_ephemeral()) {
     init();
   }
 
@@ -55,7 +53,8 @@ protected:
   }
 
   seastar::future<> tm_setup() {
-    return segment_manager->init().safe_then([this] {
+    return segment_manager->init(
+    ).safe_then([this] {
       return tm->mkfs();
     }).safe_then([this] {
       return tm->close();

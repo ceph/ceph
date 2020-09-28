@@ -79,12 +79,6 @@ constexpr size_t PADDR_SIZE = sizeof(paddr_t);
 
 class SegmentManager {
 public:
-  using init_ertr = crimson::errorator<
-    crimson::ct_error::enospc,
-    crimson::ct_error::invarg,
-    crimson::ct_error::erange>;
-  virtual init_ertr::future<> init() = 0;
-
   using open_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
@@ -129,23 +123,5 @@ public:
   virtual ~SegmentManager() {}
 };
 using SegmentManagerRef = std::unique_ptr<SegmentManager>;
-
-namespace segment_manager {
-
-struct ephemeral_config_t {
-  size_t size;
-  size_t block_size;
-  size_t segment_size;
-};
-constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
-  1 << 30,
-  4 << 10,
-  8 << 20
-};
-
-std::ostream &operator<<(std::ostream &, const ephemeral_config_t &);
-SegmentManagerRef create_ephemeral(ephemeral_config_t config);
-
-}
 
 }
