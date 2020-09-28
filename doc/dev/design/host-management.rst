@@ -1,3 +1,4 @@
+===============
 Host Management
 ===============
 
@@ -8,14 +9,10 @@ The hosts that a Ceph cluster consumes are essential components of the cluster, 
 However, not all aspects of managing a host should fall to the Ceph UI due to complexity and ownership. This means that there is a line that needs to be
 defined where management of the host and ceph intersect.
 
-
-Host Processes
-##############
-
 The following sections describe the management tasks and lifecycle processes that should be provided by the Ceph UI.
 
 Host Information
-----------------
+================
 It is a fundamental requirement to be able to understand the types of hosts that Ceph is reliant upon. Having host related 
 information easily accessible, reduces the reliance the Ceph Administrator has on other 3rd party tools and frameworks -
 ultimately providing a more end-to-end experience.
@@ -48,7 +45,7 @@ The intent is that the admin is able to manage the cluster daemons directly from
 information over container image id's. Image information is still available but not visible by default.
 
 Daemon Management
-+++++++++++++++++
+=================
 When a daemon is selected the action button would provide the following
 
 * stop *(daemon must be running)*
@@ -60,7 +57,7 @@ The **get logs** option uses cephadm's **logs** command to gather the daemons lo
 support problem determination workflows and support escalations.
 
 Server Information
-++++++++++++++++++
+==================
 The Pacific release provides more server metadata. A Server Information tab has been added that shows
 metadata about the host's configuration. 
 
@@ -71,7 +68,7 @@ This data is gathered by cephadm's gather-facts command and includes *load* metr
 appreciation for load without relying on Prometheus.
 
 Adding a Host
--------------
+=============
 The process of adding a host to the cluster has changed to support a 'bulk' add option which utilises host
 mask syntax, and also includes pre-flight checks performed in the UI to filter out common misconfiguration
 issues.
@@ -89,7 +86,7 @@ when pre-flight checks fail for the host, and would show a modal dialog to expla
 for the failure, when selected.
 
 Add Host Modal
-++++++++++++++
+______________
 When the admin selects New Host(s), the New Host modal is displayed
 
 .. image:: mockups/hostaddmodal.png
@@ -106,7 +103,7 @@ When the admin selects New Host(s), the New Host modal is displayed
 
 
 Pre-flight checks
-+++++++++++++++++
+_________________
 In order to avoid cluster expansion issues, the pre-flight process performs the following checks;
 
 * hostname is resolvable
@@ -116,7 +113,7 @@ In order to avoid cluster expansion issues, the pre-flight process performs the 
 
 
 Performing Host Maintenance
----------------------------
+===========================
 Hosts must undergo regular maintenance, whether that maintenance is for a software upgrade or hardware component replacement or expansion. The UI should
 therefore ensure that it is a simple process to initiate maintenance against a host, and also protect against erroneous maintenance requests that could
 undermine data availability within the Ceph Cluster.
@@ -128,14 +125,14 @@ to prompt the Admin, to investigate the outage to manage the risk to service.
 Before passing the maintenance request to the orchestrator, there are a number of checks than can be done to catch common issues;
 
 Deny Outcomes
-+++++++++++++
+_____________
 
 * If the hosts in the cluster have Rack identifiers, and there is another host in maintenance, deny the request if the other host is in a different rack.
 * PG backfill/recovery is active
 * cluster is in an error state
 
 Warning Outcomes
-++++++++++++++++
+________________
 If the maintenance request is OK to proceed but would have an impact, a modal should be shown to explain the
 potential impact of the action, requesting the Admin to confirm the maintenance action.
 
@@ -153,7 +150,7 @@ potential impact of the action, requesting the Admin to confirm the maintenance 
 
 
 Draining a Host
----------------
+===============
 Removing a host from the cluster, starts with the drain process. This probably the most complex host action, since the drain process will
 revolve around an "impact" plan. Draining a host is a two-step process
 
