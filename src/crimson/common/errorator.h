@@ -596,14 +596,14 @@ private:
     }
 
     template <class FuncT>
-    auto finally(FuncT &&func) {
+    _future finally(FuncT &&func) {
       return this->then_wrapped(
         [func = std::forward<FuncT>(func)](auto &&result) mutable noexcept {
         if constexpr (seastar::is_future<std::invoke_result_t<FuncT>>::value) {
           return ::seastar::futurize_invoke(std::forward<FuncT>(func)).then_wrapped(
             [result = std::move(result)](auto&& f_res) mutable {
             // TODO: f_res.failed()
-            f_res.discard_result();
+            (void)f_res.discard_result();
             return std::move(result);
           });
         } else {
