@@ -32,7 +32,7 @@ auto create_pool(neorados::RADOS& r, std::string_view pname,
 		(boost::system::error_code ec) mutable {
 		  r.lookup_pool(
 		    pname,
-		    [&r, h = std::move(h)]
+		    [h = std::move(h)]
 		    (boost::system::error_code ec, std::int64_t pool) mutable {
 		      std::move(h)(ec, pool);
 		    });
