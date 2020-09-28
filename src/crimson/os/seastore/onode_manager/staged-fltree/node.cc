@@ -428,7 +428,7 @@ void InternalNode::track_insert(
       Ref<Node> insert_child, Ref<Node> nxt_child) {
   // update tracks
   auto pos_upper_bound = insert_pos;
-  pos_upper_bound.index_by_stage(insert_stage) = INDEX_END;
+  pos_upper_bound.index_by_stage(insert_stage) = INDEX_UPPER_BOUND;
   auto first = tracked_child_nodes.lower_bound(insert_pos);
   auto last = tracked_child_nodes.lower_bound(pos_upper_bound);
   std::vector<Node*> nodes;
@@ -698,7 +698,7 @@ Ref<tree_cursor_t> LeafNode::track_insert(
     const onode_t* p_onode) {
   // update cursor position
   auto pos_upper_bound = insert_pos;
-  pos_upper_bound.index_by_stage(insert_stage) = INDEX_END;
+  pos_upper_bound.index_by_stage(insert_stage) = INDEX_UPPER_BOUND;
   auto first = tracked_cursors.lower_bound(insert_pos);
   auto last = tracked_cursors.lower_bound(pos_upper_bound);
   std::vector<tree_cursor_t*> p_cursors;

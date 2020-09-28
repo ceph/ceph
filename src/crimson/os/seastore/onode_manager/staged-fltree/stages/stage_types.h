@@ -130,7 +130,14 @@ struct staged_position_t {
   static_assert(STAGE > STAGE_BOTTOM && STAGE <= STAGE_TOP);
   using me_t = staged_position_t<STAGE>;
   using nxt_t = staged_position_t<STAGE - 1>;
-  bool is_end() const { return index == INDEX_END; }
+  bool is_end() const {
+    if (index == INDEX_END) {
+      return true;
+    } else {
+      assert(is_valid_index(index));
+      return false;
+    }
+  }
   size_t& index_by_stage(match_stage_t stage) {
     assert(stage <= STAGE);
     if (STAGE == stage) {
@@ -157,9 +164,10 @@ struct staged_position_t {
   bool operator!=(const me_t& o) const { return cmp(o) != 0; }
 
   me_t& operator-=(const me_t& o) {
-    assert(o.index != INDEX_END);
+    assert(is_valid_index(o.index));
     assert(index >= o.index);
     if (index != INDEX_END) {
+      assert(is_valid_index(index));
       index -= o.index;
       if (index == 0) {
         nxt -= o.nxt;
@@ -180,8 +188,11 @@ template <match_stage_t STAGE>
 std::ostream& operator<<(std::ostream& os, const staged_position_t<STAGE>& pos) {
   if (pos.index == INDEX_END) {
     os << "END";
+  } else if (pos.index == INDEX_LAST) {
+    os << "LAST";
   } else {
     os << pos.index;
+    assert(is_valid_index(pos.index));
   }
   return os << ", " << pos.nxt;
 }
@@ -189,7 +200,14 @@ std::ostream& operator<<(std::ostream& os, const staged_position_t<STAGE>& pos) 
 template <>
 struct staged_position_t<STAGE_BOTTOM> {
   using me_t = staged_position_t<STAGE_BOTTOM>;
-  bool is_end() const { return index == INDEX_END; }
+  bool is_end() const {
+    if (index == INDEX_END) {
+      return true;
+    } else {
+      assert(is_valid_index(index));
+      return false;
+    }
+  }
   size_t& index_by_stage(match_stage_t stage) {
     assert(stage == STAGE_BOTTOM);
     return index;
@@ -212,9 +230,10 @@ struct staged_position_t<STAGE_BOTTOM> {
   bool operator!=(const me_t& o) const { return cmp(o) != 0; }
 
   me_t& operator-=(const me_t& o) {
-    assert(o.index != INDEX_END);
+    assert(is_valid_index(o.index));
     assert(index >= o.index);
     if (index != INDEX_END) {
+      assert(is_valid_index(index));
       index -= o.index;
     }
     return *this;
@@ -228,10 +247,14 @@ struct staged_position_t<STAGE_BOTTOM> {
 template <>
 inline std::ostream& operator<<(std::ostream& os, const staged_position_t<STAGE_BOTTOM>& pos) {
   if (pos.index == INDEX_END) {
-    return os << "END";
+    os << "END";
+  } else if (pos.index == INDEX_LAST) {
+    os << "LAST";
   } else {
-    return os << pos.index;
+    os << pos.index;
+    assert(is_valid_index(pos.index));
   }
+  return os;
 }
 
 using search_position_t = staged_position_t<STAGE_TOP>;
