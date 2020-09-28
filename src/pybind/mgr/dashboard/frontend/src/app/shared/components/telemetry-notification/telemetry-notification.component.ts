@@ -61,8 +61,7 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
       NotificationType.success,
       this.i18n('Telemetry activation reminder muted'),
       this.i18n(
-        'You can activate the module on the Telemetry configuration ' +
-          'page (<b>Dashboard Settings</b> -> <b>Telemetry configuration</b>) at any time.'
+        'You can activate the module on the Telemetry configuration page (<b>Dashboard Settings</b> -> <b>Telemetry configuration</b>) at any time.'
       )
     );
   }
