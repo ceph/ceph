@@ -14,6 +14,23 @@
 namespace crimson::os::seastore::segment_manager {
 
 class EphemeralSegmentManager;
+using EphemeralSegmentManagerRef = std::unique_ptr<EphemeralSegmentManager>;
+
+struct ephemeral_config_t {
+  size_t size = 0;
+  size_t block_size = 0;
+  size_t segment_size = 0;
+};
+
+constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
+  1 << 30,
+  4 << 10,
+  8 << 20
+};
+
+std::ostream &operator<<(std::ostream &, const ephemeral_config_t &);
+EphemeralSegmentManagerRef create_test_ephemeral();
+
 class EphemeralSegment final : public Segment {
   friend class EphemeralSegmentManager;
   EphemeralSegmentManager &manager;
@@ -48,10 +65,14 @@ class EphemeralSegmentManager final : public SegmentManager {
   Segment::close_ertr::future<> segment_close(segment_id_t id);
 
 public:
-  EphemeralSegmentManager(ephemeral_config_t config);
+  EphemeralSegmentManager(ephemeral_config_t config) : config(config) {}
   ~EphemeralSegmentManager();
 
-  init_ertr::future<> init() final;
+  using init_ertr = crimson::errorator<
+    crimson::ct_error::enospc,
+    crimson::ct_error::invarg,
+    crimson::ct_error::erange>;
+  init_ertr::future<> init();
 
   open_ertr::future<SegmentRef> open(segment_id_t id) final;
 
