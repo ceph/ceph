@@ -218,7 +218,7 @@ const routes: Routes = [
       // Mgr modules
       {
         path: 'mgr-modules',
-        data: { breadcrumbs: 'Cluster/Manager modules' },
+        data: { breadcrumbs: 'Cluster/Manager Modules' },
         children: [
           {
             path: '',

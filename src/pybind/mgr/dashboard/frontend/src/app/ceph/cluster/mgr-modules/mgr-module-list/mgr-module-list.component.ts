@@ -56,7 +56,6 @@ export class MgrModuleListComponent extends ListWithDetails {
       {
         name: $localize`Always-On`,
         prop: 'always_on',
-        isHidden: true,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
