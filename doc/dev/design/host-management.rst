@@ -2,47 +2,52 @@
 Host Management
 ===============
 
-.. note:: This document is intended to promote discussion relating to the types of host management features that the Ceph UI should provide. A number of the mockup
-  also show a refresh icon, which may become redundant during Pacific development as data gathering becomes more optimised.
+.. note:: This document is intended to promote discussion relating to the types of host management features
+   that the Ceph UI should provide. A number of the mockup also show a refresh icon, which may become redundant
+   during Pacific development as data gathering becomes more optimised.
 
-The hosts that a Ceph cluster consumes are essential components of the cluster, and should be manageable in the same ways as the ceph daemons that they hold.
-However, not all aspects of managing a host should fall to the Ceph UI due to complexity and ownership. This means that there is a line that needs to be
+The hosts that a Ceph cluster consumes are essential components of the cluster, and should be manageable
+in the same ways as the ceph daemons that they hold. However, not all aspects of managing a host should
+fall to the Ceph UI due to complexity and ownership. This means that there is a line that needs to be
 defined where management of the host and ceph intersect.
 
-The following sections describe the management tasks and lifecycle processes that should be provided by the Ceph UI.
+The following sections describe the management tasks and lifecycle processes that should be provided
+by the Ceph UI.
 
 Host Information
 ================
-It is a fundamental requirement to be able to understand the types of hosts that Ceph is reliant upon. Having host related 
-information easily accessible, reduces the reliance the Ceph Administrator has on other 3rd party tools and frameworks -
-ultimately providing a more end-to-end experience.
+It is a fundamental requirement to be able to understand the types of hosts that Ceph is reliant upon.
+Having host related information easily accessible, reduces the reliance the Ceph Administrator has on
+other 3rd party tools and frameworks - ultimately providing a more end-to-end experience.
 
 .. image:: mockups/hosts.png
 
 This image shows the highlevel overview of the hosts, providing a quick understanding of the server 
-type, the daemons associated with it and the overall status of the host. The other inclusion is the use of a link
-to the BMC - this allows the Admin to quickly and easily jump from the Ceph UI to BMC boards like iDRAC or iLO. For example
-if a disk shows as failed, the alert can link to the hosts page where the host status would be ONLINE, FAULT - with the Admin
-able to quick click a link to open the physical BMC interface to progress the fault.
+type, the daemons associated with it and the overall status of the host. The other inclusion is the
+use of a link to the BMC - this allows the Admin to quickly and easily jump from the Ceph UI to BMC
+boards like iDRAC or iLO. For example if a disk shows as failed, the alert can link to the hosts page
+where the host status would be ONLINE, FAULT - with the Admin able to quick click a link to open the
+server's BMC interface to progress the fault.
 
 The action button is extended to cover the following host tasks
 
 * Edit *(change labels, BMC information)*
 * Enter Maintenance *(host must be online)*
 * Exit Maintenance *(host must be in maintenance mode)*
-* Reboot *(host must already be in maintenance)*
+* Reboot *(host must be in maintenance mode)*
 * Export *(export the server information as a CSV to support local configuration management processes)*
 * Drain 
 * Remove *(available for hosts in drained state)*
 
-When a server is selected, the host properties component is shown. This is made up of a tabbed interface; daemons, disks, osds,
-server information and performance details. The default tab selected is daemons, since this is the most common interaction point
-with a host.
+When a server is selected, the host properties component is shown. This is made up of a tabbed
+interface; daemons, disks, osds, server information and performance details. The default tab
+selected is daemons, since this is the most common interaction point with a host.
 
 .. image:: mockups/hostdaemons.png
 
-The intent is that the admin is able to manage the cluster daemons directly from the UI, so the default display focuses on systemd
-information over container image id's. Image information is still available but not visible by default.
+The intent is that the admin is able to manage the cluster daemons directly from the UI, so the default
+display focuses on systemd information over container image id's. Image information is still available
+but not visible by default.
 
 Daemon Management
 =================
@@ -53,8 +58,8 @@ When a daemon is selected the action button would provide the following
 * restart *(daemon must be running)*
 * get logs *(only available to daemons in a running state)*
 
-The **get logs** option uses cephadm's **logs** command to gather the daemons logs, allowing them to be saved on the Admins machine to
-support problem determination workflows and support escalations.
+The **get logs** option uses cephadm's **logs** command to gather the daemons logs, allowing them to be
+saved on the Admins machine to support problem determination workflows and support escalations.
 
 Server Information
 ==================
@@ -64,8 +69,8 @@ metadata about the host's configuration.
 .. image:: mockups/hostinformation.png
 
 
-This data is gathered by cephadm's gather-facts command and includes *load* metrics for CPU and RAM, to allow the UI to provide a quick
-appreciation for load without relying on Prometheus.
+This data is gathered by cephadm's gather-facts command and includes *load* metrics for CPU and RAM, to
+allow the UI to provide a quick appreciation for load without relying on Prometheus.
 
 Adding a Host
 =============
@@ -81,8 +86,8 @@ The mockup below shows the result of trying to add 3 hosts to the cluster, and i
 
 .. image:: mockups/hostadd.png
 
-You'll also note that within the action menu, there is an item called **Explain**. This option would only be visibile
-when pre-flight checks fail for the host, and would show a modal dialog to explain the reason
+You'll also note that within the action menu, there is an item called **Explain**. This option would only
+be visibile when pre-flight checks fail for the host, and would show a modal dialog to explain the reason
 for the failure, when selected.
 
 Add Host Modal
@@ -114,20 +119,24 @@ In order to avoid cluster expansion issues, the pre-flight process performs the 
 
 Performing Host Maintenance
 ===========================
-Hosts must undergo regular maintenance, whether that maintenance is for a software upgrade or hardware component replacement or expansion. The UI should
-therefore ensure that it is a simple process to initiate maintenance against a host, and also protect against erroneous maintenance requests that could
+Hosts must undergo regular maintenance, whether that maintenance is for a software upgrade or hardware
+component replacement or expansion. The UI should therefore ensure that it is a simple process to
+initiate maintenance against a host, and also protect against erroneous maintenance requests that could
 undermine data availability within the Ceph Cluster.
 
-Since removing a host can impact performance and capacity, the duration of maintenance should be defined along with the maintenance request. A
-default maintenance window of 4hrs would be provided by the UI, but a host in maintenance beyond the predefined limit would generate a healthcheck alert
-to prompt the Admin, to investigate the outage to manage the risk to service.
+Since removing a host can impact performance and capacity, the duration of maintenance should be defined
+along with the maintenance request. A default maintenance window of 4hrs would be provided by the UI, but
+a host in maintenance beyond the predefined limit would generate a healthcheck alert to prompt the Admin,
+to investigate the outage to manage the risk to service.
 
-Before passing the maintenance request to the orchestrator, there are a number of checks than can be done to catch common issues;
+Before passing the maintenance request to the orchestrator, there are a number of checks than can be done
+to catch common issues;
 
 Deny Outcomes
 _____________
 
-* If the hosts in the cluster have Rack identifiers, and there is another host in maintenance, deny the request if the other host is in a different rack.
+* If the hosts in the cluster have Rack identifiers, and there is another host in maintenance, deny the
+  request if the other host is in a different rack.
 * PG backfill/recovery is active
 * cluster is in an error state
 
@@ -151,8 +160,8 @@ potential impact of the action, requesting the Admin to confirm the maintenance 
 
 Draining a Host
 ===============
-Removing a host from the cluster, starts with the drain process. This probably the most complex host action, since the drain process will
-revolve around an "impact" plan. Draining a host is a two-step process
+Removing a host from the cluster, starts with the drain process. This probably the most complex host action, since
+the drain process will revolve around an "impact" plan. Draining a host is a two-step process
 
 #. Admin requests a host to be drained
 #. UI submits a drain request to the orchestrator in 'dry-run' mode
