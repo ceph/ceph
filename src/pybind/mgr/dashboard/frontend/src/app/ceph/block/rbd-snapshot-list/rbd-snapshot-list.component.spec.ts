@@ -111,7 +111,8 @@ describe('RbdSnapshotListComponent', () => {
         notificationService,
         null,
         null,
-        actionLabelsI18n
+        actionLabelsI18n,
+        null
       );
       spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();
@@ -227,6 +228,7 @@ describe('RbdSnapshotListComponent', () => {
   });
 
   it('should test all TableActions combinations', () => {
+    component.ngOnInit();
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
     const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
