@@ -2026,7 +2026,6 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
   flush_bdev();  // FIXME?
 
   _flush_and_sync_log(l, 0, old_log_jump_to);
-  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
 
   // 2. prepare compacted log
   bluefs_transaction_t t;
@@ -2101,6 +2100,8 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
     new_log->fnode.append_extent(*from);
     ++from;
   }
+
+  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
 
   // clear the extents from old log file, they are added to new log
   log_file->fnode.clear_extents();
