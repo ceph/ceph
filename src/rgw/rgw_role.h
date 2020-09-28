@@ -195,4 +195,32 @@ public:
     info.dump(f);
   }
 };
+class RGWRoleMetadataHandler;
+class RGWSI_Role;
+class RGWSI_MetaBackend_Handler;
+
+class RGWRoleCtl {
+  struct Svc {
+    RGWSI_Role *role {nullptr};
+  } svc;
+  RGWRoleMetadataHandler *rmhandler;
+  RGWSI_MetaBackend_Handler *be_handler{nullptr};
+public:
+  RGWRoleCtl(RGWSI_Role *_role_svc,
+	     RGWRoleMetadataHandler *_rmhander);
+
+  struct PutParams {
+    ceph::real_time mtime;
+    bool exclusive {false};
+    RGWObjVersionTracker *objv_tracker {nullptr};
+    std::map<std::string, bufferlist> *attrs {nullptr};
+
+    PutParams() {};
+  };
+
+  int store_info(const RGWRoleInfo& role,
+		 optional_yield y,
+		 const PutParams& params = {});
+};
+
 #endif /* CEPH_RGW_ROLE_H */
