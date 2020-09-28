@@ -1,8 +1,25 @@
 #AddCephTest is a module for adding tests to the "make check" target which runs CTest
 
+macro(set_test_props labels cost cost_default timeout)
+  if("${timeout}" GREATER 0)
+    set_property(TEST ${test_name} PROPERTY TIMEOUT ${timeout})
+  else()
+    set_property(TEST ${test_name} PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
+  endif()
+  if("${cost}" GREATER 0)
+    set_property(TEST ${test_name} PROPERTY COST ${cost})
+  else()
+    set_property(TEST ${test_name} PROPERTY COST ${cost_default})
+  endif()
+  if(NOT "${labels}" EQUAL "")
+    set_property(TEST ${test_name} APPEND PROPERTY LABELS "${labels}")
+  endif()
+endmacro()
+
 #adds makes target/script into a test, test to check target, sets necessary environment variables
 function(add_ceph_test test_name test_path)
-  add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN})
+  cmake_parse_arguments(PROPS "" "COST;TIMEOUT" "LABELS" ${ARGN})
+  add_test(NAME ${test_name} COMMAND ${test_path} ${PROPS_UNPARSED_ARGUMENTS})
   if(TARGET ${test_name})
     add_dependencies(tests ${test_name})
   endif()
@@ -17,10 +34,7 @@ function(add_ceph_test test_name test_path)
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
     PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.3:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
-  # none of the tests should take more than 1 hour to complete
-  set_property(TEST
-    ${test_name}
-    PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
+    set_test_props("${PROPS_LABELS}" "${PROPS_COST}" 5.0 "${PROPS_TIMEOUT}")
 endfunction()
 
 option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
@@ -43,20 +57,22 @@ if(WITH_GTEST_PARALLEL)
 endif()
 
 #sets uniform compiler flags and link libraries
-function(add_ceph_unittest unittest_name)
-  set(UNITTEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name}")
+function(add_ceph_unittest test_name)
+  cmake_parse_arguments(PROPS "" "COST;TIMEOUT" "LABELS" ${ARGN})
+  set(UNITTEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}")
   # If the second argument is "parallel", it means we want a parallel run
   if(WITH_GTEST_PARALLEL AND "${ARGV1}" STREQUAL "parallel")
     set(UNITTEST ${GTEST_PARALLEL_COMMAND} ${UNITTEST})
   endif()
-  add_ceph_test(${unittest_name} "${UNITTEST}")
-  target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
+  add_ceph_test(${test_name} "${UNITTEST}" "unittest" LABELS "unittest")
+  target_link_libraries(${test_name} ${UNITTEST_LIBS})
+  set_test_props("${PROPS_LABELS}" "${PROPS_COST}" 1.0 "${PROPS_TIMEOUT}")
 endfunction()
 
 function(add_tox_test name)
   set(test_name run-tox-${name})
   set(venv_path ${CEPH_BUILD_VIRTUALENV}/${name}-virtualenv)
-  cmake_parse_arguments(TOXTEST "" "TOX_PATH" "TOX_ENVS" ${ARGN})
+  cmake_parse_arguments(TOXTEST "" "TOX_PATH;COST;TIMEOUT" "TOX_ENVS;LABELS" ${ARGN})
   if(DEFINED TOXTEST_TOX_PATH)
     set(tox_path ${TOXTEST_TOX_PATH})
   else()
@@ -95,4 +111,7 @@ function(add_tox_test name)
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
     PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind)
   list(APPEND tox_test run-tox-${name})
+  set_tests_properties(${test_name} PROPERTIES LABELS "tox")
+  set_test_props("${TOXTEST_LABELS}" "${TOXTEST_COST}" 25.0 "${TOXTEST_TIMEOUT}")
 endfunction()
+

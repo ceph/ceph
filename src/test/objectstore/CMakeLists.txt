@@ -106,7 +106,7 @@ if(WITH_BLUESTORE)
     fastbmap_allocator_test.cc
     $<TARGET_OBJECTS:unit-main>
     )
-  add_ceph_unittest(unittest_fastbmap_allocator)
+  add_ceph_unittest(unittest_fastbmap_allocator LABELS "long" COST 102.0)
   target_link_libraries(unittest_fastbmap_allocator os global)
 
   set_target_properties(unittest_fastbmap_allocator PROPERTIES COMPILE_FLAGS
@@ -130,7 +130,7 @@ if(WITH_BLUESTORE)
   add_executable(unittest_bluefs
     test_bluefs.cc
     )
-  add_ceph_unittest(unittest_bluefs)
+  add_ceph_unittest(unittest_bluefsi COST 702.0)
   target_link_libraries(unittest_bluefs os global)
 
   # unittest_bluestore_types
@@ -159,7 +159,7 @@ target_link_libraries(unittest_transaction os ceph-common)
 add_executable(unittest_memstore_clone
   test_memstore_clone.cc
   $<TARGET_OBJECTS:store_test_fixture>)
-add_ceph_unittest(unittest_memstore_clone)
+add_ceph_unittest(unittest_memstore_clone 195.0)
 target_link_libraries(unittest_memstore_clone os global)
 
 if(WITH_BLUESTORE)

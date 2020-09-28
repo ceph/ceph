@@ -196,7 +196,7 @@ target_link_libraries(unittest_erasure_code_shec
 add_executable(unittest_erasure_code_shec_all
   TestErasureCodeShec_all.cc
   )
-add_ceph_unittest(unittest_erasure_code_shec_all parallel)
+add_ceph_unittest(unittest_erasure_code_shec_all parallel LABELS "long" COST 560.0)
 target_link_libraries(unittest_erasure_code_shec_all
   global
   ${CMAKE_DL_LIBS}

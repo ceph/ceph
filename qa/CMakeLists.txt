@@ -5,5 +5,5 @@ endif()
 
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(qa TOX_ENVS flake8 import-tasks)
+  add_tox_test(qa TOX_ENVS flake8 import-tasks COST 215.0)
 endif()
