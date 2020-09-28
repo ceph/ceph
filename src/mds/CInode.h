@@ -60,6 +60,34 @@ struct cinode_lock_info_t {
   int wr_caps;
 };
 
+struct CInodeCommitOperation {
+public:
+  CInodeCommitOperation(int prio, int64_t po)
+    : pool(po), priority(prio) {
+  }
+  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f)
+    : pool(po), priority(prio), _layout(l), _features(f) {
+      update_layout = true;
+  }
+
+  void update(ObjectOperation &op, inode_backtrace_t *bt);
+  int64_t get_pool() { return pool; }
+
+private:
+  int64_t pool;     ///< pool id
+  int priority;
+  bool update_layout = false;
+  file_layout_t _layout;
+  uint64_t _features;
+};
+
+struct CInodeCommitOperations {
+  std::vector<CInodeCommitOperation> ops_vec;
+  inode_backtrace_t bt;
+  version_t version;
+  CInode *in;
+};
+
 /**
  * Base class for CInode, containing the backing store data and
  * serialization methods.  This exists so that we can read and
@@ -763,7 +791,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void fetch(MDSContext *fin);
   void _fetched(ceph::buffer::list& bl, ceph::buffer::list& bl2, Context *fin);  
 
+  void _commit_ops(int r, version_t version, MDSContext *fin,
+                   std::vector<CInodeCommitOperation> &ops_vec,
+                   inode_backtrace_t *bt);
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
+  void _store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
+                        inode_backtrace_t &bt, int op_prio);
+  void store_backtrace(CInodeCommitOperations &op, int op_prio);
   void store_backtrace(MDSContext *fin, int op_prio=-1);
   void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, ceph::buffer::list *backtrace);
