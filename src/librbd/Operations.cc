@@ -1486,7 +1486,7 @@ int Operations<I>::metadata_set(const std::string &key,
 
   r = invoke_async_request("metadata_set",
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
-                           true,
+                           false,
                            boost::bind(&Operations<I>::execute_metadata_set,
                                        this, key, value, _1),
                            boost::bind(&ImageWatcher<I>::notify_metadata_set,
@@ -1545,7 +1545,7 @@ int Operations<I>::metadata_remove(const std::string &key) {
 
   r = invoke_async_request("metadata_remove",
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
-                           true,
+                           false,
                            boost::bind(&Operations<I>::execute_metadata_remove,
                                        this, key, _1),
                            boost::bind(&ImageWatcher<I>::notify_metadata_remove,

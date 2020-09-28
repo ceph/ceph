@@ -5487,8 +5487,8 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(0, rbd_snap_protect(image1, "snap1"));
   ASSERT_EQ(0, rbd_snap_set(image1, "snap1"));
 
-  ASSERT_EQ(0, rbd_metadata_set(image1, "key1", "value1"));
-  ASSERT_EQ(0, rbd_metadata_set(image1, "key3", "value3"));
+  ASSERT_EQ(-EROFS, rbd_metadata_set(image1, "key1", "value1"));
+  ASSERT_EQ(-EROFS, rbd_metadata_remove(image1, "key2"));
 
   keys_len = sizeof(keys);
   vals_len = sizeof(vals);
@@ -5496,18 +5496,14 @@ TEST_F(TestLibRBD, Metadata)
   memset_rand(vals, vals_len);
   ASSERT_EQ(0, rbd_metadata_list(image1, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
-  ASSERT_EQ(keys_len,
-            strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") + 1);
-  ASSERT_EQ(vals_len,
-            strlen("value1") + 1 + strlen("value2") + 1 + strlen("value3") + 1);
-  ASSERT_STREQ(keys, "key1");
-  ASSERT_STREQ(keys + strlen("key1") + 1, "key2");
-  ASSERT_STREQ(keys + strlen("key1") + 1 + strlen("key2") + 1, "key3");
-  ASSERT_STREQ(vals, "value1");
-  ASSERT_STREQ(vals + strlen("value1") + 1, "value2");
-  ASSERT_STREQ(vals + strlen("value1") + 1 + strlen("value2") + 1, "value3");
+  ASSERT_EQ(keys_len, strlen("key2") + 1);
+  ASSERT_EQ(vals_len, strlen("value2") + 1);
+  ASSERT_STREQ(keys, "key2");
+  ASSERT_STREQ(vals, "value2");
 
   ASSERT_EQ(0, rbd_snap_set(image1, NULL));
+  ASSERT_EQ(0, rbd_metadata_set(image1, "key1", "value1"));
+  ASSERT_EQ(0, rbd_metadata_set(image1, "key3", "value3"));
   keys_len = sizeof(keys);
   vals_len = sizeof(vals);
   memset_rand(keys, keys_len);
@@ -5650,15 +5646,15 @@ TEST_F(TestLibRBD, MetadataPP)
   ASSERT_EQ(0, image1.snap_set("snap1"));
 
   pairs.clear();
-  ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
-  ASSERT_EQ(0, image1.metadata_set("key3", "value3"));
+  ASSERT_EQ(-EROFS, image1.metadata_set("key1", "value1"));
+  ASSERT_EQ(-EROFS, image1.metadata_remove("key2"));
   ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
-  ASSERT_EQ(3U, pairs.size());
-  ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
+  ASSERT_EQ(1U, pairs.size());
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
-  ASSERT_EQ(0, strncmp("value3", pairs["key3"].c_str(), 6));
 
   ASSERT_EQ(0, image1.snap_set(NULL));
+  ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
+  ASSERT_EQ(0, image1.metadata_set("key3", "value3"));
   ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
   ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
