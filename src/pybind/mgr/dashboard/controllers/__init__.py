@@ -188,6 +188,11 @@ class UiApiController(Controller):
                                               security_scope=security_scope,
                                               secure=secure)
 
+    def __call__(self, cls):
+        cls = super(UiApiController, self).__call__(cls)
+        cls._api_endpoint = False
+        return cls
+
 
 def Endpoint(method=None, path=None, path_params=None, query_params=None,  # noqa: N802
              json_response=True, proxy=False, xml=False):
@@ -582,7 +587,8 @@ class BaseController(object):
 
         @property
         def is_api(self):
-            return hasattr(self.ctrl, '_api_endpoint')
+            # changed from hasattr to getattr: some ui-based api inherit _api_endpoint
+            return getattr(self.ctrl, '_api_endpoint', False)
 
         @property
         def is_secure(self):

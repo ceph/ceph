@@ -149,7 +149,7 @@ Status
   subpage containing a list of all OSDs and related management actions.
 * **Managers**: Displays the total number of active and standby Ceph Manager
   daemons (ceph-mgr) running alongside monitor daemons.
-* **Object Gateway**: Displays the total number of active object gateways and 
+* **Object Gateway**: Displays the total number of active object gateways and
   provides a link to the subpage displaying a list of all object gateway daemons.
 * **Metadata Servers**: Displays total number of active and standby metadata
   servers daemons for CephFS (ceph-mds).
@@ -289,6 +289,8 @@ wanted or required. See :ref:`dashboard-proxy-configuration` for more details.
 
     $ ceph mgr module disable dashboard
     $ ceph mgr module enable dashboard
+
+.. _dashboard-host-name-and-port:
 
 Host Name and Port
 ^^^^^^^^^^^^^^^^^^
