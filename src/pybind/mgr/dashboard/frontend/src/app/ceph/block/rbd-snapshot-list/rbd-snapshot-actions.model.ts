@@ -18,7 +18,11 @@ export class RbdSnapshotActionsModel {
 
   cloneFormatVersion = 1;
 
-  constructor(actionLabels: ActionLabelsI18n, featuresName: string[], rbdService: RbdService) {
+  constructor(
+    actionLabels: ActionLabelsI18n,
+    public featuresName: string[],
+    rbdService: RbdService
+  ) {
     rbdService.cloneFormatVersion().subscribe((version: number) => {
       this.cloneFormatVersion = version;
     });
@@ -50,7 +54,8 @@ export class RbdSnapshotActionsModel {
     this.clone = {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
-      disable: (selection: CdTableSelection) => this.getCloneDisableDesc(selection, featuresName),
+      disable: (selection: CdTableSelection) =>
+        this.getCloneDisableDesc(selection, this.featuresName),
       icon: Icons.clone,
       name: actionLabels.CLONE
     };
