@@ -2459,6 +2459,7 @@ RGWCoroutine *RGWDefaultDataSyncModule::create_delete_marker(RGWDataSyncCtx *sc,
                                                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   auto sync_env = sc->env;
+  key.instance.clear();
   return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
                             sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
@@ -2536,6 +2537,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::create_delete_marker(RGWDataSyncCtx *sc,
   ldout(sc->cct, 0) << "SYNC_ARCHIVE: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
 	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
   auto sync_env = sc->env;
+  key.instance.clear();
   return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
                             sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
