@@ -231,7 +231,93 @@ static int string2bool(const string &val, bool &b_val)
     return 0;
   }
 }
-  
+
+namespace rocksdb {
+extern std::string trim(const std::string& str);
+}
+
+// this function is a modification of rocksdb's StringToMap:
+// 1) accepts ' \n ; as separators
+// 2) leaves compound options with enclosing { and }
+rocksdb::Status StringToMap(const std::string& opts_str,
+			    std::unordered_map<std::string, std::string>* opts_map)
+{
+  using rocksdb::Status;
+  using rocksdb::trim;
+  assert(opts_map);
+  // Example:
+  //   opts_str = "write_buffer_size=1024;max_write_buffer_number=2;"
+  //              "nested_opt={opt1=1;opt2=2};max_bytes_for_level_base=100"
+  size_t pos = 0;
+  std::string opts = trim(opts_str);
+  while (pos < opts.size()) {
+    size_t eq_pos = opts.find('=', pos);
+    if (eq_pos == std::string::npos) {
+      return Status::InvalidArgument("Mismatched key value pair, '=' expected");
+    }
+    std::string key = trim(opts.substr(pos, eq_pos - pos));
+    if (key.empty()) {
+      return Status::InvalidArgument("Empty key found");
+    }
+
+    // skip space after '=' and look for '{' for possible nested options
+    pos = eq_pos + 1;
+    while (pos < opts.size() && isspace(opts[pos])) {
+      ++pos;
+    }
+    // Empty value at the end
+    if (pos >= opts.size()) {
+      (*opts_map)[key] = "";
+      break;
+    }
+    if (opts[pos] == '{') {
+      int count = 1;
+      size_t brace_pos = pos + 1;
+      while (brace_pos < opts.size()) {
+        if (opts[brace_pos] == '{') {
+          ++count;
+        } else if (opts[brace_pos] == '}') {
+          --count;
+          if (count == 0) {
+            break;
+          }
+        }
+        ++brace_pos;
+      }
+      // found the matching closing brace
+      if (count == 0) {
+	//include both '{' and '}'
+        (*opts_map)[key] = trim(opts.substr(pos, brace_pos - pos + 1));
+        // skip all whitespace and move to the next ';,'
+        // brace_pos points to the matching '}'
+        pos = brace_pos + 1;
+        while (pos < opts.size() && isspace(opts[pos])) {
+          ++pos;
+        }
+        if (pos < opts.size() && opts[pos] != ';' && opts[pos] != ',') {
+          return Status::InvalidArgument(
+              "Unexpected chars after nested options");
+        }
+        ++pos;
+      } else {
+        return Status::InvalidArgument(
+            "Mismatched curly braces for nested options");
+      }
+    } else {
+      size_t sc_pos = opts.find_first_of(",;", pos);
+      if (sc_pos == std::string::npos) {
+        (*opts_map)[key] = trim(opts.substr(pos));
+        // It either ends with a trailing , ; or the last key-value pair
+        break;
+      } else {
+        (*opts_map)[key] = trim(opts.substr(pos, sc_pos - pos));
+      }
+      pos = sc_pos + 1;
+    }
+  }
+  return Status::OK();
+}
+
 int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Options &opt)
 {
   if (key == "compaction_threads") {
@@ -280,13 +366,17 @@ int RocksDBStore::ParseOptionsFromStringStatic(
 {
   // keep aligned with func tryInterpret
   const set<string> need_interp_keys = {"compaction_threads", "flusher_threads", "compact_on_mount", "disableWAL"};
+  int r;
+  rocksdb::Status status;
+  std::unordered_map<std::string, std::string> str_map;
+  status = StringToMap(opt_str, &str_map);
+  if (!status.ok()) {
+     dout(5) << __func__ << " error '" << status.getState() <<
+      "' while parsing options '" << opt_str << "'" << dendl;
+    return -EINVAL;
+  }
 
-  map<string, string> str_map;
-  int r = get_str_map(opt_str, &str_map, ",\n;");
-  if (r < 0)
-    return r;
-  map<string, string>::iterator it;
-  for (it = str_map.begin(); it != str_map.end(); ++it) {
+  for (auto it = str_map.begin(); it != str_map.end(); ++it) {
     string this_opt = it->first + "=" + it->second;
     rocksdb::Status status =
       rocksdb::GetOptionsFromString(opt, this_opt, &opt);
