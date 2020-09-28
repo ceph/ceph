@@ -103,7 +103,7 @@ class Orchestrator(RESTController):
         Identify a device by switching on the device light for N seconds.
         :param hostname: The hostname of the device to process.
         :param device: The device identifier to process, e.g. ``/dev/dm-0`` or
-          ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+        ``ABC1234DEF567-1R1234_ABC8DE0Q``.
         :param duration: The duration in seconds how long the LED should flash.
         """
         orch = OrchClient.instance()
