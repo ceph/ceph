@@ -459,7 +459,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, packed_value);
       } else {
         std::tie(insert_stage, insert_size) = STAGE_T::evaluate_insert(
-            node_stage, key, packed_value, cast_down<STAGE>(insert_pos), true);
+            node_stage, key, packed_value, cast_down<STAGE>(insert_pos), false);
       }
       return {insert_stage, insert_size};
     } else {
@@ -485,8 +485,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const MatchHistory& history, match_stat_t mstat,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      return STAGE_T::evaluate_insert(
-          key, value, history, mstat, cast_down<STAGE>(insert_pos));
+      if (unlikely(is_empty())) {
+        assert(insert_pos.is_end());
+        return {STAGE, STAGE_T::template insert_size<KeyT::HOBJ>(key, value)};
+      } else {
+        return STAGE_T::evaluate_insert(
+            key, value, history, mstat, cast_down<STAGE>(insert_pos));
+      }
     } else {
       assert(false && "impossible path");
     }

@@ -92,7 +92,6 @@ class item_iterator_t {
   static size_t trim_at(
       NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&, size_t trimmed);
 
-  enum class index_t { none, last, end };
   template <KeyT KT>
   class Appender;
 
@@ -120,7 +119,7 @@ class item_iterator_t<NODE_TYPE>::Appender {
  public:
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {}
-  bool append(const item_iterator_t<NODE_TYPE>& src, size_t& items, index_t type);
+  bool append(const item_iterator_t<NODE_TYPE>& src, size_t& items);
   char* wrap() { return p_append; }
   std::tuple<NodeExtentMutable*, char*> open_nxt(const key_get_type&);
   std::tuple<NodeExtentMutable*, char*> open_nxt(const full_key_t<KT>&);
