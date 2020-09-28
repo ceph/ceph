@@ -9,11 +9,16 @@ export class CdHelperClass {
    *                 it would update even if it equals
    */
   static updateChanged(componentThis: any, change: { [publicVarName: string]: any }) {
+    let hasChanges = false;
+
     Object.keys(change).forEach((publicVarName) => {
       const data = change[publicVarName];
       if (!_.isEqual(data, componentThis[publicVarName])) {
         componentThis[publicVarName] = data;
+        hasChanges = true;
       }
     });
+
+    return hasChanges;
   }
 }
