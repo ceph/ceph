@@ -153,7 +153,7 @@ struct staged {
   static void _left_or_right(size_t& split_index, size_t insert_index,
                              std::optional<bool>& is_insert_left) {
     assert(!is_insert_left.has_value());
-    assert(split_index != INDEX_END);
+    assert(is_valid_index(split_index));
     if constexpr (is_exclusive) {
       if (split_index <= insert_index) {
         // ...[s_index-1] |!| (i_index) [s_index]...
@@ -317,15 +317,18 @@ struct staged {
         std::optional<bool>& is_insert_left) {
       assert(!is_end());
       assert(index() == 0);
-      assert(insert_index <= container.keys() || insert_index == INDEX_END);
-      // replace the unknown INDEX_END value
-      if (insert_index == INDEX_END) {
-        if constexpr (!is_exclusive) {
+      // replace insert_index placeholder
+      if constexpr (!is_exclusive) {
+        if (insert_index == INDEX_LAST) {
           insert_index = container.keys() - 1;
-        } else {
+        }
+      } else {
+        if (insert_index == INDEX_END) {
           insert_index = container.keys();
         }
       }
+      assert(insert_index <= container.keys());
+
       auto start_size_1 = start_size + extra_size;
       auto f_get_used_size = [this, start_size, start_size_1,
                               insert_index, insert_size] (size_t index) {
@@ -380,29 +383,26 @@ struct staged {
       return current_size;
     }
 
-    // Note: possible to return an end iterater if
-    // to_index == INDEX_END && to_stage == STAGE
+    // Note: possible to return an end iterater if to_index == INDEX_END
     template <KeyT KT>
-    void copy_out_until(typename container_t::template Appender<KT>& appender,
-                        size_t& to_index,
-                        match_stage_t to_stage) {
-      assert(to_stage <= STAGE);
+    void copy_out_until(
+        typename container_t::template Appender<KT>& appender, size_t& to_index) {
       auto num_keys = container.keys();
       size_t items;
       if (to_index == INDEX_END) {
-        if (to_stage == STAGE) {
-          items = num_keys - _index;
-          appender.append(container, _index, items);
-          _index = num_keys;
-        } else {
-          assert(!is_end());
-          items = num_keys - 1 - _index;
-          appender.append(container, _index, items);
-          _index = num_keys - 1;
-        }
+        items = num_keys - _index;
+        appender.append(container, _index, items);
+        _index = num_keys;
+        to_index = _index;
+      } else if (to_index == INDEX_LAST) {
+        assert(!is_end());
+        items = num_keys - 1 - _index;
+        appender.append(container, _index, items);
+        _index = num_keys - 1;
         to_index = _index;
       } else {
         assert(_index <= to_index);
+        assert(to_index <= num_keys);
         items = to_index - _index;
         appender.append(container, _index, items);
         _index = to_index;
@@ -589,7 +589,7 @@ struct staged {
         if constexpr (!is_exclusive) {
           if (is_last()) {
             assert(split_index == index());
-            if (insert_index == INDEX_END) {
+            if (insert_index == INDEX_LAST) {
               insert_index = index();
             }
             assert(insert_index <= index());
@@ -667,35 +667,27 @@ struct staged {
       return current_size;
     }
 
-    // Note: possible to return an end iterater if
-    // to_index == INDEX_END && to_stage == STAGE
+    // Note: possible to return an end iterater if to_index == INDEX_END
     template <KeyT KT>
-    void copy_out_until(typename container_t::template Appender<KT>& appender,
-                        size_t& to_index,
-                        match_stage_t to_stage) {
-      assert(to_stage <= STAGE);
+    void copy_out_until(
+        typename container_t::template Appender<KT>& appender, size_t& to_index) {
       if (is_end()) {
         assert(!container.has_next());
-        assert(to_stage == STAGE);
-        assert(to_index == index() || to_index == INDEX_END);
-        to_index = index();
+        if (to_index == INDEX_END) {
+          to_index = index();
+        }
+        assert(to_index == index());
         return;
       }
-      typename container_t::index_t type;
       size_t items;
-      if (to_index == INDEX_END) {
-        if (to_stage == STAGE) {
-          type = container_t::index_t::end;
-        } else {
-          type = container_t::index_t::last;
-        }
-        items = INDEX_END;
+      if (to_index == INDEX_END || to_index == INDEX_LAST) {
+        items = to_index;
       } else {
+        assert(is_valid_index(to_index));
         assert(index() <= to_index);
-        type = container_t::index_t::none;
         items = to_index - index();
       }
-      if (appender.append(container, items, type)) {
+      if (appender.append(container, items)) {
         set_end();
       }
       to_index = index();
@@ -760,7 +752,7 @@ struct staged {
    *           -> insert to left/right         (exclusive, can be end)
    *     -> split_size
    *   seek_split(start_size, extra_size, target_size) -> split_size
-   *   copy_out_until(appender, to_index, to_stage) (can be end)
+   *   copy_out_until(appender, to_index) (can be end)
    *   trim_until(mut) -> trim_size
    *   (!IS_BOTTOM) trim_at(mut, trimmed) -> trim_size
    * static:
@@ -1000,17 +992,15 @@ struct staged {
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, T> evaluate_insert(
       const container_t& container, const full_key_t<KeyT::VIEW>& key,
-      const value_t& value, position_t& position, bool is_current) {
+      const value_t& value, position_t& position, bool evaluate_last) {
     auto iter = iterator_t(container);
     auto& index = position.index;
-    if (!is_current) {
-      index = INDEX_END;
-    }
-    if (index == INDEX_END) {
+    if (evaluate_last || index == INDEX_END) {
       iter.seek_last();
       index = iter.index();
       // evaluate the previous index
     } else {
+      assert(is_valid_index(index));
       // evaluate the current index
       iter.seek_at(index);
       auto match = compare_to<KeyT::VIEW>(key, iter.get_key());
@@ -1022,10 +1012,10 @@ struct staged {
           // insert into the current index
           auto nxt_container = iter.get_nxt_container();
           return NXT_STAGE_T::evaluate_insert(
-              nxt_container, key, value, position.nxt, true);
+              nxt_container, key, value, position.nxt, false);
         }
       } else {
-        assert(is_current && match == MatchKindCMP::NE);
+        assert(match == MatchKindCMP::NE);
         if (index == 0) {
           // already the first index, so insert at the current index
           return {STAGE, insert_size<KeyT::VIEW>(key, value)};
@@ -1052,7 +1042,7 @@ struct staged {
         // insert into the previous index
         auto nxt_container = iter.get_nxt_container();
         return NXT_STAGE_T::evaluate_insert(
-            nxt_container, key, value, position.nxt, false);
+            nxt_container, key, value, position.nxt, true);
       }
     }
   }
@@ -1074,10 +1064,10 @@ struct staged {
         bool compensate = NXT_STAGE_T::
           compensate_insert_position_at(stage, position.nxt);
         if (compensate) {
-          assert(index != INDEX_END);
+          assert(is_valid_index(index));
           if (index == 0) {
             // insert into the *last* index of the current stage
-            index = INDEX_END;
+            index = INDEX_LAST;
             return true;
           } else {
             --index;
@@ -1087,6 +1077,16 @@ struct staged {
           return false;
         }
       }
+    }
+  }
+
+  static void patch_insert_end(position_t& insert_pos, match_stage_t insert_stage) {
+    assert(insert_stage <= STAGE);
+    if (insert_stage == STAGE) {
+      insert_pos.index = INDEX_END;
+    } else if constexpr (!IS_BOTTOM) {
+      insert_pos.index = INDEX_LAST;
+      NXT_STAGE_T::patch_insert_end(insert_pos.nxt, insert_stage);
     }
   }
 
@@ -1125,6 +1125,10 @@ struct staged {
       }
     }
 
+    if (position.is_end()) {
+      patch_insert_end(position, insert_stage);
+    }
+
     node_offset_t insert_size = insert_size_at<KeyT::HOBJ>(insert_stage, key, value);
 
     return {insert_stage, insert_size};
@@ -1154,19 +1158,26 @@ struct staged {
     assert(stage <= STAGE);
     auto iter = iterator_t(container);
     auto& index = position.index;
-    if (index == INDEX_END) {
-      iter.seek_last();
-    } else {
-      iter.seek_till_end(index);
-    }
 
     bool do_insert = false;
     if (stage == STAGE) {
       if (index == INDEX_END) {
+        iter.seek_last();
         iter.set_end();
+        index = iter.index();
+      } else {
+        assert(is_valid_index(index));
+        iter.seek_till_end(index);
       }
       do_insert = true;
     } else { // stage < STAGE
+      if (index == INDEX_LAST) {
+        iter.seek_last();
+        index = iter.index();
+      } else {
+        assert(is_valid_index(index));
+        iter.seek_till_end(index);
+      }
       if constexpr (SPLIT) {
         if (iter.is_end()) {
           // insert at the higher stage due to split
@@ -1177,9 +1188,6 @@ struct staged {
       } else {
         assert(!iter.is_end());
       }
-    }
-    if (index == INDEX_END) {
-      index = iter.index();
     }
 
     if (do_insert) {
@@ -1216,9 +1224,10 @@ struct staged {
       position_t& position, match_stage_t& stage, node_offset_t& _insert_size) {
     auto p_left_bound = container.p_left_bound();
     if (unlikely(!container.keys())) {
-      if (position == position_t::end()) {
+      if (position.is_end()) {
         position = position_t::begin();
         assert(stage == STAGE);
+        assert(_insert_size == insert_size<KT>(key, value));
       } else if (position == position_t::begin()) {
         // when insert into a trimmed and empty left node
         stage = STAGE;
@@ -1421,6 +1430,7 @@ struct staged {
     assert(current_size <= target_size);
     iterator_t& split_iter = split_at.get();
     current_size = split_iter.seek_split(current_size, extra_size, target_size);
+    assert(!split_iter.is_end());
     if constexpr (!IS_BOTTOM) {
       NXT_STAGE_T::recursively_locate_split(
           current_size, extra_size + split_iter.size_to_nxt(),
@@ -1442,14 +1452,25 @@ struct staged {
           insert_index, insert_size, is_insert_left);
       assert(is_insert_left.has_value());
       if (*is_insert_left == false && split_iter.index() == insert_index) {
+        // split_iter can be end
+        // found the lower-bound of target_size
         // ...[s_index-1] |!| (i_index) [s_index]...
         return;
-      }
-      assert(!split_iter.is_end());
-      if (split_iter.index() == 0) {
-        extra_size += iterator_t::header_size();
       } else {
-        extra_size = 0;
+        // Already considered insert effect in the current stage.
+        // Look into the next stage to identify the target_size lower-bound w/o
+        // insert effect.
+        assert(!split_iter.is_end());
+        if (split_iter.index() == 0) {
+          extra_size += iterator_t::header_size();
+        } else {
+          extra_size = 0;
+        }
+        if constexpr (!IS_BOTTOM) {
+          NXT_STAGE_T::recursively_locate_split(
+              current_size, extra_size + split_iter.size_to_nxt(),
+              target_size, split_at.nxt());
+        }
       }
     } else {
       if constexpr (!IS_BOTTOM) {
@@ -1464,6 +1485,10 @@ struct staged {
           extra_size = 0;
         }
         if (!is_insert_left.has_value()) {
+          // Considered insert effect in the current stage, and insert happens
+          // in the lower stage.
+          // Look into the next stage to identify the target_size lower-bound w/
+          // insert effect.
           assert(split_iter.index() == insert_index);
           NXT_STAGE_T::recursively_locate_split_inserted(
               current_size, extra_size + split_iter.size_to_nxt(), target_size,
@@ -1471,17 +1496,21 @@ struct staged {
               is_insert_left, split_at.nxt());
           assert(is_insert_left.has_value());
           return;
+        } else {
+          // is_insert_left.has_value() == true
+          // Insert will *not* happen in the lower stage.
+          // Need to look into the next stage to identify the target_size
+          // lower-bound w/ insert effect
+          NXT_STAGE_T::recursively_locate_split(
+              current_size, extra_size + split_iter.size_to_nxt(),
+              target_size, split_at.nxt());
+          return;
         }
       } else {
         assert(false && "impossible path");
+        return;
       }
     }
-    if constexpr (!IS_BOTTOM) {
-      NXT_STAGE_T::recursively_locate_split(
-          current_size, extra_size + split_iter.size_to_nxt(),
-          target_size, split_at.nxt());
-    }
-    return;
   }
 
   /*
@@ -1522,14 +1551,11 @@ struct staged {
       appender = typename container_t::template Appender<KT>(p_mut, p_start);
       _index = 0;
     }
-    // possible to make src_iter end if
-    // to_index == INDEX_END && to_stage == STAGE
-    void append_until(
-        StagedIterator& src_iter, size_t& to_index, match_stage_t to_stage) {
+    // possible to make src_iter end if to_index == INDEX_END
+    void append_until(StagedIterator& src_iter, size_t& to_index) {
       assert(!require_wrap_nxt);
-      assert(to_stage <= STAGE);
       auto s_index = src_iter.index();
-      src_iter.get().template copy_out_until<KT>(*appender, to_index, to_stage);
+      src_iter.get().template copy_out_until<KT>(*appender, to_index);
       assert(src_iter.index() == to_index);
       assert(to_index >= s_index);
       auto increment = (to_index - s_index);
@@ -1614,37 +1640,40 @@ struct staged {
   };
 
   template <KeyT KT>
-  static void _append_range(StagedIterator& src_iter, StagedAppender<KT>& appender,
-                            size_t& to_index, match_stage_t stage) {
+  static void _append_range(
+      StagedIterator& src_iter, StagedAppender<KT>& appender, size_t& to_index) {
     if (src_iter.is_end()) {
+      // append done
       assert(to_index == INDEX_END);
-      assert(stage == STAGE);
       to_index = src_iter.index();
     } else if constexpr (!IS_BOTTOM) {
       if (appender.in_progress()) {
-        // we are in the progress of appending
-        auto to_index_nxt = INDEX_END;
+        // appender has appended something at the current item,
+        // cannot append the current item as-a-whole
+        size_t to_index_nxt = INDEX_END;
         NXT_STAGE_T::template _append_range<KT>(
-            src_iter.nxt(), appender.get_nxt(),
-            to_index_nxt, STAGE - 1);
+            src_iter.nxt(), appender.get_nxt(), to_index_nxt);
         ++src_iter;
         appender.wrap_nxt();
       } else if (src_iter.in_progress()) {
+        // src_iter is not at the beginning of the current item,
         // cannot append the current item as-a-whole
-        auto to_index_nxt = INDEX_END;
+        size_t to_index_nxt = INDEX_END;
         NXT_STAGE_T::template _append_range<KT>(
-            src_iter.nxt(), appender.open_nxt(src_iter.get_key()),
-            to_index_nxt, STAGE - 1);
+            src_iter.nxt(), appender.open_nxt(src_iter.get_key()), to_index_nxt);
         ++src_iter;
         appender.wrap_nxt();
+      } else {
+        // we can safely append the current item as-a-whole
       }
     }
-    appender.append_until(src_iter, to_index, stage);
+    appender.append_until(src_iter, to_index);
   }
 
   template <KeyT KT>
   static void _append_into(StagedIterator& src_iter, StagedAppender<KT>& appender,
                            position_t& position, match_stage_t stage) {
+    assert(position.index == src_iter.index());
     // reaches the last item
     if (stage == STAGE) {
       // done, end recursion
@@ -1653,7 +1682,7 @@ struct staged {
       }
     } else {
       assert(stage < STAGE);
-      // process append in the next stage
+      // proceed append in the next stage
       NXT_STAGE_T::template append_until<KT>(
           src_iter.nxt(), appender.open_nxt(src_iter.get_key()),
           position.nxt, stage);
@@ -1668,13 +1697,18 @@ struct staged {
     assert(from_index <= to_index);
     if constexpr (IS_BOTTOM) {
       assert(stage == STAGE);
-      appender.append_until(src_iter, to_index, stage);
+      appender.append_until(src_iter, to_index);
     } else {
       assert(stage <= STAGE);
       if (src_iter.index() == to_index) {
         _append_into<KT>(src_iter, appender, position, stage);
       } else {
-        _append_range<KT>(src_iter, appender, to_index, stage);
+        if (to_index == INDEX_END) {
+          assert(stage == STAGE);
+        } else if (to_index == INDEX_LAST) {
+          assert(stage < STAGE);
+        }
+        _append_range<KT>(src_iter, appender, to_index);
         _append_into<KT>(src_iter, appender, position, stage);
       }
     }

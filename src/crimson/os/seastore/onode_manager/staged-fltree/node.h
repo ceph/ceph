@@ -244,7 +244,7 @@ class InternalNode final : public Node {
 
  private:
   // XXX: leverage intrusive data structure to control memory overhead
-  // track the current living child nodes by position
+  // track the current living child nodes by position (can be end)
   std::map<search_position_t, Node*> tracked_child_nodes;
   InternalNodeImpl* impl;
 };
@@ -324,7 +324,7 @@ class LeafNode final : public Node {
 
  private:
   // XXX: leverage intrusive data structure to control memory overhead
-  // track the current living cursors by position
+  // track the current living cursors by position (cannot be end)
   std::map<search_position_t, tree_cursor_t*> tracked_cursors;
   LeafNodeImpl* impl;
   layout_version_t layout_version = 0;

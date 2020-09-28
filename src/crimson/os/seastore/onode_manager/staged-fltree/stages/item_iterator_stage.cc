@@ -86,42 +86,45 @@ template class ITER_INST(node_type_t::INTERNAL)::Appender<KeyT::HOBJ>;
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
-bool APPEND_T::append(const ITER_T& src, size_t& items, index_t type) {
+bool APPEND_T::append(const ITER_T& src, size_t& items) {
   auto p_end = src.p_end();
-  if (items != INDEX_END) {
+  bool append_till_end = false;
+  if (is_valid_index(items)) {
     for (auto i = 1u; i <= items; ++i) {
       if (!src.has_next()) {
         assert(i == items);
-        type = index_t::end;
+        append_till_end = true;
         break;
       }
       ++src;
     }
-  } else if (type != index_t::none) {
+  } else {
+    if (items == INDEX_END) {
+      append_till_end = true;
+    } else {
+      assert(items == INDEX_LAST);
+    }
     items = 0;
     while (src.has_next()) {
       ++src;
       ++items;
     }
-    if (type == index_t::end) {
+    if (append_till_end) {
       ++items;
     }
-  } else {
-    assert(false);
   }
+
   const char* p_start;
-  if (type == index_t::end) {
-    // include last
+  if (append_till_end) {
     p_start = src.p_start();
   } else {
-    // exclude last
     p_start = src.p_end();
   }
   assert(p_end >= p_start);
   size_t append_size = p_end - p_start;
   p_append -= append_size;
   p_mut->copy_in_absolute(p_append, p_start, append_size);
-  return type == index_t::end;
+  return append_till_end;
 }
 
 template <node_type_t NODE_TYPE>

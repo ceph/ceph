@@ -44,6 +44,9 @@ using NodeImplURef = std::unique_ptr<NodeImpl>;
 
 using level_t = uint8_t;
 constexpr auto INDEX_END = std::numeric_limits<size_t>::max();
+constexpr auto INDEX_LAST = INDEX_END - 0xf;
+constexpr auto INDEX_UPPER_BOUND = INDEX_END - 0xff;
+inline bool is_valid_index(size_t index) { return index < INDEX_UPPER_BOUND; }
 
 // TODO: decide by NODE_BLOCK_SIZE
 using node_offset_t = uint16_t;
