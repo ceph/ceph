@@ -74,7 +74,7 @@ Downside:
   Having two distinct transport layers feels odd.
 * The current approach of delivering bin/cephadm to the host doesn't allow the use of external dependencies.
   This means that we're stuck with the built-in HTTP server lib, which isn't ment for production purposes.
-  bin/cephadm needs to be packaged and distributed (one way of the other) for us to make use of a production ready
+  bin/cephadm needs to be packaged and distributed (one way or the other) for us to make use of a production ready
   http server.
 
 Requirements:
