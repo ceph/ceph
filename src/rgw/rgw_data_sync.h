@@ -619,8 +619,13 @@ class RGWRemoteBucketManager {
 
   RGWDataSyncEnv *sync_env;
 
-  RGWRemoteCtl::Conns conns;
   rgw_zone_id source_zone;
+  RGWRemoteCtl::Conns conns;
+
+  const RGWBucketSyncFlowManager::pipe_handler& flow_handler;
+
+  rgw_bucket source_bucket;
+  rgw_bucket dest_bucket;
 
   std::vector<rgw_bucket_sync_pair_info> sync_pairs;
 
@@ -648,10 +653,12 @@ public:
                      RGWDataSyncEnv *_sync_env,
                      const rgw_zone_id& _source_zone,
                      const RGWRemoteCtl::Conns& _conns,
-                     const RGWBucketSyncFlowManager::pipe_handler& _handler,
-                     const RGWBucketInfo& source_bucket_info,
+                     const RGWBucketSyncFlowManager::pipe_handler& _flow_handler,
+                     const rgw_bucket& source_bucket,
                      const rgw_bucket& dest_bucket);
   ~RGWRemoteBucketManager();
+
+  int init(RGWCoroutinesManager *cr_mgr);
 
   RGWCoroutine *read_sync_status_cr(int num, rgw_bucket_shard_sync_info *sync_status);
   RGWCoroutine *init_sync_status_cr(int num);

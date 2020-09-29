@@ -498,6 +498,8 @@ public:
 
   virtual string get_sip_name() const = 0;
 
+  virtual int num_shards() const = 0;
+
   virtual RGWCoroutine *init_cr() = 0;
 
   virtual RGWCoroutine *get_pos_cr(int shard_id, M *pos) = 0;
@@ -516,8 +518,6 @@ public:
                                                   sync_env(_sc->env) {}
 
   virtual ~RGWDataSyncInfoCRHandler() {}
-
-  virtual int num_shards() const = 0;
 
   virtual int validate_sync_marker(rgw_data_sync_marker& marker) const = 0;
 };
@@ -1209,6 +1209,10 @@ public:
     return new InitCR(this);
   }
 
+  int num_shards() const override {
+    return stage_info.num_shards;
+  }
+
   RGWCoroutine *fetch_cr(int shard_id,
                          const string& marker,
                          T *result) override {
@@ -1263,10 +1267,6 @@ public:
                                                     _sip_name,
                                                     type_provider.get(),
                                                     nullopt));
-  }
-
-  int num_shards() const override {
-    return stage_info.num_shards;
   }
 
   int validate_sync_marker(rgw_data_sync_marker& marker) const override {
@@ -1767,6 +1767,7 @@ public:
 };
 
 class RGWBucketShardSIPCRHandlersRepo;
+class RGWBucketShardSIPCRWrapperCore;
 
 class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
@@ -1813,6 +1814,9 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   bool again = false;
 
   std::shared_ptr<RGWBucketShardSIPCRHandlersRepo> handlers_repo;
+
+  std::shared_ptr<RGWBucketShardSIPCRWrapperCore> wrapper_core_full;
+  std::shared_ptr<RGWBucketShardSIPCRWrapperCore> wrapper_core_inc;
 
 public:
   RGWRunBucketSourcesSyncCR(RGWDataSyncCtx *_sc,
@@ -3363,6 +3367,10 @@ public:
     return nullptr;
   }
 
+  int num_shards() const override {
+#warning implement num_shards()
+  }
+
   RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *info) override {
     return nullptr;
   }
@@ -3386,6 +3394,10 @@ public:
   RGWCoroutine *init_cr() override {
     /* nothing to init */
     return nullptr;
+  }
+
+  int num_shards() const override {
+#warning implement num_shards()
   }
 
   RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *info) override {
@@ -3675,12 +3687,12 @@ public:
   }
 };
 
-class RGWBucketShardSIPCRWrapper
+class RGWBucketShardSIPCRWrapperCore
 {
   friend class InitCR;
 
   RGWDataSyncCtx *sc;
-  rgw_bucket_shard source_bs;
+  rgw_bucket source_bucket;
 
   std::shared_ptr<RGWBucketShardSIPCRHandlersRepo> handlers_repo;
 
@@ -3689,7 +3701,7 @@ class RGWBucketShardSIPCRWrapper
   std::map<string, RGWGroupCallCR::State> groups;
 
   class InitCR : public RGWCoroutine {
-    RGWBucketShardSIPCRWrapper *caller;
+    RGWBucketShardSIPCRWrapperCore *caller;
     string sip_name;
     std::optional<string> fallback_sip;
 
@@ -3700,7 +3712,7 @@ class RGWBucketShardSIPCRWrapper
     int i;
 
   public:
-    InitCR(RGWBucketShardSIPCRWrapper *_caller,
+    InitCR(RGWBucketShardSIPCRWrapperCore *_caller,
            const string& _sip_name,
            std::optional<string> _fallback_sip) : RGWCoroutine(_caller->sc->cct),
                                                   caller(_caller),
@@ -3747,23 +3759,48 @@ class RGWBucketShardSIPCRWrapper
   
 
 public:
-  RGWBucketShardSIPCRWrapper(RGWDataSyncCtx *_sc,
-                             const rgw_bucket_shard& _source_bs,
-                              std::shared_ptr<RGWBucketShardSIPCRHandlersRepo> _handlers_repo) : sc(_sc),
-                                                                                                 source_bs(_source_bs),
-                                                                                                 handlers_repo(_handlers_repo) {}
+  RGWBucketShardSIPCRWrapperCore(RGWDataSyncCtx *_sc,
+                                 const rgw_bucket& _source_bucket,
+                                 std::shared_ptr<RGWBucketShardSIPCRHandlersRepo> _handlers_repo) : sc(_sc),
+                                                                                                    source_bucket(_source_bucket),
+                                                                                                    handlers_repo(_handlers_repo) {}
 
   RGWCoroutine *init_cr(const string& sip_name, std::optional<string> fallback_sip) {
     return new InitCR(this, sip_name, fallback_sip);
   }
 
+  int num_shards() const {
+    return handler->num_shards();
+  }
+
+  RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *info) {
+    return handler->get_pos_cr(shard_id, info);
+  }
+
+  RGWCoroutine *fetch_cr(int shard_id,
+                         const string& list_marker,
+                         sip_bucket_fetch_result *result) {
+    return handler->fetch_cr(shard_id, list_marker, result);
+  }
+};
+
+class RGWBucketShardSIPCRWrapper
+{
+  std::shared_ptr<RGWBucketShardSIPCRWrapperCore> wrapper_core;
+  int shard_id;
+
+public:
+  RGWBucketShardSIPCRWrapper(std::shared_ptr<RGWBucketShardSIPCRWrapperCore>& _wrapper_core,
+                             int _shard_id) : wrapper_core(_wrapper_core),
+                                              shard_id(_shard_id) {}
+
   RGWCoroutine *get_pos_cr(rgw_bucket_index_marker_info *info) {
-    return handler->get_pos_cr(source_bs.shard_id, info);
+    return wrapper_core->get_pos_cr(shard_id, info);
   }
 
   RGWCoroutine *fetch_cr(const string& list_marker,
                          sip_bucket_fetch_result *result) {
-    return handler->fetch_cr(source_bs.shard_id, list_marker, result);
+    return wrapper_core->fetch_cr(shard_id, list_marker, result);
   }
 };
 
@@ -3833,52 +3870,79 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                                                RGWDataSyncEnv *_sync_env,
                                                const rgw_zone_id& _source_zone,
                                                const RGWRemoteCtl::Conns& _conns,
-                                               const RGWBucketSyncFlowManager::pipe_handler& handler,
-                                               const RGWBucketInfo& source_bucket_info,
-                                               const rgw_bucket& dest_bucket) : dpp(_dpp), sync_env(_sync_env), conns(_conns)
+                                               const RGWBucketSyncFlowManager::pipe_handler& _flow_handler,
+                                               const rgw_bucket& _source_bucket,
+                                               const rgw_bucket& _dest_bucket) : dpp(_dpp),
+                                                                                 sync_env(_sync_env),
+                                                                                 source_zone(_source_zone),
+                                                                                 conns(_conns),
+                                                                                 flow_handler(_flow_handler),
+                                                                                 source_bucket(_source_bucket),
+                                                                                 dest_bucket(_dest_bucket) {}
+
+int RGWRemoteBucketManager::init(RGWCoroutinesManager *cr_mgr)
 {
-  source_zone = _source_zone;
+  auto& sc = _ctxs.sc;
+  auto& bh = _ctxs.handlers;
 
-  int num_shards = (source_bucket_info.layout.current_index.layout.normal.num_shards <= 0 ? 
-                    1 : source_bucket_info.layout.current_index.layout.normal.num_shards);
+  sc.init(sync_env, conns, source_zone);
 
-  sync_pairs.resize(num_shards);
+  auto handlers_repo = std::make_shared<RGWBucketShardSIPCRHandlersRepo>(&sc, source_bucket);
+  auto wrapper_core_full = std::make_shared<RGWBucketShardSIPCRWrapperCore>(&sc, source_bucket, handlers_repo);
+  auto wrapper_core_inc = std::make_shared<RGWBucketShardSIPCRWrapperCore>(&sc, source_bucket, handlers_repo);
 
-  int cur_shard = std::min<int>(source_bucket_info.layout.current_index.layout.normal.num_shards, 0);
+  int ret = cr_mgr->run(wrapper_core_full->init_cr("bucket.full", "legacy/bucket.full"));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize SIP core for full bucket sync: ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = cr_mgr->run(wrapper_core_inc->init_cr("bucket.inc", "legacy/bucket.inc"));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize SIP core for incremental bucket sync: ret=" << ret << dendl;
+    return ret;
+  }
+
+  int source_num_shards = wrapper_core_inc->num_shards();
+
+  int num_shards = wrapper_core_inc->num_shards();
+  if (num_shards <= 0) {
+    num_shards = 1;
+  }
+
+  sync_pairs.resize(source_num_shards);
+
+  int cur_shard = std::min<int>(source_num_shards, 0);
 
   for (int i = 0; i < num_shards; ++i, ++cur_shard) {
     auto& sync_pair = sync_pairs[i];
 
-    sync_pair.source_bs.bucket = source_bucket_info.bucket;
+    sync_pair.source_bs.bucket = source_bucket;
     sync_pair.dest_bs.bucket = dest_bucket;
-    sync_pair.handler = handler;
+    sync_pair.handler = flow_handler;
 
-    sync_pair.source_bs.shard_id = (source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? cur_shard : -1);
+    sync_pair.source_bs.shard_id = (source_num_shards > 0 ? cur_shard : -1);
 
-    if (dest_bucket == source_bucket_info.bucket) {
+    if (dest_bucket == source_bucket) {
       sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id;
     } else {
       sync_pair.dest_bs.shard_id = -1;
     }
   }
 
-  auto& sc = _ctxs.sc;
-  auto& bh = _ctxs.handlers;
-
-  sc.init(sync_env, conns, source_zone);
-
   bh.resize(num_shards);
   bscs.resize(num_shards);
 
-  std::shared_ptr<RGWBucketShardSIPCRHandlersRepo> handlers_repo = std::make_shared<RGWBucketShardSIPCRHandlersRepo>(&sc, source_bucket_info.bucket);
 
   for (int i = 0; i < num_shards; ++i) {
     auto& handlers = bh[i];
-    handlers.info.full = std::make_shared<RGWBucketShardSIPCRWrapper>(&sc, sync_pairs[i].source_bs, handlers_repo);
-    handlers.info.inc = std::make_shared<RGWBucketShardSIPCRWrapper>(&sc, sync_pairs[i].source_bs, handlers_repo);
+    handlers.info.full = std::make_shared<RGWBucketShardSIPCRWrapper>(wrapper_core_full, i);
+    handlers.info.inc = std::make_shared<RGWBucketShardSIPCRWrapper>(wrapper_core_inc, i);
     handlers.status.reset(new RGWBucketSyncStatusCRHandler_Legacy(&sc, sync_pairs[i]));
     bscs[i].init(&sc, sync_pairs[i], handlers.info.full.get(), handlers.info.inc.get(), handlers.status.get());
   }
+
+  return 0;
 }
 
 RGWRemoteBucketManager::~RGWRemoteBucketManager() {}
@@ -5458,8 +5522,6 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
       {
         ldpp_dout(dpp, 20) << __func__ << "(): sync pipe=" << *siter << dendl;
 
-        source_num_shards = siter->source.get_bucket_info().layout.current_index.layout.normal.num_shards;
-        target_num_shards = siter->target.get_bucket_info().layout.current_index.layout.normal.num_shards;
         if (source_bs) {
           sync_pair.source_bs = *source_bs;
         } else {
@@ -5468,6 +5530,26 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
         sync_pair.dest_bs.bucket = siter->target.get_bucket();
 
         sync_pair.handler = siter->handler;
+
+        wrapper_core_full = std::make_shared<RGWBucketShardSIPCRWrapperCore>(sc, sync_pair.source_bs.bucket, handlers_repo);
+        wrapper_core_inc = std::make_shared<RGWBucketShardSIPCRWrapperCore>(sc, sync_pair.source_bs.bucket, handlers_repo);
+
+        yield call(wrapper_core_full->init_cr("bucket.full", "legacy/bucket.full"));
+        if (retcode < 0) {
+          tn->log(0, SSTR("ERROR: failed to initialize sip for full bucket sync: " << retcode));
+          drain_all();
+          return set_cr_error(retcode);
+        }
+
+        yield call(wrapper_core_inc->init_cr("bucket.inc", "legacy/bucket.inc"));
+        if (retcode < 0) {
+          tn->log(0, SSTR("ERROR: failed to initialize sip for incremental bucket sync: " << retcode));
+          drain_all();
+          return set_cr_error(retcode);
+        }
+
+        source_num_shards = wrapper_core_inc->num_shards();
+        target_num_shards = siter->target.get_bucket_info().layout.current_index.layout.normal.num_shards;
 
         if (sync_pair.source_bs.shard_id >= 0) {
           num_shards = 1;
@@ -5481,7 +5563,6 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
       ldpp_dout(dpp, 20) << __func__ << "(): num shards=" << num_shards << " cur_shard=" << cur_shard << dendl;
 
       handlers_repo = std::make_shared<RGWBucketShardSIPCRHandlersRepo>(sc, sync_pair.source_bs.bucket);
-
 
       for (; num_shards > 0; --num_shards, ++cur_shard) {
         /*
@@ -5499,8 +5580,8 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
 
         cur_stack = &stacks_info[prealloc_stack_id()];
 
-        cur_stack->bsi.full = std::make_shared<RGWBucketShardSIPCRWrapper>(sc, sync_pair.source_bs, handlers_repo);
-        cur_stack->bsi.inc = std::make_shared<RGWBucketShardSIPCRWrapper>(sc, sync_pair.source_bs, handlers_repo);
+        cur_stack->bsi.full = std::make_shared<RGWBucketShardSIPCRWrapper>(wrapper_core_full, sync_pair.source_bs.shard_id);
+        cur_stack->bsi.inc = std::make_shared<RGWBucketShardSIPCRWrapper>(wrapper_core_inc, sync_pair.source_bs.shard_id);
         cur_stack->bst = std::make_shared<RGWBucketSyncStatusCRHandler_Legacy>(sc, sync_pair);
         cur_stack->bsc.init(sc, sync_pair, cur_stack->bsi.full.get(), cur_stack->bsi.inc.get(), cur_stack->bst.get());
 
@@ -5849,20 +5930,6 @@ int RGWRunBucketSyncCoroutine::operate(const DoutPrefixProvider *dpp)
 
     sync_pipe.info = sync_pair;
 
-    yield call(bsc->hsi.full->init_cr("bucket.full", "legacy/bucket.full"));
-    if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to initialize sip for full bucket sync: " << retcode));
-      drain_all();
-      return set_cr_error(retcode);
-    }
-
-    yield call(bsc->hsi.inc->init_cr("bucket.inc", "legacy/bucket.inc"));
-    if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to initialize sip for incremental bucket sync: " << retcode));
-      drain_all();
-      return set_cr_error(retcode);
-    }
-
     do {
       if (sync_status.state == rgw_bucket_shard_sync_info::StateInit ||
           sync_status.state == rgw_bucket_shard_sync_info::StateStopped) {
@@ -5970,11 +6037,19 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
       last_zone = szone;
     }
 
-    source_mgrs.push_back(new RGWRemoteBucketManager(this, &sync_env,
-                                                     szone, conns,
-                                                     pipe.handler,
-                                                     pipe.source.get_bucket_info(),
-                                                     pipe.target.get_bucket()));
+    auto bucket_mgr = new RGWRemoteBucketManager(this, &sync_env,
+                                                 szone, conns,
+                                                 pipe.handler,
+                                                 pipe.source.get_bucket(),
+                                                 pipe.target.get_bucket());
+
+    ret = bucket_mgr->init(&cr_mgr);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: failed to init bucket sync manager for pipe=" << pipe << "ret=" << ret << dendl;
+      return ret;
+    }
+
+    source_mgrs.push_back(bucket_mgr);
   }
 
   return 0;
