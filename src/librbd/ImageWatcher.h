@@ -195,6 +195,8 @@ private:
   bool mark_async_request_complete(const watch_notify::AsyncRequestId &id,
                                    int r);
   Context *remove_async_request(const watch_notify::AsyncRequestId &id);
+  Context *remove_async_request(const watch_notify::AsyncRequestId &id,
+                                ceph::shared_mutex &lock);
   void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void notify_async_request(const watch_notify::AsyncRequestId &id,
