@@ -62,7 +62,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
    and a log file for the new cluster.  See `ceph-deploy new -h`_ for
    additional details.
 
-#. If you have more than one network interface (including the loopback), add the ``public network`` 
+#. If you have more than one network interface (including the loopback), add the ``public network``
    setting under the ``[global]`` section of your Ceph configuration file.
    See the `Network Configuration Reference`_ for details. ::
 
