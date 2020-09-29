@@ -53,7 +53,7 @@ public:
   bool read(
       AioCompletion* aio_comp, Extents &&image_extents,
       ReadResult &&read_result, IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      int read_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
@@ -89,6 +89,16 @@ public:
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
+
+  bool list_snaps(
+      AioCompletion* aio_comp, Extents&& image_extents, SnapIds&& snap_ids,
+      int list_snaps_flags, SnapshotDelta* snapshot_delta,
+      const ZTracer::Trace &parent_trace, uint64_t tid,
+      std::atomic<uint32_t>* image_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
+    return false;
+  }
 
 private:
   ImageCtxT* m_image_ctx;

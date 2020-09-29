@@ -39,8 +39,10 @@ private:
 public:
   struct Read {
     ReadResult read_result;
+    int read_flags;
 
-    Read(ReadResult &&read_result) : read_result(std::move(read_result)) {
+    Read(ReadResult &&read_result, int read_flags)
+      : read_result(std::move(read_result)), read_flags(read_flags) {
     }
   };
 
@@ -85,12 +87,25 @@ public:
     }
   };
 
+  struct ListSnaps {
+    SnapIds snap_ids;
+    int list_snaps_flags;
+    SnapshotDelta* snapshot_delta;
+
+    ListSnaps(SnapIds&& snap_ids, int list_snaps_flags,
+              SnapshotDelta* snapshot_delta)
+      : snap_ids(std::move(snap_ids)), list_snaps_flags(list_snaps_flags),
+        snapshot_delta(snapshot_delta) {
+    }
+  };
+
   typedef boost::variant<Read,
                          Discard,
                          Write,
                          WriteSame,
                          CompareAndWrite,
-                         Flush> Request;
+                         Flush,
+                         ListSnaps> Request;
 
   C_Dispatcher dispatcher_ctx;
 
@@ -112,11 +127,11 @@ public:
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
       ReadResult &&read_result, IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace) {
+      int read_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents),
-                                 Read{std::move(read_result)},
+                                 Read{std::move(read_result), read_flags},
                                  io_context, op_flags, parent_trace);
   }
 
@@ -179,6 +194,20 @@ public:
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp, {},
                                  Flush{flush_source}, {}, 0, parent_trace);
+  }
+
+  template <typename ImageCtxT = ImageCtx>
+  static ImageDispatchSpec* create_list_snaps(
+      ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
+      AioCompletion *aio_comp, Extents &&image_extents, SnapIds&& snap_ids,
+      int list_snaps_flags, SnapshotDelta* snapshot_delta,
+      const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp,
+                                 std::move(image_extents),
+                                 ListSnaps{std::move(snap_ids),
+                                           list_snaps_flags, snapshot_delta},
+                                 {}, 0, parent_trace);
   }
 
   ~ImageDispatchSpec() {

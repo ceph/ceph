@@ -132,7 +132,7 @@ TEST_F(TestMockIoSimpleSchedulerObjectDispatch, Read) {
   C_SaferCond cond;
   Context *on_finish = &cond;
   ASSERT_FALSE(mock_simple_scheduler_object_dispatch.read(
-      0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, {}, nullptr,
+      0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr,
       nullptr, nullptr, nullptr, nullptr, &on_finish, nullptr));
   ASSERT_EQ(on_finish, &cond); // not modified
   on_finish->complete(0);

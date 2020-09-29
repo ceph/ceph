@@ -108,7 +108,8 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
   bool operator()(ObjectDispatchSpec::ReadRequest& read) const {
     return object_dispatch->read(
       read.object_no, read.extents, object_dispatch_spec->io_context,
-      object_dispatch_spec->op_flags, object_dispatch_spec->parent_trace,
+      object_dispatch_spec->op_flags, read.read_flags,
+      object_dispatch_spec->parent_trace,
       read.read_data, read.extent_map, read.version,
       &object_dispatch_spec->object_dispatch_flags,
       &object_dispatch_spec->dispatch_result,
@@ -169,6 +170,17 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
     return object_dispatch->flush(
       flush.flush_source, object_dispatch_spec->parent_trace,
       &flush.journal_tid,
+      &object_dispatch_spec->dispatch_result,
+      &object_dispatch_spec->dispatcher_ctx.on_finish,
+      &object_dispatch_spec->dispatcher_ctx);
+  }
+
+  bool operator()(ObjectDispatchSpec::ListSnapsRequest& list_snaps) const {
+    return object_dispatch->list_snaps(
+      list_snaps.object_no, std::move(list_snaps.extents),
+      std::move(list_snaps.snap_ids), list_snaps.list_snaps_flags,
+      object_dispatch_spec->parent_trace, list_snaps.snapshot_delta,
+      &object_dispatch_spec->object_dispatch_flags,
       &object_dispatch_spec->dispatch_result,
       &object_dispatch_spec->dispatcher_ctx.on_finish,
       &object_dispatch_spec->dispatcher_ctx);

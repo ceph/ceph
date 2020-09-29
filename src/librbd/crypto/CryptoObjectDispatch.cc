@@ -38,7 +38,7 @@ struct C_EncryptedObjectReadRequest : public Context {
     C_EncryptedObjectReadRequest(
             I* image_ctx, CryptoInterface* crypto, uint64_t object_no,
             uint64_t object_off, uint64_t object_len, IOContext io_context,
-            int op_flags, const ZTracer::Trace &parent_trace,
+            int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
             ceph::bufferlist* read_data, int* object_dispatch_flags,
             Context** on_finish,
             Context* on_dispatched) : image_ctx(image_ctx),
@@ -61,8 +61,9 @@ struct C_EncryptedObjectReadRequest : public Context {
 
       req = io::ObjectDispatchSpec::create_read(
               image_ctx, io::OBJECT_DISPATCH_LAYER_CRYPTO, object_no,
-              {{object_off, object_len}}, io_context, op_flags, parent_trace,
-              &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
+              {{object_off, object_len}}, io_context, op_flags, read_flags,
+              parent_trace, &req_comp->bl, &req_comp->extent_map, nullptr,
+              req_comp);
     }
 
     void send() {
@@ -115,8 +116,8 @@ void CryptoObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool CryptoObjectDispatch<I>::read(
-    uint64_t object_no, const io::Extents &extents,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t object_no, const io::Extents &extents, IOContext io_context,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
     ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -136,8 +137,8 @@ bool CryptoObjectDispatch<I>::read(
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   auto req = new C_EncryptedObjectReadRequest<I>(
           m_image_ctx, m_crypto, object_no, object_off, object_len, io_context,
-          op_flags, parent_trace, read_data, object_dispatch_flags, on_finish,
-          on_dispatched);
+          op_flags, read_flags, parent_trace, read_data, object_dispatch_flags,
+          on_finish, on_dispatched);
   req->send();
   return true;
 }

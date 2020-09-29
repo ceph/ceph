@@ -44,15 +44,16 @@ public:
 
   struct ReadRequest : public RequestBase {
     const Extents extents;
+    int read_flags;
     ceph::bufferlist* read_data;
     Extents* extent_map;
     uint64_t* version;
 
     ReadRequest(uint64_t object_no, const Extents &extents,
-                ceph::bufferlist* read_data, Extents* extent_map,
-                uint64_t* version)
-      : RequestBase(object_no), extents(extents), read_data(read_data),
-        extent_map(extent_map), version(version) {
+                int read_flags, ceph::bufferlist* read_data,
+                Extents* extent_map, uint64_t* version)
+      : RequestBase(object_no), extents(extents), read_flags(read_flags),
+        read_data(read_data), extent_map(extent_map), version(version) {
     }
   };
 
@@ -131,12 +132,28 @@ public:
     }
   };
 
+  struct ListSnapsRequest : public RequestBase {
+    Extents extents;
+    SnapIds snap_ids;
+    int list_snaps_flags;
+    SnapshotDelta* snapshot_delta;
+
+    ListSnapsRequest(uint64_t object_no, Extents&& extents,
+                     SnapIds&& snap_ids, int list_snaps_flags,
+                     SnapshotDelta* snapshot_delta)
+      : RequestBase(object_no), extents(std::move(extents)),
+        snap_ids(std::move(snap_ids)),list_snaps_flags(list_snaps_flags),
+        snapshot_delta(snapshot_delta) {
+    }
+  };
+
   typedef boost::variant<ReadRequest,
                          DiscardRequest,
                          WriteRequest,
                          WriteSameRequest,
                          CompareAndWriteRequest,
-                         FlushRequest> Request;
+                         FlushRequest,
+                         ListSnapsRequest> Request;
 
   C_Dispatcher dispatcher_ctx;
 
@@ -154,13 +171,14 @@ public:
   static ObjectDispatchSpec* create_read(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       uint64_t object_no, const Extents &extents, IOContext io_context,
-      int op_flags, const ZTracer::Trace &parent_trace,
+      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
       ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
       Context* on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   ReadRequest{object_no, extents,
-                                              read_data, extent_map, version},
+                                              read_flags, read_data, extent_map,
+                                              version},
                                   io_context, op_flags, parent_trace,
                                   on_finish);
   }
@@ -240,6 +258,22 @@ public:
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   FlushRequest{flush_source, journal_tid},
+                                  {}, 0, parent_trace, on_finish);
+  }
+
+  template <typename ImageCtxT>
+  static ObjectDispatchSpec* create_list_snaps(
+      ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
+      uint64_t object_no, Extents&& extents, SnapIds&& snap_ids,
+      int list_snaps_flags, const ZTracer::Trace &parent_trace,
+      SnapshotDelta* snapshot_delta, Context* on_finish) {
+    return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
+                                  object_dispatch_layer,
+                                  ListSnapsRequest{object_no,
+                                                   std::move(extents),
+                                                   std::move(snap_ids),
+                                                   list_snaps_flags,
+                                                   snapshot_delta},
                                   {}, 0, parent_trace, on_finish);
   }
 

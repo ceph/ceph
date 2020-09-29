@@ -105,7 +105,7 @@ struct ImageRequest<librbd::MockTestImageCtx> {
   static ImageRequest *s_instance;
   static void aio_read(librbd::MockImageCtx *ictx, AioCompletion *c,
                        Extents &&image_extents, ReadResult &&read_result,
-                       IOContext io_context, int op_flags,
+                       IOContext io_context, int op_flags, int read_flags,
                        const ZTracer::Trace &parent_trace) {
     s_instance->aio_read(c, image_extents, &read_result);
   }
@@ -200,6 +200,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
         [&mock_image_ctx, image_extents, data, r](
             AioCompletion* aio_comp, ReadResult* read_result) {
           aio_comp->read_result = std::move(*read_result);
+          aio_comp->read_result.set_image_extents(image_extents);
           aio_comp->set_request_count(1);
           auto ctx = new ReadResult::C_ImageReadRequest(aio_comp,
                                                         image_extents);

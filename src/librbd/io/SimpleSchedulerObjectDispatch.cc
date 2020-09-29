@@ -3,6 +3,7 @@
 
 #include "librbd/io/SimpleSchedulerObjectDispatch.h"
 #include "include/neorados/RADOS.hpp"
+#include "common/ceph_time.h"
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "librbd/AsioEngine.h"
@@ -27,6 +28,7 @@ namespace librbd {
 namespace io {
 
 using namespace boost::accumulators;
+using ceph::operator<<;
 using librbd::util::data_object_name;
 
 static const int LATENCY_STATS_WINDOW_SIZE = 10;
@@ -218,7 +220,7 @@ void SimpleSchedulerObjectDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::read(
     uint64_t object_no, const Extents &extents, IOContext io_context,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
     ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {

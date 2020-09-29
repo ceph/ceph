@@ -30,7 +30,7 @@ public:
                     DispatchResult*, Context*));
   bool read(
       uint64_t object_no, const Extents& extents, IOContext io_context,
-      int op_flags, const ZTracer::Trace& parent_trace,
+      int op_flags, int read_flags, const ZTracer::Trace& parent_trace,
       ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
       int* dispatch_flags, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
@@ -109,6 +109,19 @@ public:
              Context** on_finish, Context* on_dispatched) {
     return execute_flush(flush_source, journal_tid, dispatch_result,
                          on_dispatched);
+  }
+
+  MOCK_METHOD7(execute_list_snaps, bool(uint64_t, const Extents&,
+                                        const SnapIds&, int, SnapshotDelta*,
+                                        DispatchResult*, Context*));
+  bool list_snaps(
+      uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
+      int list_snaps_flags, const ZTracer::Trace &parent_trace,
+      SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
+    return execute_list_snaps(object_no, extents, snap_ids, list_snaps_flags,
+                              snapshot_delta, dispatch_result, on_dispatched);
   }
 
   MOCK_METHOD1(invalidate_cache, bool(Context*));
