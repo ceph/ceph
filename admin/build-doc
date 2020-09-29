@@ -15,23 +15,21 @@ if command -v dpkg >/dev/null; then
     fi
     done
     if [ -n "$missing" ]; then
-        echo "$0: missing required packages, please install them:" 1>&2
-        echo "sudo apt-get install -o APT::Install-Recommends=true $missing" 1>&2
-        exit 1
+        echo "$0: missing required packages, installing them:"
+        sudo apt-get --assume-yes install -o APT::Install-Recommends=true $missing
     fi
 elif command -v yum >/dev/null; then
-    for package in ant ditaa doxygen libxslt-devel libxml2-devel graphviz python3-devel python3-pip python3-virtualenv python3-Cython; do
+    for package in ant ditaa doxygen libxslt-devel libxml2-devel graphviz python3-devel python3-pip python3-virtualenv python3-Cython tox enchant; do
 	if ! rpm -q --whatprovides $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
     done
     if [ -n "$missing" ]; then
-        echo "$0: missing required packages, please install them:" 1>&2
-        echo "yum install $missing"
-        exit 1
+        echo "$0: missing required packages, installing them:" 1>&2
+        sudo yum -y install $missing
     fi
 else
-    for command in dot virtualenv doxygen ant ditaa cython; do
+    for command in dot virtualenv doxygen ant ditaa cython tox enchant; do
         if ! command -v "$command" > /dev/null; then
             # add a space after old values
             missing="${missing:+$missing }$command"
@@ -44,9 +42,12 @@ else
     fi
 fi
 
+
 # Don't enable -e until after running all the potentially-erroring checks
 # for availability of commands
 set -e
+
+tox -c $TOPDIR/admin/tox.ini -e spellcheck
 
 cat $TOPDIR/src/osd/PeeringState.h $TOPDIR/src/osd/PeeringState.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
 
@@ -55,9 +56,9 @@ cd build-doc
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --python=python3 $vdir
+    python3 -m venv $vdir
 fi
-$vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
+$vdir/bin/pip3 install --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
 
 install -d -m0755 \
     $TOPDIR/build-doc/output/html \
