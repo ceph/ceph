@@ -154,6 +154,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libcap-ng-devel
+BuildRequires:	fmt-devel >= 5.2.1
 BuildRequires:	pkgconfig(libudev)
 BuildRequires:	libnl3-devel
 BuildRequires:	liboath-devel
@@ -211,7 +212,6 @@ BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  yaml-cpp-devel
 %if 0%{?fedora} || 0%{?rhel} >= 8
-BuildRequires:  fmt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  libatomic
