@@ -279,5 +279,107 @@ public:
   virtual void encode_obj(bufferlist *bl) {}
 };
 
+template <typename T>
+struct BaseRemoveParams
+{
+  RGWObjVersionTracker *objv_tracker{nullptr};
+
+  BaseRemoveParams() {}
+
+  T& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+    objv_tracker = _objv_tracker;
+    return static_cast<T&>(*this);
+  }
+};
+
+template <typename T>
+struct BasePutParams {
+  RGWObjVersionTracker *objv_tracker{nullptr};
+  ceph::real_time mtime;
+
+  BasePutParams() {}
+
+  T& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+    objv_tracker = _objv_tracker;
+    return static_cast<T&>(*this);
+  }
+
+  T& set_mtime(const ceph::real_time& _mtime) {
+    mtime = _mtime;
+    return static_cast<T&>(*this);
+  }
+};
+
+template <typename T>
+struct BaseSysObjPutParams {
+  RGWObjVersionTracker *objv_tracker{nullptr};
+  ceph::real_time mtime;
+  bool exclusive{false};
+  map<string, bufferlist> *attrs{nullptr};
+
+  BaseSysObjPutParams() {}
+
+  T& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+    objv_tracker = _objv_tracker;
+    return static_cast<T&>(*this);
+  }
+
+  T& set_mtime(const ceph::real_time& _mtime) {
+    mtime = _mtime;
+    return static_cast<T&>(*this);
+  }
+
+  T& set_exclusive(bool _exclusive) {
+    exclusive = _exclusive;
+    return static_cast<T&>(*this);
+  }
+
+  T& set_attrs(map<string, bufferlist> *_attrs) {
+    attrs = _attrs;
+    return static_cast<T&>(*this);
+  }
+};
+
+template <typename T>
+struct BaseGetParams {
+  RGWObjVersionTracker *objv_tracker{nullptr};
+  ceph::real_time *mtime{nullptr};
+
+  BaseGetParams() {}
+
+  T& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+    objv_tracker = _objv_tracker;
+    return static_cast<T&>(*this);
+  }
+
+  T& set_mtime(ceph::real_time *_mtime) {
+    mtime = _mtime;
+    return static_cast<T&>(*this);
+  }
+};
+
+template <typename T>
+struct BaseSysObjGetParams {
+  RGWObjVersionTracker *objv_tracker{nullptr};
+  ceph::real_time *mtime{nullptr};
+  map<string, bufferlist> *attrs{nullptr};
+
+  BaseSysObjGetParams() {}
+
+  T& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+    objv_tracker = _objv_tracker;
+    return static_cast<T&>(*this);
+  }
+
+  T& set_mtime(ceph::real_time *_mtime) {
+    mtime = _mtime;
+    return static_cast<T&>(*this);
+  }
+
+  T& set_attrs(map<string, bufferlist> *_attrs) {
+    attrs = _attrs;
+    return static_cast<T&>(*this);
+  }
+};
 
 #endif

@@ -856,80 +856,30 @@ public:
     return ctl.bucket;
   }
 
-  struct GetParams {
-    RGWObjVersionTracker *objv_tracker{nullptr};
-    ceph::real_time *mtime{nullptr};
+  struct GetParams : public BaseSysObjGetParams<GetParams>
+  {
     rgw_cache_entry_info *cache_info{nullptr};
-    map<string, bufferlist> *attrs{nullptr};
-
-    GetParams() {}
-
-    GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-
-    GetParams& set_mtime(ceph::real_time *_mtime) {
-      mtime = _mtime;
-      return *this;
-    }
 
     GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
       cache_info = _cache_info;
       return *this;
     }
 
-    GetParams& set_attrs(map<string, bufferlist> *_attrs) {
-      attrs = _attrs;
-      return *this;
-    }
+    GetParams() {}
   };
 
-  struct PutParams {
+  struct PutParams : public BaseSysObjPutParams<PutParams> {
     RGWUserInfo *old_info{nullptr};
-    RGWObjVersionTracker *objv_tracker{nullptr};
-    ceph::real_time mtime;
-    bool exclusive{false};
-    map<string, bufferlist> *attrs{nullptr};
-
-    PutParams() {}
 
     PutParams& set_old_info(RGWUserInfo *_info) {
       old_info = _info;
       return *this;
     }
-
-    PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-
-    PutParams& set_mtime(const ceph::real_time& _mtime) {
-      mtime = _mtime;
-      return *this;
-    }
-
-    PutParams& set_exclusive(bool _exclusive) {
-      exclusive = _exclusive;
-      return *this;
-    }
-
-    PutParams& set_attrs(map<string, bufferlist> *_attrs) {
-      attrs = _attrs;
-      return *this;
-    }
+    PutParams() {}
   };
 
-  struct RemoveParams {
-    RGWObjVersionTracker *objv_tracker{nullptr};
+  struct RemoveParams : public BaseRemoveParams<RemoveParams> {};
 
-    RemoveParams() {}
-
-    RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-  };
 
   int get_info_by_uid(const rgw_user& uid, RGWUserInfo *info,
                       optional_yield y, const GetParams& params = {});

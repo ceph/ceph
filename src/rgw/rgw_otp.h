@@ -57,50 +57,9 @@ public:
 
   void init(RGWOTPMetadataHandler *_meta_handler);
 
-  struct GetParams {
-    RGWObjVersionTracker *objv_tracker{nullptr};
-    ceph::real_time *mtime{nullptr};
-
-    GetParams() {}
-
-    GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-
-    GetParams& set_mtime(ceph::real_time *_mtime) {
-      mtime = _mtime;
-      return *this;
-    }
-  };
-
-  struct PutParams {
-    RGWObjVersionTracker *objv_tracker{nullptr};
-    ceph::real_time mtime;
-
-    PutParams() {}
-
-    PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-
-    PutParams& set_mtime(const ceph::real_time& _mtime) {
-      mtime = _mtime;
-      return *this;
-    }
-  };
-
-  struct RemoveParams {
-    RGWObjVersionTracker *objv_tracker{nullptr};
-
-    RemoveParams() {}
-
-    RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-  };
+  struct GetParams : public BaseGetParams<GetParams> {};
+  struct PutParams : public  BasePutParams<PutParams> {};
+  struct RemoveParams : public BaseRemoveParams<RemoveParams> {};
 
   int read_all(const rgw_user& uid, RGWOTPInfo *info, optional_yield y,
                const GetParams& params = {});

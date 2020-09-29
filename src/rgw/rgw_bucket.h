@@ -456,30 +456,10 @@ public:
             RGWDataChangesLog *datalog);
 
   struct Bucket {
-    struct GetParams {
-      RGWObjVersionTracker *objv_tracker{nullptr};
-      real_time *mtime{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+    struct GetParams : public BaseSysObjGetParams<GetParams> {
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
-
-      GetParams() {}
-
-      GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-        objv_tracker = _objv_tracker;
-        return *this;
-      }
-
-      GetParams& set_mtime(ceph::real_time *_mtime) {
-        mtime = _mtime;
-        return *this;
-      }
-
-      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
-        attrs = _attrs;
-        return *this;
-      }
 
       GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
         cache_info = _cache_info;
@@ -495,69 +475,20 @@ public:
         bectx_params = _bectx_params;
         return *this;
       }
+
+      GetParams() {}
     };
 
-    struct PutParams {
-      RGWObjVersionTracker *objv_tracker{nullptr};
-      ceph::real_time mtime;
-      bool exclusive{false};
-      map<string, bufferlist> *attrs{nullptr};
+    struct PutParams : public BaseSysObjPutParams<PutParams> {};
+    struct RemoveParams : public BaseRemoveParams<RemoveParams> {};
 
-      PutParams() {}
-
-      PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-        objv_tracker = _objv_tracker;
-        return *this;
-      }
-
-      PutParams& set_mtime(const ceph::real_time& _mtime) {
-        mtime = _mtime;
-        return *this;
-      }
-
-      PutParams& set_exclusive(bool _exclusive) {
-        exclusive = _exclusive;
-        return *this;
-      }
-
-      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
-        attrs = _attrs;
-        return *this;
-      }
-    };
-
-    struct RemoveParams {
-      RGWObjVersionTracker *objv_tracker{nullptr};
-
-      RemoveParams() {}
-
-      RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-        objv_tracker = _objv_tracker;
-        return *this;
-      }
-    };
   };
 
   struct BucketInstance {
-    struct GetParams {
-      real_time *mtime{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+    struct GetParams : public BaseSysObjGetParams<GetParams> {
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
-      RGWObjVersionTracker *objv_tracker{nullptr};
       std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
-
-      GetParams() {}
-
-      GetParams& set_mtime(ceph::real_time *_mtime) {
-        mtime = _mtime;
-        return *this;
-      }
-
-      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
-        attrs = _attrs;
-        return *this;
-      }
 
       GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
         cache_info = _cache_info;
@@ -569,63 +500,27 @@ public:
         return *this;
       }
 
-      GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-        objv_tracker = _objv_tracker;
-        return *this;
-      }
-
       GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
         bectx_params = _bectx_params;
         return *this;
       }
+
+      GetParams() {}
     };
 
-    struct PutParams {
+    struct PutParams: public BaseSysObjPutParams<PutParams> {
       std::optional<RGWBucketInfo *> orig_info; /* nullopt: orig_info was not fetched,
                                                    nullptr: orig_info was not found (new bucket instance */
-      ceph::real_time mtime;
-      bool exclusive{false};
-      map<string, bufferlist> *attrs{nullptr};
-      RGWObjVersionTracker *objv_tracker{nullptr};
-
-      PutParams() {}
 
       PutParams& set_orig_info(RGWBucketInfo *pinfo) {
         orig_info = pinfo;
         return *this;
       }
-
-      PutParams& set_mtime(const ceph::real_time& _mtime) {
-        mtime = _mtime;
-        return *this;
-      }
-
-      PutParams& set_exclusive(bool _exclusive) {
-        exclusive = _exclusive;
-        return *this;
-      }
-
-      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
-        attrs = _attrs;
-        return *this;
-      }
-
-      PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-        objv_tracker = _objv_tracker;
-        return *this;
-      }
+      PutParams() {}
     };
 
-    struct RemoveParams {
-      RGWObjVersionTracker *objv_tracker{nullptr};
+    struct RemoveParams : public BaseRemoveParams<RemoveParams> {};
 
-      RemoveParams() {}
-
-      RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-        objv_tracker = _objv_tracker;
-        return *this;
-      }
-    };
   };
 
   /* bucket entrypoint */
