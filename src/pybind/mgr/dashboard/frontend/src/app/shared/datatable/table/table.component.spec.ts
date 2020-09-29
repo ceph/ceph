@@ -686,7 +686,7 @@ describe('TableComponent', () => {
     });
 
     it('should open the table details and close other expanded rows', () => {
-      component.toggleExpandRow(component.expanded, false);
+      component.toggleExpandRow(component.expanded, false, new Event('click'));
       expect(component.expanded).toEqual({ a: 1, b: 10, c: true });
       expect(component.table.rowDetail.collapseAllRows).toHaveBeenCalled();
       expect(component.setExpandedRow.emit).toHaveBeenCalledWith(component.expanded);
@@ -694,10 +694,25 @@ describe('TableComponent', () => {
     });
 
     it('should close the current table details expansion', () => {
-      component.toggleExpandRow(component.expanded, true);
+      component.toggleExpandRow(component.expanded, true, new Event('click'));
       expect(component.expanded).toBeUndefined();
       expect(component.setExpandedRow.emit).toHaveBeenCalledWith(undefined);
       expect(component.table.rowDetail.toggleExpandRow).toHaveBeenCalled();
+    });
+
+    it('should not select the row when the row is expanded', () => {
+      expect(component.selection.selected).toEqual([]);
+      component.toggleExpandRow(component.data[1], false, new Event('click'));
+      expect(component.selection.selected).toEqual([]);
+    });
+
+    it('should not change selection when expanding different row', () => {
+      expect(component.selection.selected).toEqual([]);
+      expect(component.expanded).toEqual(component.data[1]);
+      component.selection.selected = [component.data[2]];
+      component.toggleExpandRow(component.data[3], false, new Event('click'));
+      expect(component.selection.selected).toEqual([component.data[2]]);
+      expect(component.expanded).toEqual(component.data[3]);
     });
   });
 });

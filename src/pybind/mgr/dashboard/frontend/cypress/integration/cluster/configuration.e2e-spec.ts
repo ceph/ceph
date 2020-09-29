@@ -19,10 +19,6 @@ describe('Configuration page', () => {
       configuration.getExpandCollapseElement().click();
     });
 
-    it('should verify that selected footer increases when an entry is clicked', () => {
-      configuration.getTableCount('selected').should('eq', 1);
-    });
-
     it('should check that details table opens (w/o tab header)', () => {
       configuration.getStatusTables().should('be.visible');
       configuration.getTabs().should('not.exist');
