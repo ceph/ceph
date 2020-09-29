@@ -1,8 +1,9 @@
-import { Component, Input, OnChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 
 import _ from 'lodash';
 
 import { PoolService } from '../../../shared/api/pool.service';
+import { CdHelperClass } from '../../../shared/classes/cd-helper.class';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { RbdConfigurationEntry } from '../../../shared/models/configuration';
 import { Permissions } from '../../../shared/models/permissions';
@@ -10,17 +11,23 @@ import { Permissions } from '../../../shared/models/permissions';
 @Component({
   selector: 'cd-pool-details',
   templateUrl: './pool-details.component.html',
-  styleUrls: ['./pool-details.component.scss']
+  styleUrls: ['./pool-details.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PoolDetailsComponent implements OnChanges {
-  cacheTierColumns: Array<CdTableColumn> = [];
-
   @Input()
-  selection: any;
+  cacheTiers: any[];
   @Input()
   permissions: Permissions;
   @Input()
-  cacheTiers: any[];
+  selection: any;
+
+  cacheTierColumns: Array<CdTableColumn> = [];
+  // 'stats' won't be shown as the pure stat numbers won't tell the user much,
+  // if they are not converted or used in a chart (like the ones available in the pool listing)
+  omittedPoolAttributes = ['cdExecuting', 'cdIsBinary', 'stats'];
+
+  poolDetails: object;
   selectedPoolConfiguration: RbdConfigurationEntry[];
 
   constructor(private poolService: PoolService) {
@@ -60,13 +67,14 @@ export class PoolDetailsComponent implements OnChanges {
 
   ngOnChanges() {
     if (this.selection) {
-      this.poolService.getConfiguration(this.selection.pool_name).subscribe((poolConf) => {
-        this.selectedPoolConfiguration = poolConf;
+      this.poolService
+        .getConfiguration(this.selection.pool_name)
+        .subscribe((poolConf: RbdConfigurationEntry[]) => {
+          CdHelperClass.updateChanged(this, { selectedPoolConfiguration: poolConf });
+        });
+      CdHelperClass.updateChanged(this, {
+        poolDetails: _.omit(this.selection, this.omittedPoolAttributes)
       });
     }
-  }
-
-  filterNonPoolData(pool: object): object {
-    return _.omit(pool, ['cdExecuting', 'cdIsBinary']);
   }
 }
