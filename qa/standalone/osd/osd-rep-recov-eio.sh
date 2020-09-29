@@ -185,7 +185,7 @@ function TEST_rados_repair_warning() {
     wait_for_clean || return 1
 
     local poolname=pool-rep
-    local obj-base=obj-warn-
+    local objbase=obj-warn
     local inject=eio
 
    for i in $(seq 1 $OBJS)
