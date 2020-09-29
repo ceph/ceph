@@ -8,3 +8,4 @@ Ceph UX Workflow Designs
    :maxdepth: 1
 
    host-management
+   cluster-management
