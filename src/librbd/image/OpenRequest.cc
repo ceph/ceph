@@ -558,8 +558,8 @@ Context* OpenRequest<I>::handle_init_plugin_registry(int *result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_init_cache(int *result) {
-  // cache is disabled or parent image context
-  if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
+  if (!m_image_ctx->cache || m_image_ctx->child != nullptr ||
+      !m_image_ctx->data_ctx.is_valid()) {
     return send_register_watch(result);
   }
 
