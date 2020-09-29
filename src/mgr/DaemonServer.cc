@@ -2784,12 +2784,13 @@ void DaemonServer::got_service_map()
 	// we just started up
 	dout(10) << "got initial map e" << service_map.epoch << dendl;
 	pending_service_map = service_map;
+	pending_service_map.epoch = service_map.epoch + 1;
       } else {
 	// we we already active and therefore must have persisted it,
 	// which means ours is the same or newer.
 	dout(10) << "got updated map e" << service_map.epoch << dendl;
+	ceph_assert(pending_service_map.epoch > service_map.epoch);
       }
-      pending_service_map.epoch = service_map.epoch + 1;
     });
 
   // cull missing daemons, populate new ones
