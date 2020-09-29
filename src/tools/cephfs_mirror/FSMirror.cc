@@ -309,7 +309,7 @@ void FSMirror::init_mirror_watcher() {
   std::scoped_lock locker(m_lock);
   Context *ctx = new C_CallbackAdapter<
     FSMirror, &FSMirror::handle_init_mirror_watcher>(this);
-  m_mirror_watcher = MirrorWatcher::create(m_ioctx, m_addrs, m_work_queue);
+  m_mirror_watcher = MirrorWatcher::create(m_ioctx, this, m_work_queue);
   m_mirror_watcher->init(ctx);
 }
 
