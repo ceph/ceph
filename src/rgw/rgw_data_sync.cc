@@ -3448,26 +3448,6 @@ public:
                                                     type_provider.get(),
                                                     source_bucket.get_key()));
   }
-
-#warning FIXME?
-#if 0
-  int validate_sync_marker(rgw_bucket_index_marker_info& marker) const override {
-    if (marker.sip_name == sip_name) {
-      return 0;
-    }
-
-    if (marker.sip_name.empty() ||
-        marker.sip_name == "legacy/bucket.inc") {
-      /* marker is compatible, no need to convert */
-      marker.sip_name = sip_name;
-      return 0;
-    }
-
-    /* unsupported marker type */
-
-    return -ENOTSUP;
-  }
-#endif
 };
 
 class RGWBucketSyncInfoCRHandler_SIP : public RGWBucketSyncInfoCRHandler_SIP_Base {
