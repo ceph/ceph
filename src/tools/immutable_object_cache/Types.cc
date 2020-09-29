@@ -40,12 +40,24 @@ void ObjectCacheRequest::decode(bufferlist& bl) {
 ObjectCacheRegData::ObjectCacheRegData() {}
 ObjectCacheRegData::ObjectCacheRegData(uint16_t t, uint64_t s)
   : ObjectCacheRequest(t, s) {}
+ObjectCacheRegData::ObjectCacheRegData(uint16_t t, uint64_t s,
+                                       const std::string &version)
+  : ObjectCacheRequest(t, s),
+    version(version) {
+}
 
 ObjectCacheRegData::~ObjectCacheRegData() {}
 
-void ObjectCacheRegData::encode_payload() {}
+void ObjectCacheRegData::encode_payload() {
+  ceph::encode(version, payload);
+}
 
-void ObjectCacheRegData::decode_payload(bufferlist::const_iterator i) {}
+void ObjectCacheRegData::decode_payload(bufferlist::const_iterator i) {
+  if (i.end()) {
+    return;
+  }
+  ceph::decode(version, i);
+}
 
 ObjectCacheRegReplyData::ObjectCacheRegReplyData() {}
 ObjectCacheRegReplyData::ObjectCacheRegReplyData(uint16_t t, uint64_t s)
