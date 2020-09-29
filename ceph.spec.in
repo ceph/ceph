@@ -1398,14 +1398,6 @@ fi
 %postun base
 /sbin/ldconfig
 %systemd_postun ceph.target
-if [ $1 -ge 1 ] ; then
-  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
-  # "yes". In any case: if units are not running, do not touch them.
-  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
-  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
-    source $SYSCONF_CEPH
-  fi
-fi
 
 %pre -n cephadm
 getent group cephadm >/dev/null || groupadd -r cephadm
