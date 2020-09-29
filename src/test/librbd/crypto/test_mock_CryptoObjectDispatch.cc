@@ -66,14 +66,19 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
     TestMockFixture::TearDown();
   }
 
-  void expect_object_read() {
+  void expect_object_read(bool child_enoent = false) {
     EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, send(_))
-            .WillOnce(Invoke([this](io::ObjectDispatchSpec* spec) {
+            .WillOnce(Invoke([this, child_enoent](
+                    io::ObjectDispatchSpec* spec) {
                 auto* read = boost::get<io::ObjectDispatchSpec::ReadRequest>(
                         &spec->request);
                 ASSERT_TRUE(read != nullptr);
 
                 spec->dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+                if (!child_enoent) {
+                  spec->object_dispatch_flags |=
+                          io::OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS;
+                }
                 dispatcher_ctx = &spec->dispatcher_ctx;
             }));
   }
@@ -158,6 +163,21 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, Read) {
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
 
   expect_decrypt();
+  dispatcher_ctx->complete(0);
+  ASSERT_EQ(4096, dispatched_cond.wait());
+}
+
+TEST_F(TestMockCryptoCryptoObjectDispatch, ReadNotFromChild) {
+  expect_object_read(true);
+  ASSERT_TRUE(mock_crypto_object_dispatch->read(
+          0, {{0, 4096}}, mock_image_ctx->get_data_io_context(), 0, 0, {},
+          &data, &extent_map, nullptr, &object_dispatch_flags, &dispatch_result,
+          &on_finish, on_dispatched));
+  ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
+  ASSERT_NE(on_finish, &finished_cond);
+  ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
+
+  // no decrypt expected
   dispatcher_ctx->complete(0);
   ASSERT_EQ(4096, dispatched_cond.wait());
 }

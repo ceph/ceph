@@ -203,11 +203,13 @@ ObjectReadRequest<I>::ObjectReadRequest(
     I *ictx, uint64_t objectno, const Extents &extents,
     IOContext io_context, int op_flags, int read_flags,
     const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-    Extents* extent_map, uint64_t* version, Context *completion)
+    Extents* extent_map, uint64_t* version, int* object_dispatch_flags,
+    Context *completion)
   : ObjectRequest<I>(ictx, objectno, io_context, "read",
                      parent_trace, completion),
     m_extents(extents), m_op_flags(op_flags), m_read_flags(read_flags),
-    m_read_data(read_data), m_extent_map(extent_map), m_version(version) {
+    m_read_data(read_data), m_extent_map(extent_map), m_version(version),
+    m_object_dispatch_flags(object_dispatch_flags) {
 }
 
 template <typename I>
@@ -271,6 +273,8 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
     this->finish(r);
     return;
   }
+
+  *m_object_dispatch_flags |= OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS;
 
   // merge ExtentResults to a single sparse bufferlist
   int pos = 0;

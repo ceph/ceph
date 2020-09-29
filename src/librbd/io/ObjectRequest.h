@@ -96,17 +96,20 @@ public:
       ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
       IOContext io_context, int op_flags, int read_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      Extents* extent_map, uint64_t* version, Context *completion) {
+      Extents* extent_map, uint64_t* version, int* object_dispatch_flags,
+      Context *completion) {
     return new ObjectReadRequest(ictx, objectno, extents, io_context, op_flags,
                                  read_flags, parent_trace, read_data,
-                                 extent_map, version, completion);
+                                 extent_map, version, object_dispatch_flags,
+                                 completion);
   }
 
   ObjectReadRequest(
       ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
       IOContext io_context, int op_flags, int read_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      Extents* extent_map, uint64_t* version, Context *completion);
+      Extents* extent_map, uint64_t* version, int* object_dispatch_flags,
+      Context *completion);
 
   void send() override;
 
@@ -147,6 +150,7 @@ private:
   ceph::bufferlist* m_read_data;
   Extents* m_extent_map;
   uint64_t* m_version;
+  int* m_object_dispatch_flags;
 
   void read_object();
   void handle_read_object(int r);

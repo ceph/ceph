@@ -45,7 +45,8 @@ bool ObjectDispatch<I>::read(
   auto req = new ObjectReadRequest<I>(m_image_ctx, object_no, extents,
                                       io_context, op_flags, read_flags,
                                       parent_trace, read_data, extent_map,
-                                      version, on_dispatched);
+                                      version, object_dispatch_flags,
+                                      on_dispatched);
   req->send();
   return true;
 }

@@ -72,7 +72,8 @@ struct C_EncryptedObjectReadRequest : public Context {
 
     void finish(int r) override {
       ldout(image_ctx->cct, 20) << "r=" << r << dendl;
-      if (r > 0) {
+      if (r > 0 && (req->object_dispatch_flags
+                    & io::OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS)) {
         auto crypto_ret = crypto->decrypt(
                 read_data,
                 Striper::get_file_offset(

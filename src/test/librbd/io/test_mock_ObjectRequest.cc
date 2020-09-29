@@ -425,10 +425,11 @@ TEST_F(TestMockIoObjectRequest, Read) {
   Extents extent_map;
   C_SaferCond ctx;
   uint64_t version;
+  int object_dispatch_flags = 0;
   auto req = MockObjectReadRequest::create(
           &mock_image_ctx, 0, {{0, 4096}, {8192, 4096}},
           mock_image_ctx.get_data_io_context(), 0, 0, {},
-          &bl, &extent_map, &version, &ctx);
+          &bl, &extent_map, &version, &object_dispatch_flags, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -441,6 +442,8 @@ TEST_F(TestMockIoObjectRequest, Read) {
   ASSERT_EQ(exepected_extent_map.size(), extent_map.size());
   ASSERT_TRUE(std::equal(extent_map.begin(), extent_map.end(),
                          exepected_extent_map.begin()));
+  ASSERT_TRUE(object_dispatch_flags
+              & OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS);
 }
 
 TEST_F(TestMockIoObjectRequest, SparseReadThreshold) {
@@ -465,11 +468,12 @@ TEST_F(TestMockIoObjectRequest, SparseReadThreshold) {
   bufferlist bl;
   Extents extent_map;
   C_SaferCond ctx;
+  int object_dispatch_flags = 0;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0,
     {{0, ictx->sparse_read_threshold_bytes}},
     mock_image_ctx.get_data_io_context(), 0, 0, {}, &bl,
-    &extent_map, nullptr, &ctx);
+    &extent_map, nullptr, &object_dispatch_flags, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -494,12 +498,15 @@ TEST_F(TestMockIoObjectRequest, ReadError) {
   bufferlist bl;
   Extents extent_map;
   C_SaferCond ctx;
+  int object_dispatch_flags = 0;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, {{0, 4096}},
     mock_image_ctx.get_data_io_context(), 0, 0, {}, &bl, &extent_map,
-    nullptr, &ctx);
+    nullptr, &object_dispatch_flags, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
+  ASSERT_FALSE(object_dispatch_flags
+               & OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS);
 }
 
 TEST_F(TestMockIoObjectRequest, ParentRead) {
@@ -541,12 +548,15 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
   bufferlist bl;
   Extents extent_map;
   C_SaferCond ctx;
+  int object_dispatch_flags = 0;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, {{0, 4096}},
     mock_image_ctx.get_data_io_context(), 0, 0, {}, &bl, &extent_map,
-    nullptr, &ctx);
+    nullptr, &object_dispatch_flags, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
+  ASSERT_FALSE(object_dispatch_flags
+               & OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS);
 }
 
 TEST_F(TestMockIoObjectRequest, ParentReadError) {
@@ -588,12 +598,15 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
   bufferlist bl;
   Extents extent_map;
   C_SaferCond ctx;
+  int object_dispatch_flags = 0;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, {{0, 4096}},
     mock_image_ctx.get_data_io_context(), 0, 0, {}, &bl, &extent_map,
-    nullptr, &ctx);
+    nullptr, &object_dispatch_flags, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
+  ASSERT_FALSE(object_dispatch_flags
+               & OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS);
 }
 
 TEST_F(TestMockIoObjectRequest, SkipParentRead) {
@@ -632,12 +645,15 @@ TEST_F(TestMockIoObjectRequest, SkipParentRead) {
   bufferlist bl;
   Extents extent_map;
   C_SaferCond ctx;
+  int object_dispatch_flags = 0;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0,
     READ_FLAG_DISABLE_READ_FROM_PARENT, {}, &bl, &extent_map,
-    nullptr, &ctx);
+    nullptr, &object_dispatch_flags, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
+  ASSERT_FALSE(object_dispatch_flags
+               & OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS);
 }
 
 TEST_F(TestMockIoObjectRequest, CopyOnRead) {
@@ -684,12 +700,15 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
   bufferlist bl;
   Extents extent_map;
   C_SaferCond ctx;
+  int object_dispatch_flags = 0;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, {{0, 4096}},
     mock_image_ctx.get_data_io_context(), 0, 0, {}, &bl, &extent_map,
-    nullptr, &ctx);
+    nullptr, &object_dispatch_flags, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
+  ASSERT_FALSE(object_dispatch_flags
+               & OBJECT_DISPATCH_FLAG_CHILD_OBJECT_EXISTS);
 }
 
 TEST_F(TestMockIoObjectRequest, Write) {
