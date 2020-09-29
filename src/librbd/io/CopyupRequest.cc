@@ -179,17 +179,10 @@ void CopyupRequest<I>::read_from_parent() {
   ldout(cct, 20) << "completion=" << comp << ", "
                  << "extents=" << m_image_extents
                  << dendl;
-  if (m_image_ctx->enable_sparse_copyup) {
-    ImageRequest<I>::aio_read(
-      m_image_ctx->parent, comp, std::move(m_image_extents),
-      ReadResult{&m_copyup_extent_map, &m_copyup_data},
-      m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
-  } else {
-    ImageRequest<I>::aio_read(
-      m_image_ctx->parent, comp, std::move(m_image_extents),
-      ReadResult{&m_copyup_data},
-      m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
-  }
+  ImageRequest<I>::aio_read(
+    m_image_ctx->parent, comp, std::move(m_image_extents),
+    ReadResult{&m_copyup_extent_map, &m_copyup_data},
+    m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
 }
 
 template <typename I>
@@ -420,28 +413,33 @@ void CopyupRequest<I>::copyup() {
   }
 
   neorados::WriteOp copyup_op;
+  neorados::WriteOp write_op;
+  neorados::WriteOp* op;
   if (copy_on_read || deep_copyup) {
-    if (m_image_ctx->enable_sparse_copyup) {
-      cls_client::sparse_copyup(&copyup_op, m_copyup_extent_map, m_copyup_data);
-    } else {
-      cls_client::copyup(&copyup_op, m_copyup_data);
-    }
-    ObjectRequest<I>::add_write_hint(*m_image_ctx, &copyup_op);
+    // copyup-op will use its own request issued to the initial object revision
+    op = &copyup_op;
     ++m_pending_copyups;
+  } else {
+    // copyup-op can be combined with the write-ops (if any)
+    op = &write_op;
   }
 
-  neorados::WriteOp write_op;
-  if (!copy_on_read) {
-    if (!deep_copyup) {
-      if (m_image_ctx->enable_sparse_copyup) {
-        cls_client::sparse_copyup(&write_op, m_copyup_extent_map,
-                                  m_copyup_data);
-      } else {
-        cls_client::copyup(&write_op, m_copyup_data);
-      }
-      ObjectRequest<I>::add_write_hint(*m_image_ctx, &write_op);
-    }
+  if (m_image_ctx->enable_sparse_copyup) {
+    cls_client::sparse_copyup(op, m_copyup_extent_map, m_copyup_data);
+  } else {
+    // convert the sparse read back into a standard (thick) read
+    Striper::StripedReadResult destriper;
+    destriper.add_partial_sparse_result(
+      cct, std::move(m_copyup_data), m_copyup_extent_map, 0,
+      {{0, m_image_ctx->layout.object_size}});
 
+    bufferlist thick_bl;
+    destriper.assemble_result(cct, thick_bl, false);
+    cls_client::copyup(op, thick_bl);
+  }
+  ObjectRequest<I>::add_write_hint(*m_image_ctx, op);
+
+  if (!copy_on_read) {
     // merge all pending write ops into this single RADOS op
     for (auto req : m_pending_requests) {
       ldout(cct, 20) << "add_copyup_ops " << req << dendl;
