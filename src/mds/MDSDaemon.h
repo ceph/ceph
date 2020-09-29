@@ -152,7 +152,7 @@ class MDSDaemon : public Dispatcher {
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;
 
-  bool parse_caps(const AuthCapsInfo&, MDSAuthCaps&);
+  static bool parse_caps(const AuthCapsInfo&, MDSAuthCaps&);
 
   mono_time starttime = mono_clock::zero();
 };
