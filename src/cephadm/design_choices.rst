@@ -13,7 +13,7 @@ Intro
 
 Current situation:
 
-Cephadm manages all hosts registered hosts. This means that it needs to periodically scrape data from each
+Cephadm manages all registered hosts. This means that it needs to periodically scrape data from each
 host to identify changes on the host like:
 
 * disk added/removed
