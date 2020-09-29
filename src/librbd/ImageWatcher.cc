@@ -511,11 +511,18 @@ bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id,
     it = m_async_complete_expiration.erase(it);
   }
 
-  if (m_async_complete.insert({id, r}).second) {
-    auto expiration_time = now;
-    expiration_time += 600;
-    m_async_complete_expiration.insert({expiration_time, id});
+  if (!m_async_complete.insert({id, r}).second) {
+    for (it = m_async_complete_expiration.begin();
+         it != m_async_complete_expiration.end(); it++) {
+      if (!(it->second != id)) {
+        m_async_complete_expiration.erase(it);
+        break;
+      }
+    }
   }
+  auto expiration_time = now;
+  expiration_time += 600;
+  m_async_complete_expiration.insert({expiration_time, id});
 
   return found;
 }
@@ -610,7 +617,10 @@ int ImageWatcher<I>::prepare_async_request(const AsyncRequestId& async_request_i
       *new_request = false;
       auto it = m_async_complete.find(async_request_id);
       if (it != m_async_complete.end()) {
-        return it->second;
+        int r = it->second;
+        // reset complete request expiration time
+        mark_async_request_complete(async_request_id, r);
+        return r;
       }
     }
   }
