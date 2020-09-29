@@ -1,6 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
@@ -52,7 +51,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   pools: Pool[];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
-  modalRef: NgbModalRef;
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
   tableActions: CdTableAction[];
@@ -222,7 +220,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
 
   deletePoolModal() {
     const name = this.selection.first().pool_name;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Pool',
       itemNames: [name],
       submitActionObservable: () =>
