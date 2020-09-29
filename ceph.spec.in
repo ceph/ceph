@@ -1445,8 +1445,7 @@ fi
 %postun base
 /sbin/ldconfig
 %if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph.target
+%service_del_postun_without_restart ceph.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph.target
@@ -1587,8 +1586,7 @@ fi
 
 %postun mds
 %if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-mds@\*.service ceph-mds.target
+%service_del_postun_without_restart ceph-mds@\*.service ceph-mds.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mds@\*.service ceph-mds.target
@@ -1662,8 +1660,7 @@ fi
 
 %postun mgr
 %if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-mgr@\*.service ceph-mgr.target
+%service_del_postun_without_restart ceph-mgr@\*.service ceph-mgr.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mgr@\*.service ceph-mgr.target
@@ -1789,8 +1786,7 @@ fi
 
 %postun mon
 %if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-mon@\*.service ceph-mon.target
+%service_del_postun_without_restart ceph-mon@\*.service ceph-mon.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mon@\*.service ceph-mon.target
@@ -1847,8 +1843,7 @@ fi
 
 %postun -n rbd-mirror
 %if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
+%service_del_postun_without_restart ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
@@ -1906,8 +1901,7 @@ fi
 
 %postun radosgw
 %if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-radosgw@\*.service ceph-radosgw.target
+%service_del_postun_without_restart ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-radosgw@\*.service ceph-radosgw.target
@@ -1973,8 +1967,7 @@ fi
 
 %postun osd
 %if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
+%service_del_postun_without_restart ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
