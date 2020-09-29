@@ -3790,6 +3790,9 @@ int main(int argc, const char **argv)
 
   // not a raw op if 'period update' needs to commit to master
   bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
+  // not a raw op if 'period pull' needs to read zone/period configuration
+  bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
+
   std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE, OPT::ZONEGROUP_DELETE,
 			 OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
                          OPT::ZONEGROUP_SET, OPT::ZONEGROUP_DEFAULT,
@@ -3807,7 +3810,6 @@ int main(int argc, const char **argv)
 			 OPT::ZONE_PLACEMENT_GET,
 			 OPT::REALM_CREATE,
 			 OPT::PERIOD_DELETE, OPT::PERIOD_GET,
-			 OPT::PERIOD_PULL,
 			 OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
 			 OPT::GLOBAL_QUOTA_GET, OPT::GLOBAL_QUOTA_SET,
 			 OPT::GLOBAL_QUOTA_ENABLE, OPT::GLOBAL_QUOTA_DISABLE,
@@ -3878,7 +3880,7 @@ int main(int argc, const char **argv)
 
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
-                         raw_period_update);
+                         raw_period_update || raw_period_pull);
   bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
 
   if (raw_storage_op) {
