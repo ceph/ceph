@@ -95,11 +95,9 @@ private:
     WRITE_OP_TYPE_REMOVE_TRUNC,
   };
 
-  typedef std::map<uint64_t, uint64_t> ExtentMap;
-
   struct ReadOp {
     interval_set<uint64_t> image_interval;
-    ExtentMap image_extent_map;
+    io::Extents image_extent_map;
     bufferlist out_bl;
   };
 

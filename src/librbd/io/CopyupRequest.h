@@ -90,7 +90,7 @@ private:
   bool m_copyup_is_zero = true;
   bool m_deep_copied = false;
 
-  std::map<uint64_t, uint64_t> m_copyup_extent_map;
+  Extents m_copyup_extent_map;
   ceph::bufferlist m_copyup_data;
 
   AsyncOperation m_async_op;
