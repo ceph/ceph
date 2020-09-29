@@ -135,7 +135,7 @@ Downside:
 * This is would require a major rewrite (also how mgr/cephadm operates)
 
 
-4 Increase the worker pool size
+3 Increase the worker pool size
 --------------------------------
 
 As we identified in the `Intro` section, mgr/cephadm is currently able to scrape 10 nodes at the same time.
