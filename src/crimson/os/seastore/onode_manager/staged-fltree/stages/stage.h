@@ -1431,6 +1431,11 @@ struct staged {
     iterator_t& split_iter = split_at.get();
     current_size = split_iter.seek_split(current_size, extra_size, target_size);
     assert(!split_iter.is_end());
+    if (split_iter.index() == 0) {
+      extra_size += iterator_t::header_size();
+    } else {
+      extra_size = 0;
+    }
     if constexpr (!IS_BOTTOM) {
       NXT_STAGE_T::recursively_locate_split(
           current_size, extra_size + split_iter.size_to_nxt(),
@@ -1451,6 +1456,11 @@ struct staged {
           current_size, extra_size, target_size,
           insert_index, insert_size, is_insert_left);
       assert(is_insert_left.has_value());
+      if (split_iter.index() == 0) {
+        extra_size += iterator_t::header_size();
+      } else {
+        extra_size = 0;
+      }
       if (*is_insert_left == false && split_iter.index() == insert_index) {
         // split_iter can be end
         // found the lower-bound of target_size
@@ -1461,11 +1471,6 @@ struct staged {
         // Look into the next stage to identify the target_size lower-bound w/o
         // insert effect.
         assert(!split_iter.is_end());
-        if (split_iter.index() == 0) {
-          extra_size += iterator_t::header_size();
-        } else {
-          extra_size = 0;
-        }
         if constexpr (!IS_BOTTOM) {
           NXT_STAGE_T::recursively_locate_split(
               current_size, extra_size + split_iter.size_to_nxt(),
