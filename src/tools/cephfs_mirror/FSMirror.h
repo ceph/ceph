@@ -52,6 +52,11 @@ public:
     return m_all_peers;
   }
 
+  std::string get_instance_addr() {
+    std::scoped_lock locker(m_lock);
+    return m_addrs;
+  }
+
   // admin socket helpers
   void mirror_status(Formatter *f);
 
