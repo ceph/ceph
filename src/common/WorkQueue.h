@@ -97,6 +97,10 @@ protected:
      * so at most one copy will execute simultaneously for a given thread pool.
      * It can be used for non-thread-safe finalization. */
     virtual void _void_process_finish(void *) = 0;
+    /// Set timeout_interval
+    virtual void set_timeout(time_t si) = 0;
+    /// Set suicide_interval
+    virtual void set_suicide_timeout(time_t si) = 0;
   };
 
   // track thread pool size changes
@@ -279,7 +283,12 @@ public:
     void drain() {
       pool->drain(this);
     }
-
+    void set_timeout(time_t i) {
+        timeout_interval = i;
+    }
+    void set_suicide_timeout(time_t si) {
+        suicide_interval = si;
+    }
   };
 
   template<typename T>
@@ -592,6 +601,8 @@ public:
     virtual void return_waiting_threads() = 0;
     virtual void stop_return_waiting_threads() = 0;
     virtual bool is_shard_empty(uint32_t thread_index) = 0;
+    virtual void set_timeout(time_t si) = 0;
+    virtual void set_suicide_timeout(time_t si) = 0;
   };
 
   template <typename T>
@@ -621,7 +632,12 @@ public:
     void drain() {
       sharded_pool->drain();
     }
-    
+    void set_timeout(time_t i) {
+        timeout_interval = i;
+    }
+    void set_suicide_timeout(time_t si) {
+        suicide_interval = si;
+    }
   };
 
 private:
