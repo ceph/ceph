@@ -507,7 +507,7 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer,
   ceph_assert(curr == 0);
 }
 
-void Striper::StripedReadResult::assemble_result(
+uint64_t Striper::StripedReadResult::assemble_result(
     CephContext *cct, std::map<uint64_t, uint64_t> *extent_map,
     bufferlist *bl)
 {
@@ -521,4 +521,5 @@ void Striper::StripedReadResult::assemble_result(
     }
   }
   partial.clear();
+  return total_intended_len;
 }

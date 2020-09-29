@@ -33,7 +33,7 @@ public:
 
   bool read(
       uint64_t object_no, const io::Extents &extents,
-      IOContext io_context, int op_flags,
+      IOContext io_context, int op_flags, int read_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
       io::Extents* extent_map, uint64_t* version, int* object_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
@@ -74,6 +74,15 @@ public:
       io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override {
+    return false;
+  }
+
+  bool list_snaps(
+      uint64_t object_no, io::Extents&& extents, io::SnapIds&& snap_ids,
+      int list_snap_flags, const ZTracer::Trace &parent_trace,
+      io::SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
     return false;
   }
 

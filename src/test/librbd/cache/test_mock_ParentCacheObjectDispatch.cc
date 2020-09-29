@@ -362,7 +362,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   io::DispatchResult dispatch_result;
   ceph::bufferlist read_data;
   mock_parent_image_cache->read(
-    0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, {}, &read_data,
+    0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, 0, {}, &read_data,
     nullptr, nullptr, nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
@@ -415,7 +415,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read_dne) {
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
   mock_parent_image_cache->read(
-    0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, {}, nullptr,
+    0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr,
     nullptr, nullptr, nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 

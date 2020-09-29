@@ -393,6 +393,36 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
   o->ops.push_back(op);
 }
 
+void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
+  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  librados::ObjectOperationTestImpl op =
+    [snaps]
+    (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist*,
+     uint64_t, const SnapContext&) mutable -> int {
+      librados::snap_set_t snap_set;
+      int r = io_ctx->list_snaps(oid, &snap_set);
+      if (r >= 0 && snaps != nullptr) {
+        *snaps = {};
+        snaps->seq = snap_set.seq;
+        snaps->clones.reserve(snap_set.clones.size());
+        for (auto& clone : snap_set.clones) {
+          neorados::CloneInfo clone_info;
+          clone_info.cloneid = clone.cloneid;
+          clone_info.snaps = clone.snaps;
+          clone_info.overlap = clone.overlap;
+          clone_info.size = clone.size;
+          snaps->clones.push_back(clone_info);
+        }
+      }
+      return r;
+    };
+  if (ec != NULL) {
+    op = std::bind(save_operation_ec,
+                   std::bind(op, _1, _2, _3, _4, _5), ec);
+  }
+  o->ops.push_back(op);
+}
+
 void WriteOp::create(bool exclusive) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(

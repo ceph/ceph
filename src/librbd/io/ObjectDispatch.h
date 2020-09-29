@@ -34,7 +34,7 @@ public:
 
   bool read(
       uint64_t object_no, const Extents &extents, IOContext io_context,
-      int op_flags, const ZTracer::Trace &parent_trace,
+      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
       ceph::bufferlist* read_data, Extents* extent_map,
       uint64_t* version, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
@@ -77,6 +77,13 @@ public:
       Context** on_finish, Context* on_dispatched) override {
     return false;
   }
+
+  bool list_snaps(
+      uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
+      int list_snap_flags, const ZTracer::Trace &parent_trace,
+      SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
 
   bool invalidate_cache(Context* on_finish) override {
     return false;

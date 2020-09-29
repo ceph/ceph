@@ -34,8 +34,9 @@ void ImageDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool ImageDispatch<I>::read(
     AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    IOContext io_context, int op_flags, int read_flags,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -46,7 +47,7 @@ bool ImageDispatch<I>::read(
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_read(
     m_image_ctx, aio_comp, std::move(image_extents), std::move(read_result),
-    io_context, op_flags, parent_trace);
+    io_context, op_flags, read_flags, parent_trace);
   return true;
 }
 
@@ -142,6 +143,27 @@ bool ImageDispatch<I>::flush(
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_flush(m_image_ctx, aio_comp, flush_source, parent_trace);
+  return true;
+}
+
+template <typename I>
+bool ImageDispatch<I>::list_snaps(
+    AioCompletion* aio_comp, Extents&& image_extents, SnapIds&& snap_ids,
+    int list_snaps_flags, SnapshotDelta* snapshot_delta,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  start_in_flight_io(aio_comp);
+
+  *dispatch_result = DISPATCH_RESULT_COMPLETE;
+  ImageListSnapsRequest<I> req(
+    *m_image_ctx, aio_comp, std::move(image_extents), std::move(snap_ids),
+    list_snaps_flags, snapshot_delta, parent_trace);
+  req.send();
   return true;
 }
 

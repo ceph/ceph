@@ -136,7 +136,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, Discard) {
 TEST_F(TestMockCryptoCryptoObjectDispatch, ReadFail) {
   expect_object_read();
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-      0, {{0, 4096}}, mock_image_ctx->get_data_io_context(), 0, {}, &data,
+      0, {{0, 4096}}, mock_image_ctx->get_data_io_context(), 0, 0, {}, &data,
       &extent_map, nullptr, &object_dispatch_flags, &dispatch_result,
       &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
@@ -150,8 +150,8 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, ReadFail) {
 TEST_F(TestMockCryptoCryptoObjectDispatch, Read) {
   expect_object_read();
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-          0, {{0, 4096}}, mock_image_ctx->get_data_io_context(), 0, {}, &data,
-          &extent_map, nullptr, &object_dispatch_flags, &dispatch_result,
+          0, {{0, 4096}}, mock_image_ctx->get_data_io_context(), 0, 0, {},
+          &data, &extent_map, nullptr, &object_dispatch_flags, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_NE(on_finish, &finished_cond);

@@ -183,7 +183,7 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
     uint64_t object_no, const io::Extents &extents, IOContext io_context,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
     ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -201,6 +201,11 @@ bool ObjectCacherObjectDispatch<I>::read(
   // ensure we aren't holding the cache lock post-read
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
+
+  // embed the RBD-internal read flags in the genenric RADOS op_flags and
+  op_flags = ((op_flags & ~ObjectCacherWriteback::READ_FLAGS_MASK) |
+              ((read_flags << ObjectCacherWriteback::READ_FLAGS_SHIFT) &
+               ObjectCacherWriteback::READ_FLAGS_MASK));
 
   m_image_ctx->image_lock.lock_shared();
   auto rd = m_object_cacher->prepare_read(

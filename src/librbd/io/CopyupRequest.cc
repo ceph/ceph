@@ -176,12 +176,12 @@ void CopyupRequest<I>::read_from_parent() {
     ImageRequest<I>::aio_read(
       m_image_ctx->parent, comp, std::move(m_image_extents),
       ReadResult{&m_copyup_extent_map, &m_copyup_data},
-      m_image_ctx->parent->get_data_io_context(), 0, m_trace);
+      m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
   } else {
     ImageRequest<I>::aio_read(
       m_image_ctx->parent, comp, std::move(m_image_extents),
       ReadResult{&m_copyup_data},
-      m_image_ctx->parent->get_data_io_context(), 0, m_trace);
+      m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
   }
 }
 
@@ -212,6 +212,19 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
     ldout(cct, 20) << "no-op, skipping" << dendl;
     finish(0);
     return;
+  }
+
+  // convert the image-extent extent map to object-extents
+  ExtentMap image_extent_map;
+  image_extent_map.swap(m_copyup_extent_map);
+  for (auto [image_offset, image_length] : image_extent_map) {
+    striper::LightweightObjectExtents object_extents;
+    Striper::file_to_extents(
+      cct, &m_image_ctx->layout, image_offset, image_length, 0, 0,
+      &object_extents);
+    for (auto& object_extent : object_extents) {
+      m_copyup_extent_map[object_extent.offset] = object_extent.length;
+    }
   }
 
   // copyup() will affect snapshots only if parent data is not all

@@ -34,7 +34,7 @@ void ObjectDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool ObjectDispatch<I>::read(
     uint64_t object_no, const Extents &extents, IOContext io_context,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
     ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -43,9 +43,9 @@ bool ObjectDispatch<I>::read(
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   auto req = new ObjectReadRequest<I>(m_image_ctx, object_no, extents,
-                                     io_context,  op_flags, parent_trace,
-                                     read_data, extent_map, version,
-                                     on_dispatched);
+                                      io_context, op_flags, read_flags,
+                                      parent_trace, read_data, extent_map,
+                                      version, on_dispatched);
   req->send();
   return true;
 }
@@ -132,6 +132,26 @@ bool ObjectDispatch<I>::compare_and_write(
                                                  io_context, mismatch_offset,
                                                  op_flags, parent_trace,
                                                  on_dispatched);
+  req->send();
+  return true;
+}
+
+template <typename I>
+bool ObjectDispatch<I>::list_snaps(
+    uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
+    int list_snap_flags, const ZTracer::Trace &parent_trace,
+    SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
+                 << "extents=" << extents << ", "
+                 << "snap_ids=" << snap_ids << dendl;
+
+  *dispatch_result = DISPATCH_RESULT_COMPLETE;
+  auto req = ObjectListSnapsRequest<I>::create(
+    m_image_ctx, object_no, std::move(extents), std::move(snap_ids),
+    list_snap_flags, parent_trace, snapshot_delta, on_dispatched);
   req->send();
   return true;
 }

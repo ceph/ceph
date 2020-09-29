@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "common/zipkin_trace.h"
 #include "librbd/ObjectMap.h"
@@ -93,19 +94,19 @@ class ObjectReadRequest : public ObjectRequest<ImageCtxT> {
 public:
   static ObjectReadRequest* create(
       ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
-      Context *completion) {
+      IOContext io_context, int op_flags, int read_flags,
+      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+      Extents* extent_map, uint64_t* version, Context *completion) {
     return new ObjectReadRequest(ictx, objectno, extents, io_context, op_flags,
-                                 parent_trace, read_data, extent_map, version,
-                                 completion);
+                                 read_flags, parent_trace, read_data,
+                                 extent_map, version, completion);
   }
 
   ObjectReadRequest(
       ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
-      Context *completion);
+      IOContext io_context, int op_flags, int read_flags,
+      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+      Extents* extent_map, uint64_t* version, Context *completion);
 
   void send() override;
 
@@ -141,6 +142,7 @@ private:
   typedef std::vector<ExtentResult> ExtentResults;
   ExtentResults m_extent_results;
   int m_op_flags;
+  int m_read_flags;
 
   ceph::bufferlist* m_read_data;
   Extents* m_extent_map;
@@ -439,6 +441,53 @@ private:
   int m_op_flags;
 };
 
+template <typename ImageCtxT = ImageCtx>
+class ObjectListSnapsRequest : public ObjectRequest<ImageCtxT> {
+public:
+  static ObjectListSnapsRequest* create(
+      ImageCtxT *ictx, uint64_t objectno, Extents&& object_extents,
+      SnapIds&& snap_ids, int list_snaps_flags,
+      const ZTracer::Trace &parent_trace, SnapshotDelta* snapshot_delta,
+      Context *completion) {
+    return new ObjectListSnapsRequest(ictx, objectno,
+                                      std::move(object_extents),
+                                      std::move(snap_ids), list_snaps_flags,
+                                      parent_trace, snapshot_delta, completion);
+  }
+
+  ObjectListSnapsRequest(
+      ImageCtxT *ictx, uint64_t objectno, Extents&& object_extents,
+      SnapIds&& snap_ids, int list_snaps_flags,
+      const ZTracer::Trace &parent_trace, SnapshotDelta* snapshot_delta,
+      Context *completion);
+
+  void send() override;
+
+  const char *get_op_type() const override {
+    return "snap_list";
+  }
+
+private:
+  Extents m_object_extents;
+  SnapIds m_snap_ids;
+  int m_list_snaps_flags;
+  SnapshotDelta* m_snapshot_delta;
+
+  neorados::SnapSet m_snap_set;
+  boost::system::error_code m_ec;
+
+  SnapshotDelta m_parent_snapshot_delta;
+
+  void list_snaps();
+  void handle_list_snaps(int r);
+
+  void list_from_parent();
+  void handle_list_from_parent(int r);
+
+  void zero_initial_extent(const interval_set<uint64_t>& written_extents,
+                           bool dne);
+};
+
 } // namespace io
 } // namespace librbd
 
@@ -449,5 +498,6 @@ extern template class librbd::io::ObjectWriteRequest<librbd::ImageCtx>;
 extern template class librbd::io::ObjectDiscardRequest<librbd::ImageCtx>;
 extern template class librbd::io::ObjectWriteSameRequest<librbd::ImageCtx>;
 extern template class librbd::io::ObjectCompareAndWriteRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectListSnapsRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IO_OBJECT_REQUEST_H
