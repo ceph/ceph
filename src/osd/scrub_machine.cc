@@ -21,12 +21,12 @@ using namespace std::chrono;
 using namespace std::chrono_literals;
 namespace sc = boost::statechart;
 
-#define DECLARE_LOCALS                                          \
-  ScrubMachineListener* scrbr = context<ScrubMachine>().scrbr_; \
-  std::ignore = scrbr;                                          \
-  PG* pg = context<ScrubMachine>().pg_;                         \
-  std::ignore = pg;                                             \
-  auto pg_id = context<ScrubMachine>().pg_id_;                  \
+#define DECLARE_LOCALS                                           \
+  ScrubMachineListener* scrbr = context<ScrubMachine>().m_scrbr; \
+  std::ignore = scrbr;                                           \
+  PG* pg = context<ScrubMachine>().m_pg;                         \
+  std::ignore = pg;                                              \
+  auto pg_id = context<ScrubMachine>().m_pg_id;                  \
   std::ignore = pg_id;
 
 namespace Scrub {
@@ -35,9 +35,9 @@ namespace Scrub {
 //  trace/debug auxiliaries
 //
 
-state_logger_t::state_logger_t(std::string nm) : name_{nm}
+state_logger_t::state_logger_t(std::string nm) : m_name{nm}
 {
-  dout(7) << " ------ state -->> " << name_ << dendl;
+  dout(7) << " ------ state -->> " << m_name << dendl;
 }
 
 void on_event_creation(std::string nm)
@@ -76,7 +76,7 @@ bool ScrubMachine::is_reserving() const
 
 // for the rest of the code in this file - we know what PG we are dealing with:
 #undef dout_prefix
-#define dout_prefix *_dout << "scrbrFSM.pg(~" << context<ScrubMachine>().pg_id_ << "~) "
+#define dout_prefix *_dout << "scrbrFSM.pg(~" << context<ScrubMachine>().m_pg_id << "~) "
 
 // //////////////////////////////////////////////////////
 // ////////////// the actual actions
@@ -199,7 +199,8 @@ ActiveScrubbing::~ActiveScrubbing()
   dout(7) << "  " << __func__ << dendl;
   scrbr->unreserve_replicas();
 }
-void ScrubMachine::down_from_active(const EpochChanged&)
+
+void ScrubMachine::down_on_epoch_change(const EpochChanged&)
 {
   DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
   dout(7) << "  " << __func__ << dendl;
@@ -232,27 +233,6 @@ sc::result ActiveScrubbing::react(const FullReset&)
   return transit<NotActive>();
 }
 
-// ----------------------- ActvNQueued -----------------------------------
-
-/*
- * Sleeping till scheduled-in
- */
-ActvNQueued::ActvNQueued(my_context ctx)
-    : my_base(ctx), state_logger_t{"Act/ActvNQueued"s}
-{
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
-
-  dout(7) << "  " << __func__ << dendl;
-
-  // RRR 16/8/20: bad if arrived here after an unblock: scrbr->requeue();
-}
-
-sc::result ActvNQueued::react(const EpochChanged&)
-{
-  dout(7) << " ActvNQueued::react(const EpochChanged&)" << dendl;
-  // fix:
-  return forward_event();
-}
 
 // ----------------------- RangeBlocked -----------------------------------
 
@@ -291,12 +271,12 @@ PendingTimer::PendingTimer(my_context ctx)
   scrbr->add_delayed_scheduling();
 }
 
-sc::result PendingTimer::react(const EpochChanged&)
-{
-  // fix:
-  dout(7) << "  PendingTimer::react(const EpochChanged&)" << dendl;
-  return forward_event();
-}
+// sc::result PendingTimer::react(const EpochChanged&)
+// {
+//   // fix:
+//   dout(7) << "  PendingTimer::react(const EpochChanged&)" << dendl;
+//   return forward_event();
+// }
 
 // ----------------------- NewChunk -----------------------------------
 
@@ -335,7 +315,7 @@ sc::result NewChunk::react(const SelectedChunkFree&)
 
 sc::result NewChunk::react(const EpochChanged&)
 {
-  dout(7) << "   NewChunk::react(const EpochChanged&)" << dendl;
+  dout(7) << " NewChunk::react(const EpochChanged&)" << dendl;
   DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
 
   return transit<NotActive>();
@@ -351,7 +331,6 @@ WaitPushes::WaitPushes(my_context ctx) : my_base(ctx), state_logger_t{"Act/WaitP
 sc::result WaitPushes::react(const EpochChanged&)
 {
   dout(7) << " WaitPushes::react(const EpochChanged&)" << dendl;
-
   return transit<NotActive>();
 }
 
@@ -434,13 +413,13 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx), state_logger_t{"Act/BuildMap"
 
     // we were preempted, either directly or by a replica
     dout(10) << __func__ << " preempted!!!" << dendl;
-    scrbr->mark_local_map_ready();  // waiting_on_whom.erase(scrbr->pg_whoami_);
+    scrbr->mark_local_map_ready();
     post_event(IntBmPreempted{});
 
   } else {
 
     auto ret = scrbr->build_primary_map_chunk();
-    dout(7) << "   bpmc ret (115=inprogress) " << ret << dendl;
+    // dout(7) << "   bpmc ret (115=inprogress) " << ret << dendl;
 
     if (ret == -EINPROGRESS) {
       // must wait for the backend to finish. No specific event provided.
@@ -449,7 +428,7 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx), state_logger_t{"Act/BuildMap"
       dout(7) << " waiting for the backend..." << dendl;
 
       // unit-test code: fake preemption
-      //       if (false && pg_id_.pgid.m_seed == 1 && fake_preemption_ &&
+      //       if (false && m_pg_id.pgid.m_seed == 1 && fake_preemption_ &&
       // 	  scrbr->get_preemptor()->is_preemptable()) {
       // 	dout(7) << __func__ << " generating fake preemption" << dendl;
       // 	fake_preemption_ = false;
@@ -493,9 +472,8 @@ sc::result DrainReplMaps::react(const GotReplicas&)
   dout(7) << " DrainReplMaps::react(const GotReplicas&)" << dendl;
 
   if (scrbr->are_all_maps_available()) {
-
-    // got all of them. Anything to do here?
-    return transit<NewChunk>();
+    // NewChunk will handle the preemption that brought us to this state
+    return transit<PendingTimer>();
   }
 
   dout(10) << "DrainReplMaps::react(const GotReplicas&): still draining incoming maps: "
@@ -541,7 +519,6 @@ sc::result WaitReplicas::react(const GotReplicas&)
       return transit<WaitDigestUpdate>();
     }
   } else {
-
     return discard_event();
   }
 }
@@ -583,15 +560,15 @@ sc::result WaitDigestUpdate::react(const DigestUpdate&)
 }
 
 ScrubMachine::ScrubMachine(PG* pg, PgScrubber* pg_scrub)
-    : pg_{pg}, pg_id_{pg->pg_id}, scrbr_{pg_scrub}
+    : m_pg{pg}, m_pg_id{pg->pg_id}, m_scrbr{pg_scrub}
 {
-  dout(10) << "ScrubMachine created " << pg_id_ << dendl;
+  dout(10) << "ScrubMachine created " << m_pg_id << dendl;
   dout(11) << __func__ << " ID: " << reinterpret_cast<uint64_t>(this) << dendl;
 }
 
 ScrubMachine::~ScrubMachine()
 {
-  dout(11) << "  ~ScrubMachine " << pg_id_ << dendl;
+  dout(11) << "  ~ScrubMachine " << m_pg_id << dendl;
   dout(11) << __func__ << " ID: " << reinterpret_cast<uint64_t>(this) << dendl;
 }
 
@@ -624,7 +601,6 @@ sc::result ReplicaWaitUpdates::react(const ActivePushesUpd&)
   DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
 
   dout(7) << "   replica actp: " << scrbr->pending_active_pushes() << dendl;
-  // RRR dout(7) << "   is_deep_: " << scrbr->is_deep_ << dendl;
   dout(8) << " Was epoch c: " << scrbr->was_epoch_changed() << dendl;
 
   //  check for epoch-change
@@ -664,11 +640,11 @@ sc::result ActiveReplica::react(const SchedReplica&)
   DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
 
   dout(7) << "  ActiveReplica::react(const SchedReplica&) shard:" << pg_id << " is-p? "
-	  << scrbr->get_preemptor()->is_preemptable() << " force? " << fake_preemption_
+	  << scrbr->get_preemptor()->is_preemptable() << " force? " << m_fake_preemption
 	  << dendl;
 
   //  testing: fake preemption sometimes
-  // if (pg_id_.pgid.m_seed == 2 && fake_preemption_ && scrbr->is_preemptable()) {
+  // if (m_pg_id.pgid.m_seed == 2 && fake_preemption_ && scrbr->is_preemptable()) {
   //  /* for qa tests, 28/7/20:*/ fake_preemption_ = false;
   //  /* for qa tests, 28/7/20:*/ //scrbr->preemption_data.replica_preempted();
   // }

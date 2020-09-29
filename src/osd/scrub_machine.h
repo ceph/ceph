@@ -35,7 +35,7 @@ struct state_logger_t {
   ~state_logger_t()
   { /*logger().debug( "\t<<<-- /{}\n", name_);*/
   }
-  std::string name_;
+  std::string m_name;
 };
 
 
@@ -67,7 +67,6 @@ MEV(EpochChanged)	 ///< ... from what it was when this chunk started
 MEV(StartScrub)	 ///< initiate a new scrubbing session (relevant if we are a Primary)
 MEV(AfterRecoveryScrub)	 ///< initiate a new scrubbing session. Only triggered at Recovery
 			 ///< completion.
-MEV(SchedScrub)
 MEV(Unblocked)	///< triggered when the PG unblocked an object that was marked for
 		///< scrubbing. Via the PGScrubUnblocked op
 MEV(InternalSchedScrub)
@@ -111,13 +110,12 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   explicit ScrubMachine(PG* pg, PgScrubber* pg_scrub);
   ~ScrubMachine();
 
-  PG* pg_;  // used only for testing
-  spg_t pg_id_;
+  PG* m_pg;  // used only for testing
+  spg_t m_pg_id;
 
-  ScrubMachineListener* const scrbr_;
+  ScrubMachineListener* const m_scrbr;
 
-  // RRR verify, and rename
-  void down_from_active(const EpochChanged&);
+  void down_on_epoch_change(const EpochChanged&);
 
   void on_epoch_changed(const EpochChanged&);
 
@@ -125,7 +123,7 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
 
   void assert_not_active() const;
 
-  bool is_reserving() const;
+  [[nodiscard]] bool is_reserving() const;
 };
 
 /**
@@ -164,24 +162,17 @@ struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine>, state_log
   using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
 			      sc::custom_reaction<RemotesReserved>,
 			      sc::custom_reaction<FullReset>,
-			      sc::custom_reaction<ReservationFailure>,
-			      sc::custom_reaction<sc::event_base>>;
+			      sc::custom_reaction<ReservationFailure>>;
 
   sc::result react(const EpochChanged&);
   sc::result react(const FullReset&);
   sc::result react(const RemotesReserved&);
   sc::result react(const ReservationFailure&);
-
-  sc::result react(const sc::event_base&)  // in the future: assert here
-  {
-    return discard_event();
-  }
 };
 
 
 // the "active" sub-states
 
-struct ActvNQueued;   ///< scrub_active is set, but we may have to sleep before NewChunk
 struct RangeBlocked;  ///< the objects range is blocked
 struct PendingTimer;  ///< either delaying the scrub by some time and requeuing, or just
 		      ///< requeue
@@ -199,24 +190,15 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer>,
   explicit ActiveScrubbing(my_context ctx);
   ~ActiveScrubbing();
 
-  using reactions = mpl::list<
-    sc::
-      transition<EpochChanged, NotActive, ScrubMachine, &ScrubMachine::down_from_active>,
-    sc::custom_reaction<AllChunksDone>,
-    sc::custom_reaction<FullReset>>;
+  using reactions = mpl::list<sc::transition<EpochChanged,
+					     NotActive,
+					     ScrubMachine,
+					     &ScrubMachine::down_on_epoch_change>,
+			      sc::custom_reaction<AllChunksDone>,
+			      sc::custom_reaction<FullReset>>;
 
   sc::result react(const AllChunksDone&);
   sc::result react(const FullReset&);
-};
-
-struct ActvNQueued : sc::state<ActvNQueued, ActiveScrubbing>, state_logger_t {
-  explicit ActvNQueued(my_context ctx);
-  using reactions =
-    mpl::list<sc::custom_reaction<EpochChanged>,
-	      sc::transition<SchedScrub, PendingTimer>>	 // external trigger
-    ;
-
-  sc::result react(const EpochChanged&);
 };
 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, state_logger_t {
@@ -233,12 +215,7 @@ struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, state_logger_t {
 
   explicit PendingTimer(my_context ctx);
 
-  using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
-			      sc::transition<InternalSchedScrub, NewChunk>,
-			      sc::transition<SchedScrub, NewChunk>  // shouldn't
-			      >;
-
-  sc::result react(const EpochChanged&);
+  using reactions = mpl::list<sc::transition<InternalSchedScrub, NewChunk>>;
 };
 
 struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, state_logger_t {
@@ -293,9 +270,6 @@ struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, state_logger_t {
 
   using reactions =
     mpl::list<sc::transition<IntBmPreempted, DrainReplMaps>,
-	      sc::transition<SchedScrub, BuildMap>,  // looping, waiting for the
-						     // backend to finish. Obsolete.
-						     // Rm when sure
 	      sc::transition<InternalSchedScrub, BuildMap>,  // looping, waiting
 							     // for the backend to
 							     // finish
@@ -305,7 +279,7 @@ struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, state_logger_t {
   sc::result react(const IntLocalMapDone&);
 
   //  testing aids (to be removed)
-  inline static bool fake_preemption_{true};
+  inline static bool m_fake_preemption{true};
 };
 
 /*
@@ -315,9 +289,7 @@ struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing>, state_logger_t
   explicit DrainReplMaps(my_context ctx);
 
   using reactions =
-    mpl::list<sc::custom_reaction<GotReplicas>,
-	      sc::transition<SchedScrub, DrainReplMaps>	 // RRR new addition.
-							 // Verify
+    mpl::list<sc::custom_reaction<GotReplicas>	// all replicas are accounted for
 	      >;
 
   sc::result react(const GotReplicas&);
@@ -329,7 +301,6 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, state_logger_t {
 
   using reactions = mpl::list<sc::custom_reaction<GotReplicas>,
 			      sc::deferral<DigestUpdate>,
-			      sc::transition<SchedScrub, WaitReplicas>,
 			      sc::transition<InternalError, NotActive>>	 // to fix RRR
     ;
 
@@ -339,9 +310,7 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, state_logger_t {
 struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>, state_logger_t {
   explicit WaitDigestUpdate(my_context ctx);
 
-  using reactions = mpl::list<
-    // sc::custom_reaction< EpochChanged >,
-    sc::custom_reaction<DigestUpdate>>;
+  using reactions = mpl::list<sc::custom_reaction<DigestUpdate>>;
 
   sc::result react(const DigestUpdate&);
 };
@@ -386,7 +355,7 @@ struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, state_logger_t {
   sc::result react(const InternalError&);
 
   //  testing aids (to be removed)
-  inline static bool fake_preemption_{true};
+  inline static bool m_fake_preemption{true};
 };
 
 }  // namespace Scrub

@@ -7609,6 +7609,7 @@ void OSD::sched_scrub()
     return;
   }
   bool allow_requested_repair_only = false;
+  #if 0 
   if (service.is_recovery_active() && !cct->_conf->osd_scrub_during_recovery) {
     if (!cct->_conf->osd_repair_during_recovery) {
       dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
@@ -7619,16 +7620,30 @@ void OSD::sched_scrub()
              << dendl;
     allow_requested_repair_only = true;
   }
+  #else
+
+  if (service.is_recovery_active()) {
+    if (!cct->_conf->osd_scrub_during_recovery && cct->_conf->osd_repair_during_recovery) {
+      dout(10) << __func__
+               << " will only schedule explicitly requested repair due to active recovery"
+               << dendl;
+      allow_requested_repair_only = true;
+    } else if (!cct->_conf->osd_scrub_during_recovery && !cct->_conf->osd_repair_during_recovery) {
+      dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
+      return;
+    }
+  }
+
+  #endif
 
   utime_t now = ceph_clock_now();
   bool time_permit = scrub_time_permit(now);
   bool load_is_low = scrub_load_below_threshold();
-  dout(8/*20*/) << "sched_scrub load_is_low=" << load_is_low << dendl;
+  dout(20) << "sched_scrub load_is_low=" << load_is_low << dendl;
 
   OSDService::ScrubJob scrub_job;
   if (service.first_scrub_stamp(&scrub_job)) {
     do {
-      dout(8/*30*/) << "sched_scrub examine " << scrub_job.pgid << " at " << scrub_job.sched_time << dendl;
       dout(8/*30*/) << "sched_scrub examine (~" << scrub_job.pgid << "~) at " << scrub_job.sched_time << dendl;
 
       if (scrub_job.sched_time > now) {
@@ -7650,17 +7665,17 @@ void OSD::sched_scrub()
 	continue;
       }
 
-      dout(9) << __func__  << " pg(" << scrub_job.pgid << " " << pg->scrubber_->is_scrub_active() << " now: " <<
-              now << " must repair: " << pg->planned_scrub_.must_repair << dendl;
+      dout(9) << __func__  << " pg(" << scrub_job.pgid << " " << pg->m_scrubber->is_scrub_active() << " now: " <<
+              now << " must repair: " << pg->m_planned_scrub.must_repair << dendl;
 
       // This has already started, so go on to the next scrub job
-      if (pg->scrubber_->is_scrub_active()) {
+      if (pg->m_scrubber->is_scrub_active()) {
 	pg->unlock();
 	dout(7/*30*/) << __func__ << ": already in progress pgid " << scrub_job.pgid << dendl;
 	continue;
       }
       // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
-      if (allow_requested_repair_only && !pg->planned_scrub_.must_repair) {
+      if (allow_requested_repair_only && !pg->m_planned_scrub.must_repair) {
         pg->unlock();
         dout(10) << __func__ << " skip " << scrub_job.pgid
                  << " because repairing is not explicitly requested on it"
@@ -7669,7 +7684,7 @@ void OSD::sched_scrub()
       }
 
       // If it is reserving, let it resolve before going to the next scrub job
-      if (pg->scrubber_->is_reserving() && !pg->scrubber_->is_scrub_active()) {
+      if (pg->m_scrubber->is_reserving() && !pg->m_scrubber->is_scrub_active()) {
 	pg->unlock();
 	dout(10) << __func__ << ": reserve in progress pgid " << scrub_job.pgid << dendl;
 	break;
@@ -7700,7 +7715,7 @@ void OSD::resched_all_scrubs()
       PGRef pg = _lookup_lock_pg(scrub_job.pgid);
       if (!pg)
 	continue;
-      if (!pg->planned_scrub_.must_scrub && !pg->planned_scrub_.need_auto) {
+      if (!pg->m_planned_scrub.must_scrub && !pg->m_planned_scrub.need_auto) {
         dout(20) << __func__ << ": reschedule " << scrub_job.pgid << dendl;
         pg->on_info_history_change();
       }

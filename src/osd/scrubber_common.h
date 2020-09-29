@@ -37,7 +37,16 @@ struct requested_scrub_t {
    */
   bool must_scrub{false};
 
-  /*
+  /**
+   * scrub must not be aborted.
+   * Set for explicitly requested scrubs, and for scrubs originated by the pairing
+   * process with the 'repair' flag set (in the RequestScrub event).
+   *
+   * Will be copied into the 'required' scrub flag upon scrub start.
+   */
+  bool req_scrub{false};
+
+  /**
    * Set from:
    *  - scrub_requested() with need_auto param set, which only happens in
    *  - scrub_finish() - if deep_scrub_on_error is set, aand we have errors
@@ -49,7 +58,7 @@ struct requested_scrub_t {
 
   bool must_deep_scrub{false};	// used also here. Not just in scrubber.flags_
 
-  /*
+  /**
    * (An intermediary flag used by pg::sched_scrub() on the first time
    * a planned scrub has all its resources)
    *
@@ -60,7 +69,7 @@ struct requested_scrub_t {
 
   bool deep_scrub_on_error{false};
 
-  /*
+  /**
    * If set, we should see must_deep_scrub and must_repair set, too
    *
    * - 'must_repair' is checked by the OSD when scheduling the scrubs.
@@ -117,15 +126,13 @@ struct ScrubPgIF {
 
   virtual void send_start_after_rec() = 0;
 
-  virtual void send_sched_scrub() = 0;
-
   virtual void send_scrub_resched() = 0;
 
   virtual void replica_scrub_resched(epoch_t epoch_queued) = 0;
 
   virtual void active_pushes_notification() = 0;
 
-  virtual void update_applied_notification() = 0;
+  virtual void update_applied_notification(epoch_t epoch_queued) = 0;
 
   virtual void digest_update_notification() = 0;
 
@@ -138,12 +145,13 @@ struct ScrubPgIF {
 
   virtual void reset_epoch(epoch_t epoch_queued) = 0;
 
-  virtual bool are_callbacks_pending() const = 0;  // currently used only for an assert
+  [[nodiscard]] virtual bool are_callbacks_pending()
+    const = 0;	// currently only used for an assert
 
-  virtual bool is_scrub_active() const = 0;  // RRR must doc
+  [[nodiscard]] virtual bool is_scrub_active() const = 0;  // RRR must doc
 
   /// are we waiting for resource reservation grants form our replicas?
-  virtual bool is_reserving() const = 0;
+  [[nodiscard]] virtual bool is_reserving() const = 0;
 
   /// handle a message carrying a replica map
   virtual void map_from_replica(OpRequestRef op) = 0;
@@ -157,6 +165,8 @@ struct ScrubPgIF {
   virtual void scrub_clear_state(bool keep_repair_state = false) = 0;
 
   virtual void handle_query_state(ceph::Formatter* f) = 0;
+
+  virtual void dump(ceph::Formatter* f) const = 0;
 
   /**
    * we allow some number of preemptions of the scrub, which mean we do
@@ -183,7 +193,8 @@ struct ScrubPgIF {
   virtual void add_callback(Context* context) = 0;
 
   /// should we requeue blocked ops?
-  virtual bool should_requeue_blocked_ops(eversion_t last_recovery_applied) = 0;
+  [[nodiscard]] virtual bool should_requeue_blocked_ops(
+    eversion_t last_recovery_applied) const = 0;
 
 
   // --------------- until after we move the reservations flow into the FSM:
@@ -246,18 +257,10 @@ struct ScrubPgIF {
   virtual void send_remotes_reserved() = 0;
 
   /**
-   *  triggers the 'ReservationFailure' (at least one replica denied us the requested
+   * triggers the 'ReservationFailure' (at least one replica denied us the requested
    * resources) state-machine event
    */
   virtual void send_reservation_failure() = 0;
 
   virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
-
-  /*
-   require work:
-
-  - access to saved_req_scrub - will be reworked as part of the 'abort' integration
-  - access to req_scrub - will be reworked as part of the 'abort' integration
-  - clear_scrub_reservations()
-  */
 };

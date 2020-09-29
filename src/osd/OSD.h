@@ -592,8 +592,12 @@ public:
   void queue_scrub_unblocking(PG *pg, Scrub::scrub_prio_t with_priority);
   void queue_scrub_digest_update(PG *pg, Scrub::scrub_prio_t with_priority);
   void queue_scrub_got_repl_maps(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_for_rep_scrub(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority);
-  void queue_for_rep_scrub_resched(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority);
+  void queue_for_rep_scrub(PG* pg,
+			   Scrub::scrub_prio_t with_high_priority,
+			   unsigned int qu_priority);
+  void queue_for_rep_scrub_resched(PG* pg,
+				   Scrub::scrub_prio_t with_high_priority,
+				   unsigned int qu_priority);
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
   bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 

@@ -24,9 +24,9 @@ struct preemption_t {
 
   virtual ~preemption_t(){};
 
-  virtual bool is_preemptable() const = 0;
+  [[nodiscard]] virtual bool is_preemptable() const = 0;
 
-  virtual bool was_preempted() const = 0;
+  [[nodiscard]] virtual bool was_preempted() const = 0;
 
   virtual void adjust_parameters() = 0;
 
@@ -79,6 +79,7 @@ struct ScrubMachineListener {
 
   virtual void add_delayed_scheduling() = 0;
 
+  /// \retval have we asked at least one replica?
   virtual bool get_replicas_maps(bool replica_can_preempt) = 0;
 
   virtual Scrub::FsmNext on_digest_updates() = 0;
@@ -87,11 +88,11 @@ struct ScrubMachineListener {
 
   virtual void replica_update_start_epoch() = 0;
 
-  virtual bool has_pg_marked_new_updates() const = 0;
+  [[nodiscard]] virtual bool has_pg_marked_new_updates() const = 0;
 
   virtual void set_subset_last_update(eversion_t e) = 0;
 
-  virtual bool was_epoch_changed() const = 0;
+  [[nodiscard]] virtual bool was_epoch_changed() const = 0;
 
   virtual Scrub::preemption_t* get_preemptor() = 0;
 

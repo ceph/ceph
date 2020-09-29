@@ -43,15 +43,16 @@ class PrimaryLogScrub : public PgScrubber {
    *  new recovery_state.get_last_update_applied().
    *  (used by PrimaryLogPG::op_applied())
    */
-  bool should_requeue_blocked_ops(eversion_t last_recovery_applied) final;
+  [[nodiscard]] bool should_requeue_blocked_ops(
+    eversion_t last_recovery_applied) const final;
 
   void add_stats_if_lower(const object_stat_sum_t& delta_stats,
 			  const hobject_t& soid) final;
 
  private:
   // we know our PG is actually a PrimaryLogPG. Let's alias the pointer to that object:
-  PrimaryLogPG* const pl_pg_;
-  PGBackend* const backend_;  // cached pg_backend for this PG
+  PrimaryLogPG* const m_pl_pg;
+  PGBackend* const m_backend;  // cached pg_backend for this PG
 
   /**
    * Validate consistency of the object info and snap sets.
@@ -78,8 +79,6 @@ class PrimaryLogScrub : public PgScrubber {
 
 
   // handle our part in stats collection
-
-  object_stat_collection_t scrub_cstat_;
-
+  object_stat_collection_t m_scrub_cstat;
   void _scrub_clear_state() final;  // which just clears the stats
 };

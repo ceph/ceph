@@ -14634,8 +14634,12 @@ bool PrimaryLogPG::already_complete(eversion_t v)
 
 void PrimaryLogPG::do_replica_scrub_map(OpRequestRef op)
 {
+<<<<<<< HEAD
   dout(15) << __func__ << " is scrub active? " << m_scrubber->is_scrub_active() << dendl;
   op->mark_started();
+=======
+  dout(10) << __func__ << " is scrub active? " << m_scrubber->is_scrub_active() << dendl;
+>>>>>>> 6ad644af44... fixes after the rebase
 
   if (!m_scrubber->is_scrub_active()) {
     dout(10) << __func__ << " scrub isn't active" << dendl;

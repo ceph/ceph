@@ -179,9 +179,9 @@ public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
 
-  std::unique_ptr<ScrubPgIF> scrubber_;
+  std::unique_ptr<ScrubPgIF> m_scrubber;
   /// flags detailing scheduling/operation characteristics of the next scrub 
-  requested_scrub_t planned_scrub_;
+  requested_scrub_t m_planned_scrub;
 
 public:
   // -- members --
@@ -257,10 +257,10 @@ public:
   }
 
   static void set_last_deep_scrub_stamp(
-    utime_t t, pg_history_t &history, pg_stat_t &stats) {
+    utime_t t, pg_history_t &history, pg_stat_t &stats) ;/*{
     stats.last_deep_scrub_stamp = t;
     history.last_deep_scrub_stamp = t;
-  }
+  }*/
 
   void set_last_deep_scrub_stamp(utime_t t) {
     recovery_state.update_stats(
