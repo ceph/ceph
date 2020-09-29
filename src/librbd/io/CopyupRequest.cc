@@ -222,15 +222,18 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   }
 
   // convert the image-extent extent map to object-extents
-  ExtentMap image_extent_map;
+  Extents image_extent_map;
   image_extent_map.swap(m_copyup_extent_map);
+  m_copyup_extent_map.reserve(m_copyup_extent_map.size());
+
   for (auto [image_offset, image_length] : image_extent_map) {
     striper::LightweightObjectExtents object_extents;
     Striper::file_to_extents(
       cct, &m_image_ctx->layout, image_offset, image_length, 0, 0,
       &object_extents);
     for (auto& object_extent : object_extents) {
-      m_copyup_extent_map[object_extent.offset] = object_extent.length;
+      m_copyup_extent_map.emplace_back(
+        object_extent.offset, object_extent.length);
     }
   }
 
