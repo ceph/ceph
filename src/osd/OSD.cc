@@ -35,7 +35,6 @@
 #include <sys/mount.h>
 #endif
 
-
 #include "osd/PG.h"
 #include "osd/scrub_machine.h"
 #include "osd/pg_scrubber.h"
@@ -1271,11 +1270,11 @@ bool OSDService::can_inc_scrubs()
   std::lock_guard l(sched_scrub_lock);
 
   if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
-    dout(8/*20*/) << __func__ << " == true " << scrubs_local << " local + " << scrubs_remote
+    dout(20) << __func__ << " == true " << scrubs_local << " local + " << scrubs_remote
 	     << " remote < max " << cct->_conf->osd_max_scrubs << dendl;
     can_inc = true;
   } else {
-    dout(8/*20*/) << __func__ << " == false " << scrubs_local << " local + " << scrubs_remote
+    dout(20) << __func__ << " == false " << scrubs_local << " local + " << scrubs_remote
 	     << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
 
@@ -7429,8 +7428,6 @@ OSDService::ScrubJob::ScrubJob(CephContext* cct,
     sched_time(timestamp),
     deadline(timestamp)
 {
-  //dout(10) << __func__ << " pg(" << pg << " must:" << must << dendl;
-
   // if not explicitly requested, postpone the scrub with a random delay
   if (!must) {
     double scrub_min_interval = pool_scrub_min_interval > 0 ?
@@ -7500,7 +7497,6 @@ void OSDService::dumps_scrub(ceph::Formatter *f)
 
 double OSD::scrub_sleep_time(bool must_scrub)
 {
-  dout(10) << __func__ << " must:" << must_scrub << dendl;
   if (must_scrub) {
     return cct->_conf->osd_scrub_sleep;
   }
@@ -7596,20 +7592,12 @@ bool OSD::scrub_load_below_threshold()
 
 void OSD::sched_scrub()
 {
-  dout(8) << __func__ << " (osd:: starts) " << dendl;
-  {
-    for (auto& sj : service.sched_scrub_pg) {
-      dout(9) << __func__ << " OSD::sched_scrub() " << sj.pgid << " @:" << sj.sched_time << dendl;
-    }
-  }
-
   // if not permitted, fail fast
   if (!service.can_inc_scrubs()) {
     dout(10) << __func__ << "(): OSD cannot inc scrubs" << dendl;
     return;
   }
   bool allow_requested_repair_only = false;
-  #if 0 
   if (service.is_recovery_active() && !cct->_conf->osd_scrub_during_recovery) {
     if (!cct->_conf->osd_repair_during_recovery) {
       dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
@@ -7620,35 +7608,20 @@ void OSD::sched_scrub()
              << dendl;
     allow_requested_repair_only = true;
   }
-  #else
-
-  if (service.is_recovery_active()) {
-    if (!cct->_conf->osd_scrub_during_recovery && cct->_conf->osd_repair_during_recovery) {
-      dout(10) << __func__
-               << " will only schedule explicitly requested repair due to active recovery"
-               << dendl;
-      allow_requested_repair_only = true;
-    } else if (!cct->_conf->osd_scrub_during_recovery && !cct->_conf->osd_repair_during_recovery) {
-      dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
-      return;
-    }
-  }
-
-  #endif
 
   utime_t now = ceph_clock_now();
   bool time_permit = scrub_time_permit(now);
   bool load_is_low = scrub_load_below_threshold();
-  dout(20) << "sched_scrub load_is_low=" << load_is_low << dendl;
+  dout(20) << "sched_scrub load_is_low=" << (int)load_is_low << dendl;
 
   OSDService::ScrubJob scrub_job;
   if (service.first_scrub_stamp(&scrub_job)) {
     do {
-      dout(8/*30*/) << "sched_scrub examine (~" << scrub_job.pgid << "~) at " << scrub_job.sched_time << dendl;
+      dout(30) << "sched_scrub examine (~" << scrub_job.pgid << "~) at " << scrub_job.sched_time << dendl;
 
       if (scrub_job.sched_time > now) {
 	// save ourselves some effort
-	dout(10/*30*/) << "sched_scrub " << scrub_job.pgid << " scheduled at " << scrub_job.sched_time
+	dout(30) << "sched_scrub " << scrub_job.pgid << " scheduled at " << scrub_job.sched_time
 		 << " > " << now << dendl;
 	break;
       }
@@ -7695,13 +7668,13 @@ void OSD::sched_scrub()
 	       << dendl;
       if (pg->sched_scrub()) {
 	pg->unlock();
-        dout(10/*20*/) << __func__ << " scheduled a scrub!" << " (~" << scrub_job.pgid << "~)" << dendl;
+        dout(20) << __func__ << " scheduled a scrub!" << " (~" << scrub_job.pgid << "~)" << dendl;
 	break;
       }
       pg->unlock();
     } while (service.next_scrub_stamp(scrub_job, &scrub_job));
   }
-  dout(10/*20*/) << "sched_scrub done" << dendl;
+  dout(20) << "sched_scrub done" << dendl;
 }
 
 void OSD::resched_all_scrubs()

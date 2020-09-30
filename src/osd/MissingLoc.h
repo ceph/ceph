@@ -340,7 +340,7 @@ class MissingLoc {
     auto it = missing_loc.find(hoid);
     return it == missing_loc.end() ? empty_set : it->second;
   }
-  const HobjToShardSetMapping &get_missing_locs() const {
+  const std::map<hobject_t, std::set<pg_shard_t>> &get_missing_locs() const {
     return missing_loc;
   }
   const std::map<hobject_t, pg_missing_item> &get_needs_recovery() const {

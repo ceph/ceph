@@ -164,7 +164,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
-     virtual const HobjToShardSetMapping &get_missing_loc_shards()
+     virtual const std::map<hobject_t, std::set<pg_shard_t>> &get_missing_loc_shards()
        const = 0;
 
      virtual const pg_missing_tracker_t &get_local_missing() const = 0;
@@ -605,10 +605,11 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const std::map<pg_shard_t,ScrubMap*> &maps,
      const std::set<hobject_t> &master_set,
      bool repair,
-     HobjToShardSetMapping &missing,
-     HobjToShardSetMapping &inconsistent,
+     std::map<hobject_t, std::set<pg_shard_t>> &missing,
+     std::map<hobject_t, std::set<pg_shard_t>> &inconsistent,
      std::map<hobject_t, std::list<pg_shard_t>> &authoritative,
-     missing_map_t &missing_digest,
+     std::map<hobject_t, std::pair<std::optional<uint32_t>,
+                         std::optional<uint32_t>>> &missing_digest,
      int &shallow_errors, int &deep_errors,
      Scrub::Store *store,
      const spg_t& pgid,
