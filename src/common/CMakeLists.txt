@@ -39,7 +39,6 @@ set(common_srcs
   TracepointProvider.cc
   TrackedOp.cc
   WorkQueue.cc
-  address_helper.cc
   admin_socket.cc
   admin_socket_client.cc
   assert.cc
