@@ -49,8 +49,11 @@ class UpgradeState:
         }
 
     @classmethod
-    def from_json(cls, data) -> 'UpgradeState':
-        return cls(**data)
+    def from_json(cls, data) -> Optional['UpgradeState']:
+        if data:
+            return cls(**data)
+        else:
+            return None
 
 
 class CephadmUpgrade:
