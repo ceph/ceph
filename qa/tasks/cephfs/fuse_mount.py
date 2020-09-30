@@ -41,7 +41,7 @@ class FuseMount(CephFSMount):
             # TODO: don't call setupfs() from within mount(), since it's
             # absurd. The proper order should be: create FS first and then
             # call mount().
-            self.setupfs(name=self.cephfs_name)
+            self.setupfs(name=self.cephfs_name, create=True)
 
         try:
             return self._mount(mntopts, check_status)

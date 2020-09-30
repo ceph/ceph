@@ -15,4 +15,4 @@ tasks:
     client.mirror:
       - "sudo ceph auth caps client.mirror mon 'allow r' mds 'allow r' osd 'allow rw object_prefix cephfs_mirror' mgr 'allow r'"
     client.mirror_remote:
-      - "sudo ceph auth caps client.mirror_remote mon 'allow r' mds 'allow rwps' osd 'allow rw' mgr 'allow r'"
+      - "sudo ceph auth caps client.mirror_remote mon 'allow r' mds 'allow all' osd 'allow rw' mgr 'allow r'"

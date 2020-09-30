@@ -1,6 +1,7 @@
 import json
 import errno
 import logging
+import os
 
 from io import StringIO
 
@@ -11,15 +12,16 @@ from teuthology.contextutil import safe_while
 log = logging.getLogger(__name__)
 
 class TestMirroring(CephFSTestCase):
+    CLIENTS_REQUIRED = 2
     MDSS_REQUIRED = 5
-    REQUIRE_BACKUP_FILESYSTEM = True
 
     MODULE_NAME = "mirroring"
 
     def setUp(self):
         super(TestMirroring, self).setUp()
         self.primary_fs_name = self.fs.name
-        self.secondary_fs_name = self.backup_fs.name
+        self.secondary_fs_name = self.mounts[1].cephfs_name
+        self.mount_mirror = self.mounts[1]
         self.enable_mirroring_module()
 
     def tearDown(self):
@@ -28,6 +30,17 @@ class TestMirroring(CephFSTestCase):
 
     def enable_mirroring_module(self):
         self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable", TestMirroring.MODULE_NAME)
+        # verify via "module ls"
+        with safe_while(sleep=1, tries=30, action='wait for mirror module enable') as proceed:
+            while proceed():
+                try:
+                    res = self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "ls")
+                except CommandFailedError as ce:
+                    pass
+                else:
+                    self.assertTrue(TestMirroring.MODULE_NAME in json.loads(res)["enabled_modules"])
+                    return True
+        assert False  # mirroring mgr module must be enabled
 
     def disable_mirroring_module(self):
         self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "disable", TestMirroring.MODULE_NAME)
@@ -386,3 +399,87 @@ class TestMirroring(CephFSTestCase):
 
         self.disable_mirroring(self.primary_fs_name)
         self.mount_a.run_shell(["rm", "-rf", "d1"])
+
+    # snap mirroring
+
+    # filename has an absolute path prefix as well
+    def snap_mirror_create_file(self, filename, data):
+        self.mount_a.write_file(filename, data)
+
+    def snap_mirror_create_snap(self, src_dir, snap_name):
+        self.mount_a.run_shell(["mkdir", f"{src_dir}/.snap/{snap_name}"])
+
+    def snap_mirror_edit_file(self, input_file, output_file, data, skip_blocks):
+        self.mount_a.run_shell(["dd", f"if={input_file}", f"of={output_file}", f"bs={len(data)}", f"seek={skip_blocks}", "conv=notrunc"])
+
+    def snap_mirror_replicate_snap(self, src_dir, old_snap, new_snap):
+        log.debug(f'syncing between old:"{old_snap}" and new:"{new_snap}"')
+        self.mount_a.run_shell(["ls", "-ld", "/etc/ceph"])
+        self.mount_a.run_shell(["ls", "-l", "/etc/ceph"])
+        self.mount_a.run_shell(["ceph_test_snap_mirror",
+                                "/etc/ceph/ceph.conf",
+                                "/etc/ceph/ceph.conf",
+                                "/etc/ceph/ceph.keyring",
+                                "/etc/ceph/ceph.keyring",
+                                src_dir,
+                                self.primary_fs_name,
+                                self.secondary_fs_name,
+                                "0",
+                                "mirror_remote",
+                                old_snap,
+                                new_snap])
+
+    def snap_mirror_verify_file(self, src_dir, snap, filename):
+        # filename as a prefix path
+        snap_filename = f"{src_dir}/.snap/{snap}{filename}"
+        stat_local = self.mount_a.stat(snap_filename, follow_symlinks=False)
+        stat_remote = self.mount_mirror.stat(snap_filename, follow_symlinks=False)
+        self.assertTrue(stat_local['st_uid'] == stat_remote['st_uid'])
+        self.assertTrue(stat_local['st_gid'] == stat_remote['st_gid'])
+        self.assertTrue(stat_local['st_mode'] == stat_remote['st_mode'])
+        self.assertTrue(stat_local['st_size'] == stat_remote['st_size'])
+
+        local_stdout = StringIO()
+        self.mount_a.run_shell(["sha256sum", snap_filename], stdout=local_stdout)
+        sha256_local = local_stdout.getvalue().split(' ')[0]
+
+        remote_stdout = StringIO()
+        self.mount_mirror.run_shell(["sha256sum", snap_filename], stdout=remote_stdout)
+        sha256_remote = remote_stdout.getvalue().split(' ')[0]
+
+        self.assertTrue(sha256_local == sha256_remote)
+
+    def test_snap_mirroring(self):
+        pid = os.getpid()
+        snap_root_dir = f"pid_{pid}_snap_root_dir"
+        self.mount_a.run_shell(["mkdir", "-p", f"{snap_root_dir}"])
+
+        # test: create and verify basic data set
+        for fname in ["A", "B", "C"]:
+            data = f"{fname}" * 65536
+            self.mount_a.write_file(f"{snap_root_dir}/{fname}", data, perms="=700")
+        self.snap_mirror_create_snap(f"{snap_root_dir}", "snap1")
+        self.snap_mirror_replicate_snap(f"/{snap_root_dir}", "", "snap1")
+
+        for fname in ["A", "B", "C"]:
+            self.snap_mirror_verify_file(f"{snap_root_dir}", "snap1", f"/{fname}")
+
+        # test: edit files and verify
+        data = "@" * 1024
+        self.mount_a.write_file(f"scratch_file", data, perms="=700")
+        # change block 0
+        self.snap_mirror_edit_file("scratch_file", f"{snap_root_dir}/A", data, 0)
+        # change block 1
+        self.snap_mirror_edit_file("scratch_file", f"{snap_root_dir}/B", data, 1)
+        # change block 64: actually append
+        self.snap_mirror_edit_file("scratch_file", f"{snap_root_dir}/C", data, 64)
+        self.snap_mirror_create_snap(f"{snap_root_dir}", "snap2")
+        self.snap_mirror_replicate_snap(f"/{snap_root_dir}", "snap1", "snap2")
+        for fname in ["A", "B", "C"]:
+            self.snap_mirror_verify_file(f"{snap_root_dir}", "snap2", f"/{fname}")
+
+        # clean up
+        # self.mount_a.run_shell(["rm", "-rf", snap_root_dir])
+        # self.mount_mirror.run_shell(["rm", "-rf", snap_root_dir])
+        # self.remove_directory(self.primary_fs_name, f"/{snap_root_dir}")
+        # self.disable_mirroring(self.primary_fs_name)

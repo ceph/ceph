@@ -1,2 +1,7 @@
 tasks:
   - ceph-fuse: [client.0]
+  - ceph-fuse:
+      client.mirror_remote:
+        newfs: true
+        name: mirror_fs
+        auth_id: mirror_remote
