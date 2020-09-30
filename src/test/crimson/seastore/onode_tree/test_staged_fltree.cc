@@ -521,7 +521,7 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       TestTree test;
       test.build_tree({2, 5}, {2, 5}, {2, 5}, 120).get0();
 
-      auto& onode = test.create_onode(1084);
+      auto& onode = test.create_onode(1144);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left front at stage 2, 1, 0\n");
       test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode).get0();
@@ -536,7 +536,7 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode).get0();
       test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode).get0();
 
-      auto& onode0 = test.create_onode(1476);
+      auto& onode0 = test.create_onode(1416);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
       test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode0).get0();
@@ -581,7 +581,7 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode2).get0();
       test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode2).get0();
 
-      auto& onode3 = test.create_onode(964);
+      auto& onode3 = test.create_onode(834);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right middle at stage 0, 1, 2, 1, 0\n");
       test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode3).get0();
@@ -912,6 +912,20 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
                     "\nbefore internal node insert:\n");
       auto padding = std::string(250, '_');
       auto keys = build_key_set({2, 6}, {2, 5}, {2, 5}, padding, true);
+      keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 2, 2));
+      keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 3, 3));
+      keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 4, 4));
+      keys.erase(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 2, 2));
+      keys.erase(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 3, 3));
+      keys.erase(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 4, 4));
+      auto padding_s = std::string(257, '_');
+      keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
+      keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
+      keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
+      auto padding_e = std::string(248, '_');
+      keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 2, 2));
+      keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 3, 3));
+      keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 4, 4));
       pool.build_tree(keys).unsafe_get0();
 
       logger().info("\n---------------------------------------------"
@@ -933,7 +947,7 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
       pool.test_split(
-          make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 5, 5), search_position_t::end()).get();
+          make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 5, 5), search_position_t::end()).get();
       pool.test_split(make_ghobj(5, 5, 5, "ns5", "oid5", 3, 3), search_position_t::end()).get();
       pool.test_split(make_ghobj(6, 6, 6, "ns3", "oid3", 3, 3), search_position_t::end()).get();
 
@@ -941,7 +955,7 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
                     "\nsplit at stage 0; insert to left front at stage 2, 1, 0\n");
       pool.test_split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), {0, {0, {0}}}).get();
       pool.test_split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), {0, {0, {0}}}).get();
-      pool.test_split(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 1, 1), {0, {0, {0}}}).get();
+      pool.test_split(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 1, 1), {0, {0, {0}}}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0/1; insert to left middle at stage 0, 1, 2, 1, 0\n");
@@ -997,9 +1011,8 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (3):\n");
-      auto padding = std::string(417, '_');
+      auto padding = std::string(420, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding, true);
-      keys.insert(make_ghobj(4, 4, 4, "ns3", "oid3" + padding, 5, 5));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 2, 2));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 3, 3));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 4, 4));
@@ -1015,9 +1028,15 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (4):\n");
-      auto padding = std::string(360, '_');
+      auto padding = std::string(361, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding, true);
-      keys.insert(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5));
+      keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 2, 2));
+      keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 3, 3));
+      keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 4, 4));
+      auto padding_s = std::string(387, '_');
+      keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
+      keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
+      keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
       pool.build_tree(keys).unsafe_get0();
 
       logger().info("\n---------------------------------------------"

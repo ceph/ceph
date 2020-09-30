@@ -361,7 +361,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       size_t split_size = 0;
       std::optional<bool> _is_insert_left;
       split_at.set(node_stage);
-      STAGE_T::recursively_locate_split_inserted(
+      bool locate_nxt = STAGE_T::recursively_locate_split_inserted(
           split_size, 0, target_split_size, insert_pos,
           insert_stage, insert_size, _is_insert_left, split_at);
       is_insert_left = *_is_insert_left;
@@ -371,7 +371,14 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
                 << "(target=" << target_split_size
                 << ", current=" << node_stage.size_before(node_stage.keys())
                 << ")" << std::endl;
-      assert(split_size <= target_split_size);
+      // split_size can be larger than target_split_size in strategy B
+      // assert(split_size <= target_split_size);
+      if (locate_nxt) {
+        assert(insert_stage == STAGE);
+        assert(split_at.get().is_last());
+        split_at.set_end();
+        assert(insert_pos.index == split_at.index());
+      }
     }
 
     auto append_at = split_at;
