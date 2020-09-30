@@ -10,10 +10,13 @@
 
 #include "common/ceph_json.h"
 #include "common/ceph_context.h"
-
 #include "rgw/rgw_rados.h"
+//#include "svc_meta_be.h"
 
 class RGWRados;
+class RGWRoleMetadataHandler;
+class RGWSI_Role;
+class RGWSI_MetaBackend_Handler;
 
 namespace rgw { namespace sal {
 class RGWRole
@@ -138,10 +141,7 @@ public:
   static const std::string& get_path_oid_prefix();
 };
 WRITE_CLASS_ENCODER(RGWRole)
-
-class RGWRoleMetadataHandler;
-class RGWSI_Role;
-class RGWSI_MetaBackend_Handler;
+} } // namespace rgw::sal
 
 class RGWRoleCtl {
   struct Svc {
@@ -159,12 +159,110 @@ public:
     RGWObjVersionTracker *objv_tracker {nullptr};
     std::map<std::string, bufferlist> *attrs {nullptr};
 
-    PutParams() {};
+    PutParams() {}
+
+    PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+      objv_tracker = _objv_tracker;
+      return *this;
+    }
+
+    PutParams& set_mtime(const ceph::real_time& _mtime) {
+      mtime = _mtime;
+      return *this;
+    }
+
+    PutParams& set_exclusive(bool _exclusive) {
+      exclusive = _exclusive;
+      return *this;
+    }
+
+    PutParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
+      attrs = _attrs;
+      return *this;
+    }
   };
 
-  int store_info(const RGWRole& role,
+  struct GetParams {
+    ceph::real_time *mtime{nullptr};
+    std::map<std::string, bufferlist> *attrs{nullptr};
+    RGWObjVersionTracker *objv_tracker {nullptr};
+
+    GetParams() {}
+
+    GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+      objv_tracker = _objv_tracker;
+      return *this;
+    }
+
+    GetParams& set_mtime(ceph::real_time *_mtime) {
+      mtime = _mtime;
+      return *this;
+    }
+
+    GetParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
+      attrs = _attrs;
+      return *this;
+    }
+  };
+
+  struct RemoveParams {
+    RGWObjVersionTracker *objv_tracker{nullptr};
+
+    RemoveParams() {}
+
+    RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+      objv_tracker = _objv_tracker;
+      return *this;
+    }
+  };
+
+  int store_info(const rgw::sal::RGWRole* role,
 		 optional_yield y,
+     const DoutPrefixProvider *dpp,
 		 const PutParams& params = {});
+
+  int store_name(const std::string& role_id,
+		 const std::string& name,
+		 const std::string& tenant,
+		 optional_yield y,
+     const DoutPrefixProvider *dpp,
+		 const PutParams& params = {});
+
+  int store_path(const std::string& role_id,
+		 const std::string& path,
+		 const std::string& tenant,
+		 optional_yield y,
+     const DoutPrefixProvider *dpp,
+		 const PutParams& params = {});
+
+  int read_info(const std::string& role_id,
+					optional_yield y,
+          const DoutPrefixProvider *dpp,
+          rgw::sal::RGWRole* role,
+					const GetParams& params = {});
+
+  std::pair<int, std::string> read_name(const std::string& name,
+				   const std::string& tenant,
+				   optional_yield y,
+           const DoutPrefixProvider *dpp,
+				   const GetParams& params = {});
+
+  int delete_info(const std::string& role_id,
+		  optional_yield y,
+      const DoutPrefixProvider *dpp,
+		  const RemoveParams& params = {});
+
+  int delete_name(const std::string& name,
+		  const std::string& tenant,
+		  optional_yield y,
+      const DoutPrefixProvider *dpp,
+		  const RemoveParams& params = {});
+
+  int delete_path(const std::string& role_id,
+		  const std::string& path,
+		  const std::string& tenant,
+		  optional_yield y,
+      const DoutPrefixProvider *dpp,
+		  const RemoveParams& params = {});
 };
-} } // namespace rgw::sal
 #endif /* CEPH_RGW_ROLE_H */
