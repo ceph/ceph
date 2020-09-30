@@ -103,6 +103,7 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
 int EventCenter::init(int n, unsigned i, const std::string &t)
 {
   // can't init multi times
+  lderr(cct) << __func__ << " nevent --- : " << nevent << dendl;
   ceph_assert(nevent == 0);
 
   type = t;
@@ -159,6 +160,7 @@ int EventCenter::init(int n, unsigned i, const std::string &t)
     return r;
   }
 
+  lderr(cct) << __func__ << " nevent --- : " << nevent " r: " << r << dendl;
   return r;
 }
 
