@@ -499,16 +499,16 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == ["Removed osd.0 from host 'test'"]
 
-            cephadm_module.to_remove_osds.enqueue(OSD(osd_id=0,
-                                                      replace=False,
-                                                      force=False,
-                                                      hostname='test',
-                                                      fullname='osd.0',
-                                                      process_started_at=datetime.datetime.utcnow(),
-                                                      remove_util=cephadm_module.rm_util
-                                                      ))
+            cephadm_module.to_remove_osds.put(OSD(osd_id=0,
+                                                  replace=False,
+                                                  force=False,
+                                                  hostname='test',
+                                                  fullname='osd.0',
+                                                  process_started_at=datetime.datetime.utcnow(),
+                                                  remove_util=cephadm_module.rm_util
+                                                  ))
             cephadm_module.rm_util.process_removal_queue()
-            assert cephadm_module.to_remove_osds == OSDQueue()
+            assert isinstance(cephadm_module.to_remove_osds, OSDQueue)
 
             c = cephadm_module.remove_osds_status()
             out = wait(cephadm_module, c)

@@ -1,5 +1,7 @@
 import json
 import logging
+import threading
+from queue import Queue
 from typing import List, Dict, Any, Set, Union, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment import translate
@@ -352,7 +354,7 @@ class RemoveUtil(object):
         # self.mgr.to_remove_osds could change while this is processing (osds get added from the CLI)
         # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
         # osds that were added while this method was executed'
-        self.mgr.to_remove_osds.intersection_update(new_queue)
+        self.mgr.to_remove_osds.queue.intersection_update(new_queue)
         self.save_to_store()
 
     def cleanup(self) -> None:
@@ -473,7 +475,7 @@ class RemoveUtil(object):
             for osd in json.loads(v):
                 logger.debug(f"Loading osd ->{osd} from store")
                 osd_obj = OSD.from_json(osd, ctx=self)
-                self.mgr.to_remove_osds.add(osd_obj)
+                self.mgr.to_remove_osds.put(osd_obj)
 
 
 class NotFoundError(Exception):
@@ -657,45 +659,57 @@ class OSD:
         return f"<OSD>(osd_id={self.osd_id}, draining={self.draining})"
 
 
-class OSDQueue(Set):
+class OSDQueue(Queue):
 
     def __init__(self) -> None:
         super().__init__()
+        self.lock = threading.Lock()
+
+    def _init(self, maxsize):
+        self.queue = set()
 
     def as_osd_ids(self) -> List[int]:
-        return [osd.osd_id for osd in self]
+        with self.lock:
+            return [osd.osd_id for osd in self.queue]
 
     def queue_size(self) -> int:
-        return len(self)
+        return len(self.queue)
 
     def draining_osds(self) -> List["OSD"]:
-        return [osd for osd in self if osd.is_draining]
+        with self.lock:
+            return [osd for osd in self.queue if osd.is_draining]
 
     def idling_osds(self) -> List["OSD"]:
-        return [osd for osd in self if not osd.is_draining and not osd.is_empty]
+        with self.lock:
+            return [osd for osd in self.queue if not osd.is_draining and not osd.is_empty]
 
     def empty_osds(self) -> List["OSD"]:
-        return [osd for osd in self if osd.is_empty]
+        with self.lock:
+            return [osd for osd in self.queue if osd.is_empty]
 
     def all_osds(self) -> List["OSD"]:
-        return [osd for osd in self]
+        with self.lock:
+            return [osd for osd in self.queue]
 
     def not_in_cluster(self) -> List["OSD"]:
-        return [osd for osd in self if not osd.exists]
+        with self.lock:
+            return [osd for osd in self.queue if not osd.exists]
 
-    def enqueue(self, osd: "OSD") -> None:
-        if not osd.exists:
-            raise NotFoundError()
-        self.add(osd)
-        osd.start()
+    def _put(self, osd: "OSD") -> None:
+        with self.lock:
+            if not osd.exists:
+                raise NotFoundError()
+            self.queue.add(osd)
+            osd.start()
 
     def rm(self, osd: "OSD") -> None:
-        if not osd.exists:
-            raise NotFoundError()
-        osd.stop()
-        try:
-            logger.debug(f'Removing {osd} from the queue.')
-            self.remove(osd)
-        except KeyError:
-            logger.debug(f"Could not find {osd} in queue.")
-            raise KeyError
+        with self.lock:
+            if not osd.exists:
+                raise NotFoundError()
+            osd.stop()
+            try:
+                logger.debug(f'Removing {osd} from the queue.')
+                self.queue.remove(osd)
+            except KeyError:
+                logger.debug(f"Could not find {osd} in queue.")
+                raise KeyError

@@ -2199,13 +2199,13 @@ To check that the host is reachable:
 
         for daemon in to_remove_daemons:
             try:
-                self.to_remove_osds.enqueue(OSD(osd_id=int(daemon.daemon_id),
-                                                replace=replace,
-                                                force=force,
-                                                hostname=daemon.hostname,
-                                                fullname=daemon.name(),
-                                                process_started_at=datetime.datetime.utcnow(),
-                                                remove_util=self.rm_util))
+                self.to_remove_osds.put(OSD(osd_id=int(daemon.daemon_id),
+                                            replace=replace,
+                                            force=force,
+                                            hostname=daemon.hostname,
+                                            fullname=daemon.name(),
+                                            process_started_at=datetime.datetime.utcnow(),
+                                            remove_util=self.rm_util))
             except NotFoundError:
                 return f"Unable to find OSDs: {osd_ids}"
 

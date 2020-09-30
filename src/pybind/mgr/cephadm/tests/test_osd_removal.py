@@ -73,7 +73,8 @@ class TestOSDRemoval:
         rm_util._run_mon_cmd.assert_called_with(
             {'prefix': 'osd purge-actual', 'id': 1, 'yes_i_really_mean_it': True})
 
-    def test_load(self, cephadm_module):
+    @mock.patch('cephadm.services.osd.OSD.exists', return_value=True)
+    def test_load(self, osd_exists, cephadm_module):
         data = json.dumps([
             {
                 "osd_id": 35,
@@ -92,7 +93,7 @@ class TestOSDRemoval:
         cephadm_module.set_store('osd_remove_queue', data)
         cephadm_module.rm_util.load_from_store()
 
-        assert repr(cephadm_module.to_remove_osds) == 'OSDQueue({<OSD>(osd_id=35, draining=True)})'
+        assert repr(cephadm_module.to_remove_osds.queue) == '{<OSD>(osd_id=35, draining=True)}'
 
 
 class TestOSD:
@@ -215,17 +216,18 @@ class TestOSD:
 
 class TestOSDQueue:
 
+    @mock.patch("cephadm.services.osd.OSD.exists")
     def test_queue_size(self, osd_obj):
         q = OSDQueue()
         assert q.queue_size() == 0
-        q.add(osd_obj)
+        q.put(osd_obj)
         assert q.queue_size() == 1
 
     @mock.patch("cephadm.services.osd.OSD.start")
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_enqueue(self, exist, start, osd_obj):
         q = OSDQueue()
-        q.enqueue(osd_obj)
+        q.put(osd_obj)
         osd_obj.start.assert_called_once()
 
     @mock.patch("cephadm.services.osd.OSD.stop")
@@ -240,6 +242,6 @@ class TestOSDQueue:
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_rm(self, exist, stop, osd_obj):
         q = OSDQueue()
-        q.add(osd_obj)
+        q.put(osd_obj)
         q.rm(osd_obj)
         osd_obj.stop.assert_called_once()
