@@ -6,10 +6,11 @@ import json
 
 from mgr_module import CLIReadCommand, CLIWriteCommand
 
-from .iscsi_client import IscsiClient
-from .iscsi_config import IscsiGatewaysConfig, IscsiGatewayAlreadyExists, InvalidServiceUrl, \
-    ManagedByOrchestratorException, IscsiGatewayDoesNotExist
 from ..rest_client import RequestException
+from .iscsi_client import IscsiClient
+from .iscsi_config import InvalidServiceUrl, IscsiGatewayAlreadyExists, \
+    IscsiGatewayDoesNotExist, IscsiGatewaysConfig, \
+    ManagedByOrchestratorException
 
 
 @CLIReadCommand('dashboard iscsi-gateway-list', desc='List iSCSI gateways')

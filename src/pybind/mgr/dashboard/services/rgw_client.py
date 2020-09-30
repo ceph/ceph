@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import re
-import logging
 import ipaddress
-from distutils.util import strtobool
+import logging
+import re
 import xml.etree.ElementTree as ET  # noqa: N814
+from distutils.util import strtobool
+
+from .. import mgr
 from ..awsauth import S3Auth
 from ..exceptions import DashboardException
-from ..settings import Settings, Options
-from ..rest_client import RestClient, RequestException
-from ..tools import build_url, dict_contains_path, json_str_to_object,\
-                    partial_dict, dict_get
-from .. import mgr
+from ..rest_client import RequestException, RestClient
+from ..settings import Options, Settings
+from ..tools import build_url, dict_contains_path, dict_get, json_str_to_object, partial_dict
 
 try:
     from typing import Dict, List, Optional

@@ -3,10 +3,10 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import ApiController, RESTController, EndpointDoc, ControllerDoc
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController
 
 PERF_SCHEMA = {
     "mon.a": ({

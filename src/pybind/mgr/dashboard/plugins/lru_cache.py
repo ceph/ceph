@@ -6,8 +6,8 @@ Based on Python 3 functools and backports.functools_lru_cache.
 """
 from __future__ import absolute_import
 
-from functools import wraps
 from collections import OrderedDict
+from functools import wraps
 from threading import RLock
 
 

@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import unittest
+
 try:
     import mock
 except ImportError:

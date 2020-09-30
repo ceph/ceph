@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import (ApiController, BaseController, Endpoint, ReadPermission,
-               UpdatePermission)
-from . import ControllerDoc, EndpointDoc
 from ..exceptions import DashboardException
 from ..grafana import GrafanaRestClient, push_local_dashboards
 from ..security import Scope
 from ..settings import Settings
-
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, UpdatePermission
 
 URL_SCHEMA = {
     "instance": (str, "grafana instance")
