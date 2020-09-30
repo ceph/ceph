@@ -2651,9 +2651,10 @@ public:
     return "bluestore";
   }
 
-  bool needs_journal() override { return false; };
-  bool wants_journal() override { return false; };
-  bool allows_journal() override { return false; };
+  bool needs_journal() override { return false; }
+  bool wants_journal() override { return false; }
+  bool allows_journal() override { return false; }
+  bool supports_bulk_remove_collection() override { return true; }
 
   uint64_t get_min_alloc_size() const override {
     return min_alloc_size;
@@ -3425,7 +3426,8 @@ private:
   int _create_collection(TransContext *txc, const coll_t &cid,
 			 unsigned bits, CollectionRef *c);
   int _remove_collection(TransContext *txc, const coll_t &cid,
-                         CollectionRef *c);
+                         CollectionRef *c,
+			 bool bulk);
   void _do_remove_collection(TransContext *txc, CollectionRef *c);
   int _split_collection(TransContext *txc,
 			CollectionRef& c,

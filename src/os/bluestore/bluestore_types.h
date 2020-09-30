@@ -52,7 +52,7 @@ std::ostream& operator<<(std::ostream& out, const bluestore_bdev_label_t& l);
 /// collection metadata
 struct bluestore_cnode_t {
   uint32_t bits;   ///< how many bits of coll pgid are significant
-  bool pending_removal = false;
+  bool pending_bulk_removal = false;
 
   explicit bluestore_cnode_t(int b=0) : bits(b) {}
 
@@ -60,7 +60,7 @@ struct bluestore_cnode_t {
     DENC_START(2, 1, p);
     denc(v.bits, p);
     if (struct_v >= 2) {
-      denc(v.pending_removal, p);
+      denc(v.pending_bulk_removal, p);
     }
     DENC_FINISH(p);
   }

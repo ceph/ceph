@@ -346,6 +346,9 @@ public:
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
+  virtual bool supports_bulk_remove_collection() {
+    return false;   // assume a backend cannot, unless it says otherwise
+  }
 
   virtual int statfs(struct store_statfs_t *buf,
 		     osd_alert_list_t* alerts = nullptr) = 0;

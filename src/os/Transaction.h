@@ -154,6 +154,7 @@ public:
 
     OP_MERGE_COLLECTION = 43, // cid, destination
     OP_RECLAIM_SPACE = 44,    // cid, oid
+    OP_RMCOLL_BULK = 45, // cid
   };
 
   // Transaction hint type
@@ -441,6 +442,7 @@ public:
 
     case OP_MKCOLL:
     case OP_RMCOLL:
+    case OP_RMCOLL_BULK:
     case OP_COLL_SETATTR:
     case OP_COLL_RMATTR:
     case OP_COLL_SETATTRS:
@@ -1045,6 +1047,13 @@ public:
   void remove_collection(const coll_t& cid) {
     Op* _op = _get_next_op();
     _op->op = OP_RMCOLL;
+    _op->cid = _get_coll_id(cid);
+    data.ops = data.ops + 1;
+  }
+  /// remove the collection, no requirement for emptyness
+  void remove_collection_bulk(const coll_t& cid) {
+    Op* _op = _get_next_op();
+    _op->op = OP_RMCOLL_BULK;
     _op->cid = _get_coll_id(cid);
     data.ops = data.ops + 1;
   }

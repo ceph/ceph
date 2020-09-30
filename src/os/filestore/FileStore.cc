@@ -3261,6 +3261,11 @@ void FileStore::_do_transaction(
         tracepoint(objectstore, truncate_exit, r);
       }
       break;
+    case Transaction::OP_RMCOLL_BULK:
+      {
+	r = -EOPNOTSUPP;
+      }
+      break;
 
     default:
       derr << "bad op " << op->op << dendl;

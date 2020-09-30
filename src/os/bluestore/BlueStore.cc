@@ -6686,27 +6686,59 @@ class OnRemoveQueuedCollectionContext : public Context
 {
   CephContext* cct = nullptr;
   KeyValueDB* db = nullptr;
-  coll_t cid;
-  decltype(bluestore_cnode_t::bits) bits;
+  string temp_start_key, temp_end_key;
+  string start_key, end_key;
+  string omap_start_key, omap_end_key;
+  string cid_str;
 
 protected:
   void finish(int r) override {
     string path; // stub for dout
     if (r == 0) {
+      dout(10) << __func__ << " bulk remove continuation "
+	<< cid_str << " "
+	<< " onode " << pretty_binary_string(start_key) << " to " << pretty_binary_string(end_key)
+	<< " temp " << pretty_binary_string(temp_start_key) << " to " << pretty_binary_string(temp_end_key)
+	<< " omap " << pretty_binary_string(omap_start_key) << " to " << pretty_binary_string(omap_end_key)
+	<< dendl;
+      db->compact_range_async(PREFIX_OBJ, start_key, end_key);
+      db->compact_range_async(PREFIX_OBJ, temp_start_key, temp_end_key);
+      db->compact_range_async(PREFIX_PERPG_OMAP, omap_start_key, omap_end_key);
       db->remove_key_async(PREFIX_COLL, cid_str);
     } else {
-      derr << __func__ << " " << cid << " completed with error:" << cpp_strerror(r) << dendl;
+      derr << __func__ << " " << cid_str << " completed with error:" << cpp_strerror(r) << dendl;
     }
   }
 public:
   OnRemoveQueuedCollectionContext(
     CephContext* _cct,
     KeyValueDB* _db,
-    BlueStore::CollectionRef& _cref) :
+    BlueStore::CollectionRef cref) :
     cct(_cct),
     db(_db),
-    cid(_cref->cid),
-    bits(_cref->cnode.bits) {
+    cid_str(stringify(cref->cid)) {
+
+    get_coll_key_range(cct, cref->cid, cref->cnode.bits,
+      &temp_start_key, &temp_end_key,
+      &start_key, &end_key);
+
+    get_coll_omap_key_range(cct, cref->cid, cref->cnode.bits,
+      &omap_start_key, &omap_end_key);
+
+    string path; // stub for dout
+    dout(10) << __func__ << " bulk remove initiating "
+      << cid_str << " "
+      << " onode " << pretty_binary_string(start_key) << " to " << pretty_binary_string(end_key)
+      << " temp " << pretty_binary_string(temp_start_key) << " to " << pretty_binary_string(temp_end_key)
+      << " omap " << pretty_binary_string(omap_start_key) << " to " << pretty_binary_string(omap_end_key)
+      << dendl;
+  }
+  void update_db(KeyValueDB::Transaction t, bufferlist& bl) {
+    t->rm_range_keys_unconditionally(PREFIX_OBJ, start_key, end_key);
+    t->rm_range_keys_unconditionally(PREFIX_OBJ, temp_start_key, temp_end_key);
+    t->rm_range_keys_unconditionally(PREFIX_PERPG_OMAP, omap_start_key, omap_end_key);
+
+    t->set(PREFIX_COLL, cid_str, bl);
   }
 };
 
@@ -6741,7 +6773,7 @@ int BlueStore::_open_collections(bool allow_removal)
              << pretty_binary_string(it->key()) << dendl;
         return -EIO;
       }   
-      if (!c->cnode.pending_removal) {
+      if (!c->cnode.pending_bulk_removal) {
         dout(20) << __func__ << " opened " << cid << " " << c
 	         << " " << c->cnode << dendl;
         _osr_attach(c.get());
@@ -13921,7 +13953,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_RMCOLL:
       {
         const coll_t &cid = i.get_cid(op->cid);
-	r = _remove_collection(txc, cid, &c);
+	r = _remove_collection(txc, cid, &c, false);
 	if (!r)
 	  continue;
       }
@@ -13992,6 +14024,12 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_COLL_RENAME:
       ceph_abort_msg("not implemented");
+      break;
+    case Transaction::OP_RMCOLL_BULK:
+        const coll_t &cid = i.get_cid(op->cid);
+	r = _remove_collection(txc, cid, &c, true);
+	if (!r)
+	  continue;
       break;
     }
     if (r < 0) {
@@ -16718,7 +16756,8 @@ int BlueStore::_create_collection(
 }
 
 int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
-				  CollectionRef *cref)
+				  CollectionRef *cref,
+				  bool bulk)
 {
   dout(15) << __func__ << " " << cid << dendl;
   int r;
@@ -16728,15 +16767,13 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
   if (c) {
     c->flush_all_but_last();
 
-    if (c->bulk_rm_locked) {
-      txc->register_on_commit(
-        new OnRemoveQueuedCollectionContext(cct, db, *cref));
-
+    if (bulk) {
       std::unique_lock l(coll_lock);
-      c->cnode.pending_removal = true;
+      c->cnode.pending_bulk_removal = true;
       _do_remove_collection(txc, cref);
       r = 0;
-    } else {
+    } else
+    {
       std::unique_lock l(coll_lock);
       size_t nonexistent_count = 0;
       ceph_assert(c->exists);
@@ -16800,10 +16837,13 @@ void BlueStore::_do_remove_collection(TransContext *txc,
   txc->removed_collections.push_back(*cref);
   (*cref)->exists = false;
   _osr_register_zombie((*cref)->osr.get());
-  if ((*cref)->cnode.pending_removal) {
+  if ((*cref)->cnode.pending_bulk_removal) {
+    auto rctx = new OnRemoveQueuedCollectionContext(cct, db, *cref);
     bufferlist bl;
     encode((*cref)->cnode, bl);
-    txc->t->set(PREFIX_COLL, stringify((*cref)->cid), bl);
+    rctx->update_db(txc->t, bl);
+
+    txc->register_on_commit(rctx);
   } else {
     txc->t->rmkey(PREFIX_COLL, stringify((*cref)->cid));
   }

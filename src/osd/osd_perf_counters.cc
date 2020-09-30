@@ -278,6 +278,19 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_pg_biginfo, "osd_pg_biginfo", "PG updated its biginfo attr");
 
+  osd_plb.add_time_avg(
+    l_osd_deleting_submit_lat, "osd_deleting_submit_lat", "Single step pg deleting submit latency");
+  osd_plb.add_time_avg(
+    l_osd_reclaiming_submit_lat, "osd_reclaiming_submit_lat", "Single step pg space reclaiming submit latency");
+  osd_plb.add_time_avg(
+    l_osd_deleting_commit_lat, "osd_deleting_commit_lat", "Single step pg deleting commit latency");
+  osd_plb.add_time_avg(
+    l_osd_reclaiming_commit_lat, "osd_reclaiming_commit_lat", "Single step pg space reclaiming commit latency");
+  osd_plb.add_time_avg(
+    l_osd_pg_remove_lat, "osd_pg_remove_lat", "pg removal latency");
+  osd_plb.add_time_avg(
+    l_osd_pg_reclaim_lat, "osd_pg_reclaim_lat", "pg space reclaim latency");
+
   return osd_plb.create_perf_counters();
 }
  

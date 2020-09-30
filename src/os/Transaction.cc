@@ -522,6 +522,13 @@ void Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("oid") << oid;
       }
       break;
+    case Transaction::OP_RMCOLL_BULK:
+      {
+	coll_t cid = i.get_cid(op->cid);
+	f->dump_string("op_name", "rmcoll_bulk");
+	f->dump_stream("collection") << cid;
+      }
+      break;
 
     default:
       f->dump_string("op_name", "unknown");

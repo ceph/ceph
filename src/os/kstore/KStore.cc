@@ -2493,6 +2493,11 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	r = _truncate(txc, c, o, 0);
       }
       break;
+    case Transaction::OP_RMCOLL_BULK:
+      {
+	r = -EOPNOTSUPP;
+      }
+      break;
 
     default:
       derr << "bad op " << op->op << dendl;

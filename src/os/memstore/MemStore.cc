@@ -993,6 +993,11 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _truncate(cid, oid, 0);
       }
       break;
+    case Transaction::OP_RMCOLL_BULK:
+      {
+	r = -EOPNOTSUPP;
+      }
+      break;
 
     default:
       derr << "bad op " << op->op << dendl;
