@@ -86,7 +86,7 @@ protected:
     return res;
   }
 
-  int send_request(boost::string_view key_id, JSONParser* parser) override
+  int send_request(std::string_view key_id, JSONParser* parser) override
   {
     bufferlist secret_bl;
     int res;
@@ -174,14 +174,14 @@ public:
 class TransitSecretEngine: public VaultSecretEngine {
 
 private:
-  int get_key_version(boost::string_view key_id, string& version)
+  int get_key_version(std::string_view key_id, string& version)
   {
     size_t pos = 0;
 
     pos = key_id.rfind("/");
-    if (pos != boost::string_view::npos){
-      boost::string_view token = key_id.substr(pos+1, key_id.length()-pos);
-      if (!token.empty() && token.find_first_not_of("0123456789") == boost::string_view::npos){
+    if (pos != std::string_view::npos){
+      std::string_view token = key_id.substr(pos+1, key_id.length()-pos);
+      if (!token.empty() && token.find_first_not_of("0123456789") == std::string_view::npos){
         version.assign(std::string(token));
         return 0;
       }
@@ -192,7 +192,7 @@ private:
 public:
   TransitSecretEngine(CephContext *cct): VaultSecretEngine(cct){ }
 
-  int get_key(boost::string_view key_id, std::string& actual_key)
+  int get_key(std::string_view key_id, std::string& actual_key)
   {
     JSONParser parser;
     string version;
@@ -230,7 +230,7 @@ public:
 
   virtual ~KvSecretEngine(){}
 
-  int get_key(boost::string_view key_id, std::string& actual_key){
+  int get_key(std::string_view key_id, std::string& actual_key){
     JSONParser parser;
     int res = send_request(key_id, &parser);
     if (res < 0) {
@@ -368,8 +368,8 @@ static map<string,string> get_str_map(const string &str) {
 
 
 static int get_actual_key_from_conf(CephContext *cct,
-                                    boost::string_view key_id,
-                                    boost::string_view key_selector,
+                                    std::string_view key_id,
+                                    std::string_view key_selector,
                                     std::string& actual_key)
 {
   int res = 0;
@@ -411,7 +411,7 @@ static int get_actual_key_from_conf(CephContext *cct,
 }
 
 static int request_key_from_barbican(CephContext *cct,
-                                     boost::string_view key_id,
+                                     std::string_view key_id,
                                      const std::string& barbican_token,
                                      std::string& actual_key) {
   int res;
@@ -450,7 +450,7 @@ static int request_key_from_barbican(CephContext *cct,
 }
 
 static int get_actual_key_from_barbican(CephContext *cct,
-                                        boost::string_view key_id,
+                                        std::string_view key_id,
                                         std::string& actual_key)
 {
   int res = 0;
@@ -470,7 +470,7 @@ static int get_actual_key_from_barbican(CephContext *cct,
 
 
 static int get_actual_key_from_vault(CephContext *cct,
-                                     boost::string_view key_id,
+                                     std::string_view key_id,
                                      std::string& actual_key)
 {
   std::string secret_engine = cct->_conf->rgw_crypt_vault_secret_engine;
@@ -515,8 +515,8 @@ static int get_actual_key_from_kmip(CephContext *cct,
 
 
 int get_actual_key_from_kms(CephContext *cct,
-                            boost::string_view key_id,
-                            boost::string_view key_selector,
+                            std::string_view key_id,
+                            std::string_view key_selector,
                             std::string& actual_key)
 {
   std::string kms_backend;
