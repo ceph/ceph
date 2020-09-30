@@ -1,3 +1,8 @@
+15.2.9
+------
+* MGR: progress module can now be turned on/off, using the commands:
+  ``ceph progress on`` and ``ceph progress off``.
+
 15.2.8
 ------
 * $pid expansion in config paths like `admin_socket` will now properly expand
