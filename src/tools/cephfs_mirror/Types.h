@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "include/rados/librados.hpp"
+#include "include/cephfs/libcephfs.h"
 #include "mds/mdstypes.h"
 
 namespace cephfs {
@@ -73,6 +74,9 @@ std::ostream& operator<<(std::ostream& out, const FilesystemSpec &spec);
 
 typedef std::shared_ptr<librados::Rados> RadosRef;
 typedef std::shared_ptr<librados::IoCtx> IoCtxRef;
+
+// not a shared_ptr since the type is incomplete
+typedef ceph_mount_info *MountRef;
 
 } // namespace mirror
 } // namespace cephfs
