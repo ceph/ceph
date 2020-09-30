@@ -1745,19 +1745,19 @@ TEST_F(TestMockIoObjectRequest, ListSnaps) {
 
   SnapshotDelta expected_snapshot_delta;
   expected_snapshot_delta[{5,6}].insert(
-    440320, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    440320, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   expected_snapshot_delta[{5,6}].insert(
-    2122728, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    2122728, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   expected_snapshot_delta[{5,6}].insert(
-    2220032, 2048, {SNAPSHOT_EXTENT_STATE_DATA, 2048});
+    2220032, 2048, {SPARSE_EXTENT_STATE_DATA, 2048});
   expected_snapshot_delta[{7,CEPH_NOSNAP}].insert(
-    2122728, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    2122728, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   expected_snapshot_delta[{7,CEPH_NOSNAP}].insert(
-    2221056, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    2221056, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   expected_snapshot_delta[{7,CEPH_NOSNAP}].insert(
-    3072000, 4096, {SNAPSHOT_EXTENT_STATE_DATA, 4096});
+    3072000, 4096, {SPARSE_EXTENT_STATE_DATA, 4096});
   expected_snapshot_delta[{5,5}].insert(
-    3072000, 4096, {SNAPSHOT_EXTENT_STATE_ZEROED, 4096});
+    3072000, 4096, {SPARSE_EXTENT_STATE_ZEROED, 4096});
   ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 
@@ -1780,7 +1780,7 @@ TEST_F(TestMockIoObjectRequest, ListSnapsDNE) {
 
   SnapshotDelta expected_snapshot_delta;
   expected_snapshot_delta[{0,0}].insert(
-    440320, 1024, {SNAPSHOT_EXTENT_STATE_DNE, 1024});
+    440320, 1024, {SPARSE_EXTENT_STATE_DNE, 1024});
   ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 
@@ -1803,7 +1803,7 @@ TEST_F(TestMockIoObjectRequest, ListSnapsEmpty) {
 
   SnapshotDelta expected_snapshot_delta;
   expected_snapshot_delta[{0,0}].insert(
-    440320, 1024, {SNAPSHOT_EXTENT_STATE_ZEROED, 1024});
+    440320, 1024, {SPARSE_EXTENT_STATE_ZEROED, 1024});
   ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 
@@ -1842,7 +1842,7 @@ TEST_F(TestMockIoObjectRequest, ListSnapsParent) {
   MockImageListSnapsRequest mock_image_list_snaps_request;
   SnapshotDelta image_snapshot_delta;
   image_snapshot_delta[{1,6}].insert(
-    0, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   expect_image_list_snaps(mock_image_list_snaps_request,
                           {{0, 4096}}, image_snapshot_delta, 0);
 
@@ -1857,7 +1857,7 @@ TEST_F(TestMockIoObjectRequest, ListSnapsParent) {
 
   SnapshotDelta expected_snapshot_delta;
   expected_snapshot_delta[{0,0}].insert(
-    0, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 
@@ -1899,7 +1899,7 @@ TEST_F(TestMockIoObjectRequest, ListSnapsWholeObject) {
   SnapshotDelta expected_snapshot_delta;
   expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
     0, mock_image_ctx.layout.object_size - 1,
-    {SNAPSHOT_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 1});
+    {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 1});
   ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 

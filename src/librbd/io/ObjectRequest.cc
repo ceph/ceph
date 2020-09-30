@@ -883,7 +883,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
           for (auto& interval : diff_interval) {
             snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
               interval.first, interval.second,
-              SnapshotExtent(SNAPSHOT_EXTENT_STATE_DATA, interval.second));
+              SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
             if (maybe_whiteout_detected) {
               initial_written_extents.union_insert(interval.first,
                                                    interval.second);
@@ -903,7 +903,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
           for (auto& interval : zero_interval) {
             snapshot_delta[{end_snap_id, end_snap_id}].insert(
               interval.first, interval.second,
-              SnapshotExtent(SNAPSHOT_EXTENT_STATE_ZEROED, interval.second));
+              SparseExtent(SPARSE_EXTENT_STATE_ZEROED, interval.second));
             if (maybe_whiteout_detected) {
               initial_written_extents.union_insert(interval.first,
                                                    interval.second);
@@ -1057,8 +1057,8 @@ void ObjectListSnapsRequest<I>::zero_initial_extent(
                      << dendl;
       (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS].insert(
         offset, length,
-        SnapshotExtent(
-          (dne ? SNAPSHOT_EXTENT_STATE_DNE : SNAPSHOT_EXTENT_STATE_ZEROED),
+        SparseExtent(
+          (dne ? SPARSE_EXTENT_STATE_DNE : SPARSE_EXTENT_STATE_ZEROED),
           length));
     }
   }
