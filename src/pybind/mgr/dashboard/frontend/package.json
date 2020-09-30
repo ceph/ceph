@@ -96,7 +96,7 @@
     "detect-browser": "5.0.0",
     "file-saver": "^2.0.2",
     "fork-awesome": "1.1.7",
-    "lodash": "4.17.15",
+    "lodash": "4.17.20",
     "moment": "2.24.0",
     "ng-block-ui": "2.1.8",
     "ng-bootstrap-form-validation": "5.0.0",
@@ -111,8 +111,8 @@
     "zone.js": "0.9.1"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "0.803.26",
-    "@angular/cli": "8.3.26",
+    "@angular-devkit/build-angular": "0.803.29",
+    "@angular/cli": "8.3.29",
     "@angular/compiler-cli": "8.2.14",
     "@angular/language-service": "8.2.14",
     "@compodoc/compodoc": "1.1.11",
@@ -143,6 +143,7 @@
   },
   "resolutions": {
     "mem": "4.3.0",
-    "fsevents": "2.1.2"
+    "fsevents": "2.1.2",
+    "lodash": "4.17.20"
   }
 }
