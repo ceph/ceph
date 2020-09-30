@@ -63,6 +63,9 @@ def list_mgr_module(m_name):
     sys.modules['werkzeug'] = mock.Mock()
     sys.modules['werkzeug.serving'] = mock.Mock()
 
+    # make cephadm happy:
+    sys.modules['remoto'] = mock.Mock(__version__="1.1.4")
+
     mgr_mod = __import__(m_name, globals(), locals(), [], 0)
 
     def subclass(x):

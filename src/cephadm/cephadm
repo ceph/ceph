@@ -17,26 +17,6 @@ DEFAULT_RETRY = 10
 SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
 SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
 
-"""
-You can invoke cephadm in two ways:
-
-1. The normal way, at the command line.
-
-2. By piping the script to the python3 binary.  In this latter case, you should
-   prepend one or more lines to the beginning of the script.
-
-   For arguments,
-
-       injected_argv = [...]
-
-   e.g.,
-
-       injected_argv = ['ls']
-
-   For reading stdin from the '--config-json -' argument,
-
-       injected_stdin = '...'
-"""
 import argparse
 import datetime
 import fcntl
@@ -1796,11 +1776,8 @@ def get_parm(option):
         if cached_stdin is not None:
             j = cached_stdin
         else:
-            try:
-                j = injected_stdin  # type: ignore
-            except NameError:
-                j = sys.stdin.read()
-                cached_stdin = j
+            j = sys.stdin.read()
+            cached_stdin = j
     else:
         # inline json string
         if option[0] == '{' and option[-1] == '}':
@@ -5998,11 +5975,8 @@ if __name__ == "__main__":
     dictConfig(logging_config)
     logger = logging.getLogger()
 
-    # allow argv to be injected
-    try:
-        av = injected_argv  # type: ignore
-    except NameError:
-        av = sys.argv[1:]
+    # Process command line
+    av = sys.argv[1:]
     logger.debug("%s\ncephadm %s" % ("-" * 80, av))
     args = _parse_args(av)
 

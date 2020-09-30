@@ -778,7 +778,7 @@ class TestCephadm(object):
         class Connection(object):
             """
             A mocked connection class that only allows the use of the connection
-            once. If you attempt to use it again via a _check, it'll explode (go
+            once. If you attempt to use it again, it'll explode (go
             boom!).
 
             The old code triggers the boom. The new code checks the has_connection
@@ -786,9 +786,14 @@ class TestCephadm(object):
             """
             fuse = False
 
-            @staticmethod
-            def has_connection():
-                return False
+            def has_connection(self):
+                """
+                A connection that need to be restored after only two uses:
+                - first use when you create the object
+                - second use when you check for first time if connection is alive
+                """
+                self.fuse = not self.fuse
+                return self.fuse
 
             def import_module(self, *args, **kargs):
                 return mock.Mock()
@@ -797,24 +802,23 @@ class TestCephadm(object):
             def exit():
                 pass
 
-        def _check(conn, *args, **kargs):
-            if conn.fuse:
-                raise Exception("boom: connection is dead")
-            else:
-                conn.fuse = True
-            return '{}', None, 0
-        with mock.patch("remoto.Connection", side_effect=[Connection(), Connection(), Connection()]):
-            with mock.patch("remoto.process.check", _check):
-                with with_host(cephadm_module, 'test', refresh_hosts=False):
-                    code, out, err = cephadm_module.check_host('test')
-                    # First should succeed.
-                    assert err is None
+        with mock.patch("remoto.Connection") as mock_connection:
+            # We need two connection objects, the first to get the initial connection,
+            # the second one to simulate returning a different connection when
+            # the initial connection fails
+            mock_connection.side_effect = [Connection(), Connection()]
 
-                    # On second it should attempt to reuse the connection, where the
-                    # connection is "down" so will recreate the connection. The old
-                    # code will blow up here triggering the BOOM!
-                    code, out, err = cephadm_module.check_host('test')
-                    assert err is None
+            # We create a new connection for <test> host
+            conn, r = cephadm_module._get_connection("test")
+
+            # We call a second time and verify that the connection is reused
+            conn_2, r = cephadm_module._get_connection("test")
+            assert conn is conn_2
+
+            # and we call a third time and verify that we get a new connection
+            # Here we consume the second <side_effect> connection object
+            conn_3, r = cephadm_module._get_connection("test")
+            assert not(conn is conn_3)
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")

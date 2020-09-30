@@ -320,13 +320,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.notify('mon_map', None)
         self.config_notify()
 
-        path = self.get_ceph_option('cephadm_path')
-        try:
-            with open(path, 'r') as f:
-                self._cephadm = f.read()
-        except (IOError, TypeError) as e:
-            raise RuntimeError("unable to read cephadm at '%s': %s" % (
-                path, str(e)))
+        self._cephadm = self._read_cephadm_script()
 
         self._worker_pool = multiprocessing.pool.ThreadPool(10)
 
@@ -959,7 +953,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             logger=child_logger,
             ssh_options=self._ssh_options,
             sudo=True if self.ssh_user != 'root' else False)
-
         r = conn.import_module(remotes)
         self._cons[host] = conn, r
 
@@ -1059,6 +1052,40 @@ To check that the host is reachable:
 
         return image
 
+    def _read_cephadm_script(self):
+        path = self.get_ceph_option('cephadm_path')
+        try:
+            with open(path, 'r') as f:
+                return f.read()
+        except (IOError, TypeError) as e:
+            raise RuntimeError("unable to read cephadm at '%s': %s" % (
+                path, str(e)))
+
+    def _copy_cephadm(self, conn: "BaseConnection", cephadm_dest: str):
+        """
+        Copy the cephadm script pointed in the cephadm manager module
+        """
+        try:
+            out, err, code = remoto.process.check(
+                conn,
+                ['mkdir', '-p', os.path.dirname(cephadm_dest)])
+            self.log.debug('mkdir-> %s-:-%s' % (out, err))
+
+            out, err, code = remoto.process.check(
+                conn,
+                ['cp', '/dev/stdin', cephadm_dest],
+                stdin=self._cephadm.encode('utf-8'))
+
+            self.log.debug('cp-> %s-:-%s' % (out, err))
+            out, err, code = remoto.process.check(
+                conn,
+                ['chmod', '+x', cephadm_dest])
+            self.log.debug('chmod-> %s-:-%s' % (out, err))
+
+        except RuntimeError as e:
+            self.log.error(str(e))
+            raise
+
     def _run_cephadm(self,
                      host: str,
                      entity: Union[CephadmNoImage, str],
@@ -1076,6 +1103,8 @@ To check that the host is reachable:
 
         :env_vars: in format -> [KEY=VALUE, ..]
         """
+        assert isinstance(stdin, str)
+
         with self._remote_connection(host, addr) as tpl:
             conn, connr = tpl
             assert image or entity
@@ -1102,27 +1131,28 @@ To check that the host is reachable:
 
             self.log.debug('args: %s' % (' '.join(final_args)))
             if self.mode == 'root':
-                if stdin:
-                    self.log.debug('stdin: %s' % stdin)
-                script = 'injected_argv = ' + json.dumps(final_args) + '\n'
-                if stdin:
-                    script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-                script += self._cephadm
-                python = connr.choose_python()
-                if not python:
-                    raise RuntimeError(
-                        'unable to find python on %s (tried %s in %s)' % (
-                            host, remotes.PYTHONS, remotes.PATH))
                 try:
+                    python = connr.choose_python()
+                    cephadm_dest = '/var/lib/ceph/%s/cephadm/%s' % (
+                        self._cluster_fsid, self.get_mgr_id())
+                    self._copy_cephadm(conn, cephadm_dest)
+
+                    self.log.info("Tying to execute : %s" %
+                                  (['sudo', python, cephadm_dest] + final_args))
+                    if stdin:
+                        self.log.info("with stdin = %s" % stdin)
                     out, err, code = remoto.process.check(
                         conn,
-                        [python, '-u'],
-                        stdin=script.encode('utf-8'))
+                        ['sudo', python, cephadm_dest] + final_args,
+                        stdin=stdin.encode('utf-8'))
+
                 except RuntimeError as e:
+
                     self._reset_con(host)
                     if error_ok:
                         return [], [str(e)], 1
                     raise
+
             elif self.mode == 'cephadm-package':
                 try:
                     out, err, code = remoto.process.check(
