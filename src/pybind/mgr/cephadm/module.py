@@ -467,6 +467,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 missing_names = []
                 for s in daemons:
                     name = '%s.%s' % (s.get('type'), s.get('id'))
+                    if s.get('type') == 'rbd-mirror':
+                        defaults = defaultdict(lambda: None, {'id': None})
+                        metadata = self.get_metadata("rbd-mirror", s.get('id'), default=defaults)
+                        if metadata['id']:
+                            name = '%s.%s' % (s.get('type'), metadata['id'])
+                        else:
+                            self.log.debug(
+                                "Failed to find daemon id for rbd-mirror service %s" % (s.get('id')))
                     if host not in self.inventory:
                         missing_names.append(name)
                         host_num_daemons += 1
