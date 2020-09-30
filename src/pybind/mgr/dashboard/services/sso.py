@@ -2,25 +2,23 @@
 # pylint: disable=too-many-return-statements,too-many-branches
 from __future__ import absolute_import
 
-import os
 import errno
 import json
 import logging
+import os
 import threading
 import warnings
-
 from urllib import parse
 
 from .. import mgr
 from ..tools import prepare_url_prefix
 
-
 logger = logging.getLogger('sso')
 
 try:
-    from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
     from onelogin.saml2.errors import OneLogin_Saml2_Error as Saml2Error
     from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser as Saml2Parser
+    from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
 
     python_saml_imported = True
 except ImportError:
@@ -154,7 +152,7 @@ def handle_sso_command(cmd):
             Saml2Settings(mgr.SSO_DB.saml2.onelogin_settings)
         except Saml2Error:
             return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
-                          'use `ceph dashboard sso setup saml2`'
+                'use `ceph dashboard sso setup saml2`'
         mgr.SSO_DB.protocol = 'saml2'
         mgr.SSO_DB.save()
         return 0, 'SSO is "enabled" with "SAML2" protocol.', ''

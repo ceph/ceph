@@ -6,14 +6,14 @@ import logging
 import re
 
 from orchestrator import OrchestratorError
+
+from .. import mgr
+from ..exceptions import DashboardException
+from ..settings import Settings
 from .cephfs import CephFS
 from .cephx import CephX
 from .orchestrator import OrchClient
-from .rgw_client import RgwClient, RequestException, NoCredentialsException
-from .. import mgr
-from ..settings import Settings
-from ..exceptions import DashboardException
-
+from .rgw_client import NoCredentialsException, RequestException, RgwClient
 
 logger = logging.getLogger('ganesha')
 

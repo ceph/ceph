@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import abc
 
-from .pluggy import HookspecMarker, HookimplMarker, PluginManager
+from .pluggy import HookimplMarker, HookspecMarker, PluginManager
 
 
 class Interface(object, metaclass=abc.ABCMeta):

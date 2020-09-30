@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import logging
 
+import logging
 from functools import wraps
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from ceph.deployment.service_spec import ServiceSpec
-from orchestrator import InventoryFilter, DeviceLightLoc, Completion
-from orchestrator import ServiceDescription, DaemonDescription
-from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
-from orchestrator import HostSpec
+from orchestrator import Completion, DaemonDescription, DeviceLightLoc, \
+    HostSpec, InventoryFilter, OrchestratorClientMixin, OrchestratorError, \
+    ServiceDescription, raise_if_exception
+
 from .. import mgr
 
 logger = logging.getLogger('orchestrator')

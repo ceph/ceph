@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import os
-import re
 import json
 import logging
+import os
+import re
+
 try:
     from functools import lru_cache
 except ImportError:
     from ..plugins.lru_cache import lru_cache
+
 import cherrypy
 from cherrypy.lib.static import serve_file
 
-from . import Controller, UiApiController, BaseController, Proxy, Endpoint
 from .. import mgr
-
+from . import BaseController, Controller, Endpoint, Proxy, UiApiController
 
 logger = logging.getLogger("controllers.home")
 

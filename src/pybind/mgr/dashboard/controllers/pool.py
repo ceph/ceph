@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-from typing import Any, cast, Dict, Iterable, List, Optional, Union
 
 import time
+from typing import Any, Dict, Iterable, List, Optional, Union, cast
+
 import cherrypy
 
-from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, Task, \
-    UiApiController, EndpointDoc
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from ..services.rbd import RbdConfiguration
 from ..services.exception import handle_send_command_error
-from ..tools import str_to_bool, TaskManager
+from ..services.rbd import RbdConfiguration
+from ..tools import TaskManager, str_to_bool
+from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UiApiController
 
 POOL_SCHEMA = ([{
     "pool": (int, "pool id"),

@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from ..controllers import ApiController, BaseController, Controller, Endpoint, RESTController
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
-from ..controllers import BaseController, RESTController, Controller, \
-                          ApiController, Endpoint
 
 
 @Controller("/btest/{key}", base_url="/ui", secure=False)

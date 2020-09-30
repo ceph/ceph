@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from datetime import datetime
 import json
+from datetime import datetime
+
 import requests
 
-from . import Controller, ApiController, BaseController, RESTController, Endpoint, ControllerDoc
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
-from ..exceptions import DashboardException
+from . import ApiController, BaseController, Controller, ControllerDoc, Endpoint, RESTController
 
 
 @Controller('/api/prometheus_receiver', secure=False)

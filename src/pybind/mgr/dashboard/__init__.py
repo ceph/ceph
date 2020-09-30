@@ -6,6 +6,7 @@ ceph dashboard module
 from __future__ import absolute_import
 
 import os
+
 import cherrypy
 
 if 'COVERAGE_ENABLED' in os.environ:
