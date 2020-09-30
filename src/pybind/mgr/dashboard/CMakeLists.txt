@@ -34,7 +34,7 @@ else()
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=12.16.2
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=12.18.2
     COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
