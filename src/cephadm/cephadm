@@ -3181,7 +3181,7 @@ def command_bootstrap():
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password, '--force'])
 
     if args.container_init:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', args.container_init, '--force'])
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(args.container_init), '--force'])
 
     if not args.skip_dashboard:
         # Configure SSL port (cephadm only allows to configure dashboard SSL port)
