@@ -16,9 +16,6 @@ namespace cache {
 
 using namespace librbd::cache::pwl;
 
-typedef WriteLogCache<ImageCtx>::Extent Extent;
-typedef WriteLogCache<ImageCtx>::Extents Extents;
-
 template <typename I>
 WriteLogCache<I>::WriteLogCache(I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state) {
   m_write_log = new librbd::cache::pwl::ReplicatedWriteLog<I>(image_ctx, cache_state);
@@ -103,4 +100,3 @@ void WriteLogCache<I>::flush(Context *on_finish) {
 } // namespace librbd
 
 template class librbd::cache::WriteLogCache<librbd::ImageCtx>;
-template class librbd::cache::ImageCache<librbd::ImageCtx>;

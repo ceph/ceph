@@ -1571,11 +1571,17 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
     ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
-    uint64_t image_size = ictx->get_image_size(ictx->snap_id);
-    bool snap_exists = ictx->snap_exists;
 
-    if (!snap_exists)
-      return -ENOENT;
+    uint64_t image_size;
+    if (ictx->snap_id == CEPH_NOSNAP) {
+      image_size = ictx->get_image_size(CEPH_NOSNAP);
+    } else {
+      auto snap_info = ictx->get_snap_info(ictx->snap_id);
+      if (snap_info == nullptr) {
+	return -ENOENT;
+      }
+      image_size = snap_info->size;
+    }
 
     // special-case "len == 0" requests: always valid
     if (*len == 0)

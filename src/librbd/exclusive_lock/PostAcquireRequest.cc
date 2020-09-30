@@ -8,7 +8,6 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include "librbd/cache/pwl/InitRequest.h"
-#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -200,38 +199,11 @@ void PostAcquireRequest<I>::handle_open_image_cache(int r) {
   if (r < 0) {
     lderr(cct) << "failed to open image cache: " << cpp_strerror(r)
                << dendl;
-    send_close_image_cache();
+    send_close_journal();
     return;
   }
 
   finish();
-}
-
-template <typename I>
-void PostAcquireRequest<I>::send_close_image_cache() {
-  if (m_image_ctx.image_cache == nullptr) {
-    send_close_journal();
-  }
-
-  using klass = PostAcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_close_image_cache>(
-    this);
-  cache::pwl::ShutdownRequest<I> *req = cache::pwl::ShutdownRequest<I>::create(
-    m_image_ctx, ctx);
-  req->send();
-}
-
-template <typename I>
-void PostAcquireRequest<I>::handle_close_image_cache(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "r=" << r << dendl;
-
-  save_result(r);
-  if (r < 0) {
-    lderr(cct) << "failed to close image_cache: " << cpp_strerror(r) << dendl;
-  }
-
-  send_close_journal();
 }
 
 template <typename I>

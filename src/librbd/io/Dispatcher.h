@@ -76,7 +76,10 @@ public:
     {
       std::unique_lock locker{m_lock};
       auto it = m_dispatches.find(dispatch_layer);
-      ceph_assert(it != m_dispatches.end());
+      if (it == m_dispatches.end()) {
+        on_finish->complete(0);
+        return;
+      }
 
       dispatch_meta = it->second;
       m_dispatches.erase(it);

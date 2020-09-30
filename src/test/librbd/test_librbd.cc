@@ -2964,6 +2964,36 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, TestSnapshotDeletedIo)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t isize = 2 << 20;
+
+  int r;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), isize, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_EQ(0, rbd_snap_create(image, "orig"));
+
+  r = rbd_snap_set(image, "orig");
+  ASSERT_EQ(r, 0);
+
+  ASSERT_EQ(0, rbd_snap_remove(image, "orig"));
+  char test[20];
+  ASSERT_EQ(-ENOENT, rbd_read(image, 20, 20, test));
+
+  r = rbd_snap_set(image, NULL);
+  ASSERT_EQ(r, 0);
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, TestClone)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
