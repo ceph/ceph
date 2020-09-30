@@ -93,6 +93,9 @@ fi
 
 cd $DASH_DIR/frontend
 
+# Remove existing XML results
+rm -f cypress/reports/results-*.xml || true
+
 case "$DEVICE" in
     docker)
         failed=0
