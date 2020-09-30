@@ -1090,22 +1090,25 @@ void cls_rgw_head_prefetch(librados::ObjectReadOperation& op,
                            uint64_t offset, uint64_t length,
                            uint64_t max_length,
                            int* ret_code, uint64_t* offset_out,
-                           bufferlist* data_out)
+                           bufferlist* data_out, map<string, bufferlist>* xattrs)
 {
   bufferlist in;
   cls_rgw_head_prefetch_op call;
   call.offset = offset;
   call.length = length;
   call.max_length = max_length;
+  call.getxattrs = (xattrs != nullptr);
   encode(call, in);
 
   class PrefetchCompletion : public librados::ObjectOperationCompletion {
     uint64_t* offset;
     bufferlist* data;
+    map<string, bufferlist>* xattrs;
     int* ret_code;
    public:
-    PrefetchCompletion(uint64_t* offset, bufferlist* data, int* ret_code)
-      : offset(offset), data(data), ret_code(ret_code) {}
+    PrefetchCompletion(uint64_t* offset, bufferlist* data,
+    map<string, bufferlist>* xattrs, int* ret_code)
+      : offset(offset), data(data), xattrs(xattrs), ret_code(ret_code) {}
 
     void handle_completion(int r, bufferlist& outbl) override {
       if (r >= 0) {
@@ -1119,6 +1122,9 @@ void cls_rgw_head_prefetch(librados::ObjectReadOperation& op,
           if (data) {
             *data = std::move(result.data);
           }
+          if (xattrs) {
+            *xattrs = std::move(result.xattrs);
+          }
         } catch (ceph::buffer::error& err) {
           r = -EIO;
         }
@@ -1129,5 +1135,5 @@ void cls_rgw_head_prefetch(librados::ObjectReadOperation& op,
     }
   };
   op.exec(RGW_CLASS, RGW_HEAD_PREFETCH, in,
-	  new PrefetchCompletion(offset_out, data_out, ret_code));
+	  new PrefetchCompletion(offset_out, data_out, xattrs, ret_code));
 }

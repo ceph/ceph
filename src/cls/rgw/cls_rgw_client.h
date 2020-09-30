@@ -651,6 +651,6 @@ void cls_rgw_head_prefetch(librados::ObjectReadOperation& op,
                            uint64_t offset, uint64_t length,
                            uint64_t max_length,
                            int* ret_code, uint64_t* offset_out,
-                           bufferlist* data_out);
+                           bufferlist* data_out, map<std::string, bufferlist>* xattrs);
 
 #endif

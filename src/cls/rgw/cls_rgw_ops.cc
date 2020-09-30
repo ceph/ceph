@@ -556,6 +556,7 @@ void cls_rgw_head_prefetch_op::dump(Formatter *f) const
   encode_json("offset", offset, f);
   encode_json("length", length, f);
   encode_json("max_length", max_length, f);
+  encode_json("getxattrs", getxattrs, f);
 }
 
 void cls_rgw_head_prefetch_ret::generate_test_instances(list<cls_rgw_head_prefetch_ret*>& ls)

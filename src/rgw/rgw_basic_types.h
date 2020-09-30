@@ -628,6 +628,6 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_user &u) {
 }
 struct prefetch_range {
   size_t off = 0;
-  uint64_t len = 0;
+  uint64_t len = std::numeric_limits<uint64_t>::max();
 };
 #endif

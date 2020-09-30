@@ -2035,14 +2035,12 @@ const prefetch_range* RGWGetObj::prefetch_data()
   }
 
   range_str = s->info.env->get("HTTP_RANGE");
-  prefetch.off = 0;
-  prefetch.len = s->cct->_conf->rgw_max_chunk_size;
+
   if (range_str) {
     parse_range();
     if (partial_content && range_parsed) {
       prefetch.off = ofs;
-      if (end - ofs + 1 < s->cct->_conf->rgw_max_chunk_size)
-        prefetch.len = end - ofs + 1;
+      prefetch.len = end - ofs + 1;
     }
   }
 

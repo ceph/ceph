@@ -1162,7 +1162,7 @@ TEST_F(cls_rgw, head_prefetch_full)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(prefetch_offset, offset);
     EXPECT_EQ(chunk_size, data.length());
@@ -1189,7 +1189,7 @@ TEST_F(cls_rgw, head_prefetch_less_than_chunk)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(prefetch_offset, offset);
     EXPECT_EQ(prefetch_length, data.length());
@@ -1216,7 +1216,7 @@ TEST_F(cls_rgw, head_prefetch_more_than_chunk)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(prefetch_offset, offset);
     EXPECT_EQ(chunk_size, data.length());
@@ -1271,10 +1271,42 @@ TEST_F(cls_rgw, head_prefetch_compressed_full)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(prefetch_offset, offset);
     EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_full_with_xattrs)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 0xffffffffffffffff;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    // initialize compressed head object
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    op.setxattr("user.rgw.getxattrs", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    std::map<std::string, bufferlist> xattrs;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, &xattrs);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+    EXPECT_EQ(2, xattrs.size());
   }
 }
 
@@ -1299,7 +1331,7 @@ TEST_F(cls_rgw, head_prefetch_compressed_less_than_chunk)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(prefetch_offset, offset);
     EXPECT_EQ(48, data.length());
@@ -1327,7 +1359,7 @@ TEST_F(cls_rgw, head_prefetch_compressed_more_than_chunk)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(prefetch_offset, offset);
     EXPECT_EQ(chunk_size, data.length());
@@ -1355,7 +1387,7 @@ TEST_F(cls_rgw, head_prefetch_compressed_offset_off_boundary)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(16, offset); // block boundary before 36
     EXPECT_EQ(48, data.length()); // round up to 3 compressed blocks
@@ -1383,7 +1415,7 @@ TEST_F(cls_rgw, head_prefetch_compressed_single_block_off_boundary)
     uint64_t offset = 0;
     bufferlist data;
     cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
-                          chunk_size, &ret, &offset, &data);
+                          chunk_size, &ret, &offset, &data, nullptr);
     ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
     EXPECT_EQ(16, offset); // block boundary before 36
     EXPECT_EQ(16, data.length()); // round up to 1 compressed block

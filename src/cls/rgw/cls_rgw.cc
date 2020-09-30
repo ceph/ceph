@@ -4139,12 +4139,27 @@ static int rgw_head_prefetch(cls_method_context_t hctx,
   uint64_t logical_offset = op.offset;
   uint64_t offset = op.offset;
   uint64_t length = op.length;
-
+  int ret = 0;
+  std::map<std::string, bufferlist> xattrs;
   // if the object is compressed, prefetch any compression blocks that overlap
   // the given range
   bufferlist compression;
-  int ret = cls_cxx_getxattr(hctx, RGW_ATTR_COMPRESSION, &compression);
-  if (ret == -ENODATA) {
+
+  if (op.getxattrs) {
+    ret = cls_cxx_getxattrs(hctx, &xattrs);
+    if (ret < 0) {
+      CLS_LOG(1, "ERROR: %s(): failed to read xattrs", __func__);
+      return ret;
+    }
+    CLS_LOG(20, "rgw_head_prefetch read %zu attrs", xattrs.size());
+    auto compress = xattrs.find(RGW_ATTR_COMPRESSION);
+    if (compress != xattrs.end()) {
+      compression = compress->second;
+    }
+  } else {
+    ret = cls_cxx_getxattr(hctx, RGW_ATTR_COMPRESSION, &compression);
+  }
+  if (ret == -ENODATA || compression.length() > 0) {
     // not compressed, use given offset/length
   } else if (ret < 0) {
     CLS_LOG(1, "ERROR: %s(): failed to read compression attribute", __func__);
@@ -4166,6 +4181,7 @@ static int rgw_head_prefetch(cls_method_context_t hctx,
   cls_rgw_head_prefetch_ret op_ret;
   op_ret.offset = logical_offset;
   op_ret.data = std::move(data);
+  op_ret.xattrs = std::move(xattrs);
   encode(op_ret, *out);
   return 0;
 }
