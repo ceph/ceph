@@ -5,6 +5,7 @@ set(cephfs_mirror_internal
   InstanceWatcher.cc
   MirrorWatcher.cc
   Types.cc
+  Utils.cc
   Watcher.cc
   watcher/RewatchRequest.cc)
 
