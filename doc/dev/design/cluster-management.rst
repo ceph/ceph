@@ -95,6 +95,7 @@ Some of the checks that host facts can support (today) are listed below;
   * dedicated/shared interfaces
 
 More checks could be enabled by enhancing cephadm's gather-facts function.
+https://tracker.ceph.com/issues/47711
 
 Tasks
 =====
