@@ -416,7 +416,14 @@ class Module(MgrModule):
          "perm": "r"},
         {"cmd": "progress clear",
          "desc": "Reset progress tracking",
+         "perm": "rw"},
+        {"cmd": "progress on",
+         "desc": "Enable progress tracking",
+         "perm": "rw"},
+        {"cmd": "progress off",
+         "desc": "Disable progress tracking",
          "perm": "rw"}
+
     ]
 
     MODULE_OPTIONS = [
@@ -434,6 +441,12 @@ class Module(MgrModule):
             'desc': 'how frequently to persist completed events',
             'runtime': True,
         },
+        {
+            'name': 'enabled',
+            'default': True,
+            'type': 'bool',
+            
+        }
     ]  # type: List[Dict[str, Any]]
 
     def __init__(self, *args, **kwargs):
@@ -458,6 +471,7 @@ class Module(MgrModule):
         if TYPE_CHECKING:
             self.max_completed_events = 0
             self.persist_interval = 0
+            self.enabled = True
 
     def config_notify(self):
         for opt in self.MODULE_OPTIONS:
@@ -605,7 +619,8 @@ class Module(MgrModule):
 
     def notify(self, notify_type, notify_data):
         self._ready.wait()
-
+        if not self.enabled:
+            return
         if notify_type == "osd_map":
             old_osdmap = self._latest_osdmap
             self._latest_osdmap = self.get_osdmap()
@@ -724,10 +739,12 @@ class Module(MgrModule):
         """
         For calling from other mgr modules
         """
+        if not self.enabled:
+            return
+
         if refs is None:
             refs = []
         try:
-
             ev = self._events[ev_id]
             assert isinstance(ev, RemoteEvent)
         except KeyError:
@@ -762,6 +779,8 @@ class Module(MgrModule):
         """
         For calling from other mgr modules
         """
+        if not self.enabled:
+            return
         try:
             ev = self._events[ev_id]
             assert isinstance(ev, RemoteEvent)
@@ -789,6 +808,12 @@ class Module(MgrModule):
         except KeyError:
             self.log.warning("fail: ev {0} does not exist".format(ev_id))
 
+    def on(self):
+        self.set_module_option('enabled', True)
+
+    def off(self):
+        self.set_module_option('enabled', False)
+
     def _handle_ls(self):
         if len(self._events) or len(self._completed_events):
             out = ""
@@ -815,13 +840,15 @@ class Module(MgrModule):
             'completed': [ev.to_json() for ev in self._completed_events]
         }
 
-    def _handle_clear(self):
+    def clear(self):
         self._events = {}
         self._completed_events = []
         self._dirty = True
         self._save()
         self.clear_all_progress_events()
 
+    def _handle_clear(self):
+        self.clear()  
         return 0, "", ""
 
     def handle_command(self, _, cmd):
@@ -835,5 +862,16 @@ class Module(MgrModule):
             return self._handle_clear()
         elif cmd['prefix'] == "progress json":
             return 0, json.dumps(self._json(), indent=4, sort_keys=True), ""
+        elif cmd['prefix'] == "progress on":
+            if self.enabled:
+                return 0, "", "progress already enabled!"
+            self.on()
+            return 0, "", "progress enabled"
+        elif cmd['prefix'] == "progress off":
+            if not self.enabled:
+                return 0, "", "progress already disabled!"
+            self.off()
+            self.clear()
+            return 0, "", "progress disabled"
         else:
             raise NotImplementedError(cmd['prefix'])
