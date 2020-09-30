@@ -603,6 +603,12 @@ class Size(object):
         _b = self._b / other
         return Size(b=_b)
 
+    def __bool__(self):
+        return self.b != 0
+
+    def __nonzero__(self):
+        return self.__bool__()
+
     def __getattr__(self, unit):
         """
         Calculate units on the fly, relies on the fact that ``bytes`` has been

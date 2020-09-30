@@ -3,7 +3,8 @@ import pytest
 
 from ceph.deployment.inventory import Devices, Device
 
-from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
+        DriveGroupValidationError
 
 from ceph.deployment import drive_selection
 from ceph.deployment.service_spec import PlacementSpec
@@ -277,6 +278,7 @@ class TestDriveGroup(object):
                              disk_format='bluestore'):
             raw_sample_bluestore = {
                 'service_type': 'osd',
+                'service_id': 'foo',
                 'placement': {'host_pattern': 'data*'},
                 'data_devices': {
                     'size': '30G:50G',
@@ -302,6 +304,7 @@ class TestDriveGroup(object):
             }
             raw_sample_filestore = {
                 'service_type': 'osd',
+                'service_id': 'foo',
                 'placement': {'host_pattern': 'data*'},
                 'objectstore': 'filestore',
                 'data_devices': {
@@ -325,6 +328,7 @@ class TestDriveGroup(object):
             if empty:
                 raw_sample = {
                     'service_type': 'osd',
+                    'service_id': 'foo',
                     'placement': {'host_pattern': 'data*'},
                     'data_devices': {
                         'all': True
@@ -332,6 +336,11 @@ class TestDriveGroup(object):
                 }
 
             dgo = DriveGroupSpec.from_json(raw_sample)
+            if disk_format == 'filestore':
+                with pytest.raises(DriveGroupValidationError):
+                    dgo.validate()
+            else:
+                dgo.validate()
             return dgo
 
         return make_sample_data
@@ -362,7 +371,7 @@ class TestDriveGroup(object):
 
     def test_block_wal_size_prop(self, test_fix):
         test_fix = test_fix()
-        assert test_fix.block_wal_size == 5000000000
+        assert test_fix.block_wal_size == '5G'
 
     def test_block_wal_size_prop_empty(self, test_fix):
         test_fix = test_fix(empty=True)
@@ -370,7 +379,7 @@ class TestDriveGroup(object):
 
     def test_block_db_size_prop(self, test_fix):
         test_fix = test_fix()
-        assert test_fix.block_db_size == 10000000000
+        assert test_fix.block_db_size == '10G'
 
     def test_block_db_size_prop_empty(self, test_fix):
         test_fix = test_fix(empty=True)
@@ -431,7 +440,7 @@ class TestDriveGroup(object):
 
     def test_journal_size(self, test_fix):
         test_fix = test_fix(disk_format='filestore')
-        assert test_fix.journal_size == 5000000000
+        assert test_fix.journal_size == '5G'
 
     def test_osds_per_device(self, test_fix):
         test_fix = test_fix(osds_per_device='3')
@@ -489,13 +498,17 @@ class TestDriveSelection(object):
 
     testdata = [
         (
-            DriveGroupSpec(placement=PlacementSpec(host_pattern='*'), data_devices=DeviceSelection(all=True)),
+            DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='*'),
+                service_id='foobar',
+                data_devices=DeviceSelection(all=True)),
             _mk_inventory(_mk_device() * 5),
             ['/dev/sda', '/dev/sdb', '/dev/sdc', '/dev/sdd', '/dev/sde'], []
         ),
         (
             DriveGroupSpec(
                 placement=PlacementSpec(host_pattern='*'),
+                service_id='foobar',
                 data_devices=DeviceSelection(all=True, limit=3),
                 db_devices=DeviceSelection(all=True)
             ),
@@ -505,6 +518,7 @@ class TestDriveSelection(object):
         (
             DriveGroupSpec(
                 placement=PlacementSpec(host_pattern='*'),
+                service_id='foobar',
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),
@@ -514,6 +528,7 @@ class TestDriveSelection(object):
         (
             DriveGroupSpec(
                 placement=PlacementSpec(host_pattern='*'),
+                service_id='foobar',
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),
@@ -523,6 +538,7 @@ class TestDriveSelection(object):
         (
             DriveGroupSpec(
                 placement=PlacementSpec(host_pattern='*'),
+                service_id='foobar',
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),
