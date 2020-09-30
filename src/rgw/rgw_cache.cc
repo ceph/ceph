@@ -170,6 +170,9 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
     cache_info->gen = entry.gen;
   }
 
+  // put() must include the latest version if we're going to keep caching it
+  target.flags &= ~CACHE_FLAG_OBJV;
+
   target.flags |= info.flags;
 
   if (info.flags & CACHE_FLAG_META)
