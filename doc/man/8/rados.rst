@@ -132,6 +132,22 @@ Bench options
 
    Write contents to the extended attributes.
 
+.. option:: --clear-omap
+
+   Clear omap contents.
+
+.. option:: --read-object
+
+   Read contents from the objects.
+
+.. option:: --read-omap
+
+   Read contents (using single key access) from the omaps.
+
+.. option:: --read-omap-bulk
+
+   Read contents (using bulk access via prefix) from the omaps.
+
 
 Load gen options
 ================
