@@ -444,7 +444,7 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     for (auto& image_interval : image_intervals) {
       auto state = image_interval.get_val().state;
       switch (state) {
-      case io::SNAPSHOT_EXTENT_STATE_DNE:
+      case io::SPARSE_EXTENT_STATE_DNE:
         ceph_assert(write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS);
         if (read_from_parent) {
           // special-case for DNE object-extents since when flattening we need
@@ -456,10 +456,10 @@ void ObjectCopyRequest<I>::compute_read_ops() {
             image_interval.get_off(), image_interval.get_len());
         }
         break;
-      case io::SNAPSHOT_EXTENT_STATE_ZEROED:
+      case io::SPARSE_EXTENT_STATE_ZEROED:
         only_dne_extents = false;
         break;
-      case io::SNAPSHOT_EXTENT_STATE_DATA:
+      case io::SPARSE_EXTENT_STATE_DATA:
         ldout(m_cct, 20) << "read op: "
                          << "snap_ids=" << write_read_snap_ids << " "
                          << image_interval.get_off() << "~"
@@ -582,7 +582,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     for (auto& image_interval : image_intervals) {
       auto state = image_interval.get_val().state;
       switch (state) {
-      case io::SNAPSHOT_EXTENT_STATE_ZEROED:
+      case io::SPARSE_EXTENT_STATE_ZEROED:
         if (write_read_snap_ids != io::WriteReadSnapIds{0, 0}) {
           ldout(m_cct, 20) << "zeroed extent: "
                            << "src_snap_seq=" << src_snap_seq << " "
@@ -600,8 +600,8 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
             image_interval.get_off(), image_interval.get_len());
         }
         break;
-      case io::SNAPSHOT_EXTENT_STATE_DNE:
-      case io::SNAPSHOT_EXTENT_STATE_DATA:
+      case io::SPARSE_EXTENT_STATE_DNE:
+      case io::SPARSE_EXTENT_STATE_DATA:
         break;
       default:
         ceph_abort();
