@@ -575,6 +575,7 @@ struct staged {
     }
 
     // Note: possible to return an end iterator when is_exclusive is true
+    // insert_index can still be INDEX_LAST or INDEX_END
     template <bool is_exclusive>
     size_t seek_split_inserted(
         size_t start_size, size_t extra_size, size_t target_size,
@@ -1424,26 +1425,50 @@ struct staged {
     std::optional<iterator_t> iter;
   };
 
-  static void recursively_locate_split(
+  static bool recursively_locate_split(
       size_t& current_size, size_t extra_size,
       size_t target_size, StagedIterator& split_at) {
     assert(current_size <= target_size);
     iterator_t& split_iter = split_at.get();
     current_size = split_iter.seek_split(current_size, extra_size, target_size);
+    assert(current_size <= target_size);
     assert(!split_iter.is_end());
     if (split_iter.index() == 0) {
       extra_size += iterator_t::header_size();
     } else {
       extra_size = 0;
     }
+    bool locate_nxt;
     if constexpr (!IS_BOTTOM) {
-      NXT_STAGE_T::recursively_locate_split(
+      locate_nxt = NXT_STAGE_T::recursively_locate_split(
           current_size, extra_size + split_iter.size_to_nxt(),
           target_size, split_at.nxt());
+    } else { // IS_BOTTOM
+      // located upper_bound, fair split strategy
+      size_t nxt_size = split_iter.size() + extra_size;
+      assert(current_size + nxt_size > target_size);
+      if (current_size + nxt_size/2 < target_size) {
+        // include next
+        current_size += nxt_size;
+        locate_nxt = true;
+      } else {
+        // exclude next
+        locate_nxt = false;
+      }
+    }
+    if (locate_nxt) {
+      if (split_iter.is_last()) {
+        return true;
+      } else {
+        ++split_at;
+        return false;
+      }
+    } else {
+      return false;
     }
   }
 
-  static void recursively_locate_split_inserted(
+  static bool recursively_locate_split_inserted(
       size_t& current_size, size_t extra_size, size_t target_size,
       position_t& insert_pos, match_stage_t insert_stage, size_t insert_size,
       std::optional<bool>& is_insert_left, StagedIterator& split_at) {
@@ -1456,6 +1481,7 @@ struct staged {
           current_size, extra_size, target_size,
           insert_index, insert_size, is_insert_left);
       assert(is_insert_left.has_value());
+      assert(current_size <= target_size);
       if (split_iter.index() == 0) {
         extra_size += iterator_t::header_size();
       } else {
@@ -1465,16 +1491,71 @@ struct staged {
         // split_iter can be end
         // found the lower-bound of target_size
         // ...[s_index-1] |!| (i_index) [s_index]...
-        return;
+
+        // located upper-bound, fair split strategy
+        // look at the next slot (the insert item)
+        size_t nxt_size = insert_size + extra_size;
+        assert(current_size + nxt_size > target_size);
+        if (current_size + nxt_size/2 < target_size) {
+          // include next
+          *is_insert_left = true;
+          current_size += nxt_size;
+          if (split_iter.is_end()) {
+            // ...[s_index-1] (i_index) |!|
+            return true;
+          } else {
+            return false;
+          }
+        } else {
+          // exclude next
+          return false;
+        }
       } else {
         // Already considered insert effect in the current stage.
         // Look into the next stage to identify the target_size lower-bound w/o
         // insert effect.
         assert(!split_iter.is_end());
+        bool locate_nxt;
         if constexpr (!IS_BOTTOM) {
-          NXT_STAGE_T::recursively_locate_split(
+          locate_nxt = NXT_STAGE_T::recursively_locate_split(
               current_size, extra_size + split_iter.size_to_nxt(),
               target_size, split_at.nxt());
+        } else { // IS_BOTTOM
+          // located upper-bound, fair split strategy
+          // look at the next slot
+          size_t nxt_size = split_iter.size() + extra_size;
+          assert(current_size + nxt_size > target_size);
+          if (current_size + nxt_size/2 < target_size) {
+            // include next
+            current_size += nxt_size;
+            locate_nxt = true;
+          } else {
+            // exclude next
+            locate_nxt = false;
+          }
+        }
+        if (locate_nxt) {
+          if (split_iter.is_last()) {
+            auto end_index = split_iter.index() + 1;
+            if (insert_index == INDEX_END) {
+              insert_index = end_index;
+            }
+            assert(insert_index <= end_index);
+            if (insert_index == end_index) {
+              assert(*is_insert_left == false);
+              split_iter.set_end();
+              // ...[s_index-1] |!| (i_index)
+              return false;
+            } else {
+              assert(*is_insert_left == true);
+              return true;
+            }
+          } else {
+            ++split_at;
+            return false;
+          }
+        } else {
+          return false;
         }
       }
     } else {
@@ -1484,36 +1565,59 @@ struct staged {
             current_size, extra_size, target_size,
             insert_index, insert_size, is_insert_left);
         assert(!split_iter.is_end());
+        assert(current_size <= target_size);
         if (split_iter.index() == 0) {
           extra_size += iterator_t::header_size();
         } else {
           extra_size = 0;
         }
+        bool locate_nxt;
         if (!is_insert_left.has_value()) {
           // Considered insert effect in the current stage, and insert happens
           // in the lower stage.
           // Look into the next stage to identify the target_size lower-bound w/
           // insert effect.
           assert(split_iter.index() == insert_index);
-          NXT_STAGE_T::recursively_locate_split_inserted(
+          locate_nxt = NXT_STAGE_T::recursively_locate_split_inserted(
               current_size, extra_size + split_iter.size_to_nxt(), target_size,
               insert_pos.nxt, insert_stage, insert_size,
               is_insert_left, split_at.nxt());
           assert(is_insert_left.has_value());
-          return;
+#ifndef NDEBUG
+          if (locate_nxt) {
+            assert(*is_insert_left == true);
+          }
+#endif
         } else {
           // is_insert_left.has_value() == true
           // Insert will *not* happen in the lower stage.
           // Need to look into the next stage to identify the target_size
           // lower-bound w/ insert effect
-          NXT_STAGE_T::recursively_locate_split(
+          assert(split_iter.index() != insert_index);
+          locate_nxt = NXT_STAGE_T::recursively_locate_split(
               current_size, extra_size + split_iter.size_to_nxt(),
               target_size, split_at.nxt());
-          return;
+#ifndef NDEBUG
+          if (split_iter.index() < insert_index) {
+            assert(*is_insert_left == false);
+          } else {
+            assert(*is_insert_left == true);
+          }
+#endif
+        }
+        if (locate_nxt) {
+          if (split_iter.is_last()) {
+            return true;
+          } else {
+            ++split_at;
+            return false;
+          }
+        } else {
+          return false;
         }
       } else {
         assert(false && "impossible path");
-        return;
+        return false;;
       }
     }
   }
