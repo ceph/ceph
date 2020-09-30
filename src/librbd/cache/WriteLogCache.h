@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_CACHE_WRITE_LOG_CACHE
 
 #include "librbd/cache/ImageCache.h"
+#include "librbd/io/Types.h"
 
 namespace librbd {
 
@@ -18,10 +19,10 @@ template <typename> class ImageCacheState;
 }
 
 template <typename ImageCtxT>
-class WriteLogCache : public ImageCache<ImageCtxT> {
+class WriteLogCache {
 public:
-  using typename ImageCache<ImageCtxT>::Extent;
-  using typename ImageCache<ImageCtxT>::Extents;
+  typedef io::Extent Extent;
+  typedef io::Extents Extents;
 
   WriteLogCache(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
   ~WriteLogCache();
@@ -30,26 +31,26 @@ public:
 
   /// client AIO methods
   void aio_read(Extents&& image_extents, ceph::bufferlist *bl,
-                int fadvise_flags, Context *on_finish) override;
+                int fadvise_flags, Context *on_finish) ;
   void aio_write(Extents&& image_extents, ceph::bufferlist&& bl,
-                 int fadvise_flags, Context *on_finish) override;
+                 int fadvise_flags, Context *on_finish) ;
   void aio_discard(uint64_t offset, uint64_t length,
                    uint32_t discard_granularity_bytes,
-                   Context *on_finish) override;
-  void aio_flush(io::FlushSource flush_source, Context *on_finish) override;
+                   Context *on_finish) ;
+  void aio_flush(io::FlushSource flush_source, Context *on_finish) ;
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,
-                     int fadvise_flags, Context *on_finish) override;
+                     int fadvise_flags, Context *on_finish) ;
   void aio_compare_and_write(Extents&& image_extents,
                              ceph::bufferlist&& cmp_bl, ceph::bufferlist&& bl,
                              uint64_t *mismatch_offset,int fadvise_flags,
-                             Context *on_finish) override;
+                             Context *on_finish) ;
 
   /// internal state methods
-  void init(Context *on_finish) override;
-  void shut_down(Context *on_finish) override;
-  void invalidate(Context *on_finish) override;
-  void flush(Context *on_finish) override;
+  void init(Context *on_finish) ;
+  void shut_down(Context *on_finish) ;
+  void invalidate(Context *on_finish) ;
+  void flush(Context *on_finish) ;
 
   librbd::cache::pwl::AbstractWriteLog<ImageCtxT> *m_write_log;
 };

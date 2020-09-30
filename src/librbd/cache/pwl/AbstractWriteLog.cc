@@ -756,6 +756,7 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
     });
   ctx = new LambdaContext(
     [this, ctx](int r) {
+      ldout(m_image_ctx.cct, 6) << "image cache cleaned" << dendl;
       Context *next_ctx = override_ctx(r, ctx);
       bool periodic_stats_enabled = m_periodic_stats_enabled;
       m_periodic_stats_enabled = false;
@@ -2585,6 +2586,7 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
         ctx = new LambdaContext(
           [this, ctx, invalidate](int r) {
             Context *next_ctx = ctx;
+	    ldout(m_image_ctx.cct, 6) << "flush_dirty_entries finished" << dendl;
             if (r < 0) {
               /* Override on_finish status with this error */
               next_ctx = new LambdaContext([r, ctx](int _r) {

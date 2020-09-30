@@ -34,6 +34,11 @@ void read_parent(ImageCtxT *image_ctx, uint64_t object_no, const Extents &extent
                  librados::snap_t snap_id, const ZTracer::Trace &trace,
                  ceph::bufferlist* data, Context* on_finish);
 
+template <typename ImageCtxT = librbd::ImageCtx>
+int clip_request(ImageCtxT *image_ctx, Extents *image_extents);
+
+uint64_t extents_length(Extents &extents);
+
 } // namespace util
 } // namespace io
 } // namespace librbd

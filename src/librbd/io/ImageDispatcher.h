@@ -50,11 +50,14 @@ protected:
 
 private:
   struct SendVisitor;
+  struct PreprocessVisitor;
 
   std::atomic<uint64_t> m_next_tid{0};
 
   QosImageDispatch<ImageCtxT>* m_qos_image_dispatch = nullptr;
   WriteBlockImageDispatch<ImageCtxT>* m_write_block_dispatch = nullptr;
+
+  bool preprocess(ImageDispatchSpec* image_dispatch_spec);
 
 };
 
