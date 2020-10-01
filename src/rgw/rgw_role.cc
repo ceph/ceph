@@ -31,7 +31,14 @@ const string RGWRole::role_oid_prefix = "roles.";
 const string RGWRole::role_path_oid_prefix = "role_paths.";
 const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
-// int RGWRole::store_info(bool exclusive)
+int RGWRole::store_info(bool exclusive, optional_yield y)
+{
+
+  return role_ctl->store_info(info,
+			      y,
+			      RGWRoleCtl::PutParams().
+			      set_exclusive(exclusive));
+}
 // {
 //   using ceph::encode;
 //   string oid = get_info_oid_prefix() + id;
@@ -239,11 +246,11 @@ int RGWRole::get_by_id()
 
 int RGWRole::update()
 {
-  auto& pool = ctl->svc->zone->get_zone_params().roles_pool;
+  //auto& pool = ctl->svc->zone->get_zone_params().roles_pool;
 
   int ret = store_info(false);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR:  storing info in pool: " << pool.name << ": "
+    ldout(cct, 0) << "ERROR:  updating info "
                   << info.id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -313,32 +320,32 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
 }
 
-int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
-{
-  auto svc = ctl->svc;
-  auto& pool = svc->zone->get_zone_params().roles_pool;
-  string oid = tenant + get_names_oid_prefix() + role_name;
-  bufferlist bl;
-  auto obj_ctx = svc->sysobj->init_obj_ctx();
+// int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
+// {
+//   auto svc = ctl->svc;
+//   auto& pool = svc->zone->get_zone_params().roles_pool;
+//   string oid = tenant + get_names_oid_prefix() + role_name;
+//   bufferlist bl;
+//   auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
-  if (ret < 0) {
-    return ret;
-  }
+//   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
+//   if (ret < 0) {
+//     return ret;
+//   }
 
-  RGWNameToId nameToId;
-  try {
-    auto iter = bl.cbegin();
-    using ceph::decode;
-    decode(nameToId, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode role from pool: " << pool.name << ": "
-                  << role_name << dendl;
-    return -EIO;
-  }
-  role_id = nameToId.obj_id;
-  return 0;
-}
+//   RGWNameToId nameToId;
+//   try {
+//     auto iter = bl.cbegin();
+//     using ceph::decode;
+//     decode(nameToId, iter);
+//   } catch (buffer::error& err) {
+//     ldout(cct, 0) << "ERROR: failed to decode role from pool: " << pool.name << ": "
+//                   << role_name << dendl;
+//     return -EIO;
+//   }
+//   role_id = nameToId.obj_id;
+//   return 0;
+// }
 
 // int RGWRole::read_info()
 // {

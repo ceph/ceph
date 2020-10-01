@@ -107,7 +107,7 @@ struct RGWRoleInfo
 };
 WRITE_CLASS_ENCODER(RGWRoleInfo)
 
-
+class RGWRoleCtl;
 class RGWRole
 {
   using string = std::string;
@@ -117,10 +117,11 @@ class RGWRole
   static const string role_arn_prefix;
 
   CephContext *cct;
-  RGWCtl *ctl;
+  RGWCtl *ctl; // fixme
+  RGWRoleCtl *role_ctl;
   RGWRoleInfo info;
 
-  int store_info(bool exclusive) { return 0; }
+  int store_info(bool exclusive, optional_yield y = null_yield);
   int store_name(bool exclusive) { return 0; }
   int store_path(bool exclusive) { return 0; }
   int read_id(const string& role_name, const string& tenant, string& role_id);
