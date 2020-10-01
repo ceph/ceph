@@ -34,6 +34,16 @@ const string RGWRole::role_oid_prefix = "roles.";
 const string RGWRole::role_path_oid_prefix = "role_paths.";
 const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
+int RGWRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+
+  return role_ctl->store_info(this,
+			      y,
+            dpp,
+			      RGWRoleCtl::PutParams().
+			      set_exclusive(exclusive));
+}
+
 int RGWRole::get(const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret = read_name(dpp, y);
