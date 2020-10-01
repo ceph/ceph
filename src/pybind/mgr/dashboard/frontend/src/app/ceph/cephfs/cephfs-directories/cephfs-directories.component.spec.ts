@@ -6,7 +6,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { TreeComponent, TreeModule, TREE_ACTIONS } from '@circlon/angular-tree-component';
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
@@ -369,7 +368,6 @@ describe('CephfsDirectoriesComponent', () => {
         SharedModule,
         RouterTestingModule,
         TreeModule,
-        NgBootstrapFormValidationModule.forRoot(),
         ToastrModule.forRoot(),
         NgbModalModule
       ],
