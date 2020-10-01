@@ -1226,23 +1226,44 @@ public:
   int olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
   template <class CLSRGWBucketModifyOpT, class F, class... Args>
   int with_bilog(F&& on_flushed, const RGWBucketInfo& bucket_info, Args&&... args);
-  template <bool DeleteMarkerV>
-  int bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state,
+  template <bool DeleteMarkerV, class OpIssuerT>
+  int bucket_index_link_olh(OpIssuerT& op_issuer,
+                            const RGWBucketInfo& bucket_info,
+                            RGWObjState& olh_state,
                             const rgw_obj& obj_instance,
-                            const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
+                            struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
-                            ceph::real_time unmod_since, bool high_precision_time,
-                            rgw_zone_set *zones_trace = nullptr,
+                            ceph::real_time unmod_since,
+                            bool high_precision_time,
                             bool log_data_change = false);
-  int bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
+  template <class OpIssuerT>
+  int bucket_index_unlink_instance(OpIssuerT& op_issuer,
+                                   const RGWBucketInfo& bucket_info,
+                                   const rgw_obj& obj_instance,
+                                   const string& olh_tag,
+                                   uint64_t olh_epoch,
+                                   rgw_zone_set *zones_trace = nullptr);
   int bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
   int bucket_index_clear_olh(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
-  int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                    bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
-                    uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
-  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
+  template <class BILogHandlerT>
+  int apply_olh_log(RGWObjectCtx& ctx,
+                    RGWObjState& obj_state,
+                    const RGWBucketInfo& bucket_info,
+                    const rgw_obj& obj,
+                    bufferlist& obj_tag,
+                    map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
+                    BILogHandlerT&& bilog_handler,
+                    uint64_t *plast_ver,
+                    rgw_zone_set *zones_trace = nullptr);
+  template <class BILogHandlerT>
+  int update_olh(RGWObjectCtx& obj_ctx,
+                 RGWObjState *state,
+                 const RGWBucketInfo& bucket_info,
+                 const rgw_obj& obj,
+                 BILogHandlerT&& bilog_handler,
+                 rgw_zone_set *zones_trace = nullptr);
   template <bool DeleteMarkerV>
   int set_olh(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
