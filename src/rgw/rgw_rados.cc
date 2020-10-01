@@ -3283,17 +3283,17 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw_obj obj;
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
-  boost::optional<RGWPutObj_ETagVerifier_Atomic> etag_verifier_atomic;
-  boost::optional<RGWPutObj_ETagVerifier_MPU> etag_verifier_mpu;
+  bool try_etag_verify;
+  rgw::putobj::etag_verifier_ptr etag_verifier;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl, manifest_bl;
+  std::optional<RGWCompressionInfo> compression_info;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
-  SourceObjType obj_type{OBJ_TYPE_UNINIT};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
@@ -3310,6 +3310,7 @@ public:
                        cct(cct),
                        filter(p),
                        compressor(compressor),
+                       try_etag_verify(cct->_conf->rgw_sync_obj_etag_verify),
                        plugin(plugin),
                        processor(p),
                        progress_cb(_progress_cb),
@@ -3326,9 +3327,28 @@ public:
 
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
-      src_attrs.erase(RGW_ATTR_COMPRESSION);
+      auto iter = src_attrs.find(RGW_ATTR_COMPRESSION);
+      if (iter != src_attrs.end()) {
+        const bufferlist bl = std::move(iter->second);
+        src_attrs.erase(iter); // don't preserve source compression info
+
+        if (try_etag_verify) {
+          // if we're trying to verify etags, we need to convert compressed
+          // ranges in the manifest back into logical multipart part offsets
+          RGWCompressionInfo info;
+          bool compressed = false;
+          int r = rgw_compression_info_from_attr(bl, compressed, info);
+          if (r < 0) {
+            ldout(cct, 4) << "failed to decode compression info, "
+                "disabling etag verification" << dendl;
+            try_etag_verify = false;
+          } else if (compressed) {
+            compression_info = std::move(info);
+          }
+        }
+      }
       /* We need the manifest to recompute the ETag for verification */
-      auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+      iter = src_attrs.find(RGW_ATTR_MANIFEST);
       if (iter != src_attrs.end()) {
         manifest_bl = std::move(iter->second);
         src_attrs.erase(iter);
@@ -3365,49 +3385,15 @@ public:
      * requested. We can enable simultaneous support once we have a mechanism
      * to know the sequence in which the filters must be applied.
      */
-    if (cct->_conf->rgw_sync_obj_etag_verify &&
-        src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
-
-      RGWObjManifest manifest;
-
-      auto miter = manifest_bl.cbegin();
-      try {
-        decode(manifest, miter);
-      } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
-        return -EIO;
-      }
-
-      RGWObjManifestRule rule;
-      bool found = manifest.get_rule(0, &rule);
-      if (!found) {
-        lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
-        return -EIO;
-      }
-
-      if (rule.part_size == 0) {
-        /* Atomic object */
-        obj_type = OBJ_TYPE_ATOMIC;
-        etag_verifier_atomic = boost::in_place(cct, filter);
-        filter = &*etag_verifier_atomic;
+    if (try_etag_verify && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+      ret = rgw::putobj::create_etag_verifier(cct, filter, manifest_bl,
+                                              compression_info,
+                                              etag_verifier);
+      if (ret < 0) {
+        ldout(cct, 4) << "failed to initial etag verifier, "
+            "disabling etag verification" << dendl;
       } else {
-        obj_type = OBJ_TYPE_MPU;
-        etag_verifier_mpu = boost::in_place(cct, filter);
-        uint64_t cur_part_ofs = UINT64_MAX;
-
-        /*
-         * We must store the offset of each part to calculate the ETAGs for each
-         * MPU part. These part ETags then become the input for the MPU object
-         * Etag.
-         */
-        for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
-          if (cur_part_ofs == mi.get_part_ofs())
-            continue;
-          cur_part_ofs = mi.get_part_ofs();
-          ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
-          etag_verifier_mpu->append_part_ofs(cur_part_ofs);
-        }
-        filter = &*etag_verifier_mpu;
+        filter = etag_verifier.get();
       }
     }
 
@@ -3478,20 +3464,13 @@ public:
     return data_len;
   }
 
-  string get_calculated_etag() {
-    if (obj_type == OBJ_TYPE_ATOMIC) {
-      etag_verifier_atomic->calculate_etag();
-      return etag_verifier_atomic->get_calculated_etag();
-    } else if (obj_type == OBJ_TYPE_MPU) {
-      etag_verifier_mpu->calculate_etag();
-      return etag_verifier_mpu->get_calculated_etag();
+  std::string get_verifier_etag() {
+    if (etag_verifier) {
+      etag_verifier->calculate_etag();
+      return etag_verifier->get_calculated_etag();
     } else {
       return "";
     }
-  }
-
-  SourceObjType get_obj_type() {
-    return obj_type;
   }
 };
 
@@ -4030,17 +4009,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   /* Perform ETag verification is we have computed the object's MD5 sum at our end */
-  if (cb.get_obj_type() != OBJ_TYPE_UNINIT) {
+  if (const auto& verifier_etag = cb.get_verifier_etag();
+      !verifier_etag.empty()) {
     string trimmed_etag = etag;
 
     /* Remove the leading and trailing double quotes from etag */
     trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
       trimmed_etag.end());
 
-    if (cb.get_calculated_etag().compare(trimmed_etag)) {
+    if (verifier_etag != trimmed_etag) {
       ret = -EIO;
       ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
-        << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+        << trimmed_etag << " Computed etag:" << verifier_etag << dendl;
       goto set_err_state;
     }
   }
