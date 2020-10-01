@@ -90,7 +90,7 @@ class RGWSI_Role_RADOS: public RGWSI_Role
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,
 		optional_yield y,
-		const DoutPrefixProvider *dpp) override;
+		const DoutPrefixProvider *dpp) override { return 0; } // TODO impl me
 
   int delete_info(RGWSI_MetaBackend::Context *ctx,
 		  const std::string& name,
