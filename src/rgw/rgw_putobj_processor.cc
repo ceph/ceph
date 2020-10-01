@@ -151,7 +151,7 @@ RadosWriter::~RadosWriter()
 
     int r = store->getRados()->delete_raw_obj(obj);
     if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
   }
 
