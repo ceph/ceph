@@ -7,7 +7,7 @@
 #include <string>
 
 #include "common/ceph_context.h"
-
+#include "rgw_metadata.h"
 class RGWCtl;
 class RGWRados;
 
@@ -196,7 +196,35 @@ public:
     info.dump(f);
   }
 };
-class RGWRoleMetadataHandler;
+
+//class RGWMetadataObject;
+
+class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
+{
+  struct Svc {
+    RGWSI_Role *role{nullptr};
+  } svc;
+
+public:
+
+  RGWRoleMetadataHandler(RGWSI_Role *role_svc);
+
+  int do_get(RGWSI_MetaBackend_Handler::Op *op,
+	     std::string& entry,
+	     RGWMetadataObject **obj,
+	     optional_yield y) final
+  {
+    return 0; // TODO
+  }
+
+  int do_remove(RGWSI_MetaBackend_Handler::Op *op,
+		std::string& entry,
+		RGWObjVersionTracker& objv_tracker,
+		optional_yield y) final {
+    return 0; // TODO
+  }
+};
+
 class RGWSI_Role;
 class RGWSI_MetaBackend_Handler;
 
@@ -208,7 +236,10 @@ class RGWRoleCtl {
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:
   RGWRoleCtl(RGWSI_Role *_role_svc,
-	     RGWRoleMetadataHandler *_rmhander);
+	     RGWRoleMetadataHandler *_rmhandler) {
+    svc.role = _role_svc;
+    rmhandler = _rmhandler;
+  }
 
   struct PutParams {
     ceph::real_time mtime;

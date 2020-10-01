@@ -654,3 +654,9 @@ int RGWRoleCtl::delete_path(const std::string& role_id,
 				 y);
   });
 }
+
+RGWRoleMetadataHandler::RGWRoleMetadataHandler(RGWSI_Role *role_svc)
+{
+  base_init(role_svc->ctx(), role_svc->get_be_handler());
+  svc.role = role_svc;
+}
