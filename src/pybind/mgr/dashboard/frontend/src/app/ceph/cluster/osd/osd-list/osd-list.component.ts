@@ -267,8 +267,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       }
     ];
     this.columns = [
-      { prop: 'host.name', name: $localize`Host` },
       { prop: 'id', name: $localize`ID`, flexGrow: 1, cellTransformation: CellTemplate.bold },
+      { prop: 'host.name', name: $localize`Host` },
       {
         prop: 'collectedStates',
         name: $localize`Status`,
