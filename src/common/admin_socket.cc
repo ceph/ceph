@@ -120,7 +120,7 @@ public:
 
 private:
   std::string variable;
-  std::map<std::string, AdminSocketHook*, std::less<> > subhooks;
+  std::multimap<std::string, AdminSocketHook*, std::less<> > subhooks;
   friend class AdminSocket;
 };
 
@@ -806,12 +806,7 @@ int AdminSocket::add_instance(InstancesHook* ih,
   ceph_assert(!variable.empty());
   ceph_assert(ih->subhooks.size() == 0 || variable == ih->variable);
   ih->variable = variable;
-  auto i = ih->subhooks.find(value);
-  if (i == ih->subhooks.end()) {
-    ih->subhooks.emplace(value, hook);
-  } else {
-    ret = -EEXIST;
-  }
+  ih->subhooks.emplace(value, hook);
   return ret;
 }
 
