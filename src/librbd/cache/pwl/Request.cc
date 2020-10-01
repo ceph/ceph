@@ -275,16 +275,7 @@ bool C_WriteRequest<T>::append_write_request(std::shared_ptr<SyncPoint> sync_poi
 template <typename T>
 void C_WriteRequest<T>::schedule_append() {
   ceph_assert(++m_appended == 1);
-  if (m_do_early_flush) {
-    /* This caller is waiting for persist, so we'll use their thread to
-     * expedite it */
-    pwl.flush_pmem_buffer(this->op_set->operations);
-    pwl.schedule_append(this->op_set->operations);
-  } else {
-    /* This is probably not still the caller's thread, so do the payload
-     * flushing/replicating later. */
-    pwl.schedule_flush_and_append(this->op_set->operations);
-  }
+  pwl.setup_schedule_append(this->op_set->operations, m_do_early_flush);
 }
 
 /**
