@@ -12,7 +12,6 @@ import {
   NgbTimepickerModule,
   NgbTooltipModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ClickOutsideModule } from 'ng-click-outside';
 import { ChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
@@ -57,7 +56,6 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     PipesModule,
     DirectivesModule,
     NgbDropdownModule,
-    NgBootstrapFormValidationModule,
     ClickOutsideModule,
     SimplebarAngularModule,
     RouterModule,

@@ -4,7 +4,6 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -29,13 +28,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   let data: {};
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      RouterTestingModule,
-      ToastrModule.forRoot(),
-      PoolModule,
-      NgBootstrapFormValidationModule.forRoot()
-    ],
+    imports: [HttpClientTestingModule, RouterTestingModule, ToastrModule.forRoot(), PoolModule],
     providers: [ErasureCodeProfileService, NgbActiveModal]
   });
 

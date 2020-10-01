@@ -3,7 +3,6 @@ import { NgModule } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { AppRoutingModule } from '../../../app-routing.module';
 import { SharedModule } from '../../../shared/shared.module';
@@ -12,14 +11,7 @@ import { MgrModuleFormComponent } from './mgr-module-form/mgr-module-form.compon
 import { MgrModuleListComponent } from './mgr-module-list/mgr-module-list.component';
 
 @NgModule({
-  imports: [
-    AppRoutingModule,
-    CommonModule,
-    ReactiveFormsModule,
-    SharedModule,
-    NgbNavModule,
-    NgBootstrapFormValidationModule
-  ],
+  imports: [AppRoutingModule, CommonModule, ReactiveFormsModule, SharedModule, NgbNavModule],
   declarations: [MgrModuleListComponent, MgrModuleFormComponent, MgrModuleDetailsComponent]
 })
 export class MgrModulesModule {}
