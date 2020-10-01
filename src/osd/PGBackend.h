@@ -146,6 +146,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
        GenContext<ThreadPool::TPHandle&> *c) = 0;
 
+     virtual std::set<pair<hobject_t,version_t> > &objects_repairing = 0;
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
        ObjectStore::Transaction&& t,

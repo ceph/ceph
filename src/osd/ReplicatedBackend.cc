@@ -1887,8 +1887,7 @@ bool ReplicatedBackend::handle_pull_response(
 
   if (complete) {
     pi.stat.num_objects_recovered++;
-    // XXX: This could overcount if regular recovery is needed right after a repair
-    if (get_parent()->pg_is_repair()) {
+    if (get_parent()->pg_is_repair() && get_parent()->objects_repairing.count(pair<hoid, pi.recovery_info.version>)) {
       pi.stat.num_objects_repaired++;
       get_parent()->inc_osd_stat_repaired();
     }

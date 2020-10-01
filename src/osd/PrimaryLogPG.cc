@@ -12186,6 +12186,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     waiting_for_cache_not_full.clear();
   }
   objects_blocked_on_cache_full.clear();
+  objects_repairing.clear();
 
   for (list<pair<OpRequestRef, OpContext*> >::iterator i =
          in_progress_async_reads.begin();
@@ -15108,6 +15109,10 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
 
     // Drop through to save this op in case an osd comes up with the object.
   }
+
+  if (objects_repairing.count(pair<soid, v>))
+    return -EAGAIN;
+  objects_reparing.insert(pair<soid,v>);
 
   // Restart the op after object becomes readable again
   waiting_for_unreadable_object[soid].push_back(op);
