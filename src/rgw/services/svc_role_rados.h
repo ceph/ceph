@@ -84,7 +84,7 @@ class RGWSI_Role_RADOS: public RGWSI_Role
   		std::string& path,
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,
-  		optional_yield y) override;
+  		optional_yield y) override { return 0; } // TODO impl me
 
   int delete_info(RGWSI_MetaBackend::Context *ctx,
 		  const std::string& name,
