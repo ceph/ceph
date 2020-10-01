@@ -88,6 +88,8 @@ Some of the checks that host facts can support (today) are listed below;
 * OS version consistency
 * Support consistently configured 
 * Security policy (SELINUX, AppArmor enabled)
+* enabled services are running
+* daemons are not in a disabled or dead state (when the host is in an ONLINE state)
 * cluster network and public network using consistent
 
   * network connection speeds
