@@ -466,6 +466,15 @@ function TEST_rep_recovery_multi() {
     local lastobj=100
     local testgroup=40
 
+    # reset everything since this test seems to fail when
+    # following other tests
+    teardown $dir || return 1
+    setup $dir || return 1
+    # set warning amount in case default changes
+    run_mon $dir a --mon_osd_warn_num_repaired=$warnings || return 1
+    run_mgr $dir x || return 1
+    ceph osd pool create foo 8 || return 1
+
     setup_osds 3 || return 1
 
     local poolname=test-pool
@@ -489,7 +498,7 @@ function TEST_rep_recovery_multi() {
       inject_eio rep data $poolname obj${o} $dir 0 || return 1
     done
 
-    for i in $(seq 1 $lastobj)
+    for i in $(seq 1 $testgroup)
     do
       rados --pool $poolname get obj${i} $dir/CHECK || return 1
       diff -q $dir/ORIGINAL $dir/CHECK || return 1
@@ -513,9 +522,9 @@ function TEST_rep_backfill_in_progress() {
     local objname=myobject
     # hopefully this is large enough that backfill is still
     # going when we start reading the error objects
-    local lastobj=500
+    local lastobj=20
     # The last testgroup number of objects to get read errors
-    local testgroup=10
+    local testgroup=20
 
     export CEPH_ARGS
     CEPH_ARGS+=' --osd_min_pg_log_entries=5 --osd_max_pg_log_entries=10'
@@ -538,30 +547,36 @@ function TEST_rep_backfill_in_progress() {
     done
 
     # shard 0 is the primary osd not the osd id
-    for o in $(seq $(($lastobj - $testgroup)) $lastobj)
+    for o in $(seq 1 $lastobj)
     do
       inject_eio rep data $poolname obj${o} $dir 0 || return 1
     done
 
-    ceph osd pool set $poolname size 4
+    #ceph osd pool set $poolname size 4
 
-    for tmp in $(seq 1 100); do
-      state=$(get_state $pgid)
-      echo $state | grep backfilling
-      if [ "$?" = "0" ]; then
-        break
-      fi
-      echo "$state "
-      sleep 1
-    done
+    #for tmp in $(seq 1 100); do
+    #  state=$(get_state $pgid)
+    #  echo $state | grep backfilling
+    #  if [ "$?" = "0" ]; then
+    #    break
+    #  fi
+    #  echo "$state "
+    #  sleep 1
+    #done
 
-    for i in $(seq $(($lastobj - $testgroup)) $lastobj)
+    for i in $(seq 1 $lastobj)
     do
-      rados --pool $poolname get obj${i} $dir/CHECK || return 1
-      diff -q $dir/ORIGINAL $dir/CHECK || return 1
+      rados --pool $poolname get obj${i} $dir/CHECK &
+      rados --pool $poolname get obj${i} $dir/CHECK &
+      rados --pool $poolname get obj${i} $dir/CHECK &
+      rados --pool $poolname get obj${i} $dir/CHECK &
+      rados --pool $poolname get obj${i} $dir/CHECK &
+      rados --pool $poolname get obj${i} $dir/CHECK &
+      rados --pool $poolname get obj${i} $dir/CHECK &
+      rados --pool $poolname get obj${i} $dir/CHECK &
     done
 
-    wait_for_clean || return 1
+    WAIT_FOR_CLEAN_TIMEOUT=300 wait_for_clean || return 1
 
     # Make sure all objects happened in one recovery phase
     test "1" = "$(grep "recovery already in progress" $dir/osd.${primary}.log | wc -l)" || return 1
@@ -569,6 +584,8 @@ function TEST_rep_backfill_in_progress() {
     test "$(($testgroup - 1))" = "$(grep ", but already seen errors" $dir/osd.${primary}.log | wc -l)" || return 1
 
     rm -f ${dir}/ORIGINAL ${dir}/CHECK
+
+    grep rep_repair_primary_object $dir/osd.${primary}.log
 
     delete_pool $poolname
 }
