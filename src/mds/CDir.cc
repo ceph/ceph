@@ -1983,13 +1983,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   list<CInode*> undef_inodes;
 
   // purge stale snaps?
-  // only if we have past_parents open!
   bool force_dirty = false;
   const set<snapid_t> *snaps = NULL;
   SnapRealm *realm = inode->find_snaprealm();
-  if (!realm->have_past_parents_open()) {
-    dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
+  if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
     dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
@@ -2344,9 +2341,7 @@ void CDir::_omap_commit(int op_prio)
   // snap purge?
   const set<snapid_t> *snaps = NULL;
   SnapRealm *realm = inode->find_snaprealm();
-  if (!realm->have_past_parents_open()) {
-    dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
+  if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
     dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
@@ -2452,7 +2447,7 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
       if (!in->snaprealm) {
 	if (snaps)
 	  in->purge_stale_snap_data(*snaps);
-      } else if (in->snaprealm->have_past_parents_open()) {
+      } else {
 	in->purge_stale_snap_data(in->snaprealm->get_snaps());
       }
     }

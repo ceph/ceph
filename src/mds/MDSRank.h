@@ -355,8 +355,6 @@ class MDSRank {
 		      const std::string& option, const std::string& value,
 		      std::ostream& ss);
 
-    void mark_base_recursively_scrubbed(inodeno_t ino);
-
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
