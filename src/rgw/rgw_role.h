@@ -17,6 +17,7 @@ class RGWRados;
 class RGWRoleMetadataHandler;
 class RGWSI_Role;
 class RGWSI_MetaBackend_Handler;
+class RGWRoleCtl;
 
 namespace rgw { namespace sal {
 class RGWRole
@@ -32,6 +33,8 @@ public:
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 protected:
 
+  RGWRoleCtl *role_ctl;
+
   std::string id;
   std::string name;
   std::string path;
@@ -44,7 +47,7 @@ protected:
   std::multimap<std::string,std::string> tags;
 
 public:
-  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
   virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
   virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
