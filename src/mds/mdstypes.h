@@ -957,7 +957,7 @@ struct mds_load_t {
 
   double cpu_load_avg = 0.0;
 
-  double mds_load() const;  // defiend in MDBalancer.cc
+  double mds_load(int64_t bal_mode) const;  // defiend in MDBalancer.cc
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
