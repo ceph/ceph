@@ -11,8 +11,9 @@
 #include "common/ceph_json.h"
 #include "common/ceph_context.h"
 #include "rgw/rgw_rados.h"
-//#include "svc_meta_be.h"
+#include "rgw_metadata.h"
 
+class RGWCtl;
 class RGWRados;
 class RGWRoleMetadataHandler;
 class RGWSI_Role;
@@ -146,6 +147,36 @@ public:
 WRITE_CLASS_ENCODER(RGWRole)
 } } // namespace rgw::sal
 
+//class RGWMetadataObject;
+
+class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
+{
+  struct Svc {
+    RGWSI_Role *role{nullptr};
+  } svc;
+
+public:
+
+  RGWRoleMetadataHandler(RGWSI_Role *role_svc);
+
+  int do_get(RGWSI_MetaBackend_Handler::Op *op,
+	     std::string& entry,
+	     RGWMetadataObject **obj,
+	     optional_yield y,
+       const DoutPrefixProvider *dpp) final
+  {
+    return 0; // TODO
+  }
+
+  int do_remove(RGWSI_MetaBackend_Handler::Op *op,
+		std::string& entry,
+		RGWObjVersionTracker& objv_tracker,
+		optional_yield y,
+    const DoutPrefixProvider *dpp) final {
+    return 0; // TODO
+  }
+};
+
 class RGWRoleCtl {
   struct Svc {
     RGWSI_Role *role {nullptr};
@@ -154,7 +185,10 @@ class RGWRoleCtl {
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:
   RGWRoleCtl(RGWSI_Role *_role_svc,
-	     RGWRoleMetadataHandler *_rmhander);
+	     RGWRoleMetadataHandler *_rmhandler) {
+    svc.role = _role_svc;
+    rmhandler = _rmhandler;
+  }
 
   struct PutParams {
     ceph::real_time mtime;
