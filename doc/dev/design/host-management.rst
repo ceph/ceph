@@ -56,10 +56,11 @@ When a daemon is selected the action button would provide the following
 * stop *(daemon must be running)*
 * start *(daemon must be stopped)*
 * restart *(daemon must be running)*
-* get logs *(only available to daemons in a running state)*
+* view logs *(only available to daemons in a running state)*
 
-The **get logs** option uses cephadm's **logs** command to gather the daemons logs, allowing them to be
-saved on the Admins machine to support problem determination workflows and support escalations.
+The **view logs** option may use cephadm's **logs** command to gather the daemons logs, allowing them to be
+viewed, and potentially downloaded to the Admins machine in support of problem determination workflows and
+support escalations.
 
 Server Information
 ==================
