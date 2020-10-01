@@ -149,6 +149,14 @@
   - ``mds session blacklist on timeout`` is now ``mds session blocklist on timeout``
   - ``mds session blacklist on evict`` is now ``mds session blocklist on evict``
 
+* CephFS: Compatibility code for old on-disk format of snapshot has been removed.
+  Current on-disk format of snapshot was introduced by Mimic release. If there
+  are any snapshots created by Ceph release older than Mimic. Before upgrading,
+  either delete them all or scrub the whole filesystem:
+
+    ceph daemon <mds of rank 0> scrub_path / force recursive repair
+    ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
+
 * The following librados API calls have changed:
 
   - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.

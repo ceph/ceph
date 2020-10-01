@@ -702,12 +702,6 @@ void MDSRank::set_mdsmap_multimds_snaps_allowed()
   already_sent = true;
 }
 
-void MDSRank::mark_base_recursively_scrubbed(inodeno_t ino)
-{
-  if (mdsmap->get_tableserver() == whoami)
-    snapserver->mark_base_recursively_scrubbed(ino);
-}
-
 void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
