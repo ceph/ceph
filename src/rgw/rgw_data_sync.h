@@ -737,8 +737,8 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
                            rgw::sal::RadosStore* store,
                            const rgw_sync_bucket_pipe& pipe,
                            const RGWBucketInfo& dest_bucket_info,
-                           const RGWBucketInfo *psource_bucket_info,
-                           std::vector<rgw_bucket_shard_sync_info> *status);
+                           std::vector<rgw_bucket_shard_sync_info> *status,
+                           std::vector<rgw_bucket_index_marker_info> *opt_source_markers);
 
 class RGWDefaultSyncModule : public RGWSyncModule {
 public:

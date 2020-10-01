@@ -3905,7 +3905,7 @@ int RGWRemoteBucketManager::init(RGWCoroutinesManager *cr_mgr)
 
   int source_num_shards = wrapper_core_inc->num_shards();
 
-  int num_shards = wrapper_core_inc->num_shards();
+  int num_shards = source_num_shards;
   if (num_shards <= 0) {
     num_shards = 1;
   }
@@ -5693,9 +5693,11 @@ void RGWGetBucketPeersCR::update_from_target_bucket_policy()
                  pipes);
 
   for (siter = pipes->begin(); siter != pipes->end(); ++siter) {
+#if 0
     if (!siter->source.has_bucket_info()) {
       buckets_info.emplace(siter->source.get_bucket(), all_bucket_info());
     }
+#endif
     if (!siter->target.has_bucket_info()) {
       buckets_info.emplace(siter->target.get_bucket(), all_bucket_info());
     }
@@ -5718,9 +5720,6 @@ void RGWGetBucketPeersCR::update_from_source_bucket_policy()
                  pipes);
 
   for (siter = pipes->begin(); siter != pipes->end(); ++siter) {
-    if (!siter->source.has_bucket_info()) {
-      buckets_info.emplace(siter->source.get_bucket(), all_bucket_info());
-    }
     if (!siter->target.has_bucket_info()) {
       buckets_info.emplace(siter->target.get_bucket(), all_bucket_info());
     }
@@ -6185,7 +6184,7 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   rgw::sal::RadosStore* const store;
   RGWDataSyncCtx *const sc;
   RGWDataSyncEnv *const env;
-  RGWBucketInfo source_bucket_info;
+  rgw_bucket source_bucket;
   RGWBucketInfo dest_bucket_info;
   rgw_bucket_shard source_bs;
   rgw_bucket_shard dest_bs;
@@ -6199,24 +6198,25 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   Vector::iterator i, end;
 
  public:
-  RGWCollectBucketSyncStatusCR(rgw::sal::RadosStore* store, RGWDataSyncCtx *sc,
-                               const RGWBucketInfo& source_bucket_info,
+  RGWCollectBucketSyncStatusCR(rgw::sal::RadosStore *store, RGWDataSyncCtx *sc,
+                               const rgw_bucket& source_bucket,
+                               int num_source_shards,
                                const RGWBucketInfo& dest_bucket_info,
                                Vector *status)
     : RGWShardCollectCR(sc->cct, max_concurrent_shards),
       store(store), sc(sc), env(sc->env),
-      source_bucket_info(source_bucket_info),
+      source_bucket(source_bucket),
       dest_bucket_info(dest_bucket_info),
       i(status->begin()), end(status->end())
   {
-    shard_to_shard_sync = (source_bucket_info.layout.current_index.layout.normal.num_shards == dest_bucket_info.layout.current_index.layout.normal.num_shards);
+    shard_to_shard_sync = (num_source_shards == (int)dest_bucket_info.layout.current_index.layout.normal.num_shards);
 
-    source_bs = rgw_bucket_shard(source_bucket_info.bucket, source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
-    dest_bs = rgw_bucket_shard(dest_bucket_info.bucket, dest_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
+    source_bs = rgw_bucket_shard(source_bucket, num_source_shards > 0 ? 0 : -1);
+    dest_bs = rgw_bucket_shard(dest_bucket_info.bucket, shard_to_shard_sync ? source_bs.shard_id : -1);
 
     status->clear();
 
-    auto num = std::max<size_t>(1, source_bucket_info.layout.current_index.layout.normal.num_shards);
+    auto num = std::max<size_t>(1, num_source_shards);
     status->resize(num);
 
     bst.reserve(num);
@@ -6242,12 +6242,60 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   }
 };
 
+class RGWCollectBucketSourceShardStateCR : public RGWShardCollectCR {
+  static constexpr int max_concurrent_shards = 16;
+  rgw::sal::RGWRadosStore *const store;
+  RGWDataSyncCtx *const sc;
+  RGWDataSyncEnv *const env;
+
+  std::shared_ptr<RGWBucketShardSIPCRWrapperCore> wrapper_core_inc;
+
+  std::vector<unique_ptr<RGWBucketShardSIPCRWrapper> > sips;
+
+  using Vector = std::vector<rgw_bucket_index_marker_info>;
+  Vector::iterator i, end;
+
+  int cur_shard{0};
+
+ public:
+  RGWCollectBucketSourceShardStateCR(rgw::sal::RGWRadosStore *store,
+                                     RGWDataSyncCtx *sc,
+                                     std::shared_ptr<RGWBucketShardSIPCRWrapperCore> wrapper_core_inc,
+                                     Vector *status)
+    : RGWShardCollectCR(sc->cct, max_concurrent_shards),
+      store(store), sc(sc), env(sc->env),
+      wrapper_core_inc(wrapper_core_inc),
+      i(status->begin()), end(status->end())
+  {
+    status->clear();
+
+    auto num = std::max<size_t>(1, wrapper_core_inc->num_shards());
+    status->resize(num);
+
+    sips.reserve(num);
+
+    i = status->begin();
+    end = status->end();
+  }
+
+  bool spawn_next() override {
+    if (i == end) {
+      return false;
+    }
+    sips.emplace_back(new RGWBucketShardSIPCRWrapper(wrapper_core_inc, cur_shard));
+    spawn(sips.back()->get_pos_cr(&*i), false);
+    ++i;
+    ++cur_shard;
+    return true;
+  }
+};
+
 int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
                            rgw::sal::RadosStore* store,
                            const rgw_sync_bucket_pipe& pipe,
                            const RGWBucketInfo& dest_bucket_info,
-                           const RGWBucketInfo *psource_bucket_info,
-                           std::vector<rgw_bucket_shard_sync_info> *status)
+                           std::vector<rgw_bucket_shard_sync_info> *status,
+                           std::vector<rgw_bucket_index_marker_info> *opt_source_markers)
 {
   if (!pipe.source.zone ||
       !pipe.source.bucket ||
@@ -6263,35 +6311,53 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
 
   const rgw_bucket& source_bucket = *pipe.source.bucket;
 
-  RGWBucketInfo source_bucket_info;
-
-  if (!psource_bucket_info) {
-    auto& bucket_ctl = store->getRados()->ctl.bucket;
-
-    int ret = bucket_ctl->read_bucket_info(source_bucket, &source_bucket_info, null_yield, dpp);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info: bucket=" << source_bucket << ": " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-
-    psource_bucket_info = &source_bucket_info;
+  RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.start();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    return ret;
   }
-
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
   env.init(dpp, store->ctx(), store, store->svc(), store->svc()->rados->get_async_processor(),
-           nullptr, nullptr, nullptr, module, nullptr);
+           &http_manager, nullptr, nullptr, module, nullptr);
 
   RGWDataSyncCtx sc;
-  RGWRemoteCtl::Conns no_conns;
-  sc.init(&env, no_conns, *pipe.source.zone);
+  auto conns = store->ctl()->remote->zone_conns(*pipe.source.zone);
+  if (!conns) {
+    ldpp_dout(dpp, 0) << "connection object to zone " << *pipe.source.zone << " does not exist" << dendl;
+    return -ENOENT;
+  }
 
-  RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
-  return crs.run(dpp, new RGWCollectBucketSyncStatusCR(store, &sc,
-                                                  *psource_bucket_info,
-                                                  dest_bucket_info,
-                                                  status));
+  sc.init(&env, *conns, *pipe.source.zone);
+
+  auto handlers_repo = std::make_shared<RGWBucketShardSIPCRHandlersRepo>(&sc, source_bucket);
+  auto wrapper_core_inc = std::make_shared<RGWBucketShardSIPCRWrapperCore>(&sc, source_bucket, handlers_repo);
+
+  ret = crs.run(dpp, wrapper_core_inc->init_cr("bucket.inc", "legacy/bucket.inc"));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize SIP core for incremental bucket sync: ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = crs.run(dpp, new RGWCollectBucketSyncStatusCR(store, &sc,
+                                                 source_bucket,
+                                                 wrapper_core_inc->num_shards(),
+                                                 dest_bucket_info,
+                                                 status));
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!opt_source_markers) {
+    return 0;
+  }
+
+  return crs.run(dpp, new RGWCollectBucketSourceShardStateCR(store, &sc,
+                                                        wrapper_core_inc,
+                                                        opt_source_markers));
 }
 
 void rgw_data_sync_info::generate_test_instances(list<rgw_data_sync_info*>& o)

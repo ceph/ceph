@@ -2506,15 +2506,16 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
 }
 
 static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, const RGWZone& zone,
-                                     const RGWZone& source, RGWRESTConn *conn,
+                                     const rgw_zone_id& source_zone_id,
+                                     const string& source_zone_name,
                                      const RGWBucketInfo& bucket_info,
                                      rgw_sync_bucket_pipe pipe,
                                      int width, std::ostream& out)
 {
-  out << indented{width, "source zone"} << source.id << " (" << source.name << ")" << std::endl;
+  out << indented{width, "source zone"} << source_zone_id << " (" << source_zone_name << ")" << std::endl;
 
   // syncing from this zone?
-  if (!zone.syncs_from(source.name)) {
+  if (!zone.syncs_from(source_zone_name)) {
     out << indented{width} << "does not sync from zone\n";
     return 0;
   }
@@ -2528,14 +2529,19 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   int r = init_bucket(nullptr, *pipe.source.bucket, &source_bucket);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read source bucket info: " << cpp_strerror(r) << dendl;
-    return r;
+
+    /* source bucket info might not exist because it's a foreign zone */
+    if (r != -ENOENT) {
+      return r;
+    }
   }
 
   pipe.source.bucket = source_bucket->get_key();
   pipe.dest.bucket = bucket_info.bucket;
 
   std::vector<rgw_bucket_shard_sync_info> status;
-  r = rgw_bucket_sync_status(dpp, store, pipe, bucket_info, &source_bucket->get_info(), &status);
+  std::vector<rgw_bucket_index_marker_info> remote_markers;
+  r = rgw_bucket_sync_status(dpp, store, pipe, bucket_info, &status, &remote_markers);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
     return r;
@@ -2565,22 +2571,16 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   }
   out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
 
-  BucketIndexShardsManager remote_markers;
-  r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(), remote_markers, null_yield);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "failed to read remote log: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   std::set<int> shards_behind;
-  for (auto& r : remote_markers.get()) {
-    auto shard_id = r.first;
+  int i = 0;
+  for (auto& r : remote_markers) {
+    int shard_id = i++;
     auto& m = status[shard_id];
-    if (r.second.empty()) {
+    if (r.pos.empty()) {
       continue; // empty bucket index shard
     }
     auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker->position);
-    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.second) {
+    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.pos) {
       shards_behind.insert(shard_id);
     }
   }
@@ -2836,31 +2836,27 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
   set<rgw_zone_id> zone_ids;
 
   if (!source_zone_id.empty()) {
-    auto z = zonegroup.zones.find(source_zone_id);
-    if (z == zonegroup.zones.end()) {
+    auto z = zonegroup.combined_zones.find(source_zone_id);
+    if (z == zonegroup.combined_zones.end()) {
       ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
           << zonegroup.get_name() << dendl;
       return -EINVAL;
     }
     auto c = store->ctl()->remote->zone_conns(source_zone_id);
     if (!c) {
-      lderr(store->ctx()) << "No connection to zone " << z->second.name << dendl;
+      lderr(store->ctx()) << "No connection to zone " << z->second << dendl;
       return -EINVAL;
     }
     zone_ids.insert(source_zone_id);
   } else {
-    for (const auto& entry : zonegroup.zones) {
-      zone_ids.insert(entry.second.id);
+    for (const auto& entry : zonegroup.combined_zones) {
+      zone_ids.insert(entry.first);
     }
   }
 
   for (auto& zone_id : zone_ids) {
-    auto z = zonegroup.zones.find(zone_id.id);
-    if (z == zonegroup.zones.end()) { /* should't happen */
-      continue;
-    }
-    auto c = store->ctl()->remote->zone_conns(zone_id.id);
-    if (!c) {
+    auto z = zonegroup.combined_zones.find(zone_id.id);
+    if (z == zonegroup.combined_zones.end()) { /* should't happen */
       continue;
     }
 
@@ -2870,9 +2866,9 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
 	  pipe.source.bucket != opt_source_bucket) {
 	continue;
       }
-      if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-	bucket_source_sync_status(dpp(), store, zone, z->second,
-				  c->data,
+      if (pipe.source.zone.value_or(rgw_zone_id()) == z->first) {
+	bucket_source_sync_status(dpp(), store, zone,
+                                  z->first, z->second,
 				  info, pipe,
 				  width, out);
       }
