@@ -378,6 +378,7 @@ int RGWCtlDef::init(RGWServices& svc, const DoutPrefixProvider *dpp)
                                 svc.bucket_sync,
                                 svc.bi));
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
+  role = std::make_unique<RGWRoleCtl>(svc.role, static_cast<RGWRoleMetadataHandler*>(meta.role.get()));
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
