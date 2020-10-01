@@ -7198,7 +7198,7 @@ int RGWRados::with_bilog(const DoutPrefixProvider *dpp, F&& func,
 
 template <bool DeleteMarkerV, class OpIssuerT>
 int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, OpIssuerT& op_issuer,
-                                    RGWBucketInfo& bucket_info,
+                                    const RGWBucketInfo& bucket_info,
                                     RGWObjState& olh_state,
                                     const rgw_obj& obj_instance,
                                     struct rgw_bucket_dir_entry_meta *meta,
@@ -7248,7 +7248,7 @@ void RGWRados::bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjSt
 
 template <class OpIssuerT>
 int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp, OpIssuerT& op_issuer,
-                                           RGWBucketInfo& bucket_info,
+                                           const RGWBucketInfo& bucket_info,
                                            const rgw_obj& obj_instance,
                                            const std::string& olh_tag,
                                            uint64_t olh_epoch,
@@ -7481,7 +7481,7 @@ static int decode_olh_info(const DoutPrefixProvider *dpp, CephContext* cct, cons
 template <class BILogHandlerT>
 int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
                             RGWObjState& state,
-                            RGWBucketInfo& bucket_info,
+                            const RGWBucketInfo& bucket_info,
                             const rgw::sal::Object* obj,
                             bufferlist& olh_tag,
                             std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
@@ -7656,7 +7656,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 template <class BILogHandlerT>
 int RGWRados::update_olh(const DoutPrefixProvider *dpp,
                          RGWObjState *state,
-                         RGWBucketInfo& bucket_info,
+                         const RGWBucketInfo& bucket_info,
                          const rgw::sal::Object* obj,
                          BILogHandlerT&& bilog_handler,
                          rgw_zone_set *zones_trace)
