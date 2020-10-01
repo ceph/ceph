@@ -458,6 +458,7 @@ private:
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;
   unsigned delegate_inos_pct = 0;
+  int64_t bal_fragment_size_max;
 
   DecayCounter recall_throttle;
   time last_recall_state;

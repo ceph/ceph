@@ -532,6 +532,8 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 
+  bal_export_pin = g_conf().get_val<bool>("mds_bal_export_pin");
+
   heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
                                          cct->_conf->mds_op_log_threshold);
@@ -647,9 +649,9 @@ void MDSRank::update_targets()
 
 void MDSRank::hit_export_target(mds_rank_t rank, double amount)
 {
-  double rate = g_conf()->mds_bal_target_decay;
+  double rate = g_conf().get_val<double>("mds_bal_target_decay");
   if (amount < 0.0) {
-    amount = 100.0/g_conf()->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
+    amount = 100.0/rate; /* a good default for "i am trying to keep this export_target active" */
   }
   auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(DecayRate(rate)));
   auto &counter = em.first->second;
@@ -3624,7 +3626,7 @@ MDSRankDispatcher::MDSRankDispatcher(
     Context *suicide_hook_,
     boost::asio::io_context& ioc)
   : MDSRank(whoami_, fs_name_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
-            msgr, monc_, mgrc, respawn_hook_, suicide_hook_, ioc)
+            msgr, monc_, mgrc, respawn_hook_, suicide_hook_, ioc) 
 {
     g_conf().add_observer(this);
 }
@@ -3657,6 +3659,17 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "host",
     "mds_bal_fragment_dirs",
     "mds_bal_fragment_interval",
+    "mds_bal_interval",
+    "mds_bal_max_until",
+    "mds_bal_max",
+    "mds_bal_mode",
+    "mds_bal_export_pin",
+    "mds_bal_sample_interval",
+    "mds_bal_split_rd",
+    "mds_bal_split_wr",
+    "mds_bal_replicate_threshold",
+    "mds_bal_unreplicate_threshold",
+    "mds_bal_fragment_size_max",
     "mds_cache_memory_limit",
     "mds_cache_mid",
     "mds_cache_reservation",
@@ -3725,7 +3738,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
       changed.count("fsid")) {
     update_log_config();
   }
-
+  if (changed.count("mds_bal_export_pin")) {
+    bal_export_pin = g_conf().get_val<bool>("mds_bal_export_pin");
+  }
   finisher->queue(new LambdaContext([this, changed](int) {
     std::scoped_lock lock(mds_lock);
 

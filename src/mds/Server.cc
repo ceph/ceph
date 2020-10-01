@@ -260,6 +260,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   cap_acquisition_throttle = g_conf().get_val<uint64_t>("mds_session_cap_acquisition_throttle");
   max_caps_throttle_ratio = g_conf().get_val<double>("mds_session_max_caps_throttle_ratio");
   caps_throttle_retry_request_timeout = g_conf().get_val<double>("mds_cap_acquisition_throttle_retry_request_timeout");
+  bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -1252,6 +1253,9 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   }
   if (changed.count("mds_alternate_name_max")) {
     alternate_name_max  = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
+  }
+  if (changed.count("mds_bal_fragment_size_max")) {
+    bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
   }
 }
 
@@ -3186,9 +3190,15 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
 bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
 {
   const auto size = in->get_frag_size();
+<<<<<<< HEAD
   if (size >= g_conf()->mds_bal_fragment_size_max) {
     dout(10) << "fragment " << *in << " size exceeds " << g_conf()->mds_bal_fragment_size_max << " (CEPHFS_ENOSPC)" << dendl;
     respond_to_request(mdr, -CEPHFS_ENOSPC);
+=======
+  if (size >= bal_fragment_size_max) {
+    dout(10) << "fragment " << *in << " size exceeds " << bal_fragment_size_max << " (ENOSPC)" << dendl;
+    respond_to_request(mdr, -ENOSPC);
+>>>>>>> mds: Optimize Balancer code path to use newer config fetch and also cache the fetched values when there is a hot code path
     return false;
   }
 

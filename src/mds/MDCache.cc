@@ -206,7 +206,7 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
   }
 
-  if (changed.count("mds_kill_dirgrag_at")) {
+  if (changed.count("mds_kill_dirfrag_at")) {
     kill_dirfrag_at = g_conf().get_val<int64_t>("mds_kill_dirfrag_at");
   }
 

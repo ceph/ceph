@@ -218,6 +218,8 @@ class MDSRank {
     bool is_cluster_degraded() const { return cluster_degraded; }
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
+    bool get_bal_export_pin() { return bal_export_pin; }
+
     bool is_cache_trimmable() const {
       return is_standby_replay() || is_clientreplay() || is_active() || is_stopping();
     }
@@ -596,6 +598,8 @@ class MDSRank {
 
     Context *respawn_hook;
     Context *suicide_hook;
+
+    bool bal_export_pin;
 
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
 private:
