@@ -12,6 +12,7 @@ meta:
 overrides:
   ceph:
     log-whitelist:
+    - evicting unresponsive client
     - reached quota
     - scrub
     - osd_map_max_advance
