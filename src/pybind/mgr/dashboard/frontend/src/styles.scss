@@ -9,10 +9,12 @@ $fa-font-path: '~fork-awesome/fonts';
 $font-family-icon: 'ForkAwesome';
 
 // Bootstrap
+$warning-dark: #fd7e14;
 $theme-colors: (
   'primary': $color-primary,
   'secondary': $color-accent,
-  'dark': $color-mild-gray
+  'dark': $color-mild-gray,
+  'warning-dark': $warning-dark
 );
 
 $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-serif,
