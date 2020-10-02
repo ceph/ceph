@@ -38,7 +38,8 @@ $fg-color-over-dark-bg: $white;
 $fg-hover-color-over-dark-bg: $gray-500;
 
 $theme-colors: (
-  'accent': #ef5c55
+  'accent': #ef5c55,
+  'warning-dark': $orange
 );
 
 // Body
