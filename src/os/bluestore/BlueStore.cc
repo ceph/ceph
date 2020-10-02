@@ -694,16 +694,14 @@ private:
   ghobject_t m_oid;
 
   void get_oid() {
+    m_oid = ghobject_t();
+    while (m_it->valid() && is_extent_shard_key(m_it->key())) {
+      m_it->next();
+    }
     if (!valid()) {
       return;
     }
 
-    if (is_extent_shard_key(m_it->key())) {
-      next();
-      return;
-    }
-
-    m_oid = ghobject_t();
     int r = get_key_object(m_it->key(), &m_oid);
     ceph_assert(r == 0);
   }
