@@ -37,6 +37,10 @@ p {
   .info {
     color: bd.$info;
   }
+
+  .debug {
+    color: bd.$gray-700;
+  }
 }
 
 ::ng-deep cd-logs ngb-timepicker input.ngb-tp-input {

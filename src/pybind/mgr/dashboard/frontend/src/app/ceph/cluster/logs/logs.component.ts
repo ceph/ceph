@@ -19,6 +19,7 @@ export class LogsComponent implements OnInit, OnDestroy {
 
   interval: number;
   priorities: Array<{ name: string; value: string }> = [
+    { name: 'Debug', value: '[DBG]' },
     { name: 'Info', value: '[INF]' },
     { name: 'Warning', value: '[WRN]' },
     { name: 'Error', value: '[ERR]' },
@@ -29,6 +30,11 @@ export class LogsComponent implements OnInit, OnDestroy {
   selectedDate: NgbDateStruct;
   startTime = { hour: 0, minute: 0 };
   endTime = { hour: 23, minute: 59 };
+  maxDate = {
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    day: new Date().getDate()
+  };
 
   constructor(
     private logsService: LogsService,
@@ -119,5 +125,15 @@ export class LogsComponent implements OnInit, OnDestroy {
   clearDate() {
     this.selectedDate = null;
     this.filterLogs();
+  }
+  resetFilter() {
+    this.priority = 'All';
+    this.search = '';
+    this.selectedDate = null;
+    this.startTime = { hour: 0, minute: 0 };
+    this.endTime = { hour: 23, minute: 59 };
+    this.filterLogs();
+
+    return false;
   }
 }
