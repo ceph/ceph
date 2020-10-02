@@ -791,6 +791,10 @@ std::vector<Option> get_global_options() {
     .set_default(5)
     .set_description("Zlib compression level to use"),
 
+    Option("compressor_zstd_level", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("Zstd compression level to use"),
+
     Option("qat_compressor_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Enable Intel QAT acceleration support for compression if available"),
