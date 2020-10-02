@@ -319,6 +319,17 @@ describe('PoolFormComponent', () => {
       formHelper.expectValidChange('size', 2);
     });
 
+    it('validates if warning is displayed when size is 1', () => {
+      formHelper.setValue('poolType', 'replicated');
+      formHelper.expectValid('size');
+
+      formHelper.setValue('size', 1, true);
+      expect(fixtureHelper.getElementByCss('#size ~ .text-warning-dark')).toBeTruthy();
+
+      formHelper.setValue('size', 2, true);
+      expect(fixtureHelper.getElementByCss('#size ~ .text-warning-dark')).toBeFalsy();
+    });
+
     it('validates compression mode default value', () => {
       expect(form.getValue('mode')).toBe('none');
     });
