@@ -3,9 +3,7 @@
 ``batch``
 ===========
 The subcommand allows to create multiple OSDs at the same time given
-an input of devices. The ``batch`` subcommand is closely related to
-drive-groups. One individual drive group specification translates to a single
-``batch`` invocation.
+an input of devices.
 
 The subcommand is based to :ref:`ceph-volume-lvm-create`, and will use the very
 same code path. All ``batch`` does is to calculate the appropriate sizes of all
@@ -129,5 +127,3 @@ Suppose /dev/sdc goes bad and needs to be replaced. After destroying the OSD and
 replacing the hardware, you can again call the same command and `ceph-volume`
 will detect that only two out of the three wanted OSDs are setup and re-create
 the missing OSD.
-
-This idempotency notion is tightly coupled to and extensively used by :ref:`drivegroups`.
