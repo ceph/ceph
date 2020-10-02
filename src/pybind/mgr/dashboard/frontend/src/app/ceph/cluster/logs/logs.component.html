@@ -18,8 +18,7 @@
               <span class="message">{{ line.message }}</span>
             </p>
 
-            <span *ngIf="contentData.clog.length === 0"
-                  i18n>No entries found</span>
+            <ng-container *ngIf="clog.length != 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
       </ng-template>
@@ -37,8 +36,7 @@
               <span class="message">{{ line.message }}</span>
             </p>
 
-            <span *ngIf="contentData.audit_log.length === 0"
-                  i18n>No entries found</span>
+            <ng-container *ngIf="audit_log.length != 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
       </ng-template>
@@ -96,6 +94,7 @@
                id="logs-date"
                placeholder="YYYY-MM-DD"
                ngbDatepicker
+               [maxDate]="maxDate"
                #d="ngbDatepicker"
                (click)="d.open()"
                [(ngModel)]="selectedDate"
@@ -123,4 +122,12 @@
                       (ngModelChange)="filterLogs()"></ngb-timepicker>
     </div>
   </div>
+</ng-template>
+
+<ng-template #noEntriesTpl>
+  <span i18n>No log entries found. Please try to select different filter options.</span>
+  <span>&nbsp;</span>
+  <a href="#"
+     (click)="resetFilter()"
+     i18n>Reset filter.</a>
 </ng-template>
