@@ -3872,13 +3872,14 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                                                const RGWRemoteCtl::Conns& _conns,
                                                const RGWBucketSyncFlowManager::pipe_handler& _flow_handler,
                                                const rgw_bucket& _source_bucket,
-                                               const rgw_bucket& _dest_bucket) : dpp(_dpp),
+                                               const RGWBucketInfo& _dest_bucket_info) : dpp(_dpp),
                                                                                  sync_env(_sync_env),
                                                                                  source_zone(_source_zone),
                                                                                  conns(_conns),
                                                                                  flow_handler(_flow_handler),
                                                                                  source_bucket(_source_bucket),
-                                                                                 dest_bucket(_dest_bucket) {}
+                                                                                 dest_bucket_info(_dest_bucket_info),
+                                                                                 dest_bucket(dest_bucket_info.bucket) {}
 
 int RGWRemoteBucketManager::init(RGWCoroutinesManager *cr_mgr)
 {
@@ -3910,6 +3911,8 @@ int RGWRemoteBucketManager::init(RGWCoroutinesManager *cr_mgr)
     num_shards = 1;
   }
 
+  bool shard_to_shard_sync = (source_num_shards == (int)dest_bucket_info.layout.current_index.layout.normal.num_shards);
+
   sync_pairs.resize(source_num_shards);
 
   int cur_shard = std::min<int>(source_num_shards, 0);
@@ -3923,7 +3926,7 @@ int RGWRemoteBucketManager::init(RGWCoroutinesManager *cr_mgr)
 
     sync_pair.source_bs.shard_id = (source_num_shards > 0 ? cur_shard : -1);
 
-    if (dest_bucket == source_bucket) {
+    if (shard_to_shard_sync) {
       sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id;
     } else {
       sync_pair.dest_bs.shard_id = -1;
@@ -6040,7 +6043,7 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
                                                  szone, conns,
                                                  pipe.handler,
                                                  pipe.source.get_bucket(),
-                                                 pipe.target.get_bucket());
+                                                 pipe.target.get_bucket_info());
 
     ret = bucket_mgr->init(&cr_mgr);
     if (ret < 0) {

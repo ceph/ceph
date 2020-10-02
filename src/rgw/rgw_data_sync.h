@@ -625,7 +625,9 @@ class RGWRemoteBucketManager {
   const RGWBucketSyncFlowManager::pipe_handler& flow_handler;
 
   rgw_bucket source_bucket;
-  rgw_bucket dest_bucket;
+
+  RGWBucketInfo dest_bucket_info;
+  rgw_bucket& dest_bucket;
 
   std::vector<rgw_bucket_sync_pair_info> sync_pairs;
 
@@ -655,7 +657,7 @@ public:
                      const RGWRemoteCtl::Conns& _conns,
                      const RGWBucketSyncFlowManager::pipe_handler& _flow_handler,
                      const rgw_bucket& source_bucket,
-                     const rgw_bucket& dest_bucket);
+                     const RGWBucketInfo& dest_bucket_info);
   ~RGWRemoteBucketManager();
 
   int init(RGWCoroutinesManager *cr_mgr);
