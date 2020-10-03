@@ -185,11 +185,6 @@ inline bs::error_code osdcode(int r) {
 
 // config obs ----------------------------
 
-static const char *config_keys[] = {
-  "crush_location",
-  NULL
-};
-
 class Objecter::RequestStateHook : public AdminSocketHook {
   Objecter *m_objecter;
 public:
@@ -214,6 +209,12 @@ std::unique_lock<std::mutex> Objecter::OSDSession::get_lock(object_t& oid)
 
 const char** Objecter::get_tracked_conf_keys() const
 {
+  static const char *config_keys[] = {
+    "crush_location",
+    "osdc_mon_timeout",
+    "osdc_osd_timeout",
+    NULL
+  };
   return config_keys;
 }
 
@@ -223,6 +224,16 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
 {
   if (changed.count("crush_location")) {
     update_crush_location();
+  }
+  if (changed.count("osdc_mon_timeout")) {
+    if (!mon_timeout_configured) {
+      mon_timeout = conf.get_val<std::chrono::seconds>("osdc_mon_timeout");
+    }
+  }
+  if (changed.count("osdc_osd_timeout")) {
+    if (!osd_timeout_configured) {
+      osd_timeout = conf.get_val<std::chrono::seconds>("osdc_osd_timeout");
+    }
   }
 }
 
@@ -4904,12 +4915,25 @@ Objecter::OSDSession::~OSDSession()
 Objecter::Objecter(CephContext *cct,
 		   Messenger *m, MonClient *mc,
 		   boost::asio::io_context& service,
-		   double mon_timeout,
-		   double osd_timeout) :
+		   double mon_timeout_,
+		   double osd_timeout_) :
   Dispatcher(cct), messenger(m), monc(mc), service(service),
-  mon_timeout(ceph::make_timespan(mon_timeout)),
-  osd_timeout(ceph::make_timespan(osd_timeout))
-{}
+  mon_timeout(ceph::make_timespan(mon_timeout_)),
+  osd_timeout(ceph::make_timespan(osd_timeout_))
+{
+  ceph_assert(mon_timeout_ >= 0.0);
+  if (mon_timeout_ > 0.0) {
+    mon_timeout_configured = true;
+  } else {
+    mon_timeout = cct->_conf.get_val<std::chrono::seconds>("osdc_mon_timeout");
+  }
+  ceph_assert(osd_timeout_ >= 0.0);
+  if (osd_timeout_ > 0.0) {
+    osd_timeout_configured = true;
+  } else {
+    osd_timeout = cct->_conf.get_val<std::chrono::seconds>("osdc_osd_timeout");
+  }
+}
 
 Objecter::~Objecter()
 {

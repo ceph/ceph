@@ -3940,6 +3940,18 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("osdc_mon_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(5_min)
+    .set_description("timeout for operations handled by monitors such as statfs")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_min(0),
+
+    Option("osdc_osd_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(6_hr)
+    .set_description("timeout for operations handled by osds such as write")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_min(0),
+
     Option("osd_discard_disconnected_ops", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
