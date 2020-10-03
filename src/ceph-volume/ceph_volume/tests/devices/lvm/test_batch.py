@@ -1,4 +1,5 @@
 import pytest
+import json
 import random
 from ceph_volume.devices.lvm import batch
 
@@ -19,7 +20,7 @@ class TestBatch(object):
         assert 'Device lists are not disjoint' in str(disjoint_ex.value)
 
     @pytest.mark.parametrize('format_', ['pretty', 'json', 'json-pretty'])
-    def test_json_report(self, format_, factory, conf_ceph_stub, mock_device_generator):
+    def test_report(self, format_, factory, conf_ceph_stub, mock_device_generator):
         # just ensure reporting works
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         devs = [mock_device_generator() for _ in range(5)]
@@ -39,6 +40,29 @@ class TestBatch(object):
         plan = b.get_plan(args)
         b.args = args
         b.report(plan)
+
+    @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
+    def test_json_report_valid_empty(self, format_, factory, conf_ceph_stub, mock_device_generator):
+        # ensure json reports are valid when empty
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(5)]
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       report=True,
+                       format=format_,
+                       devices=devs,
+                       db_devices=[],
+                       wal_devices=[],
+                       bluestore=True,
+                       block_db_size="1G",
+                       dmcrypt=True,
+                      )
+        b = batch.Batch([])
+        plan = b.get_plan(args)
+        b.args = args
+        report = b._create_report(plan)
+        json.loads(report)
 
     def test_get_physical_osds_return_len(self, factory,
                                           mock_devices_available,
