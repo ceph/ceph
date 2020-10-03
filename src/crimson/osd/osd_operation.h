@@ -313,7 +313,8 @@ public:
  * expensive and simply limits the number that can be
  * concurrently active.
  */
-class OperationThrottler : public Blocker, md_config_obs_t {
+class OperationThrottler : public Blocker,
+			private md_config_obs_t {
 public:
   OperationThrottler(ConfigProxy &conf);
 
