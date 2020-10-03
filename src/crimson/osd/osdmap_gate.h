@@ -37,6 +37,7 @@ class OSDMapGate {
     seastar::shared_promise<epoch_t> promise;
 
     void dump_detail(Formatter *f) const final;
+  private:
     const char *get_type_name() const final {
       return type_name;
     }

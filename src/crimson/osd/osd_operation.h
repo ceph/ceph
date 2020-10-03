@@ -118,40 +118,37 @@ make_exception_blocking_future(Exception&& e) {
  * why a particular op is not making progress.
  */
 class Blocker {
-protected:
-  virtual void dump_detail(ceph::Formatter *f) const = 0;
-
 public:
   template <typename... T>
   blocking_future<T...> make_blocking_future(seastar::future<T...> &&f) {
     return blocking_future<T...>(this, std::move(f));
   }
-
   void dump(ceph::Formatter *f) const;
-
-  virtual const char *get_type_name() const = 0;
-
   virtual ~Blocker() = default;
+
+private:
+  virtual void dump_detail(ceph::Formatter *f) const = 0;
+  virtual const char *get_type_name() const = 0;
 };
 
 template <typename T>
 class BlockerT : public Blocker {
 public:
+  virtual ~BlockerT() = default;
+private:
   const char *get_type_name() const final {
     return T::type_name;
   }
-
-  virtual ~BlockerT() = default;
 };
 
 class AggregateBlocker : public BlockerT<AggregateBlocker> {
   vector<Blocker*> parent_blockers;
-protected:
-  void dump_detail(ceph::Formatter *f) const final;
 public:
   AggregateBlocker(vector<Blocker*> &&parent_blockers)
     : parent_blockers(std::move(parent_blockers)) {}
   static constexpr const char *type_name = "AggregateBlocker";
+private:
+  void dump_detail(ceph::Formatter *f) const final;
 };
 
 template <typename T>
@@ -352,11 +349,13 @@ public:
 	return seastar::make_ready_future<>();
     });
   }
-protected:
+
+private:
   void dump_detail(Formatter *f) const final;
   const char *get_type_name() const final {
     return "OperationThrottler";
   }
+
 private:
   crimson::osd::scheduler::SchedulerRef scheduler;
 
@@ -381,8 +380,8 @@ private:
  * the op ordering is preserved.
  */
 class OrderedPipelinePhase : public Blocker {
-protected:
-  virtual void dump_detail(ceph::Formatter *f) const final;
+private:
+  void dump_detail(ceph::Formatter *f) const final;
   const char *get_type_name() const final {
     return name;
   }
