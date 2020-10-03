@@ -250,7 +250,7 @@ OSDService::OSDService(OSD *osd) :
   promote_max_bytes(0),
   objecter(make_unique<Objecter>(osd->client_messenger->cct,
 				 osd->objecter_messenger,
-				 osd->monc, nullptr, 0, 0)),
+				 osd->monc, nullptr)),
   m_objecter_finishers(cct->_conf->osd_objecter_finishers),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),

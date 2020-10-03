@@ -71,6 +71,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     log_last_version(0), log_cb(NULL), log_cb2(NULL), log_cb_arg(NULL),
     finisher(cct, "radosclient", "fn-radosclient")
 {
+  conf.add_observer(this);
 }
 
 int64_t librados::RadosClient::lookup_pool(const char *name)
@@ -260,10 +261,7 @@ int librados::RadosClient::connect()
 
   ldout(cct, 1) << "starting objecter" << dendl;
 
-  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient,
-			  &finisher,
-			  cct->_conf->rados_mon_op_timeout,
-			  cct->_conf->rados_osd_op_timeout);
+  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient, &finisher);
   if (!objecter)
     goto out;
   objecter->set_balanced_budget();
@@ -469,6 +467,7 @@ int librados::RadosClient::get_min_compatible_client(int8_t* min_compat_client,
 
 librados::RadosClient::~RadosClient()
 {
+  conf.remove_observer(this);
   if (messenger)
     delete messenger;
   if (objecter)
@@ -574,11 +573,7 @@ int librados::RadosClient::wait_for_osdmap()
   if (need_map) {
     std::unique_lock l(lock);
 
-    ceph::timespan timeout{0};
-    if (cct->_conf->rados_mon_op_timeout > 0) {
-      timeout = ceph::make_timespan(cct->_conf->rados_mon_op_timeout);
-    }
-
+    ceph::timespan timeout = rados_mon_op_timeout;
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
@@ -864,8 +859,8 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
     return r;
 
   lock.unlock();
-  if (conf->rados_mon_op_timeout) {
-    r = cond.wait_for(conf->rados_mon_op_timeout);
+  if (rados_mon_op_timeout.count() > 0) {
+    r = cond.wait_for(rados_mon_op_timeout);
   } else {
     r = cond.wait();
   }
@@ -888,8 +883,8 @@ int librados::RadosClient::mgr_command(
     return r;
 
   lock.unlock();
-  if (conf->rados_mon_op_timeout) {
-    r = cond.wait_for(conf->rados_mon_op_timeout);
+  if (rados_mon_op_timeout.count() > 0) {
+    r = cond.wait_for(rados_mon_op_timeout);
   } else {
     r = cond.wait();
   }
@@ -1174,4 +1169,21 @@ int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
     pgs->emplace_back(std::move(pgid));
   }
   return 0;
+}
+
+const char** librados::RadosClient::get_tracked_conf_keys() const
+{
+  static const char *config_keys[] = {
+    "rados_mon_op_timeout",
+    nullptr
+  };
+  return config_keys;
+}
+
+void librados::RadosClient::handle_conf_change(const ConfigProxy& conf,
+					       const std::set<std::string> &changed)
+{
+  if (changed.count("rados_mon_op_timeout")) {
+    rados_mon_op_timeout = conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  }
 }
