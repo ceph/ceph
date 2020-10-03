@@ -204,7 +204,7 @@ class Operation : public boost::intrusive_ref_counter<
   void dump_brief(ceph::Formatter *f);
   virtual ~Operation() = default;
 
- protected:
+ private:
   virtual void dump_detail(ceph::Formatter *f) const = 0;
 
  private:
@@ -235,10 +235,6 @@ std::ostream &operator<<(std::ostream &, const Operation &op);
 
 template <typename T>
 class OperationT : public Operation {
-
-protected:
-  virtual void dump_detail(ceph::Formatter *f) const = 0;
-
 public:
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
@@ -252,6 +248,9 @@ public:
   }
 
   virtual ~OperationT() = default;
+
+private:
+  virtual void dump_detail(ceph::Formatter *f) const = 0;
 };
 
 /**
