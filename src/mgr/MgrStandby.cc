@@ -45,7 +45,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 		     entity_name_t::MGR(),
 		     "mgr",
 		     Messenger::get_pid_nonce())),
-  objecter{g_ceph_context, client_messenger.get(), &monc, poolctx, 0, 0},
+  objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
   client{client_messenger.get(), &monc, &objecter},
   mgrc(g_ceph_context, client_messenger.get(), &monc.monmap),
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),

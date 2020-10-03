@@ -247,10 +247,7 @@ int librados::RadosClient::connect()
 
   ldout(cct, 1) << "starting objecter" << dendl;
 
-  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient,
-					 poolctx,
-					 cct->_conf->rados_mon_op_timeout,
-					 cct->_conf->rados_osd_op_timeout);
+  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient, poolctx);
   if (!objecter)
     goto out;
   objecter->set_balanced_budget();
@@ -560,11 +557,7 @@ int librados::RadosClient::wait_for_osdmap()
   if (need_map) {
     std::unique_lock l(lock);
 
-    ceph::timespan timeout{0};
-    if (cct->_conf->rados_mon_op_timeout > 0) {
-      timeout = ceph::make_timespan(cct->_conf->rados_mon_op_timeout);
-    }
-
+    ceph::timespan timeout = rados_mon_op_timeout;
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
@@ -860,8 +853,8 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
     return r;
 
   lock.unlock();
-  if (conf->rados_mon_op_timeout) {
-    r = cond.wait_for(conf->rados_mon_op_timeout);
+  if (rados_mon_op_timeout.count() > 0) {
+    r = cond.wait_for(rados_mon_op_timeout);
   } else {
     r = cond.wait();
   }
@@ -884,8 +877,8 @@ int librados::RadosClient::mgr_command(
     return r;
 
   lock.unlock();
-  if (conf->rados_mon_op_timeout) {
-    r = cond.wait_for(conf->rados_mon_op_timeout);
+  if (rados_mon_op_timeout.count() > 0) {
+    r = cond.wait_for(rados_mon_op_timeout);
   } else {
     r = cond.wait();
   }
@@ -1158,15 +1151,13 @@ int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
   return 0;
 }
 
-namespace {
-const char *config_keys[] = {
-  "librados_thread_count",
-  NULL
-};
-}
-
 const char** librados::RadosClient::get_tracked_conf_keys() const
 {
+  static const char *config_keys[] = {
+    "librados_thread_count",
+    "rados_mon_op_timeout",
+    nullptr
+  };
   return config_keys;
 }
 
@@ -1176,5 +1167,8 @@ void librados::RadosClient::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("librados_thread_count")) {
     poolctx.stop();
     poolctx.start(conf.get_val<std::uint64_t>("librados_thread_count"));
+  }
+  if (changed.count("rados_mon_op_timeout")) {
+    rados_mon_op_timeout = conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   }
 }

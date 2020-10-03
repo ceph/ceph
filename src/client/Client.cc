@@ -15059,7 +15059,7 @@ mds_rank_t Client::_get_random_up_mds() const
 
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
 				   boost::asio::io_context& ictx)
-  : Client(m, mc, new Objecter(m->cct, m, mc, ictx, 0, 0))
+  : Client(m, mc, new Objecter(m->cct, m, mc, ictx))
 {
   monclient->set_messenger(m);
   objecter->set_client_incarnation(0);

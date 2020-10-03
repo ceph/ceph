@@ -185,11 +185,6 @@ inline bs::error_code osdcode(int r) {
 
 // config obs ----------------------------
 
-static const char *config_keys[] = {
-  "crush_location",
-  NULL
-};
-
 class Objecter::RequestStateHook : public AdminSocketHook {
   Objecter *m_objecter;
 public:
@@ -214,6 +209,12 @@ std::unique_lock<std::mutex> Objecter::OSDSession::get_lock(object_t& oid)
 
 const char** Objecter::get_tracked_conf_keys() const
 {
+  static const char *config_keys[] = {
+    "crush_location",
+    "rados_mon_op_timeout",
+    "rados_osd_op_timeout",
+    NULL
+  };
   return config_keys;
 }
 
@@ -223,6 +224,12 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
 {
   if (changed.count("crush_location")) {
     update_crush_location();
+  }
+  if (changed.count("rados_mon_op_timeout")) {
+    mon_timeout = conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  }
+  if (changed.count("rados_osd_op_timeout")) {
+    osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   }
 }
 
@@ -4903,13 +4910,12 @@ Objecter::OSDSession::~OSDSession()
 
 Objecter::Objecter(CephContext *cct,
 		   Messenger *m, MonClient *mc,
-		   boost::asio::io_context& service,
-		   double mon_timeout,
-		   double osd_timeout) :
-  Dispatcher(cct), messenger(m), monc(mc), service(service),
-  mon_timeout(ceph::make_timespan(mon_timeout)),
-  osd_timeout(ceph::make_timespan(osd_timeout))
-{}
+		   boost::asio::io_context& service) :
+  Dispatcher(cct), messenger(m), monc(mc), service(service)
+{
+  mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+}
 
 Objecter::~Objecter()
 {
