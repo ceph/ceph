@@ -381,8 +381,6 @@ private:
  * the op ordering is preserved.
  */
 class OrderedPipelinePhase : public Blocker {
-  const char * name;
-
 protected:
   virtual void dump_detail(ceph::Formatter *f) const final;
   const char *get_type_name() const final {
@@ -390,8 +388,6 @@ protected:
   }
 
 public:
-  seastar::shared_mutex mutex;
-
   /**
    * Used to encapsulate pipeline residency state.
    */
@@ -423,6 +419,10 @@ public:
   };
 
   OrderedPipelinePhase(const char *name) : name(name) {}
+
+private:
+  const char * name;
+  seastar::shared_mutex mutex;
 };
 
 }
