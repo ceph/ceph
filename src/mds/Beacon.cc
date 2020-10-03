@@ -304,9 +304,9 @@ void Beacon::notify_health(MDSRank const *mds)
   }
 
   // Detect MDS_HEALTH_TRIM condition
-  // Arbitrary factor of 2, indicates MDS is not trimming promptly
+  // Indicates MDS is not trimming promptly
   {
-    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * 2)) {
+    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * g_conf().get_val<double>("mds_log_warn_factor"))) {
       std::ostringstream oss;
       oss << "Behind on trimming (" << mds->mdlog->get_num_segments()
         << "/" << g_conf()->mds_log_max_segments << ")";
