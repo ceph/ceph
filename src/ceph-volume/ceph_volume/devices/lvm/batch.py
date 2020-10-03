@@ -325,12 +325,11 @@ class Batch(object):
             setattr(self, '{}usable'.format(dev_list), [])
 
     def report(self, plan):
-        if self.args.format == 'json':
-            print(json.dumps([osd.report_json() for osd in plan]))
-        elif self.args.format == 'json-pretty':
-            print(json.dumps([osd.report_json() for osd in plan], indent=4,
-                       sort_keys=True))
-        else:
+        report = self._create_report(plan)
+        print(report)
+
+    def _create_report(self, plan):
+        if self.args.format == 'pretty':
             report = ''
             report += templates.total_osds.format(total_osds=len(plan))
 
@@ -338,8 +337,16 @@ class Batch(object):
             for osd in plan:
                 report += templates.osd_header
                 report += osd.report()
-
-            print(report)
+            return report
+        else:
+            json_report = []
+            for osd in plan:
+                json_report.append(osd.report_json())
+            if self.args.format == 'json':
+                return json.dumps(json_report)
+            elif self.args.format == 'json-pretty':
+                return json.dumps(json_report, indent=4,
+                                  sort_keys=True)
 
     def _check_slot_args(self):
         '''
