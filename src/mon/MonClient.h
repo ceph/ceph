@@ -567,9 +567,10 @@ private:
 
     MonCommand(MonClient& monc, uint64_t t, std::unique_ptr<CommandCompletion> onfinish)
       : tid(t), onfinish(std::move(onfinish)) {
-      auto timeout = ceph::maybe_timespan(monc.cct->_conf->rados_mon_op_timeout);
-      if (timeout) {
-	cancel_timer.emplace(monc.service, *timeout);
+      auto timeout =
+          monc.cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+      if (timeout.count() > 0) {
+	cancel_timer.emplace(monc.service, timeout);
 	cancel_timer->async_wait(
           [this, &monc](boost::system::error_code ec) {
 	    if (ec)

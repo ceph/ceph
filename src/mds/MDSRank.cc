@@ -490,7 +490,7 @@ MDSRank::MDSRank(
     boost::asio::io_context& ioc) :
     cct(msgr->cct), mds_lock(mds_lock_), clog(clog_),
     timer(timer_), mdsmap(mdsmap_),
-    objecter(new Objecter(g_ceph_context, msgr, monc_, ioc, 0, 0)),
+    objecter(new Objecter(g_ceph_context, msgr, monc_, ioc)),
     damage_table(whoami_), sessionmap(this),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),

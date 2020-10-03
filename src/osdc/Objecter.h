@@ -2575,9 +2575,7 @@ private:
 			     cct->_conf->objecter_inflight_ops)};
  public:
   Objecter(CephContext *cct, Messenger *m, MonClient *mc,
-	   boost::asio::io_context& service,
-	   double mon_timeout,
-	   double osd_timeout);
+	   boost::asio::io_context& service);
   ~Objecter() override;
 
   void init();
