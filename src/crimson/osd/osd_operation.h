@@ -4,6 +4,7 @@
 #pragma once
 
 #include "crimson/osd/osd_operation_sequencer.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/scheduler/scheduler.h"
 
 namespace crimson::osd {
@@ -39,6 +40,13 @@ static_assert(
 template <typename T>
 class OperationT : public Operation {
 public:
+  template <typename ValuesT = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, ValuesT>;
+  using interruptor =
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
 

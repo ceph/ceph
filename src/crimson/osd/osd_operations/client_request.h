@@ -62,13 +62,16 @@ public:
   seastar::future<> start();
 
 private:
-  seastar::future<> process_pg_op(Ref<PG>& pg);
-  seastar::future<> process_op(Ref<PG>& pg);
-  seastar::future<> do_recover_missing(Ref<PG>& pgref);
-  seastar::future<> do_process(
+  interruptible_future<> do_recover_missing(Ref<PG>& pgref);
+  interruptible_future<> do_process(
       Ref<PG>& pg,
       crimson::osd::ObjectContextRef obc);
-
+  ::crimson::interruptible::interruptible_future<
+    ::crimson::osd::IOInterruptCondition> process_pg_op(
+    Ref<PG> &pg);
+  ::crimson::interruptible::interruptible_future<
+    ::crimson::osd::IOInterruptCondition> process_op(
+    Ref<PG> &pg);
   bool is_pg_op() const;
 
   ConnectionPipeline &cp();
@@ -77,6 +80,11 @@ private:
   OpSequencer& sequencer;
   const uint64_t prev_op_id;
 
+  template <typename Errorator>
+  using interruptible_errorator =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      Errorator>;
 private:
   bool is_misdirected(const PG& pg) const;
 };

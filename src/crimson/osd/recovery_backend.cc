@@ -89,7 +89,8 @@ void RecoveryBackend::handle_backfill_finish(
     RecoveryDone{});
 }
 
-seastar::future<> RecoveryBackend::handle_backfill_progress(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_backfill_progress(
   MOSDPGBackfill& m)
 {
   logger().debug("{}", __func__);
@@ -107,7 +108,8 @@ seastar::future<> RecoveryBackend::handle_backfill_progress(
   ).or_terminate();
 }
 
-seastar::future<> RecoveryBackend::handle_backfill_finish_ack(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_backfill_finish_ack(
   MOSDPGBackfill& m)
 {
   logger().debug("{}", __func__);
@@ -118,7 +120,8 @@ seastar::future<> RecoveryBackend::handle_backfill_finish_ack(
   return seastar::now();
 }
 
-seastar::future<> RecoveryBackend::handle_backfill(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_backfill(
   MOSDPGBackfill& m)
 {
   logger().debug("{}", __func__);
@@ -136,7 +139,8 @@ seastar::future<> RecoveryBackend::handle_backfill(
   }
 }
 
-seastar::future<> RecoveryBackend::handle_backfill_remove(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_backfill_remove(
   MOSDPGBackfillRemove& m)
 {
   logger().debug("{} m.ls={}", __func__, m.ls);
@@ -153,18 +157,20 @@ seastar::future<> RecoveryBackend::handle_backfill_remove(
   ).or_terminate();
 }
 
-seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
+RecoveryBackend::interruptible_future<BackfillInterval>
+RecoveryBackend::scan_for_backfill(
   const hobject_t& start,
   [[maybe_unused]] const std::int64_t min,
   const std::int64_t max)
 {
   logger().debug("{} starting from {}", __func__, start);
   auto version_map = seastar::make_lw_shared<std::map<hobject_t, eversion_t>>();
-  return backend->list_objects(start, max).then(
+  return backend->list_objects(start, max).then_interruptible(
     [this, start, version_map] (auto&& ret) {
     auto&& [objects, next] = std::move(ret);
-    return seastar::parallel_for_each(std::move(objects),
-      [this, version_map] (const hobject_t& object) {
+    return interruptor::parallel_for_each(std::move(objects),
+      [this, version_map] (const hobject_t& object)
+      -> interruptible_future<> {
       crimson::osd::ObjectContextRef obc;
       if (pg.is_primary()) {
         obc = shard_services.obc_registry.maybe_get_cached_obc(object);
@@ -181,7 +187,7 @@ seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
         }
         return seastar::now();
       } else {
-        return backend->load_metadata(object).safe_then(
+        return backend->load_metadata(object).safe_then_interruptible(
           [version_map, object] (auto md) {
           if (md->os.exists) {
             logger().debug("scan_for_backfill found: {}  {}",
@@ -191,7 +197,7 @@ seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
           return seastar::now();
         }, PGBackend::load_metadata_ertr::assert_all{});
       }
-    }).then([version_map, start=std::move(start), next=std::move(next), this] {
+    }).then_interruptible([version_map, start=std::move(start), next=std::move(next), this] {
       BackfillInterval bi;
       bi.begin = std::move(start);
       bi.end = std::move(next);
@@ -204,7 +210,8 @@ seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
   });
 }
 
-seastar::future<> RecoveryBackend::handle_scan_get_digest(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_scan_get_digest(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
@@ -224,7 +231,7 @@ seastar::future<> RecoveryBackend::handle_scan_get_digest(
     std::move(m.begin),
     crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_min"),
     crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_max")
-  ).then([this,
+  ).then_interruptible([this,
           query_epoch=m.query_epoch,
           conn=m.get_connection()] (auto backfill_interval) {
     auto reply = make_message<MOSDPGScan>(
@@ -240,7 +247,8 @@ seastar::future<> RecoveryBackend::handle_scan_get_digest(
   });
 }
 
-seastar::future<> RecoveryBackend::handle_scan_digest(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_scan_digest(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
@@ -264,7 +272,8 @@ seastar::future<> RecoveryBackend::handle_scan_digest(
   return seastar::now();
 }
 
-seastar::future<> RecoveryBackend::handle_scan(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_scan(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
@@ -280,7 +289,8 @@ seastar::future<> RecoveryBackend::handle_scan(
   }
 }
 
-seastar::future<> RecoveryBackend::handle_recovery_op(
+RecoveryBackend::interruptible_future<>
+RecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m)
 {
   switch (m->get_header().type) {
