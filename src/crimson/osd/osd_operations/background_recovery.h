@@ -41,7 +41,7 @@ private:
       scheduler_class
     };
   }
-  virtual seastar::future<bool> do_recovery() = 0;
+  virtual interruptible_future<bool> do_recovery() = 0;
   ShardServices &ss;
   const crimson::osd::scheduler::scheduler_class_t scheduler_class;
 };
@@ -67,7 +67,7 @@ public:
 
 private:
   void dump_detail(Formatter* f) const final;
-  seastar::future<bool> do_recovery() override;
+  interruptible_future<bool> do_recovery() override;
   const hobject_t soid;
   const eversion_t need;
 };
@@ -80,7 +80,7 @@ public:
     epoch_t epoch_started);
 
 private:
-  seastar::future<bool> do_recovery() override;
+  interruptible_future<bool> do_recovery() override;
 };
 
 class BackfillRecovery final : public BackgroundRecovery {
@@ -105,7 +105,7 @@ public:
 private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
   PipelineHandle handle;
-  seastar::future<bool> do_recovery() override;
+  interruptible_future<bool> do_recovery() override;
 };
 
 template <class EventT>

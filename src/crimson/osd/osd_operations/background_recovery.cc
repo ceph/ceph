@@ -51,7 +51,11 @@ seastar::future<> BackgroundRecovery::start()
   IRef ref = this;
   return ss.throttler.with_throttle_while(
     this, get_scheduler_params(), [this] {
-      return do_recovery();
+      return interruptor::with_interruption([this] {
+	return do_recovery();
+      }, [](std::exception_ptr) {
+	return seastar::make_ready_future<bool>(false);
+      }, pg);
     }).handle_exception_type([ref, this](const std::system_error& err) {
       if (err.code() == std::make_error_code(std::errc::interrupted)) {
 	logger().debug("{} recovery interruped: {}", *pg, err.what());
@@ -61,12 +65,14 @@ seastar::future<> BackgroundRecovery::start()
     });
 }
 
-seastar::future<bool> UrgentRecovery::do_recovery()
+UrgentRecovery::interruptible_future<bool>
+UrgentRecovery::do_recovery()
 {
+  logger().debug("{}: {}", __func__, *this);
   if (!pg->has_reset_since(epoch_started)) {
-    return with_blocking_future(
+    return with_blocking_future_interruptible<IOInterruptCondition>(
       pg->get_recovery_handler()->recover_missing(soid, need)
-    ).then([] {
+    ).then_interruptible([] {
       return seastar::make_ready_future<bool>(false);
     });
   }
@@ -76,7 +82,8 @@ seastar::future<bool> UrgentRecovery::do_recovery()
 void UrgentRecovery::print(std::ostream &lhs) const
 {
   lhs << "UrgentRecovery(" << pg->get_pgid() << ", "
-    << soid << ", v" << need << ")";
+    << soid << ", v" << need << ", epoch_started: "
+    << epoch_started << ")";
 }
 
 void UrgentRecovery::dump_detail(Formatter *f) const
@@ -101,11 +108,12 @@ PglogBasedRecovery::PglogBasedRecovery(
       crimson::osd::scheduler::scheduler_class_t::background_recovery)
 {}
 
-seastar::future<bool> PglogBasedRecovery::do_recovery()
+PglogBasedRecovery::interruptible_future<bool>
+PglogBasedRecovery::do_recovery()
 {
   if (pg->has_reset_since(epoch_started))
     return seastar::make_ready_future<bool>(false);
-  return with_blocking_future(
+  return with_blocking_future_interruptible<IOInterruptCondition>(
     pg->get_recovery_handler()->start_recovery_ops(
       crimson::common::local_conf()->osd_recovery_max_single_start));
 }
@@ -115,7 +123,8 @@ BackfillRecovery::BackfillRecoveryPipeline &BackfillRecovery::bp(PG &pg)
   return pg.backfill_pipeline;
 }
 
-seastar::future<bool> BackfillRecovery::do_recovery()
+BackfillRecovery::interruptible_future<bool>
+BackfillRecovery::do_recovery()
 {
   logger().debug("{}", __func__);
 
@@ -125,13 +134,13 @@ seastar::future<bool> BackfillRecovery::do_recovery()
     return seastar::make_ready_future<bool>(false);
   }
   // TODO: limits
-  return with_blocking_future(
+  return with_blocking_future_interruptible<IOInterruptCondition>(
     // process_event() of our boost::statechart machine is non-reentrant.
     // with the backfill_pipeline we protect it from a second entry from
     // the implementation of BackfillListener.
     // additionally, this stage serves to synchronize with PeeringEvent.
     handle.enter(bp(*pg).process)
-  ).then([this] {
+  ).then_interruptible([this] {
     pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
     return seastar::make_ready_future<bool>(false);
   });

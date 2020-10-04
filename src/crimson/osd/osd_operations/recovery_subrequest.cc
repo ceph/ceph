@@ -15,14 +15,17 @@ seastar::future<> RecoverySubRequest::start() {
   logger().debug("{}: start", *this);
 
   IRef opref = this;
-  return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_min_epoch()))
+  return with_blocking_future(
+      osd.osdmap_gate.wait_for_map(m->get_min_epoch()))
   .then([this] (epoch_t epoch) {
     return with_blocking_future(osd.wait_for_pg(m->get_spg()));
   }).then([this, opref=std::move(opref)] (Ref<PG> pgref) {
-    return seastar::do_with(std::move(pgref), std::move(opref),
-      [this](auto& pgref, auto& opref) {
-      return pgref->get_recovery_backend()->handle_recovery_op(m);
-    });
+    return interruptor::with_interruption([this, opref, pgref] {
+      return seastar::do_with(std::move(pgref), std::move(opref),
+	[this](auto& pgref, auto& opref) {
+	return pgref->get_recovery_backend()->handle_recovery_op(m);
+      });
+    }, [](std::exception_ptr) { return seastar::now(); }, pgref);
   });
 }
 

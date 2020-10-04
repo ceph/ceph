@@ -21,9 +21,11 @@
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
 
+#include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/backfill_state.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
@@ -79,6 +81,11 @@ class PG : public boost::intrusive_ref_counter<
   seastar::timer<seastar::lowres_clock> renew_lease_timer;
 
 public:
+  template <typename T = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, T>;
+
   PG(spg_t pgid,
      pg_shard_t pg_shard,
      crimson::os::CollectionRef coll_ref,
@@ -479,16 +486,30 @@ public:
 
   using load_obc_ertr = crimson::errorator<
     crimson::ct_error::object_corrupted>;
+  using load_obc_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      load_obc_ertr>;
+  using interruptor = ::crimson::interruptible::interruptor<
+    ::crimson::osd::IOInterruptCondition>;
+  load_obc_iertr::future<
+    std::pair<crimson::osd::ObjectContextRef, bool>>
+  get_or_load_clone_obc(
+    hobject_t oid, crimson::osd::ObjectContextRef head_obc);
 
-  load_obc_ertr::future<crimson::osd::ObjectContextRef>
+  load_obc_iertr::future<
+    std::pair<crimson::osd::ObjectContextRef, bool>>
+  get_or_load_head_obc(hobject_t oid);
+
+  load_obc_iertr::future<crimson::osd::ObjectContextRef>
   load_head_obc(ObjectContextRef obc);
 
-  load_obc_ertr::future<>
+  load_obc_iertr::future<>
   reload_obc(crimson::osd::ObjectContext& obc) const;
 
 public:
   using with_obc_func_t =
-    std::function<load_obc_ertr::future<> (ObjectContextRef)>;
+    std::function<load_obc_iertr::future<> (ObjectContextRef)>;
 
   using obc_accessing_list_t = boost::intrusive::list<
     ObjectContext,
@@ -496,15 +517,15 @@ public:
   obc_accessing_list_t obc_set_accessing;
 
   template<RWState::State State>
-  load_obc_ertr::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
+  load_obc_iertr::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
 
-  load_obc_ertr::future<> with_locked_obc(
+  load_obc_iertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
     const OpInfo &op_info,
     Operation *op,
     with_obc_func_t&& f);
 
-  seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
+  interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
   void handle_rep_op_reply(crimson::net::ConnectionRef conn,
 			   const MOSDRepOpReply& m);
 
@@ -513,9 +534,9 @@ public:
 
 private:
   template<RWState::State State>
-  load_obc_ertr::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
+  load_obc_iertr::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
 
-  load_obc_ertr::future<ObjectContextRef> get_locked_obc(
+  load_obc_iertr::future<ObjectContextRef> get_locked_obc(
     Operation *op,
     const hobject_t &oid,
     RWState::State type);
@@ -527,23 +548,27 @@ private:
     osd_op_params_t& osd_op_p,
     Ref<MOSDOp> m,
     const bool user_modify);
-  seastar::future<Ref<MOSDOpReply>> handle_failed_op(
+  interruptible_future<Ref<MOSDOpReply>> handle_failed_op(
     const std::error_code& e,
     ObjectContextRef obc,
     const OpsExecuter& ox,
     const MOSDOp& m) const;
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
-  do_osd_ops_ertr::future<Ref<MOSDOpReply>> do_osd_ops(
+  using do_osd_ops_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      ::crimson::errorator<crimson::ct_error::eagain>>;
+  do_osd_ops_iertr::future<Ref<MOSDOpReply>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,
     const OpInfo &op_info);
-  seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
-  seastar::future<> submit_transaction(const OpInfo& op_info,
+  interruptible_future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
+  interruptible_future<> submit_transaction(const OpInfo& op_info,
 				       ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
 				       osd_op_params_t&& oop);
-  seastar::future<> repair_object(Ref<MOSDOp> m,
+  interruptible_future<> repair_object(Ref<MOSDOp> m,
                const hobject_t& oid,
                eversion_t& v);
 
@@ -632,7 +657,7 @@ public:
 	return &it->second;
     }
   }
-  seastar::future<std::tuple<bool, int>> already_complete(const osd_reqid_t& reqid);
+  interruptible_future<std::tuple<bool, int>> already_complete(const osd_reqid_t& reqid);
   int get_recovery_op_priority() const {
     int64_t pri = 0;
     get_pool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
@@ -698,6 +723,8 @@ private:
 
 private:
   BackfillRecovery::BackfillRecoveryPipeline backfill_pipeline;
+
+  friend class IOInterruptCondition;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);

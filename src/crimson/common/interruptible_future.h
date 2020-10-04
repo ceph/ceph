@@ -241,6 +241,8 @@ public:
     typename interruptor<InterruptCond>::template futurize_t<U>;
   using core_type::get0;
   using core_type::core_type;
+  using core_type::get_exception;
+  using core_type::ignore_ready_future;
 
   [[gnu::always_inline]]
   interruptible_future_detail(seastar::future<T>&& base)
@@ -319,6 +321,14 @@ public:
     }
   }
 
+  template <typename Func>
+  [[gnu::always_inline]]
+  auto then_unpack_interruptible(Func&& func) {
+    return then_interruptible([func=std::forward<Func>(func)](T&& tuple) mutable {
+      return std::apply(std::forward<Func>(func), std::move(tuple));
+    });
+  }
+
   template <typename Func,
 	    typename Result =interrupt_futurize_t<
 		std::result_of_t<Func(std::exception_ptr)>>>
@@ -386,6 +396,14 @@ public:
     });
   }
 
+
+  using my_type = interruptible_future_detail<InterruptCond, seastar::future<T>>;
+
+  template <typename Func>
+  [[gnu::always_inline]]
+  my_type finally(Func&& func) {
+    return core_type::finally(std::forward<Func>(func));
+  }
 private:
   seastar::future<T> to_future() {
     return static_cast<core_type&&>(std::move(*this));
@@ -404,14 +422,6 @@ private:
 		std::forward<Func>(func),
 		std::move(fut));
     });
-  }
-  // this is only supposed to be invoked by seastar functions
-  template <typename Func,
-	    typename Result = interrupt_futurize_t<
-		std::invoke_result_t<Func>>>
-  [[gnu::always_inline]]
-  Result finally(Func&& func) {
-    return core_type::finally(std::forward<Func>(func));
   }
   template <typename Iterator, typename AsyncAction, typename Result,
 	    std::enable_if_t<
@@ -688,32 +698,36 @@ public:
 			    std::forward<ErrorVisitorTailT>(err_func_tail)...));
   }
 
-  template <typename ErrorFunc>
+  template <bool interruptible = true, typename ErrorFunc>
   auto handle_error_interruptible(ErrorFunc&& errfunc) {
-    assert(interrupt_cond<InterruptCond>);
-    auto fut = core_type::handle_error(
-      [errfunc=std::move(errfunc),
-       interrupt_condition=interrupt_cond<InterruptCond>]
-      (auto&& err) mutable -> decltype(auto) {
-	constexpr bool return_void = std::is_void_v<
-	  std::invoke_result_t<ErrorFunc,
-	    std::decay_t<decltype(err)>>>;
-	constexpr bool return_err = ::crimson::is_error_v<
-	  std::decay_t<std::invoke_result_t<ErrorFunc,
-	    std::decay_t<decltype(err)>>>>;
-	if constexpr (return_err || return_void) {
-	  return non_futurized_call_with_interruption(
-		    interrupt_condition,
-		    std::move(errfunc),
-		    std::move(err));
-	} else {
-	  return call_with_interruption(
-		    interrupt_condition,
-		    std::move(errfunc),
-		    std::move(err));
-	}
-      });
-    return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
+    if constexpr (interruptible) {
+      assert(interrupt_cond<InterruptCond>);
+      auto fut = core_type::handle_error(
+	[errfunc=std::move(errfunc),
+	 interrupt_condition=interrupt_cond<InterruptCond>]
+	(auto&& err) mutable -> decltype(auto) {
+	  constexpr bool return_void = std::is_void_v<
+	    std::invoke_result_t<ErrorFunc,
+	      std::decay_t<decltype(err)>>>;
+	  constexpr bool return_err = ::crimson::is_error_v<
+	    std::decay_t<std::invoke_result_t<ErrorFunc,
+	      std::decay_t<decltype(err)>>>>;
+	  if constexpr (return_err || return_void) {
+	    return non_futurized_call_with_interruption(
+		      interrupt_condition,
+		      std::move(errfunc),
+		      std::move(err));
+	  } else {
+	    return call_with_interruption(
+		      interrupt_condition,
+		      std::move(errfunc),
+		      std::move(err));
+	  }
+	});
+      return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
+    } else {
+      return core_type::handle_error(std::forward<ErrorFunc>(errfunc));
+    }
   }
 
   template <typename ErrorFuncHead,
@@ -726,6 +740,13 @@ public:
       ::crimson::composer(
 	std::forward<ErrorFuncHead>(error_func_head),
 	std::forward<ErrorFuncTail>(error_func_tail)...));
+  }
+
+  template <typename Func>
+  [[gnu::always_inline]]
+  auto finally(Func&& func) {
+    auto fut = core_type::finally(std::forward<Func>(func));
+    return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
   }
 private:
   ErroratedFuture<::crimson::errorated_future_marker<T>>
@@ -865,6 +886,17 @@ public:
 	disable_interruption();
       }
       return fut;
+  }
+
+  template <typename Func>
+  [[gnu::always_inline]]
+  static auto wrap_function(Func&& func) {
+    return [func=std::forward<Func>(func),
+	    interrupt_condition=interrupt_cond<InterruptCond>]() mutable {
+	      return call_with_interruption(
+		  interrupt_condition,
+		  std::forward<Func>(func));
+	    };
   }
 
   template <typename Iterator, typename AsyncAction,
@@ -1133,6 +1165,12 @@ public:
   template <typename... FutOrFuncs>
   static inline auto when_all(FutOrFuncs&&... fut_or_funcs) noexcept {
     return ::seastar::internal::when_all_impl(
+	futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs))...);
+  }
+
+  template <typename... FutOrFuncs>
+  static inline auto when_all_succeed(FutOrFuncs&&... fut_or_funcs) noexcept {
+    return ::seastar::internal::when_all_succeed_impl(
 	futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs))...);
   }
 private:
