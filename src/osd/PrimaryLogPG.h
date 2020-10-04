@@ -548,7 +548,7 @@ public:
     osd->send_message_osd_cluster(messages, from_epoch);
   }
   void send_message_osd_cluster(
-    Message *m, Connection *con) override {
+    MessageRef m, Connection *con) override {
     osd->send_message_osd_cluster(m, con);
   }
   void send_message_osd_cluster(

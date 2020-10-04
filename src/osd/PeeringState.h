@@ -270,7 +270,7 @@ public:
 
     /// Send cluster message to osd
     virtual void send_cluster_message(
-      int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
+      int osd, MessageRef m, epoch_t epoch, bool share_map_update=false) = 0;
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 

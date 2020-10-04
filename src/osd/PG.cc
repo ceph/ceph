@@ -799,7 +799,7 @@ void PG::set_probe_targets(const set<pg_shard_t> &probe_set)
 }
 
 void PG::send_cluster_message(
-  int target, Message *m,
+  int target, MessageRef m,
   epoch_t epoch, bool share_map_update=false)
 {
   ConnectionRef con = osd->get_con_osd_cluster(
