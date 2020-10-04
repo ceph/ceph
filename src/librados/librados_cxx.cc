@@ -2152,6 +2152,25 @@ int librados::IoCtx::aio_notify(const string& oid, AioCompletion *c,
                                  NULL);
 }
 
+void librados::IoCtx::decode_notify_response(bufferlist &bl,
+                                             std::vector<librados::notify_ack_t> *acks,
+                                             std::vector<librados::notify_timeout_t> *timeouts)
+{
+  map<pair<uint64_t,uint64_t>,bufferlist> acked;
+  set<pair<uint64_t,uint64_t>> missed;
+
+  auto iter = bl.cbegin();
+  decode(acked, iter);
+  decode(missed, iter);
+
+  for (auto &[who, payload] : acked) {
+    acks->emplace_back(librados::notify_ack_t{who.first, who.second, payload});
+  }
+  for (auto &[notifier_id, cookie] : missed) {
+    timeouts->emplace_back(librados::notify_timeout_t{notifier_id, cookie});
+  }
+}
+
 void librados::IoCtx::notify_ack(const std::string& o,
 				 uint64_t notify_id, uint64_t handle,
 				 bufferlist& bl)
