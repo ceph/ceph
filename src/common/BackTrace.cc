@@ -46,7 +46,7 @@ std::string BackTrace::demangle(const char* name)
       end = j;
     }
   }
-  if (begin && end) {
+  if (begin && end && begin < end) {
     std::string mangled(begin, end);
     int status;
     // only demangle a C++ mangled name
