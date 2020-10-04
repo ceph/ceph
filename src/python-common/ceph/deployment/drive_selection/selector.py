@@ -115,11 +115,6 @@ class DriveSelection(object):
         for disk in self.disks:
             logger.debug("Processing disk {}".format(disk.path))
 
-            if not disk.available:
-                logger.debug(
-                    "Ignoring disk {}. Disk is not available".format(disk.path))
-                continue
-
             if not self._has_mandatory_idents(disk):
                 logger.debug(
                     "Ignoring disk {}. Missing mandatory idents".format(
