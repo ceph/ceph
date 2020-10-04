@@ -442,7 +442,7 @@ int FIFO::process_journal(optional_yield y)
   auto new_max = info.max_push_part_num;
   l.unlock();
 
-  int r;
+  int r = 0;
   for (auto& [n, entry] : tmpjournal) {
     switch (entry.op) {
     case fifo::journal_entry::Op::create:
@@ -497,7 +497,7 @@ int FIFO::process_journal(optional_yield y)
       canceled = false;
       break;
     }
-    _update_meta(fifo::update()
+    r = _update_meta(fifo::update()
 		 .tail_part_num(tail_part_num)
 		 .head_part_num(head_part_num)
 		 .max_push_part_num(max_part_num)
@@ -520,8 +520,9 @@ int FIFO::process_journal(optional_yield y)
       processed = std::move(new_processed);
     }
   }
-  if (canceled)
+  if (canceled) {
     r = -ECANCELED;
+  }
   return r;
 }
 
@@ -589,7 +590,7 @@ int FIFO::_prepare_new_head(optional_yield y) {
   } else {
     bool canceled = true;
     for (auto i = 0; canceled && i < MAX_RACE_RETRIES; ++i) {
-      _update_meta(fifo::update{}.head_part_num(new_head_num),
+      r = _update_meta(fifo::update{}.head_part_num(new_head_num),
 		   version, &canceled, y);
       if (r < 0)
 	break;
@@ -652,7 +653,7 @@ int FIFO::open(lr::IoCtx ioctx, std::string oid, std::unique_ptr<FIFO>* fifo,
   fifo::info info;
   std::uint32_t size;
   std::uint32_t over;
-  int r = get_meta(ioctx, std::move(oid), objv, &info, &size, &over, y);
+  int r = get_meta(ioctx, oid, objv, &info, &size, &over, y);
   if (r >= 0) {
     std::unique_ptr<FIFO> f(new FIFO(std::move(ioctx), oid));
     f->info = info;
@@ -815,7 +816,7 @@ int FIFO::push(const std::vector<cb::list>& data_bufs, optional_yield y)
       remaining.pop_front();
     }
 
-    auto r = push_entries(batch, y);
+    r = push_entries(batch, y);
     if (r >= 0) {
       // Made forward progress!
       canceled = false;
@@ -837,8 +838,9 @@ int FIFO::push(const std::vector<cb::list>& data_bufs, optional_yield y)
     if (r < 0)
       break;
   }
-  if (canceled && r == 0)
+  if (canceled && r == 0) {
     r = -ECANCELED;
+  }
   return r;
 }
 
@@ -872,7 +874,7 @@ int FIFO::list(int max_entries,
     auto part_oid = info.part_oid(part_num);
     l.unlock();
 
-    list_part(ioctx, part_oid, {}, ofs, max_entries, &entries,
+    r = list_part(ioctx, part_oid, {}, ofs, max_entries, &entries,
 	      &part_more, &part_full, nullptr, y);
     if (r == -ENOENT) {
       r = read_meta(y);
