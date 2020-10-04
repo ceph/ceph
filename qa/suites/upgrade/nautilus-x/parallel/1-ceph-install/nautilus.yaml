@@ -27,6 +27,7 @@ tasks:
       - Behind on trimming
       - Manager daemon
       - Not found or unloadable
+      - evicting unresponsive client
     conf:
       global:
         mon warn on pool no app: false
