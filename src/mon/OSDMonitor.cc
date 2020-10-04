@@ -4370,7 +4370,8 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
     return false;
   }
 
-  last_osd_report[from] = ceph_clock_now();
+  last_osd_report[from].first = ceph_clock_now();
+  last_osd_report[from].second = beacon->osd_beacon_report_interval;
   osd_epochs[from] = beacon->version;
 
   for (const auto& pg : beacon->pgs) {
@@ -5244,7 +5245,7 @@ void OSDMonitor::_set_new_cache_sizes()
 }
 
 bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
-				     std::map<int,utime_t> &last_osd_report)
+				     std::map<int, std::pair<utime_t, int>> &last_osd_report)
 {
   utime_t timeo(g_conf()->mon_osd_report_timeout, 0);
   if (now - mon->get_leader_since() < timeo) {
@@ -5263,19 +5264,24 @@ bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
     }
     if (!osdmap.is_up(i))
       continue;
-    const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
+    const std::map<int, std::pair<utime_t, int>>::const_iterator t = last_osd_report.find(i);
     if (t == last_osd_report.end()) {
       // it wasn't in the map; start the timer.
-      last_osd_report[i] = now;
+      last_osd_report[i].first = now;
+      last_osd_report[i].second = 0;
     } else if (can_mark_down(i)) {
-      utime_t diff = now - t->second;
-      if (diff > timeo) {
-	mon->clog->info() << "osd." << i << " marked down after no beacon for "
-			  << diff << " seconds";
-	derr << "no beacon from osd." << i << " since " << t->second
-	     << ", " << diff << " seconds ago.  marking down" << dendl;
-	pending_inc.new_state[i] = CEPH_OSD_UP;
-	new_down = true;
+      utime_t diff = now - t->second.first;
+      // we use the max(mon_osd_report_timeout, 2*osd_beacon_report_interval) as timeout
+      // to allow for the osd to miss a beacon.
+      int mon_osd_report_timeout = g_conf()->mon_osd_report_timeout;
+      utime_t max_timeout(std::max(mon_osd_report_timeout,  2 * t->second.second), 0);
+      if (diff > max_timeout) {
+        mon->clog->info() << "osd." << i << " marked down after no beacon for "
+                          << diff << " seconds";
+        derr << "no beacon from osd." << i << " since " << t->second.first
+             << ", " << diff << " seconds ago.  marking down" << dendl;
+        pending_inc.new_state[i] = CEPH_OSD_UP;
+        new_down = true;
       }
     }
   }
