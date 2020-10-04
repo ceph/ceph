@@ -287,7 +287,7 @@ void PeeringState::purge_strays()
       psdout(10) << "sending PGRemove to osd." << *p << dendl;
       vector<spg_t> to_remove;
       to_remove.push_back(spg_t(info.pgid.pgid, p->shard));
-      MOSDPGRemove *m = new MOSDPGRemove(
+      auto m = make_message<MOSDPGRemove>(
 	get_osdmap_epoch(),
 	to_remove);
       pl->send_cluster_message(p->osd, m, get_osdmap_epoch());
@@ -1164,7 +1164,7 @@ void PeeringState::send_lease()
     }
     pl->send_cluster_message(
       peer.osd,
-      new MOSDPGLease(epoch,
+      make_message<MOSDPGLease>(epoch,
 		      spg_t(spgid.pgid, peer.shard),
 		      get_lease()),
       epoch);
@@ -1464,7 +1464,7 @@ void PeeringState::reject_reservation()
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     primary.osd,
-    new MBackfillReserve(
+    make_message<MBackfillReserve>(
       MBackfillReserve::REJECT_TOOFULL,
       spg_t(info.pgid.pgid, primary.shard),
       get_osdmap_epoch()),
@@ -2783,7 +2783,7 @@ void PeeringState::activate(
 
       psdout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      MOSDPGLog *m = 0;
+      MRef<MOSDPGLog> m;
       ceph_assert(peer_missing.count(peer));
       pg_missing_t& pm = peer_missing[peer];
 
@@ -2810,7 +2810,7 @@ void PeeringState::activate(
 	} else {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, but sending pg_log anyway" << dendl;
-	  m = new MOSDPGLog(
+	  m = make_message<MOSDPGLog>(
 	    i->shard, pg_whoami.shard,
 	    get_osdmap_epoch(), info,
 	    last_peering_reset);
@@ -2847,7 +2847,7 @@ void PeeringState::activate(
 	// initialize peer with our purged_snaps.
 	pi.purged_snaps = info.purged_snaps;
 
-	m = new MOSDPGLog(
+	m = make_message<MOSDPGLog>(
 	  i->shard, pg_whoami.shard,
 	  get_osdmap_epoch(), pi,
 	  last_peering_reset /* epoch to create pg at */);
@@ -2862,7 +2862,7 @@ void PeeringState::activate(
       } else {
 	// catch up
 	ceph_assert(pg_log.get_tail() <= pi.last_update);
-	m = new MOSDPGLog(
+	m = make_message<MOSDPGLog>(
 	  i->shard, pg_whoami.shard,
 	  get_osdmap_epoch(), info,
 	  last_peering_reset /* epoch to create pg at */);
@@ -3009,21 +3009,23 @@ void PeeringState::share_pg_info()
       peer->second.last_interval_started = info.last_interval_started;
       peer->second.history.merge(info.history);
     }
-    Message* m = nullptr;
+    MessageRef m;
     if (last_require_osd_release >= ceph_release_t::octopus) {
-      m = new MOSDPGInfo2{spg_t{info.pgid.pgid, pg_shard.shard},
+      m = make_message<MOSDPGInfo2>(spg_t{info.pgid.pgid, pg_shard.shard},
 			  info,
 			  get_osdmap_epoch(),
 			  get_osdmap_epoch(),
-			  get_lease(), {}};
+			  std::optional<pg_lease_t>{get_lease()},
+			  std::nullopt);
     } else {
-      m = new MOSDPGInfo{get_osdmap_epoch(),
-			 {pg_notify_t{pg_shard.shard,
-				      pg_whoami.shard,
-				      get_osdmap_epoch(),
-				      get_osdmap_epoch(),
-				      info,
-				      past_intervals}}};
+      m = make_message<MOSDPGInfo>(get_osdmap_epoch(),
+	      MOSDPGInfo::pg_list_t{
+	        pg_notify_t{pg_shard.shard,
+			    pg_whoami.shard,
+			    get_osdmap_epoch(),
+			    get_osdmap_epoch(),
+			    info,
+			    past_intervals}});
     }
     pl->send_cluster_message(pg_shard.osd, m, get_osdmap_epoch());
   }
@@ -3150,7 +3152,7 @@ void PeeringState::fulfill_log(
   ceph_assert(from == primary);
   ceph_assert(query.type != pg_query_t::INFO);
 
-  MOSDPGLog *mlog = new MOSDPGLog(
+  auto mlog = make_message<MOSDPGLog>(
     from.shard, pg_whoami.shard,
     get_osdmap_epoch(),
     info, query_epoch);
@@ -4397,7 +4399,7 @@ void PeeringState::recovery_committed_to(eversion_t version)
       // we are fully up to date.  tell the primary!
       pl->send_cluster_message(
 	get_primary().osd,
-	new MOSDPGTrim(
+	make_message<MOSDPGTrim>(
 	  get_osdmap_epoch(),
 	  spg_t(info.pgid.pgid, primary.shard),
 	  last_complete_ondisk),
@@ -5040,7 +5042,7 @@ void PeeringState::Backfilling::backfill_release_reservations()
     ceph_assert(*it != ps->pg_whoami);
     pl->send_cluster_message(
       it->osd,
-      new MBackfillReserve(
+      make_message<MBackfillReserve>(
 	MBackfillReserve::RELEASE,
 	spg_t(ps->info.pgid.pgid, it->shard),
 	ps->get_osdmap_epoch()),
@@ -5164,7 +5166,7 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
     ceph_assert(*backfill_osd_it != ps->pg_whoami);
     pl->send_cluster_message(
       backfill_osd_it->osd,
-      new MBackfillReserve(
+      make_message<MBackfillReserve>(
 	MBackfillReserve::REQUEST,
 	spg_t(context< PeeringMachine >().spgid.pgid, backfill_osd_it->shard),
 	ps->get_osdmap_epoch(),
@@ -5204,7 +5206,7 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
     ceph_assert(*it != ps->pg_whoami);
     pl->send_cluster_message(
       it->osd,
-      new MBackfillReserve(
+      make_message<MBackfillReserve>(
 	MBackfillReserve::RELEASE,
 	spg_t(context< PeeringMachine >().spgid.pgid, it->shard),
 	ps->get_osdmap_epoch()),
@@ -5377,7 +5379,7 @@ PeeringState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
   DECLARE_LOCALS;
   pl->send_cluster_message(
     ps->primary.osd,
-    new MRecoveryReserve(
+    make_message<MRecoveryReserve>(
       MRecoveryReserve::GRANT,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5485,7 +5487,7 @@ PeeringState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 
   pl->send_cluster_message(
       ps->primary.osd,
-      new MBackfillReserve(
+      make_message<MBackfillReserve>(
 	MBackfillReserve::GRANT,
 	spg_t(ps->info.pgid.pgid, ps->primary.shard),
 	ps->get_osdmap_epoch()),
@@ -5542,7 +5544,7 @@ PeeringState::RepRecovering::react(const RemoteRecoveryPreempted &)
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
-    new MRecoveryReserve(
+    make_message<MRecoveryReserve>(
       MRecoveryReserve::REVOKE,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5559,7 +5561,7 @@ PeeringState::RepRecovering::react(const BackfillTooFull &)
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
-    new MBackfillReserve(
+    make_message<MBackfillReserve>(
       MBackfillReserve::REVOKE_TOOFULL,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5576,7 +5578,7 @@ PeeringState::RepRecovering::react(const RemoteBackfillPreempted &)
   pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
-    new MBackfillReserve(
+    make_message<MBackfillReserve>(
       MBackfillReserve::REVOKE,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
@@ -5680,7 +5682,7 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
     ceph_assert(*remote_recovery_reservation_it != ps->pg_whoami);
     pl->send_cluster_message(
       remote_recovery_reservation_it->osd,
-      new MRecoveryReserve(
+      make_message<MRecoveryReserve>(
 	MRecoveryReserve::REQUEST,
 	spg_t(context< PeeringMachine >().spgid.pgid,
 	      remote_recovery_reservation_it->shard),
@@ -5730,7 +5732,7 @@ void PeeringState::Recovering::release_reservations(bool cancel)
       continue;
     pl->send_cluster_message(
       i->osd,
-      new MRecoveryReserve(
+      make_message<MRecoveryReserve>(
 	MRecoveryReserve::RELEASE,
 	spg_t(ps->info.pgid.pgid, i->shard),
 	ps->get_osdmap_epoch()),
@@ -6429,7 +6431,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLease& l)
   ps->proc_lease(l.lease);
   pl->send_cluster_message(
     ps->get_primary().osd,
-    new MOSDPGLeaseAck(epoch,
+    make_message<MOSDPGLeaseAck>(epoch,
 		       spg_t(spgid.pgid, ps->get_primary().shard),
 		       ps->get_lease_ack()),
     epoch);
