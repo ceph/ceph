@@ -93,8 +93,6 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   if (!name)
     name = "CEPH_ARGS";
 
-  auto [options, arguments] = split_dashdash(args);
-
   /*
    * We can only populate str_vec once. Other threads could hold pointers into
    * it, so clearing it out and replacing it is not currently safe.
@@ -108,14 +106,15 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
     }
     get_str_vec(p, " ", g_str_vec);
   }
-  g_str_vec_lock.unlock();
 
   std::vector<const char*> env;
   for (const auto& s : g_str_vec) {
     env.push_back(s.c_str());
   }
+  g_str_vec_lock.unlock();
   auto [env_options, env_arguments] = split_dashdash(env);
 
+  auto [options, arguments] = split_dashdash(args);
   args.clear();
   args.insert(args.end(), env_options.begin(), env_options.end());
   args.insert(args.end(), options.begin(), options.end());
