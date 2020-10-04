@@ -2119,8 +2119,7 @@ void PG::repair_object(
 }
 
 
-/* replica_scrub
- *
+/*
  * (triggered by MSG_OSD_REP_SCRUB)
  * Initiate the process that will create our scrub map for the Primary:
  * Wait for last_update_applied to match msg->scrub_to as above. Wait
@@ -2175,12 +2174,10 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle& handle)
 void PG::recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
 {
   dout(7) << __func__ << " " << (is_primary() ? "<P>" : "<NP>") << pg_id << dendl;
-  dout(7) << __func__ << " " << (m_scrubber->is_scrub_active() ? "<+act> " : "<-act> ")
-	  << pg_id << dendl;
 
   scrub_queued = false;
 
-  // RRR do we need this check when called after recovery?
+  /// RRR \ask do we need this check when called after recovery?
   if (pg_has_reset_since(queued)) {
     dout(7) << " reset_since " << __func__ << " " << queued << dendl;
     dout(7) << " reset_since " << __func__ << " "
@@ -2237,8 +2234,7 @@ void PG::scrub_send_resources_denied(epoch_t epoch_queued,
 void PG::replica_scrub_resched(epoch_t epoch_queued,
 			       [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
-  dout(7) << "pg::replica_scrub_resched  : " << __func__ << " "
-	  << (is_primary() ? "<P>" : "<NP>") << dendl;
+  dout(7) << __func__ << " qed at: " << epoch_queued << dendl;
   scrub_queued = false;
   m_scrubber->replica_scrub_resched(epoch_queued);
 }
@@ -2263,20 +2259,23 @@ void PG::scrub_send_pushes_update(epoch_t epoch_queued,
   m_scrubber->active_pushes_notification();
 }
 
+void PG::scrub_send_replica_pushes(epoch_t epoch_queued,
+				  [[maybe_unused]] ThreadPool::TPHandle& handle)
+{
+  dout(7) << "- " << __func__ << " qed at: " << epoch_queued << dendl;
+  m_scrubber->send_replica_pushes_upd();
+}
+
 void PG::scrub_send_applied_update(epoch_t epoch_queued,
 				   [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(7) << "- " << __func__ << " qed at: " << epoch_queued << dendl;
 
   if (pg_has_reset_since(epoch_queued)) {
-    // RRR verify
-    dout(7) << "pg::scrub   reset_since " << __func__ << " " << epoch_queued << dendl;
     dout(7) << "pg::scrub   reset_since " << __func__ << " "
 	    << recovery_state.get_last_peering_reset() << dendl;
-    // are we really not going to do anything? RRR seems we depend on the reset to kill
-    // the active FSM state. Verify
 
-    // shouldn't we send an 'epoch changed' event?
+    // RRR shouldn't we send an 'epoch changed' event?
     return;
   }
 

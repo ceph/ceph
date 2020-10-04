@@ -23,10 +23,9 @@
 #include "OSD.h"
 #include "scrub_machine.h"
 
-
 class PrimaryLogPG;
 
-/*!
+/**
  * The derivative of PgScrubber that is used by PrimaryLogPG.
  */
 class PrimaryLogScrub : public PgScrubber {

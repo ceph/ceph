@@ -448,6 +448,14 @@ class PGRepScrubResched : public PGScrubItem {
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
+class PGScrubReplicaPushes : public PGScrubItem {
+ public:
+  PGScrubReplicaPushes(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubReplicaPushes"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
 class PGRecovery : public PGOpQueueable {
   epoch_t epoch_queued;
   uint64_t reserved_pushes;

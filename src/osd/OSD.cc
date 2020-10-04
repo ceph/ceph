@@ -1866,6 +1866,17 @@ void OSDService::queue_scrub_got_repl_maps(PG *pg, Scrub::scrub_prio_t with_prio
   queue_scrub_event_msg<PGScrubGotReplMaps>(pg, with_priority);
 }
 
+/**
+ *  Queue a PGScrubReplicaPushes message, that will translate into a ReplicaPushesUpd event
+ *  in the scrub state machine.
+ *
+ *  Signals a change in the number of in-flight recovery writes.
+ */
+void OSDService::queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority)
+{
+  queue_scrub_event_msg<PGScrubReplicaPushes>(pg, with_priority);
+}
+
 void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
 {
   dout(10) << __func__ << " on " << pgid << " e " << e  << dendl;

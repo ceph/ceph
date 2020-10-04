@@ -252,6 +252,16 @@ void PgScrubber::send_replica_maps_ready()
   dout(7) << "RRRRRRR --<< " << __func__ << dendl;
 }
 
+void PgScrubber::send_replica_pushes_upd()
+{
+  dout(7) << "RRRRRRR -->> " << __func__ << dendl;
+  m_fsm->my_states();
+  if (is_scrub_active()) {
+    m_fsm->process_event(ReplicaPushesUpd{});
+  }
+  dout(7) << "RRRRRRR --<< " << __func__ << dendl;
+}
+
 void PgScrubber::send_remotes_reserved()
 {
   dout(7) << "RRRRRRR -->> " << __func__ << dendl;
@@ -569,7 +579,6 @@ bool PgScrubber::select_range()
   return true;
 }
 
-
 bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
 {
   if (soid < m_start || soid >= m_end) {
@@ -633,12 +642,9 @@ void PgScrubber::add_delayed_scheduling()
     auto callbk = new LambdaContext([osds = m_osds, pgid, scrbr = this](int r) mutable {
       PGRef pg = osds->osd->lookup_lock_pg(pgid);
       if (!pg) {
-	// no PG now, so we are forced to use the OSD's context
 	lgeneric_subdout(g_ceph_context, osd, 10)
 	  << "scrub_requeue_callback: Could not find "
 	  << "PG " << pgid << " can't complete scrub requeue after sleep" << dendl;
-
-	// RRR ask how to send this error message
 	return;
       }
       scrbr->m_needs_sleep = true;
@@ -647,8 +653,7 @@ void PgScrubber::add_delayed_scheduling()
 	<< ceph_clock_now() - scrbr->m_sleep_started_at << ", re-queuing scrub" << dendl;
 
       scrbr->m_sleep_started_at = utime_t{};
-      osds->queue_for_scrub_resched(
-	&(*pg), /* RRR  should it be high? */ Scrub::scrub_prio_t::high_priority);
+      osds->queue_for_scrub_resched(&(*pg), Scrub::scrub_prio_t::low_priority);
       pg->unlock();
     });
 
@@ -1047,7 +1052,7 @@ void PgScrubber::run_callbacks()
   }
 }
 
-void PgScrubber::done_comparing_maps()
+void PgScrubber::maps_compare_n_cleanup()
 {
   scrub_compare_maps();
   m_start = m_end;
@@ -1123,27 +1128,17 @@ void PgScrubber::replica_scrub(epoch_t epoch_queued)
   dout(7) << __func__ << " m_is_deep: " << m_is_deep << dendl;
 
   if (m_pg->pg_has_reset_since(epoch_queued)) {
-    // RRR verify
     dout(7) << "replica_scrub(epoch,) - reset!" << dendl;
     send_epoch_changed();
     return;
   }
 
   if (was_epoch_changed()) {
-    // RRR verify
     dout(7) << "replica_scrub(epoch,) - epoch!" << dendl;
-    send_epoch_changed();  // RRR
-    return;
-  }
-
-  // RR check directly for epoch number?
-
-  if (is_primary()) {
-    // we will never get here unless the epoch changed.
     send_epoch_changed();
-    // a bug. RRR assert
     return;
   }
+  ceph_assert(!is_primary());  // as should have been caught by the epoch-changed check
 
   send_start_replica();
 }
@@ -1158,40 +1153,20 @@ void PgScrubber::replica_scrub_resched(epoch_t epoch_queued)
 	  << " better be >= " << m_pg->info.history.same_interval_since << dendl;
 
   if (m_pg->pg_has_reset_since(epoch_queued)) {
-    // RRR verify
     dout(7) << "replica_scrub(epoch,) - reset!" << dendl;
     send_epoch_changed();
     return;
   }
 
   if (was_epoch_changed()) {
-    // RRR verify
+    // RRR verify whether to check against epoch_start or replica_epoch_start
     dout(7) << "replica_scrub(epoch,) - epoch!" << dendl;
     send_epoch_changed();
     return;
   }
-
-  if (is_primary()) {
-    // we will never get here unless the epoch changed.
-    send_epoch_changed();
-    // a bug. RRR assert
-    return;
-  }
+  ceph_assert(!is_primary());  // as should have been caught by the epoch-changed check
 
   send_sched_replica();
-}
-
-void PgScrubber::queue_pushes_update(Scrub::scrub_prio_t is_high_priority)
-{
-  dout(10) << __func__ << ": queueing" << dendl;
-  m_osds->queue_scrub_pushes_update(m_pg, is_high_priority);
-}
-
-void PgScrubber::queue_pushes_update(bool with_priority)
-{
-  dout(10) << __func__ << ": queueing" << dendl;
-  m_osds->queue_scrub_pushes_update(m_pg,
-				    static_cast<Scrub::scrub_prio_t>(with_priority));
 }
 
 void PgScrubber::set_op_parameters(requested_scrub_t& request)
@@ -1206,7 +1181,6 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
   m_flags.priority = (request.must_scrub || request.need_auto)
 		       ? get_pg_cct()->_conf->osd_requested_scrub_priority
 		       : m_pg->get_scrub_priority();
-  // RRR which CCT to use here?
 
   state_set(PG_STATE_SCRUBBING);
 
@@ -1378,10 +1352,10 @@ void PgScrubber::send_replica_map(bool was_preempted)
  *  - if the replica lets us know it was interrupted, we mark the chunk as interrupted.
  *    The state-machine will react to that when all replica maps are received.
  *  - when all maps are received, we signal the FSM with the GotReplicas event (see
- * scrub_send_replmaps_ready()). Note that due to the no-reentrancy limitations of the
- * FSM, we do not 'process' the event directly. Instead - it is queued for the OSD to
- * handle (well - the incoming message is marked for fast dispatching, which is an even
- * better reason for handling it via the queue).
+ *    scrub_send_replmaps_ready()). Note that due to the no-reentrancy limitations of the
+ *    FSM, we do not 'process' the event directly. Instead - it is queued for the OSD to
+ *    handle (well - the incoming message is marked for fast dispatching, which is an even
+ *    better reason for handling it via the queue).
  */
 void PgScrubber::map_from_replica(OpRequestRef op)
 {
@@ -1400,10 +1374,9 @@ void PgScrubber::map_from_replica(OpRequestRef op)
 
   m_received_maps[m->from].decode(p, m_pg->info.pgid.pool());
   dout(10) << "map version is " << m_received_maps[m->from].valid_through << dendl;
-  // dout(10) << __func__ << " waiting_on _whom was " << waiting_on _whom << dendl;
 
   [[maybe_unused]] auto [is_ok, err_txt] = m_maps_status.mark_arriving_map(m->from);
-  ceph_assert(is_ok);  // and not an error message, as this was the original code
+  ceph_assert(is_ok);  // and not an error message, following the original code
 
   if (m->preempted) {
     dout(10) << __func__ << " replica was preempted, setting flag" << dendl;
@@ -1417,8 +1390,10 @@ void PgScrubber::map_from_replica(OpRequestRef op)
   }
 }
 
-/// we are a replica being asked by the Primary to reserve OSD resources for
-/// scrubbing
+/**
+ *  we are a replica being asked by the Primary to reserve OSD resources for
+ * scrubbing
+ */
 void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 {
   dout(7) << __func__ << " " << *op->get_req() << dendl;
@@ -1431,7 +1406,6 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 
   bool granted{false};
 
-  // RRR check the 'cct' used here
   if (m_pg->cct->_conf->osd_scrub_during_recovery || !m_osds->is_recovery_active()) {
 
     m_remote_osd_resource.emplace(m_pg, m_osds);

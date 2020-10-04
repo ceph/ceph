@@ -140,6 +140,7 @@ struct ScrubPgIF {
 
   virtual void send_replica_maps_ready() = 0;
 
+  virtual void send_replica_pushes_upd() = 0;
 
   // --------------------------------------------------
 
@@ -148,7 +149,8 @@ struct ScrubPgIF {
   [[nodiscard]] virtual bool are_callbacks_pending()
     const = 0;	// currently only used for an assert
 
-  [[nodiscard]] virtual bool is_scrub_active() const = 0;  // RRR must doc
+  /// \todo should be documented!
+  [[nodiscard]] virtual bool is_scrub_active() const = 0;
 
   /// are we waiting for resource reservation grants form our replicas?
   [[nodiscard]] virtual bool is_reserving() const = 0;
@@ -187,9 +189,6 @@ struct ScrubPgIF {
   virtual unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority,
 					      unsigned int suggested_priority) const = 0;
 
-  virtual void queue_pushes_update(bool is_high_priority) = 0;
-  virtual void queue_pushes_update(Scrub::scrub_prio_t with_priority) = 0;
-
   virtual void add_callback(Context* context) = 0;
 
   /// should we requeue blocked ops?
@@ -197,7 +196,7 @@ struct ScrubPgIF {
     eversion_t last_recovery_applied) const = 0;
 
 
-  // --------------- until after we move the reservations flow into the FSM:
+  // --------------- reservations -----------------------------------
 
   /**
    *  message all replicas with a request to "unreserve" scrub
@@ -213,7 +212,7 @@ struct ScrubPgIF {
   /**
    * Reserve local scrub resources (managed by the OSD)
    *
-   * Fail if OSD's local-scrubs budget was exhausted
+   * Fails if OSD's local-scrubs budget was exhausted
    * \retval 'true' if local resources reserved.
    */
   virtual bool reserve_local() = 0;
@@ -238,7 +237,6 @@ struct ScrubPgIF {
 			       requested_scrub_t& req_flags) = 0;
 
   // -------------------------------------------------------
-
 
   virtual bool is_chunky_scrub_active() const = 0;
 

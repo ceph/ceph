@@ -210,6 +210,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void send_replica_maps_ready() final;
 
+  void send_replica_pushes_upd() final;
+
   void reset_epoch(epoch_t epoch_queued) final;
 
   /**
@@ -270,9 +272,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 				      unsigned int suggested_priority) const final;
   /// the version that refers to m_flags.priority
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const final;
-
-  void queue_pushes_update(bool is_high_priority) final;
-  void queue_pushes_update(Scrub::scrub_prio_t with_priority) final;
 
   void add_callback(Context* context) final { m_callbacks.push_back(context); }
 
@@ -357,7 +356,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void replica_update_start_epoch() final;
 
-  void done_comparing_maps() final;
+  void maps_compare_n_cleanup() final;
 
   Scrub::preemption_t* get_preemptor() final;
 

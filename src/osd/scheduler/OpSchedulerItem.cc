@@ -103,7 +103,6 @@ void PGScrubAppliedUpdate::run(OSD* osd,
 			       ThreadPool::TPHandle& handle)
 {
   pg->scrub_send_applied_update(epoch_queued, handle);
-  // should the unlock stay? RRR
   pg->unlock();
 }
 
@@ -146,6 +145,15 @@ void PGRepScrubResched::run(OSD* osd,
 			    ThreadPool::TPHandle& handle)
 {
   pg->replica_scrub_resched(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubReplicaPushes::run([[maybe_unused]] OSD* osd,
+			      OSDShard* sdata,
+			      PGRef& pg,
+			      ThreadPool::TPHandle& handle)
+{
+  pg->scrub_send_replica_pushes(epoch_queued, handle);
   pg->unlock();
 }
 

@@ -391,6 +391,7 @@ public:
   void scrub_send_unblocking(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
   void scrub_send_digest_update(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
   void scrub_send_replmaps_ready(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
+  void scrub_send_replica_pushes(epoch_t queued, ThreadPool::TPHandle &handle);
 
   void reg_next_scrub();
 

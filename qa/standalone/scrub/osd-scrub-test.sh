@@ -303,6 +303,7 @@ function _scrub_abort() {
     fi
 
     ceph osd set $stopscrub
+    ceph osd set noscrub
 
     # Wait for scrubbing to end
     set -o pipefail
@@ -327,6 +328,9 @@ function _scrub_abort() {
     fi
 
     local last_scrub=$(get_last_scrub_stamp $pgid)
+    ceph config set osd "osd_scrub_sleep" "0.1" 
+
+    ceph osd unset $stopscrub
     ceph osd unset noscrub
     TIMEOUT=$(($objects / 2))
     wait_for_scrub $pgid "$last_scrub" || return 1

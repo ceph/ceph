@@ -595,6 +595,7 @@ public:
   void queue_for_rep_scrub(PG* pg,
 			   Scrub::scrub_prio_t with_high_priority,
 			   unsigned int qu_priority);
+  void queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority);
   void queue_for_rep_scrub_resched(PG* pg,
 				   Scrub::scrub_prio_t with_high_priority,
 				   unsigned int qu_priority);

@@ -2,11 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
-
 /**
  * \file the PgScrubber interface used by the scrub FSM
  */
-
 #include "common/version.h"
 #include "include/Context.h"
 
@@ -103,7 +101,7 @@ struct ScrubMachineListener {
    *  - the scrub region markers (start_ & end_) are advanced
    *  - callbacks and ops that were pending are free to run
    */
-  virtual void done_comparing_maps() = 0;
+  virtual void maps_compare_n_cleanup() = 0;
 
   /**
    * order the PgScrubber to initiate the process of reserving replicas' scrub

@@ -31,11 +31,8 @@ namespace sc = ::boost::statechart;
 namespace mpl = ::boost::mpl;
 
 struct state_logger_t {
-  state_logger_t(std::string nm);
-  ~state_logger_t()
-  { /*logger().debug( "\t<<<-- /{}\n", name_);*/
-  }
-  std::string m_name;
+  state_logger_t(std::string_view nm);
+  std::string_view m_name;
 };
 
 
@@ -73,7 +70,7 @@ MEV(InternalSchedScrub)
 MEV(SelectedChunkFree)
 MEV(ChunkIsBusy)
 MEV(ActivePushesUpd)	 ///< Update to active_pushes. 'active_pushes' represents recovery
-			 ///< that is in-flight to the local Objectstore
+			 ///< that is in-flight to the local ObjectStore
 MEV(UpdatesApplied)	 // external
 MEV(InternalAllUpdates)	 ///< the internal counterpart of UpdatesApplied
 MEV(GotReplicas)	 ///< got a map from a replica
@@ -91,11 +88,14 @@ MEV(AllChunksDone)
 MEV(StartReplica)  ///< initiating replica scrub. replica_scrub_op() -> OSD Q ->
 		   ///< replica_scrub()
 MEV(SchedReplica)
+MEV(ReplicaPushesUpd)  ///< Update to active_pushes. 'active_pushes' represents recovery
+		       ///< that is in-flight to the local ObjectStore
 
 MEV(FullReset)	///< guarantee that the FSM is in the quiescent state (i.e. NotActive)
 
 
 struct NotActive;	    ///< the quiescent state. No active scrubbing.
+struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
 struct ReplicaWaitUpdates;  ///< an active state for a replica. Waiting for all active
 			    ///< operations to finish.
@@ -140,16 +140,14 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, state_logger_t {
   explicit NotActive(my_context ctx);
 
   using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
-			      sc::custom_reaction<StartScrub>,
-			      sc::custom_reaction<AfterRecoveryScrub>,
-			      sc::custom_reaction<StartReplica>,
+			      sc::transition<StartScrub, ReservingReplicas>,
+			      // a scrubbing that was initiated at recovery completion,
+			      // and requires no resource reservations:
+			      sc::transition<AfterRecoveryScrub, ActiveScrubbing>,
+			      sc::transition<StartReplica, ReplicaWaitUpdates>,
 			      sc::custom_reaction<sc::event_base>>;
 
   sc::result react(const EpochChanged&);
-  sc::result react(const StartScrub&);
-  sc::result react(const AfterRecoveryScrub&);
-  sc::result react(const StartReplica&);
-
   sc::result react(const sc::event_base&)  // in the future: assert here
   {
     return discard_event();
@@ -160,13 +158,13 @@ struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine>, state_log
 
   explicit ReservingReplicas(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
-			      sc::custom_reaction<RemotesReserved>,
+			      // all replicas granted our resources request
+			      sc::transition<RemotesReserved, ActiveScrubbing>,
 			      sc::custom_reaction<FullReset>,
 			      sc::custom_reaction<ReservationFailure>>;
 
   sc::result react(const EpochChanged&);
   sc::result react(const FullReset&);
-  sc::result react(const RemotesReserved&);
   sc::result react(const ReservationFailure&);
 };
 
@@ -190,12 +188,15 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer>,
   explicit ActiveScrubbing(my_context ctx);
   ~ActiveScrubbing();
 
-  using reactions = mpl::list<sc::transition<EpochChanged,
-					     NotActive,
-					     ScrubMachine,
-					     &ScrubMachine::down_on_epoch_change>,
-			      sc::custom_reaction<AllChunksDone>,
-			      sc::custom_reaction<FullReset>>;
+  using reactions = mpl::list<
+    // done scrubbing
+    sc::transition<AllChunksDone, NotActive>,
+
+    sc::transition<EpochChanged,
+		   NotActive,
+		   ScrubMachine,
+		   &ScrubMachine::down_on_epoch_change>,
+    sc::custom_reaction<FullReset>>;
 
   sc::result react(const AllChunksDone&);
   sc::result react(const FullReset&);
@@ -203,12 +204,7 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer>,
 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, state_logger_t {
   explicit RangeBlocked(my_context ctx);
-  using reactions =
-    mpl::list<sc::custom_reaction<EpochChanged>,
-	      sc::transition<Unblocked, PendingTimer>>	// external trigger
-    ;
-
-  sc::result react(const EpochChanged&);
+  using reactions = mpl::list<sc::transition<Unblocked, PendingTimer>>;
 };
 
 struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, state_logger_t {
@@ -222,12 +218,9 @@ struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, state_logger_t {
 
   explicit NewChunk(my_context ctx);
 
-  using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
-			      sc::transition<ChunkIsBusy, RangeBlocked>,
-			      sc::custom_reaction<SelectedChunkFree>,
-			      sc::deferral<sc::event_base>>;
+  using reactions = mpl::list<sc::transition<ChunkIsBusy, RangeBlocked>,
+			      sc::custom_reaction<SelectedChunkFree>>;
 
-  sc::result react(const EpochChanged&);
   sc::result react(const SelectedChunkFree&);
 };
 
@@ -243,13 +236,10 @@ struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing>, state_logger_t {
 
   explicit WaitPushes(my_context ctx);
 
-  using reactions =
-    mpl::list<sc::custom_reaction<EpochChanged>, sc::custom_reaction<ActivePushesUpd>>;
+  using reactions = mpl::list<sc::custom_reaction<ActivePushesUpd>>;
 
-  sc::result react(const EpochChanged&);
   sc::result react(const ActivePushesUpd&);
 };
-
 
 struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing>, state_logger_t {
 
@@ -274,7 +264,7 @@ struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, state_logger_t {
 							     // for the backend to
 							     // finish
 	      sc::custom_reaction<IntLocalMapDone>,
-	      sc::transition<InternalError, NotActive>>;  // to fix RRR
+	      sc::transition<InternalError, NotActive>>;  // to discuss RRR
 
   sc::result react(const IntLocalMapDone&);
 
@@ -299,10 +289,8 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, state_logger_t {
 
   explicit WaitReplicas(my_context ctx);
 
-  using reactions = mpl::list<sc::custom_reaction<GotReplicas>,
-			      sc::deferral<DigestUpdate>,
-			      sc::transition<InternalError, NotActive>>	 // to fix RRR
-    ;
+  using reactions =
+    mpl::list<sc::custom_reaction<GotReplicas>, sc::deferral<DigestUpdate>>;
 
   sc::result react(const GotReplicas&);
 };
@@ -311,7 +299,6 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>, state_lo
   explicit WaitDigestUpdate(my_context ctx);
 
   using reactions = mpl::list<sc::custom_reaction<DigestUpdate>>;
-
   sc::result react(const DigestUpdate&);
 };
 
@@ -323,15 +310,15 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>, state_lo
  *
  * When in this state:
  * - the details of the Primary's request were internalized by PgScrubber;
- * -
+ * - 'active' scrubbing is set
  */
 struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>, state_logger_t {
 
   explicit ReplicaWaitUpdates(my_context ctx);
   using reactions =
-    mpl::list<sc::custom_reaction<ActivePushesUpd>, sc::custom_reaction<EpochChanged>>;
+    mpl::list<sc::custom_reaction<ReplicaPushesUpd>, sc::custom_reaction<EpochChanged>>;
 
-  sc::result react(const ActivePushesUpd&);
+  sc::result react(const ReplicaPushesUpd&);
   sc::result react(const EpochChanged&);
 };
 
@@ -339,9 +326,6 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>, state_l
 struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, state_logger_t {
 
   explicit ActiveReplica(my_context ctx);
-
-  ~ActiveReplica();
-
   using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
 			      sc::custom_reaction<SchedReplica>,
 			      sc::custom_reaction<IntLocalMapDone>,
