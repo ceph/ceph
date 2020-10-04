@@ -1420,6 +1420,57 @@ static void run_server(Preforker& forker, NBDServer *server, bool netlink_used)
   shutdown_async_signal_handler();
 }
 
+// Eventually it should be replaced with glibc' pidfd_open
+// when it is widely available.
+static int
+pidfd_open(pid_t pid, unsigned int)
+{
+  std::string path = "/proc/" + stringify(pid);
+  int fd = open(path.c_str(), O_RDONLY);
+  if (fd == -1 && errno == ENOENT) {
+    errno = ESRCH;
+  }
+
+  return fd;
+}
+
+static int wait_for_terminate(int pid, int timeout)
+{
+  int fd = pidfd_open(pid, 0);
+  if (fd == -1) {
+    if (errno == -ESRCH) {
+      return 0;
+    }
+    int r = -errno;
+    cerr << "rbd-nbd: pidfd_open(" << pid << ") failed: "
+         << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  struct pollfd poll_fds[1];
+  memset(poll_fds, 0, sizeof(struct pollfd));
+  poll_fds[0].fd = fd;
+  poll_fds[0].events = POLLIN;
+
+  int r = poll(poll_fds, 1, timeout * 1000);
+  if (r == -1) {
+    r = -errno;
+    cerr << "rbd-nbd: failed to poll rbd-nbd process: " << cpp_strerror(r)
+         << std::endl;
+    goto done;
+  }
+
+  if ((poll_fds[0].revents & POLLIN) == 0) {
+    cerr << "rbd-nbd: waiting for process exit timed out" << std::endl;
+    r = -ETIMEDOUT;
+  }
+
+done:
+  close(fd);
+
+  return r;
+}
+
 static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 {
   int r;
@@ -1625,14 +1676,14 @@ close_ret:
 static int do_detach(Config *cfg)
 {
   int r = kill(cfg->pid, SIGTERM);
-  if (r != 0) {
+  if (r == -1) {
     r = -errno;
     cerr << "rbd-nbd: failed to terminate " << cfg->pid << ": "
          << cpp_strerror(r) << std::endl;
     return r;
   }
 
-  return 0;
+  return wait_for_terminate(cfg->pid, cfg->timeout);
 }
 
 static int do_unmap(Config *cfg)
@@ -1659,7 +1710,12 @@ static int do_unmap(Config *cfg)
   }
 
   close(nbd);
-  return r;
+
+  if (r < 0) {
+    return r;
+  }
+
+  return wait_for_terminate(cfg->pid, cfg->timeout);
 }
 
 static int parse_imgpath(const std::string &imgpath, Config *cfg,

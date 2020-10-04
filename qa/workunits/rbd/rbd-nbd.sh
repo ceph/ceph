@@ -97,7 +97,7 @@ function get_pid()
 
     PID=$(rbd-nbd --format xml list-mapped | $XMLSTARLET sel -t -v \
       "//devices/device[pool='${POOL}'][namespace='${ns}'][image='${IMAGE}'][device='${DEV}']/id")
-    test -n "${PID}"
+    test -n "${PID}" || return 1
     ps -p ${PID} -C rbd-nbd
 }
 
@@ -105,15 +105,13 @@ unmap_device()
 {
     local dev=$1
     local pid=$2
-    _sudo rbd-nbd unmap ${dev}
 
-    for s in 0.5 1 2 4 8 16 32; do
-	sleep ${s}
-        rbd-nbd list-mapped | expect_false grep "^${pid}\\b" &&
-            ps -C rbd-nbd | expect_false grep "^${pid}\\b" &&
-            return 0
-    done
-    return 1
+    _sudo rbd-nbd unmap ${dev}
+    rbd-nbd list-mapped | expect_false grep "^${pid}\\b" || return 1
+    ps -C rbd-nbd | expect_false grep "^${pid}\\b" || return 1
+
+    # workaround possible race between unmap and following map
+    sleep 0.5
 }
 
 #
@@ -320,17 +318,8 @@ DEV=`_sudo rbd-nbd map --try-netlink ${POOL}/${IMAGE}`
 get_pid
 _sudo mount ${DEV} ${TEMPDIR}/mnt
 _sudo rbd-nbd detach ${POOL}/${IMAGE}
-attached=
-for i in `seq 10`; do
-    if _sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}; then
-        attached=1
-        break
-    fi
-    rbd-nbd list-mapped
-    ps auxww | grep rbd-nbd
-    sleep 1
-done
-test "${attached}" = 1
+expect_false get_pid
+_sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
 get_pid
 ls ${TEMPDIR}/mnt/
 dd if=${TEMPDIR}/mnt/test of=/dev/null bs=1M count=1
