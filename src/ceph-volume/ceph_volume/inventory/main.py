@@ -42,13 +42,13 @@ class Inventory(object):
         if self.args.path:
             self.format_report(Device(self.args.path))
         else:
-            self.format_report(Devices(self.args.filter_for_batch))
+            self.format_report(Devices(filter_for_batch=self.args.filter_for_batch))
 
     def get_report(self):
         if self.args.path:
             return Device(self.args.path).json_report()
         else:
-            return Devices(self.args.filter_for_batch).json_report()
+            return Devices(filter_for_batch=self.args.filter_for_batch).json_report()
 
     def format_report(self, inventory):
         if self.args.format == 'json':
