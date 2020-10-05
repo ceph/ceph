@@ -54,7 +54,9 @@ class FuseMount(CephFSMount):
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
-        self.client_remote.run(args=['mkdir', '-p', self.mountpoint],
+        # Use 0000 mode to prevent undesired modifications to the mountpoint on
+        # the local file system.
+        self.client_remote.run(args=['mkdir', '-m', '0000', '-p', self.mountpoint],
                                timeout=(15*60), cwd=self.test_dir)
 
         run_cmd = [
