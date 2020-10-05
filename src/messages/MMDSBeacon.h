@@ -131,9 +131,13 @@ struct MDSHealthMetric
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode((uint16_t&)type, bl);
+    uint16_t raw_type;
+    decode(raw_type, bl);
+    type = (mds_metric_t)raw_type;
     ceph_assert(type != MDS_HEALTH_NULL);
-    decode((uint8_t&)sev, bl);
+    uint8_t raw_sev;
+    decode(raw_sev, bl);
+    sev = (health_status_t)raw_sev;
     decode(message, bl);
     decode(metadata, bl);
     DECODE_FINISH(bl);
@@ -264,7 +268,9 @@ public:
     paxos_decode(p);
     decode(fsid, p);
     decode(global_id, p);
-    decode((__u32&)state, p);
+    __u32 raw_state;
+    decode(raw_state, p);
+    state = (MDSMap::DaemonState)raw_state;
     decode(seq, p);
     decode(name, p);
     {
