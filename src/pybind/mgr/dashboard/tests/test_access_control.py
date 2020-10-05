@@ -6,16 +6,14 @@ import errno
 import json
 import time
 import unittest
-
 from datetime import datetime, timedelta
 
-from . import CmdException, CLICommandTestMixin
 from .. import mgr
-from ..security import Scope, Permission
-from ..services.access_control import load_access_control_db, \
-                                      password_hash, AccessControlDB, \
-                                      SYSTEM_ROLES, PasswordPolicy
+from ..security import Permission, Scope
+from ..services.access_control import SYSTEM_ROLES, AccessControlDB, \
+    PasswordPolicy, load_access_control_db, password_hash
 from ..settings import Settings
+from . import CLICommandTestMixin, CmdException  # pylint: disable=no-name-in-module
 
 
 class AccessControlTest(unittest.TestCase, CLICommandTestMixin):

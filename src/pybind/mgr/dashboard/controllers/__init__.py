@@ -12,17 +12,16 @@ import pkgutil
 import re
 import sys
 import urllib
-
 from functools import wraps
 
 # pylint: disable=wrong-import-position
 import cherrypy
 
-from ..security import Scope, Permission
-from ..tools import getargspec, TaskManager, get_request_body_params
-from ..exceptions import ScopeNotValid, PermissionNotValid
-from ..services.auth import AuthManager, JwtManager
+from ..exceptions import PermissionNotValid, ScopeNotValid
 from ..plugins import PLUGIN_MANAGER
+from ..security import Permission, Scope
+from ..services.auth import AuthManager, JwtManager
+from ..tools import TaskManager, get_request_body_params, getargspec
 
 try:
     from typing import Any, List, Optional

@@ -1,18 +1,17 @@
 from __future__ import absolute_import
 
 import json
+
 try:
     import mock
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
 from .. import mgr
+from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringPoolBootstrap, RbdMirroringSummary
 from ..controllers.summary import Summary
-from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringSummary, \
-    RbdMirroringPoolBootstrap
 from ..services import progress
-
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 mock_list_servers = [{
     'hostname': 'ceph-host',
@@ -137,7 +136,7 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
             'mgr_map': {
                 'services': {
                     'dashboard': 'https://ceph.dev:11000/'
-                    },
+                },
             }
         }[key]
         mgr.url_prefix = ''

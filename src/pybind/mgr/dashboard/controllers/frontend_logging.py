@@ -2,8 +2,7 @@ from __future__ import absolute_import
 
 import logging
 
-from . import UiApiController, BaseController, Endpoint
-
+from . import BaseController, Endpoint, UiApiController
 
 logger = logging.getLogger('frontend.error')
 

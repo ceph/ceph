@@ -3,8 +3,8 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
 from ..controllers.rgw import RgwUser
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class RgwUserControllerTestCase(ControllerTestCase):

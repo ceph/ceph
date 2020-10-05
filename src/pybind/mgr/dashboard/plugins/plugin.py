@@ -1,4 +1,4 @@
-from mgr_module import Option, Command
+from mgr_module import Command, Option
 
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812

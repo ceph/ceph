@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ApiController, RESTController, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController
 
 REPORT_SCHEMA = {
     "report": ({

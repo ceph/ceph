@@ -1,5 +1,6 @@
 import inspect
 import unittest
+
 try:
     import mock
 except ImportError:
@@ -8,12 +9,10 @@ except ImportError:
 from orchestrator import InventoryHost
 from orchestrator import Orchestrator as OrchestratorBase
 
-from . import ControllerTestCase
 from .. import mgr
-from ..controllers.orchestrator import get_device_osd_map
-from ..controllers.orchestrator import Orchestrator
-from ..controllers.orchestrator import OrchestratorInventory
+from ..controllers.orchestrator import Orchestrator, OrchestratorInventory, get_device_osd_map
 from ..services.orchestrator import OrchFeature
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class OrchestratorControllerTest(ControllerTestCase):

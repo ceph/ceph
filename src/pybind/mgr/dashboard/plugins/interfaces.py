@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import PLUGIN_MANAGER as PM, Interface, Mixin  # pylint: disable=cyclic-import
+from . import PLUGIN_MANAGER as PM  # pylint: disable=cyclic-import
+from . import Interface, Mixin
 
 
 class CanMgr(Mixin):

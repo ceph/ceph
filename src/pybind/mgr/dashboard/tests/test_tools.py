@@ -5,17 +5,17 @@ import unittest
 
 import cherrypy
 from cherrypy.lib.sessions import RamSession
+
 try:
     from mock import patch
 except ImportError:
     from unittest.mock import patch
 
-from . import ControllerTestCase
+from ..controllers import ApiController, BaseController, Controller, Proxy, RESTController
 from ..services.exception import handle_rados_error
-from ..controllers import RESTController, ApiController, Controller, \
-                          BaseController, Proxy
-from ..tools import dict_contains_path, json_str_to_object, partial_dict,\
-                    dict_get, RequestLoggingTool
+from ..tools import RequestLoggingTool, dict_contains_path, dict_get, \
+    json_str_to_object, partial_dict
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 # pylint: disable=W0613

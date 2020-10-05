@@ -5,11 +5,11 @@ import json
 import logging
 import os
 import time
+
 import requests
 
 from .exceptions import GrafanaError
 from .settings import Settings
-
 
 logger = logging.getLogger('grafana')
 

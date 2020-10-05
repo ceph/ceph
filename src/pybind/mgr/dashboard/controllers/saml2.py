@@ -16,7 +16,7 @@ from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
 from ..tools import prepare_url_prefix
-from . import Controller, Endpoint, BaseController
+from . import BaseController, Controller, Endpoint
 
 
 @Controller('/auth/saml2', secure=False)

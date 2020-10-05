@@ -2,25 +2,22 @@
 from __future__ import absolute_import
 
 import json
-import re
 import logging
-
+import re
 from functools import partial
 
 import cherrypy
-
 import rbd
-
-from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
-    UpdatePermission, RESTController, allow_empty_body, ControllerDoc, EndpointDoc
 
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
 from ..services.rbd import rbd_call
 from ..tools import ViewCache
-from ..services.exception import handle_rados_error, handle_rbd_error, \
-    serialize_dashboard_exception
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
+    allow_empty_body
 
 try:
     from typing import no_type_check

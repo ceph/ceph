@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ApiController, RESTController, ControllerDoc, EndpointDoc
-from ..tools import TaskManager
 from ..services import progress
+from ..tools import TaskManager
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController
 
 TASK_SCHEMA = {
     "executing_tasks": (str, "ongoing executing tasks"),

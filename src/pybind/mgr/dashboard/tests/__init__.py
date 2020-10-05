@@ -10,18 +10,14 @@ import time
 import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
+from mgr_module import CLICommand
 from pyfakefs import fake_filesystem
 
-from mgr_module import CLICommand
-
 from .. import mgr
-from ..controllers import json_error_page, generate_controller_routes
+from ..controllers import generate_controller_routes, json_error_page
+from ..plugins import PLUGIN_MANAGER, debug, feature_toggles  # noqa
 from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
-
-from ..plugins import PLUGIN_MANAGER
-from ..plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
-
 
 PLUGIN_MANAGER.hook.init()
 PLUGIN_MANAGER.hook.register_commands()

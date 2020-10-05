@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import os.path
 
+import os.path
 import time
 from functools import wraps
 
-from . import ApiController, Endpoint, ReadPermission, UpdatePermission, ControllerDoc, EndpointDoc
-from . import RESTController, Task
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import TaskManager, str_to_bool
+from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UpdatePermission
 
 STATUS_SCHEMA = {
     "available": (bool, "Orchestrator status"),

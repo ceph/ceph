@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+
 from contextlib import contextmanager
 
 import cherrypy
 
-from . import ApiController, RESTController, UiApiController, ControllerDoc, EndpointDoc
-from ..settings import Settings as SettingsModule, Options
 from ..security import Scope
+from ..settings import Options
+from ..settings import Settings as SettingsModule
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController, UiApiController
 
 SETTINGS_SCHEMA = [{
     "name": (str, 'Settings Name'),

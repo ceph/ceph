@@ -48,6 +48,7 @@ except ImportError:
 
 class HookspecMarker(object):
     """ Dummy implementation. No spec validation. """
+
     def __init__(self, project_name):
         self.project_name = project_name
 
@@ -77,6 +78,7 @@ class _HookRelay(object):
     Provides the PluginManager.hook.<method_name>() syntax and
     functionality.
     """
+
     def __init__(self):
         from collections import defaultdict
         self._registry = defaultdict(list)  # type: DefaultDict[str, list]

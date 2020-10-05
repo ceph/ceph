@@ -1,30 +1,27 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import collections
+import fnmatch
 import inspect
 import json
 import logging
-
-import collections
+import threading
+import time
+import urllib
 from datetime import datetime, timedelta
 from distutils.util import strtobool
-import fnmatch
-import time
-import threading
-import urllib
 
 import cherrypy
-
 from ceph.deployment.utils import wrap_ipv6
 
 from . import mgr
 from .exceptions import ViewCacheNoDataException
-from .settings import Settings
 from .services.auth import JwtManager
+from .settings import Settings
 
 try:
-    from typing import Any, AnyStr, Callable, DefaultDict, Deque,\
-        Dict, List, Set, Tuple, Union  # noqa pylint: disable=unused-import
+    from typing import Any, AnyStr, Callable, DefaultDict, Deque, Dict, List, Set, Tuple, Union
 except ImportError:
     pass  # For typing only
 

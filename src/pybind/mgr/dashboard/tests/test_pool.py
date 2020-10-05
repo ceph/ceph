@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access
 import time
+
 try:
     import mock
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
 from ..controllers.pool import Pool
 from ..controllers.task import Task
 from ..tools import NotificationQueue, TaskManager
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class MockTask(object):

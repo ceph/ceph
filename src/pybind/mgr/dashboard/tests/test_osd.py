@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 import uuid
 from contextlib import contextmanager
-
+from typing import Any, Dict, List, Optional
 from unittest import mock
+
 from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec  # type: ignore
 from ceph.deployment.service_spec import PlacementSpec  # type: ignore
 
-from . import ControllerTestCase
+from .. import mgr
 from ..controllers.osd import Osd
 from ..tools import NotificationQueue, TaskManager
-from .. import mgr
-from .helper import update_dict
-
-from typing import Any, Dict, List, Optional  # pylint: disable=C0411
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from .helper import update_dict  # pylint: disable=import-error
 
 
 class OsdHelper(object):
