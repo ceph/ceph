@@ -298,6 +298,10 @@ public:
     }
   }
 
+  void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, prepare_copyup(_, _));
+  }
+
   int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
                   librados::snap_t *snap_id) {
     NoOpProgressContext prog_ctx;
@@ -518,6 +522,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
 
@@ -592,6 +597,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
 
+  expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, -EINVAL);
 
@@ -650,6 +656,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[2], is_fast_diff(mock_dst_image_ctx) ?
                            OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -707,6 +714,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+  expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -763,6 +771,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
                            m_dst_snap_ids[1], is_fast_diff(mock_dst_image_ctx) ?
                            OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
 
+  expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -883,6 +892,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            CEPH_NOSNAP, OBJECT_EXISTS, 0);
 
+  expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, two,
                {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
