@@ -12,6 +12,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ReadResult.h"
 #include "osdc/Striper.h"
 
@@ -194,7 +195,7 @@ template <typename I>
 void ObjectCopyRequest<I>::send_update_object_map() {
   if (!m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP) ||
       m_dst_object_state.empty()) {
-    send_write_object();
+    process_copyup();
     return;
   }
 
@@ -263,6 +264,18 @@ void ObjectCopyRequest<I>::handle_update_object_map(int r) {
     send_update_object_map();
     return;
   }
+
+  process_copyup();
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::process_copyup() {
+  ldout(m_cct, 20) << dendl;
+
+  // let dispatch layers have a chance to process the data but
+  // assume that the dispatch layer will only touch the sparse bufferlist
+  m_dst_image_ctx->io_object_dispatcher->prepare_copyup(
+    m_dst_object_number, &m_snapshot_sparse_bufferlist);
 
   send_write_object();
 }

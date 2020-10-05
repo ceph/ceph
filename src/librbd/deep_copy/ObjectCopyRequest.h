@@ -139,6 +139,7 @@ private:
   void send_update_object_map();
   void handle_update_object_map(int r);
 
+  void process_copyup();
   void send_write_object();
   void handle_write_object(int r);
 
