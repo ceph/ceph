@@ -1060,6 +1060,10 @@ public:
     TARGET_SIZE_RATIO,  // fraction of total cluster
     PG_AUTOSCALE_BIAS,
     READ_LEASE_INTERVAL,
+    DEDUP_TIER,
+    DEDUP_CHUNK_ALGORITHM,
+    DEDUP_CDC_WINDOW_SIZE,
+    DEDUP_CDC_CHUNK_SIZE,
   };
 
   enum type_t {
@@ -1543,6 +1547,57 @@ public:
     case TYPE_FINGERPRINT_SHA512: return "sha512";
     default: return "unknown";
     }
+  }
+
+  typedef enum {
+    TYPE_DEDUP_CHUNK_NONE = 0,
+    TYPE_DEDUP_CHUNK_FASTCDC = 1,     
+    TYPE_DEDUP_CHUNK_FIXEDCDC = 2,     
+  } dedup_chunk_algo_t;
+  static dedup_chunk_algo_t get_dedup_chunk_algorithm_from_str(const std::string& s) {
+    if (s == "none")
+      return TYPE_DEDUP_CHUNK_NONE;
+    if (s == "fastcdc")
+      return TYPE_DEDUP_CHUNK_FASTCDC;
+    if (s == "fixed")
+      return TYPE_DEDUP_CHUNK_FIXEDCDC;
+    return (dedup_chunk_algo_t)-1;
+  }
+  const dedup_chunk_algo_t get_dedup_chunk_algorithm_type() const {
+    std::string algo_str;
+    opts.get(pool_opts_t::DEDUP_CHUNK_ALGORITHM, &algo_str);
+    return get_dedup_chunk_algorithm_from_str(algo_str);
+  }
+  const char *get_dedup_chunk_algorithm_name() const {
+    std::string dedup_chunk_algo_str;
+    dedup_chunk_algo_t dedup_chunk_algo_t;
+    opts.get(pool_opts_t::DEDUP_CHUNK_ALGORITHM, &dedup_chunk_algo_str);
+    dedup_chunk_algo_t = get_dedup_chunk_algorithm_from_str(dedup_chunk_algo_str);
+    return get_dedup_chunk_algorithm_name(dedup_chunk_algo_t);
+  }
+  static const char *get_dedup_chunk_algorithm_name(dedup_chunk_algo_t m) {
+    switch (m) {
+    case TYPE_DEDUP_CHUNK_NONE: return "none";
+    case TYPE_DEDUP_CHUNK_FASTCDC: return "fastcdc";
+    case TYPE_DEDUP_CHUNK_FIXEDCDC: return "fixed";
+    default: return "unknown";
+    }
+  }
+
+  int64_t get_dedup_tier() const {
+    int64_t tier_id;
+    opts.get(pool_opts_t::DEDUP_TIER, &tier_id);
+    return tier_id;
+  }
+  int64_t get_dedup_cdc_chunk_size() const {
+    int64_t chunk_size;
+    opts.get(pool_opts_t::DEDUP_CDC_CHUNK_SIZE, &chunk_size);
+    return chunk_size;
+  }
+  int64_t get_dedup_cdc_window_size() const {
+    int64_t window_size;
+    opts.get(pool_opts_t::DEDUP_CDC_WINDOW_SIZE, &window_size);
+    return window_size;
   }
 
   /// application -> key/value metadata
