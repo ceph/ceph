@@ -157,7 +157,7 @@ fi
 
 
 # be compatible with pip shipped by distro older v20.2
-if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
+if ./$VENV/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
     PIP_INSTALL="./$VENV/bin/pip install --use-feature=2020-resolver"
 else
     PIP_INSTALL="./$VENV/bin/pip install"
