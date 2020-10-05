@@ -1056,6 +1056,17 @@ bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
 /*
  * high priority messages we always process
  */
+
+#define ALLOW_MESSAGES_FROM(peers)                                      \
+  do {                                                                  \
+    if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
+      dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" \
+              << m->get_connection()->get_peer_type() << " allowing="   \
+              << #peers << " message=" << *m << dendl;                  \
+      return true;                                                      \
+    }                                                                   \
+  } while (0)
+
 bool MDSDaemon::handle_core_message(const Message::const_ref &m)
 {
   switch (m->get_type()) {
