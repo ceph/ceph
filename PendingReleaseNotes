@@ -3,6 +3,8 @@
 
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
+* The ``bluefs_preextend_wal_files`` option has been removed.
+
 >=15.2.5
 --------
 
