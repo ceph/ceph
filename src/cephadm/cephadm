@@ -1467,7 +1467,7 @@ def copy_tree(src, dst, uid=None, gid=None):
     """
     Copy a directory tree from src to dst
     """
-    if not uid or not gid:
+    if uid is None or gid is None:
         (uid, gid) = extract_uid_gid()
 
     for src_dir in src:
@@ -1492,7 +1492,7 @@ def copy_files(src, dst, uid=None, gid=None):
     """
     Copy a files from src to dst
     """
-    if not uid or not gid:
+    if uid is None or gid is None:
         (uid, gid) = extract_uid_gid()
 
     for src_file in src:
@@ -1512,7 +1512,7 @@ def move_files(src, dst, uid=None, gid=None):
     """
     Move files from src to dst
     """
-    if not uid or not gid:
+    if uid is None or gid is None:
         (uid, gid) = extract_uid_gid()
 
     for src_file in src:
