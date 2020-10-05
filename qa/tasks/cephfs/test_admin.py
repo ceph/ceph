@@ -96,6 +96,7 @@ class TestAdminCommands(CephFSTestCase):
         That a new file system warns/fails with an EC default data pool.
         """
 
+        self.mount_a.umount_wait(require_clean=True)
         self.fs.delete_all_filesystems()
         n = "test_new_default_ec"
         self._setup_ec_pools(n)
@@ -114,6 +115,7 @@ class TestAdminCommands(CephFSTestCase):
         That a new file system succeeds with an EC default data pool with --force.
         """
 
+        self.mount_a.umount_wait(require_clean=True)
         self.fs.delete_all_filesystems()
         n = "test_new_default_ec_force"
         self._setup_ec_pools(n)
@@ -124,6 +126,7 @@ class TestAdminCommands(CephFSTestCase):
         That a new file system fails with an EC default data pool without overwrite.
         """
 
+        self.mount_a.umount_wait(require_clean=True)
         self.fs.delete_all_filesystems()
         n = "test_new_default_ec_no_overwrite"
         self._setup_ec_pools(n, overwrites=False)
@@ -151,6 +154,7 @@ class TestAdminCommands(CephFSTestCase):
         """
         That the application metadata set on the pools of a newly created filesystem are as expected.
         """
+        self.mount_a.umount_wait(require_clean=True)
         self.fs.delete_all_filesystems()
         fs_name = "test_fs_new_pool_application"
         keys = ['metadata', 'data']
