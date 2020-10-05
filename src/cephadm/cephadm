@@ -3617,8 +3617,6 @@ def command_logs():
 
     cmd = [find_program('journalctl')]
     cmd.extend(['-u', unit_name])
-    if args.command:
-        cmd.extend(args.command)
 
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
@@ -5702,9 +5700,6 @@ def _get_parser():
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
-    parser_logs.add_argument(
-        'command', nargs='*',
-        help='additional journalctl args')
 
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')

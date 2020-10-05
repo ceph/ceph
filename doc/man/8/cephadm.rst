@@ -49,7 +49,7 @@ Synopsis
 
 | **cephadm** **unit**  [-h] [--fsid FSID] --name NAME command
 
-| **cephadm** **logs** [-h] [--fsid FSID] --name NAME [command [command ...]]
+| **cephadm** **logs** [-h] [--fsid FSID] --name NAME
 
 | **cephadm** **bootstrap** [-h] [--config CONFIG] [--mon-id MON_ID]
 |                           [--mon-addrv MON_ADDRV] [--mon-ip MON_IP]
