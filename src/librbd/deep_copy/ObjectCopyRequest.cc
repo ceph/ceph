@@ -118,7 +118,7 @@ void ObjectCopyRequest<I>::send_read() {
     merge_write_ops();
     compute_zero_ops();
 
-    if (m_write_ops.empty()) {
+    if (m_snapshot_sparse_bufferlist.empty()) {
       // nothing to copy
       finish(-ENOENT);
       return;
@@ -269,8 +269,8 @@ void ObjectCopyRequest<I>::handle_update_object_map(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::send_write_object() {
-  ceph_assert(!m_write_ops.empty());
-  auto& write_ops = m_write_ops.begin()->second;
+  ceph_assert(!m_snapshot_sparse_bufferlist.empty());
+  auto& sparse_bufferlist = m_snapshot_sparse_bufferlist.begin()->second;
 
   m_src_image_ctx->image_lock.lock_shared();
   bool hide_parent = (m_src_snap_id_start == 0 &&
@@ -280,7 +280,7 @@ void ObjectCopyRequest<I>::send_write_object() {
   // retrieve the destination snap context for the op
   SnapIds dst_snap_ids;
   librados::snap_t dst_snap_seq = 0;
-  librados::snap_t src_snap_seq = m_write_ops.begin()->first;
+  librados::snap_t src_snap_seq = m_snapshot_sparse_bufferlist.begin()->first;
   if (src_snap_seq != 0) {
     auto snap_map_it = m_snap_map.find(src_snap_seq);
     ceph_assert(snap_map_it != m_snap_map.end());
@@ -288,13 +288,14 @@ void ObjectCopyRequest<I>::send_write_object() {
     auto dst_snap_id = snap_map_it->second.front();
     auto dst_may_exist_it = m_dst_object_may_exist.find(dst_snap_id);
     ceph_assert(dst_may_exist_it != m_dst_object_may_exist.end());
-    if (!dst_may_exist_it->second && !write_ops.empty()) {
+    if (!dst_may_exist_it->second && !sparse_bufferlist.empty()) {
       // if the object cannot exist, the only valid op is to remove it
       ldout(m_cct, 20) << "object DNE: src_snap_seq=" << src_snap_seq << dendl;
-      ceph_assert(write_ops.size() == 1U);
-      ceph_assert(write_ops.begin()->type == WRITE_OP_TYPE_ZERO &&
-                  write_ops.begin()->object_offset == 0 &&
-                  write_ops.begin()->object_length ==
+      ceph_assert(sparse_bufferlist.ext_count() == 1U);
+      ceph_assert(sparse_bufferlist.begin().get_val().state ==
+                    io::SPARSE_EXTENT_STATE_ZEROED &&
+                  sparse_bufferlist.begin().get_off() == 0 &&
+                  sparse_bufferlist.begin().get_len() ==
                     m_dst_image_ctx->layout.object_size);
     }
 
@@ -320,19 +321,19 @@ void ObjectCopyRequest<I>::send_write_object() {
                                  cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ);
   }
 
-  for (auto& write_op : write_ops) {
-    switch (write_op.type) {
-    case WRITE_OP_TYPE_WRITE:
-      ldout(m_cct, 20) << "write op: " << write_op.object_offset << "~"
-                       << write_op.object_length << dendl;
-      op.write(write_op.object_offset, write_op.bl);
+  for (auto& sbe : sparse_bufferlist) {
+    switch (sbe.get_val().state) {
+    case io::SPARSE_EXTENT_STATE_DATA:
+      ldout(m_cct, 20) << "write op: " << sbe.get_off() << "~"
+                       << sbe.get_len() << dendl;
+      op.write(sbe.get_off(), std::move(sbe.get_val().bl));
       op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
                        LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
       break;
-    case WRITE_OP_TYPE_ZERO:
-      if (write_op.object_offset + write_op.object_length ==
+    case io::SPARSE_EXTENT_STATE_ZEROED:
+      if (sbe.get_off() + sbe.get_len() ==
             m_dst_image_ctx->layout.object_size) {
-        if (write_op.object_offset == 0) {
+        if (sbe.get_off() == 0) {
           if (hide_parent) {
             ldout(m_cct, 20) << "create+truncate op" << dendl;
             op.create(false);
@@ -342,13 +343,13 @@ void ObjectCopyRequest<I>::send_write_object() {
             op.remove();
           }
         } else {
-          ldout(m_cct, 20) << "trunc op: " << write_op.object_offset << dendl;
-          op.truncate(write_op.object_offset);
+          ldout(m_cct, 20) << "trunc op: " << sbe.get_off() << dendl;
+          op.truncate(sbe.get_off());
         }
       } else {
-        ldout(m_cct, 20) << "zero op: " << write_op.object_offset << "~"
-                         << write_op.object_length << dendl;
-        op.zero(write_op.object_offset, write_op.object_length);
+        ldout(m_cct, 20) << "zero op: " << sbe.get_off() << "~"
+                         << sbe.get_len() << dendl;
+        op.zero(sbe.get_off(), sbe.get_len());
       }
       break;
     default:
@@ -401,8 +402,8 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
     return;
   }
 
-  m_write_ops.erase(m_write_ops.begin());
-  if (!m_write_ops.empty()) {
+  m_snapshot_sparse_bufferlist.erase(m_snapshot_sparse_bufferlist.begin());
+  if (!m_snapshot_sparse_bufferlist.empty()) {
     send_write_object();
     return;
   }
@@ -568,11 +569,13 @@ void ObjectCopyRequest<I>::merge_write_ops() {
                          << "object_offset=" << object_extent.offset << ", "
                          << "object_length=" << object_extent.length << dendl;
 
-        bufferlist tmp_bl;
-        tmp_bl.substr_of(read_op.out_bl, buffer_offset, object_extent.length);
-        m_write_ops[src_snap_seq].emplace_back(
-          WRITE_OP_TYPE_WRITE, object_extent.offset, object_extent.length,
-          std::move(tmp_bl));
+        bufferlist sub_bl;
+        sub_bl.substr_of(read_op.out_bl, buffer_offset, object_extent.length);
+
+        m_snapshot_sparse_bufferlist[src_snap_seq].insert(
+          object_extent.offset, object_extent.length,
+          {io::SPARSE_EXTENT_STATE_DATA, object_extent.length,\
+           std::move(sub_bl)});
 
         buffer_offset += object_extent.length;
       }
@@ -650,8 +653,9 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     ceph_assert(dst_may_exist_it != m_dst_object_may_exist.end());
     if (!dst_may_exist_it->second && prev_end_size > 0) {
       ldout(m_cct, 5) << "object DNE for snap_id: " << dst_snap_seq << dendl;
-      m_write_ops[src_snap_seq].emplace_back(
-        WRITE_OP_TYPE_ZERO, 0, m_dst_image_ctx->layout.object_size);
+      m_snapshot_sparse_bufferlist[src_snap_seq].insert(
+        0, m_dst_image_ctx->layout.object_size,
+        {io::SPARSE_EXTENT_STATE_ZEROED, m_dst_image_ctx->layout.object_size});
       prev_end_size = 0;
       continue;
     }
@@ -687,11 +691,11 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     uint64_t end_size = prev_end_size;
 
     // update end_size if there are writes into higher offsets
-    auto iter = m_write_ops.find(src_snap_seq);
-    if (iter != m_write_ops.end()) {
-      for (auto &write_op : iter->second) {
+    auto iter = m_snapshot_sparse_bufferlist.find(src_snap_seq);
+    if (iter != m_snapshot_sparse_bufferlist.end()) {
+      for (auto &sparse_bufferlist : iter->second) {
         end_size = std::max(
-          end_size, write_op.object_offset + write_op.object_length);
+          end_size, sparse_bufferlist.get_off() + sparse_bufferlist.get_len());
       }
     }
 
@@ -712,20 +716,23 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
           // zero interval at the object end
           if ((object_extent.offset == 0 && hide_parent) ||
               (object_extent.offset < prev_end_size)) {
-            ldout(m_cct, 20) << "WRITE_OP_TYPE_ZERO " << object_extent.offset
+            ldout(m_cct, 20) << "truncate " << object_extent.offset
                              << dendl;
-            m_write_ops[src_snap_seq].emplace_back(
-              WRITE_OP_TYPE_ZERO, object_extent.offset,
-              m_dst_image_ctx->layout.object_size - object_extent.offset);
+            auto length =
+              m_dst_image_ctx->layout.object_size - object_extent.offset;
+            m_snapshot_sparse_bufferlist[src_snap_seq].insert(
+              object_extent.offset, length,
+              {io::SPARSE_EXTENT_STATE_ZEROED, length});
           }
           end_size = std::min(end_size, object_extent.offset);
         } else {
           // zero interval inside the object
-          ldout(m_cct, 20) << "WRITE_OP_TYPE_ZERO "
+          ldout(m_cct, 20) << "zero "
                            << object_extent.offset << "~"
                            << object_extent.length << dendl;
-          m_write_ops[src_snap_seq].emplace_back(
-              WRITE_OP_TYPE_ZERO, object_extent.offset, object_extent.length);
+          m_snapshot_sparse_bufferlist[src_snap_seq].insert(
+            object_extent.offset, object_extent.length,
+            {io::SPARSE_EXTENT_STATE_ZEROED, object_extent.length});
         }
       }
     }
@@ -735,7 +742,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     if (end_size > 0 || hide_parent) {
       m_dst_object_state[src_snap_seq] = OBJECT_EXISTS;
       if (fast_diff && end_size == prev_end_size &&
-          m_write_ops.count(src_snap_seq) == 0) {
+          m_snapshot_sparse_bufferlist.count(src_snap_seq) == 0) {
         m_dst_object_state[src_snap_seq] = OBJECT_EXISTS_CLEAN;
       }
     }
