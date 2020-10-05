@@ -205,15 +205,20 @@ class FuseMount(CephFSMount):
             proc.wait()
         except CommandFailedError:
             error = six.ensure_str(proc.stderr.getvalue())
-            if ("endpoint is not connected" in error
-            or "Software caused connection abort" in error):
-                # This happens is fuse is killed without unmount
-                log.warning("Found stale moutn point at {0}".format(self.mountpoint))
-                return True
-            else:
-                # This happens if the mount directory doesn't exist
-                log.info('mount point does not exist: %s', self.mountpoint)
-                return False
+            stale = [
+                'Connection timed out',
+                'Endpoint is not connected',
+                'Software caused connection abort',
+            ]
+            for s in stale:
+                if s.lower() in error.lower():
+                    # This happens is fuse is killed without unmount
+                    log.warning("Found stale moutn point at {0}".format(self.mountpoint))
+                    return True
+
+            # This happens if the mount directory doesn't exist
+            log.info('mount point does not exist: %s', self.mountpoint)
+            return False
 
         fstype = six.ensure_str(proc.stdout.getvalue()).rstrip('\n')
         if fstype == 'fuseblk':
