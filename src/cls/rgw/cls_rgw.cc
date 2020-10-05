@@ -1458,8 +1458,13 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
   return 0;
 }
 
-static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
-                           const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
+static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry,
+                           OLHLogOp op,
+                           const string& op_tag,
+                           const cls_rgw_obj_key& key,
+                           bool delete_marker,
+                           std::optional<rgw_bucket_olh_log_bi_log_entry>&& bi_log_replay_data,
+                           uint64_t epoch)
 {
   vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[olh_data_entry.epoch];
   rgw_bucket_olh_log_entry log_entry;
@@ -1468,6 +1473,7 @@ static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, co
   log_entry.op_tag = op_tag;
   log_entry.key = key;
   log_entry.delete_marker = delete_marker;
+  log_entry.bi_log_replay_data = std::move(bi_log_replay_data);
   log.push_back(log_entry);
 }
 
@@ -1737,11 +1743,16 @@ public:
     return 0;
   }
 
-  void update_log(OLHLogOp op, const string& op_tag, const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
+  void update_log(OLHLogOp op,
+                  const string& op_tag,
+                  const cls_rgw_obj_key& key,
+                  bool delete_marker,
+                  std::optional<rgw_bucket_olh_log_bi_log_entry> bi_log_replay_data,
+                  uint64_t epoch = 0) {
     if (epoch == 0) {
       epoch = olh_data_entry.epoch;
     }
-    update_olh_log(olh_data_entry, op, op_tag, key, delete_marker, epoch);
+    update_olh_log(olh_data_entry, op, op_tag, key, delete_marker, std::move(bi_log_replay_data), epoch);
   }
 
   bool exists() { return olh_data_entry.exists; }
@@ -1984,7 +1995,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       return ret;
     }
     if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, std::nullopt, op.olh_epoch);
+    } else {
+      // XXX, HUH: obj.write(op.olh_epoch, ...) modifies the BI but this
+      // operation is NOT recorded in the BILog. Is this a bug?
     }
     return write_header_while_logrecord(hctx, header);
   }
@@ -2034,9 +2048,16 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* update the olh log */
-  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.has_delete_marker());
+  rgw_bucket_dir_entry& entry = obj.get_dir_entry();
+  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.has_delete_marker(),
+                 rgw_bucket_olh_log_bi_log_entry {
+                   obj.mtime(),
+                   entry.meta.owner,
+                   entry.meta.owner_display_name,
+                   op.zones_trace
+                 });
   if (removing) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, std::nullopt);
   }
 
   if (promote) {
@@ -2063,8 +2084,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   if (header.syncstopped) {
     return write_header_while_logrecord(hctx, header);
   }
-
-  rgw_bucket_dir_entry& entry = obj.get_dir_entry();
 
   rgw_bucket_entry_ver ver;
   ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
@@ -2169,7 +2188,8 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       return 0;
     }
 
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, std::nullopt, op.olh_epoch);
+    // XXX: no bilog handling. See the comment for ..._LINK_OLH.
     return olh.write(header);
   }
 
@@ -2200,20 +2220,20 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
               next_key.name.c_str(), next_key.instance.c_str(), (int)next.is_delete_marker());
 
       olh.update(next_key, next.is_delete_marker());
-      olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
+      olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker(), std::nullopt);
     } else {
       // next_key is empty, but we need to preserve its name in case this entry
       // gets resharded, because this key is used for hash placement
       next_key.name = dest_key.name;
       olh.update(next_key, false);
-      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
+      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false, std::nullopt);
       olh.set_exists(false);
       olh.set_pending_removal(true);
     }
   }
 
   if (!obj.is_delete_marker()) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, std::nullopt);
   } else {
     /* this is a delete marker, it's our responsibility to remove its
      * instance entry */

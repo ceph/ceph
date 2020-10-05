@@ -516,6 +516,38 @@ enum OLHLogOp {
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
 };
 
+// because of the need to preserve atomicity in  `Write::_do_write_meta()`
+// between updating Bucket Index (the `UpdateIndex::complete()` method)
+// and `RGWRados::set_olh()`, we reissue requests to link OLH basing OLH
+// log. However, to make that possible, these entries have to contain
+// some extra bits which are represented by the following struct.
+struct rgw_bucket_olh_log_bi_log_entry {
+  ceph::real_time timestamp;
+  std::string owner; /* only being set if it's a delete marker */
+  std::string owner_display_name; /* only being set if it's a delete marker */
+  rgw_zone_set zones_trace;
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(timestamp, bl);
+    encode(owner, bl);
+    encode(owner_display_name, bl);
+    encode(zones_trace, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(timestamp, bl);
+    decode(owner, bl);
+    decode(owner_display_name, bl);
+    decode(zones_trace, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_olh_log_bi_log_entry)
+
 struct rgw_bucket_olh_log_entry {
   uint64_t epoch;
   OLHLogOp op;
@@ -523,20 +555,23 @@ struct rgw_bucket_olh_log_entry {
   cls_rgw_obj_key key;
   bool delete_marker;
 
+  std::optional<rgw_bucket_olh_log_bi_log_entry> bi_log_replay_data;
+
   rgw_bucket_olh_log_entry() : epoch(0), op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
 
-
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(epoch, bl);
     encode((__u8)op, bl);
     encode(op_tag, bl);
     encode(key, bl);
     encode(delete_marker, bl);
+    // since struct_v >= 2
+    encode(bi_log_replay_data, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(epoch, bl);
     uint8_t c;
     decode(c, bl);
@@ -544,6 +579,9 @@ struct rgw_bucket_olh_log_entry {
     decode(op_tag, bl);
     decode(key, bl);
     decode(delete_marker, bl);
+    if (struct_v > 1) {
+      decode(bi_log_replay_data, bl);
+    }
     DECODE_FINISH(bl);
   }
   static std::list<rgw_bucket_olh_log_entry> generate_test_instances();
