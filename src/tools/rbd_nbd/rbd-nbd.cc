@@ -94,7 +94,8 @@ enum Command {
 struct Config {
   int nbds_max = 0;
   int max_part = 255;
-  int timeout = -1;
+  int io_timeout = -1;
+  int reattach_timeout = 30;
 
   bool exclusive = false;
   bool quiesce = false;
@@ -139,16 +140,18 @@ static void usage()
             << "               unmap <device|image-or-snap-spec>     Unmap nbd device\n"
             << "               [options] list-mapped                 List mapped nbd devices\n"
             << "Map and attach options:\n"
-            << "  --device <device path>  Specify nbd device path (/dev/nbd{num})\n"
-            << "  --exclusive             Forbid writes by other clients\n"
-            << "  --max_part <limit>      Override for module param max_part\n"
-            << "  --nbds_max <limit>      Override for module param nbds_max\n"
-            << "  --quiesce               Use quiesce callbacks\n"
-            << "  --quiesce-hook <path>   Specify quiesce hook path\n"
-            << "                          (default: " << Config().quiesce_hook << ")\n"
-            << "  --read-only             Map read-only\n"
-            << "  --timeout <seconds>     Set nbd request timeout\n"
-            << "  --try-netlink           Use the nbd netlink interface\n"
+            << "  --device <device path>   Specify nbd device path (/dev/nbd{num})\n"
+            << "  --exclusive              Forbid writes by other clients\n"
+            << "  --io-timeout <sec>       Set nbd IO timeout\n"
+            << "  --max_part <limit>       Override for module param max_part\n"
+            << "  --nbds_max <limit>       Override for module param nbds_max\n"
+            << "  --quiesce                Use quiesce callbacks\n"
+            << "  --quiesce-hook <path>    Specify quiesce hook path\n"
+            << "                           (default: " << Config().quiesce_hook << ")\n"
+            << "  --read-only              Map read-only\n"
+            << "  --reattach-timeout <sec> Set nbd re-attach timeout\n"
+            << "                           (default: " << Config().reattach_timeout << ")\n"
+            << "  --try-netlink            Use the nbd netlink interface\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -1050,11 +1053,11 @@ static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
 
   ioctl(nbd, NBD_SET_FLAGS, flags);
 
-  if (cfg->timeout >= 0) {
-    r = ioctl(nbd, NBD_SET_TIMEOUT, (unsigned long)cfg->timeout);
+  if (cfg->io_timeout >= 0) {
+    r = ioctl(nbd, NBD_SET_TIMEOUT, (unsigned long)cfg->io_timeout);
     if (r < 0) {
       r = -errno;
-      cerr << "rbd-nbd: failed to set timeout: " << cpp_strerror(r)
+      cerr << "rbd-nbd: failed to set IO timeout: " << cpp_strerror(r)
            << std::endl;
       goto close_nbd;
     }
@@ -1284,14 +1287,13 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
     }
   }
 
-  if (cfg->timeout >= 0)
-    NLA_PUT_U64(msg, NBD_ATTR_TIMEOUT, cfg->timeout);
+  if (cfg->io_timeout >= 0)
+    NLA_PUT_U64(msg, NBD_ATTR_TIMEOUT, cfg->io_timeout);
 
   NLA_PUT_U64(msg, NBD_ATTR_SIZE_BYTES, size);
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
   NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
-  NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT,
-              cfg->timeout >= 0 ? cfg->timeout : 30);
+  NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT, cfg->reattach_timeout);
 
   sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
   if (!sock_attr) {
@@ -1692,7 +1694,7 @@ static int do_detach(Config *cfg)
     return r;
   }
 
-  return wait_for_terminate(cfg->pid, cfg->timeout);
+  return wait_for_terminate(cfg->pid, cfg->reattach_timeout);
 }
 
 static int do_unmap(Config *cfg)
@@ -1724,7 +1726,7 @@ static int do_unmap(Config *cfg)
     return r;
   }
 
-  return wait_for_terminate(cfg->pid, cfg->timeout);
+  return wait_for_terminate(cfg->pid, cfg->reattach_timeout);
 }
 
 static int parse_imgpath(const std::string &imgpath, Config *cfg,
@@ -1854,6 +1856,16 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_flag(args, i, "-v", "--version", (char*)NULL)) {
       return VERSION_INFO;
     } else if (ceph_argparse_witharg(args, i, &cfg->devpath, "--device", (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &cfg->io_timeout, err,
+                                     "--io-timeout", (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->io_timeout < 0) {
+        *err_msg << "rbd-nbd: Invalid argument for io-timeout!";
+        return -EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &cfg->nbds_max, err, "--nbds_max", (char *)NULL)) {
       if (!err.str().empty()) {
         *err_msg << "rbd-nbd: " << err.str();
@@ -1879,18 +1891,29 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                                      "--quiesce-hook", (char *)NULL)) {
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       cfg->readonly = true;
-    } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
-      cfg->exclusive = true;
-    } else if (ceph_argparse_witharg(args, i, &cfg->timeout, err, "--timeout",
-                                     (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &cfg->reattach_timeout, err,
+                                     "--reattach-timeout", (char *)NULL)) {
       if (!err.str().empty()) {
         *err_msg << "rbd-nbd: " << err.str();
         return -EINVAL;
       }
-      if (cfg->timeout < 0) {
+      if (cfg->reattach_timeout < 0) {
+        *err_msg << "rbd-nbd: Invalid argument for reattach-timeout!";
+        return -EINVAL;
+      }
+    } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
+      cfg->exclusive = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->io_timeout, err,
+                                     "--timeout", (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->io_timeout < 0) {
         *err_msg << "rbd-nbd: Invalid argument for timeout!";
         return -EINVAL;
       }
+      *err_msg << "rbd-nbd: --timeout is deprecated (use --io-timeout)";
     } else if (ceph_argparse_witharg(args, i, &cfg->format, err, "--format",
                                      (char *)NULL)) {
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
@@ -1990,6 +2013,10 @@ static int rbd_nbd(int argc, const char *argv[])
   } else if (r < 0) {
     cerr << err_msg.str() << std::endl;
     return r;
+  }
+
+  if (!err_msg.str().empty()) {
+    cerr << err_msg.str() << std::endl;
   }
 
   switch (cfg.command) {
