@@ -376,6 +376,22 @@ void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("pending_removal", pending_removal, obj);
 }
 
+void rgw_bucket_olh_log_bi_log_entry::dump(Formatter *f) const
+{
+  encode_json("timestamp", timestamp, f);
+  encode_json("owner", owner, f);
+  encode_json("owner_display_name", owner_display_name, f);
+  encode_json("zones_trace", zones_trace, f);
+}
+
+void rgw_bucket_olh_log_bi_log_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  JSONDecoder::decode_json("owner", owner, obj);
+  JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
+  JSONDecoder::decode_json("zones_trace", zones_trace, obj);
+}
+
 void rgw_bucket_olh_log_entry::generate_test_instances(list<rgw_bucket_olh_log_entry*>& o)
 {
   rgw_bucket_olh_log_entry *entry = new rgw_bucket_olh_log_entry;
@@ -410,6 +426,9 @@ void rgw_bucket_olh_log_entry::dump(Formatter *f) const
   encode_json("op_tag", op_tag, f);
   encode_json("key", key, f);
   encode_json("delete_marker", delete_marker, f);
+
+  // since v2
+  encode_json("bi_log_replay_data", bi_log_replay_data, f);
 }
 
 void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
@@ -429,6 +448,9 @@ void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("op_tag", op_tag, obj);
   JSONDecoder::decode_json("key", key, obj);
   JSONDecoder::decode_json("delete_marker", delete_marker, obj);
+
+  // since v2
+  JSONDecoder::decode_json("bi_log_replay_data", bi_log_replay_data, obj);
 }
 void rgw_bi_log_entry::decode_json(JSONObj *obj)
 {
