@@ -5,22 +5,23 @@ from __future__ import absolute_import
 
 import logging
 import math
-from functools import partial
 from datetime import datetime
+from functools import partial
 
 import rbd
 
-from . import ApiController, RESTController, Task, UpdatePermission, \
-    DeletePermission, CreatePermission, allow_empty_body, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
 from ..services.rbd import RbdConfiguration, RbdService, RbdSnapshotService, \
-    format_bitmask, format_features, parse_image_spec, rbd_call, rbd_image_call
+    format_bitmask, format_features, parse_image_spec, rbd_call, \
+    rbd_image_call
 from ..tools import ViewCache, str_to_bool
-from ..services.exception import handle_rados_error, handle_rbd_error, \
-    serialize_dashboard_exception
+from . import ApiController, ControllerDoc, CreatePermission, \
+    DeletePermission, EndpointDoc, RESTController, Task, UpdatePermission, \
+    allow_empty_body
 
 logger = logging.getLogger(__name__)
 

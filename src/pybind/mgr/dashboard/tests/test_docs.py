@@ -1,9 +1,9 @@
 # # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ControllerTestCase
-from ..controllers import RESTController, ApiController, Endpoint, EndpointDoc, ControllerDoc
+from ..controllers import ApiController, ControllerDoc, Endpoint, EndpointDoc, RESTController
 from ..controllers.docs import Docs
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 # Dummy controller and endpoint that can be assigned with @EndpointDoc and @GroupDoc

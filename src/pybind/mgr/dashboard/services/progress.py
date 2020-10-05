@@ -9,12 +9,11 @@ using the same structure of dashboard tasks
 
 from __future__ import absolute_import
 
-from datetime import datetime
 import logging
+from datetime import datetime
 
-from . import rbd
 from .. import mgr
-
+from . import rbd  # pylint: disable=no-name-in-module
 
 logger = logging.getLogger('progress')
 

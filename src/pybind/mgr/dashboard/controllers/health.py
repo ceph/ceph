@@ -3,8 +3,6 @@ from __future__ import absolute_import
 
 import json
 
-from . import ApiController, Endpoint, BaseController, ControllerDoc, EndpointDoc
-
 from .. import mgr
 from ..rest_client import RequestException
 from ..security import Permission, Scope
@@ -12,6 +10,7 @@ from ..services.ceph_service import CephService
 from ..services.iscsi_cli import IscsiGatewaysConfig
 from ..services.iscsi_client import IscsiClient
 from ..tools import partial_dict
+from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc
 from .host import get_hosts
 
 HEALTH_MINIMAL_SCHEMA = ({

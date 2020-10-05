@@ -3,11 +3,11 @@ from __future__ import absolute_import
 
 from cherrypy import NotFound
 
-from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, \
-    UiApiController, EndpointDoc
+from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from .. import mgr
+from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, UiApiController
 
 LIST_CODE__SCHEMA = {
     "crush-failure-domain": (str, ''),

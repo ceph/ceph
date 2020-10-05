@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
+import os
 from collections import defaultdict
 
-import os
-
-import cherrypy
 import cephfs
+import cherrypy
 
-from . import ApiController, ControllerDoc, RESTController, UiApiController, \
-    allow_empty_body, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from ..services.cephfs import CephFS as CephFS_
 from ..services.ceph_service import CephService
+from ..services.cephfs import CephFS as CephFS_
 from ..tools import ViewCache
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController, \
+    UiApiController, allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),

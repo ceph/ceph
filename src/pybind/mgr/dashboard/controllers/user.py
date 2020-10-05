@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from datetime import datetime
-
 import time
+from datetime import datetime
 
 import cherrypy
 
-from . import BaseController, ApiController, RESTController, Endpoint, \
-    allow_empty_body, ControllerDoc, EndpointDoc
 from .. import mgr
-from ..exceptions import DashboardException, UserAlreadyExists, \
-    UserDoesNotExist, PasswordPolicyException, PwdExpirationDateNotValid
+from ..exceptions import DashboardException, PasswordPolicyException, \
+    PwdExpirationDateNotValid, UserAlreadyExists, UserDoesNotExist
 from ..security import Scope
 from ..services.access_control import SYSTEM_ROLES, PasswordPolicy
 from ..services.auth import JwtManager
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, RESTController, allow_empty_body
 
 USER_SCHEMA = ([{
     "username": (str, 'Username of the user'),

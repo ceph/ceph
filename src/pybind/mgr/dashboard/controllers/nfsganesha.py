@@ -1,21 +1,20 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from functools import partial
 import logging
+from functools import partial
 
-import cherrypy
 import cephfs
+import cherrypy
 
-from . import ApiController, RESTController, UiApiController, BaseController, \
-              Endpoint, Task, ReadPermission, ControllerDoc, EndpointDoc
 from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.cephx import CephX
 from ..services.exception import serialize_dashboard_exception
 from ..services.ganesha import Ganesha, GaneshaConf, NFSException
 from ..services.rgw_client import RgwClient
-
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UiApiController
 
 logger = logging.getLogger('controllers.ganesha')
 
@@ -273,7 +272,7 @@ class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/cephx/clients')
     @ReadPermission
     def cephx_clients(self):
-        return [client for client in CephX.list_clients()]
+        return list(CephX.list_clients())
 
     @Endpoint('GET', '/fsals')
     @ReadPermission

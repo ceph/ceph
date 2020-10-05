@@ -1,26 +1,25 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+
 import json
 import logging
 import time
+from typing import Any, Dict, List, Union
 
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError  # type: ignore
 from mgr_util import get_most_recent_rate
 
-from . import ApiController, RESTController, Endpoint, Task
-from . import CreatePermission, ReadPermission, UpdatePermission, DeletePermission, \
-    allow_empty_body, ControllerDoc, EndpointDoc
-from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
-from ..services.exception import handle_send_command_error, handle_orchestrator_error
+from ..services.exception import handle_orchestrator_error, handle_send_command_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import str_to_bool
-
-from typing import Any, Dict, List, Union  # pylint: disable=C0411
-
+from . import ApiController, ControllerDoc, CreatePermission, \
+    DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
+    Task, UpdatePermission, allow_empty_body
+from .orchestrator import raise_if_no_orchestrator
 
 logger = logging.getLogger('controllers.osd')
 
@@ -287,7 +286,7 @@ class Osd(RESTController):
 
     @CreatePermission
     @osd_task('create', {'tracking_id': '{tracking_id}'})
-    def create(self, method, data, tracking_id):  # pylint: disable=W0622
+    def create(self, method, data, tracking_id):  # pylint: disable=unused-argument
         if method == 'bare':
             return self._create_bare(data)
         if method == 'drive_groups':

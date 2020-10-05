@@ -7,11 +7,11 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
 from ..controllers import Controller, RESTController, Task
 from ..controllers.task import Task as TaskController
 from ..services import progress
 from ..tools import NotificationQueue, TaskManager
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 @Controller('/test/task', secure=False)

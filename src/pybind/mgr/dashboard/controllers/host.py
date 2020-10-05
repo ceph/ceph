@@ -2,22 +2,22 @@
 from __future__ import absolute_import
 
 import copy
-
-from typing import List, Dict
+from typing import Dict, List
 
 import cherrypy
-
 from mgr_util import merge_dicts
 from orchestrator import HostSpec
-from . import ApiController, RESTController, Task, Endpoint, ReadPermission, \
-    UiApiController, BaseController, allow_empty_body, ControllerDoc, EndpointDoc
-from .orchestrator import raise_if_no_orchestrator
+
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from ..services.orchestrator import OrchClient, OrchFeature
 from ..services.ceph_service import CephService
 from ..services.exception import handle_orchestrator_error
+from ..services.orchestrator import OrchClient, OrchFeature
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UiApiController, \
+    allow_empty_body
+from .orchestrator import raise_if_no_orchestrator
 
 LIST_HOST_SCHEMA = {
     "hostname": (str, "Hostname"),

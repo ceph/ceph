@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-from typing import Any, Dict, Union
 
 import logging
+from typing import Any, Dict, Union
+
 import cherrypy
 
-from . import Controller, BaseController, Endpoint, ENDPOINT_MAP, \
-    allow_empty_body
 from .. import mgr
+from . import ENDPOINT_MAP, BaseController, Controller, Endpoint, allow_empty_body
 
 NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
@@ -456,7 +456,9 @@ class Docs(BaseController):
 
 if __name__ == "__main__":
     import sys
+
     import yaml
+
     from . import generate_routes
 
     def fix_null_descr(obj):

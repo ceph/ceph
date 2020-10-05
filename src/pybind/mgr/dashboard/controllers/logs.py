@@ -3,11 +3,10 @@ from __future__ import absolute_import
 
 import collections
 
-from . import ApiController, Endpoint, BaseController, ReadPermission, ControllerDoc, EndpointDoc
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..tools import NotificationQueue
-
+from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc, ReadPermission
 
 LOG_BUFFER_SIZE = 30
 

@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 try:
-    from typing import Dict, Any  # pylint: disable=unused-import
+    from typing import Any, Dict
 except ImportError:
     pass
 
