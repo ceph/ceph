@@ -89,10 +89,7 @@ private:
 
   enum WriteOpType {
     WRITE_OP_TYPE_WRITE,
-    WRITE_OP_TYPE_ZERO,
-    WRITE_OP_TYPE_TRUNC,
-    WRITE_OP_TYPE_REMOVE,
-    WRITE_OP_TYPE_REMOVE_TRUNC,
+    WRITE_OP_TYPE_ZERO
   };
 
   struct ReadOp {
