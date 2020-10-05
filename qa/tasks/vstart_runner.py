@@ -1348,9 +1348,10 @@ class LogStream(object):
         vstart_runner.py will do it for itself since it runs tests in a
         testsuite one by one.
         """
-        self.buffer = re.sub('\n\n'+'-'*70+'\nran [0-9]* test in [0-9.]*s\n\n',
+        self.buffer = re.sub('-'*70+'\nran [0-9]* test in [0-9.]*s\n*',
                              '', self.buffer, flags=re.I)
-
+        self.buffer = re.sub('failed \(failures=[0-9]*\)\n', '', self.buffer,
+                             flags=re.I)
         self.buffer = self.buffer.replace('OK\n', '')
 
     def write(self, data):
@@ -1423,8 +1424,10 @@ class LoggingResultTemplate(object):
 
 
 def launch_tests(overall_suite):
-    return launch_individually(overall_suite) if opt_rotate_logs else \
-        launch_entire_suite(overall_suite)
+    if opt_rotate_logs or not opt_exit_on_test_failure:
+        return launch_individually(overall_suite)
+    else:
+        return launch_entire_suite(overall_suite)
 
 
 def get_logging_result_class():
@@ -1435,8 +1438,10 @@ def get_logging_result_class():
 
 def launch_individually(overall_suite):
     no_of_tests_execed = 0
-
+    no_of_tests_failed, no_of_tests_execed = 0, 0
     LoggingResult = get_logging_result_class()
+    stream = LogStream()
+    stream.omit_result_lines = True
     if opt_rotate_logs:
         logrotate = LogRotate()
 
@@ -1447,12 +1452,15 @@ def launch_individually(overall_suite):
         if opt_rotate_logs:
             logrotate.run_logrotate()
 
-        result = unittest.TextTestRunner(stream=LogStream(),
+        result = unittest.TextTestRunner(stream=stream,
                                          resultclass=LoggingResult,
                                          verbosity=2, failfast=True).run(case)
 
         if not result.wasSuccessful():
-            break
+            if opt_exit_on_test_failure:
+                break
+            else:
+                no_of_tests_failed += 1
 
         no_of_tests_execed += 1
     time_elapsed = (datetime.datetime.utcnow() - started_at).total_seconds()
@@ -1460,8 +1468,9 @@ def launch_individually(overall_suite):
     if result.wasSuccessful():
         log.info('')
         log.info('-'*70)
-        log.info('Ran {} tests in {}s'.format(no_of_tests_execed,
-                                              time_elapsed))
+        log.info(f'Ran {no_of_tests_execed} tests in {time_elapsed}s')
+        if no_of_tests_failed > 0:
+            log.info(f'{no_of_tests_failed} tests failed')
         log.info('')
         log.info('OK')
 
@@ -1494,6 +1503,8 @@ def exec_test():
     opt_verbose = True
     global opt_rotate_logs
     opt_rotate_logs = False
+    global opt_exit_on_test_failure
+    opt_exit_on_test_failure = True
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1533,6 +1544,8 @@ def exec_test():
             opt_verbose = False
         elif f == '--rotate-logs':
             opt_rotate_logs = True
+        elif f == '--run-all-tests':
+            opt_exit_on_test_failure = False
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1711,7 +1724,10 @@ def exec_test():
         teardown_cluster()
 
     if not result.wasSuccessful():
-        result.printErrors()  # duplicate output at end for convenience
+        # no point in duplicating if we can have multiple failures in same
+        # run.
+        if opt_exit_on_test_failure:
+            result.printErrors()  # duplicate output at end for convenience
 
         bad_tests = []
         for test, error in result.errors:
