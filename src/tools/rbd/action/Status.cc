@@ -24,9 +24,9 @@ namespace {
 const std::string IMAGE_CACHE_STATE = ".librbd/image_cache_state";
 
 struct ImageCacheState {
-  bool present;
-  bool clean;
-  int size;
+  bool present = false;
+  bool clean = false;
+  int size = 0;
   std::string host;
   std::string path;
 };
@@ -43,14 +43,14 @@ bool image_cache_parse(const std::string& s, ImageCacheState &cache_state) {
     if (success && (success = f.exists("clean"))) {
       cache_state.present = (bool)f["clean"];
     }
-    if (success && (success = f.exists("rwl_size"))) {
-      cache_state.size = (int)f["rwl_size"];
+    if (success && (success = f.exists("pwl_size"))) {
+      cache_state.size = (int)f["pwl_size"];
     }
-    if (success && (success = f.exists("rwl_host"))) {
-      cache_state.host = (std::string)f["rwl_host"];
+    if (success && (success = f.exists("pwl_host"))) {
+      cache_state.host = (std::string)f["pwl_host"];
     }
-    if (success && (success = f.exists("rwl_path"))) {
-      cache_state.path = (std::string)f["rwl_path"];
+    if (success && (success = f.exists("pwl_path"))) {
+      cache_state.path = (std::string)f["pwl_path"];
     }
   }
   return success;
