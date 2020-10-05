@@ -272,6 +272,11 @@ void ObjectCopyRequest<I>::send_write_object() {
   ceph_assert(!m_write_ops.empty());
   auto& write_ops = m_write_ops.begin()->second;
 
+  m_src_image_ctx->image_lock.lock_shared();
+  bool hide_parent = (m_src_snap_id_start == 0 &&
+                      m_src_image_ctx->parent != nullptr);
+  m_src_image_ctx->image_lock.unlock_shared();
+
   // retrieve the destination snap context for the op
   SnapIds dst_snap_ids;
   librados::snap_t dst_snap_seq = 0;
@@ -287,7 +292,10 @@ void ObjectCopyRequest<I>::send_write_object() {
       // if the object cannot exist, the only valid op is to remove it
       ldout(m_cct, 20) << "object DNE: src_snap_seq=" << src_snap_seq << dendl;
       ceph_assert(write_ops.size() == 1U);
-      ceph_assert(write_ops.begin()->type == WRITE_OP_TYPE_REMOVE);
+      ceph_assert(write_ops.begin()->type == WRITE_OP_TYPE_ZERO &&
+                  write_ops.begin()->object_offset == 0 &&
+                  write_ops.begin()->object_length ==
+                    m_dst_image_ctx->layout.object_size);
     }
 
     // write snapshot context should be before actual snapshot
@@ -322,21 +330,26 @@ void ObjectCopyRequest<I>::send_write_object() {
                        LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
       break;
     case WRITE_OP_TYPE_ZERO:
-      ldout(m_cct, 20) << "zero op: " << write_op.object_offset << "~"
-                       << write_op.object_length << dendl;
-      op.zero(write_op.object_offset, write_op.object_length);
-      break;
-    case WRITE_OP_TYPE_REMOVE_TRUNC:
-      ldout(m_cct, 20) << "create op" << dendl;
-      op.create(false);
-      [[fallthrough]];
-    case WRITE_OP_TYPE_TRUNC:
-      ldout(m_cct, 20) << "trunc op: " << write_op.object_offset << dendl;
-      op.truncate(write_op.object_offset);
-      break;
-    case WRITE_OP_TYPE_REMOVE:
-      ldout(m_cct, 20) << "remove op" << dendl;
-      op.remove();
+      if (write_op.object_offset + write_op.object_length ==
+            m_dst_image_ctx->layout.object_size) {
+        if (write_op.object_offset == 0) {
+          if (hide_parent) {
+            ldout(m_cct, 20) << "create+truncate op" << dendl;
+            op.create(false);
+            op.truncate(0);
+          } else {
+            ldout(m_cct, 20) << "remove op" << dendl;
+            op.remove();
+          }
+        } else {
+          ldout(m_cct, 20) << "trunc op: " << write_op.object_offset << dendl;
+          op.truncate(write_op.object_offset);
+        }
+      } else {
+        ldout(m_cct, 20) << "zero op: " << write_op.object_offset << "~"
+                         << write_op.object_length << dendl;
+        op.zero(write_op.object_offset, write_op.object_length);
+      }
       break;
     default:
       ceph_abort();
@@ -637,7 +650,8 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     ceph_assert(dst_may_exist_it != m_dst_object_may_exist.end());
     if (!dst_may_exist_it->second && prev_end_size > 0) {
       ldout(m_cct, 5) << "object DNE for snap_id: " << dst_snap_seq << dendl;
-      m_write_ops[src_snap_seq].emplace_back(WRITE_OP_TYPE_REMOVE, 0, 0);
+      m_write_ops[src_snap_seq].emplace_back(
+        WRITE_OP_TYPE_ZERO, 0, m_dst_image_ctx->layout.object_size);
       prev_end_size = 0;
       continue;
     }
@@ -691,23 +705,18 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
       Striper::file_to_extents(m_cct, &m_dst_image_ctx->layout, z.get_start(),
                                z.get_len(), 0, 0, &object_extents);
       for (auto& object_extent : object_extents) {
+        ceph_assert(object_extent.offset + object_extent.length <=
+                      m_dst_image_ctx->layout.object_size);
+
         if (object_extent.offset + object_extent.length >= end_size) {
           // zero interval at the object end
-          if (object_extent.offset == 0 && hide_parent) {
-            ldout(m_cct, 20) << "WRITE_OP_TYPE_REMOVE_TRUNC" << dendl;
+          if ((object_extent.offset == 0 && hide_parent) ||
+              (object_extent.offset < prev_end_size)) {
+            ldout(m_cct, 20) << "WRITE_OP_TYPE_ZERO " << object_extent.offset
+                             << dendl;
             m_write_ops[src_snap_seq].emplace_back(
-              WRITE_OP_TYPE_REMOVE_TRUNC, 0, 0);
-          } else if (object_extent.offset < prev_end_size) {
-            if (object_extent.offset == 0) {
-              ldout(m_cct, 20) << "WRITE_OP_TYPE_REMOVE" << dendl;
-              m_write_ops[src_snap_seq].emplace_back(
-                WRITE_OP_TYPE_REMOVE, 0, 0);
-            } else {
-              ldout(m_cct, 20) << "WRITE_OP_TYPE_TRUNC " << object_extent.offset
-                               << dendl;
-              m_write_ops[src_snap_seq].emplace_back(
-                WRITE_OP_TYPE_TRUNC, object_extent.offset, 0);
-            }
+              WRITE_OP_TYPE_ZERO, object_extent.offset,
+              m_dst_image_ctx->layout.object_size - object_extent.offset);
           }
           end_size = std::min(end_size, object_extent.offset);
         } else {
@@ -716,7 +725,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
                            << object_extent.offset << "~"
                            << object_extent.length << dendl;
           m_write_ops[src_snap_seq].emplace_back(
-            WRITE_OP_TYPE_ZERO, object_extent.offset, object_extent.length);
+              WRITE_OP_TYPE_ZERO, object_extent.offset, object_extent.length);
         }
       }
     }
