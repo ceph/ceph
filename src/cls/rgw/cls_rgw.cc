@@ -1143,6 +1143,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d\n", (int)op.remove_objs.size());
+  // multipart uploads atomical deletes
   for (const auto& remove_key : op.remove_objs) {
     CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s\n",
             remove_key.name.c_str(), remove_key.instance.c_str());

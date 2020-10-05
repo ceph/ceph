@@ -1494,6 +1494,7 @@ struct cls_rgw_get_bucket_resharding_ret  {
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
 
+//rgw_cls_obj_complete_op
 struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
   void complete_op(librados::ObjectWriteOperation& o,
                    const rgw_bucket_entry_ver& ver,
@@ -1509,6 +1510,7 @@ struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
   }
 };
 
+// rgw_cls_link_olh_op
 struct CLSRGWLinkOLHBase : cls_rgw_bi_log_related_op {
   static RGWModifyOp get_bilog_op_type(const bool delete_marker) {
      return delete_marker ? CLS_RGW_OP_LINK_OLH_DM
@@ -1535,6 +1537,7 @@ struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
   }
 };
 
+// rgw_cls_unlink_instance_op
 struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
   template <class... Args>
   CLSRGWUnlinkInstance(Args&&... args)
