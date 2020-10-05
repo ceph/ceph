@@ -63,11 +63,13 @@ class FuseMount(CephFSMount):
            self.client_config.get('valgrind') is not None:
             daemon_signal = 'term'
 
+        # Use 0000 mode to prevent undesired modifications to the mountpoint on
+        # the local file system.
+        script = f'mkdir -m 0000 -p -v {self.hostfs_mntpt}'.split()
         stderr = StringIO()
         try:
-            self.client_remote.run(args=['mkdir', '-p', self.hostfs_mntpt],
-                                   timeout=(15*60), cwd=self.test_dir,
-                                   stderr=StringIO())
+            self.client_remote.run(args=script, timeout=(15*60),
+                cwd=self.test_dir, stderr=StringIO())
         except CommandFailedError:
             if 'file exists' not in stderr.getvalue().lower():
                 raise
