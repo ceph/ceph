@@ -156,8 +156,14 @@ if [ -z "$NO_CLOBBER" ] || [ ! -e ./$VENV ]; then
 fi
 
 
-# Upgrade pip first
-./$VENV/bin/pip install --use-feature=2020-resolver --upgrade pip
+# be compatible with pip shipped by distro older v20.2
+if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
+    PIP_INSTALL="./$VENV/bin/pip install --use-feature=2020-resolver"
+else
+    PIP_INSTALL="./$VENV/bin/pip install"
+fi
+# Upgrade pip first - then we have a new pip version with the --use-feature flag
+$PIP_INSTALL --upgrade pip
 
 # Ensure setuptools is installed
 ./$VENV/bin/pip install --use-feature=2020-resolver setuptools --upgrade
