@@ -29,41 +29,28 @@ struct C_EncryptedObjectReadRequest : public Context {
     I* image_ctx;
     CryptoInterface* crypto;
     uint64_t object_no;
-    uint64_t object_off;
-    ceph::bufferlist* read_data;
+    io::ReadExtents* extents;
     Context* onfinish;
-    io::ReadResult::C_ObjectReadRequest* req_comp;
     io::ObjectDispatchSpec* req;
 
     C_EncryptedObjectReadRequest(
             I* image_ctx, CryptoInterface* crypto, uint64_t object_no,
-            uint64_t object_off, uint64_t object_len, IOContext io_context,
+            io::ReadExtents* extents, IOContext io_context,
             int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
-            ceph::bufferlist* read_data, int* object_dispatch_flags,
+            uint64_t* version, int* object_dispatch_flags,
             Context** on_finish,
             Context* on_dispatched) : image_ctx(image_ctx),
                                       crypto(crypto),
                                       object_no(object_no),
-                                      object_off(object_off),
-                                      read_data(read_data),
+                                      extents(extents),
                                       onfinish(on_dispatched) {
       *on_finish = util::create_context_callback<
               Context, &Context::complete>(*on_finish, crypto);
 
-      auto aio_comp = io::AioCompletion::create_and_start(
-              (Context*)this, util::get_image_ctx(image_ctx),
-              io::AIO_TYPE_READ);
-      aio_comp->read_result = io::ReadResult{read_data};
-      aio_comp->set_request_count(1);
-
-      auto req_comp = new io::ReadResult::C_ObjectReadRequest(
-              aio_comp, object_off, object_len, {{0, object_len}});
-
       req = io::ObjectDispatchSpec::create_read(
               image_ctx, io::OBJECT_DISPATCH_LAYER_CRYPTO, object_no,
-              {{object_off, object_len}}, io_context, op_flags, read_flags,
-              parent_trace, &req_comp->bl, &req_comp->extent_map, nullptr,
-              req_comp);
+              extents, io_context, op_flags, read_flags, parent_trace,
+              version, this);
     }
 
     void send() {
@@ -71,16 +58,25 @@ struct C_EncryptedObjectReadRequest : public Context {
     }
 
     void finish(int r) override {
-      ldout(image_ctx->cct, 20) << "r=" << r << dendl;
-      if (r > 0) {
-        auto crypto_ret = crypto->decrypt(
-                read_data,
-                Striper::get_file_offset(
-                        image_ctx->cct, &image_ctx->layout, object_no,
-                        object_off));
-        if (crypto_ret != 0) {
-          ceph_assert(crypto_ret < 0);
-          r = crypto_ret;
+      auto cct = image_ctx->cct;
+      ldout(cct, 20) << "r=" << r << dendl;
+      if (r == 0) {
+        for (auto& extent: *extents) {
+          io::util::unsparsify(cct, &extent.bl, extent.extent_map,
+                               extent.offset, extent.length);
+
+          auto crypto_ret = crypto->decrypt(
+                  &extent.bl,
+                  Striper::get_file_offset(
+                          cct, &image_ctx->layout, object_no,
+                          extent.offset));
+          if (crypto_ret != 0) {
+            ceph_assert(crypto_ret < 0);
+            r = crypto_ret;
+            break;
+          }
+
+          r += extent.length;
         }
       }
       onfinish->complete(r);
@@ -116,28 +112,20 @@ void CryptoObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool CryptoObjectDispatch<I>::read(
-    uint64_t object_no, const io::Extents &extents, IOContext io_context,
+    uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
     int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
-    int* object_dispatch_flags, io::DispatchResult* dispatch_result,
-    Context** on_finish, Context* on_dispatched) {
+    uint64_t* version, int* object_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
-                 << extents << dendl;
+                 << *extents << dendl;
   ceph_assert(m_crypto != nullptr);
-
-  if (version != nullptr || extents.size() != 1) {
-    // there's currently no need to support multiple extents
-    // as well as returning object version
-    return false;
-  }
-
-  auto [object_off, object_len] = extents.front();
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   auto req = new C_EncryptedObjectReadRequest<I>(
-          m_image_ctx, m_crypto, object_no, object_off, object_len, io_context,
-          op_flags, read_flags, parent_trace, read_data, object_dispatch_flags,
+          m_image_ctx, m_crypto, object_no, extents, io_context,
+          op_flags, read_flags, parent_trace, version, object_dispatch_flags,
           on_finish, on_dispatched);
   req->send();
   return true;

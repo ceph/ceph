@@ -11,6 +11,7 @@
 #include "librbd/cache/ObjectCacherWriteback.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 #include "librbd/io/Utils.h"
 #include "osd/osd_types.h"
@@ -182,21 +183,25 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
-    uint64_t object_no, const io::Extents &extents, IOContext io_context,
+    uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
     int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
-    int* object_dispatch_flags, io::DispatchResult* dispatch_result,
-    Context** on_finish, Context* on_dispatched) {
+    uint64_t* version, int* object_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   // IO chained in reverse order
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << extents << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << *extents << dendl;
 
-  if (version != nullptr || extents.size() != 1) {
+  if (extents->size() == 0) {
+    ldout(cct, 20) << "no extents to read" << dendl;
+    return false;
+  }
+
+  if (version != nullptr) {
     // we currently don't cache read versions
     // and don't support reading more than one extent
     return false;
   }
-  auto [object_off, object_len] = extents.front();
 
   // ensure we aren't holding the cache lock post-read
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
@@ -207,16 +212,30 @@ bool ObjectCacherObjectDispatch<I>::read(
               ((read_flags << ObjectCacherWriteback::READ_FLAGS_SHIFT) &
                ObjectCacherWriteback::READ_FLAGS_MASK));
 
+  ceph::bufferlist* bl;
+  if (extents->size() > 1) {
+    auto req = new io::ReadResult::C_ObjectReadMergedExtents(
+            cct, extents, on_dispatched);
+    on_dispatched = req;
+    bl = &req->bl;
+  } else {
+    bl = &extents->front().bl;
+  }
+
   m_image_ctx->image_lock.lock_shared();
   auto rd = m_object_cacher->prepare_read(
-    io_context->read_snap().value_or(CEPH_NOSNAP), read_data, op_flags);
+    io_context->read_snap().value_or(CEPH_NOSNAP), bl, op_flags);
   m_image_ctx->image_lock.unlock_shared();
 
-  ObjectExtent extent(data_object_name(m_image_ctx, object_no), object_no,
-                      object_off, object_len, 0);
-  extent.oloc.pool = m_image_ctx->data_ctx.get_id();
-  extent.buffer_extents.push_back({0, object_len});
-  rd->extents.push_back(extent);
+  uint64_t off = 0;
+  for (auto& read_extent: *extents) {
+    ObjectExtent extent(data_object_name(m_image_ctx, object_no), object_no,
+                        read_extent.offset, read_extent.length, 0);
+    extent.oloc.pool = m_image_ctx->data_ctx.get_id();
+    extent.buffer_extents.push_back({off, read_extent.length});
+    rd->extents.push_back(extent);
+    off += read_extent.length;
+  }
 
   ZTracer::Trace trace(parent_trace);
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;

@@ -135,7 +135,7 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
   aio_comp->set_request_count(1);
 
   auto req_comp = new io::ReadResult::C_ObjectReadRequest(
-    aio_comp, off, len, {{0, len}});
+    aio_comp, {{off, len, {{0, len}}}});
 
   auto io_context = m_ictx->duplicate_data_io_context();
   if (snapid != CEPH_NOSNAP) {
@@ -147,9 +147,8 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
   op_flags &= ~READ_FLAGS_MASK;
 
   auto req = io::ObjectDispatchSpec::create_read(
-    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, {{off, len}},
-    io_context, op_flags, read_flags, trace, &req_comp->bl,
-    &req_comp->extent_map, nullptr, req_comp);
+    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, &req_comp->extents,
+    io_context, op_flags, read_flags, trace, nullptr, req_comp);
   req->send();
 }
 

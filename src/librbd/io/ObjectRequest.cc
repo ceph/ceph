@@ -200,14 +200,14 @@ void ObjectRequest<I>::finish(int r) {
 
 template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(
-    I *ictx, uint64_t objectno, const Extents &extents,
+    I *ictx, uint64_t objectno, ReadExtents* extents,
     IOContext io_context, int op_flags, int read_flags,
-    const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-    Extents* extent_map, uint64_t* version, Context *completion)
-  : ObjectRequest<I>(ictx, objectno, io_context, "read",
-                     parent_trace, completion),
-    m_extents(extents), m_op_flags(op_flags), m_read_flags(read_flags),
-    m_read_data(read_data), m_extent_map(extent_map), m_version(version) {
+    const ZTracer::Trace &parent_trace, uint64_t* version,
+    Context *completion)
+  : ObjectRequest<I>(ictx, objectno, io_context, "read", parent_trace,
+                     completion),
+    m_extents(extents), m_op_flags(op_flags),m_read_flags(read_flags),
+    m_version(version) {
 }
 
 template <typename I>
@@ -235,15 +235,12 @@ void ObjectReadRequest<I>::read_object() {
   ldout(image_ctx->cct, 20) << dendl;
 
   neorados::ReadOp read_op;
-  m_extent_results.reserve(this->m_extents.size());
-  for (auto [object_off, object_len]: this->m_extents) {
-    m_extent_results.emplace_back();
-    auto& extent_result = m_extent_results.back();
-    if (object_len >= image_ctx->sparse_read_threshold_bytes) {
-      read_op.sparse_read(object_off, object_len, &(extent_result.first),
-                          &(extent_result.second));
+  for (auto& extent: *this->m_extents) {
+    if (extent.length >= image_ctx->sparse_read_threshold_bytes) {
+      read_op.sparse_read(extent.offset, extent.length, &extent.bl,
+                          &extent.extent_map);
     } else {
-      read_op.read(object_off, object_len, &(extent_result.first));
+      read_op.read(extent.offset, extent.length, &extent.bl);
     }
   }
   util::apply_op_flags(
@@ -272,28 +269,6 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
     return;
   }
 
-  // merge ExtentResults to a single sparse bufferlist
-  int pos = 0;
-  uint64_t object_off = 0;
-  for (auto& [read_data, extent_map] : m_extent_results) {
-    if (extent_map.size() == 0) {
-      extent_map.push_back(std::make_pair(m_extents[pos].first,
-                                          read_data.length()));
-    }
-
-    uint64_t total_extents_len = 0;
-    for (auto& [extent_off, extent_len] : extent_map) {
-      ceph_assert(extent_off >= object_off);
-      object_off = extent_off + extent_len;
-      m_extent_map->push_back(std::make_pair(extent_off, extent_len));
-      total_extents_len += extent_len;
-    }
-    ceph_assert(total_extents_len == read_data.length());
-
-    m_read_data->claim_append(read_data);
-    ++pos;
-  }
-
   this->finish(0);
 }
 
@@ -313,7 +288,7 @@ void ObjectReadRequest<I>::read_parent() {
   io::util::read_parent<I>(
     image_ctx, this->m_object_no, this->m_extents,
     this->m_io_context->read_snap().value_or(CEPH_NOSNAP), this->m_trace,
-    m_read_data, ctx);
+    ctx);
 }
 
 template <typename I>
@@ -329,11 +304,6 @@ void ObjectReadRequest<I>::handle_read_parent(int r) {
                           << cpp_strerror(r) << dendl;
     this->finish(r);
     return;
-  }
-
-  if (this->m_extents.size() > 1) {
-    m_extent_map->insert(m_extent_map->end(),
-                         m_extents.begin(), m_extents.end());
   }
 
   copyup();
