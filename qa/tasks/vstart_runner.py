@@ -1341,6 +1341,7 @@ def clear_old_log():
 class LogStream(object):
     def __init__(self):
         self.buffer = ""
+        self.omit_result_lines = False
 
     def _del_result_lines(self):
         """
@@ -1348,8 +1349,9 @@ class LogStream(object):
         vstart_runner.py will do it for itself since it runs tests in a
         testsuite one by one.
         """
-        self.buffer = re.sub('-'*70+'\nran [0-9]* test in [0-9.]*s\n*',
-                             '', self.buffer, flags=re.I)
+        if self.omit_result_lines:
+            self.buffer = re.sub('-'*70+'\nran [0-9]* test in [0-9.]*s\n*',
+                                 '', self.buffer, flags=re.I)
         self.buffer = re.sub('failed \(failures=[0-9]*\)\n', '', self.buffer,
                              flags=re.I)
         self.buffer = self.buffer.replace('OK\n', '')
