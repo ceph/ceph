@@ -27,7 +27,7 @@ class Devices(object):
     A container for Device instances with reporting
     """
 
-    def __init__(self, devices=None, filter_for_batch=False):
+    def __init__(self, filter_for_batch=False):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
         self.devices = [Device(k) for k in
