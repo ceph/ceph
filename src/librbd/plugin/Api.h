@@ -25,9 +25,9 @@ struct Api {
   virtual ~Api() {}
 
   virtual void read_parent(
-      ImageCtxT *image_ctx, uint64_t object_no, const Extents &extents,
+      ImageCtxT *image_ctx, uint64_t object_no, io::ReadExtents* extents,
       librados::snap_t snap_id, const ZTracer::Trace &trace,
-      ceph::bufferlist* data, Context* on_finish);
+      Context* on_finish);
 
 };
 

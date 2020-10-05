@@ -65,21 +65,18 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
 
 template <typename I>
 bool ParentCacheObjectDispatch<I>::read(
-    uint64_t object_no, const io::Extents &extents, IOContext io_context,
+    uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
     int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
-    int* object_dispatch_flags, io::DispatchResult* dispatch_result,
-    Context** on_finish, Context* on_dispatched) {
+    uint64_t* version, int* object_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << extents << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << *extents << dendl;
 
-  if (version != nullptr || extents.size() != 1) {
+  if (version != nullptr) {
     // we currently don't cache read versions
-    // and don't support reading more than one extent
     return false;
   }
-
-  auto [object_off, object_len] = extents.front();
 
   string oid = data_object_name(m_image_ctx, object_no);
 
@@ -95,13 +92,11 @@ bool ParentCacheObjectDispatch<I>::read(
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
-   ([this, read_data, dispatch_result, on_dispatched, object_no,
-     object_off = object_off, object_len = object_len, io_context,
-      &parent_trace]
+   ([this, extents, dispatch_result, on_dispatched, object_no, io_context,
+     &parent_trace]
    (ObjectCacheRequest* ack) {
-      handle_read_cache(ack, object_no, object_off, object_len, io_context,
-                        parent_trace, read_data, dispatch_result,
-                        on_dispatched);
+      handle_read_cache(ack, object_no, extents, io_context, parent_trace,
+                        dispatch_result, on_dispatched);
   });
 
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
@@ -113,9 +108,8 @@ bool ParentCacheObjectDispatch<I>::read(
 
 template <typename I>
 void ParentCacheObjectDispatch<I>::handle_read_cache(
-     ObjectCacheRequest* ack, uint64_t object_no, uint64_t read_off,
-     uint64_t read_len, IOContext io_context,
-     const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+     ObjectCacheRequest* ack, uint64_t object_no, io::ReadExtents* extents,
+     IOContext io_context, const ZTracer::Trace &parent_trace,
      io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
@@ -139,23 +133,36 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
         *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
         on_dispatched->complete(r);
       });
-    m_plugin_api.read_parent(m_image_ctx, object_no, {{read_off, read_len}},
+    m_plugin_api.read_parent(m_image_ctx, object_no, extents,
                              io_context->read_snap().value_or(CEPH_NOSNAP),
-                             parent_trace, read_data, ctx);
+                             parent_trace, ctx);
     return;
   }
 
-  // try to read from parent image cache
-  int r = read_object(file_path, read_data, read_off, read_len, on_dispatched);
-  if(r < 0) {
-    // cache read error, fall back to read rados
-    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-    on_dispatched->complete(0);
-    return;
+  int read_len = 0;
+  for (auto& extent: *extents) {
+    // try to read from parent image cache
+    int r = read_object(file_path, &extent.bl, extent.offset, extent.length,
+                        on_dispatched);
+    if (r < 0) {
+      // cache read error, fall back to read rados
+      for (auto& read_extent: *extents) {
+        // clear read bufferlists
+        if (&read_extent == &extent) {
+          break;
+        }
+        read_extent.bl.clear();
+      }
+      *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+      on_dispatched->complete(0);
+      return;
+    }
+
+    read_len += r;
   }
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  on_dispatched->complete(r);
+  on_dispatched->complete(read_len);
 }
 
 template <typename I>

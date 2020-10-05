@@ -82,9 +82,9 @@ bool assemble_write_same_extent(
 }
 
 template <typename I>
-void read_parent(I *image_ctx, uint64_t object_no, const Extents &extents,
+void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
                  librados::snap_t snap_id, const ZTracer::Trace &trace,
-                 ceph::bufferlist* data, Context* on_finish) {
+                 Context* on_finish) {
 
   auto cct = image_ctx->cct;
 
@@ -92,9 +92,9 @@ void read_parent(I *image_ctx, uint64_t object_no, const Extents &extents,
 
   // calculate reverse mapping onto the image
   Extents parent_extents;
-  for (auto [object_off, object_len]: extents) {
-    Striper::extent_to_file(cct, &image_ctx->layout, object_no, object_off,
-                            object_len, parent_extents);
+  for (auto& extent: *extents) {
+    Striper::extent_to_file(cct, &image_ctx->layout, object_no, extent.offset,
+                            extent.length, parent_extents);
   }
 
   uint64_t parent_overlap = 0;
@@ -114,13 +114,24 @@ void read_parent(I *image_ctx, uint64_t object_no, const Extents &extents,
 
   ldout(cct, 20) << dendl;
 
+  ceph::bufferlist* parent_read_bl;
+  if (extents->size() > 1) {
+    auto parent_comp = new ReadResult::C_ObjectReadMergedExtents(
+            cct, extents, on_finish);
+    parent_read_bl = &parent_comp->bl;
+    on_finish = parent_comp;
+  } else {
+    parent_read_bl = &extents->front().bl;
+  }
+
   auto comp = AioCompletion::create_and_start(on_finish, image_ctx->parent,
                                               AIO_TYPE_READ);
   ldout(cct, 20) << "completion " << comp << ", extents " << parent_extents
                  << dendl;
 
   ImageRequest<I>::aio_read(
-    image_ctx->parent, comp, std::move(parent_extents), ReadResult{data},
+    image_ctx->parent, comp, std::move(parent_extents),
+    ReadResult{parent_read_bl},
     image_ctx->parent->get_data_io_context(), 0, 0, trace);
 }
 
@@ -148,13 +159,24 @@ uint64_t extents_length(Extents &extents) {
   return total_bytes;
 }
 
+void unsparsify(CephContext* cct, ceph::bufferlist* bl,
+                const Extents& extent_map, uint64_t bl_off,
+                uint64_t out_bl_len) {
+  Striper::StripedReadResult destriper;
+  bufferlist out_bl;
+
+  destriper.add_partial_sparse_result(cct, std::move(*bl), extent_map, bl_off,
+                                      {{0, out_bl_len}});
+  destriper.assemble_result(cct, out_bl, true);
+  *bl = out_bl;
+}
+
 } // namespace util
 } // namespace io
 } // namespace librbd
 
 template void librbd::io::util::read_parent(
-    librbd::ImageCtx *image_ctx, uint64_t object_no, const Extents &extents,
-    librados::snap_t snap_id, const ZTracer::Trace &trace,
-    ceph::bufferlist* data, Context* on_finish);
+    librbd::ImageCtx *image_ctx, uint64_t object_no, ReadExtents* extents,
+    librados::snap_t snap_id, const ZTracer::Trace &trace, Context* on_finish);
 template int librbd::io::util::clip_request(
     librbd::ImageCtx *image_ctx, Extents *image_extents);

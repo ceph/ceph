@@ -107,8 +107,8 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
     EXPECT_CALL(*crypto, encrypt(_, _)).Times(count);
   }
 
-  void expect_decrypt() {
-    EXPECT_CALL(*crypto, decrypt(_, _));
+  void expect_decrypt(int count = 1) {
+    EXPECT_CALL(*crypto, decrypt(_, _)).Times(count);
   }
 };
 
@@ -135,9 +135,10 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, Discard) {
 
 TEST_F(TestMockCryptoCryptoObjectDispatch, ReadFail) {
   expect_object_read();
+  io::ReadExtents extents = {{0, 4096}};
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-      0, {{0, 4096}}, mock_image_ctx->get_data_io_context(), 0, 0, {}, &data,
-      &extent_map, nullptr, &object_dispatch_flags, &dispatch_result,
+      0, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {},
+      nullptr, &object_dispatch_flags, &dispatch_result,
       &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_NE(on_finish, &finished_cond);
@@ -149,17 +150,18 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, ReadFail) {
 
 TEST_F(TestMockCryptoCryptoObjectDispatch, Read) {
   expect_object_read();
+  io::ReadExtents extents = {{0, 4096}, {8192, 4096}};
   ASSERT_TRUE(mock_crypto_object_dispatch->read(
-          0, {{0, 4096}}, mock_image_ctx->get_data_io_context(), 0, 0, {},
-          &data, &extent_map, nullptr, &object_dispatch_flags, &dispatch_result,
+          0, &extents, mock_image_ctx->get_data_io_context(), 0, 0, {},
+          nullptr, &object_dispatch_flags, &dispatch_result,
           &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_NE(on_finish, &finished_cond);
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
 
-  expect_decrypt();
+  expect_decrypt(2);
   dispatcher_ctx->complete(0);
-  ASSERT_EQ(4096, dispatched_cond.wait());
+  ASSERT_EQ(8192, dispatched_cond.wait());
 }
 
 TEST_F(TestMockCryptoCryptoObjectDispatch, Write) {

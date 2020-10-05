@@ -38,18 +38,23 @@ public:
 
   struct C_ObjectReadRequest : public Context {
     AioCompletion *aio_completion;
-    uint64_t object_off;
-    uint64_t object_len;
-    LightweightBufferExtents buffer_extents;
+    ReadExtents extents;
 
-    bufferlist bl;
-    Extents extent_map;
-
-    C_ObjectReadRequest(AioCompletion *aio_completion, uint64_t object_off,
-                        uint64_t object_len,
-                        LightweightBufferExtents&& buffer_extents);
+    C_ObjectReadRequest(AioCompletion *aio_completion, ReadExtents&& extents);
 
     void finish(int r) override;
+  };
+
+  struct C_ObjectReadMergedExtents : public Context {
+      CephContext* cct;
+      ReadExtents* extents;
+      Context *on_finish;
+      bufferlist bl;
+
+      C_ObjectReadMergedExtents(CephContext* cct, ReadExtents* extents,
+                                Context* on_finish);
+
+      void finish(int r) override;
   };
 
   ReadResult();

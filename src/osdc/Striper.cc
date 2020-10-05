@@ -425,6 +425,12 @@ void Striper::StripedReadResult::add_partial_sparse_result(
   ldout(cct, 10) << "add_partial_sparse_result(" << this << ") " << bl.length()
 		 << " covering " << bl_map << " (offset " << bl_off << ")"
 		 << " to " << buffer_extents << dendl;
+
+  if (bl_map.empty()) {
+    add_partial_result(cct, bl, buffer_extents);
+    return;
+  }
+
   auto s = bl_map.cbegin();
   for (auto& be : buffer_extents) {
     ::add_partial_sparse_result(cct, &partial, &total_intended_len, bl, &s,
@@ -433,12 +439,18 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 }
 
 void Striper::StripedReadResult::add_partial_sparse_result(
-    CephContext *cct, ceph::buffer::list& bl,
+    CephContext *cct, ceph::buffer::list&& bl,
     const std::vector<std::pair<uint64_t, uint64_t>>& bl_map, uint64_t bl_off,
     const striper::LightweightBufferExtents& buffer_extents) {
   ldout(cct, 10) << "add_partial_sparse_result(" << this << ") " << bl.length()
 		 << " covering " << bl_map << " (offset " << bl_off << ")"
 		 << " to " << buffer_extents << dendl;
+
+  if (bl_map.empty()) {
+    add_partial_result(cct, std::move(bl), buffer_extents);
+    return;
+  }
+
   auto s = bl_map.cbegin();
   for (auto& be : buffer_extents) {
     ::add_partial_sparse_result(cct, &partial, &total_intended_len, bl, &s,
