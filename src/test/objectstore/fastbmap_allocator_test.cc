@@ -1016,6 +1016,11 @@ TEST(TestAllocatorLevel01, test_claim_free_l2)
   ASSERT_EQ(0x1000, claimed);
   ASSERT_EQ(0x2000, al2.debug_get_free());
 
+  // claiming on the right boundary
+  claimed = al2.claim_free_to_right(capacity);
+  ASSERT_EQ(0x0, claimed);
+  ASSERT_EQ(0x2000, al2.debug_get_free());
+
   // extend allocator space up to 64M
   auto max_available2 = 64 * 1024 * 1024;
   al2.mark_free(max_available, max_available2 - max_available);
