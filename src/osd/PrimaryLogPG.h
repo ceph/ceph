@@ -260,6 +260,11 @@ public:
   struct ManifestOp {
     RefCountCallback *cb;
     ceph_tid_t objecter_tid;
+    OpRequestRef op;
+    std::map<uint64_t, int> results;
+    std::map<uint64_t, ceph_tid_t> tids; 
+    std::map<hobject_t, pair<uint64_t, uint64_t>> chunks;
+    uint64_t num_chunks = 0;
 
     ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
       : cb(cb), objecter_tid(tid) {}
@@ -1504,11 +1509,17 @@ protected:
 			   ObjectContextRef& _l, ObjectContextRef& _g);
   bool inc_refcount_by_set(OpContext* ctx, object_manifest_t& tgt,
 			   OSDOp& osd_op);
+  int do_cdc(const object_info_t& oi, bufferlist& bl, vector<pair<uint64_t, uint64_t>>& chunks);
+  int start_dedup(OpRequestRef op, ObjectContextRef obc);
+  hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
+  void finish_set_dedup(hobject_t oid, map<hobject_t, pair<uint64_t, uint64_t>>& chunks,
+			int r, ceph_tid_t tid);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend struct C_CopyChunk;
   friend struct RefCountCallback;
+  friend struct C_SetDedupChunks;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
