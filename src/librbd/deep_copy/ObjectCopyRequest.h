@@ -98,25 +98,7 @@ private:
     bufferlist out_bl;
   };
 
-  struct WriteOp {
-    WriteOp(WriteOpType type, uint64_t object_offset, uint64_t object_length)
-      : type(type), object_offset(object_offset), object_length(object_length) {
-    }
-    WriteOp(WriteOpType type, uint64_t object_offset, uint64_t object_length,
-            bufferlist&& bl)
-      : type(type), object_offset(object_offset), object_length(object_length),
-        bl(std::move(bl)) {
-    }
-
-    WriteOpType type;
-    uint64_t object_offset;
-    uint64_t object_length;
-
-    bufferlist bl;
-  };
-
   typedef std::pair<librados::snap_t, librados::snap_t> WriteReadSnapIds;
-  typedef std::list<WriteOp> WriteOps;
 
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
@@ -139,7 +121,7 @@ private:
 
   std::map<WriteReadSnapIds, ReadOp> m_read_ops;
   std::list<WriteReadSnapIds> m_read_snaps;
-  std::map<librados::snap_t, WriteOps> m_write_ops;
+  io::SnapshotSparseBufferlist m_snapshot_sparse_bufferlist;
 
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_data_interval;
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_zero_interval;
