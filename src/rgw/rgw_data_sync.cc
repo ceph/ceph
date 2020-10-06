@@ -4146,7 +4146,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
         tn->log(0, "ERROR: lease is not taken, abort");
         return set_cr_error(-ECANCELED);
       }
-      tn->log(20, SSTR("listing bilog for incremental sync" << sync_info.inc_marker.position));
+      tn->log(20, SSTR("listing bilog for incremental sync; position=" << sync_info.inc_marker.position));
       set_status() << "listing bilog; position=" << sync_info.inc_marker.position;
       yield call(new RGWListBucketIndexLogCR(sc, bs, sync_info.inc_marker.position,
                                              &list_result));
