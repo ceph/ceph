@@ -90,6 +90,8 @@ struct ceph_pg {
  *
  * b <= bmask and bmask=(2**n)-1
  * e.g., b=12 -> bmask=15, b=123 -> bmask=127
+ *
+ * ** This function is released to the public domain by the author. **
  */
 static inline int ceph_stable_mod(int x, int b, int bmask)
 {
