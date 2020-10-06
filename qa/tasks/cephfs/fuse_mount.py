@@ -407,17 +407,6 @@ class FuseMount(CephFSMount):
 
         self.mounted = False
 
-        # Indiscriminate, unlike the touchier cleanup()
-        self.client_remote.run(
-            args=[
-                'rm',
-                '-rf',
-                self.hostfs_mntpt,
-            ],
-            cwd=self.test_dir,
-            timeout=(60*5)
-        )
-
     def _asok_path(self):
         return "/var/run/ceph/ceph-client.{0}.*.asok".format(self.client_id)
 
