@@ -368,7 +368,6 @@ class FuseMount(CephFSMount):
                 cwd=self.test_dir,
                 stderr=stderr,
                 timeout=(60*5),
-                check_status=False,
             )
         except CommandFailedError:
             if b"No such file or directory" in stderr.getvalue():
@@ -410,16 +409,7 @@ class FuseMount(CephFSMount):
             except CommandFailedError:
                 pass
 
-        # Indiscriminate, unlike the touchier cleanup()
-        self.client_remote.run(
-            args=[
-                'rm',
-                '-rf',
-                self.mountpoint,
-            ],
-            cwd=self.test_dir,
-            timeout=(60*5)
-        )
+        return self.cleanup()
 
     def _asok_path(self):
         return "/var/run/ceph/ceph-client.{0}.*.asok".format(self.client_id)
