@@ -22,7 +22,7 @@ class PoolTest(DashboardTestCase):
     }, allow_unknown=True)
 
     pool_list_stat_schema = JObj(sub_elems={
-        'latest': JUnion([int,float]),
+        'latest': JUnion([int, float]),
         'rate': float,
         'rates': JList(JAny(none=False)),
     })

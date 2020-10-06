@@ -314,7 +314,7 @@ class DashboardTestCase(MgrTestCase):
             executing_tasks = [task for task in _res['executing_tasks'] if
                                task['metadata'] == task_metadata]
             finished_tasks = [task for task in _res['finished_tasks'] if
-                               task['metadata'] == task_metadata]
+                              task['metadata'] == task_metadata]
             if not executing_tasks and finished_tasks:
                 res_task = finished_tasks[0]
 
@@ -466,16 +466,19 @@ class DashboardTestCase(MgrTestCase):
                 return obj
         return None
 
+
 # TODP: pass defaults=(False,) to namedtuple() if python3.7
 class JLeaf(namedtuple('JLeaf', ['typ', 'none'])):
     def __new__(cls, typ, none=False):
         return super().__new__(cls, typ, none)
+
 
 JList = namedtuple('JList', ['elem_typ'])
 
 JTuple = namedtuple('JList', ['elem_typs'])
 
 JUnion = namedtuple('JUnion', ['elem_typs'])
+
 
 class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none', 'unknown_schema'])):
     def __new__(cls, sub_elems, allow_unknown=False, none=False, unknown_schema=None):

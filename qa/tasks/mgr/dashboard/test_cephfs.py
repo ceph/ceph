@@ -25,7 +25,7 @@ class CephfsTest(DashboardTestCase):
 
     def rm_dir(self, path, expectedStatus=200):
         self._delete("/api/cephfs/{}/tree".format(self.get_fs_id()),
-                   params={'path': path})
+                     params={'path': path})
         self.assertStatus(expectedStatus)
 
     def get_root_directory(self, expectedStatus=200):
@@ -239,7 +239,7 @@ class CephfsTest(DashboardTestCase):
         self.assertEqual(len(snapshots), 0)
 
         self._delete("/api/cephfs/{}/snapshot".format(fs_id),
-                   params={'path': '/movies/dune', 'name': 'test'})
+                     params={'path': '/movies/dune', 'name': 'test'})
         self.assertStatus(200)
 
         data = self.ls_dir('/movies', 1)

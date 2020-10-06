@@ -59,7 +59,6 @@ class OrchestratorControllerTest(DashboardTestCase):
     URL_INVENTORY = '/api/orchestrator/inventory'
     URL_OSD = '/api/orchestrator/osd'
 
-
     @property
     def test_data_inventory(self):
         return test_data['inventory']
@@ -119,7 +118,9 @@ class OrchestratorControllerTest(DashboardTestCase):
         data = self._get(self.URL_INVENTORY)
         self.assertStatus(200)
 
-        sorting_key = lambda node: node['name']
+        def sorting_key(node):
+            return node['name']
+
         test_inventory = sorted(self.test_data_inventory, key=sorting_key)
         resp_inventory = sorted(data, key=sorting_key)
         self.assertEqual(len(test_inventory), len(resp_inventory))
