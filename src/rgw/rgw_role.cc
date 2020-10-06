@@ -573,3 +573,17 @@ RGWRoleMetadataHandler::RGWRoleMetadataHandler(RGWSI_Role *role_svc)
   base_init(role_svc->ctx(), role_svc->get_be_handler());
   svc.role = role_svc;
 }
+
+void RGWRoleCompleteInfo::dump(ceph::Formatter *f) const
+{
+  info.dump(f);
+  if (has_attrs) {
+    encode_json("attrs", attrs, f);
+  }
+}
+
+void RGWRoleCompleteInfo::decode_json(JSONObj *obj)
+{
+  decode_json_obj(info, obj);
+  has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
+}

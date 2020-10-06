@@ -147,6 +147,31 @@ public:
 WRITE_CLASS_ENCODER(RGWRole)
 } } // namespace rgw::sal
 
+struct RGWRoleCompleteInfo {
+  rgw::sal::RGWRole info;
+  std::map<std::string, bufferlist> attrs;
+  bool has_attrs;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
+class RGWRoleMetadataObject: public RGWMetadataObject {
+  RGWRoleCompleteInfo rci;
+public:
+  RGWRoleMetadataObject() = default;
+  RGWRoleMetadataObject(const RGWRoleCompleteInfo& _rci,
+			const obj_version& v,
+			real_time m) : RGWMetadataObject(v,m), rci(_rci) {}
+
+  void dump(Formatter *f) const override {
+    rci.dump(f);
+  }
+
+  RGWRoleCompleteInfo& get_rci() {
+    return rci;
+  }
+};
 //class RGWMetadataObject;
 
 class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
