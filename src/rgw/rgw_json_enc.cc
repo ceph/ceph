@@ -1821,6 +1821,66 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
   encode_json("inc_marker", inc_marker, f);
 }
 
+void rgw_bucket_full_sync_status::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("position", position, obj);
+  JSONDecoder::decode_json("count", count, obj);
+}
+
+void rgw_bucket_full_sync_status::dump(Formatter *f) const
+{
+  encode_json("position", position, f);
+  encode_json("count", count, f);
+}
+
+void encode_json(const char *name, BucketSyncState state, Formatter *f)
+{
+  switch (state) {
+  case BucketSyncState::Init:
+    encode_json(name, "init", f);
+    break;
+  case BucketSyncState::Full:
+    encode_json(name, "full-sync", f);
+    break;
+  case BucketSyncState::Incremental:
+    encode_json(name, "incremental-sync", f);
+    break;
+  case BucketSyncState::Stopped:
+    encode_json(name, "stopped", f);
+    break;
+  default:
+    encode_json(name, "unknown", f);
+    break;
+  }
+}
+
+void decode_json_obj(BucketSyncState& state, JSONObj *obj)
+{
+  std::string s;
+  decode_json_obj(s, obj);
+  if (s == "full-sync") {
+    state = BucketSyncState::Full;
+  } else if (s == "incremental-sync") {
+    state = BucketSyncState::Incremental;
+  } else if (s == "stopped") {
+    state = BucketSyncState::Stopped;
+  } else {
+    state = BucketSyncState::Init;
+  }
+}
+
+void rgw_bucket_sync_status::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("state", state, obj);
+  JSONDecoder::decode_json("full", full, obj);
+}
+
+void rgw_bucket_sync_status::dump(Formatter *f) const
+{
+  encode_json("state", state, f);
+  encode_json("full", full, f);
+}
+
 /* This utility function shouldn't conflict with the overload of std::to_string
  * provided by string_ref since Boost 1.54 as it's defined outside of the std
  * namespace. I hope we'll remove it soon - just after merging the Matt's PR
