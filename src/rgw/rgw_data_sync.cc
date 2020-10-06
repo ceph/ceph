@@ -2783,17 +2783,11 @@ public:
         } else {
           // whether or not to do full sync, incremental sync will follow anyway
           if (sync_env->sync_module->should_full_sync()) {
-            status.state = rgw_bucket_shard_sync_info::StateFullSync;
             status.inc_marker.position = info.max_marker;
-          } else {
-            // clear the marker position unless we're resuming from SYNCSTOP
-            if (!stopped) {
-              status.inc_marker.position = "";
-            }
-            status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
           }
           write_status = true;
           status.inc_marker.timestamp = ceph::real_clock::now();
+          status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
         }
 
         if (write_status) {
