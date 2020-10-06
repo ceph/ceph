@@ -526,15 +526,17 @@ class RGWSimpleRadosWriteCR : public RGWSimpleCoroutine {
   bufferlist bl;
   rgw_raw_obj obj;
   RGWObjVersionTracker *objv_tracker;
+  bool exclusive;
   RGWAsyncPutSystemObj *req{nullptr};
 
 public:
   RGWSimpleRadosWriteCR(const DoutPrefixProvider *_dpp, 
-                      RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
-		      const rgw_raw_obj& _obj,
-		      const T& _data, RGWObjVersionTracker *objv_tracker = nullptr)
+			RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
+			const rgw_raw_obj& _obj, const T& _data,
+			RGWObjVersionTracker *objv_tracker = nullptr,
+			bool exclusive = false)
     : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados),
-      svc(_svc), obj(_obj), objv_tracker(objv_tracker) {
+      svc(_svc), obj(_obj), objv_tracker(objv_tracker), exclusive(exclusive) {
     encode(_data, bl);
   }
 
@@ -551,7 +553,7 @@ public:
 
   int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncPutSystemObj(dpp, this, stack->create_completion_notifier(),
-			           svc, objv_tracker, obj, false, std::move(bl));
+			           svc, objv_tracker, obj, exclusive, std::move(bl));
     async_rados->queue(req);
     return 0;
   }
