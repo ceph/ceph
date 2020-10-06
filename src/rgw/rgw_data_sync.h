@@ -725,6 +725,9 @@ public:
   std::map<int, rgw_bucket_shard_sync_info>& get_sync_status() { return sync_status; }
   int init_sync_status(const DoutPrefixProvider *dpp);
 
+  static std::string full_status_oid(const rgw_zone_id& source_zone,
+				     const rgw_bucket& source_bucket,
+				     const rgw_bucket& dest_bucket);
   static std::string inc_status_oid(const rgw_zone_id& source_zone,
 				    const rgw_bucket_sync_pair_info& bs);
   // specific source obj sync status, can be used by sync modules
