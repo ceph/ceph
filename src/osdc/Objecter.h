@@ -1557,6 +1557,10 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_TIER_FLUSH);
   }
 
+  void tier_evict() {
+    add_op(CEPH_OSD_OP_TIER_EVICT);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {

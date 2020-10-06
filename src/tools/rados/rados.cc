@@ -132,6 +132,7 @@ void usage(ostream& out)
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "   unset-manifest <obj-name>	     unset redirect or chunked object\n"
 "   tier-flush <obj-name>	     flush the chunked object\n"
+"   tier-evict <obj-name>	     evict the chunked object\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
@@ -3817,6 +3818,29 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     completion->release();
     if (ret < 0) {
       cerr << "error tier-flush " << pool_name << "/" << oid << " : " 
+	   << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
+  } else if (strcmp(nargs[0], "tier-evict") == 0) {
+    if (!pool_name || nargs.size() < 2) {
+      usage(cerr);
+      return 1;
+    }
+    string oid(nargs[1]);
+
+    ObjectReadOperation op;
+    op.tier_evict();
+    librados::AioCompletion *completion =
+      librados::Rados::aio_create_completion();
+    io_ctx.aio_operate(oid.c_str(), completion, &op,
+		       librados::OPERATION_IGNORE_CACHE |
+		       librados::OPERATION_IGNORE_OVERLAY,
+		       NULL);
+    completion->wait_for_complete();
+    ret = completion->get_return_value();
+    completion->release();
+    if (ret < 0) {
+      cerr << "error tier-evict " << pool_name << "/" << oid << " : " 
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
