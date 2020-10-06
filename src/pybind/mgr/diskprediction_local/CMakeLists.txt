@@ -1,0 +1,1 @@
+add_tox_test(mgr-diskprediction_local)
