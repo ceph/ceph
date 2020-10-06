@@ -143,6 +143,10 @@
                     *ngIf="form.showError('size', formDir)"
                     i18n>The size specified is out of range. A value from
                 {{ getMinSize() }} to {{ getMaxSize() }} is usable.</span>
+              <span class="text-warning-dark"
+                    *ngIf="form.getValue('size') === 1"
+                    i18n>A size of 1 will not create a replication of the
+                object. The 'Replicated size' includes the object itself.</span>
             </div>
           </div>
 
