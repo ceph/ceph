@@ -1181,26 +1181,6 @@ struct rgw_sync_pipe_info_set {
   }
 };
 
-class RGWRunBucketsSyncBySourceCR : public RGWCoroutine {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
-
-  rgw_bucket_shard source;
-
-  RGWSyncTraceNodeRef tn;
-
-public:
-  RGWRunBucketsSyncBySourceCR(RGWDataSyncCtx *_sc, const rgw_bucket_shard& _source, const RGWSyncTraceNodeRef& _tn_parent)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env), source(_source),
-      tn(sync_env->sync_tracer->add_node(_tn_parent, "source",
-                                         SSTR(bucket_shard_str{_source} ))) {
-  }
-  ~RGWRunBucketsSyncBySourceCR() override {
-  }
-
-  int operate(const DoutPrefixProvider *dpp) override;
-};
-
 class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
@@ -4660,15 +4640,6 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
       pipes->update_empty_bucket_info(buckets_info);
     }
 
-    return set_cr_done();
-  }
-
-  return 0;
-}
-
-int RGWRunBucketsSyncBySourceCR::operate(const DoutPrefixProvider *dpp)
-{
-  reenter(this) {
     return set_cr_done();
   }
 
