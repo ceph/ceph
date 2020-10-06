@@ -742,6 +742,13 @@ public:
   int run(const DoutPrefixProvider *dpp);
 };
 
+/// read the full sync status with respect to a source bucket
+int rgw_read_bucket_full_sync_status(const DoutPrefixProvider *dpp,
+                                     rgw::sal::RadosStore *store,
+                                     const rgw_sync_bucket_pipe& pipe,
+                                     rgw_bucket_sync_status *status,
+                                     optional_yield y);
+
 /// read the incremental sync status of all bucket shards from the given source zone
 int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
                                     rgw::sal::RadosStore *store,
