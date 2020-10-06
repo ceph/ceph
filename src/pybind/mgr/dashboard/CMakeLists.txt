@@ -24,17 +24,19 @@ if(WITH_SYSTEM_NPM)
     DEPENDS frontend/node_modules
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   )
-else()
+else(WITH_SYSTEM_NPM)
   set(mgr-dashboard-nodeenv-dir ${CMAKE_CURRENT_BINARY_DIR}/node-env)
   set(nodeenv NODEENV)
   set(mgr-dashboard-userconfig --userconfig ${mgr-dashboard-nodeenv-dir}/.npmrc)
   set(virt-activate . ${mgr-dashboard-nodeenv-dir}/bin/activate)
-
+  if(DEFINED ENV{NODE_MIRROR})
+    set(node_mirror_opt "--mirror=$ENV{NODE_MIRROR}")
+  endif()
   add_custom_command(
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=12.18.2
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv ${node_mirror_opt} -p --node=12.18.2
     COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
@@ -49,7 +51,7 @@ else()
     DEPENDS frontend/node_modules mgr-dashboard-nodeenv
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   )
-endif()
+endif(WITH_SYSTEM_NPM)
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
