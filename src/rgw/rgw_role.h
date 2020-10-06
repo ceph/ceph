@@ -226,28 +226,30 @@ public:
 
 class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
 {
+
+public:
   struct Svc {
     RGWSI_Role *role{nullptr};
   } svc;
-
-public:
 
   RGWRoleMetadataHandler(RGWSI_Role *role_svc);
 
   int do_get(RGWSI_MetaBackend_Handler::Op *op,
 	     std::string& entry,
 	     RGWMetadataObject **obj,
-	     optional_yield y) final
-  {
-    return 0; // TODO
-  }
+	     optional_yield y) final;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op,
 		std::string& entry,
 		RGWObjVersionTracker& objv_tracker,
-		optional_yield y) final {
-    return 0; // TODO
-  }
+		optional_yield y) final;
+
+  int do_put(RGWSI_MetaBackend_Handler::Op *op,
+	     std::string& entr,
+	     RGWMetadataObject *obj,
+	     RGWObjVersionTracker& objv_tracker,
+	     optional_yield y,
+	     RGWMDLogSyncType type) override;
 };
 
 class RGWSI_Role;
