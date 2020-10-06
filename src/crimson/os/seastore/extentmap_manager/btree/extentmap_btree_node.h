@@ -100,7 +100,7 @@ struct ExtMapNode : LogicalCachedExtent {
       [this, ec, len] (auto &extents) {
       return crimson::do_for_each(boost::make_counting_iterator(0),
                                   boost::make_counting_iterator(2),
-                                  [this, ec, len, &extents] (auto i) {
+                                  [ec, len, &extents] (auto i) {
         return ec.tm.alloc_extent<T>(ec.t, L_ADDR_MIN, len).safe_then(
           [i, &extents](auto &&node) {
 	         if (i == 0)
