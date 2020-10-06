@@ -12,7 +12,7 @@ import cherrypy
 import rbd
 
 from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
-    UpdatePermission, RESTController
+    UpdatePermission, RESTController, allow_empty_body
 
 from .. import mgr
 from ..security import Scope
@@ -413,6 +413,7 @@ class RbdMirroringPoolBootstrap(BaseController):
     @Endpoint(method='POST', path='token')
     @handle_rbd_mirror_error()
     @UpdatePermission
+    @allow_empty_body
     def create_token(self, pool_name):
         ioctx = mgr.rados.open_ioctx(pool_name)
         token = rbd.RBD().mirror_peer_bootstrap_create(ioctx)
@@ -421,6 +422,7 @@ class RbdMirroringPoolBootstrap(BaseController):
     @Endpoint(method='POST', path='peer')
     @handle_rbd_mirror_error()
     @UpdatePermission
+    @allow_empty_body
     def import_token(self, pool_name, direction, token):
         ioctx = mgr.rados.open_ioctx(pool_name)
 
