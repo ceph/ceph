@@ -37,6 +37,7 @@ public:
   /// Callback interface for querying and operating on segments
   class ExtentCallbackInterface {
   public:
+    virtual ~ExtentCallbackInterface() = default;
     /**
      * get_next_dirty_extent
      *
