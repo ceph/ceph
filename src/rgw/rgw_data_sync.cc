@@ -1011,7 +1011,7 @@ public:
                             ceph::real_time* progress)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
       lease_cr(std::move(lease_cr)), sync_pair(_sync_pair), progress(progress),
-      status_oid(RGWBucketPipeSyncStatusManager::status_oid(sc->source_zone, sync_pair)),
+      status_oid(RGWBucketPipeSyncStatusManager::inc_status_oid(sc->source_zone, sync_pair)),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket",
                                          SSTR(bucket_shard_str{_sync_pair.dest_bs} << "<-" << bucket_shard_str{_sync_pair.source_bs} ))) {
   }
@@ -2736,7 +2736,7 @@ public:
                                         RGWObjVersionTracker& objv_tracker)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
       sync_pair(_sync_pair),
-      sync_status_oid(RGWBucketPipeSyncStatusManager::status_oid(sc->source_zone, _sync_pair)),
+      sync_status_oid(RGWBucketPipeSyncStatusManager::inc_status_oid(sc->source_zone, _sync_pair)),
       status(_status), objv_tracker(objv_tracker)
   {}
 
@@ -2910,7 +2910,7 @@ public:
                                    rgw_bucket_shard_sync_info *_status,
                                    RGWObjVersionTracker* objv_tracker)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      oid(RGWBucketPipeSyncStatusManager::status_oid(sc->source_zone, sync_pair)),
+      oid(RGWBucketPipeSyncStatusManager::inc_status_oid(sc->source_zone, sync_pair)),
       status(_status), objv_tracker(objv_tracker)
   {}
   int operate(const DoutPrefixProvider *dpp) override;
@@ -4868,8 +4868,8 @@ std::ostream& RGWBucketPipeSyncStatusManager::gen_prefix(std::ostream& out) cons
     << " bucket:" << dest_bucket << ' ';
 }
 
-string RGWBucketPipeSyncStatusManager::status_oid(const rgw_zone_id& source_zone,
-                                              const rgw_bucket_sync_pair_info& sync_pair)
+string RGWBucketPipeSyncStatusManager::inc_status_oid(const rgw_zone_id& source_zone,
+                                                      const rgw_bucket_sync_pair_info& sync_pair)
 {
   if (sync_pair.source_bs == sync_pair.dest_bs) {
     return bucket_status_oid_prefix + "." + source_zone.id + ":" + sync_pair.dest_bs.get_key();
