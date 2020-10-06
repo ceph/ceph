@@ -388,6 +388,16 @@ class BucketTrimShardCollectCR : public RGWShardCollectCR {
   const RGWBucketInfo& bucket_info;
   const std::vector<std::string>& markers; //< shard markers to trim
   size_t i{0}; //< index of current shard marker
+
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to trim bilog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   BucketTrimShardCollectCR(const DoutPrefixProvider *dpp,
                            rgw::sal::RadosStore* store, const RGWBucketInfo& bucket_info,
@@ -577,6 +587,16 @@ class BucketTrimInstanceCollectCR : public RGWShardCollectCR {
   std::vector<std::string>::const_iterator bucket;
   std::vector<std::string>::const_iterator end;
   const DoutPrefixProvider *dpp;
+
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to trim bucket instance: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   BucketTrimInstanceCollectCR(rgw::sal::RadosStore* store, RGWHTTPManager *http,
                               BucketTrimObserver *observer,
