@@ -59,11 +59,15 @@ else(WITH_SYSTEM_NPM)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
     )
+  if(DEFINED ENV{NPM_REGISTRY})
+    set(npm_registry_opts "OPTION" "registry=$ENV{NPM_REGISTRY}")
+  endif()
   add_npm_options(
     NODEENV_DIR ${mgr-dashboard-nodeenv-dir}
     TARGET mgr-dashboard-nodeenv
     OPTION python=${MGR_PYTHON_EXECUTABLE}
-    OPTION cache=${mgr-dashboard-nodeenv-dir}/.npm)
+    OPTION cache=${mgr-dashboard-nodeenv-dir}/.npm
+    ${npm_registry_opts})
   add_custom_target(mgr-dashboard-frontend-deps
     DEPENDS frontend/node_modules mgr-dashboard-nodeenv
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
