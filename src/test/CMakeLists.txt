@@ -81,6 +81,9 @@ if(WITH_FIO OR WITH_SYSTEM_FIO)
   add_subdirectory(fio)
 endif()
 add_subdirectory(lazy-omap-stats)
+if (WITH_CEPHFS)
+  add_subdirectory(snap-mirror)
+endif()
 
 # test_timers
 add_executable(ceph_test_timers

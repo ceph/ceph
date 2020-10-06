@@ -4,6 +4,7 @@ set(cephfs_mirror_internal
   FSMirror.cc
   InstanceWatcher.cc
   MirrorWatcher.cc
+  SnapReplicator.cc
   Types.cc
   Watcher.cc
   watcher/RewatchRequest.cc)
