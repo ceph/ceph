@@ -5343,6 +5343,37 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   }
 };
 
+int rgw_read_bucket_full_sync_status(const DoutPrefixProvider *dpp,
+                                     rgw::sal::RadosStore *store,
+                                     const rgw_sync_bucket_pipe& pipe,
+                                     rgw_bucket_sync_status *status,
+                                     optional_yield y)
+{
+  auto get_oid = RGWBucketPipeSyncStatusManager::full_status_oid;
+  const rgw_raw_obj obj{store->svc()->zone->get_zone_params().log_pool,
+                        get_oid(*pipe.source.zone, *pipe.source.bucket, *pipe.dest.bucket)};
+
+  auto svc = store->svc()->sysobj;
+  auto obj_ctx = svc->init_obj_ctx();
+  auto sysobj = svc->get_obj(obj_ctx, obj);
+  bufferlist bl;
+  int ret = sysobj.rop().read(dpp, &bl, y);
+  if (ret < 0)
+    return ret;
+
+  try {
+    auto iter = bl.cbegin();
+    using ceph::decode;
+    rgw_bucket_sync_status result;
+    decode(result, iter);
+    *status = result;
+    return 0;
+  } catch (const buffer::error& err) {
+    lderr(svc->ctx()) << "error decoding " << obj << ": " << err.what() << dendl;
+    return -EIO;
+  }
+}
+
 int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
                                     rgw::sal::RadosStore *store,
                                     const rgw_sync_bucket_pipe& pipe,
