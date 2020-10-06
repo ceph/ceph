@@ -988,37 +988,6 @@ std::ostream& operator<<(std::ostream& out, const bucket_shard_str& rhs) {
   return out;
 }
 
-class RGWSyncBucketShardCR : public RGWCoroutine {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
-  boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
-  rgw_bucket_sync_pair_info sync_pair;
-  rgw_bucket_sync_pipe sync_pipe;
-  rgw_bucket_shard_sync_info sync_status;
-  RGWMetaSyncEnv meta_sync_env;
-  RGWObjVersionTracker objv_tracker;
-  ceph::real_time* progress;
-
-  const std::string status_oid;
-
-  RGWSyncTraceNodeRef tn;
-
-public:
-  RGWSyncBucketShardCR(RGWDataSyncCtx *_sc,
-                       boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
-                       const rgw_bucket_sync_pair_info& _sync_pair,
-                       const RGWSyncTraceNodeRef& _tn_parent,
-                       ceph::real_time* progress)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      lease_cr(std::move(lease_cr)), sync_pair(_sync_pair), progress(progress),
-      status_oid(RGWBucketPipeSyncStatusManager::inc_status_oid(sc->source_zone, sync_pair)),
-      tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket",
-                                         SSTR(bucket_shard_str{_sync_pair.dest_bs} << "<-" << bucket_shard_str{_sync_pair.source_bs} ))) {
-  }
-
-  int operate(const DoutPrefixProvider *dpp) override;
-};
-
 struct all_bucket_info {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
@@ -4264,6 +4233,12 @@ std::ostream& operator<<(std::ostream& out, std::optional<rgw_bucket_shard>& bs)
   return out;
 }
 
+static RGWCoroutine* sync_bucket_shard_cr(RGWDataSyncCtx* sc,
+                                          boost::intrusive_ptr<const RGWContinuousLeaseCR> lease,
+                                          const rgw_bucket_sync_pair_info& sync_pair,
+                                          const RGWSyncTraceNodeRef& tn,
+                                          ceph::real_time* progress);
+
 RGWRunBucketSourcesSyncCR::RGWRunBucketSourcesSyncCR(RGWDataSyncCtx *_sc,
                                                      boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
                                                      std::optional<rgw_bucket_shard> _target_bs,
@@ -4342,8 +4317,8 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
 
         cur_progress = (progress ? &shard_progress[prealloc_stack_id()] : nullptr);
 
-        yield_spawn_window(new RGWSyncBucketShardCR(sc, lease_cr, sync_pair, tn,
-                                                    cur_progress),
+        yield_spawn_window(sync_bucket_shard_cr(sc, lease_cr, sync_pair, tn,
+                                                cur_progress),
                            BUCKET_SYNC_SPAWN_WINDOW,
                            [&](uint64_t stack_id, int ret) {
                              handle_complete_stack(stack_id);
@@ -4646,6 +4621,46 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+class RGWSyncBucketShardCR : public RGWCoroutine {
+  RGWDataSyncCtx *sc;
+  RGWDataSyncEnv *sync_env;
+  boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
+  rgw_bucket_sync_pair_info sync_pair;
+  rgw_bucket_sync_pipe sync_pipe;
+  rgw_bucket_shard_sync_info sync_status;
+  RGWMetaSyncEnv meta_sync_env;
+  RGWObjVersionTracker objv_tracker;
+  ceph::real_time* progress;
+
+  const std::string status_oid;
+
+  RGWSyncTraceNodeRef tn;
+
+public:
+  RGWSyncBucketShardCR(RGWDataSyncCtx *_sc,
+                       boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
+                       const rgw_bucket_sync_pair_info& _sync_pair,
+                       const RGWSyncTraceNodeRef& _tn_parent,
+                       ceph::real_time* progress)
+    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
+      lease_cr(std::move(lease_cr)), sync_pair(_sync_pair), progress(progress),
+      status_oid(RGWBucketPipeSyncStatusManager::inc_status_oid(sc->source_zone, sync_pair)),
+      tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket",
+                                         SSTR(bucket_shard_str{_sync_pair.dest_bs} << "<-" << bucket_shard_str{_sync_pair.source_bs} ))) {
+  }
+
+  int operate(const DoutPrefixProvider *dpp) override;
+};
+
+static RGWCoroutine* sync_bucket_shard_cr(RGWDataSyncCtx* sc,
+                                          boost::intrusive_ptr<const RGWContinuousLeaseCR> lease,
+                                          const rgw_bucket_sync_pair_info& sync_pair,
+                                          const RGWSyncTraceNodeRef& tn,
+                                          ceph::real_time* progress)
+{
+  return new RGWSyncBucketShardCR(sc, std::move(lease), sync_pair, tn, progress);
+}
+
 int RGWSyncBucketShardCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
@@ -4733,7 +4748,7 @@ RGWCoroutine *RGWRemoteBucketManager::run_sync_cr(int num)
     return nullptr;
   }
 
-  return new RGWSyncBucketShardCR(&sc, nullptr, sync_pairs[num], sync_env->sync_tracer->root_node, nullptr);
+  return sync_bucket_shard_cr(&sc, nullptr, sync_pairs[num], sync_env->sync_tracer->root_node, nullptr);
 }
 
 int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
