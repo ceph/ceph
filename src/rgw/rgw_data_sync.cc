@@ -988,7 +988,7 @@ std::ostream& operator<<(std::ostream& out, const bucket_shard_str& rhs) {
   return out;
 }
 
-class RGWRunBucketSyncCoroutine : public RGWCoroutine {
+class RGWSyncBucketShardCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
@@ -1004,11 +1004,11 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
 
 public:
-  RGWRunBucketSyncCoroutine(RGWDataSyncCtx *_sc,
-                            boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
-                            const rgw_bucket_sync_pair_info& _sync_pair,
-                            const RGWSyncTraceNodeRef& _tn_parent,
-                            ceph::real_time* progress)
+  RGWSyncBucketShardCR(RGWDataSyncCtx *_sc,
+                       boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
+                       const rgw_bucket_sync_pair_info& _sync_pair,
+                       const RGWSyncTraceNodeRef& _tn_parent,
+                       ceph::real_time* progress)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
       lease_cr(std::move(lease_cr)), sync_pair(_sync_pair), progress(progress),
       status_oid(RGWBucketPipeSyncStatusManager::inc_status_oid(sc->source_zone, sync_pair)),
@@ -4121,7 +4121,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
     if (syncstopped) {
-      // transition to StateStopped in RGWRunBucketSyncCoroutine. if sync is
+      // transition to StateStopped in RGWSyncBucketShardCR. if sync is
       // still disabled, we'll delete the sync status object. otherwise we'll
       // restart full sync to catch any changes that happened while sync was
       // disabled
@@ -4360,8 +4360,8 @@ int RGWRunBucketSourcesSyncCR::operate()
 
         ldpp_dout(sync_env->dpp, 20) << __func__ << "(): sync_pair=" << sync_pair << dendl;
 
-        yield spawn(new RGWRunBucketSyncCoroutine(sc, lease_cr, sync_pair, tn,
-                                                  &*cur_shard_progress), false);
+        yield spawn(new RGWSyncBucketShardCR(sc, lease_cr, sync_pair, tn,
+                                             &*cur_shard_progress), false);
         while (num_spawned() > BUCKET_SYNC_SPAWN_WINDOW) {
           set_status() << "num_spawned() > spawn_window";
           yield wait_for_child();
@@ -4674,7 +4674,7 @@ int RGWGetBucketPeersCR::operate()
   return 0;
 }
 
-int RGWRunBucketSyncCoroutine::operate()
+int RGWSyncBucketShardCR::operate()
 {
   reenter(this) {
     yield call(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &sync_status, &objv_tracker));
@@ -4761,7 +4761,7 @@ RGWCoroutine *RGWRemoteBucketManager::run_sync_cr(int num)
     return nullptr;
   }
 
-  return new RGWRunBucketSyncCoroutine(&sc, nullptr, sync_pairs[num], sync_env->sync_tracer->root_node, nullptr);
+  return new RGWSyncBucketShardCR(&sc, nullptr, sync_pairs[num], sync_env->sync_tracer->root_node, nullptr);
 }
 
 int RGWBucketPipeSyncStatusManager::init()
