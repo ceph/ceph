@@ -2487,39 +2487,41 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     return r;
   }
 
+  out << indented{width, "source bucket"} << source_bucket->get_key() << std::endl;
   pipe.source.bucket = source_bucket->get_key();
+
   pipe.dest.bucket = bucket_info.bucket;
+
+  rgw_bucket_sync_status full_status;
+  r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, null_yield);
+  if (r < 0) {
+    lderr(store->ctx()) << "failed to read bucket full sync status: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (full_status.state == BucketSyncState::Init) {
+    out << indented{width} << "init: bucket sync has not started\n";
+    return 0;
+  }
+  if (full_status.state == BucketSyncState::Stopped) {
+    out << indented{width} << "stopped: bucket sync is disabled\n";
+    return 0;
+  }
+  if (full_status.state == BucketSyncState::Full) {
+    out << indented{width} << "full sync: " << full_status.full.count << " objects completed\n";
+    return 0;
+  }
 
   std::vector<rgw_bucket_shard_sync_info> status;
   r = rgw_read_bucket_inc_sync_status(dpp, store, pipe, bucket_info, &source_bucket->get_info(), &status);
   if (r < 0) {
-    ldpp_dout(dpp, -1) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
+    lderr(store->ctx()) << "failed to read bucket incremental sync status: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  out << indented{width, "source bucket"} << source_bucket << std::endl;
-
-  int num_full = 0;
-  int num_inc = 0;
-  uint64_t full_complete = 0;
   const size_t total_shards = status.size();
 
-  using BucketSyncState = rgw_bucket_shard_sync_info::SyncState;
-  for (size_t shard_id = 0; shard_id < total_shards; shard_id++) {
-    auto& m = status[shard_id];
-    if (m.state == BucketSyncState::StateFullSync) {
-      num_full++;
-      full_complete += m.full_marker.count;
-    } else if (m.state == BucketSyncState::StateIncrementalSync) {
-      num_inc++;
-    }
-  }
-
-  out << indented{width} << "full sync: " << num_full << "/" << total_shards << " shards\n";
-  if (num_full > 0) {
-    out << indented{width} << "full sync: " << full_complete << " objects completed\n";
-  }
-  out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
+  out << indented{width} << "incremental sync on " << total_shards << " shards\n";
 
   BucketIndexShardsManager remote_markers;
   r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(), remote_markers, null_yield);
@@ -2535,15 +2537,15 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     if (r.second.empty()) {
       continue; // empty bucket index shard
     }
-    auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
-    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.second) {
+    const auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
+    if (pos < r.second) {
       shards_behind.insert(shard_id);
     }
   }
   if (!shards_behind.empty()) {
     out << indented{width} << "bucket is behind on " << shards_behind.size() << " shards\n";
     out << indented{width} << "behind shards: [" << shards_behind << "]\n" ;
-  } else if (!num_full) {
+  } else {
     out << indented{width} << "bucket is caught up with source\n";
   }
   return 0;
