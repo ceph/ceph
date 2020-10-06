@@ -80,6 +80,8 @@ public:
 
   RGWRole(std::string id) : id(std::move(id)) {}
 
+  RGWRole() = default;
+
   virtual ~RGWRole() = default;
 
   void encode(bufferlist& bl) const {
@@ -176,11 +178,11 @@ public:
 
 class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
 {
+
+public:
   struct Svc {
     RGWSI_Role *role{nullptr};
   } svc;
-
-public:
 
   RGWRoleMetadataHandler(RGWSI_Role *role_svc);
 
@@ -188,18 +190,22 @@ public:
 	     std::string& entry,
 	     RGWMetadataObject **obj,
 	     optional_yield y,
-       const DoutPrefixProvider *dpp) final
-  {
-    return 0; // TODO
-  }
+       const DoutPrefixProvider *dpp) final;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op,
 		std::string& entry,
 		RGWObjVersionTracker& objv_tracker,
 		optional_yield y,
-    const DoutPrefixProvider *dpp) final {
-    return 0; // TODO
-  }
+    const DoutPrefixProvider *dpp) final;
+
+  int do_put(RGWSI_MetaBackend_Handler::Op *op,
+	     std::string& entr,
+	     RGWMetadataObject *obj,
+	     RGWObjVersionTracker& objv_tracker,
+	     optional_yield y,
+       const DoutPrefixProvider *dpp,
+	     RGWMDLogSyncType type,
+       bool from_remote_zone) override;
 };
 
 class RGWRoleCtl {

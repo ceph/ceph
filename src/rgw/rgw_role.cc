@@ -587,3 +587,91 @@ void RGWRoleCompleteInfo::decode_json(JSONObj *obj)
   decode_json_obj(info, obj);
   has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
 }
+
+int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
+                                   std::string& entry,
+                                   RGWMetadataObject **obj,
+                                   optional_yield y,
+                                   const DoutPrefixProvider *dpp)
+{
+  RGWRoleCompleteInfo rci;
+  RGWObjVersionTracker objv_tracker;
+  real_time mtime;
+
+  int ret = svc.role->read_info(op->ctx(),
+                                entry,
+                                &rci.info,
+                                &objv_tracker,
+                                &mtime,
+                                &rci.attrs,
+                                y,
+                                dpp);
+
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWRoleMetadataObject *rdo = new RGWRoleMetadataObject(rci, objv_tracker.read_version,
+                                                         mtime);
+  *obj = rdo;
+
+  return 0;
+}
+
+int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
+                                      std::string& entry,
+                                      RGWObjVersionTracker& objv_tracker,
+                                      optional_yield y,
+                                      const DoutPrefixProvider *dpp)
+{
+  return svc.role->delete_info(op->ctx(), entry, &objv_tracker, y, dpp);
+}
+
+class RGWMetadataHandlerPut_Role : public RGWMetadataHandlerPut_SObj
+{
+  RGWRoleMetadataHandler *rhandler;
+  RGWRoleMetadataObject *mdo;
+public:
+  RGWMetadataHandlerPut_Role(RGWRoleMetadataHandler *handler,
+                             RGWSI_MetaBackend_Handler::Op *op,
+                             std::string& entry,
+                             RGWMetadataObject *obj,
+                             RGWObjVersionTracker& objv_tracker,
+                             optional_yield y,
+                             RGWMDLogSyncType type,
+                             bool from_remote_zone) :
+    RGWMetadataHandlerPut_SObj(handler, op, entry, obj, objv_tracker, y, type, from_remote_zone),
+    rhandler(handler) {
+    mdo = static_cast<RGWRoleMetadataObject*>(obj);
+  }
+
+  int put_checked(const DoutPrefixProvider *dpp) override {
+    auto& rci = mdo->get_rci();
+    auto mtime = mdo->get_mtime();
+    map<std::string, bufferlist> *pattrs = rci.has_attrs ? &rci.attrs : nullptr;
+
+    int ret = rhandler->svc.role->store_info(op->ctx(),
+                                           rci.info,
+                                           &objv_tracker,
+                                           mtime,
+                                           false,
+                                           pattrs,
+                                           y,
+                                           dpp);
+
+    return ret < 0 ? ret : STATUS_APPLIED;
+  }
+};
+
+int RGWRoleMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
+                                   std::string& entry,
+                                   RGWMetadataObject *obj,
+                                   RGWObjVersionTracker& objv_tracker,
+                                   optional_yield y,
+                                   const DoutPrefixProvider *dpp,
+                                   RGWMDLogSyncType type,
+                                   bool from_remote_zone)
+{
+  RGWMetadataHandlerPut_Role put_op(this, op , entry, obj, objv_tracker, y, type, from_remote_zone);
+  return do_put_operate(&put_op, dpp);
+}
