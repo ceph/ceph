@@ -624,7 +624,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       *m,
       obc->obs.oi.soid);
     return std::move(*ox).flush_changes(
-      [this, m] (auto&& obc) -> osd_op_errorator::future<> {
+      [m] (auto&& obc) -> osd_op_errorator::future<> {
 	logger().debug(
 	  "do_osd_ops: {} - object {} txn is empty, bypassing mutate",
 	  *m,

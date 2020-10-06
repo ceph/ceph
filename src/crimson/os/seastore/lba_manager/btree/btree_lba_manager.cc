@@ -248,7 +248,7 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
 	  op_context_t{cache, pin_set, t},
 	  lban->get_node_meta().begin,
 	  lban->get_node_meta().depth
-	).safe_then([this, &t, e=std::move(e)](LBANodeRef c) {
+	).safe_then([this, e=std::move(e)](LBANodeRef c) {
 	  if (c->get_paddr() == e->get_paddr()) {
 	    assert(&*c == &*e);
 	    logger().debug("init_cached_extent: {} initialized", *e);
@@ -265,7 +265,7 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
 	  op_context_t{cache, pin_set, t},
 	  logn->get_laddr(),
 	  logn->get_length()).safe_then(
-	    [this, &t, logn=std::move(logn)](auto pins) {
+	    [this, logn=std::move(logn)](auto pins) {
 	      if (pins.size() == 1) {
 		auto pin = std::move(pins.front());
 		pins.pop_front();

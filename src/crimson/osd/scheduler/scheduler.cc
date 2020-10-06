@@ -49,7 +49,7 @@ std::ostream &operator<<(std::ostream &lhs, const scheduler_class_t &c)
  * OpQueue based implementations.
  */
 template <typename T>
-class ClassedOpQueueScheduler : public Scheduler {
+class ClassedOpQueueScheduler final : public Scheduler {
   const scheduler_class_t cutoff;
   T queue;
 
