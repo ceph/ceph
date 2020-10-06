@@ -674,13 +674,13 @@ public:
   int run(const DoutPrefixProvider *dpp);
 };
 
-/// read the sync status of all bucket shards from the given source zone
-int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
-                           rgw::sal::RadosStore* store,
-                           const rgw_sync_bucket_pipe& pipe,
-                           const RGWBucketInfo& dest_bucket_info,
-                           const RGWBucketInfo *psource_bucket_info,
-                           std::vector<rgw_bucket_shard_sync_info> *status);
+/// read the incremental sync status of all bucket shards from the given source zone
+int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
+                                    rgw::sal::RadosStore *store,
+                                    const rgw_sync_bucket_pipe& pipe,
+                                    const RGWBucketInfo& dest_bucket_info,
+                                    const RGWBucketInfo *psource_bucket_info,
+                                    std::vector<rgw_bucket_shard_sync_info> *status);
 
 class RGWDefaultSyncModule : public RGWSyncModule {
 public:
