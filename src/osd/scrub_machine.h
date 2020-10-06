@@ -40,8 +40,8 @@ struct state_logger_t {
 //  EVENTS
 //
 
-void on_event_creation(std::string nm);
-void on_event_discard(std::string nm);
+void on_event_creation(std::string_view nm);
+void on_event_discard(std::string_view nm);
 
 #define MEV(E)                 \
   struct E : sc::event<E> {    \

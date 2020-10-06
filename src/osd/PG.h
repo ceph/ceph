@@ -1026,7 +1026,6 @@ public:
   // -- scrub --
 protected:
   bool scrub_after_recovery;
-  bool save_req_scrub; // Saved for scrub_after_recovery
 
   int active_pushes;
 

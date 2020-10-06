@@ -30,7 +30,7 @@ struct requested_scrub_t {
   // flags to indicate explicitly requested scrubs (by admin)
   // bool must_scrub, must_deep_scrub, must_repair, need_auto;
 
-  /*
+  /**
    * 'must_scrub' is set by an admin command (or - by need_auto).
    *  Affects the priority of the scrubbing, and the sleep periods
    *  during the scrub.
@@ -49,14 +49,19 @@ struct requested_scrub_t {
   /**
    * Set from:
    *  - scrub_requested() with need_auto param set, which only happens in
-   *  - scrub_finish() - if deep_scrub_on_error is set, aand we have errors
+   *  - scrub_finish() - if deep_scrub_on_error is set, and we have errors
    *
    * If set, will prevent the OSD from casually postponing our scrub. When scrubbing
    * starts, will cause must_scrub, must_deep_scrub and auto_repair to be set.
    */
   bool need_auto{false};
 
-  bool must_deep_scrub{false};	// used also here. Not just in scrubber.flags_
+  /**
+   * Set for scrub-after-recovery just before we initiate the recovery deep scrub,
+   * or if scrub_requested() was called with either need_auto ot repair.
+   * Affects PG_STATE_DEEP_SCRUB.
+   */
+  bool must_deep_scrub{false};
 
   /**
    * (An intermediary flag used by pg::sched_scrub() on the first time
@@ -81,14 +86,16 @@ struct requested_scrub_t {
   /*
    * the value of auto_repair is determined in sched_scrub() (once per scrub. previous
    * value is not remembered). Set if
-   * - (previous value is not remembered)
    * - allowed by configuration and backend, and
    * - must_scrub is not set (i.e. - this is a periodic scrub),
    * - time_for_deep was just set
    */
   bool auto_repair{false};
 
-  /// indicating that we are scrubbing post repair to verify everything is fixed
+  /**
+   * indicating that we are scrubbing post repair to verify everything is fixed.
+   * Otherwise - PG_STATE_FAILED_REPAIR will be asserted.
+   */
   bool check_repair{false};
 
   /*

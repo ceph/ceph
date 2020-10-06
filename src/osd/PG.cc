@@ -438,13 +438,13 @@ void PG::queue_scrub_after_recovery()
   // An interrupted recovery repair could leave this set. RRR ask someone to verify this is still true
   state_clear(PG_STATE_REPAIR);
 
-  m_scrubber->set_op_parameters(m_planned_scrub);
-
   // I am not comfortable with having this check *after* the destructive set_op_parameters()
   if (scrub_queued) {
     dout(10) << __func__ << ": already queued" << dendl;
     return;
   }
+
+  m_scrubber->set_op_parameters(m_planned_scrub);
 
   dout(10) << __func__ << ": queueing" << dendl;
 
@@ -1541,7 +1541,7 @@ bool PG::sched_scrub_initial()
 
     // scrubber.must_scrub:
   } else if (!m_planned_scrub.must_deep_scrub && has_deep_errors) {
-    dout(7) << __func__ << " RRR no scrubbing due to deep errors" << dendl;
+    dout(10) << __func__ << "no scrubbing due to deep errors" << dendl;
     osd->clog->error() << "osd." << osd->whoami << " pg " << info.pgid
 		       << " Regular scrub request, deep-scrub details will be lost";
   }
