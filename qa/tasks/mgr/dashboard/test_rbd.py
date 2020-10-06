@@ -178,7 +178,7 @@ class RbdTest(DashboardTestCase):
         img = self._get('/api/block/image/{}%2F{}'.format(pool, name))
 
         self._task_post("/api/block/image/{}%2F{}/move_trash".format(pool, name),
-                       {'delay': delay})
+                        {'delay': delay})
         self.assertStatus([200, 201])
         return img['id']
 
@@ -403,7 +403,8 @@ class RbdTest(DashboardTestCase):
         res = self.create_image('rbd', None, 'test_rbd_twice', 10240)
         self.assertStatus(400)
         self.assertEqual(res, {"code": '17', 'status': 400, "component": "rbd",
-                               "detail": "[errno 17] RBD image already exists (error creating image)",
+                               "detail": "[errno 17] RBD image already exists (error creating "
+                                         "image)",
                                'task': {'name': 'rbd/create',
                                         'metadata': {'pool_name': 'rbd', 'namespace': None,
                                                      'image_name': 'test_rbd_twice'}}})
@@ -756,6 +757,7 @@ class RbdTest(DashboardTestCase):
 
     def test_clone_format_version(self):
         config_name = 'rbd_default_clone_format'
+
         def _get_config_by_name(conf_name):
             data = self._get('/api/cluster_conf/{}'.format(conf_name))
             if 'value' in data:
@@ -774,9 +776,9 @@ class RbdTest(DashboardTestCase):
             'value': value
         })
         self.wait_until_equal(
-                    lambda: _get_config_by_name(config_name),
-                    value,
-                    timeout=60)
+            lambda: _get_config_by_name(config_name),
+            value,
+            timeout=60)
         clone_format_version = self._get('/api/block/image/clone_format_version')
         self.assertEqual(clone_format_version, 1)
         self.assertStatus(200)
@@ -788,9 +790,9 @@ class RbdTest(DashboardTestCase):
             'value': value
         })
         self.wait_until_equal(
-                    lambda: _get_config_by_name(config_name),
-                    value,
-                    timeout=60)
+            lambda: _get_config_by_name(config_name),
+            value,
+            timeout=60)
         clone_format_version = self._get('/api/block/image/clone_format_version')
         self.assertEqual(clone_format_version, 2)
         self.assertStatus(200)
@@ -801,9 +803,9 @@ class RbdTest(DashboardTestCase):
             'value': value
         })
         self.wait_until_equal(
-                    lambda: _get_config_by_name(config_name),
-                    None,
-                    timeout=60)
+            lambda: _get_config_by_name(config_name),
+            None,
+            timeout=60)
 
     def test_image_with_namespace(self):
         self.create_namespace('rbd', 'ns')

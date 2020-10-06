@@ -49,7 +49,6 @@ class ECPTest(DashboardTestCase):
             get_data = self._get('/api/erasure_code_profile/default')
             self.assertEqual(get_data, default[0])
 
-
     def test_create(self):
         data = {'name': 'ecp32', 'k': 3, 'm': 2}
         self._post('/api/erasure_code_profile', data)
@@ -104,4 +103,3 @@ class ECPTest(DashboardTestCase):
             'directory': str,
             'nodes': JList(JObj({}, allow_unknown=True))
         }))
-

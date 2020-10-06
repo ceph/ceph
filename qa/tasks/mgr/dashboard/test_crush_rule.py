@@ -84,4 +84,3 @@ class CrushRuleTest(DashboardTestCase):
             'names': JList(str),
             'nodes': JList(JObj({}, allow_unknown=True))
         }))
-
