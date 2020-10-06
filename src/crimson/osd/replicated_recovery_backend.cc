@@ -124,7 +124,7 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
     return seastar::now();
   }
   return pg.get_or_load_head_obc(soid).safe_then(
-    [&recovery_waiter, pulled](auto p) {
+    [&recovery_waiter](auto p) {
     auto& [obc, existed] = p;
     logger().debug("load_obc_for_recovery: loaded obc: {}", obc->obs.oi.soid);
     recovery_waiter.obc = obc;
