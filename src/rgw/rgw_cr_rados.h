@@ -458,6 +458,9 @@ int RGWSimpleRadosReadCR<T>::request_complete()
     if (ret < 0) {
       return ret;
     }
+    if (objv_tracker) { // copy the updated version
+      *objv_tracker = req->objv_tracker;
+    }
     try {
       auto iter = req->bl.cbegin();
       if (iter.end()) {
