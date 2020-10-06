@@ -81,6 +81,16 @@ class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
 
   map<uint32_t, rgw_data_sync_marker>& markers;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to read data sync status: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   RGWReadDataSyncStatusMarkersCR(RGWDataSyncCtx *sc, int num_shards,
                                  map<uint32_t, rgw_data_sync_marker>& markers)
@@ -117,6 +127,16 @@ class RGWReadDataSyncRecoveringShardsCR : public RGWShardCollectCR {
   string marker;
   std::vector<RGWRadosGetOmapKeysCR::ResultPtr>& omapkeys;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to list recovering data sync: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   RGWReadDataSyncRecoveringShardsCR(RGWDataSyncCtx *sc, uint64_t _max_entries, int _num_shards,
                                     std::vector<RGWRadosGetOmapKeysCR::ResultPtr>& omapkeys)
@@ -352,6 +372,16 @@ class RGWReadRemoteDataLogInfoCR : public RGWShardCollectCR {
   int shard_id;
 #define READ_DATALOG_MAX_CONCURRENT 10
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to fetch remote datalog info: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
 public:
   RGWReadRemoteDataLogInfoCR(RGWDataSyncCtx *_sc,
                      int _num_shards,
@@ -442,6 +472,16 @@ class RGWListRemoteDataLogCR : public RGWShardCollectCR {
   map<int, string>::iterator iter;
 #define READ_DATALOG_MAX_CONCURRENT 10
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to list remote datalog: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
 public:
   RGWListRemoteDataLogCR(RGWDataSyncCtx *_sc,
                      map<int, string>& _shards,
@@ -4962,6 +5002,16 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   using Vector = std::vector<rgw_bucket_shard_sync_info>;
   Vector::iterator i, end;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to read bucket shard sync status: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   RGWCollectBucketSyncStatusCR(rgw::sal::RadosStore* store, RGWDataSyncCtx *sc,
                                const RGWBucketInfo& source_bucket_info,
