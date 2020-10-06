@@ -561,6 +561,71 @@ struct rgw_bucket_shard_sync_info {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
 
+struct rgw_bucket_full_sync_status {
+  rgw_obj_key position;
+  uint64_t count = 0;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(position, bl);
+    encode(count, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(position, bl);
+    decode(count, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_full_sync_status)
+
+enum class BucketSyncState : uint8_t {
+  Init = 0,
+  Full,
+  Incremental,
+  Stopped,
+};
+inline std::ostream& operator<<(std::ostream& out, const BucketSyncState& s) {
+  switch (s) {
+  case BucketSyncState::Init: out << "init"; break;
+  case BucketSyncState::Full: out << "full"; break;
+  case BucketSyncState::Incremental: out << "incremental"; break;
+  case BucketSyncState::Stopped: out << "stopped"; break;
+  }
+  return out;
+}
+
+void encode_json(const char *name, BucketSyncState state, Formatter *f);
+void decode_json_obj(BucketSyncState& state, JSONObj *obj);
+
+struct rgw_bucket_sync_status {
+  BucketSyncState state = BucketSyncState::Init;
+  rgw_bucket_full_sync_status full;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(state, bl);
+    encode(full, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(state, bl);
+    decode(full, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_sync_status)
+
 struct rgw_bucket_index_marker_info {
   string bucket_ver;
   string master_ver;
