@@ -17,6 +17,25 @@ function(add_npm_command)
     COMMENT ${NC_COMMENT})
 endfunction(add_npm_command)
 
+function(add_npm_options)
+  set(commands)
+  cmake_parse_arguments(NC "" "NODEENV_DIR;TARGET" "OPTION" ${ARGN})
+  foreach(opt ${NC_OPTION})
+    string(REPLACE "=" ";" opt ${opt})
+    list(GET opt 0 key)
+    list(GET opt 1 value)
+    list(APPEND commands
+      COMMAND
+      . ${NC_NODEENV_DIR}/bin/activate &&
+      npm config set ${key} ${value} --userconfig ${NC_NODEENV_DIR}/.npmrc &&
+      deactivate)
+  endforeach()
+  add_custom_target(${NC_TARGET}
+    ${commands}
+    DEPENDS ${NC_NODEENV_DIR}/bin/npm
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+endfunction(add_npm_options)
+
 if(WITH_SYSTEM_NPM)
   set(mgr-dashboard-nodeenv-dir )
   set(nodeenv "")
@@ -28,7 +47,6 @@ else(WITH_SYSTEM_NPM)
   set(mgr-dashboard-nodeenv-dir ${CMAKE_CURRENT_BINARY_DIR}/node-env)
   set(nodeenv NODEENV)
   set(mgr-dashboard-userconfig --userconfig ${mgr-dashboard-nodeenv-dir}/.npmrc)
-  set(virt-activate . ${mgr-dashboard-nodeenv-dir}/bin/activate)
   if(DEFINED ENV{NODE_MIRROR})
     set(node_mirror_opt "--mirror=$ENV{NODE_MIRROR}")
   endif()
@@ -40,13 +58,12 @@ else(WITH_SYSTEM_NPM)
     COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
-  )
-  add_custom_target(mgr-dashboard-nodeenv
-    COMMAND ${virt-activate} && npm config set python ${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-userconfig} && deactivate
-    COMMAND ${virt-activate} && npm config set cache ${mgr-dashboard-nodeenv-dir}/.npm ${mgr-dashboard-userconfig} && deactivate
-    DEPENDS ${mgr-dashboard-nodeenv-dir}/bin/npm
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
+    )
+  add_npm_options(
+    NODEENV_DIR ${mgr-dashboard-nodeenv-dir}
+    TARGET mgr-dashboard-nodeenv
+    OPTION python=${MGR_PYTHON_EXECUTABLE}
+    OPTION cache=${mgr-dashboard-nodeenv-dir}/.npm)
   add_custom_target(mgr-dashboard-frontend-deps
     DEPENDS frontend/node_modules mgr-dashboard-nodeenv
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
