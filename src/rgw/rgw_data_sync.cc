@@ -45,11 +45,11 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "data sync: ")
 
-static string datalog_sync_status_oid_prefix = "datalog.sync-status";
-static string datalog_sync_status_shard_prefix = "datalog.sync-status.shard";
-static string datalog_sync_full_sync_index_prefix = "data.full-sync.index";
-static string bucket_status_oid_prefix = "bucket.sync-status";
-static string object_status_oid_prefix = "bucket.sync-status";
+static const string datalog_sync_status_oid_prefix = "datalog.sync-status";
+static const string datalog_sync_status_shard_prefix = "datalog.sync-status.shard";
+static const string datalog_sync_full_sync_index_prefix = "data.full-sync.index";
+static const string bucket_status_oid_prefix = "bucket.sync-status";
+static const string object_status_oid_prefix = "bucket.sync-status";
 
 
 void rgw_datalog_info::decode_json(JSONObj *obj) {
