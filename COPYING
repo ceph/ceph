@@ -32,6 +32,10 @@ Files: src/include/ceph_hash.cc
 Copyright: None
 License: Public domain
 
+Files: src/include/rados.h, except ceph_stable_mod(), which is public domain
+Copyright: the authors
+License: LGPL-2.1 or LGPL-3 (see COPYING-LGPL2.1 and COPYING-LGPL3)
+
 Files: src/common/bloom_filter.hpp
 Copyright: Copyright (C) 2000 Arash Partow <arash@partow.net>
 License: Boost Software License, Version 1.0
