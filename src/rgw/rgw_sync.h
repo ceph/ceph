@@ -513,16 +513,20 @@ public:
 };
 
 class RGWShardCollectCR : public RGWCoroutine {
-  int cur_shard = 0;
-  int current_running;
+  int current_running = 0;
+ protected:
   int max_concurrent;
-  int status;
+  int status = 0;
 
-public:
-  RGWShardCollectCR(CephContext *_cct, int _max_concurrent) : RGWCoroutine(_cct),
-                                                             current_running(0),
-                                                             max_concurrent(_max_concurrent),
-                                                             status(0) {}
+  // called with the result of each child. error codes can be ignored by
+  // returning 0. if handle_result() returns a negative value, it's
+  // treated as an error and stored in 'status'. the last such error is
+  // reported to the caller with set_cr_error()
+  virtual int handle_result(int r) = 0;
+ public:
+  RGWShardCollectCR(CephContext *_cct, int _max_concurrent)
+    : RGWCoroutine(_cct), max_concurrent(_max_concurrent)
+  {}
 
   virtual bool spawn_next() = 0;
   int operate(const DoutPrefixProvider *dpp) override;
