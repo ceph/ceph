@@ -3441,6 +3441,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   uint64_t data_len{0};
+  map<string, string> src_headers;
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
@@ -3511,6 +3512,24 @@ public:
           break;
         }
         iter = src_attrs.erase(iter);
+      }
+    } else {
+#define X_AMZ_META_PREFIX "X_AMZ_META_"
+
+      for (auto& entry : src_headers) {
+        if (entry.first == "ETAG") {
+          if (entry.second.size() > 2 &&
+              entry.second[0] == '"') {
+            src_attrs[RGW_ATTR_ETAG].append(entry.second.substr(1, entry.second.size() - 2));
+          } else {
+            src_attrs[RGW_ATTR_ETAG].append(entry.second);
+          }
+        } else if (entry.first == "CONTENT_TYPE") {
+          src_attrs[RGW_ATTR_CONTENT_TYPE].append(entry.second);
+        } else if (boost::algorithm::starts_with(entry.first, X_AMZ_META_PREFIX)) {
+          auto name = lowercase_dash_http_attr(entry.first.substr(sizeof(X_AMZ_META_PREFIX) - 1));
+          src_attrs[string(RGW_ATTR_META_PREFIX) + name].append(entry.second);
+        }
       }
     }
 
@@ -3597,6 +3616,11 @@ public:
     return filter->process(std::move(bl), lofs);
   }
 
+  int handle_headers(const map<string, string>& _headers) override {
+    src_headers = _headers;
+    return 0;
+  }
+
   int flush() {
     return filter->process({}, data_len);
   }
@@ -3607,6 +3631,10 @@ public:
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
+    if (len > 0) { /* we have embedded info, no need to
+                      use the headers */
+      set_need_headers(false);
+    }
     RGWHTTPStreamRWRequest::ReceiveCB::set_extra_data_len(len);
   }
 

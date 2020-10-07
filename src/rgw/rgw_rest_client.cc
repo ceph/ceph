@@ -944,7 +944,15 @@ int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
           return ret;
         }
       } else {
-        *mtime = real_time();
+        set_str_from_headers(out_headers, "LAST_MODIFIED", mtime_str);
+        if (!mtime_str.empty()) {
+          int ret = parse_time(mtime_str.c_str(), mtime);
+          if (ret < 0) {
+            return ret;
+          }
+        } else {
+          *mtime = real_time();
+        }
       }
     }
     if (psize) {
@@ -1013,6 +1021,14 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
   size_t orig_len = len;
 
   if (cb) {
+    if (ofs == 0 &&
+        cb->get_need_headers()) {
+      int ret = cb->handle_headers(out_headers);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
     in_data.append((const char *)ptr, len);
 
     size_t orig_in_data_len = in_data.length();
