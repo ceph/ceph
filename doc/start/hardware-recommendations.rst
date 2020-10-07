@@ -62,7 +62,6 @@ tuning the following settings:
 * `mon_osd_cache_size`
 * `rocksdb_cache_size`
 
-
 Metadata servers (ceph-mds)
 ---------------------------
 
@@ -142,11 +141,6 @@ per gigabyte (i.e., $150 / 3072 = 0.0488). In the foregoing example, using the
 .. tip:: Running an OSD and a monitor or a metadata server on a single 
    drive is also **NOT** a good idea.
 
-.. tip:: With spinning disks, the SATA and SAS interface increasingly
-   becomes a bottleneck at larger capacities. See also the `Storage Networking 
-   Industry Association's Total Cost of Ownership calculator`_.
-
-
 Storage drives are subject to limitations on seek time, access time, read and
 write times, as well as total throughput. These physical limitations affect
 overall system performance--especially during recovery. We recommend using a
@@ -206,12 +200,9 @@ are a few important performance considerations for journals and SSDs:
   proper partition alignment with SSDs, which can cause SSDs to transfer data 
   much more slowly. Ensure that SSD partitions are properly aligned.
 
-While SSDs are cost prohibitive for object storage, OSDs may see a significant
-performance improvement by storing an OSD's journal on an SSD and the OSD's
-object data on a separate hard disk drive. The ``osd journal`` configuration
-setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
-this path to an SSD or to an SSD partition so that it is not merely a file on
-the same disk as the object data.
+SSDs have historically been cost prohibitive for object storage, though
+emerging QLC drives are closing the gap.  HDD OSDs may see a significant
+performance improvement by offloading WAL+DB onto an SSD.
 
 One way Ceph accelerates CephFS file system performance is to segregate the
 storage of CephFS metadata from the storage of the CephFS file contents. Ceph
@@ -295,7 +286,6 @@ and so forth. When planning out your hardware needs, you must balance the
 temptation to reduce costs by placing too many responsibilities into too few
 failure domains, and the added costs of isolating every potential failure
 domain.
-
 
 Minimum Hardware Recommendations
 ================================

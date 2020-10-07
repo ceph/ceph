@@ -4,33 +4,20 @@
 
 .. index:: Ceph Block Device; live-migration
 
-RBD images can be live-migrated between different pools within the same cluster;
-between different image formats and layouts; or from external data sources.
-When started, the source will be deep-copied to the destination image, pulling
-all snapshot history while preserving the sparse allocation of data where
-possible.
+RBD images can be live-migrated between different pools within the same cluster
+or between different image formats and layouts. When started, the source image
+will be deep-copied to the destination image, pulling all snapshot history and
+optionally preserving any link to the source image's parent to preserve
+sparseness.
 
-By default, when live-migrating RBD images within the same Ceph cluster, the
-source image will be marked read-only and all clients will instead redirect
-IOs to the new target image. In addition, this mode can optionally preserve the
-link to the source image's parent to preserve sparseness, or it can flatten the
-image during the migration to remove the dependency on the source image's
-parent.
-
-The live-migration process can also be used in an import-only mode where the
-source image remains unmodified and the target image can be linked to an
-external data source such as a backing file, HTTP(s) file, or S3 object.
-
-The live-migration copy process can safely run in the background while the new
-target image is in use. There is currently a requirement to temporarily stop
-using the source image before preparing a migration when not using the
-import-only mode of operation. This helps to ensure that the client using the
-image is updated to point to the new target image.
+This copy process can safely run in the background while the new target image is
+in use. There is currently a requirement to temporarily stop using the source
+image before preparing a migration. This helps to ensure that the client using
+the image is updated to point to the new target image.
 
 .. note::
-   Image live-migration requires the Ceph Nautilus release or later. Support for
-   external data sources requires the Ceph Pacific release of later. The
-   ``krbd`` kernel module does not support live-migration at this time.
+   Image live-migration requires the Ceph Nautilus release or later. The ``krbd``
+   kernel module does not support live-migration at this time.
 
 
 .. ditaa::

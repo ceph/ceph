@@ -76,25 +76,6 @@ capacity pressure it will evict cold cache files as needed.
 
 Here are some important cache configuration settings:
 
-``immutable_object_cache_sock``
-
-:Description: The path to the domain socket used for communication between
-              librbd clients and the ceph-immutable-object-cache daemon.
-:Type: String
-:Required: No
-:Default: ``/var/run/ceph/immutable_object_cache_sock``
-
-
-``immutable_object_cache_path``
-
-:Description: The immutable object cache data directory.
-:Type: String
-:Required: No
-:Default: ``/tmp/ceph_immutable_object_cache``
-
-
-``immutable_object_cache_max_size``
-
 :Description: The max size for immutable cache.
 :Type: Size
 :Required: No
@@ -103,12 +84,9 @@ Here are some important cache configuration settings:
 
 ``immutable_object_cache_watermark``
 
-:Description: The high-water mark for the cache. The value is between (0, 1).
-              If the cache size reaches this threshold the daemon will start
-              to delete cold cache based on LRU statistics.
-:Type: Float
-:Required: No
-:Default: ``0.9``
+- ``immutable_object_cache_watermark`` The high-water mark for the cache. If the
+  capacity reaches this threshold the daemon will delete cold cache based
+  on LRU statistics.
 
 The ``ceph-immutable-object-cache`` daemon is available within the optional
 ``ceph-immutable-object-cache`` distribution package.
