@@ -1,6 +1,12 @@
 >= 14.2.12
 ----------
 
+* ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
+  a number of bugs and improves usability in terms of size specification and
+  calculation, as well as idempotency behaviour and disk replacement process.
+  Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
+  more detailed information.
+
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
 * Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
