@@ -45,6 +45,7 @@ in the body of the message.
    mds_internals/index*
    radosgw/index*
    ceph-volume/index*
+   crimson/index*
 
 .. raw:: html
 
