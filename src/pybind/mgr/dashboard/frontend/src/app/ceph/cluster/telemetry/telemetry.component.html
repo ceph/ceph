@@ -235,7 +235,10 @@
             <div class="form-group row">
               <label i18n
                      for="reportId"
-                     class="cd-col-form-label">Report ID</label>
+                     class="cd-col-form-label">Report ID
+              <cd-helper i18n-html
+                         html="A randomized UUID to identify a particular cluster over the course of several telemetry reports.">
+              </cd-helper></label>
               <div class="cd-col-form-input">
                 <input class="form-control"
                        type="text"
@@ -249,7 +252,10 @@
             <div class="form-group row">
               <label i18n
                      for="report"
-                     class="cd-col-form-label">Report preview</label>
+                     class="cd-col-form-label">Report preview
+                <cd-helper i18n-html
+                           html="The actual telemetry data that will be submitted.">
+                </cd-helper></label>
               <div class="cd-col-form-input">
                 <textarea class="form-control"
                           id="report"
