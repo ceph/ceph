@@ -1,7 +1,7 @@
 {
     "2018-01-01": {
         "model_name": "ST4000DM000",
-        "serial_number": "Z302SV96",
+        "serial_number": "Z304KD7V",
         "model_family": "ST4000DM000",
         "user_capacity": {
             "bytes": 4000787030016.0
@@ -10,15 +10,15 @@
             "table": [
                 {
                     "id": 1,
-                    "value": 108.0,
+                    "value": 117.0,
                     "raw": {
-                        "value": 106448638.0,
-                        "string": "106448638.0"
+                        "value": 159564472.0,
+                        "string": "159564472.0"
                     }
                 },
                 {
                     "id": 3,
-                    "value": 91.0,
+                    "value": 94.0,
                     "raw": {
                         "value": 0.0,
                         "string": "0.0"
@@ -28,8 +28,8 @@
                     "id": 4,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -44,16 +44,16 @@
                     "id": 7,
                     "value": 90.0,
                     "raw": {
-                        "value": 941615543.0,
-                        "string": "941615543.0"
+                        "value": 985630555.0,
+                        "string": "985630555.0"
                     }
                 },
                 {
                     "id": 9,
-                    "value": 77.0,
+                    "value": 78.0,
                     "raw": {
-                        "value": 20902.0,
-                        "string": "20902.0"
+                        "value": 19618.0,
+                        "string": "19618.0"
                     }
                 },
                 {
@@ -68,8 +68,8 @@
                     "id": 12,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -90,418 +90,10 @@
                 },
                 {
                     "id": 187,
-                    "value": 88.0,
-                    "raw": {
-                        "value": 12.0,
-                        "string": "12.0"
-                    }
-                },
-                {
-                    "id": 188,
                     "value": 100.0,
                     "raw": {
                         "value": 0.0,
                         "string": "0.0"
-                    }
-                },
-                {
-                    "id": 189,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 190,
-                    "value": 72.0,
-                    "raw": {
-                        "value": 28.0,
-                        "string": "28.0"
-                    }
-                },
-                {
-                    "id": 191,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 192,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 193,
-                    "value": 72.0,
-                    "raw": {
-                        "value": 56754.0,
-                        "string": "56754.0"
-                    }
-                },
-                {
-                    "id": 194,
-                    "value": 28.0,
-                    "raw": {
-                        "value": 28.0,
-                        "string": "28.0"
-                    }
-                },
-                {
-                    "id": 197,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 198,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 199,
-                    "value": 200.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 240,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 20534.0,
-                        "string": "20534.0"
-                    }
-                },
-                {
-                    "id": 241,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 26117106989.0,
-                        "string": "26117106989.0"
-                    }
-                },
-                {
-                    "id": 242,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 267648532063.0,
-                        "string": "267648532063.0"
-                    }
-                }
-            ]
-        }
-    },
-    "2018-01-02": {
-        "model_name": "ST4000DM000",
-        "serial_number": "Z302SV96",
-        "model_family": "ST4000DM000",
-        "user_capacity": {
-            "bytes": 4000787030016.0
-        },
-        "ata_smart_attributes": {
-            "table": [
-                {
-                    "id": 1,
-                    "value": 119.0,
-                    "raw": {
-                        "value": 225324288.0,
-                        "string": "225324288.0"
-                    }
-                },
-                {
-                    "id": 3,
-                    "value": 91.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 4,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
-                    }
-                },
-                {
-                    "id": 5,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 7,
-                    "value": 90.0,
-                    "raw": {
-                        "value": 942353235.0,
-                        "string": "942353235.0"
-                    }
-                },
-                {
-                    "id": 9,
-                    "value": 77.0,
-                    "raw": {
-                        "value": 20926.0,
-                        "string": "20926.0"
-                    }
-                },
-                {
-                    "id": 10,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 12,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
-                    }
-                },
-                {
-                    "id": 183,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 184,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 187,
-                    "value": 88.0,
-                    "raw": {
-                        "value": 12.0,
-                        "string": "12.0"
-                    }
-                },
-                {
-                    "id": 188,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 189,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 190,
-                    "value": 73.0,
-                    "raw": {
-                        "value": 27.0,
-                        "string": "27.0"
-                    }
-                },
-                {
-                    "id": 191,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 192,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 193,
-                    "value": 72.0,
-                    "raw": {
-                        "value": 56754.0,
-                        "string": "56754.0"
-                    }
-                },
-                {
-                    "id": 194,
-                    "value": 27.0,
-                    "raw": {
-                        "value": 27.0,
-                        "string": "27.0"
-                    }
-                },
-                {
-                    "id": 197,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 198,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 199,
-                    "value": 200.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 240,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 20558.0,
-                        "string": "20558.0"
-                    }
-                },
-                {
-                    "id": 241,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 26121726292.0,
-                        "string": "26121726292.0"
-                    }
-                },
-                {
-                    "id": 242,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 267681469954.0,
-                        "string": "267681469954.0"
-                    }
-                }
-            ]
-        }
-    },
-    "2018-01-03": {
-        "model_name": "ST4000DM000",
-        "serial_number": "Z302SV96",
-        "model_family": "ST4000DM000",
-        "user_capacity": {
-            "bytes": 4000787030016.0
-        },
-        "ata_smart_attributes": {
-            "table": [
-                {
-                    "id": 1,
-                    "value": 118.0,
-                    "raw": {
-                        "value": 176129928.0,
-                        "string": "176129928.0"
-                    }
-                },
-                {
-                    "id": 3,
-                    "value": 91.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 4,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
-                    }
-                },
-                {
-                    "id": 5,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 7,
-                    "value": 90.0,
-                    "raw": {
-                        "value": 943036222.0,
-                        "string": "943036222.0"
-                    }
-                },
-                {
-                    "id": 9,
-                    "value": 77.0,
-                    "raw": {
-                        "value": 20950.0,
-                        "string": "20950.0"
-                    }
-                },
-                {
-                    "id": 10,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 12,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
-                    }
-                },
-                {
-                    "id": 183,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 184,
-                    "value": 100.0,
-                    "raw": {
-                        "value": 0.0,
-                        "string": "0.0"
-                    }
-                },
-                {
-                    "id": 187,
-                    "value": 88.0,
-                    "raw": {
-                        "value": 12.0,
-                        "string": "12.0"
                     }
                 },
                 {
@@ -546,10 +138,10 @@
                 },
                 {
                     "id": 193,
-                    "value": 72.0,
+                    "value": 98.0,
                     "raw": {
-                        "value": 56754.0,
-                        "string": "56754.0"
+                        "value": 5480.0,
+                        "string": "5480.0"
                     }
                 },
                 {
@@ -588,24 +180,432 @@
                     "id": 240,
                     "value": 100.0,
                     "raw": {
-                        "value": 20582.0,
-                        "string": "20582.0"
+                        "value": 19531.0,
+                        "string": "19531.0"
                     }
                 },
                 {
                     "id": 241,
                     "value": 100.0,
                     "raw": {
-                        "value": 26128268311.0,
-                        "string": "26128268311.0"
+                        "value": 46353893048.0,
+                        "string": "46353893048.0"
                     }
                 },
                 {
                     "id": 242,
                     "value": 100.0,
                     "raw": {
-                        "value": 267713521819.0,
-                        "string": "267713521819.0"
+                        "value": 76320796782.0,
+                        "string": "76320796782.0"
+                    }
+                }
+            ]
+        }
+    },
+    "2018-01-02": {
+        "model_name": "ST4000DM000",
+        "serial_number": "Z304KD7V",
+        "model_family": "ST4000DM000",
+        "user_capacity": {
+            "bytes": 4000787030016.0
+        },
+        "ata_smart_attributes": {
+            "table": [
+                {
+                    "id": 1,
+                    "value": 113.0,
+                    "raw": {
+                        "value": 56261952.0,
+                        "string": "56261952.0"
+                    }
+                },
+                {
+                    "id": 3,
+                    "value": 94.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 4,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 6.0,
+                        "string": "6.0"
+                    }
+                },
+                {
+                    "id": 5,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 7,
+                    "value": 90.0,
+                    "raw": {
+                        "value": 987957606.0,
+                        "string": "987957606.0"
+                    }
+                },
+                {
+                    "id": 9,
+                    "value": 78.0,
+                    "raw": {
+                        "value": 19643.0,
+                        "string": "19643.0"
+                    }
+                },
+                {
+                    "id": 10,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 12,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 6.0,
+                        "string": "6.0"
+                    }
+                },
+                {
+                    "id": 183,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 184,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 187,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 188,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 189,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 190,
+                    "value": 71.0,
+                    "raw": {
+                        "value": 29.0,
+                        "string": "29.0"
+                    }
+                },
+                {
+                    "id": 191,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 192,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 193,
+                    "value": 98.0,
+                    "raw": {
+                        "value": 5480.0,
+                        "string": "5480.0"
+                    }
+                },
+                {
+                    "id": 194,
+                    "value": 29.0,
+                    "raw": {
+                        "value": 29.0,
+                        "string": "29.0"
+                    }
+                },
+                {
+                    "id": 197,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 198,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 199,
+                    "value": 200.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 240,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 19555.0,
+                        "string": "19555.0"
+                    }
+                },
+                {
+                    "id": 241,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 46375914480.0,
+                        "string": "46375914480.0"
+                    }
+                },
+                {
+                    "id": 242,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 76489111948.0,
+                        "string": "76489111948.0"
+                    }
+                }
+            ]
+        }
+    },
+    "2018-01-03": {
+        "model_name": "ST4000DM000",
+        "serial_number": "Z304KD7V",
+        "model_family": "ST4000DM000",
+        "user_capacity": {
+            "bytes": 4000787030016.0
+        },
+        "ata_smart_attributes": {
+            "table": [
+                {
+                    "id": 1,
+                    "value": 110.0,
+                    "raw": {
+                        "value": 25507280.0,
+                        "string": "25507280.0"
+                    }
+                },
+                {
+                    "id": 3,
+                    "value": 94.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 4,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 6.0,
+                        "string": "6.0"
+                    }
+                },
+                {
+                    "id": 5,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 7,
+                    "value": 90.0,
+                    "raw": {
+                        "value": 989095425.0,
+                        "string": "989095425.0"
+                    }
+                },
+                {
+                    "id": 9,
+                    "value": 78.0,
+                    "raw": {
+                        "value": 19666.0,
+                        "string": "19666.0"
+                    }
+                },
+                {
+                    "id": 10,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 12,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 6.0,
+                        "string": "6.0"
+                    }
+                },
+                {
+                    "id": 183,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 184,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 187,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 188,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 189,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 190,
+                    "value": 72.0,
+                    "raw": {
+                        "value": 28.0,
+                        "string": "28.0"
+                    }
+                },
+                {
+                    "id": 191,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 192,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 193,
+                    "value": 98.0,
+                    "raw": {
+                        "value": 5480.0,
+                        "string": "5480.0"
+                    }
+                },
+                {
+                    "id": 194,
+                    "value": 28.0,
+                    "raw": {
+                        "value": 28.0,
+                        "string": "28.0"
+                    }
+                },
+                {
+                    "id": 197,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 198,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 199,
+                    "value": 200.0,
+                    "raw": {
+                        "value": 0.0,
+                        "string": "0.0"
+                    }
+                },
+                {
+                    "id": 240,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 19579.0,
+                        "string": "19579.0"
+                    }
+                },
+                {
+                    "id": 241,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 46386763072.0,
+                        "string": "46386763072.0"
+                    }
+                },
+                {
+                    "id": 242,
+                    "value": 100.0,
+                    "raw": {
+                        "value": 76642024679.0,
+                        "string": "76642024679.0"
                     }
                 }
             ]
@@ -613,7 +613,7 @@
     },
     "2018-01-04": {
         "model_name": "ST4000DM000",
-        "serial_number": "Z302SV96",
+        "serial_number": "Z304KD7V",
         "model_family": "ST4000DM000",
         "user_capacity": {
             "bytes": 4000787030016.0
@@ -622,15 +622,15 @@
             "table": [
                 {
                     "id": 1,
-                    "value": 118.0,
+                    "value": 113.0,
                     "raw": {
-                        "value": 197523216.0,
-                        "string": "197523216.0"
+                        "value": 55799960.0,
+                        "string": "55799960.0"
                     }
                 },
                 {
                     "id": 3,
-                    "value": 91.0,
+                    "value": 94.0,
                     "raw": {
                         "value": 0.0,
                         "string": "0.0"
@@ -640,8 +640,8 @@
                     "id": 4,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -656,16 +656,16 @@
                     "id": 7,
                     "value": 90.0,
                     "raw": {
-                        "value": 943745051.0,
-                        "string": "943745051.0"
+                        "value": 989543132.0,
+                        "string": "989543132.0"
                     }
                 },
                 {
                     "id": 9,
-                    "value": 77.0,
+                    "value": 78.0,
                     "raw": {
-                        "value": 20974.0,
-                        "string": "20974.0"
+                        "value": 19679.0,
+                        "string": "19679.0"
                     }
                 },
                 {
@@ -680,8 +680,8 @@
                     "id": 12,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -702,10 +702,10 @@
                 },
                 {
                     "id": 187,
-                    "value": 88.0,
+                    "value": 100.0,
                     "raw": {
-                        "value": 12.0,
-                        "string": "12.0"
+                        "value": 0.0,
+                        "string": "0.0"
                     }
                 },
                 {
@@ -726,10 +726,10 @@
                 },
                 {
                     "id": 190,
-                    "value": 72.0,
+                    "value": 70.0,
                     "raw": {
-                        "value": 28.0,
-                        "string": "28.0"
+                        "value": 30.0,
+                        "string": "30.0"
                     }
                 },
                 {
@@ -750,18 +750,18 @@
                 },
                 {
                     "id": 193,
-                    "value": 72.0,
+                    "value": 98.0,
                     "raw": {
-                        "value": 56755.0,
-                        "string": "56755.0"
+                        "value": 5480.0,
+                        "string": "5480.0"
                     }
                 },
                 {
                     "id": 194,
-                    "value": 28.0,
+                    "value": 30.0,
                     "raw": {
-                        "value": 28.0,
-                        "string": "28.0"
+                        "value": 30.0,
+                        "string": "30.0"
                     }
                 },
                 {
@@ -792,24 +792,24 @@
                     "id": 240,
                     "value": 100.0,
                     "raw": {
-                        "value": 20606.0,
-                        "string": "20606.0"
+                        "value": 19592.0,
+                        "string": "19592.0"
                     }
                 },
                 {
                     "id": 241,
                     "value": 100.0,
                     "raw": {
-                        "value": 26134231293.0,
-                        "string": "26134231293.0"
+                        "value": 46393456376.0,
+                        "string": "46393456376.0"
                     }
                 },
                 {
                     "id": 242,
                     "value": 100.0,
                     "raw": {
-                        "value": 267748485202.0,
-                        "string": "267748485202.0"
+                        "value": 76719870756.0,
+                        "string": "76719870756.0"
                     }
                 }
             ]
@@ -817,7 +817,7 @@
     },
     "2018-01-05": {
         "model_name": "ST4000DM000",
-        "serial_number": "Z302SV96",
+        "serial_number": "Z304KD7V",
         "model_family": "ST4000DM000",
         "user_capacity": {
             "bytes": 4000787030016.0
@@ -826,15 +826,15 @@
             "table": [
                 {
                     "id": 1,
-                    "value": 114.0,
+                    "value": 102.0,
                     "raw": {
-                        "value": 80218016.0,
-                        "string": "80218016.0"
+                        "value": 4074888.0,
+                        "string": "4074888.0"
                     }
                 },
                 {
                     "id": 3,
-                    "value": 91.0,
+                    "value": 94.0,
                     "raw": {
                         "value": 0.0,
                         "string": "0.0"
@@ -844,8 +844,8 @@
                     "id": 4,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -860,16 +860,16 @@
                     "id": 7,
                     "value": 90.0,
                     "raw": {
-                        "value": 944101579.0,
-                        "string": "944101579.0"
+                        "value": 991008592.0,
+                        "string": "991008592.0"
                     }
                 },
                 {
                     "id": 9,
-                    "value": 77.0,
+                    "value": 78.0,
                     "raw": {
-                        "value": 20998.0,
-                        "string": "20998.0"
+                        "value": 19706.0,
+                        "string": "19706.0"
                     }
                 },
                 {
@@ -884,8 +884,8 @@
                     "id": 12,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -906,10 +906,10 @@
                 },
                 {
                     "id": 187,
-                    "value": 88.0,
+                    "value": 100.0,
                     "raw": {
-                        "value": 12.0,
-                        "string": "12.0"
+                        "value": 0.0,
+                        "string": "0.0"
                     }
                 },
                 {
@@ -930,10 +930,10 @@
                 },
                 {
                     "id": 190,
-                    "value": 72.0,
+                    "value": 71.0,
                     "raw": {
-                        "value": 28.0,
-                        "string": "28.0"
+                        "value": 29.0,
+                        "string": "29.0"
                     }
                 },
                 {
@@ -954,18 +954,18 @@
                 },
                 {
                     "id": 193,
-                    "value": 72.0,
+                    "value": 98.0,
                     "raw": {
-                        "value": 57497.0,
-                        "string": "57497.0"
+                        "value": 5485.0,
+                        "string": "5485.0"
                     }
                 },
                 {
                     "id": 194,
-                    "value": 28.0,
+                    "value": 29.0,
                     "raw": {
-                        "value": 28.0,
-                        "string": "28.0"
+                        "value": 29.0,
+                        "string": "29.0"
                     }
                 },
                 {
@@ -996,24 +996,24 @@
                     "id": 240,
                     "value": 100.0,
                     "raw": {
-                        "value": 20627.0,
-                        "string": "20627.0"
+                        "value": 19619.0,
+                        "string": "19619.0"
                     }
                 },
                 {
                     "id": 241,
                     "value": 100.0,
                     "raw": {
-                        "value": 26136277903.0,
-                        "string": "26136277903.0"
+                        "value": 46405899872.0,
+                        "string": "46405899872.0"
                     }
                 },
                 {
                     "id": 242,
                     "value": 100.0,
                     "raw": {
-                        "value": 267783785853.0,
-                        "string": "267783785853.0"
+                        "value": 76855763415.0,
+                        "string": "76855763415.0"
                     }
                 }
             ]
@@ -1021,7 +1021,7 @@
     },
     "2018-01-06": {
         "model_name": "ST4000DM000",
-        "serial_number": "Z302SV96",
+        "serial_number": "Z304KD7V",
         "model_family": "ST4000DM000",
         "user_capacity": {
             "bytes": 4000787030016.0
@@ -1032,13 +1032,13 @@
                     "id": 1,
                     "value": 117.0,
                     "raw": {
-                        "value": 128199768.0,
-                        "string": "128199768.0"
+                        "value": 117844496.0,
+                        "string": "117844496.0"
                     }
                 },
                 {
                     "id": 3,
-                    "value": 91.0,
+                    "value": 94.0,
                     "raw": {
                         "value": 0.0,
                         "string": "0.0"
@@ -1048,8 +1048,8 @@
                     "id": 4,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -1064,16 +1064,16 @@
                     "id": 7,
                     "value": 90.0,
                     "raw": {
-                        "value": 944163246.0,
-                        "string": "944163246.0"
+                        "value": 991961986.0,
+                        "string": "991961986.0"
                     }
                 },
                 {
                     "id": 9,
-                    "value": 77.0,
+                    "value": 78.0,
                     "raw": {
-                        "value": 21022.0,
-                        "string": "21022.0"
+                        "value": 19730.0,
+                        "string": "19730.0"
                     }
                 },
                 {
@@ -1088,8 +1088,8 @@
                     "id": 12,
                     "value": 100.0,
                     "raw": {
-                        "value": 15.0,
-                        "string": "15.0"
+                        "value": 6.0,
+                        "string": "6.0"
                     }
                 },
                 {
@@ -1110,10 +1110,10 @@
                 },
                 {
                     "id": 187,
-                    "value": 88.0,
+                    "value": 100.0,
                     "raw": {
-                        "value": 12.0,
-                        "string": "12.0"
+                        "value": 0.0,
+                        "string": "0.0"
                     }
                 },
                 {
@@ -1134,10 +1134,10 @@
                 },
                 {
                     "id": 190,
-                    "value": 75.0,
+                    "value": 74.0,
                     "raw": {
-                        "value": 25.0,
-                        "string": "25.0"
+                        "value": 26.0,
+                        "string": "26.0"
                     }
                 },
                 {
@@ -1158,18 +1158,18 @@
                 },
                 {
                     "id": 193,
-                    "value": 71.0,
+                    "value": 98.0,
                     "raw": {
-                        "value": 58711.0,
-                        "string": "58711.0"
+                        "value": 5485.0,
+                        "string": "5485.0"
                     }
                 },
                 {
                     "id": 194,
-                    "value": 25.0,
+                    "value": 26.0,
                     "raw": {
-                        "value": 25.0,
-                        "string": "25.0"
+                        "value": 26.0,
+                        "string": "26.0"
                     }
                 },
                 {
@@ -1200,24 +1200,24 @@
                     "id": 240,
                     "value": 100.0,
                     "raw": {
-                        "value": 20646.0,
-                        "string": "20646.0"
+                        "value": 19643.0,
+                        "string": "19643.0"
                     }
                 },
                 {
                     "id": 241,
                     "value": 100.0,
                     "raw": {
-                        "value": 26136382708.0,
-                        "string": "26136382708.0"
+                        "value": 46418821464.0,
+                        "string": "46418821464.0"
                     }
                 },
                 {
                     "id": 242,
                     "value": 100.0,
                     "raw": {
-                        "value": 267817908171.0,
-                        "string": "267817908171.0"
+                        "value": 77009438162.0,
+                        "string": "77009438162.0"
                     }
                 }
             ]
