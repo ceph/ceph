@@ -1,3 +1,5 @@
+import { RbdService } from 'app/shared/api/rbd.service';
+
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -14,7 +16,13 @@ export class RbdSnapshotActionsModel {
   deleteSnap: CdTableAction;
   ordering: CdTableAction[];
 
-  constructor(actionLabels: ActionLabelsI18n, featuresName: string[]) {
+  cloneFormatVersion = 1;
+
+  constructor(actionLabels: ActionLabelsI18n, featuresName: string[], rbdService: RbdService) {
+    rbdService.cloneFormatVersion().subscribe((version: number) => {
+      this.cloneFormatVersion = version;
+    });
+
     this.create = {
       permission: 'create',
       icon: Icons.add,
@@ -85,6 +93,10 @@ export class RbdSnapshotActionsModel {
     if (selection.hasSingleSelection && !selection.first().cdExecuting) {
       if (!featuresName?.includes('layering')) {
         return $localize`Parent image must support Layering`;
+      }
+
+      if (this.cloneFormatVersion === 1 && !selection.first().is_protected) {
+        return $localize`Snapshot must be protected in order to clone.`;
       }
 
       return false;
