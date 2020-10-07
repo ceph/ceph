@@ -239,6 +239,7 @@ class NFSGanesha(object):
         self.userid = dict_get(config_json, 'userid')
         self.extra_args = dict_get(config_json, 'extra_args', [])
         self.files = dict_get(config_json, 'files', {})
+        self.rgw = dict_get(config_json, 'rgw', {})
 
         # validate the supplied args
         self.validate()
@@ -248,13 +249,17 @@ class NFSGanesha(object):
         # type: (str, Union[int, str]) -> NFSGanesha
         return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
 
-    @staticmethod
-    def get_container_mounts(data_dir):
+    def get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
+        if self.rgw:
+            cluster = self.rgw.get('cluster', 'ceph')
+            rgw_user = self.rgw.get('user', 'admin')
+            mounts[os.path.join(data_dir, 'keyring.rgw')] = \
+                    '/var/lib/ceph/radosgw/%s-%s/keyring:z' % (cluster, rgw_user)
         return mounts
 
     @staticmethod
@@ -293,6 +298,13 @@ class NFSGanesha(object):
                 if fname not in self.files:
                     raise Error('required file missing from config-json: %s' % fname)
 
+        # check for an RGW config
+        if self.rgw:
+            if not self.rgw.get('keyring'):
+                raise Error('RGW keyring is missing')
+            if not self.rgw.get('user'):
+                raise Error('RGW user is missing')
+
     def get_daemon_name(self):
         # type: () -> str
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -329,6 +341,14 @@ class NFSGanesha(object):
                 os.fchown(f.fileno(), uid, gid)
                 os.fchmod(f.fileno(), 0o600)
                 f.write(config_content)
+
+        # write the RGW keyring
+        if self.rgw:
+            keyring_path = os.path.join(data_dir, 'keyring.rgw')
+            with open(keyring_path, 'w') as f:
+                os.fchmod(f.fileno(), 0o600)
+                os.fchown(f.fileno(), uid, gid)
+                f.write(self.rgw.get('keyring', ''))
 
     def get_rados_grace_container(self, action):
         # type: (str) -> CephContainer
@@ -1931,7 +1951,8 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
     if daemon_type == NFSGanesha.daemon_type:
         assert daemon_id
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
-        mounts.update(NFSGanesha.get_container_mounts(data_dir))
+        nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
+        mounts.update(nfs_ganesha.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
         assert daemon_id
