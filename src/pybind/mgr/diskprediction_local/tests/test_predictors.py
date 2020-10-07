@@ -67,6 +67,17 @@ class TestModels(unittest.TestCase):
             if len(self.predict_datas) >= 12:
                 break
 
+        # create a corrupted version of test input
+        # it does not have any smart attr keys
+        self.corrupt_predict_datas = []
+        for day_data in self.predict_datas:
+            corrupt_day_data = dict()
+
+            for key,val in day_data.items():
+                if not key.startswith('smart_'):
+                    corrupt_day_data[key] = val
+
+            self.corrupt_predict_datas.append(corrupt_day_data)
 
     def test_setup(self):
         """Tests if setup was done correctly
@@ -107,6 +118,15 @@ class TestModels(unittest.TestCase):
             msg=f'Expected model output to be "Good" but got {pred}'
         )
 
+        # check if model doesnt break for invalid input
+        # instead, it should ouput "unknown" and gracefully exit
+        pred = rh_predictor.predict(self.corrupt_predict_datas)
+        self.assertEquals(
+            pred,
+            'Unknown',
+            msg=f'Expected model output to be "Unknown" but got {pred}'
+        )
+
     def test_prophetstor_predictor(self):
         """Tests if Prophetstor created model works correctly
         """
@@ -130,6 +150,15 @@ class TestModels(unittest.TestCase):
             pred,
             'Good',
             msg=f'Expected model output to be "Good" but got {pred}'
+        )
+
+        # check if model doesnt break for invalid input
+        # instead, it should ouput "unknown" and gracefully exit
+        pred = ps_predictor.predict(self.corrupt_predict_datas)
+        self.assertEquals(
+            pred,
+            'Unknown',
+            msg=f'Expected model output to be "Unknown" but got {pred}'
         )
 
 
