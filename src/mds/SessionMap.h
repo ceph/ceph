@@ -131,6 +131,9 @@ private:
   // session caps liveness
   DecayCounter session_cache_liveness;
 
+  // cap acquisition via readdir
+  DecayCounter cap_acquisition;
+
   // session start time -- used to track average session time
   // note that this is initialized in the constructor rather
   // than at the time of adding a session to the sessionmap
@@ -209,6 +212,9 @@ public:
   }
   auto get_session_cache_liveness() const {
     return session_cache_liveness.get();
+  }
+  auto get_cap_acquisition() const {
+    return cap_acquisition.get();
   }
 
   inodeno_t next_ino() const {
@@ -309,6 +315,10 @@ public:
       ls.insert(ls.end(), v.begin(), v.end());
       waitfor_flush.erase(it);
     }
+  }
+
+  void touch_readdir_cap(uint32_t count) {
+    cap_acquisition.hit(count);
   }
 
   void touch_cap(Capability *cap) {
@@ -426,6 +436,7 @@ public:
     recall_caps_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
     recall_caps_throttle2o(0.5),
     session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
+    cap_acquisition(g_conf().get_val<double>("mds_session_cap_acquisition_decay_rate")),
     birth_time(clock::now()),
     auth_caps(g_ceph_context),
     item_session_list(this),

@@ -150,6 +150,36 @@ class TestClientLimits(CephFSTestCase):
         else:
             raise RuntimeError("expected no client recall warning")
 
+    def test_cap_acquisition_throttle_readdir(self):
+        """
+        Mostly readdir acquires caps faster than the mds recalls, so the cap
+        acquisition via readdir is throttled by retrying the readdir after
+        a fraction of second (0.5) by default when throttling condition is met.
+        """
+
+        max_caps_per_client = 500
+        cap_acquisition_throttle = 250
+
+        self.config_set('mds', 'mds_max_caps_per_client', max_caps_per_client)
+        self.config_set('mds', 'mds_session_cap_acquisition_throttle', cap_acquisition_throttle)
+
+        # Create 1500 files split across 6 directories, 250 each.
+        for i in range(1, 7):
+            self.mount_a.create_n_files("dir{0}/file".format(i), cap_acquisition_throttle, sync=True)
+
+        mount_a_client_id = self.mount_a.get_global_id()
+
+        # recursive readdir
+        self.mount_a.run_shell_payload("find | wc")
+
+        # validate cap_acquisition decay counter after readdir to exceed throttle count i.e 250
+        cap_acquisition_value = self.get_session(mount_a_client_id)['cap_acquisition']['value']
+        self.assertGreaterEqual(cap_acquisition_value, cap_acquisition_throttle)
+
+        # validate the throttle condition to be hit atleast once
+        cap_acquisition_throttle_hit_count = self.perf_dump()['mds_server']['cap_acquisition_throttle']
+        self.assertGreaterEqual(cap_acquisition_throttle_hit_count, 1)
+
     def test_client_release_bug(self):
         """
         When a client has a bug (which we will simulate) preventing it from releasing caps,
