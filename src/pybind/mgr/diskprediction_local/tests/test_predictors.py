@@ -8,13 +8,13 @@ class TestModels(unittest.TestCase):
         """Load sample data point for testing
         """
         # possible outputs from predictors
-        self.valid_outputs = ['Good', 'Warning', 'Bad', 'Unknown'] 
+        self.valid_outputs = ['Good', 'Warning', 'Bad', 'Unknown']
 
         # sample input, taken from backblaze q1 2018 csv
         # and converted to match smartctl json format
         with open('tests/sample_input.json', 'r') as f:
             health_data = json.load(f)
-        
+
         # NOTE: this is copied as-is from module.py
         # ideally i'd want to init the module and pass this smartctl json to it
         # but the module only takes device id as input. and since we dont have
@@ -69,7 +69,7 @@ class TestModels(unittest.TestCase):
 
 
     def test_setup(self):
-        """Tests if setup was done correctly 
+        """Tests if setup was done correctly
         """
         # ensure test pt is a list of dicts, as it will be for the module
         self.assertIsInstance(self.predict_datas, list)
@@ -92,8 +92,20 @@ class TestModels(unittest.TestCase):
 
         # predict and check if value is a valid output
         pred = rh_predictor.predict(self.predict_datas)
-        self.assertIn(pred, self.valid_outputs)
 
+        # a lenient check
+        self.assertIn(
+            pred,
+            self.valid_outputs,
+            msg=f'Expected model output to be in {self.valid_outputs} but got {pred}'
+        )
+
+        # a stricter check
+        self.assertEquals(
+            pred,
+            'Good',
+            msg=f'Expected model output to be "Good" but got {pred}'
+        )
 
     def test_prophetstor_predictor(self):
         """Tests if Prophetstor created model works correctly
@@ -105,7 +117,20 @@ class TestModels(unittest.TestCase):
 
         # predict and check if value is a valid output
         pred = ps_predictor.predict(self.predict_datas)
-        self.assertIn(pred, self.valid_outputs)
+
+        # a lenient check
+        self.assertIn(
+            pred,
+            self.valid_outputs,
+            msg=f'Expected model output to be in {self.valid_outputs} but got {pred}'
+        )
+
+        # a stricter check
+        self.assertEquals(
+            pred,
+            'Good',
+            msg=f'Expected model output to be "Good" but got {pred}'
+        )
 
 
 if __name__ == "__main__":
