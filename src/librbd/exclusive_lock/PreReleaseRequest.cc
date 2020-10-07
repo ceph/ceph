@@ -84,6 +84,12 @@ void PreReleaseRequest<I>::handle_cancel_op_requests(int r) {
 
 template <typename I>
 void PreReleaseRequest<I>::send_set_require_lock() {
+  if (!m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    // exclusive-lock was disabled, no need to block IOs
+    send_wait_for_ops();
+    return;
+  }
+
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
