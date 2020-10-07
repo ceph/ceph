@@ -14,17 +14,17 @@ online bucket resharding.
 
 Each bucket index shard can handle its entries efficiently up until
 reaching a certain threshold number of entries. If this threshold is
-exceeded the system can encounter performance issues. The dynamic
+exceeded the system can suffer from performance issues. The dynamic
 resharding feature detects this situation and automatically increases
-the number of shards used by the bucket index, resulting in the
+the number of shards used by the bucket index, resulting in a
 reduction of the number of entries in each bucket index shard. This
 process is transparent to the user.
 
 By default dynamic bucket index resharding can only increase the
-number of bucket index shards to 1999, although the upper-bound is a
-configuration parameter (see Configuration below). Furthermore, when
+number of bucket index shards to 1999, although this upper-bound is a
+configuration parameter (see Configuration below). When
 possible, the process chooses a prime number of bucket index shards to
-help spread the number of bucket index entries across the bucket index
+spread the number of bucket index entries across the bucket index
 shards more evenly.
 
 The detection process runs in a background process that periodically
