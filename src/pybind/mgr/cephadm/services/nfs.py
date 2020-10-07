@@ -153,3 +153,17 @@ class NFSService(CephService):
         })
 
         return keyring
+
+    def remove_rgw_keyring(self, daemon: DaemonDescription) -> None:
+        daemon_id: str = daemon.daemon_id
+        entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
+
+        logger.info(f'Remove keyring: {entity}')
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'auth rm',
+            'entity': entity,
+        })
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        super().post_remove(daemon)
+        self.remove_rgw_keyring(daemon)
