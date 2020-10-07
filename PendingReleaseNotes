@@ -9,6 +9,12 @@
   * Similarly the date ranges and marker ranges have been removed on
     the RESTful DATALog and MDLog list and trim operations.
 
+* ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
+  a number of bugs and improves usability in terms of size specification and
+  calculation, as well as idempotency behaviour and disk replacement process.
+  Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
+  more detailed information.
+
 >=15.0.0
 --------
 
