@@ -2074,9 +2074,6 @@ void MDSRank::recovery_done(int oldstate)
   mdcache->start_purge_inodes();
   mdcache->start_files_to_recover();
 
-  // tell connected clients
-  //bcast_mds_map();     // not anymore, they get this from the monitor
-
   mdcache->populate_mydir();
 }
 
@@ -3559,21 +3556,6 @@ bool MDSRank::evict_client(int64_t session_id,
   }
 
   return true;
-}
-
-void MDSRank::bcast_mds_map()
-{
-  dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << dendl;
-
-  // share the map with mounted clients
-  set<Session*> clients;
-  sessionmap.get_client_session_set(clients);
-  for (const auto &session : clients) {
-    auto m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap,
-				   std::string(mdsmap->get_fs_name()));
-    session->get_connection()->send_message2(std::move(m));
-  }
-  last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
 MDSRankDispatcher::MDSRankDispatcher(

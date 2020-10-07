@@ -453,7 +453,6 @@ class MDSRank {
      /**
      * Share MDSMap with clients
      */
-    void bcast_mds_map();  // to mounted clients
     void create_logger();
 
     void dump_clientreplay_status(Formatter *f) const;
@@ -580,8 +579,6 @@ class MDSRank {
     Beacon &beacon;
 
     int mds_slow_req_count = 0;
-
-    epoch_t last_client_mdsmap_bcast = 0;
 
     map<mds_rank_t,DecayCounter> export_targets; /* targets this MDS is exporting to or wants/tries to */
 
