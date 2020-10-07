@@ -107,18 +107,12 @@ def preview_table_osd(data):
                 if spec.get('error'):
                     return spec.get('message')
                 dg_name = spec.get('osdspec')
-                for osd in spec.get('data', {}).get('osds', []):
-                    db_path = '-'
-                    wal_path = '-'
-                    block_db = osd.get('block.db', {}).get('path')
-                    block_wal = osd.get('block.wal', {}).get('path')
-                    block_data = osd.get('data', {}).get('path', '')
+                for osd in spec.get('data', []):
+                    db_path = osd.get('block_db', '-')
+                    wal_path = osd.get('block_wal', '-')
+                    block_data = osd.get('data', '')
                     if not block_data:
                         continue
-                    if block_db:
-                        db_path = spec.get('data', {}).get('vg', {}).get('devices', [])
-                    if block_wal:
-                        wal_path = spec.get('data', {}).get('wal_vg', {}).get('devices', [])
                     table.add_row(('osd', dg_name, host, block_data, db_path, wal_path))
     return table.get_string()
 
