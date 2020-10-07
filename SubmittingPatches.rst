@@ -122,6 +122,12 @@ imperative mood in the commit title. Positive examples include::
      mds: add perf counter for finisher of MDSRank
      osd: make the ClassHandler::mutex private
 
+If the change only touches the files under ``doc`` directory, the title
+should start with "doc". For instance, a commit fixing a typo in
+``doc/mgr/dashboard.rst`` could have a title like::
+
+  doc/mgr/dashboard: fix a typo
+
 More positive examples can be obtained from the git history of the ``master``
 branch::
 
