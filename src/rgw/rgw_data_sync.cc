@@ -2843,6 +2843,11 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
 
   std::optional<std::map<string, bufferlist> > new_attrs;
 
+  /* no acls to object, so set owner as the destination bucket owner */
+  if (obj_attrs.find(RGW_ATTR_ACL) == obj_attrs.end()) {
+    *poverride_owner = dest_bucket_info.owner;
+  }
+
   if (params.dest.acl_translation) {
     rgw_user& acl_translation_owner = params.dest.acl_translation->owner;
     if (!acl_translation_owner.empty()) {
