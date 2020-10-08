@@ -44,7 +44,7 @@ Ceph clusters using Ansible.
   management features and dashboard integration are not available.
 
 
-``ceph-deploy`` is a tool for quickly deploying clusters.
+`ceph-deploy <https://docs.ceph.com/projects/ceph-deploy/en/latest/>`_ is a tool for quickly deploying clusters.
 
   .. IMPORTANT::
 
