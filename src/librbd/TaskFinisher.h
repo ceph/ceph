@@ -64,24 +64,21 @@ public:
     if (it == m_task_contexts.end()) {
       return false;
     }
-    delete it->second.first;
+    it->second.first->complete(-ECANCELED);
     bool canceled = m_safe_timer->cancel_event(it->second.second);
     ceph_assert(canceled);
     m_task_contexts.erase(it);
     return true;
   }
 
-  void cancel_all(Context *comp) {
-    {
-      std::lock_guard l{*m_lock};
-      for (typename TaskContexts::iterator it = m_task_contexts.begin();
-           it != m_task_contexts.end(); ++it) {
-        delete it->second.first;
-        m_safe_timer->cancel_event(it->second.second);
-      }
-      m_task_contexts.clear();
+  void cancel_all() {
+    std::lock_guard l{*m_lock};
+    for (auto &[task, pair] : m_task_contexts) {
+      pair.first->complete(-ECANCELED);
+      bool canceled = m_safe_timer->cancel_event(pair.second);
+      ceph_assert(canceled);
     }
-    m_finisher->queue(comp);
+    m_task_contexts.clear();
   }
 
   bool add_event_after(const Task& task, double seconds, Context *ctx) {

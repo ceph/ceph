@@ -90,12 +90,11 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
   cancel_async_requests();
 
   on_finish = new LambdaContext([this, on_finish](int r) {
+    cancel_quiesce_requests();
+    m_task_finisher->cancel_all();
     m_async_op_tracker.wait_for_ops(on_finish);
   });
-  auto ctx = new LambdaContext([this, on_finish](int r) {
-    m_task_finisher->cancel_all(on_finish);
-  });
-  Watcher::unregister_watch(ctx);
+  Watcher::unregister_watch(on_finish);
 }
 
 template <typename I>
@@ -537,8 +536,12 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
   if (this->is_registered(this->m_watch_lock)) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
-    auto ctx = new LambdaContext(
-      boost::bind(&ImageWatcher<I>::notify_request_lock, this));
+    auto ctx = new LambdaContext([this](int r) {
+      if (r != -ECANCELED) {
+        notify_request_lock();
+      }
+    });
+
     if (use_timer) {
       if (timer_delay < 0) {
         timer_delay = RETRY_DELAY_SECONDS;
@@ -681,8 +684,11 @@ void ImageWatcher<I>::schedule_async_request_timed_out(const AsyncRequestId &id)
   ldout(m_image_ctx.cct, 20) << "scheduling async request time out: " << id
                              << dendl;
 
-  Context *ctx = new LambdaContext(boost::bind(
-    &ImageWatcher<I>::async_request_timed_out, this, id));
+  auto ctx = new LambdaContext([this, id](int r) {
+    if (r != -ECANCELED) {
+      async_request_timed_out(id);
+    }
+  });
 
   Task task(TASK_CODE_ASYNC_REQUEST, id);
   m_task_finisher->cancel(task);
@@ -816,22 +822,25 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
       std::unique_lock async_request_locker{m_async_request_lock};
       mark_async_request_complete(request, r);
       auto ctx = remove_async_request(request, m_async_request_lock);
-      ceph_assert(ctx != nullptr);
-      ctx = new C_ResponseMessage(static_cast<C_NotifyAck *>(ctx));
       async_request_locker.unlock();
-      ctx->complete(r);
+      if (ctx != nullptr) {
+        ctx = new C_ResponseMessage(static_cast<C_NotifyAck *>(ctx));
+        ctx->complete(r);
+      } else {
+        m_task_finisher->cancel(Task(TASK_CODE_QUIESCE, request));
+      }
     });
 }
 
 template <typename I>
-Context *ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &request) {
+void ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &request) {
   {
     std::unique_lock async_request_locker{m_async_request_lock};
     auto it = m_async_complete.find(request);
     if (it == m_async_complete.end()) {
       ldout(m_image_ctx.cct, 20) << this << " " << request
                                  << ": not found in complete" << dendl;
-      return nullptr;
+      return;
     }
     // reset complete request expiration time
     mark_async_request_complete(request, it->second);
@@ -841,13 +850,22 @@ Context *ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &reques
   if (!canceled) {
     ldout(m_image_ctx.cct, 20) << this << " " << request
                                << ": timer task not found" << dendl;
-    return nullptr;
   }
+}
 
-  return new LambdaContext(
-    [this](int r) {
-      m_async_op_tracker.finish_op();
-    });
+template <typename I>
+void ImageWatcher<I>::cancel_quiesce_requests() {
+  std::unique_lock l{m_async_request_lock};
+  for (auto it = m_async_requests.begin(); it != m_async_requests.end(); ) {
+    if (it->second.second == nullptr) {
+      // Quiesce notify request.
+      mark_async_request_complete(it->first, 0);
+      delete it->second.first;
+      it = m_async_requests.erase(it);
+    } else {
+      it++;
+    }
+  }
 }
 
 template <typename I>
@@ -1341,17 +1359,10 @@ bool ImageWatcher<I>::handle_payload(const QuiescePayload &payload,
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const UnquiescePayload &payload,
 				     C_NotifyAck *ack_ctx) {
-  auto on_finish = prepare_unquiesce_request(payload.async_request_id);
-  if (on_finish == nullptr) {
-    ldout(m_image_ctx.cct, 10) << this
-                               << " duplicate or unknown unquiesce request: "
-                               << payload.async_request_id << dendl;
-    return true;
-  }
-
   ldout(m_image_ctx.cct, 10) << this << " unquiesce request: "
                              << payload.async_request_id << dendl;
-  m_image_ctx.state->notify_unquiesce(on_finish);
+
+  prepare_unquiesce_request(payload.async_request_id);
   return true;
 }
 
