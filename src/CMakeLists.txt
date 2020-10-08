@@ -893,12 +893,22 @@ if(DOXYGEN_FOUND)
   set(DOXYGEN_FILE_PATTERNS *.cc *.c *.cpp *.C *.cxx *.c++ *.CC *.H *.h *.hh *.hpp)
   set(DOXYGEN_SOURCE_BROWSER YES)
   set(DOXYGEN_WARN_IF_UNDOCUMENTED NO)
-  set(DOXYGEN_CLANG_ASSISTED_PARSING YES)
-  set(DOXYGEN_CLANG_DATABASE_PATH .)
+  # enabling clang slows down doxygen significantly
+  set(DOXYGEN_CLANG_ASSISTED_PARSING NO)
+  set(DOXYGEN_CLANG_DATABASE_PATH "${PROJECT_BINARY_DIR}")
   set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
   set(DOXYGEN_RECURSIVE YES)
   set(DOXYGEN_QUIET YES)
   set(DOXYGEN_GENERATE_LATEX NO)
+  set(DOXYGEN_GENERATE_XML NO)
+  set(DOXYGEN_GENERATE_HTML YES)
+  set(DOXYGEN_PROJECT_NAME Ceph)
+  set(DOXYGEN_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build-doc/doxygen")
+  set(DOXYGEN_STRIP_FROM_PATH "src/")
+  set(DOXYGEN_STRIP_FROM_INC_PATH "src/include")
+  set(DOXYGEN_JAVADOC_AUTOBRIEF YES)
+  set(DOXYGEN_HAVE_DOT NO)
+  set(DOXYGEN_VERBATIM_HEADERS YES)
   doxygen_add_docs(doxygen
     auth
     client
@@ -919,7 +929,6 @@ if(DOXYGEN_FOUND)
     libradosstriper
     librbd
     log
-    lua
     mds
     messages
     mgr
