@@ -223,7 +223,8 @@ private:
 
   Context *prepare_quiesce_request(const watch_notify::AsyncRequestId &request,
                                    C_NotifyAck *ack_ctx);
-  Context *prepare_unquiesce_request(const watch_notify::AsyncRequestId &request);
+  void prepare_unquiesce_request(const watch_notify::AsyncRequestId &request);
+  void cancel_quiesce_requests();
 
   void notify_quiesce(const watch_notify::AsyncRequestId &async_request_id,
                       size_t attempts, ProgressContext &prog_ctx,
