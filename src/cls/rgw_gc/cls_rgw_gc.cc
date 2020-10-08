@@ -221,6 +221,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   if (list_ret.truncated) {
     list_ret.next_marker = next_marker;
   }
+  CLS_LOG(5, "INFO: cls_rgw_gc_queue_list_entries(): truncated flag: %u and next marker: %s\n", list_ret.truncated, list_ret.next_marker);
   out->clear();
   encode(list_ret, *out);
   return 0;

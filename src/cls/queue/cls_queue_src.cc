@@ -296,7 +296,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     }
   }
 
-  CLS_LOG(10, "INFO: queue_list_entries(): front is: %s, tail is %s", head.front.to_str().c_str(), head.tail.to_str().c_str());
+  CLS_LOG(5, "INFO: queue_list_entries(): front is: %s, tail is %s", head.front.to_str().c_str(), head.tail.to_str().c_str());
 
   bool offset_populated = false, entry_start_processed = false;
   uint64_t data_size = 0, num_ops = 0;
@@ -305,7 +305,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   string last_marker;
   do
   {
-    CLS_LOG(10, "INFO: queue_list_entries(): start_offset is %lu", start_offset);
+    CLS_LOG(5, "INFO: queue_list_entries(): start_offset is %lu", start_offset);
   
     bufferlist bl_chunk;
     //Read chunk size at a time, if it is less than contiguous data size, else read contiguous data size
