@@ -178,6 +178,10 @@
   ``fsname`` in caps. This also affects subcommand ``fs authorize``, the caps
   produce by it will be specific to the FS name passed in its arguments.
 
+* fs: root_squash flag can be set in MDS caps. It disallows file system
+  operations that need write access for clients with uid=0 or gid=0. This
+  feature should prevent accidents such as an inadvertent `sudo rm -rf /<path>`.
+
 * fs: "fs authorize" now sets MON cap to "allow <perm> fsname=<fsname>"
       instead of setting it to "allow r" all the time.
 

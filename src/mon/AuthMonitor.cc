@@ -1356,7 +1356,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   }
 
   cmd_getval(cmdmap, "caps", caps_vec);
-  if ((caps_vec.size() % 2) != 0) {
+  // fs authorize command's can have odd number of caps arguments
+  if ((prefix != "fs authorize") && (caps_vec.size() % 2) != 0) {
     ss << "bad capabilities request; odd number of arguments";
     err = -EINVAL;
     goto done;
@@ -1621,6 +1622,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	 it += 2) {
       const string &path = *it;
       const string &cap = *(it+1);
+      bool root_squash = false;
+      if ((it + 2) != caps_vec.end() && *(it+2) == "root_squash") {
+	root_squash = true;
+	++it;
+      }
 
       if (cap != "r" && cap.compare(0, 2, "rw")) {
 	ss << "Permission flags must start with 'r' or 'rw'.";
@@ -1659,6 +1665,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
       if (path != "/") {
 	mds_cap_string += " path=" + path;
+      }
+
+      if (root_squash) {
+	mds_cap_string += " root_squash";
       }
     }
 
