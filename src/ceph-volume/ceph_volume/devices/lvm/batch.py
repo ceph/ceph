@@ -459,7 +459,7 @@ class Batch(object):
         num_osds = len(plan)
         if num_osds == 0:
             mlogger.info('All data devices are unavailable')
-            exit(0)
+            return plan
         requested_osds = args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
         fast_type = 'block_db' if args.bluestore else 'journal'
@@ -469,7 +469,7 @@ class Batch(object):
                                                  fast_type)
         if fast_devices and not fast_allocations:
             mlogger.info('{} fast devices were passed, but none are available'.format(len(fast_devices)))
-            exit(0)
+            return []
         if fast_devices and not len(fast_allocations) == num_osds:
             mlogger.error('{} fast allocations != {} num_osds'.format(
                 len(fast_allocations), num_osds))
@@ -481,7 +481,7 @@ class Batch(object):
                                                       'block_wal')
         if very_fast_devices and not very_fast_allocations:
             mlogger.info('{} very fast devices were passed, but none are available'.format(len(very_fast_devices)))
-            exit(0)
+            return []
         if very_fast_devices and not len(very_fast_allocations) == num_osds:
             mlogger.error('{} very fast allocations != {} num_osds'.format(
                 len(very_fast_allocations), num_osds))
