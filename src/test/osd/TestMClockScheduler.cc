@@ -77,6 +77,11 @@ OpSchedulerItem create_item(
     utime_t(), owner, e);
 }
 
+OpSchedulerItem get_item(WorkItem item)
+{
+  return std::move(std::get<OpSchedulerItem>(item));
+}
+
 TEST_F(mClockSchedulerTest, TestEmpty) {
   ASSERT_TRUE(q.empty());
 
@@ -88,8 +93,8 @@ TEST_F(mClockSchedulerTest, TestEmpty) {
 
   std::list<OpSchedulerItem> reqs;
 
-  reqs.push_back(q.dequeue());
-  reqs.push_back(q.dequeue());
+  reqs.push_back(get_item(q.dequeue()));
+  reqs.push_back(get_item(q.dequeue()));
 
   ASSERT_FALSE(q.empty());
 
@@ -115,19 +120,19 @@ TEST_F(mClockSchedulerTest, TestSingleClientOrderedEnqueueDequeue) {
   q.enqueue(create_item(103, client1));
   q.enqueue(create_item(104, client1));
 
-  auto r = q.dequeue();
+  auto r = get_item(q.dequeue());
   ASSERT_EQ(100u, r.get_map_epoch());
 
-  r = q.dequeue();
+  r = get_item(q.dequeue());
   ASSERT_EQ(101u, r.get_map_epoch());
 
-  r = q.dequeue();
+  r = get_item(q.dequeue());
   ASSERT_EQ(102u, r.get_map_epoch());
 
-  r = q.dequeue();
+  r = get_item(q.dequeue());
   ASSERT_EQ(103u, r.get_map_epoch());
 
-  r = q.dequeue();
+  r = get_item(q.dequeue());
   ASSERT_EQ(104u, r.get_map_epoch());
 }
 
@@ -145,7 +150,7 @@ TEST_F(mClockSchedulerTest, TestMultiClientOrderedEnqueueDequeue) {
   }
   for (unsigned i = 0; i < NUM * 3; ++i) {
     ASSERT_FALSE(q.empty());
-    auto r = q.dequeue();
+    auto r = get_item(q.dequeue());
     auto owner = r.get_owner();
     auto niter = next.find(owner);
     ASSERT_FALSE(niter == next.end());
