@@ -6706,9 +6706,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
       if (!diri->is_auth()) {
 	if (dir->get_num_ref() > 1)  // only subtree pin
 	  continue;
-	list<CDir*> ls;
-	diri->get_subtree_dirfrags(ls);
-	if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
+	if (diri->get_num_ref() > diri->get_num_subtree_roots())
 	  continue;
 
 	// don't trim subtree root if its auth MDS is recovering.
