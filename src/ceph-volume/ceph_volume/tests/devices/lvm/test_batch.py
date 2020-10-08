@@ -45,7 +45,7 @@ class TestBatch(object):
     def test_json_report_valid_empty(self, format_, factory, conf_ceph_stub, mock_device_generator):
         # ensure json reports are valid when empty
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        devs = [mock_device_generator() for _ in range(5)]
+        devs = []
         args = factory(data_slots=1,
                        osds_per_device=1,
                        osd_ids=[],
@@ -54,6 +54,58 @@ class TestBatch(object):
                        devices=devs,
                        db_devices=[],
                        wal_devices=[],
+                       bluestore=True,
+                       block_db_size="1G",
+                       dmcrypt=True,
+                      )
+        b = batch.Batch([])
+        plan = b.get_plan(args)
+        b.args = args
+        report = b._create_report(plan)
+        json.loads(report)
+
+    @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
+    def test_json_report_valid_empty_unavailable_fast(self, format_, factory, conf_ceph_stub, mock_device_generator):
+        # ensure json reports are valid when empty
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(5)]
+        fast_devs = [mock_device_generator()]
+        fast_devs[0].available_lvm = False
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       report=True,
+                       format=format_,
+                       devices=devs,
+                       db_devices=fast_devs,
+                       wal_devices=[],
+                       bluestore=True,
+                       block_db_size="1G",
+                       dmcrypt=True,
+                      )
+        b = batch.Batch([])
+        plan = b.get_plan(args)
+        b.args = args
+        report = b._create_report(plan)
+        json.loads(report)
+
+
+    @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
+    def test_json_report_valid_empty_unavailable_very_fast(self, format_, factory, conf_ceph_stub, mock_device_generator):
+        # ensure json reports are valid when empty
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        devs = [mock_device_generator() for _ in range(5)]
+        fast_devs = [mock_device_generator()]
+        very_fast_devs = [mock_device_generator()]
+        very_fast_devs[0].available_lvm = False
+        args = factory(data_slots=1,
+                       osds_per_device=1,
+                       osd_ids=[],
+                       report=True,
+                       format=format_,
+                       devices=devs,
+                       db_devices=fast_devs,
+                       wal_devices=very_fast_devs,
                        bluestore=True,
                        block_db_size="1G",
                        dmcrypt=True,
