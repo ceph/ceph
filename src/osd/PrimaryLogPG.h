@@ -538,6 +538,9 @@ public:
   uint64_t min_peer_features() const override {
     return recovery_state.get_min_peer_features();
   }
+  uint64_t min_upacting_features() const override {
+    return recovery_state.get_min_upacting_features();
+  }
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override {
     osd->send_message_osd_cluster(peer, m, from_epoch);
