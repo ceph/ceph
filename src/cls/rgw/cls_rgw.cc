@@ -175,7 +175,7 @@ static int log_index_operation(cls_method_context_t hctx,
                                const cls_rgw_obj_key& obj_key,
                                RGWModifyOp op,
                                const string& tag,
-                               real_time& timestamp,
+                               const real_time& timestamp,
                                rgw_bucket_entry_ver& ver, uint64_t index_ver,
                                string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name,
                                const rgw_zone_set *zones_trace)
@@ -1878,7 +1878,43 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     obj.set_epoch(1);
   }
 
-  if (!olh.start_modify(op.olh_epoch)) {
+  const bool olh_modified = olh.start_modify(op.olh_epoch);
+
+  /* record the operation in bi log */
+  {
+    rgw_bucket_dir_header header;
+    if (ret = read_bucket_header(hctx, &header);
+        ret < 0) {
+      CLS_LOG(1, "ERROR: rgw_bucket_unlink_instance(): failed to read header\n");
+      return ret;
+    }
+    if (op.log_op && !header.syncstopped) {
+      rgw_bucket_entry_ver ver;
+      ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+      if (ret = log_index_operation(hctx,
+                                    op.key,
+                                    op.op,
+                                    op.op_tag,
+                                    /* mtime has no real meaning in instance removal context */
+                                    obj.mtime(),
+                                    ver,
+                                    header.ver,
+                                    header.max_marker,
+                                    op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
+                                    nullptr,
+                                    nullptr,
+                                    &op.zones_trace);
+          ret < 0) {
+        return ret;
+      }
+      if (ret = write_bucket_header(hctx, &header); /* updates header version */
+          ret < 0) {
+        return ret;
+      }
+    }
+  }
+
+  if (!olh_modified) {
     ret = obj.unlink_list_entry();
     if (ret < 0) {
       return ret;
@@ -1948,38 +1984,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  ret = olh.write();
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (!op.log_op) {
-    return 0;
-  }
-
-  rgw_bucket_dir_header header;
-  ret = read_bucket_header(hctx, &header);
-  if (ret < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_unlink_instance(): failed to read header\n");
-    return ret;
-  }
-  if (header.syncstopped) {
-    return 0;
-  }
-
-  rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
-
-  real_time mtime = obj.mtime(); /* mtime has no real meaning in
-                                  * instance removal context */
-  ret = log_index_operation(hctx, op.key, op.op, op.op_tag,
-                            mtime, ver,
-                            header.ver, header.max_marker,
-                            op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
-  if (ret < 0)
-    return ret;
-
-  return write_bucket_header(hctx, &header); /* updates header version */
+  return olh.write();
 }
 
 static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
