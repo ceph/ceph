@@ -19,18 +19,18 @@ using namespace Scrub;
 using Scrub::ScrubMachine;
 
 bool PrimaryLogScrub::get_store_errors(const scrub_ls_arg_t& arg,
-				       scrub_ls_result_t& res_inout)
+				       scrub_ls_result_t& res_inout) const
 {
   if (!m_store) {
     return false;
   }
 
   if (arg.get_snapsets) {
-    res_inout.vals = m_store->get_snap_errors(m_osds->store, m_pg->get_pgid().pool(),
-					      arg.start_after, arg.max_return);
+    res_inout.vals =
+      m_store->get_snap_errors(m_pg->get_pgid().pool(), arg.start_after, arg.max_return);
   } else {
-    res_inout.vals = m_store->get_object_errors(m_osds->store, m_pg->get_pgid().pool(),
-						arg.start_after, arg.max_return);
+    res_inout.vals = m_store->get_object_errors(m_pg->get_pgid().pool(), arg.start_after,
+						arg.max_return);
   }
   return true;
 }

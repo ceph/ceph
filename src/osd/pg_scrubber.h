@@ -306,7 +306,12 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void set_op_parameters(requested_scrub_t& request) final;
 
-  void cleanup_store(ObjectStore::Transaction* t);
+  void cleanup_store(ObjectStore::Transaction* t) final;
+
+  bool get_store_errors(const scrub_ls_arg_t& arg, scrub_ls_result_t& res_inout) const override
+  {
+    return false;
+  };
 
   // -------------------------------------------------------------------------------------------
   // the I/F used by the state-machine (i.e. the implementation of ScrubMachineListener)

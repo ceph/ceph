@@ -4,6 +4,7 @@
 #pragma once
 
 #include "include/types.h"
+#include "common/scrub_types.h"
 #include "os/ObjectStore.h"
 
 #include "OpRequest.h"
@@ -268,4 +269,6 @@ struct ScrubPgIF {
   virtual void send_reservation_failure() = 0;
 
   virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
+
+  virtual bool get_store_errors(const scrub_ls_arg_t& arg, scrub_ls_result_t& res_inout) const = 0;
 };
