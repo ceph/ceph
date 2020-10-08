@@ -1572,12 +1572,13 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl, b->flags);
 	  nb->maybe_rebuild();
 	  _add_buffer(cache, nb, 0, b);
 	} else {
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail),
-		      0, b);
+	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail,
+                                        b->flags),
+	              0, b);
 	}
 	if (!b->is_writing()) {
 	  cache->_adjust_size(b, front - (int64_t)b->length);
@@ -1607,11 +1608,13 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+      Buffer *nb = new Buffer(this, b->state, b->seq, end, bl, b->flags);
       nb->maybe_rebuild();
       _add_buffer(cache, nb, 0, b);
     } else {
-      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep), 0, b);
+      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep,
+                                    b->flags),
+                  0, b);
     }
     _rm_buffer(cache, i);
     cache->_audit("discard end 2");
@@ -1656,7 +1659,7 @@ void BlueStore::BufferSpace::read(
 	  length -= l;
 	  if (!b->is_writing()) {
 	    cache->_touch(b);
-	  }
+          }
 	  continue;
         }
         if (b->offset > offset) {
@@ -1743,10 +1746,12 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
       if (p->second->data.length()) {
 	bufferlist bl;
 	bl.substr_of(p->second->data, left, right);
-	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq, 0, bl),
+	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
+                                        0, bl, p->second->flags),
 		      0, p->second.get());
       } else {
-	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq, 0, right),
+	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
+                                        0, right, p->second->flags),
 		      0, p->second.get());
       }
       cache->_adjust_size(p->second.get(), -right);
@@ -1758,11 +1763,11 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
     ldout(cache->cct, 30) << __func__ << " move " << *p->second << dendl;
     if (p->second->data.length()) {
       r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                               p->second->offset - pos, p->second->data),
+                               p->second->offset - pos, p->second->data, p->second->flags),
                     0, p->second.get());
     } else {
       r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                               p->second->offset - pos, p->second->length),
+                               p->second->offset - pos, p->second->length, p->second->flags),
                     0, p->second.get());
     }
     if (p == buffer_map.begin()) {
