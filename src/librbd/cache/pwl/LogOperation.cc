@@ -179,7 +179,7 @@ WriteLogOperation::~WriteLogOperation() { }
 void WriteLogOperation::init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation, uint64_t current_sync_gen,
                              uint64_t last_op_sequence_num, bufferlist &write_req_bl, uint64_t buffer_offset,
                              bool persist_on_flush) {
-  log_entry->init(has_data, allocation, current_sync_gen, last_op_sequence_num, persist_on_flush);
+  log_entry->init(has_data, current_sync_gen, last_op_sequence_num, persist_on_flush);
   buffer_alloc = &(*allocation);
   bl.substr_of(write_req_bl, buffer_offset,
                log_entry->write_bytes());
@@ -215,11 +215,13 @@ void WriteLogOperation::complete(int result) {
   m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_app_t, log_append_time - buf_persist_time);
 }
 
-void WriteLogOperation::copy_bl_to_pmem_buffer() {
+#ifdef WITH_RBD_RWL
+void WriteLogOperation::copy_bl_to_pmem_buffer(std::vector<WriteBufferAllocation>::iterator allocation) {
   /* operation is a shared_ptr, so write_op is only good as long as operation is in scope */
   bufferlist::iterator i(&bl);
   m_perfcounter->inc(l_librbd_pwl_log_op_bytes, log_entry->write_bytes());
   ldout(m_cct, 20) << bl << dendl;
+  log_entry->init_pmem_buffer(allocation);
   i.copy((unsigned)log_entry->write_bytes(), (char*)log_entry->pmem_buffer);
 }
 
@@ -227,6 +229,7 @@ void WriteLogOperation::flush_pmem_buf_to_cache(PMEMobjpool *log_pool) {
   buf_persist_time = ceph_clock_now();
   pmemobj_flush(log_pool, log_entry->pmem_buffer, log_entry->write_bytes());
 }
+#endif
 
 WriteLogOperationSet::WriteLogOperationSet(utime_t dispatched, PerfCounters *perfcounter, std::shared_ptr<SyncPoint> sync_point,
                                            bool persist_on_flush, CephContext *cct, Context *on_finish)

@@ -73,12 +73,17 @@ std::ostream &operator<<(std::ostream &os,
   return entry.format(os);
 }
 
-void WriteLogEntry::init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
-                         uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush) {
-  ram_entry.has_data = 1;
+#ifdef WITH_RBD_RWL
+void WriteLogEntry::init_pmem_buffer(std::vector<WriteBufferAllocation>::iterator allocation) {
   ram_entry.write_data = allocation->buffer_oid;
   ceph_assert(!TOID_IS_NULL(ram_entry.write_data));
   pmem_buffer = D_RW(ram_entry.write_data);
+}
+#endif
+
+void WriteLogEntry::init(bool has_data,
+                         uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush) {
+  ram_entry.has_data = 1;
   ram_entry.sync_gen_number = current_sync_gen;
   if (persist_on_flush) {
     /* Persist on flush. Sequence #0 is never used. */
