@@ -1694,9 +1694,46 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   if (ret < 0) {
     return ret;
   }
-  const uint64_t prev_epoch = olh.get_epoch();
 
-  if (!olh.start_modify(op.olh_epoch)) {
+  const uint64_t prev_epoch = olh.get_epoch();
+  const bool modified = olh.start_modify(op.olh_epoch);
+  rgw_bucket_dir_entry& entry = obj.get_dir_entry();
+
+  /* handle bi log */
+  {
+    rgw_bucket_dir_header header;
+    if (ret = read_bucket_header(hctx, &header);
+        ret < 0) {
+      CLS_LOG(1, "ERROR: rgw_bucket_link_olh(): failed to read header\n");
+      return ret;
+    }
+    if (op.log_op && !header.syncstopped) {
+      rgw_bucket_entry_ver ver;
+      ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+      const bool is_dm = op.has_delete_marker();
+      if (ret = log_index_operation(hctx,
+                                    op.key,
+                                    op.op,
+                                    op.op_tag,
+                                    entry.meta.mtime,
+                                    ver,
+                                    header.ver,
+                                    header.max_marker,
+                                    op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
+                                    is_dm ? &entry.meta.owner : nullptr,
+                                    is_dm ? &entry.meta.owner_display_name : nullptr,
+                                    &op.zones_trace);
+          ret < 0) {
+        return ret;
+      }
+      if (ret = write_bucket_header(hctx, &header); /* updates header version */
+          ret < 0) {
+        return ret;
+      }
+    }
+  }
+
+  if (!modified) {
     ret = obj.write(op.olh_epoch, false);
     if (ret < 0) {
       return ret;
@@ -1752,7 +1789,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* update the olh log */
-  rgw_bucket_dir_entry& entry = obj.get_dir_entry();
   olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.has_delete_marker(),
                  rgw_bucket_olh_log_bi_log_entry {
                    obj.mtime(),
@@ -1776,44 +1812,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* write the instance and list entries */
-  ret = obj.write(olh.get_epoch(), promote);
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (!op.log_op) {
-   return 0;
-  }
-
-  rgw_bucket_dir_header header;
-  ret = read_bucket_header(hctx, &header);
-  if (ret < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_link_olh(): failed to read header\n");
-    return ret;
-  }
-  if (header.syncstopped) {
-    return 0;
-  }
-
-  rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
-
-  string *powner = NULL;
-  string *powner_display_name = NULL;
-
-  if (op.has_delete_marker()) {
-    powner = &entry.meta.owner;
-    powner_display_name = &entry.meta.owner_display_name;
-  }
-
-  ret = log_index_operation(hctx, op.key, op.op, op.op_tag,
-                            entry.meta.mtime, ver,
-                            header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
-                            powner, powner_display_name, &op.zones_trace);
-  if (ret < 0)
-    return ret;
-
-  return write_bucket_header(hctx, &header); /* updates header version */
+  return obj.write(olh.get_epoch(), promote);
 }
 
 static std::pair<int, rgw_cls_unlink_instance_op>
