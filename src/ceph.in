@@ -1258,8 +1258,12 @@ def main():
                 except IOError as e:
                     if e.errno != errno.EPIPE:
                         raise e
+        try:
+            sys.stdout.flush()
+        except IOError as e:
+            if e.errno != errno.EPIPE:
+                raise e
 
-        sys.stdout.flush()
 
     # Block until command completion (currently scrub and deep_scrub only)
     if block:
