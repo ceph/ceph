@@ -226,3 +226,24 @@ But mounting ``cephfs2`` does not::
     $ sudo ceph-fuse /mnt/cephfs2 -n client.someuser -k ceph.client.someuser.keyring --client-fs=cephfs2
     ceph-fuse[96599]: starting ceph client
     ceph-fuse[96599]: ceph mount failed with (1) Operation not permitted
+
+Root squash
+===========
+
+The ``root squash`` feature is implemented as a safety measure to prevent
+scenarios such as accidental ``sudo rm -rf /path``. You can enable
+``root_squash`` mode in MDS caps to disallow clients with uid=0 or gid=0 to
+perform write access operations -- e.g., rm, rmdir, rmsnap, mkdir, mksnap.
+However, the mode allows the read operations of a root client unlike in
+other file systems.
+
+Following is an example of enabling root_squash in a filesystem except within
+'/volumes' directory tree in the filesystem::
+
+    $ ceph fs authorize a client.test_a / rw root_squash /volumes rw
+    $ ceph auth get client.test_a
+    [client.test_a]
+	key = AQBZcDpfEbEUKxAADk14VflBXt71rL9D966mYA==
+	caps mds = "allow rw fsname=a root_squash, allow rw fsname=a path=/volumes"
+	caps mon = "allow r fsname=a"
+	caps osd = "allow rw tag cephfs data=a"

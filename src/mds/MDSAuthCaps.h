@@ -107,6 +107,12 @@ struct MDSCapMatch {
     normalize_path();
   }
 
+  explicit MDSCapMatch(std::string path, std::string fs_name, bool root_squash_) :
+    uid(MDS_AUTH_UID_ANY), path(std::move(path)), fs_name(std::move(fs_name)), root_squash(root_squash_)
+  {
+    normalize_path();
+  }
+
   MDSCapMatch(const std::string& path_, int64_t uid_, std::vector<gid_t>& gids_)
     : uid(uid_), gids(gids_), path(path_), fs_name(std::string()) {
     normalize_path();
@@ -137,6 +143,7 @@ struct MDSCapMatch {
   std::vector<gid_t> gids;  // Use these GIDs
   std::string path;  // Require path to be child of this (may be "" or "/" for any)
   std::string fs_name;
+  bool root_squash=false;
 };
 
 struct MDSCapGrant {
