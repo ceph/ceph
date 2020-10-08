@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <libpmemobj.h>
 #include "ReplicatedWriteLog.h"
 #include "include/buffer.h"
 #include "include/Context.h"
@@ -17,7 +16,6 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
-#include "librbd/cache/pwl/Types.h"
 #include <map>
 #include <vector>
 
@@ -38,7 +36,8 @@ const unsigned long int OPS_APPENDED_TOGETHER = MAX_ALLOC_PER_TRANSACTION;
 template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(
     I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state)
-: AbstractWriteLog<I>(image_ctx, cache_state)
+: AbstractWriteLog<I>(image_ctx, cache_state),
+  m_pwl_pool_layout_name(POBJ_LAYOUT_NAME(rbd_pwl))
 { 
 }
 
@@ -849,6 +848,11 @@ void ReplicatedWriteLog<I>::reserve_pmem(C_BlockIORequestT *req,
                                << "." << buffer.buffer_oid.oid.off
                                << ", size=" << buffer.allocation_size << dendl;
   }                            
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::copy_pmem(C_BlockIORequestT *req) {
+  req->copy_pmem();
 }
 
 template <typename I>

@@ -18,7 +18,6 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/cache/pwl/ReadRequest.h"
-#include "librbd/cache/pwl/Types.h"
 #include <map>
 #include <vector>
 
@@ -47,7 +46,6 @@ AbstractWriteLog<I>::AbstractWriteLog(I &image_ctx, librbd::cache::pwl::ImageCac
     m_thread_pool(
         image_ctx.cct, "librbd::cache::pwl::AbstractWriteLog::thread_pool", "tp_pwl", 4, ""),
     m_cache_state(cache_state),
-    m_pwl_pool_layout_name(POBJ_LAYOUT_NAME(rbd_pwl)),
     m_image_ctx(image_ctx),
     m_log_pool_config_size(DEFAULT_POOL_SIZE),
     m_image_writeback(image_ctx),
@@ -1995,7 +1993,9 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
 }
 
 template <typename I>
-void AbstractWriteLog<I>::add_into_log_map(GenericWriteLogEntries &log_entries) {
+void AbstractWriteLog<I>::add_into_log_map(GenericWriteLogEntries &log_entries,
+                                           C_BlockIORequestT *req) {
+  copy_pmem(req);
   m_blocks_to_log_entries.add_log_entries(log_entries);
 }
 
