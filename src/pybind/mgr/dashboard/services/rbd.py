@@ -87,7 +87,7 @@ class RbdConfiguration(object):
                     result = []
             else:  # pool config
                 pg_status = list(CephService.get_pool_pg_status(self._pool_name).keys())
-                if len(pg_status) == 1 and 'unknown' in pg_status[0]:
+                if len(pg_status) == 1 and 'incomplete' in pg_status[0]:
                     # If config_list would be called with ioctx if it's a bad pool,
                     # the dashboard would stop working, waiting for the response
                     # that would not happen.
