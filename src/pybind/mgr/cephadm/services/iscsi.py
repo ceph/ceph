@@ -35,7 +35,7 @@ class IscsiService(CephService):
             'entity': self.get_auth_entity(igw_id),
             'caps': ['mon', 'profile rbd, '
                             'allow command "osd blocklist", '
-                            'allow command "config-key get" with "key" prefix "iscsi/"',
+                            f'allow command "config-key get" with "key" prefix "iscsi/"',
                      'osd', 'allow rwx'],
         })
 
@@ -59,6 +59,21 @@ class IscsiService(CephService):
                 'prefix': 'config-key set',
                 'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.key',
                 'val': key_data,
+            })
+
+        # set up the mon-store options, they are all global for iscsi (atm)
+        config_options_in_mon = [
+            # (key, val)
+            (f'{ spec.mon_config_prefix }/trusted_ip_list', spec.trusted_ip_list or ''),
+            (f'{ spec.mon_config_prefix }/api_port', spec.api_port or ''),
+            (f'{ spec.mon_config_prefix }/api_user', spec.api_user or ''),
+            (f'{ spec.mon_config_prefix }/api_password', spec.api_password or ''),
+            (f'{ spec.mon_config_prefix }/api_secure', spec.api_secure or 'False')]
+        for key, val in config_options_in_mon:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config-key set',
+                'key': key,
+                'val': val,
             })
 
         context = {
