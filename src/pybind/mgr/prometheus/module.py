@@ -12,6 +12,7 @@ import time
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
 from mgr_util import get_default_addr, profile_method
 from rbd import RBD
+from collections import namedtuple
 try:
     from typing import DefaultDict, Optional, Dict, Any, Set
 except ImportError:
@@ -108,6 +109,11 @@ DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
+
+alert_metric = namedtuple('alert_metric', 'name description')
+HEALTH_CHECKS = [
+    alert_metric('SLOW_OPS', 'OSD or Monitor requests taking a long time to process' ),
+]
 
 
 class Metric(object):
@@ -433,14 +439,61 @@ class Module(MgrModule):
                 'Number of {} objects'.format(state),
             )
 
+        for check in HEALTH_CHECKS:
+            path = 'healthcheck_{}'.format(check.name.lower())
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                check.description,
+            )
+
         return metrics
 
     @profile_method()
     def get_health(self):
+
+        def _get_value(message, delim=' ', word_pos=0):
+            """Extract value from message (default is 1st field)"""
+            v_str = message.split(delim)[word_pos]
+            if v_str.isdigit():
+                return int(v_str), 0
+            return 0, 1
+
         health = json.loads(self.get('health')['json'])
+        # set overall health
         self.metrics['health_status'].set(
             health_status_to_number(health['status'])
         )
+
+        # Examine the health to see if any health checks triggered need to
+        # become a metric.
+        active_healthchecks = health.get('checks', {})
+        active_names = active_healthchecks.keys()
+
+        for check in HEALTH_CHECKS:
+            path = 'healthcheck_{}'.format(check.name.lower())
+
+            if path in self.metrics:
+
+                if check.name in active_names:
+                    check_data = active_healthchecks[check.name]
+                    message = check_data['summary'].get('message', '')
+                    v, err = 0, 0
+
+                    if check.name == "SLOW_OPS":
+                        # 42 slow ops, oldest one blocked for 12 sec, daemons [osd.0, osd.3] have slow ops.
+                        v, err = _get_value(message)
+
+                    if err:
+                        self.log.error("healthcheck {} message format is incompatible and has been dropped".format(check.name))
+                        # drop the metric, so it's no longer emitted
+                        del self.metrics[path]
+                        continue
+                    else:
+                        self.metrics[path].set(v)
+                else:
+                    # health check is not active, so give it a default of 0
+                    self.metrics[path].set(0)
 
     @profile_method()
     def get_pool_stats(self):
