@@ -197,7 +197,7 @@ Remove an OSD
 -------------
 ::
 
-    ceph orch osd rm <svc_id(s)> [--replace] [--force]
+    ceph orch osd rm <osd_id(s)> [--replace] [--force]
 
 Evacuates PGs from an OSD and removes it from the cluster.
 
@@ -313,13 +313,17 @@ error if it doesn't know how to do this transition.
 
 Update the number of monitor hosts::
 
-    ceph orch apply mon <num> [host, host:network...] [--dry-run]
+    ceph orch apply mon --placement=<placement> [--dry-run]
+    
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 Each host can optionally specify a network for the monitor to listen on.
 
 Update the number of manager hosts::
 
-    ceph orch apply mgr <num> [host...] [--dry-run]
+    ceph orch apply mgr --placement=<placement> [--dry-run]
+    
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 ..
     .. note::
@@ -408,6 +412,81 @@ Service Commands::
 
     ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
 
+Deploying custom containers
+===========================
+
+The orchestrator enables custom containers to be deployed using a YAML file.
+A corresponding :ref:`orchestrator-cli-service-spec` must look like:
+
+.. code-block:: yaml
+
+    service_type: container
+    service_id: foo
+    placement:
+        ...
+    image: docker.io/library/foo:latest
+    entrypoint: /usr/bin/foo
+    uid: 1000
+    gid: 1000
+    args:
+        - "--net=host"
+        - "--cpus=2"
+    ports:
+        - 8080
+        - 8443
+    envs:
+        - SECRET=mypassword
+        - PORT=8080
+        - PUID=1000
+        - PGID=1000
+    volume_mounts:
+        CONFIG_DIR: /etc/foo
+    bind_mounts:
+      - ['type=bind', 'source=lib/modules', 'destination=/lib/modules', 'ro=true']
+    dirs:
+      - CONFIG_DIR
+    files:
+      CONFIG_DIR/foo.conf:
+          - refresh=true
+          - username=xyz
+
+where the properties of a service specification are:
+
+* ``service_id``
+    A unique name of the service.
+* ``image``
+    The name of the Docker image.
+* ``uid``
+    The UID to use when creating directories and files in the host system.
+* ``gid``
+    The GID to use when creating directories and files in the host system.
+* ``entrypoint``
+    Overwrite the default ENTRYPOINT of the image.
+* ``args``
+    A list of additional Podman/Docker command line arguments.
+* ``ports``
+    A list of TCP ports to open in the host firewall.
+* ``envs``
+    A list of environment variables.
+* ``bind_mounts``
+    When you use a bind mount, a file or directory on the host machine
+    is mounted into the container. Relative `source=...` paths will be
+    located below `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+* ``volume_mounts``
+    When you use a volume mount, a new directory is created within
+    Docker’s storage directory on the host machine, and Docker manages
+    that directory’s contents. Relative source paths will be located below
+    `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+* ``dirs``
+    A list of directories that are created below
+    `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+* ``files``
+    A dictionary, where the key is the relative path of the file and the
+    value the file content. The content must be double quoted when using
+    a string. Use '\n' for line breaks in that case. Otherwise define
+    multi-line content as list of strings. The given files will be created
+    below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+
 .. _orchestrator-cli-service-spec:
 
 Service Specification
@@ -425,25 +504,28 @@ to specify the deployment of services.  For example:
         - host1
         - host2
         - host3
-    spec: ...
     unmanaged: false
+    ...
 
 where the properties of a service specification are:
 
-* ``service_type`` is the type of the service. Needs to be either a Ceph
-   service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
-   ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), or part of the
-   monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
-   ``prometheus``)
-* ``service_id`` is the name of the service
-* ``placement`` is a :ref:`orchestrator-cli-placement-spec`
-* ``spec``: additional specifications for a specific service
-* ``unmanaged``: If set to ``true``, the orchestrator will not deploy nor
-   remove any daemon associated with this service. Placement and all other
-   properties will be ignored. This is useful, if this service should not
-   be managed temporarily.
+* ``service_type``
+    The type of the service. Needs to be either a Ceph
+    service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
+    ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), part of the
+    monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
+    ``prometheus``) or (``container``) for custom containers.
+* ``service_id``
+    The name of the service.
+* ``placement``
+    See :ref:`orchestrator-cli-placement-spec`.
+* ``unmanaged``
+    If set to ``true``, the orchestrator will not deploy nor
+    remove any daemon associated with this service. Placement and all other
+    properties will be ignored. This is useful, if this service should not
+    be managed temporarily.
 
-Each service type can have different requirements for the ``spec`` element.
+Each service type can have additional service specific properties.
 
 Service specifications of type ``mon``, ``mgr``, and the monitoring
 types do not require a ``service_id``.
@@ -504,7 +586,7 @@ Explicit placements
 
 Daemons can be explicitly placed on hosts by simply specifying them::
 
-    orch apply prometheus "host1 host2 host3"
+    orch apply prometheus --placement="host1 host2 host3"
 
 Or in YAML:
 
@@ -519,7 +601,7 @@ Or in YAML:
 
 MONs and other services may require some enhanced network specifications::
 
-  orch daemon add mon myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name
+  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
 
 where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
@@ -529,7 +611,7 @@ Placement by labels
 
 Daemons can be explictly placed on hosts that match a specific label::
 
-    orch apply prometheus label:mylabel
+    orch apply prometheus --placement="label:mylabel"
 
 Or in YAML:
 
@@ -545,7 +627,7 @@ Placement by pattern matching
 
 Daemons can be placed on hosts as well::
 
-    orch apply prometheus 'myhost[1-3]'
+    orch apply prometheus --placement='myhost[1-3]'
 
 Or in YAML:
 
@@ -557,7 +639,7 @@ Or in YAML:
 
 To place a service on *all* hosts, use ``"*"``::
 
-    orch apply crash '*'
+    orch apply crash --placement='*'
 
 Or in YAML:
 
@@ -573,15 +655,15 @@ Setting a limit
 
 By specifying ``count``, only that number of daemons will be created::
 
-    orch apply prometheus 3
+    orch apply prometheus --placement=3
 
 To deploy *daemons* on a subset of hosts, also specify the count::
 
-    orch apply prometheus "2 host1 host2 host3"
+    orch apply prometheus --placement="2 host1 host2 host3"
 
 If the count is bigger than the amount of hosts, cephadm deploys one per host::
 
-    orch apply prometheus "3 host1 host2"
+    orch apply prometheus --placement="3 host1 host2"
 
 results in two Prometheus daemons.
 
@@ -666,6 +748,7 @@ This is an overview of the current implementation status of the orchestrators.
  apply osd                           ✔      ✔
  apply rbd-mirror                    ✔      ✔
  apply rgw                           ⚪      ✔
+ apply container                     ⚪      ✔
  host add                            ⚪      ✔
  host ls                             ✔      ✔
  host rm                             ⚪      ✔

@@ -236,6 +236,7 @@ def ceph_log(ctx, config):
                         'sudo',
                         'find',
                         '/var/log/ceph',   # all logs, not just for the cluster
+                        '/var/log/rbd-target-api', # ceph-iscsi
                         '-name',
                         '*.log',
                         '-print0',
@@ -788,6 +789,56 @@ def ceph_rgw(ctx, config):
 
     yield
 
+
+@contextlib.contextmanager
+def ceph_iscsi(ctx, config):
+    """
+    Deploy iSCSIs
+    """
+    cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
+
+    nodes = []
+    daemons = {}
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('iscsi', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            nodes.append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    if nodes:
+        poolname = 'iscsi'
+        # ceph osd pool create iscsi 3 3 replicated
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'pool', 'create',
+            poolname, '3', '3', 'replicated']
+        )
+
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'pool', 'application', 'enable',
+            poolname, 'rbd']
+        )
+
+        # ceph orch apply iscsi iscsi user password
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'apply', 'iscsi',
+            poolname, 'user', 'password',
+            '--placement', str(len(nodes)) + ';' + ';'.join(nodes)]
+        )
+    for role, i in daemons.items():
+        remote, id_ = i
+        ctx.daemons.register_daemon(
+            remote, 'iscsi', id_,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild(role),
+            wait=False,
+            started=True,
+        )
+
+    yield
+
 @contextlib.contextmanager
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
@@ -1219,6 +1270,7 @@ def task(ctx, config):
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: ceph_rgw(ctx=ctx, config=config),
+            lambda: ceph_iscsi(ctx=ctx, config=config),
             lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),
             lambda: ceph_monitoring('node-exporter', ctx=ctx, config=config),
             lambda: ceph_monitoring('alertmanager', ctx=ctx, config=config),

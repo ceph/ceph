@@ -1,18 +1,22 @@
 import json
 from datetime import datetime
 
+import pytest
+
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from cephadm import CephadmOrchestrator
-from cephadm.inventory import SPEC_STORE_PREFIX, DATEFMT
+from cephadm.inventory import SPEC_STORE_PREFIX
+from cephadm.utils import DATEFMT
 from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
+from orchestrator import OrchestratorError
 from tests import mock
 
 
 @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
 @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
 def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
-    with with_host(cephadm_module, 'host1'):
-        with with_host(cephadm_module, 'host2'):
+    with with_host(cephadm_module, 'host1', refresh_hosts=False):
+        with with_host(cephadm_module, 'host2', refresh_hosts=False):
 
             # emulate the old scheduler:
             c = cephadm_module.apply_rgw(
@@ -20,7 +24,19 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             )
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
+            # with pytest.raises(OrchestratorError, match="cephadm migration still ongoing. Please wait, until the migration is complete."):
             cephadm_module._apply_all_services()
+
+            cephadm_module.migration_current = 0
+            cephadm_module.migration.migrate()
+            # assert we need all daemons.
+            assert cephadm_module.migration_current == 0
+
+            cephadm_module._refresh_hosts_and_daemons()
+            cephadm_module.migration.migrate()
+
+            cephadm_module._apply_all_services()
+
             out = {o.hostname for o in wait(cephadm_module, cephadm_module.list_daemons())}
             assert out == {'host1', 'host2'}
 
@@ -29,17 +45,12 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             )
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
-            cephadm_module.migration_current = 0
-            cephadm_module.migration.migrate()
-
-            # assert we need all daemons.
-            assert cephadm_module.migration_current == 0
-
             # Sorry, for this hack, but I need to make sure, Migration thinks,
             # we have updated all daemons already.
             cephadm_module.cache.last_daemon_update['host1'] = datetime.now()
             cephadm_module.cache.last_daemon_update['host2'] = datetime.now()
 
+            cephadm_module.migration_current = 0
             cephadm_module.migration.migrate()
             assert cephadm_module.migration_current == 2
 

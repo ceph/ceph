@@ -81,6 +81,7 @@ fi
 
 # TMPDIR for test data
 [ -d "$TMPDIR" ] || TMPDIR=$(mktemp -d tmp.$SCRIPT_NAME.XXXXXX)
+[ -d "$TMPDIR_TEST_MULTIPLE_MOUNTS" ] || TMPDIR_TEST_MULTIPLE_MOUNTS=$(mktemp -d tmp.$SCRIPT_NAME.XXXXXX)
 
 function cleanup()
 {
@@ -367,6 +368,23 @@ is_available "nfs" "$cond" 10
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
 	 ceph orch resume
 
+# add alertmanager via custom container
+alertmanager_image=$(cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | jq -r '.image')
+tcp_ports=$(cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | jq -r '.ports | map_values(.|tostring) | join(" ")')
+cat ${CEPHADM_SAMPLES_DIR}/custom_container.json | \
+      ${CEPHADM//--image $IMAGE_MASTER/} \
+      --image $alertmanager_image \
+      deploy \
+      --tcp-ports "$tcp_ports" \
+      --name container.alertmanager.a \
+      --fsid $FSID \
+      --config-json -
+cond="$CEPHADM enter --fsid $FSID --name container.alertmanager.a -- test -f \
+      /etc/alertmanager/alertmanager.yml"
+is_available "alertmanager.yml" "$cond" 10
+cond="curl 'http://localhost:9093' | grep -q 'Alertmanager'"
+is_available "alertmanager" "$cond" 10
+
 ## run
 # WRITE ME
 
@@ -384,7 +402,7 @@ $CEPHADM shell --fsid $FSID -- true
 $CEPHADM shell --fsid $FSID -- test -d /var/log/ceph
 expect_false $CEPHADM --timeout 10 shell --fsid $FSID -- sleep 60
 $CEPHADM --timeout 60 shell --fsid $FSID -- sleep 10
-$CEPHADM shell --fsid $FSID --mount $TMPDIR -- stat /mnt/$(basename $TMPDIR)
+$CEPHADM shell --fsid $FSID --mount $TMPDIR $TMPDIR_TEST_MULTIPLE_MOUNTS -- stat /mnt/$(basename $TMPDIR)
 
 ## enter
 expect_false $CEPHADM enter
