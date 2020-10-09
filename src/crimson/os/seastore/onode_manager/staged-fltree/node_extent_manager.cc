@@ -7,8 +7,12 @@
 
 namespace crimson::os::seastore::onode {
 
-NodeExtentManagerURef NodeExtentManager::create_dummy() {
-  return NodeExtentManagerURef(new DummyNodeExtentManager());
+NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync) {
+  if (is_sync) {
+    return NodeExtentManagerURef(new DummyNodeExtentManager<true>());
+  } else {
+    return NodeExtentManagerURef(new DummyNodeExtentManager<false>());
+  }
 }
 
 NodeExtentManagerURef NodeExtentManager::create_seastore(

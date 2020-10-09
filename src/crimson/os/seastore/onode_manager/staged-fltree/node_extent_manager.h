@@ -60,7 +60,7 @@ class NodeExtentManager {
   virtual tm_future<NodeExtentRef> alloc_extent(Transaction&, extent_len_t) = 0;
   virtual tm_future<Super::URef> get_super(Transaction&, RootNodeTracker&) = 0;
 
-  static NodeExtentManagerURef create_dummy();
+  static NodeExtentManagerURef create_dummy(bool is_sync);
   static NodeExtentManagerURef create_seastore(
       TransactionManager& tm, laddr_t min_laddr = L_ADDR_MIN);
 };
