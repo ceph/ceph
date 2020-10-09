@@ -1511,10 +1511,19 @@ struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
 };
 
 // rgw_cls_link_olh_op
-struct CLSRGWLinkOLHBase : cls_rgw_bi_log_related_op {
+struct CLSRGWLinkOLHBase : private cls_rgw_bi_log_related_op {
+  template <class... Args>
+  CLSRGWLinkOLHBase(Args&&... args)
+    : cls_rgw_bi_log_related_op{ std::forward<Args>(args)... } {
+  }
+
   static RGWModifyOp get_bilog_op_type(const bool delete_marker) {
      return delete_marker ? CLS_RGW_OP_LINK_OLH_DM
                           : CLS_RGW_OP_LINK_OLH;
+  }
+
+  std::string& get_op_tag_ref() {
+    return op_tag;
   }
 
   void link_olh(librados::ObjectWriteOperation& op,
@@ -1527,6 +1536,8 @@ struct CLSRGWLinkOLHBase : cls_rgw_bi_log_related_op {
 
 template <bool DeleteMarkerV>
 struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
+  using CLSRGWLinkOLHBase::CLSRGWLinkOLHBase;
+
   constexpr static enum RGWModifyOp get_bilog_op_type() {
     return CLSRGWLinkOLHBase::get_bilog_op_type(DeleteMarkerV);
   }

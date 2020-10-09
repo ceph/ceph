@@ -7460,7 +7460,7 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, c
           return ret;
         }
  
-        ret = olh_init_modification(bucket_info, *state, olh_obj, &op_issuer.op_tag);
+        ret = olh_init_modification(bucket_info, *state, olh_obj, &op_issuer.get_op_tag_ref());
         if (ret < 0) {
           ldout(cct, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)DeleteMarkerV << " returned " << ret << dendl;
           if (ret == -ECANCELED) {
