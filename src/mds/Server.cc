@@ -730,21 +730,6 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
       ceph_assert(session->is_open() || 
 	     session->is_stale() || 
 	     session->is_opening());
-      if (m->get_seq() < session->get_push_seq()) {
-	dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq() 
-		 << ", dropping" << dendl;
-	return;
-      }
-      // We are getting a seq that is higher than expected.
-      // Handle the same as any other seqn error.
-      //
-      if (m->get_seq() != session->get_push_seq()) {
-	dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq()
-		<< ", BUGGY!" << dendl;
-	mds->clog->warn() << "incorrect push seq " << m->get_seq() << " != "
-			  << session->get_push_seq() << ", dropping" << " from client : " << session->get_human_name();
-	return;
-      }
       journal_close_session(session, Session::STATE_CLOSING, NULL);
     }
     break;
