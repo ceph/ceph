@@ -85,6 +85,86 @@ public:
   }
 };
 
+#if WILL_BE_NEEDED_IN_THE_FUTURE
+
+template <typename... Ts>
+class RGWSafeRetAsyncCR : public RGWCoroutine
+{
+  friend struct Action;
+
+  RGWAsyncRadosProcessor *async_rados;
+
+  std::tuple<Ts*...> pret;
+  std::function<int(Ts*... )> cb;
+
+  struct Action : public RGWGenericAsyncCR::Action {
+    RGWSafeRetAsyncCR *caller;
+    std::tuple<Ts...> ret;
+
+    Action(RGWSafeRetAsyncCR *_caller) : caller(_caller) {}
+
+    int operate() {
+      return call_cb(ret,
+                     std::index_sequence_for<Ts...>());
+    }
+
+    template<std::size_t... Is>
+    int call_cb(std::tuple<Ts...>& v,
+                std::index_sequence<Is...>) {
+      return caller->cb(&std::get<Is>(v)...);
+    }
+  };
+
+  std::shared_ptr<Action> action;
+
+public:
+  RGWSafeRetAsyncCR(CephContext *cct,
+                    RGWAsyncRadosProcessor *_async_rados,
+                    Ts*... _pret,
+                    std::function<int(Ts*... )> _cb) : RGWCoroutine(cct),
+                                                       pret(_pret...),
+                                                       cb(_cb) {}
+
+  int operate() {
+    reenter(this) {
+      action = make_shared<Action>(this);
+
+      yield call(new RGWGenericAsyncCR(cct, async_rados, action));
+
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+
+      apply_ret(pret,
+                action->ret,
+                std::index_sequence_for<Ts...>());
+
+      return set_cr_done();
+    }
+
+    return 0;
+  }
+
+  template <class T>
+  int assign_ret(T* p, T& v) {
+    *p = v;
+    return 0;
+  }
+
+  template<typename... Is>
+  void apply_ret_helper(Is...) {}
+
+  template<std::size_t... Is>
+  void apply_ret(std::tuple<Ts*...>& p,
+                std::tuple<Ts...>& v,
+                std::index_sequence<Is...>) {
+    apply_ret_helper(assign_ret(std::get<Is>(p), std::get<Is>(v))... );
+  }
+};
+
+#endif
+
+
 RGWCoroutine *SIProviderCRMgr_Local::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
 {
   auto pvd = provider; /* capture another reference */
