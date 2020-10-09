@@ -678,8 +678,12 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     }
 
     /* init dest placement -- only if bucket exists, otherwise request is either not relevant, or
-     * it's a create_bucket request, in which case the op will deal with the placement later */
-    if (s->bucket_exists) {
+     * it's a create_bucket request, in which case the op will deal with the placement later
+     *
+     * Some buckets created in earlier releases of Ceph have no placement_rule set and only have their
+     * explicit placement
+     */
+    if (s->bucket_exists && (!s->bucket_info.placement_rule.empty() && s->bucket_info.bucket.explicit_placement.data_pool.empty())) {
       s->dest_placement.storage_class = s->info.storage_class;
       s->dest_placement.inherit_from(s->bucket_info.placement_rule);
 
