@@ -56,7 +56,6 @@
 #include "events/ESubtreeMap.h"
 #include "events/EUpdate.h"
 #include "events/EPeerUpdate.h"
-#include "events/EImportFinish.h"
 #include "events/EFragment.h"
 #include "events/ECommitted.h"
 #include "events/EPurged.h"
@@ -2585,14 +2584,6 @@ ESubtreeMap *MDCache::create_subtree_map()
     if (dir->get_dir_auth().first != mds->get_nodeid())
       continue;
 
-    if (migrator->is_ambiguous_import(dir->dirfrag()) ||
-	my_ambiguous_imports.count(dir->dirfrag())) {
-      dout(15) << " ambig subtree " << *dir << dendl;
-      le->ambiguous_subtrees.insert(dir->dirfrag());
-    } else {
-      dout(15) << " auth subtree " << *dir << dendl;
-    }
-
     dirs_to_add[dir->dirfrag()] = dir;
     le->subtrees[dir->dirfrag()].clear();
 
@@ -2609,6 +2600,8 @@ ESubtreeMap *MDCache::create_subtree_map()
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
     }
   }
+
+  migrator->add_ambiguous_subtrees(le);
 
   // apply projected renames
   for (const auto& [diri, renames] : projected_subtree_renames) {
@@ -2698,7 +2691,6 @@ ESubtreeMap *MDCache::create_subtree_map()
   }
 
   dout(15) << " subtrees " << le->subtrees << dendl;
-  dout(15) << " ambiguous_subtrees " << le->ambiguous_subtrees << dendl;
 
   //le->metablob.print(cout);
   le->expire_pos = mds->mdlog->journaler->get_expire_pos();
@@ -2708,8 +2700,9 @@ ESubtreeMap *MDCache::create_subtree_map()
 void MDCache::dump_resolve_status(Formatter *f) const
 {
   f->open_object_section("resolve_status");
-  f->dump_stream("resolve_gather") << resolve_gather;
-  f->dump_stream("resolve_ack_gather") << resolve_gather;
+  f->dump_stream("peer_resolve_gather") << peer_resolve_gather;
+  f->dump_stream("peer_resolve_ack_gather") << peer_resolve_ack_gather;
+  f->dump_stream("subtree_resolve_gather") << subtree_resolve_gather;
   f->close_section();
 }
 
@@ -2728,7 +2721,9 @@ void MDCache::resolve_start(MDSContext *resolve_done_)
     if (rootdir)
       adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
   }
-  resolve_gather = recovery_set;
+
+  peer_resolve_gather = recovery_set;
+  subtree_resolve_gather = recovery_set;
 
   resolve_snapclient_commits = mds->snapclient->get_journaled_tids();
 }
@@ -2736,6 +2731,7 @@ void MDCache::resolve_start(MDSContext *resolve_done_)
 void MDCache::send_resolves()
 {
   send_peer_resolves();
+  subtree_resolves_pending = false;
 
   if (!resolve_done) {
     // I'm survivor: refresh snap cache
@@ -2749,9 +2745,9 @@ void MDCache::send_resolves()
     dout(10) << "send_resolves waiting for snapclient cache to sync" << dendl;
     return;
   }
-  if (!resolve_ack_gather.empty()) {
+  if (!peer_resolve_ack_gather.empty()) {
     dout(10) << "send_resolves still waiting for resolve ack from ("
-	     << resolve_ack_gather << ")" << dendl;
+	     << peer_resolve_ack_gather << ")" << dendl;
     return;
   }
   if (!resolve_need_rollback.empty()) {
@@ -2770,31 +2766,48 @@ void MDCache::send_peer_resolves()
   map<mds_rank_t, ref_t<MMDSResolve>> resolves;
 
   if (mds->is_resolve()) {
-    for (map<metareqid_t, upeer>::iterator p = uncommitted_peers.begin();
-	 p != uncommitted_peers.end();
-	 ++p) {
-      mds_rank_t leader = p->second.leader;
-      auto &m = resolves[leader];
-      if (!m) m = make_message<MMDSResolve>();
-      m->add_peer_request(p->first, false);
+    for (auto &r : recovery_set) {
+      if (r == mds->get_nodeid())
+	continue;
+      if (peer_resolve_sent.count(r))
+	continue;
+      resolves[r] = make_message<MMDSResolve>(MMDSResolve::OP_PEER);
     }
+    for (auto& p : uncommitted_peers) {
+      mds_rank_t leader = p.second.leader;
+      if (peer_resolve_sent.count(leader))
+	continue;
+      auto &m = resolves.at(leader);
+      m->add_peer_request(p.first, false);
+    }
+
+    migrator->add_ambiguous_imports(resolves, {});
   } else {
     set<mds_rank_t> resolve_set;
     mds->mdsmap->get_mds_set(resolve_set, MDSMap::STATE_RESOLVE);
-    for (ceph::unordered_map<metareqid_t, MDRequestRef>::iterator p = active_requests.begin();
-	 p != active_requests.end();
-	 ++p) {
-      MDRequestRef& mdr = p->second;
+    for (auto& r : peer_resolve_sent)
+      resolve_set.erase(r);
+
+    for (auto &r : resolve_set) {
+      if (r == mds->get_nodeid())
+	continue;
+      resolves[r] = make_message<MMDSResolve>(MMDSResolve::OP_PEER);
+    }
+
+    for (auto& p : active_requests) {
+      MDRequestRef& mdr = p.second;
       if (!mdr->is_peer())
 	continue;
       if (!mdr->peer_did_prepare() && !mdr->committing) {
 	continue;
       }
       mds_rank_t leader = mdr->peer_to_mds;
-      if (resolve_set.count(leader) || is_ambiguous_peer_update(p->first, leader)) {
+      if (resolve_set.count(leader) || is_ambiguous_peer_update(p.first, leader)) {
 	dout(10) << " including uncommitted " << *mdr << dendl;
-	if (!resolves.count(leader))
-	  resolves[leader] = make_message<MMDSResolve>();
+	auto &m = resolves[leader];
+	if (!m)
+	  m = make_message<MMDSResolve>(MMDSResolve::OP_PEER);
+
 	if (!mdr->committing &&
 	    mdr->has_more() && mdr->more()->is_inode_exporter) {
 	  // re-send cap exports
@@ -2804,18 +2817,21 @@ void MDCache::send_peer_resolves()
 	  bufferlist bl;
           MMDSResolve::peer_inode_cap inode_caps(in->ino(), cap_map);
           encode(inode_caps, bl);
-	  resolves[leader]->add_peer_request(p->first, bl);
+	  m->add_peer_request(p.first, bl);
 	} else {
-	  resolves[leader]->add_peer_request(p->first, mdr->committing);
+	  m->add_peer_request(p.first, mdr->committing);
 	}
       }
     }
+
+    migrator->add_ambiguous_imports(resolves, resolve_set);
   }
 
   for (auto &p : resolves) {
     dout(10) << "sending peer resolve to mds." << p.first << dendl;
     mds->send_message_mds(p.second, p.first);
-    resolve_ack_gather.insert(p.first);
+    peer_resolve_ack_gather.insert(p.first);
+    peer_resolve_sent.insert(p.first);
   }
 }
 
@@ -2823,26 +2839,24 @@ void MDCache::send_subtree_resolves()
 {
   dout(10) << "send_subtree_resolves" << dendl;
 
-  if (migrator->is_exporting() || migrator->is_importing()) {
+  if (migrator->is_any_in_progress()) {
     dout(7) << "send_subtree_resolves waiting, imports/exports still in progress" << dendl;
-    migrator->show_importing();
-    migrator->show_exporting();
-    resolves_pending = true;
+    migrator->show_all();
+    subtree_resolves_pending = true;
     return;  // not now
   }
 
   map<mds_rank_t, ref_t<MMDSResolve>> resolves;
-  for (set<mds_rank_t>::iterator p = recovery_set.begin();
-       p != recovery_set.end();
-       ++p) {
-    if (*p == mds->get_nodeid())
+  for (auto& r : recovery_set) {
+    if (r == mds->get_nodeid())
       continue;
-    if (mds->is_resolve() || mds->mdsmap->is_resolve(*p))
-      resolves[*p] = make_message<MMDSResolve>();
+    if (subtree_resolve_sent.count(r))
+      continue;
+    if (mds->is_resolve() || mds->mdsmap->is_resolve(r))
+      resolves[r] = make_message<MMDSResolve>(MMDSResolve::OP_SUBTREE);
   }
 
   map<dirfrag_t, vector<dirfrag_t> > my_subtrees;
-  map<dirfrag_t, vector<dirfrag_t> > my_ambig_imports;
 
   // known
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
@@ -2854,44 +2868,21 @@ void MDCache::send_subtree_resolves()
     if (dir->authority().first != mds->get_nodeid()) 
       continue;
 
-    if (mds->is_resolve() && my_ambiguous_imports.count(dir->dirfrag()))
-      continue;  // we'll add it below
-    
-    if (migrator->is_ambiguous_import(dir->dirfrag())) {
-      // ambiguous (mid-import)
-      set<CDir*> bounds;
-      get_subtree_bounds(dir, bounds);
-      vector<dirfrag_t> dfls;
-      for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q)
-	dfls.push_back((*q)->dirfrag());
-
-      my_ambig_imports[dir->dirfrag()] = dfls;
-      dout(10) << " ambig " << dir->dirfrag() << " " << dfls << dendl;
-    } else {
-      // not ambiguous.
-      for (auto &q : resolves) {
-	resolves[q.first]->add_subtree(dir->dirfrag());
-      }
-      // bounds too
-      vector<dirfrag_t> dfls;
-      for (set<CDir*>::iterator q = subtrees[dir].begin();
-	   q != subtrees[dir].end();
-	   ++q) {
-	CDir *bound = *q;
-	dfls.push_back(bound->dirfrag());
-      }
-
-      my_subtrees[dir->dirfrag()] = dfls;
-      dout(10) << " claim " << dir->dirfrag() << " " << dfls << dendl;
+    // not ambiguous.
+    for (auto &q : resolves) {
+      resolves[q.first]->add_subtree(dir->dirfrag());
     }
-  }
+    // bounds too
+    vector<dirfrag_t> dfls;
+    for (set<CDir*>::iterator q = subtrees[dir].begin();
+	 q != subtrees[dir].end();
+	 ++q) {
+      CDir *bound = *q;
+      dfls.push_back(bound->dirfrag());
+    }
 
-  // ambiguous
-  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
-       p != my_ambiguous_imports.end();
-       ++p) {
-    my_ambig_imports[p->first] = p->second;
-    dout(10) << " ambig " << p->first << " " << p->second << dendl;
+    my_subtrees[dir->dirfrag()] = dfls;
+    dout(10) << " claim " << dir->dirfrag() << " " << dfls << dendl;
   }
 
   // simplify the claimed subtree.
@@ -2921,15 +2912,17 @@ void MDCache::send_subtree_resolves()
       m->add_table_commits(TABLE_SNAP, mds->snapclient->get_journaled_tids());
     }
     m->subtrees = my_subtrees;
-    m->ambiguous_imports = my_ambig_imports;
     dout(10) << "sending subtee resolve to mds." << p.first << dendl;
     mds->send_message_mds(m, p.first);
+    subtree_resolve_sent.insert(p.first);
   }
-  resolves_pending = false;
+
+  subtree_resolves_pending = false;
+  maybe_resolve_finish();
 }
 
 void MDCache::maybe_finish_peer_resolve() {
-  if (resolve_ack_gather.empty() && resolve_need_rollback.empty()) {
+  if (peer_resolve_ack_gather.empty() && resolve_need_rollback.empty()) {
     // snap cache get synced or I'm in resolve state
     if (mds->snapclient->is_synced() || resolve_done)
       send_subtree_resolves();
@@ -2943,7 +2936,11 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   
   dout(1) << "handle_mds_failure mds." << who << " : recovery peers are " << recovery_set << dendl;
 
-  resolve_gather.insert(who);
+  peer_resolve_sent.erase(who);
+  peer_resolve_gather.insert(who);
+  subtree_resolves_pending = false;
+  subtree_resolve_sent.erase(who);
+  subtree_resolve_gather.insert(who);
   discard_delayed_resolve(who);
   ambiguous_peer_updates.erase(who);
 
@@ -2952,8 +2949,11 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   rejoin_ack_sent.erase(who);    // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
 
-  dout(10) << " resolve_gather " << resolve_gather << dendl;
-  dout(10) << " resolve_ack_gather " << resolve_ack_gather << dendl;
+  dout(10) << " peer_resolve_sent " << peer_resolve_sent << dendl;
+  dout(10) << " peer_resolve_gather " << peer_resolve_gather << dendl;
+  dout(10) << " peer_resolve_ack_gather " << peer_resolve_ack_gather << dendl;
+  dout(10) << " subtree_resolve_sent " << subtree_resolve_sent << dendl;
+  dout(10) << " subtree_resolve_gather " << subtree_resolve_gather << dendl;
   dout(10) << " rejoin_sent " << rejoin_sent << dendl;
   dout(10) << " rejoin_gather " << rejoin_gather << dendl;
   dout(10) << " rejoin_ack_gather " << rejoin_ack_gather << dendl;
@@ -3206,7 +3206,7 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
   discard_delayed_resolve(from);
 
   // ambiguous peer requests?
-  if (!m->peer_requests.empty()) {
+  if (m->is_op_peer()) {
     if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
       for (auto p = m->peer_requests.begin(); p != m->peer_requests.end(); ++p) {
 	if (uncommitted_leaders.count(p->first) && !uncommitted_leaders[p->first].safe) {
@@ -3223,8 +3223,11 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
     }
 
     auto ack = make_message<MMDSResolveAck>();
+
+    migrator->handle_peer_resolve(m, ack);
+
     for (const auto &p : m->peer_requests) {
-      if (uncommitted_leaders.count(p.first)) {  //mds->sessionmap.have_completed_request(p.first)) {
+      if (uncommitted_leaders.count(p.first)) {
 	// COMMIT
 	if (p.second.committing) {
 	  // already committing, waiting for the OP_COMMITTED peer reply
@@ -3245,17 +3248,15 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 	  map<client_t,Capability::Export> cap_exports = inode_caps.cap_exports;
 	  ceph_assert(get_inode(ino));
 
-	  for (map<client_t,Capability::Export>::iterator q = cap_exports.begin();
-	      q != cap_exports.end();
-	      ++q) {
-	    Capability::Import& im = rejoin_imported_caps[from][ino][q->first];
+	  for (auto& q : cap_exports) {
+	    Capability::Import& im = rejoin_imported_caps[from][ino][q.first];
 	    im.cap_id = ++last_cap_id; // assign a new cap ID
 	    im.issue_seq = 1;
-	    im.mseq = q->second.mseq;
+	    im.mseq = q.second.mseq;
 
-	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q.first.v));
 	    if (session)
-	      rejoin_client_map.emplace(q->first, session->info.inst);
+	      rejoin_client_map.emplace(q.first, session->info.inst);
 	  }
 
 	  // will process these caps in rejoin stage
@@ -3273,100 +3274,53 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
       }
     }
     mds->send_message(ack, m->get_connection());
-    return;
-  }
 
-  if (!resolve_ack_gather.empty() || !resolve_need_rollback.empty()) {
-    dout(10) << "delay processing subtree resolve" << dendl;
-    delayed_resolve[from] = m;
-    return;
-  }
-
-  bool survivor = false;
-  // am i a surviving ambiguous importer?
-  if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
-    survivor = true;
-    // check for any import success/failure (from this node)
-    map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
-    while (p != my_ambiguous_imports.end()) {
-      map<dirfrag_t, vector<dirfrag_t> >::iterator next = p;
-      ++next;
-      CDir *dir = get_dirfrag(p->first);
-      ceph_assert(dir);
-      dout(10) << "checking ambiguous import " << *dir << dendl;
-      if (migrator->is_importing(dir->dirfrag()) &&
-	  migrator->get_import_peer(dir->dirfrag()) == from) {
-	ceph_assert(migrator->get_import_state(dir->dirfrag()) == Migrator::IMPORT_ACKING);
-	
-	// check if sender claims the subtree
-	bool claimed_by_sender = false;
-	for (const auto &q : m->subtrees) {
-	  // an ambiguous import won't race with a refragmentation; it's appropriate to force here.
-	  CDir *base = get_force_dirfrag(q.first, false);
-	  if (!base || !base->contains(dir)) 
-	    continue;  // base not dir or an ancestor of dir, clearly doesn't claim dir.
-
-	  bool inside = true;
-	  set<CDir*> bounds;
-	  get_force_dirfrag_bound_set(q.second, bounds);
-	  for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p) {
-	    CDir *bound = *p;
-	    if (bound->contains(dir)) {
-	      inside = false;  // nope, bound is dir or parent of dir, not inside.
-	      break;
-	    }
-	  }
-	  if (inside)
-	    claimed_by_sender = true;
-	}
-
-	my_ambiguous_imports.erase(p);  // no longer ambiguous.
-	if (claimed_by_sender) {
-	  dout(7) << "ambiguous import failed on " << *dir << dendl;
-	  migrator->import_reverse(dir);
-	} else {
-	  dout(7) << "ambiguous import succeeded on " << *dir << dendl;
-	  migrator->import_finish(dir, true);
-	}
-      }
-      p = next;
+    peer_resolve_gather.erase(from);
+    if (peer_resolve_gather.empty()) {
+      finish_committed_leaders();
+      migrator->peer_resolve_gather_finish();
     }
-  }    
 
-  // update my dir_auth values
-  //   need to do this on recoverying nodes _and_ bystanders (to resolve ambiguous
-  //   migrations between other nodes)
-  for (const auto& p : m->subtrees) {
-    dout(10) << "peer claims " << p.first << " bounds " << p.second << dendl;
-    CDir *dir = get_force_dirfrag(p.first, !survivor);
-    if (!dir)
-      continue;
-    adjust_bounded_subtree_auth(dir, p.second, from);
-    try_subtree_merge(dir);
+
+  } else if (m->is_op_subtree()) {
+    if (!peer_resolve_ack_gather.empty() || !resolve_need_rollback.empty()) {
+      dout(10) << "delay processing subtree resolve" << dendl;
+      delayed_resolve[from] = m;
+      return;
+    }
+
+    // update my dir_auth values
+    //   need to do this on recoverying nodes _and_ bystanders (to resolve ambiguous
+    //   migrations between other nodes)
+    bool survivor = mds->is_clientreplay() || mds->is_active() || mds->is_stopping();
+    for (const auto& p : m->subtrees) {
+      dout(10) << "peer claims " << p.first << " bounds " << p.second << dendl;
+      CDir *dir = get_force_dirfrag(p.first, !survivor);
+      if (!dir)
+	continue;
+      adjust_bounded_subtree_auth(dir, p.second, from);
+      try_subtree_merge(dir);
+    }
+
+    show_subtrees();
+
+    // learn other mds' pendina snaptable commits. later when resolve finishes, we will reload
+    // snaptable cache from snapserver. By this way, snaptable cache get synced among all mds
+    for (const auto& p : m->table_clients) {
+      dout(10) << " noting " << get_mdstable_name(p.type)
+	       << " pending_commits " << p.pending_commits << dendl;
+      MDSTableClient *client = mds->get_table_client(p.type);
+      for (const auto& q : p.pending_commits)
+	client->notify_commit(q);
+    }
+
+    // did i get them all?
+    subtree_resolve_gather.erase(from);
+
+    maybe_resolve_finish();
+  } else {
+    ceph_abort_msg("unknown resolve op");
   }
-
-  show_subtrees();
-
-  // note ambiguous imports too
-  for (const auto& p : m->ambiguous_imports) {
-    dout(10) << "noting ambiguous import on " << p.first << " bounds " << p.second << dendl;
-    other_ambiguous_imports[from][p.first] = p.second;
-  }
-
-  // learn other mds' pendina snaptable commits. later when resolve finishes, we will reload
-  // snaptable cache from snapserver. By this way, snaptable cache get synced among all mds
-  for (const auto& p : m->table_clients) {
-    dout(10) << " noting " << get_mdstable_name(p.type)
-	     << " pending_commits " << p.pending_commits << dendl;
-    MDSTableClient *client = mds->get_table_client(p.type);
-    for (const auto& q : p.pending_commits)
-      client->notify_commit(q);
-  }
-  
-  // did i get them all?
-  resolve_gather.erase(from);
-  
-  maybe_resolve_finish();
 }
 
 void MDCache::process_delayed_resolve()
@@ -3386,18 +3340,20 @@ void MDCache::discard_delayed_resolve(mds_rank_t who)
 
 void MDCache::maybe_resolve_finish()
 {
-  ceph_assert(resolve_ack_gather.empty());
+  ceph_assert(peer_resolve_ack_gather.empty());
   ceph_assert(resolve_need_rollback.empty());
 
-  if (!resolve_gather.empty()) {
+  if (!subtree_resolve_gather.empty()) {
     dout(10) << "maybe_resolve_finish still waiting for resolves ("
-	     << resolve_gather << ")" << dendl;
+	     << subtree_resolve_gather << ")" << dendl;
+    return;
+  }
+  if (subtree_resolves_pending) {
+    dout(10) << "maybe_resolve_finish still having in-progress imports/exports" << dendl;
     return;
   }
 
   dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
-  disambiguate_my_imports();
-  finish_committed_leaders();
 
   if (resolve_done) {
     ceph_assert(mds->is_resolve());
@@ -3415,7 +3371,7 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
   dout(10) << "handle_resolve_ack " << *ack << " from " << ack->get_source() << dendl;
   mds_rank_t from = mds_rank_t(ack->get_source().num());
 
-  if (!resolve_ack_gather.count(from) ||
+  if (!peer_resolve_ack_gather.count(from) ||
       mds->mdsmap->get_state(from) < MDSMap::STATE_RESOLVE) {
     return;
   }
@@ -3491,8 +3447,10 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
     }
   }
 
+  migrator->handle_peer_resolve_ack(ack);
+
   if (!ambiguous_peer_updates.count(from)) {
-    resolve_ack_gather.erase(from);
+    peer_resolve_ack_gather.erase(from);
     maybe_finish_peer_resolve();
   }
 }
@@ -3594,147 +3552,6 @@ void MDCache::finish_rollback(metareqid_t reqid, MDRequestRef& mdr) {
   }
   resolve_need_rollback.erase(p);
   maybe_finish_peer_resolve();
-}
-
-void MDCache::disambiguate_other_imports()
-{
-  dout(10) << "disambiguate_other_imports" << dendl;
-
-  bool recovering = !(mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
-  // other nodes' ambiguous imports
-  for (map<mds_rank_t, map<dirfrag_t, vector<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
-       p != other_ambiguous_imports.end();
-       ++p) {
-    mds_rank_t who = p->first;
-    dout(10) << "ambiguous imports for mds." << who << dendl;
-
-    for (map<dirfrag_t, vector<dirfrag_t> >::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      dout(10) << " ambiguous import " << q->first << " bounds " << q->second << dendl;
-      // an ambiguous import will not race with a refragmentation; it's appropriate to force here.
-      CDir *dir = get_force_dirfrag(q->first, recovering);
-      if (!dir) continue;
-
-      if (dir->is_ambiguous_auth() ||	// works for me_ambig or if i am a surviving bystander
-	  dir->authority() == CDIR_AUTH_UNDEF) { // resolving
-	dout(10) << "  mds." << who << " did import " << *dir << dendl;
-	adjust_bounded_subtree_auth(dir, q->second, who);
-	try_subtree_merge(dir);
-      } else {
-	dout(10) << "  mds." << who << " did not import " << *dir << dendl;
-      }
-    }
-  }
-  other_ambiguous_imports.clear();
-}
-
-void MDCache::disambiguate_my_imports()
-{
-  dout(10) << "disambiguate_my_imports" << dendl;
-
-  if (!mds->is_resolve()) {
-    ceph_assert(my_ambiguous_imports.empty());
-    return;
-  }
-
-  disambiguate_other_imports();
-
-  // my ambiguous imports
-  mds_authority_t me_ambig(mds->get_nodeid(), mds->get_nodeid());
-  while (!my_ambiguous_imports.empty()) {
-    map<dirfrag_t, vector<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
-
-    CDir *dir = get_dirfrag(q->first);
-    ceph_assert(dir);
-    
-    if (dir->authority() != me_ambig) {
-      dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
-      cancel_ambiguous_import(dir);
-
-      mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
-
-      // subtree may have been swallowed by another node claiming dir
-      // as their own.
-      CDir *root = get_subtree_root(dir);
-      if (root != dir)
-	dout(10) << "  subtree root is " << *root << dendl;
-      ceph_assert(root->dir_auth.first != mds->get_nodeid());  // no us!
-      try_trim_non_auth_subtree(root);
-    } else {
-      dout(10) << "ambiguous import auth unclaimed, must be me " << *dir << dendl;
-      finish_ambiguous_import(q->first);
-      mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
-    }
-  }
-  ceph_assert(my_ambiguous_imports.empty());
-  mds->mdlog->flush();
-
-  // verify all my subtrees are unambiguous!
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *dir = p->first;
-    if (dir->is_ambiguous_dir_auth()) {
-      dout(0) << "disambiguate_imports uh oh, dir_auth is still ambiguous for " << *dir << dendl;
-    }
-    ceph_assert(!dir->is_ambiguous_dir_auth());
-  }
-
-  show_subtrees();
-}
-
-
-void MDCache::add_ambiguous_import(dirfrag_t base, const vector<dirfrag_t>& bounds) 
-{
-  ceph_assert(my_ambiguous_imports.count(base) == 0);
-  my_ambiguous_imports[base] = bounds;
-}
-
-
-void MDCache::add_ambiguous_import(CDir *base, const set<CDir*>& bounds)
-{
-  // make a list
-  vector<dirfrag_t> binos;
-  for (set<CDir*>::iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) 
-    binos.push_back((*p)->dirfrag());
-  
-  // note: this can get called twice if the exporter fails during recovery
-  if (my_ambiguous_imports.count(base->dirfrag()))
-    my_ambiguous_imports.erase(base->dirfrag());
-
-  add_ambiguous_import(base->dirfrag(), binos);
-}
-
-void MDCache::cancel_ambiguous_import(CDir *dir)
-{
-  dirfrag_t df = dir->dirfrag();
-  ceph_assert(my_ambiguous_imports.count(df));
-  dout(10) << "cancel_ambiguous_import " << df
-	   << " bounds " << my_ambiguous_imports[df]
-	   << " " << *dir
-	   << dendl;
-  my_ambiguous_imports.erase(df);
-}
-
-void MDCache::finish_ambiguous_import(dirfrag_t df)
-{
-  ceph_assert(my_ambiguous_imports.count(df));
-  vector<dirfrag_t> bounds;
-  bounds.swap(my_ambiguous_imports[df]);
-  my_ambiguous_imports.erase(df);
-  
-  dout(10) << "finish_ambiguous_import " << df
-	   << " bounds " << bounds
-	   << dendl;
-  CDir *dir = get_dirfrag(df);
-  ceph_assert(dir);
-  
-  // adjust dir_auth, import maps
-  adjust_bounded_subtree_auth(dir, bounds, mds->get_nodeid());
-  try_subtree_merge(dir);
 }
 
 void MDCache::remove_inode_recursive(CInode *in)
@@ -4030,22 +3847,16 @@ void MDCache::rejoin_send_rejoins()
     rejoins_pending = true;
     return;
   }
-  if (!resolve_gather.empty()) {
+  if (!subtree_resolve_gather.empty()) {
     dout(7) << "rejoin_send_rejoins still waiting for resolves ("
-	    << resolve_gather << ")" << dendl;
+	    << subtree_resolve_gather << ")" << dendl;
     rejoins_pending = true;
     return;
   }
 
-  ceph_assert(!migrator->is_importing());
-  ceph_assert(!migrator->is_exporting());
-
-  if (!mds->is_rejoin()) {
-    disambiguate_other_imports();
-  }
+  ceph_assert(!migrator->is_any_in_progress());
 
   map<mds_rank_t, ref_t<MMDSCacheRejoin>> rejoins;
-
 
   // if i am rejoining, send a rejoin to everyone.
   // otherwise, just send to others who are rejoining.
@@ -4104,12 +3915,7 @@ void MDCache::rejoin_send_rejoins()
        ++p) {
     CDir *dir = p->first;
     ceph_assert(dir->is_subtree_root());
-    if (dir->is_ambiguous_dir_auth()) {
-      // exporter is recovering, importer is survivor.
-      ceph_assert(rejoins.count(dir->authority().first));
-      ceph_assert(!rejoins.count(dir->authority().second));
-      continue;
-    }
+    ceph_assert(!dir->is_ambiguous_dir_auth());
 
     // my subtree?
     if (dir->is_auth())
@@ -7469,7 +7275,7 @@ void MDCache::handle_cache_expire(const cref_t<MCacheExpire> &m)
 	   ((export_state == Migrator::EXPORT_WARNING &&
 	     migrator->export_has_warned(parent_dir,from)) ||
 	    export_state == Migrator::EXPORT_EXPORTING ||
-	    export_state == Migrator::EXPORT_LOGGINGFINISH ||
+	    export_state == Migrator::EXPORT_LOGGING ||
 	    (export_state == Migrator::EXPORT_NOTIFYING &&
 	     !migrator->export_has_notified(parent_dir,from))))) {
 
@@ -7917,12 +7723,12 @@ bool MDCache::shutdown_pass()
     show_subtrees();
     migrator->show_importing();
     migrator->show_exporting();
-    if (!migrator->is_importing() && !migrator->is_exporting())
+    if (!migrator->is_any_importing() && !migrator->is_any_exporting())
       show_cache();
     return false;
   }
-  ceph_assert(!migrator->is_exporting());
-  ceph_assert(!migrator->is_importing());
+  ceph_assert(!migrator->is_any_exporting());
+  ceph_assert(!migrator->is_any_importing());
 
   // replicas may dirty scatter locks
   if (myin && myin->is_replicated()) {

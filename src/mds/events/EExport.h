@@ -30,13 +30,14 @@ protected:
   dirfrag_t      base;
   vector<dirfrag_t> bounds;
   mds_rank_t target;
+  uint64_t tid;
   
 public:
   EExport() :
     LogEvent(EVENT_EXPORT), target(MDS_RANK_NONE) { }
-  EExport(dirfrag_t b, const vector<dirfrag_t>& bds, mds_rank_t t) :
+  EExport(dirfrag_t b, const vector<dirfrag_t>& bds, mds_rank_t t, uint64_t _tid) :
     LogEvent(EVENT_EXPORT),
-    base(b), bounds(bds), target(t) { }
+    base(b), bounds(bds), target(t), tid(_tid) { }
   
   const vector<dirfrag_t>& get_bounds() const { return bounds; }
   

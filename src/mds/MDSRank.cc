@@ -2242,6 +2242,9 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
+  if (last_tid < ((uint64_t)incarnation << 32))
+    last_tid = (uint64_t)incarnation << 32;
+
   // tell objecter my incarnation
   if (objecter->get_client_incarnation() != incarnation)
     objecter->set_client_incarnation(incarnation);

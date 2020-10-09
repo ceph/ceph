@@ -24,16 +24,20 @@ class MMDSResolve final : public MMDSOp {
   static constexpr int COMPAT_VERSION = 1;
 
 public:
-  std::map<dirfrag_t, std::vector<dirfrag_t>> subtrees;
-  std::map<dirfrag_t, std::vector<dirfrag_t>> ambiguous_imports;
+  static constexpr int OP_PEER		= 1;
+  static constexpr int OP_SUBTREE	= 2;
 
-  class peer_inode_cap {
-  public:
+  bool is_op_peer() const { return op == OP_PEER; }
+  bool is_op_subtree() const { return op == OP_SUBTREE; }
+
+  std::map<dirfrag_t, std::vector<dirfrag_t>> subtrees;
+
+  struct peer_inode_cap {
     inodeno_t ino;
     std::map<client_t,Capability::Export> cap_exports;
     peer_inode_cap() {}
     peer_inode_cap(inodeno_t a, map<client_t, Capability::Export> b) : ino(a), cap_exports(b) {}
-    void encode(ceph::buffer::list &bl) const 
+    void encode(ceph::buffer::list &bl) const
     {
       ENCODE_START(1, 1, bl);
       encode(ino, bl);
@@ -48,7 +52,6 @@ public:
       DECODE_FINISH(blp);
     }
   };
-  WRITE_CLASS_ENCODER(peer_inode_cap)
 
   struct peer_request {
     ceph::buffer::list inode_caps;
@@ -67,8 +70,28 @@ public:
       DECODE_FINISH(blp);
     }
   };
-
   std::map<metareqid_t, peer_request> peer_requests;
+
+  struct ambig_import {
+    uint64_t tid = 0;
+    bool finishing = false;
+    bool bystander = false;
+    void encode(ceph::buffer::list &bl) const {
+      ENCODE_START(2, 2, bl);
+      encode(tid, bl);
+      encode(finishing, bl);
+      encode(bystander, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(ceph::buffer::list::const_iterator &blp) {
+      DECODE_START(2, blp);
+      decode(tid, blp);
+      decode(finishing, blp);
+      decode(bystander, blp);
+      DECODE_FINISH(blp);
+    }
+  };
+  std::map<dirfrag_t, ambig_import> ambiguous_imports;
 
   // table client information
   struct table_client {
@@ -93,11 +116,6 @@ public:
 
   std::list<table_client> table_clients;
 
-protected:
-  MMDSResolve() : MMDSOp{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
- {}
-  ~MMDSResolve() final {}
-
 public:
   std::string_view get_type_name() const override { return "mds_resolve"; }
 
@@ -114,8 +132,16 @@ public:
     subtrees[im].push_back(ex);
   }
 
-  void add_ambiguous_import(dirfrag_t im, const std::vector<dirfrag_t>& m) {
-    ambiguous_imports[im] = m;
+  void add_ambiguous_import(dirfrag_t im, uint64_t tid, bool finishing) {
+    auto& ambig_import = ambiguous_imports[im];
+    ambig_import.tid = tid;
+    ambig_import.finishing = finishing;
+  }
+
+  void add_other_ambiguous_import(dirfrag_t im, uint64_t tid) {
+    auto& ambig_import = ambiguous_imports[im];
+    ambig_import.tid = tid;
+    ambig_import.bystander = true;
   }
 
   void add_peer_request(metareqid_t reqid, bool committing) {
@@ -132,6 +158,7 @@ public:
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    encode(op, payload);
     encode(subtrees, payload);
     encode(ambiguous_imports, payload);
     encode(peer_requests, payload);
@@ -140,6 +167,7 @@ public:
   void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
+    decode(op, p);
     decode(subtrees, p);
     decode(ambiguous_imports, p);
     decode(peer_requests, p);
@@ -148,13 +176,21 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+
+  MMDSResolve() : MMDSOp{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSResolve(int o) : MMDSResolve() { op = o; }
+  ~MMDSResolve() final {}
+
+  int32_t op = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const MMDSResolve::peer_request&) {
     return out;
 }
 
-WRITE_CLASS_ENCODER(MMDSResolve::peer_request)
-WRITE_CLASS_ENCODER(MMDSResolve::table_client)
 WRITE_CLASS_ENCODER(MMDSResolve::peer_inode_cap)
+WRITE_CLASS_ENCODER(MMDSResolve::peer_request)
+WRITE_CLASS_ENCODER(MMDSResolve::ambig_import)
+WRITE_CLASS_ENCODER(MMDSResolve::table_client)
+
 #endif

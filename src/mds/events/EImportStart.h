@@ -29,17 +29,18 @@ protected:
   dirfrag_t base;
   vector<dirfrag_t> bounds;
   mds_rank_t from;
+  uint64_t tid;
 
 public:
   EMetaBlob metablob;
   bufferlist client_map;  // encoded map<__u32,entity_inst_t>
   version_t cmapv{0};
 
-  EImportStart(dirfrag_t b, const vector<dirfrag_t>& bds, mds_rank_t f) :
-    LogEvent(EVENT_IMPORTSTART),
-    base(b), bounds(bds), from(f) { }
+  EImportStart(dirfrag_t b, const vector<dirfrag_t>& bds,
+	       mds_rank_t f, uint64_t t) :
+    LogEvent(EVENT_IMPORTSTART), base(b), bounds(bds), from(f), tid(t) { }
   EImportStart() :
-    LogEvent(EVENT_IMPORTSTART), from(MDS_RANK_NONE) { }
+    LogEvent(EVENT_IMPORTSTART), from(MDS_RANK_NONE), tid(0) { }
   
   void print(ostream& out) const override {
     out << "EImportStart " << base << " from mds." << from << " " << metablob;

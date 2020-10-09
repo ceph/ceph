@@ -27,9 +27,9 @@ private:
   dirfrag_t dirfrag;
 public:
   ceph::buffer::list basedir;
-  std::vector<dirfrag_t> bounds;
   std::list<ceph::buffer::list> traces;
 private:
+  std::vector<dirfrag_t> bounds;
   std::set<mds_rank_t> bystanders;
   bool b_did_assim = false;
 

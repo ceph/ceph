@@ -470,22 +470,10 @@ class MDCache {
   }
   void finish_rollback(metareqid_t reqid, MDRequestRef& mdr);
 
-  // ambiguous imports
-  void add_ambiguous_import(dirfrag_t base, const vector<dirfrag_t>& bounds);
-  void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
-  bool have_ambiguous_import(dirfrag_t base) {
-    return my_ambiguous_imports.count(base);
-  }
-  void get_ambiguous_import_bounds(dirfrag_t base, vector<dirfrag_t>& bounds) {
-    ceph_assert(my_ambiguous_imports.count(base));
-    bounds = my_ambiguous_imports[base];
-  }
-  void cancel_ambiguous_import(CDir *);
-  void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start(MDSContext *resolve_done_);
   void send_resolves();
   void maybe_send_pending_resolves() {
-    if (resolves_pending)
+    if (subtree_resolves_pending)
       send_subtree_resolves();
   }
   
@@ -609,8 +597,7 @@ class MDCache {
   void standby_trim_segment(LogSegment *ls);
   void try_trim_non_auth_subtree(CDir *dir);
   bool can_trim_non_auth_dirfrag(CDir *dir) {
-    return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
-	   uncommitted_peer_rename_olddir.count(dir->inode) == 0;
+    return uncommitted_peer_rename_olddir.count(dir->inode) == 0;
   }
 
   /**
@@ -1045,8 +1032,6 @@ class MDCache {
   void process_delayed_resolve();
   void discard_delayed_resolve(mds_rank_t who);
   void maybe_resolve_finish();
-  void disambiguate_my_imports();
-  void disambiguate_other_imports();
   void trim_unlinked_inodes();
 
   void send_peer_resolves();
@@ -1147,9 +1132,6 @@ class MDCache {
 
   // [resolve]
   // from EImportStart w/o EImportFinish during journal replay
-  map<dirfrag_t, vector<dirfrag_t> > my_ambiguous_imports;
-  // from MMDSResolves
-  map<mds_rank_t, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;
 
   map<CInode*, int> uncommitted_peer_rename_olddir;  // peer: preserve the non-auth dir until seeing commit.
   map<CInode*, int> uncommitted_peer_unlink;  // peer: preserve the unlinked inode until seeing commit.
@@ -1160,9 +1142,12 @@ class MDCache {
   set<metareqid_t> pending_leaders;
   map<int, set<metareqid_t> > ambiguous_peer_updates;
 
-  bool resolves_pending = false;
-  set<mds_rank_t> resolve_gather;	// nodes i need resolves from
-  set<mds_rank_t> resolve_ack_gather;	// nodes i need a resolve_ack from
+  set<mds_rank_t> peer_resolve_sent;
+  set<mds_rank_t> peer_resolve_gather;
+  set<mds_rank_t> peer_resolve_ack_gather;	// nodes i need a resolve_ack from
+  bool subtree_resolves_pending = false;
+  set<mds_rank_t> subtree_resolve_sent;	// nodes i need resolves from
+  set<mds_rank_t> subtree_resolve_gather;	// nodes i need resolves from
   set<version_t> resolve_snapclient_commits;
   map<metareqid_t, mds_rank_t> resolve_need_rollback;  // rollbacks i'm writing to the journal
   map<mds_rank_t, cref_t<MMDSResolve>> delayed_resolve;

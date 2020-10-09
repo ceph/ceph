@@ -29,6 +29,7 @@
 #include "events/EPurged.h"
 
 #include "events/EExport.h"
+#include "events/EExportCommitted.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
@@ -2622,7 +2623,7 @@ void EPeerUpdate::replay(MDSRank *mds)
 
 void ESubtreeMap::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 7, bl);
   encode(stamp, bl);
   encode(metablob, bl, features);
   encode(subtrees, bl);
@@ -2634,17 +2635,23 @@ void ESubtreeMap::encode(bufferlist& bl, uint64_t features) const
  
 void ESubtreeMap::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
-  if (struct_v >= 2)
-    decode(stamp, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  decode(stamp, bl);
   decode(metablob, bl);
   decode(subtrees, bl);
-  if (struct_v >= 4)
-    decode(ambiguous_subtrees, bl);
-  if (struct_v >= 3)
+  if (struct_v <= 6) {
+    set<dirfrag_t> _ambiguous_subtrees;
+    decode(_ambiguous_subtrees, bl);
+    for (auto& df : _ambiguous_subtrees)
+      ambiguous_subtrees[df].bounds = subtrees.at(df);
     decode(expire_pos, bl);
-  if (struct_v >= 6)
+    if (struct_v == 6)
+      decode(event_seq, bl);
+  } else {
+    decode(ambiguous_subtrees, bl);
+    decode(expire_pos, bl);
     decode(event_seq, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2668,9 +2675,9 @@ void ESubtreeMap::dump(Formatter *f) const
   f->close_section(); // subtrees
 
   f->open_array_section("ambiguous subtrees");
-  for(set<dirfrag_t>::const_iterator i = ambiguous_subtrees.begin();
-      i != ambiguous_subtrees.end(); ++i) {
-    f->dump_stream("dirfrag") << *i;
+  for(auto& p : ambiguous_subtrees) {
+    f->dump_stream("dirfrag") << p.first;
+    f->dump_stream("bounds") << p.second.bounds;
   }
   f->close_section(); // ambiguous subtrees
 
@@ -2743,20 +2750,6 @@ void ESubtreeMap::replay(MDSRank *mds)
 			  << " subtree " << p->first << " has extra bound in cache " << (*q)->dirfrag();
 	++errors;
       }
-      
-      if (ambiguous_subtrees.count(p->first)) {
-	if (!mds->mdcache->have_ambiguous_import(p->first)) {
-	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			    << " subtree " << p->first << " is ambiguous but is not in our cache";
-	  ++errors;
-	}
-      } else {
-	if (mds->mdcache->have_ambiguous_import(p->first)) {
-	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
-			    << " subtree " << p->first << " is not ambiguous but is in our cache";
-	  ++errors;
-	}
-      }
     }
     
     std::vector<CDir*> dirs;
@@ -2771,9 +2764,10 @@ void ESubtreeMap::replay(MDSRank *mds)
       }
     }
 
+    errors += mds->mdcache->migrator->replay_check_ambiguous_subtrees(this);
+
     if (errors) {
       dout(0) << "journal subtrees: " << subtrees << dendl;
-      dout(0) << "journal ambig_subtrees: " << ambiguous_subtrees << dendl;
       mds->mdcache->show_subtrees();
       ceph_assert(!g_conf()->mds_debug_subtrees || errors == 0);
     }
@@ -2792,15 +2786,13 @@ void ESubtreeMap::replay(MDSRank *mds)
        ++p) {
     CDir *dir = mds->mdcache->get_dirfrag(p->first);
     ceph_assert(dir);
-    if (ambiguous_subtrees.count(p->first)) {
-      // ambiguous!
-      mds->mdcache->add_ambiguous_import(p->first, p->second);
-      mds->mdcache->adjust_bounded_subtree_auth(dir, p->second,
-						mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
-    } else {
-      // not ambiguous
-      mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
-    }
+    // not ambiguous
+    mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
+  }
+
+  for (auto &p : ambiguous_subtrees) {
+    mds->mdcache->migrator->replay_import_start(p.first, p.second.bounds,
+						p.second.from, p.second.tid);
   }
 
   mds->mdcache->recalc_auth_bits(true);
@@ -2944,37 +2936,26 @@ void EExport::replay(MDSRank *mds)
   dout(10) << "EExport.replay " << base << dendl;
   auto&& segment = get_segment();
   metablob.replay(mds, segment);
-  
-  CDir *dir = mds->mdcache->get_dirfrag(base);
-  ceph_assert(dir);
-  
-  set<CDir*> realbounds;
-  for (auto &df : bounds)
-    CDir *bd = mds->mdcache->get_dirfrag(df);
-    ceph_assert(bd);
-    realbounds.insert(bd);
-  }
 
-  // adjust auth away
-  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, CDIR_AUTH_UNDEF);
-
-  mds->mdcache->try_trim_non_auth_subtree(dir);
+  mds->mdcache->migrator->replay_export_dir(base, bounds, target,
+					    tid, segment);
 }
 
 void EExport::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   encode(stamp, bl);
   encode(metablob, bl, features);
   encode(base, bl);
   encode(bounds, bl);
   encode(target, bl);
+  encode(tid, bl);
   ENCODE_FINISH(bl);
 }
 
 void EExport::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(metablob, bl);
@@ -2982,6 +2963,8 @@ void EExport::decode(bufferlist::const_iterator &bl)
   decode(bounds, bl);
   if (struct_v >= 4)
     decode(target, bl);
+  if (struct_v >= 5)
+    decode(tid, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3004,6 +2987,39 @@ void EExport::generate_test_instances(std::list<EExport*>& ls)
   ls.push_back(sample);
 }
 
+void EExportCommitted::replay(MDSRank *mds)
+{
+  dout(10) << "EExportCommitted.replay " << base << dendl;
+  mds->mdcache->migrator->replay_export_committed(base, tid);
+}
+
+void EExportCommitted::encode(bufferlist& bl, uint64_t features) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(base, bl);
+  encode(tid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EExportCommitted::decode(bufferlist::const_iterator &bl)
+{
+  DECODE_START(1, bl);
+  decode(base, bl);
+  decode(tid, bl);
+  DECODE_FINISH(bl);
+}
+
+void EExportCommitted::dump(Formatter *f) const
+{
+  f->dump_stream("base") << base;
+  f->dump_stream("tid") << tid;
+}
+
+void EExportCommitted::generate_test_instances(std::list<EExportCommitted*>& ls)
+{
+  EExportCommitted *sample = new EExportCommitted();
+  ls.push_back(sample);
+}
 
 // -----------------------
 // EImportStart
@@ -3020,26 +3036,7 @@ void EImportStart::replay(MDSRank *mds)
   auto&& segment = get_segment();
   metablob.replay(mds, segment);
 
-  // put in ambiguous import list
-  mds->mdcache->add_ambiguous_import(base, bounds);
-
-  // set auth partially to us so we don't trim it
-  CDir *dir = mds->mdcache->get_dirfrag(base);
-  ceph_assert(dir);
-
-  set<CDir*> realbounds;
-  for (vector<dirfrag_t>::iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = mds->mdcache->get_dirfrag(*p);
-    ceph_assert(bd);
-    if (!bd->is_subtree_root())
-      bd->state_clear(CDir::STATE_AUTH);
-    realbounds.insert(bd);
-  }
-
-  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds,
-					    mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
+  mds->mdcache->migrator->replay_import_start(base, bounds, from, tid);
 
   // open client sessions?
   if (mds->sessionmap.get_version() >= cmapv) {
@@ -3061,7 +3058,7 @@ void EImportStart::replay(MDSRank *mds)
 }
 
 void EImportStart::encode(bufferlist &bl, uint64_t features) const {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   encode(stamp, bl);
   encode(base, bl);
   encode(metablob, bl, features);
@@ -3069,11 +3066,12 @@ void EImportStart::encode(bufferlist &bl, uint64_t features) const {
   encode(cmapv, bl);
   encode(client_map, bl);
   encode(from, bl);
+  encode(tid, bl);
   ENCODE_FINISH(bl);
 }
 
 void EImportStart::decode(bufferlist::const_iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(base, bl);
@@ -3083,6 +3081,8 @@ void EImportStart::decode(bufferlist::const_iterator &bl) {
   decode(client_map, bl);
   if (struct_v >= 4)
     decode(from, bl);
+  if (struct_v >= 5)
+    decode(tid, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3107,46 +3107,32 @@ void EImportStart::generate_test_instances(std::list<EImportStart*>& ls)
 
 void EImportFinish::replay(MDSRank *mds)
 {
-  if (mds->mdcache->have_ambiguous_import(base)) {
-    dout(10) << "EImportFinish.replay " << base << " success=" << success << dendl;
-    if (success) {
-      mds->mdcache->finish_ambiguous_import(base);
-    } else {
-      CDir *dir = mds->mdcache->get_dirfrag(base);
-      ceph_assert(dir);
-      vector<dirfrag_t> bounds;
-      mds->mdcache->get_ambiguous_import_bounds(base, bounds);
-      mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
-      mds->mdcache->cancel_ambiguous_import(dir);
-      mds->mdcache->try_trim_non_auth_subtree(dir);
-   }
-  } else {
-    // this shouldn't happen unless this is an old journal
-    dout(10) << "EImportFinish.replay " << base << " success=" << success
-	     << " on subtree not marked as ambiguous" 
-	     << dendl;
-    mds->clog->error() << "failure replaying journal (EImportFinish)";
-    mds->damaged();
-    ceph_abort();  // Should be unreachable because damaged() calls respawn()
-  }
+  dout(10) << "EImportFinish.replay " << base << " tid " << tid << dendl;
+  mds->mdcache->migrator->replay_import_finish(base, tid, success);
 }
 
 void EImportFinish::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   encode(stamp, bl);
   encode(base, bl);
   encode(success, bl);
+  encode(from, bl);
+  encode(tid, bl);
   ENCODE_FINISH(bl);
 }
 
 void EImportFinish::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(base, bl);
   decode(success, bl);
+  if (struct_v >= 4) {
+    decode(from, bl);
+    decode(tid, bl);
+  }
   DECODE_FINISH(bl);
 }
 

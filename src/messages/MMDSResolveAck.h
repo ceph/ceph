@@ -26,6 +26,27 @@ public:
   std::map<metareqid_t, ceph::buffer::list> commit;
   std::vector<metareqid_t> abort;
 
+  struct ambig_import {
+    uint64_t tid = 0;
+    bool bystander = false;
+    void encode(ceph::buffer::list &bl) const
+    {
+      ENCODE_START(1, 1, bl);
+      encode(tid, bl);
+      encode(bystander, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(ceph::buffer::list::const_iterator &blp)
+    {
+      DECODE_START(1, blp);
+      decode(tid, blp);
+      decode(bystander, blp);
+      DECODE_FINISH(blp);
+    }
+  };
+  std::map<dirfrag_t, ambig_import> aborted_imports;
+  std::map<dirfrag_t, ambig_import> finished_imports;
+
 protected:
   MMDSResolveAck() : MMDSOp{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
   ~MMDSResolveAck() final {}
@@ -45,21 +66,37 @@ public:
   void add_abort(metareqid_t r) {
     abort.push_back(r);
   }
+  void add_aborted_import(dirfrag_t df, uint64_t tid, bool bystander) {
+    auto &im = aborted_imports[df];
+    im.tid = tid;
+    im.bystander = bystander;
+  }
+  void add_finished_import(dirfrag_t df, uint64_t tid, bool bystander) {
+    auto &im = finished_imports[df];
+    im.tid = tid;
+    im.bystander = bystander;
+  }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(commit, payload);
     encode(abort, payload);
+    encode(aborted_imports, payload);
+    encode(finished_imports, payload);
   }
   void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(commit, p);
     decode(abort, p);
+    decode(aborted_imports, p);
+    decode(finished_imports, p);
   }
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
+
+WRITE_CLASS_ENCODER(MMDSResolveAck::ambig_import)
 
 #endif

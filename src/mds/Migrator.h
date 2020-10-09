@@ -34,11 +34,14 @@
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
 #include "messages/MExportDirFinish.h"
+#include "messages/MExportDirFinishAck.h"
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
 #include "messages/MGatherCaps.h"
+#include "messages/MMDSResolve.h"
+#include "messages/MMDSResolveAck.h"
 
 class MDSRank;
 class CDir;
@@ -46,6 +49,10 @@ class CInode;
 class CDentry;
 class Session;
 class EImportStart;
+class EImportFinish;
+class EEXport;
+class EEXportCommitted;
+class ESubtreeMap;
 
 class Migrator {
 public:
@@ -58,8 +65,9 @@ public:
   const static int EXPORT_PREPPING	= 5;  // sending dest spanning tree to export bounds
   const static int EXPORT_WARNING	= 6;  // warning bystanders of dir_auth_pending
   const static int EXPORT_EXPORTING	= 7;  // sent actual export, waiting for ack
-  const static int EXPORT_LOGGINGFINISH	= 8;  // logging EExportFinish
+  const static int EXPORT_LOGGING	= 8;  // logging EExport
   const static int EXPORT_NOTIFYING	= 9;  // waiting for notifyacks
+  const static int EXPORT_FINISHED	= 10; // waiting for peer committed
 
   // -- imports --
   const static int IMPORT_DISCOVERING   = 1; // waiting for prep
@@ -67,9 +75,12 @@ public:
   const static int IMPORT_PREPPING      = 3; // opening dirs on bounds
   const static int IMPORT_PREPPED       = 4; // opened bounds, waiting for import
   const static int IMPORT_LOGGINGSTART  = 5; // got import, logging EImportStart
-  const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
-  const static int IMPORT_FINISHING     = 7; // sent cap imports, waiting for finish
-  const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
+  const static int IMPORT_REPLAYEDSTART	= 6; // replayed EImportStart
+  const static int IMPORT_ACKING        = 7; // logged EImportStart, sent ack, waiting for finish
+  const static int IMPORT_FINISHING	= 8; // sent cap imports, waiting for final finish
+  const static int IMPORT_LOGGINGFINISH = 9; // got import, logging EImportStart
+  const static int IMPORT_ABORTING	= 10; // notifying bystanders of an abort before unfreezing
+
 
   // -- cons --
   Migrator(MDSRank *m, MDCache *c);
@@ -83,8 +94,9 @@ public:
     case EXPORT_PREPPING: return "prepping";
     case EXPORT_WARNING: return "warning";
     case EXPORT_EXPORTING: return "exporting";
-    case EXPORT_LOGGINGFINISH: return "loggingfinish";
+    case EXPORT_LOGGING: return "logging";
     case EXPORT_NOTIFYING: return "notifying";
+    case EXPORT_FINISHED: return "finished";
     default: ceph_abort(); return std::string_view();
     }
   }
@@ -96,8 +108,10 @@ public:
     case IMPORT_PREPPING: return "prepping";
     case IMPORT_PREPPED: return "prepped";
     case IMPORT_LOGGINGSTART: return "loggingstart";
+    case IMPORT_REPLAYEDSTART: return "replayedstart";
     case IMPORT_ACKING: return "acking";
     case IMPORT_FINISHING: return "finishing";
+    case IMPORT_LOGGINGFINISH: return "loggingfinish";
     case IMPORT_ABORTING: return "aborting";
     default: ceph_abort(); return std::string_view();
     }
@@ -109,6 +123,12 @@ public:
 
   void show_importing();
   void show_exporting();
+  void show_other_importing();
+  void show_all() {
+    show_importing();
+    show_exporting();
+    show_other_importing();
+  }
 
   int get_num_exporting() const { return export_state.size(); }
   int get_export_queue_size() const { return export_queue.size(); }
@@ -119,20 +139,20 @@ public:
     if (it != export_state.end()) return it->second.state;
     return 0;
   }
-  bool is_exporting() const { return !export_state.empty(); }
+  bool is_any_exporting() const { return !export_state.empty(); }
   int is_importing(dirfrag_t df) const {
     auto it = import_state.find(df);
     if (it != import_state.end()) return it->second.state;
     return 0;
   }
-  bool is_importing() const { return !import_state.empty(); }
+  bool is_any_importing() const { return !import_state.empty(); }
 
   bool is_ambiguous_import(dirfrag_t df) const {
     auto it = import_state.find(df);
     if (it == import_state.end())
       return false;
     if (it->second.state >= IMPORT_LOGGINGSTART &&
-	it->second.state < IMPORT_ABORTING)
+	it->second.state < IMPORT_LOGGINGFINISH)
       return true;
     return false;
   }
@@ -247,9 +267,28 @@ public:
 			std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
 			std::list<ScatterLock*>& updated_scatterlocks, int &num_imported);
 
-  void import_reverse(CDir *dir);
+  // replay
+  int replay_check_ambiguous_subtrees(ESubtreeMap *le);
+  void add_ambiguous_subtrees(ESubtreeMap *le);
 
-  void import_finish(CDir *dir, bool notify, bool last=true);
+  void replay_export_dir(dirfrag_t base, const vector<dirfrag_t>& bound_vec,
+			 mds_rank_t target, uint64_t tid, LogSegment *ls);
+  void replay_export_committed(dirfrag_t base, uint64_t tid);
+
+  void replay_import_start(dirfrag_t base, const vector<dirfrag_t>& bound_vec,
+			   mds_rank_t from, uint64_t tid);
+  void replay_import_finish(dirfrag_t base, uint64_t tid, bool success);
+
+  void add_ambiguous_imports(map<mds_rank_t, ref_t<MMDSResolve>>& resolves,
+			     const set<mds_rank_t>& resolve_set);
+  void handle_peer_resolve(const cref_t<MMDSResolve> &m,
+			   const ref_t<MMDSResolveAck> &ack);
+  void handle_peer_resolve_ack(const cref_t<MMDSResolveAck> &m);
+  void peer_resolve_gather_finish();
+
+  bool is_any_in_progress() const {
+    return is_any_exporting() || is_any_importing() || !other_ambiguous_imports.empty();
+  }
 
 protected:
   struct export_base_t {
@@ -276,12 +315,14 @@ protected:
     std::set<mds_rank_t> notify_ack_waiting;
     std::map<inodeno_t,std::map<client_t,Capability::Import> > peer_imported;
     MutationRef mut;
+    LogSegment *ls = nullptr;
     size_t approx_size = 0;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins = 0;
     int num_remote_waiters = 0; // number of remote authpin waiters
     std::shared_ptr<export_base_t> parent;
+    bool active_peer = true;
   };
 
   // import fun
@@ -297,12 +338,15 @@ protected:
     std::map<client_t,pair<Session*,uint64_t> > session_map;
     std::map<CInode*, std::map<client_t,Capability::Export> > peer_exports;
     MutationRef mut;
+    bool ack_finished = true;
   };
 
   typedef map<dirfrag_t, export_state_t>::iterator export_state_iterator;
+  typedef map<dirfrag_t, import_state_t>::iterator import_state_iterator;
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
+  friend class C_MDS_ExportDirCommitted;
   friend class C_M_ExportGo;
   friend class C_M_ExportSessionsFlushed;
   friend class C_MDS_ExportDiscover;
@@ -325,6 +369,8 @@ protected:
   void export_notify_abort(export_state_t& stat, std::set<CDir*>& bounds);
   void handle_export_ack(const cref_t<MExportDirAck> &m);
   void export_logged_finish(CDir *dir);
+  void handle_export_finish_ack(const cref_t<MExportDirFinishAck> &m);
+  void export_logged_committed(dirfrag_t df);
   void handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m);
   void export_finish(CDir *dir);
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
@@ -342,15 +388,16 @@ protected:
 
   void import_reverse_discovering(dirfrag_t df);
   void import_reverse_discovered(dirfrag_t df, CInode *diri);
-  void import_reverse_prepping(CDir *dir, import_state_t& stat);
+  void import_reverse_prepping(CDir *dir, import_state_iterator it);
   void import_remove_pins(CDir *dir, import_state_t& stat);
-  void import_reverse_unfreeze(CDir *dir);
-  void import_reverse_final(CDir *dir);
-  void import_notify_abort(CDir *dir, import_state_t& stat);
+  void import_reverse_unfreeze(CDir *dir, import_state_iterator it);
+  void import_reverse_final(CDir *dir, import_state_iterator it);
   void import_notify_finish(CDir *dir, import_state_t& stat);
+  void import_notify_abort(CDir *dir, import_state_iterator it);
   void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
 			   std::map<client_t,pair<Session*,uint64_t> >& imported_session_map);
   void handle_export_finish(const cref_t<MExportDirFinish> &m);
+  void import_logged_finish(dirfrag_t df);
 
   void handle_export_caps(const cref_t<MExportCaps> &m);
   void handle_export_caps_ack(const cref_t<MExportCapsAck> &m);
@@ -358,6 +405,10 @@ protected:
 			  mds_rank_t from,
 			  std::map<client_t,pair<Session*,uint64_t> >& imported_session_map,
 			  std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
+
+  void import_reverse(CDir *dir, import_state_iterator it, bool notify);
+  void import_finish(CDir *dir, import_state_t& stat, bool last);
+  void import_finish_final(CDir *dir, import_state_t& stat);
 
   // bystander
   void handle_export_notify(const cref_t<MExportDirNotify> &m);
@@ -371,6 +422,15 @@ protected:
   uint64_t export_queue_gen = 1;
 
   std::map<dirfrag_t, import_state_t>  import_state;
+
+  struct other_ambiguous_import_t {
+    uint64_t tid = 0;
+    mds_authority_t dir_auth = CDIR_AUTH_UNDEF;;
+    std::vector<dirfrag_t> bound_vec;
+  };
+  std::map<dirfrag_t, other_ambiguous_import_t> other_ambiguous_imports;
+
+  bool peer_resolve_gathered = false;
 
 private:
   MDSRank *mds;

@@ -30,8 +30,10 @@
 #include "common/likely.h"
 
 #include "events/EExport.h"
+#include "events/EExportCommitted.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
+#include "events/ESubtreeMap.h"
 #include "events/ESessions.h"
 
 #include "msg/Messenger.h"
@@ -125,6 +127,9 @@ void Migrator::dispatch(const cref_t<Message> &m)
     break;
   case MSG_MDS_EXPORTDIRACK:
     handle_export_ack(ref_cast<MExportDirAck>(m));
+    break;
+  case MSG_MDS_EXPORTDIRFINISHACK:
+    handle_export_finish_ack(ref_cast<MExportDirFinishAck>(m));
     break;
   case MSG_MDS_EXPORTDIRNOTIFYACK:
     handle_export_notify_ack(ref_cast<MExportDirNotifyAck>(m));
@@ -275,12 +280,11 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     it->second.state = EXPORT_CANCELLED;
     dir->unfreeze_tree();  // cancel the freeze
     dir->auth_unpin(this);
-    if (notify_peer &&
-	(!mds->is_cluster_degraded() ||
-	 mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer))) // tell them.
+    if (notify_peer && it->second.active_peer) {
       mds->send_message_mds(make_message<MExportDirCancel>(dir->dirfrag(),
 							   it->second.tid),
 			    it->second.peer);
+    }
     break;
 
   case EXPORT_FREEZING:
@@ -289,12 +293,11 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dir->unfreeze_tree();  // cancel the freeze
     if (dir->is_subtree_root())
       mdcache->try_subtree_merge(dir);
-    if (notify_peer &&
-	(!mds->is_cluster_degraded() ||
-	 mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer))) // tell them.
+    if (notify_peer && it->second.active_peer) {
       mds->send_message_mds(make_message<MExportDirCancel>(dir->dirfrag(),
 							   it->second.tid),
 			    it->second.peer);
+    }
     break;
 
     // NOTE: state order reversal, warning comes after prepping
@@ -324,12 +327,11 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     }
     dir->unfreeze_tree();
     mdcache->try_subtree_merge(dir);
-    if (notify_peer &&
-	(!mds->is_cluster_degraded() ||
-	 mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer))) // tell them.
+    if (notify_peer && it->second.active_peer) {
       mds->send_message_mds(make_message<MExportDirCancel>(dir->dirfrag(),
 							   it->second.tid),
 			    it->second.peer);
+    }
     break;
 
   case EXPORT_EXPORTING:
@@ -338,11 +340,12 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     export_reverse(it->second);
     break;
 
-  case EXPORT_LOGGINGFINISH:
+  case EXPORT_LOGGING:
   case EXPORT_NOTIFYING:
-    dout(10) << "export state=loggingfinish|notifying : ignoring dest failure, we were successful." << dendl;
+    dout(10) << "export state=logging|notifying : ignoring dest failure, we were successful." << dendl;
     // leave export_state, don't clean up now.
     break;
+  case EXPORT_FINISHED:
   case EXPORT_CANCELLING:
     break;
 
@@ -392,8 +395,9 @@ void Migrator::export_cancel_finish(export_state_iterator& it)
     // pinned by Migrator::export_notify_abort()
     dir->auth_unpin(this);
   }
-  // send pending import_maps?  (these need to go out when all exports have finished.)
-  mdcache->maybe_send_pending_resolves();
+  // send pending subtree resolves?  (these need to go out when all exports have finished.)
+  if (!is_any_in_progress())
+    mdcache->maybe_send_pending_resolves();
 
   if (parent)
     child_export_finish(parent, false);
@@ -429,11 +433,14 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
     auto &stat = p->second;
     CDir *dir = stat.base;
     
+    if (stat.peer == who)
+      stat.active_peer = false;
     // abort exports:
     //  - that are going to the failed node
     //  - that aren't frozen yet (to avoid auth_pin deadlock)
     //  - they havne't prepped yet (they may need to discover bounds to do that)
     if ((stat.peer == who &&
+	 stat.state != EXPORT_FINISHED &&
 	 stat.state != EXPORT_CANCELLING) ||
 	stat.state == EXPORT_LOCKING ||
 	stat.state == EXPORT_DISCOVERING ||
@@ -447,7 +454,6 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
       // bystander failed.
       if (stat.warning_ack_waiting.erase(who)) {
 	if (stat.state == EXPORT_WARNING) {
-	  stat.notify_ack_waiting.erase(who);   // they won't get a notify either.
 	  // exporter waiting for warning acks, let's fake theirs.
 	  dout(10) << "faking export_warning_ack from mds." << who
 		   << " on " << *dir << " to mds." << stat.peer
@@ -459,11 +465,12 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
       if (stat.notify_ack_waiting.erase(who)) {
 	// exporter is waiting for notify acks, fake it
 	dout(10) << "faking export_notify_ack from mds." << who
-		 << " on " << *dir << " to mds." << stat.peer
+		 << " on " << p->first << " to mds." << stat.peer
 		 << dendl;
 	if (stat.state == EXPORT_NOTIFYING) {
-	  if (stat.notify_ack_waiting.empty())
+	  if (stat.notify_ack_waiting.empty()) {
 	    export_finish(dir);
+	  }
 	} else if (stat.state == EXPORT_CANCELLING) {
 	  if (stat.notify_ack_waiting.empty()) {
 	    export_cancel_finish(p);
@@ -508,40 +515,41 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
       case IMPORT_PREPPING:
 	ceph_assert(dir);
 	dout(10) << "import state=prepping : unpinning base+bounds " << *dir << dendl;
-	import_reverse_prepping(dir, q->second);
+	import_reverse_prepping(dir, q);
 	break;
 
       case IMPORT_PREPPED:
 	ceph_assert(dir);
 	dout(10) << "import state=prepped : unpinning base+bounds, unfreezing " << *dir << dendl;
-	import_remove_pins(dir, q->second);
-
-	// adjust auth back to the exporter
-	mdcache->adjust_subtree_auth(dir, q->second.peer);
-
-	// notify bystanders ; wait in aborting state
 	q->second.state = IMPORT_ABORTING;
-	import_notify_abort(dir, q->second);
-	ceph_assert(g_conf()->mds_kill_import_at != 10);
+	import_remove_pins(dir, q->second);
+	mdcache->adjust_subtree_auth(dir, q->second.peer);
+	import_notify_abort(dir, q);
 	break;
 
       case IMPORT_LOGGINGSTART:
 	ceph_assert(dir);
 	dout(10) << "import state=loggingstart : reversing import on " << *dir << dendl;
-	import_reverse(dir);
+	import_reverse(dir, q, true);
 	break;
 
       case IMPORT_ACKING:
 	ceph_assert(dir);
 	// hrm.  make this an ambiguous import, and wait for exporter recovery to disambiguate
 	dout(10) << "import state=acking : noting ambiguous import " << *dir << dendl;
-	mdcache->add_ambiguous_import(dir, q->second.bounds);
 	break;
 	
       case IMPORT_FINISHING:
 	ceph_assert(dir);
 	dout(10) << "import state=finishing : finishing import on " << *dir << dendl;
-	import_finish(dir, true);
+	import_notify_finish(dir, q->second);
+	import_finish(dir, q->second, true);
+	q->second.ack_finished = false;
+	break;
+
+      case IMPORT_LOGGINGFINISH:
+        dout(10) << "import state=loggingfinish : ignoring peer failure " << *dir << dendl;
+	q->second.ack_finished = false;
 	break;
 
       case IMPORT_ABORTING:
@@ -550,17 +558,14 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	break;
       }
     } else {
-      auto bystanders_entry = q->second.bystanders.find(who);
-      if (bystanders_entry != q->second.bystanders.end()) {
-	q->second.bystanders.erase(bystanders_entry);
-	if (q->second.state == IMPORT_ABORTING) {
-	  ceph_assert(dir);
-	  dout(10) << "faking export_notify_ack from mds." << who
-		   << " on aborting import " << *dir << " from mds." << q->second.peer
-		   << dendl;
-	  if (q->second.bystanders.empty())
-	    import_reverse_unfreeze(dir);
-	}
+      if (q->second.bystanders.erase(who)) {
+        if (q->second.state == IMPORT_ABORTING) {
+          ceph_assert(dir);
+          dout(10) << "faking notify ack from mds." << who << " on aborting import "
+		   << *dir << " from mds." << q->second.peer << dendl;
+          if (q->second.bystanders.empty())
+            import_reverse_unfreeze(dir, q);
+        }
       }
     }
 
@@ -599,13 +604,32 @@ void Migrator::show_exporting()
 {
   dout(10) << dendl;
   for (const auto& [df, stat] : export_state) {
-    dout(10) << " exporting to " << stat.peer
-	     << ": (" << stat.state << ") " << get_export_statename(stat.state)
-	     << " " << df << " " << *stat.base << dendl;
+    if (stat.base) {
+      dout(10) << " exporting to " << stat.peer
+	       << ": (" << stat.state << ") " << get_export_statename(stat.state)
+	       << " " << *stat.base << dendl;
+    } else {
+      dout(10) << " exporting to " << stat.peer
+	       << ": (" << stat.state << ") " << get_export_statename(stat.state)
+	       << " " << df << dendl;
+    }
   }
 }
 
-
+void Migrator::show_other_importing()
+{
+  dout(10) << dendl;
+  for (auto& p : other_ambiguous_imports) {
+    CDir *dir = mdcache->get_dirfrag(p.first);
+    if (dir) {
+      dout(10) << " mds." << p.second.dir_auth.first << " is exporting " << *dir
+	       << " to mds." << p.second.dir_auth.second << dendl;
+    } else {
+      dout(10) << " mds." << p.second.dir_auth.first << " is exporting " << p.first
+	       << " to mds." << p.second.dir_auth.second << dendl;
+    }
+  }
+}
 
 void Migrator::audit()
 {
@@ -617,7 +641,8 @@ void Migrator::audit()
   for (map<dirfrag_t,import_state_t>::iterator p = import_state.begin();
        p != import_state.end();
        ++p) {
-    if (p->second.state == IMPORT_DISCOVERING)
+    if (p->second.state == IMPORT_DISCOVERING ||
+	p->second.state == IMPORT_LOGGINGFINISH)
       continue;
     if (p->second.state == IMPORT_DISCOVERED) {
       CInode *in = mdcache->get_inode(p->first.ino);
@@ -645,6 +670,7 @@ void Migrator::audit()
     if (stat.state == EXPORT_LOCKING ||
 	stat.state == EXPORT_DISCOVERING ||
 	stat.state == EXPORT_FREEZING ||
+	stat.state == EXPORT_FINISHED ||
 	stat.state == EXPORT_CANCELLING)
       continue;
     ceph_assert(dir->is_ambiguous_dir_auth());
@@ -1316,16 +1342,17 @@ void Migrator::export_frozen(dirfrag_t df, uint64_t tid)
     return;
   }
 
-  const auto& dir = it->second.base;
-  ceph_assert(it->second.state == EXPORT_FREEZING);
+  auto &stat = it->second;
+  const auto& dir = stat.base;
+  ceph_assert(stat.state == EXPORT_FREEZING);
   ceph_assert(dir->is_frozen_tree_root());
 
-  it->second.mut = new MutationImpl();
+  stat.mut = new MutationImpl();
 
   // ok, try to grab all my locks.
   CInode *diri = dir->get_inode();
   if ((diri->is_auth() && diri->is_frozen()) ||
-      !export_try_grab_locks(dir, it->second.mut)) {
+      !export_try_grab_locks(dir, stat.mut)) {
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
 	    << *dir << dendl;
     export_try_cancel(dir);
@@ -1333,30 +1360,31 @@ void Migrator::export_frozen(dirfrag_t df, uint64_t tid)
   }
 
   if (diri->is_auth())
-    it->second.mut->auth_pin(diri);
+    stat.mut->auth_pin(diri);
 
   mdcache->show_subtrees();
 
   // CDir::_freeze_tree() should have forced it into subtree.
   ceph_assert(dir->get_dir_auth() == mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
-  mdcache->get_subtree_bounds(dir, it->second.bounds);
-  for (auto& bound : it->second.bounds)
-   it->second.bound_vec.push_back(bound->dirfrag());
-  std::sort(it->second.bound_vec.begin(), it->second.bound_vec.end());
+  mdcache->get_subtree_bounds(dir, stat.bounds);
+  for (auto& bound : stat.bounds) {
+   stat.bound_vec.push_back(bound->dirfrag());
+  }
+  std::sort(stat.bound_vec.begin(), stat.bound_vec.end());
 
   // generate prep message, log entry.
-  auto prep = make_message<MExportDirPrep>(dir->dirfrag(), it->second.bound_vec, it->second.tid);
+  auto prep = make_message<MExportDirPrep>(dir->dirfrag(), stat.bound_vec, stat.tid);
 
   // include list of bystanders
   for (const auto &p : dir->get_replicas()) {
-    if (p.first != it->second.peer) {
+    if (p.first != stat.peer) {
       dout(10) << "bystander mds." << p.first << dendl;
       prep->add_bystander(p.first);
     }
   }
 
   // include base dirfrag
-  mdcache->encode_replica_dir(dir, it->second.peer, prep->basedir);
+  mdcache->encode_replica_dir(dir, stat.peer, prep->basedir);
   
   /*
    * include spanning tree for all nested exports.
@@ -1371,24 +1399,24 @@ void Migrator::export_frozen(dirfrag_t df, uint64_t tid)
   set<dirfrag_t> dirfrags_added;
 
   // check bounds
-  for (auto &bound : it->second.bounds){
+  for (auto &bound : stat.bounds){
     dout(7) << "  export bound " << *bound << dendl;
     // pin it.
     bound->get(CDir::PIN_EXPORTBOUND);
     bound->state_set(CDir::STATE_EXPORTBOUND);
 
     bufferlist final_bl;
-    encode_export_prep_trace(final_bl, bound, it->second, inodes_added, dirfrags_added);
+    encode_export_prep_trace(final_bl, bound, stat, inodes_added, dirfrags_added);
     prep->add_trace(final_bl);
   }
 
   // send.
-  it->second.state = EXPORT_PREPPING;
-  mds->send_message_mds(prep, it->second.peer);
+  stat.state = EXPORT_PREPPING;
+  mds->send_message_mds(prep, stat.peer);
   assert (g_conf()->mds_kill_export_at != 4);
 
   // make sure any new instantiations of caps are flushed out
-  ceph_assert(it->second.warning_ack_waiting.empty());
+  ceph_assert(stat.warning_ack_waiting.empty());
 
   set<client_t> export_client_set;
   get_export_client_set(dir, export_client_set);
@@ -1396,8 +1424,8 @@ void Migrator::export_frozen(dirfrag_t df, uint64_t tid)
   MDSGatherBuilder gather(g_ceph_context);
   mds->server->flush_client_sessions(export_client_set, gather);
   if (gather.has_subs()) {
-    it->second.warning_ack_waiting.insert(MDS_RANK_NONE);
-    gather.set_finisher(new C_M_ExportSessionsFlushed(this, dir, it->second.tid));
+    stat.warning_ack_waiting.insert(MDS_RANK_NONE);
+    gather.set_finisher(new C_M_ExportSessionsFlushed(this, dir, stat.tid));
     gather.activate();
   }
 }
@@ -1872,12 +1900,12 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   auto bp = m->imported_caps.cbegin();
   decode(it->second.peer_imported, bp);
 
-  it->second.state = EXPORT_LOGGINGFINISH;
+  it->second.state = EXPORT_LOGGING;
   assert (g_conf()->mds_kill_export_at != 9);
 
   // log completion. 
   //  include export bounds, to ensure they're in the journal.
-  EExport *le = new EExport(it->first, it->second.bound_vec, it->second.peer);
+  EExport *le = new EExport(it->first, it->second.bound_vec, it->second.peer, it->second.tid);
   mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
@@ -1890,6 +1918,9 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   // list us second, them first.
   // this keeps authority().first in sync with subtree auth state in the journal.
   mdcache->adjust_subtree_auth(dir, it->second.peer, mds->get_nodeid());
+
+  it->second.ls = mds->mdlog->get_current_segment();
+  it->second.ls->uncommitted_exports.insert(it->first);
 
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le, new C_MDS_ExportFinishLogged(this, dir));
@@ -1918,6 +1949,33 @@ void Migrator::export_notify_abort(export_state_t& stat, set<CDir*>& bounds)
 						 mds_authority_t(mds->get_nodeid(), stat.peer),
 						 mds_authority_t(mds->get_nodeid(), CDIR_AUTH_UNKNOWN));
     mds->send_message_mds(notify, *p);
+  }
+}
+
+class C_MDS_ExportDirCommitted: public MigratorLogContext {
+  dirfrag_t df;
+public:
+  C_MDS_ExportDirCommitted(Migrator *m, dirfrag_t d) :
+    MigratorLogContext(m), df(d) {
+  }
+  void finish(int r) override {
+    mig->export_logged_committed(df);
+  }
+};
+
+
+void Migrator::handle_export_finish_ack(const cref_t<MExportDirFinishAck> &m)
+{
+  auto it = export_state.find(m->get_dirfrag());
+  ceph_assert(it != export_state.end());
+  auto& stat = it->second;
+  ceph_assert(it->second.state == EXPORT_FINISHED);
+
+  if (mds->is_resolve() && !peer_resolve_gathered) {
+    stat.active_peer = false;
+  } else {
+    mds->mdlog->start_submit_entry(new EExportCommitted(it->first, stat.tid),
+				   new C_MDS_ExportDirCommitted(this, it->first));
   }
 }
 
@@ -2046,16 +2104,27 @@ void Migrator::export_logged_finish(CDir *dir)
  */
 void Migrator::handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m)
 {
-  CDir *dir = mdcache->get_dirfrag(m->get_dirfrag());
-  mds_rank_t dest(m->get_source().num());
-  ceph_assert(dir);
   mds_rank_t from = mds_rank_t(m->get_source().num());
 
-  mds->hit_export_target(dest, -1);
+  if (mds->is_resolve()) {
+    auto& stat = export_state.at(m->get_dirfrag());
+    ceph_assert(stat.state == EXPORT_NOTIFYING);
+    if (stat.notify_ack_waiting.erase(from) &&
+	stat.notify_ack_waiting.empty()) {
+      if (stat.active_peer)
+	mds->send_message_mds(make_message<MExportDirFinish>(m->get_dirfrag(), true, stat.tid), stat.peer);
+      stat.state = EXPORT_FINISHED;
+    }
+  }
 
-  auto export_state_entry = export_state.find(dir->dirfrag());
-  if (export_state_entry != export_state.end()) {
-    export_state_t& stat = export_state_entry->second;
+  CDir *dir = mdcache->get_dirfrag(m->get_dirfrag());
+  ceph_assert(dir);
+
+  mds->hit_export_target(from, -1);
+
+  auto export_state_it = export_state.find(dir->dirfrag());
+  if (export_state_it != export_state.end()) {
+    export_state_t& stat = export_state_it->second;
     if (stat.state == EXPORT_WARNING &&
 	stat.warning_ack_waiting.erase(from)) {
       // exporting. process warning.
@@ -2076,22 +2145,21 @@ void Migrator::handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m)
       dout(7) << "from " << m->get_source()
 	      << ": cancelling export, processing notify on " << *dir << dendl;
       if (stat.notify_ack_waiting.empty()) {
-	export_cancel_finish(export_state_entry);
+	export_cancel_finish(export_state_it);
       }
     }
-  }
-  else {
-    auto import_state_entry = import_state.find(dir->dirfrag());
-    if (import_state_entry != import_state.end()) {
-      import_state_t& stat = import_state_entry->second;
+  } else {
+    auto import_state_it = import_state.find(dir->dirfrag());
+    if (import_state_it != import_state.end()) {
+      import_state_t& stat = import_state_it->second;
       if (stat.state == IMPORT_ABORTING) {
 	// reversing import
 	dout(7) << "from " << m->get_source()
-	  << ": aborting import on " << *dir << dendl;
-	ceph_assert(stat.bystanders.count(from));
-	stat.bystanders.erase(from);
+		<< ": aborting import on " << *dir << dendl;
+	auto ret = stat.bystanders.erase(from);
+	ceph_assert(ret);
 	if (stat.bystanders.empty())
-	  import_reverse_unfreeze(dir);
+	  import_reverse_unfreeze(dir, import_state_it);
       }
     }
   }
@@ -2109,8 +2177,7 @@ void Migrator::export_finish(CDir *dir)
   }
 
   // send finish/commit to new auth
-  if (!mds->is_cluster_degraded() ||
-      mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) {
+  if (it->second.active_peer) {
     mds->send_message_mds(make_message<MExportDirFinish>(dir->dirfrag(), true, it->second.tid), it->second.peer);
   } else {
     dout(7) << "not sending MExportDirFinish last, dest has failed" << dendl;
@@ -2156,11 +2223,10 @@ void Migrator::export_finish(CDir *dir)
   if (!finished.empty())
     mds->queue_waiters(finished);
 
-  MutationRef mut = std::move(it->second.mut);
-  auto parent = std::move(it->second.parent);
   // remove from exporting list, clean up state
   total_exporting_size -= it->second.approx_size;
-  export_state.erase(it);
+  it->second.state = EXPORT_FINISHED;
+  it->second.base = nullptr;
 
   ceph_assert(dir->state_test(CDir::STATE_EXPORTING));
   dir->clear_exporting();
@@ -2170,21 +2236,35 @@ void Migrator::export_finish(CDir *dir)
 
   mdcache->trim(num_dentries); // try trimming exported dentries
 
-  // send pending import_maps?
-  mdcache->maybe_send_pending_resolves();
-
   // drop locks, unpin path
-  if (mut) {
-    mds->locker->drop_locks(mut.get());
-    mut->cleanup();
+  if (it->second.mut) {
+    mds->locker->drop_locks(it->second.mut.get());
+    it->second.mut->cleanup();
+    it->second.mut.reset();
   }
-
-  if (parent)
-    child_export_finish(parent, true);
-
-  maybe_do_queued_export();
 }
 
+void Migrator::export_logged_committed(dirfrag_t base)
+{
+  auto it = export_state.find(base);
+  ceph_assert(it != export_state.end());
+
+  auto &stat = it->second;
+  ceph_assert(stat.state == EXPORT_FINISHED);
+
+  if (stat.parent)
+    child_export_finish(stat.parent, true);
+
+  stat.ls->uncommitted_exports.erase(base);
+  if (!stat.ls->is_any_uncommitted())
+    mds->queue_waiters(stat.ls->uncommitted_waiters);
+  export_state.erase(it);
+
+  maybe_do_queued_export();
+
+  if (!is_any_in_progress())
+    mdcache->maybe_send_pending_resolves();
+}
 
 
 class C_MDS_ExportDiscover : public MigratorContext {
@@ -2303,14 +2383,17 @@ void Migrator::import_reverse_discovered(dirfrag_t df, CInode *diri)
   import_state.erase(df);
 }
 
-void Migrator::import_reverse_prepping(CDir *dir, import_state_t& stat)
+void Migrator::import_reverse_prepping(CDir *dir, import_state_iterator it)
 {
-  import_remove_pins(dir, stat);
-  import_reverse_final(dir);
+  import_remove_pins(dir, it->second);
+  import_reverse_final(dir, it);
 }
 
 void Migrator::handle_export_cancel(const cref_t<MExportDirCancel> &m)
 {
+  if (!(mds->is_clientreplay() || mds->is_active() || mds->is_stopping()))
+    return;
+
   dout(7) << "on " << m->get_dirfrag() << dendl;
   dirfrag_t df = m->get_dirfrag();
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(df);
@@ -2325,17 +2408,20 @@ void Migrator::handle_export_cancel(const cref_t<MExportDirCancel> &m)
   } else if (it->second.state == IMPORT_PREPPING) {
     CDir *dir = mdcache->get_dirfrag(df);
     ceph_assert(dir);
-    import_reverse_prepping(dir, it->second);
+    import_reverse_prepping(dir, it);
   } else if (it->second.state == IMPORT_PREPPED) {
     CDir *dir = mdcache->get_dirfrag(df);
     ceph_assert(dir);
     import_remove_pins(dir, it->second);
     // adjust auth back to the exportor
     mdcache->adjust_subtree_auth(dir, it->second.peer);
-    import_reverse_unfreeze(dir);
+    import_reverse_unfreeze(dir, it);
   } else {
     ceph_abort_msg("got export_cancel in weird state");
   }
+
+  if (!is_any_in_progress())
+    mdcache->maybe_send_pending_resolves();
 }
 
 class C_MDS_ExportPrep : public MigratorContext {
@@ -2540,7 +2626,7 @@ void Migrator::handle_export_prep(const cref_t<MExportDirPrep> &m, bool did_assi
       // note that i am an ambiguous auth for this subtree.
       // specify bounds, since the exporter explicitly defines the region.
       mdcache->adjust_bounded_subtree_auth(dir, it->second.bounds,
-					 pair<int,int>(oldauth, mds->get_nodeid()));
+					   mds_authority_t(oldauth, mds->get_nodeid()));
       mdcache->verify_subtree_bounds(dir, it->second.bounds);
       // freeze.
       dir->_freeze_tree();
@@ -2556,7 +2642,7 @@ void Migrator::handle_export_prep(const cref_t<MExportDirPrep> &m, bool did_assi
   }
 
   if (!success)
-    import_reverse_prepping(dir, it->second);
+    import_reverse_prepping(dir, it);
 
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
@@ -2609,10 +2695,9 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
 
   mdcache->show_subtrees();
 
-  C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, oldauth);
-
   // start the journal entry
-  EImportStart *le = new EImportStart(dir->dirfrag(), m->bounds, oldauth);
+  C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, oldauth);
+  EImportStart *le = new EImportStart(dir->dirfrag(), m->bounds, oldauth, m->get_tid());
   mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir);
@@ -2724,20 +2809,33 @@ public:
  * called by both handle_mds_failure and by handle_resolve (if we are
  *  a survivor coping with an exporter failure+recovery).
  */
-void Migrator::import_reverse(CDir *dir)
+void Migrator::import_reverse(CDir *dir, import_state_iterator it, bool notify)
 {
   dout(7) << *dir << dendl;
+  auto& stat = it->second;
 
-  import_state_t& stat = import_state[dir->dirfrag()];
-  stat.state = IMPORT_ABORTING;
+  // log our failure
+  mds->mdlog->start_submit_entry(new EImportFinish(dir->dirfrag(), stat.peer, stat.tid, false));
 
-  // remove pins
   import_remove_pins(dir, stat);
+
+  if (mds->is_resolve()) {
+    ceph_assert(stat.state == IMPORT_REPLAYEDSTART);
+
+    mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
+    mdcache->try_trim_non_auth_subtree(dir);
+
+    import_state.erase(it);
+
+    if (!is_any_in_progress())
+      mdcache->maybe_send_pending_resolves();
+    return;
+  }
+
+  stat.state = IMPORT_ABORTING;
 
   // update auth, with possible subtree merge.
   ceph_assert(dir->is_subtree_root());
-  if (mds->is_resolve())
-    mdcache->trim_non_auth_subtree(dir);
 
   mdcache->adjust_subtree_auth(dir, stat.peer);
 
@@ -2837,36 +2935,36 @@ void Migrator::import_reverse(CDir *dir)
       session->dec_importing();
     }
   }
-	 
-  // log our failure
-  mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
 
-  mdcache->trim(num_dentries); // try trimming dentries
-
-  // notify bystanders; wait in aborting state
-  import_notify_abort(dir, stat);
+  if (notify)
+    import_notify_abort(dir, it);
+  else
+    import_reverse_unfreeze(dir, it);
 }
 
 void Migrator::import_notify_finish(CDir *dir, import_state_t& stat)
 {
   dout(7) << *dir << dendl;
 
-  for (set<mds_rank_t>::iterator p = stat.bystanders.begin();
-       p != stat.bystanders.end();
-       ++p) {
+  for (auto& p : stat.bystanders) {
+    if (mds->is_cluster_degraded() &&
+	!mds->mdsmap->is_clientreplay_or_active_or_stopping(p)) {
+      // this can happen if both exporter and bystander fail in the same mdsmap epoch
+      continue;
+    }
     auto notify = make_message<MExportDirNotify>(dir->dirfrag(), stat.bound_vec, stat.tid, false,
 						 mds_authority_t(stat.peer, mds->get_nodeid()),
 						 mds_authority_t(mds->get_nodeid(), CDIR_AUTH_UNKNOWN));
-    mds->send_message_mds(notify, *p);
+    mds->send_message_mds(notify, p);
   }
 }
 
-void Migrator::import_notify_abort(CDir *dir, import_state_t& stat)
+void Migrator::import_notify_abort(CDir *dir, import_state_iterator it)
 {
   dout(7) << *dir << dendl;
-  
-  for (set<mds_rank_t>::iterator p = stat.bystanders.begin();
-       p != stat.bystanders.end(); ) {
+
+  auto& stat = it->second;
+  for (auto p = stat.bystanders.begin(); p != stat.bystanders.end(); ) {
     if (mds->is_cluster_degraded() &&
 	!mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)) {
       // this can happen if both exporter and bystander fail in the same mdsmap epoch
@@ -2879,15 +2977,16 @@ void Migrator::import_notify_abort(CDir *dir, import_state_t& stat)
     mds->send_message_mds(notify, *p);
     ++p;
   }
+
   if (stat.bystanders.empty()) {
     dout(7) << "no bystanders, finishing reverse now" << dendl;
-    import_reverse_unfreeze(dir);
+    import_reverse_unfreeze(dir, it);
   } else {
     assert (g_conf()->mds_kill_import_at != 10);
   }
 }
 
-void Migrator::import_reverse_unfreeze(CDir *dir)
+void Migrator::import_reverse_unfreeze(CDir *dir, import_state_iterator it)
 {
   dout(7) << *dir << dendl;
   ceph_assert(!dir->is_auth());
@@ -2895,22 +2994,20 @@ void Migrator::import_reverse_unfreeze(CDir *dir)
   dir->unfreeze_tree();
   if (dir->is_subtree_root())
     mdcache->try_subtree_merge(dir);
-  import_reverse_final(dir);
+  import_reverse_final(dir, it);
 }
 
-void Migrator::import_reverse_final(CDir *dir) 
+void Migrator::import_reverse_final(CDir *dir, import_state_iterator it)
 {
   dout(7) << *dir << dendl;
 
   // clean up
-  map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
-  ceph_assert(it != import_state.end());
-
   MutationRef mut = it->second.mut;
   import_state.erase(it);
 
-  // send pending import_maps?
-  mdcache->maybe_send_pending_resolves();
+  // send pending subtree resolves?
+  if (!is_any_in_progress())
+    mdcache->maybe_send_pending_resolves();
 
   if (mut) {
     mds->locker->drop_locks(mut.get());
@@ -2971,85 +3068,87 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
   mdcache->show_subtrees();
 }
 
+class C_MDS_ImportDirLoggedFinish : public MigratorLogContext {
+  dirfrag_t df;
+public:
+  C_MDS_ImportDirLoggedFinish(Migrator *m, dirfrag_t d) :
+    MigratorLogContext(m), df(d) {
+  }
+  void finish(int r) override {
+    mig->import_logged_finish(df);
+  }
+};
+
 void Migrator::handle_export_finish(const cref_t<MExportDirFinish> &m)
 {
+  dout(7) << m->get_dirfrag() << (m->is_last() ? " last" : "") << dendl;
+
+  auto &stat = import_state.at(m->get_dirfrag());
+  ceph_assert(stat.tid == m->get_tid());
+
   CDir *dir = mdcache->get_dirfrag(m->get_dirfrag());
   ceph_assert(dir);
-  dout(7) << *dir << (m->is_last() ? " last" : "") << dendl;
 
-  map<dirfrag_t,import_state_t>::iterator it = import_state.find(m->get_dirfrag());
-  ceph_assert(it != import_state.end());
-  ceph_assert(it->second.tid == m->get_tid());
-
-  import_finish(dir, false, m->is_last());
+  ceph_assert(dir);
+  import_finish(dir, stat, m->is_last());
 }
 
-void Migrator::import_finish(CDir *dir, bool notify, bool last)
+void Migrator::import_finish(CDir *dir, import_state_t& stat, bool last)
 {
   dout(7) << *dir << dendl;
 
-  map<dirfrag_t,import_state_t>::iterator it = import_state.find(dir->dirfrag());
-  ceph_assert(it != import_state.end());
-  ceph_assert(it->second.state == IMPORT_ACKING || it->second.state == IMPORT_FINISHING);
-
-  if (it->second.state == IMPORT_ACKING) {
-    ceph_assert(dir->is_auth());
-    mdcache->adjust_subtree_auth(dir, mds->get_nodeid(), mds->get_nodeid());
-  }
+  if (mds->is_resolve())
+    ceph_assert(stat.state == IMPORT_REPLAYEDSTART);
 
   // log finish
   ceph_assert(g_conf()->mds_kill_import_at != 9);
 
-  if (it->second.state == IMPORT_ACKING) {
-    for (map<CInode*, map<client_t,Capability::Export> >::iterator p = it->second.peer_exports.begin();
-	p != it->second.peer_exports.end();
-	++p) {
-      CInode *in = p->first;
+  if (stat.state == IMPORT_ACKING) {
+    ceph_assert(dir->is_auth());
+    mdcache->adjust_subtree_auth(dir, mds->get_nodeid(), mds->get_nodeid());
+
+    for (auto& p : stat.peer_exports) {
+      CInode *in = p.first;
       ceph_assert(in->is_auth());
-      for (map<client_t,Capability::Export>::iterator q = p->second.begin();
-	  q != p->second.end();
-	  ++q) {
-	auto r = it->second.session_map.find(q->first);
-	if (r == it->second.session_map.end())
+      for (auto& q : p.second) {
+	auto r = stat.session_map.find(q.first);
+	if (r == stat.session_map.end())
 	  continue;
 
 	Session *session = r->second.first;
-	Capability *cap = in->get_client_cap(q->first);
+	Capability *cap = in->get_client_cap(q.first);
 	ceph_assert(cap);
-	cap->merge(q->second, true);
+	cap->merge(q.second, true);
 	cap->clear_importing();
-	mdcache->do_cap_import(session, in, cap, q->second.cap_id, q->second.seq,
-				    q->second.mseq - 1, it->second.peer, CEPH_CAP_FLAG_AUTH);
+	mdcache->do_cap_import(session, in, cap, q.second.cap_id, q.second.seq,
+			       q.second.mseq - 1, stat.peer, CEPH_CAP_FLAG_AUTH);
       }
-      p->second.clear();
+      p.second.clear();
       in->replica_caps_wanted = 0;
     }
-    for (auto& p : it->second.session_map) {
+    for (auto& p : stat.session_map) {
       Session *session = p.second.first;
       session->dec_importing();
     }
   }
 
   if (!last) {
-    ceph_assert(it->second.state == IMPORT_ACKING);
-    it->second.state = IMPORT_FINISHING;
+    ceph_assert(stat.state == IMPORT_ACKING);
+    stat.state = IMPORT_FINISHING;
     return;
   }
 
-  // remove pins
-  if (notify)
-    import_notify_finish(dir, it->second);
+  stat.state = IMPORT_LOGGINGFINISH;
+  mds->mdlog->start_submit_entry(new EImportFinish(dir->dirfrag(), stat.peer, stat.tid, true),
+				 new C_MDS_ImportDirLoggedFinish(this, dir->dirfrag()));
 
-  import_remove_pins(dir, it->second);
+  import_remove_pins(dir, stat);
 
-  map<CInode*, map<client_t,Capability::Export> > peer_exports;
-  it->second.peer_exports.swap(peer_exports);
-
-  // clear import state (we're done!)
-  MutationRef mut = it->second.mut;
-  import_state.erase(it);
-
-  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
+  if (mds->is_resolve()) {
+    mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+    mdcache->try_subtree_merge(dir);
+    return;
+  }
 
   // process delayed expires
   mdcache->process_delayed_expire(dir);
@@ -3061,26 +3160,19 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   mdcache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
 
-  if (mut) {
-    mds->locker->drop_locks(mut.get());
-    mut->cleanup();
+  if (stat.mut) {
+    mds->locker->drop_locks(stat.mut.get());
+    stat.mut->cleanup();
+    stat.mut.reset();
   }
 
   // re-eval imported caps
-  for (map<CInode*, map<client_t,Capability::Export> >::iterator p = peer_exports.begin();
-       p != peer_exports.end();
-       ++p) {
-    if (p->first->is_auth())
-      mds->locker->eval(p->first, CEPH_CAP_LOCKS, true);
-    p->first->put(CInode::PIN_IMPORTINGCAPS);
+  for (auto& p : stat.peer_exports) {
+    if (p.first->is_auth())
+      mds->locker->eval(p.first, CEPH_CAP_LOCKS, true);
+    p.first->put(CInode::PIN_IMPORTINGCAPS);
   }
-
-  // send pending import_maps?
-  mdcache->maybe_send_pending_resolves();
-
-  // did i just import mydir?
-  if (dir->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
-    mdcache->populate_mydir();
+  stat.peer_exports.clear();
 
   // is it empty?
   if (dir->get_num_head_items() == 0 &&
@@ -3088,6 +3180,23 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
     // reexport!
     export_empty_import(dir);
   }
+}
+
+void Migrator::import_logged_finish(dirfrag_t base)
+{
+  auto it = import_state.find(base);
+  ceph_assert(it != import_state.end());
+
+  auto &stat = it->second;
+  ceph_assert(stat.state == IMPORT_LOGGINGFINISH);
+
+  if (stat.ack_finished)
+    mds->send_message_mds(make_message<MExportDirFinishAck>(base, stat.tid), stat.peer);
+
+  import_state.erase(it);
+  // send pending subtree resolves?
+  if (!is_any_in_progress())
+    mdcache->maybe_send_pending_resolves();
 }
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
@@ -3415,7 +3524,9 @@ void Migrator::handle_export_notify(const cref_t<MExportDirNotify> &m)
   mds_rank_t from = mds_rank_t(m->get_source().num());
   mds_authority_t old_auth = m->get_old_auth();
   mds_authority_t new_auth = m->get_new_auth();
+  ceph_assert((old_auth.second >= 0) != (new_auth.second >= 0));
   
+  bool auth_updated = false;
   if (!dir) {
     dout(7) << old_auth << " -> " << new_auth
 	    << " on missing dir " << m->get_dirfrag() << dendl;
@@ -3424,15 +3535,32 @@ void Migrator::handle_export_notify(const cref_t<MExportDirNotify> &m)
 	    << " != " << old_auth << " -> " << new_auth
 	    << " on " << *dir << dendl;
   } else {
-    dout(7) << old_auth << " -> " << new_auth
-	    << " on " << *dir << dendl;
+    dout(7) << old_auth << " -> " << new_auth << " on " << *dir << dendl;
     // adjust auth
     set<CDir*> have;
     mdcache->map_dirfrag_set(m->get_bounds(), have);
     mdcache->adjust_bounded_subtree_auth(dir, have, new_auth);
+    auth_updated = true;
     
     // induce a merge?
     mdcache->try_subtree_merge(dir);
+  }
+
+  if (old_auth.second >= 0) {
+    auto it = other_ambiguous_imports.find(m->get_dirfrag());
+    if (it != other_ambiguous_imports.end()) {
+      other_ambiguous_imports.erase(it);
+      if (!is_any_in_progress())
+	mdcache->maybe_send_pending_resolves();
+    } else {
+      ceph_assert(!auth_updated);
+    }
+  } else if (auth_updated) {
+    auto &ambig_import = other_ambiguous_imports[m->get_dirfrag()];
+    ceph_assert(ambig_import.tid == 0);
+    ambig_import.tid = m->get_tid();
+    ambig_import.dir_auth = new_auth;
+    ambig_import.bound_vec = m->get_bounds();
   }
   
   // send ack
@@ -3564,7 +3692,6 @@ void Migrator::handle_export_caps(const cref_t<MExportCaps> &ex)
   mds->mdlog->flush();
 }
 
-
 void Migrator::logged_import_caps(CInode *in, 
 				  mds_rank_t from,
 				  map<client_t,pair<Session*,uint64_t> >& imported_session_map,
@@ -3597,6 +3724,332 @@ void Migrator::logged_import_caps(CInode *in,
   }
 
   in->auth_unpin(this);
+}
+
+void Migrator::add_ambiguous_subtrees(ESubtreeMap *le)
+{
+  for (auto &[df, stat] : import_state) {
+    if (stat.state < IMPORT_LOGGINGSTART || stat.state >= IMPORT_LOGGINGFINISH)
+      continue;
+    dout(10) << __func__ << " " << df << " bounds " << stat.bound_vec << dendl;
+    auto &ambig_subtee = le->ambiguous_subtrees[df];
+    ambig_subtee.bounds = stat.bound_vec;
+    ambig_subtee.from = stat.peer;
+    ambig_subtee.tid = stat.tid;
+  }
+}
+
+int Migrator::replay_check_ambiguous_subtrees(ESubtreeMap *le)
+{
+  int errors = 0;
+
+  for (auto &[df, stat] : import_state) {
+    auto it = le->ambiguous_subtrees.find(df);
+    if (it == le->ambiguous_subtrees.end()) {
+      mds->clog->error() << " replayed ESubtreeMap at " << le->get_start_off()
+			 << " subtree " << df << " is ambiguous, but is not in cache";
+      ++errors;
+      continue;
+    }
+    if (stat.bound_vec != it->second.bounds) {
+      mds->clog->error() << " replayed ESubtreeMap at " << le->get_start_off()
+			 << " ambiguous subtree " << df << " bounds mismatch";
+      ++errors;
+    }
+    if (stat.peer != it->second.from ||
+	stat.tid != it->second.tid) {
+      mds->clog->error() << " replayed ESubtreeMap at " << le->get_start_off()
+			 << " ambiguous subtree " << df << " peer|tid mismatch";
+      ++errors;
+    }
+  }
+  for (auto& p : le->ambiguous_subtrees) {
+    if (!import_state.count(p.first)) {
+      mds->clog->error() << " replayed ESubtreeMap at " << le->get_start_off()
+			 << " subtree " << p.first << " is not ambiguous, but is in cache";
+      ++errors;
+    }
+  }
+  return errors;
+}
+
+void Migrator::replay_export_dir(dirfrag_t base, const vector<dirfrag_t>& bound_vec,
+				 mds_rank_t target, uint64_t tid, LogSegment *ls)
+{
+  CDir *dir = mdcache->get_dirfrag(base);
+  ceph_assert(dir);
+
+  set<CDir*> bounds;
+  for (auto& df : bound_vec) {
+    CDir *bd = mdcache->get_dirfrag(df);
+    ceph_assert(bd);
+    bounds.insert(bd);
+  }
+
+  // adjust auth away
+  mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
+
+  mdcache->try_trim_non_auth_subtree(dir);
+
+  ceph_assert(export_state.count(base) == 0);
+  export_state_t& stat = export_state[base];
+  stat.state = EXPORT_FINISHED;
+  stat.peer = target;
+  stat.tid = tid;
+  stat.bound_vec = bound_vec;
+  stat.ls = ls;
+  stat.active_peer = false;
+  ls->uncommitted_exports.insert(base);
+}
+
+void Migrator::replay_export_committed(dirfrag_t base, uint64_t tid)
+{
+  auto it = export_state.find(base);
+  if (it == export_state.end())
+    return;
+
+  auto &stat = it->second;
+  ceph_assert(stat.state == EXPORT_FINISHED);
+  ceph_assert(stat.tid == tid);
+
+  stat.ls->uncommitted_exports.erase(base);
+  if (!stat.ls->is_any_uncommitted())
+    mds->queue_waiters(stat.ls->uncommitted_waiters);
+
+  export_state.erase(it);
+}
+
+void Migrator::replay_import_start(dirfrag_t base, const vector<dirfrag_t>& bound_vec,
+				   mds_rank_t from, uint64_t tid)
+{
+  // set auth partially to us so we don't trim it
+  CDir *dir = mdcache->get_dirfrag(base);
+  ceph_assert(dir);
+
+  dir->get(CDir::PIN_IMPORTING);
+  dir->state_set(CDir::STATE_IMPORTING);
+
+  ceph_assert(import_state.count(base) == 0);
+  import_state_t& stat = import_state[base];
+  stat.state = IMPORT_REPLAYEDSTART;
+  stat.peer = from;
+  stat.tid = tid;
+  stat.bound_vec = bound_vec;
+
+  set<inodeno_t> did;
+  for (auto& df : bound_vec) {
+    CDir *bd = mdcache->get_dirfrag(df);
+    ceph_assert(bd);
+
+    stat.bounds.insert(bd);
+    if (!did.count(bd->ino())) {
+      did.insert(bd->ino());
+      bd->inode->get_stickydirs();
+    }
+
+    bd->get(CDir::PIN_IMPORTBOUND);
+    bd->state_set(CDir::STATE_IMPORTBOUND);
+
+    if (!bd->is_subtree_root())
+      bd->state_clear(CDir::STATE_AUTH);
+  }
+
+  mdcache->adjust_bounded_subtree_auth(dir, stat.bounds, mds_authority_t(mds->get_nodeid(), from));
+}
+
+void Migrator::replay_import_finish(dirfrag_t base, uint64_t tid, bool success)
+{
+  auto it = import_state.find(base);
+  if (it == import_state.end())
+    return;
+
+  ceph_assert(it->second.tid == tid);
+  ceph_assert(it->second.state == IMPORT_REPLAYEDSTART);
+
+  CDir *dir = mdcache->get_dirfrag(base);
+  ceph_assert(dir);
+  import_remove_pins(dir, it->second);
+
+  if (success) {
+    mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+    mdcache->try_subtree_merge(dir);
+  } else {
+    mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
+    mdcache->try_trim_non_auth_subtree(dir);
+  }
+
+  import_state.erase(it);
+}
+
+void Migrator::add_ambiguous_imports(map<mds_rank_t, ref_t<MMDSResolve>>& resolves,
+				     const set<mds_rank_t>& resolve_set)
+{
+  for (auto& [df, stat] : import_state) {
+    if (stat.state == IMPORT_ABORTING)
+      continue;
+    if (mds->is_resolve()) {
+      auto it = resolves.find(stat.peer);
+      if (it == resolves.end())
+	continue; // already sent?
+      ceph_assert(stat.state == IMPORT_REPLAYEDSTART ||
+		  stat.state == IMPORT_LOGGINGFINISH);
+      dout(10) << __func__ << " mds." << stat.peer << " -> me dir(" << df << ") bounds "
+	       << stat.bound_vec << dendl;
+      it->second->add_ambiguous_import(df, stat.tid, stat.state == IMPORT_LOGGINGFINISH);
+      stat.ack_finished = true;
+    } else if (resolve_set.count(stat.peer)) {
+      ceph_assert(stat.state == IMPORT_ACKING ||
+		  stat.state == IMPORT_LOGGINGFINISH);
+      dout(10) << __func__ << " mds." << stat.peer << " -> me dir(" << df << ") bounds "
+			   << stat.bound_vec << dendl;
+      resolves.at(stat.peer)->add_ambiguous_import(df, stat.tid, stat.state == IMPORT_LOGGINGFINISH);
+      stat.ack_finished = true;
+    }
+  }
+  for (auto& [df, stat] : other_ambiguous_imports) {
+    mds_rank_t leader = stat.dir_auth.first;
+    if (resolve_set.count(leader)) {
+      dout(10) << __func__ << " mds." << leader << " -> mds." << stat.dir_auth.second
+	       << " dir(" << df << ") bounds " << stat.bound_vec << dendl;
+      resolves.at(leader)->add_other_ambiguous_import(df, stat.tid);
+    }
+  }
+}
+
+void Migrator::handle_peer_resolve(const cref_t<MMDSResolve>& m,
+				   const ref_t<MMDSResolveAck>& ack)
+{
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+
+  bool survivor = !mds->is_resolve();
+  for (const auto &[df, ambig_import] : m->ambiguous_imports) {
+    auto it = export_state.find(df);
+    if (it == export_state.end()) {
+      ceph_assert(!ambig_import.finishing);
+      ack->add_aborted_import(df, ambig_import.tid, ambig_import.bystander);
+      continue;
+    }
+
+    auto& stat = it->second;
+    ceph_assert(ambig_import.tid == stat.tid);
+    if (from == stat.peer) {
+      ceph_assert(!ambig_import.bystander);
+      stat.active_peer = true;
+    } else {
+      ceph_assert(ambig_import.bystander);
+      ceph_assert(!survivor);
+    }
+
+    if (stat.state == EXPORT_CANCELLING) {
+      ack->add_aborted_import(df, ambig_import.tid, ambig_import.bystander);
+      continue;
+    }
+
+    if (stat.state == EXPORT_LOGGING ||
+	stat.state == EXPORT_NOTIFYING) {
+      ceph_assert(survivor);
+      continue;
+    }
+
+    if (ambig_import.finishing) {
+      ceph_assert(!survivor);
+      continue;
+    }
+
+    ceph_assert(stat.state == EXPORT_FINISHED);
+    ack->add_finished_import(df, ambig_import.tid, ambig_import.bystander);
+  }
+
+  if (!mds->is_resolve()) {
+    for (auto& [df, stat] : export_state) {
+      if (stat.state == EXPORT_CANCELLING || stat.active_peer || stat.peer != from)
+	continue;
+      ceph_assert(stat.state == EXPORT_FINISHED);
+      mds->mdlog->start_submit_entry(new EExportCommitted(df, stat.tid),
+				     new C_MDS_ExportDirCommitted(this, df));
+    }
+  }
+}
+
+void Migrator::handle_peer_resolve_ack(const cref_t<MMDSResolveAck>& ack)
+{
+  mds_rank_t from = mds_rank_t(ack->get_source().num());
+
+  auto disambiguate_other_import = [this, from](dirfrag_t df, uint64_t tid, bool success) {
+    CDir *dir = mdcache->get_dirfrag(df);
+
+    auto it = other_ambiguous_imports.find(df);
+    if (it == other_ambiguous_imports.end()) {
+      ceph_assert(!dir || dir->get_dir_auth().second == CDIR_AUTH_UNKNOWN);
+      return;
+    }
+
+    auto &stat = it->second;
+    ceph_assert(tid == stat.tid);
+    ceph_assert(from == stat.dir_auth.first);
+
+    if (dir) {
+      set<CDir*> have;
+      mdcache->map_dirfrag_set(stat.bound_vec, have);
+      if (success)
+	mdcache->adjust_bounded_subtree_auth(dir, have, stat.dir_auth.second);
+      else
+	mdcache->adjust_bounded_subtree_auth(dir, have, stat.dir_auth.first);
+      mdcache->try_subtree_merge(dir);
+    }
+    other_ambiguous_imports.erase(it);
+  };
+
+  for (auto& [df, im] : ack->aborted_imports) {
+    if (im.bystander) {
+      disambiguate_other_import(df, im.tid, false);
+    } else  {
+      auto it = import_state.find(df);
+      ceph_assert(it != import_state.end());
+      auto &stat = it->second;
+      ceph_assert(stat.tid == im.tid);
+
+      CDir *dir = mdcache->get_dirfrag(df);
+      ceph_assert(dir);
+      import_reverse(dir, it, false);
+    }
+  }
+
+  for (auto& [df, im] : ack->finished_imports) {
+    if (im.bystander) {
+      disambiguate_other_import(df, im.tid, true);
+    } else {
+      auto it = import_state.find(df);
+      ceph_assert(it != import_state.end());
+      auto &stat = it->second;
+      ceph_assert(stat.tid == im.tid);
+
+      CDir *dir = mdcache->get_dirfrag(df);
+      ceph_assert(dir);
+      import_notify_finish(dir, stat);
+      import_finish(dir, stat, true);
+    }
+  }
+
+  if (!is_any_in_progress())
+    mdcache->maybe_send_pending_resolves();
+}
+
+void Migrator::peer_resolve_gather_finish()
+{
+  if (!mds->is_resolve())
+    return;
+
+  dout(10) << __func__ << dendl;
+  peer_resolve_gathered = true;
+
+  for (auto& [df, stat] : export_state) {
+    if (stat.active_peer)
+      continue;
+    ceph_assert(stat.state == EXPORT_FINISHED);
+    mds->mdlog->start_submit_entry(new EExportCommitted(df, stat.tid),
+				   new C_MDS_ExportDirCommitted(this, df));
+  }
 }
 
 Migrator::Migrator(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {
