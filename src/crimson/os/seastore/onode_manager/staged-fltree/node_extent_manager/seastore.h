@@ -56,10 +56,10 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   ~SeastoreNodeExtentManager() override = default;
   TransactionManager& get_tm() { return tm; }
  protected:
-  bool is_read_isolated() const { return true; }
+  bool is_read_isolated() const override { return true; }
 
   tm_future<NodeExtentRef> read_extent(
-      Transaction& t, laddr_t addr, extent_len_t len) {
+      Transaction& t, laddr_t addr, extent_len_t len) override {
     return tm.read_extents<SeastoreNodeExtent>(t, addr, len
     ).safe_then([](auto&& extents) {
       assert(extents.size() == 1);
@@ -69,14 +69,15 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   }
 
   tm_future<NodeExtentRef> alloc_extent(
-      Transaction& t, extent_len_t len) {
+      Transaction& t, extent_len_t len) override {
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
     ).safe_then([](auto extent) {
       return NodeExtentRef(extent);
     });
   }
 
-  tm_future<Super::URef> get_super(Transaction& t, RootNodeTracker& tracker) {
+  tm_future<Super::URef> get_super(
+      Transaction& t, RootNodeTracker& tracker) override {
     return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
     });

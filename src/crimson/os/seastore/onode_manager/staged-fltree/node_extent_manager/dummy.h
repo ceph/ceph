@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <chrono>
+#include <seastar/core/sleep.hh>
+
 #include "include/buffer_raw.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
@@ -39,14 +42,52 @@ class DummyNodeExtent final: public NodeExtent {
     assert(false && "impossible path"); }
 };
 
+template <bool SYNC>
 class DummyNodeExtentManager final: public NodeExtentManager {
   static constexpr size_t ALIGNMENT = 4096;
  public:
   ~DummyNodeExtentManager() override = default;
  protected:
-  bool is_read_isolated() const { return false; }
+  bool is_read_isolated() const override { return false; }
 
   tm_future<NodeExtentRef> read_extent(
+      Transaction& t, laddr_t addr, extent_len_t len) override {
+    if constexpr (SYNC) {
+      return read_extent_sync(t, addr, len);
+    } else {
+      using namespace std::chrono_literals;
+      return seastar::sleep(1us).then([this, &t, addr, len] {
+        return read_extent_sync(t, addr, len);
+      });
+    }
+  }
+
+  tm_future<NodeExtentRef> alloc_extent(
+      Transaction& t, extent_len_t len) override {
+    if constexpr (SYNC) {
+      return alloc_extent_sync(t, len);
+    } else {
+      using namespace std::chrono_literals;
+      return seastar::sleep(1us).then([this, &t, len] {
+        return alloc_extent_sync(t, len);
+      });
+    }
+  }
+
+  tm_future<Super::URef> get_super(
+      Transaction& t, RootNodeTracker& tracker) override {
+    if constexpr (SYNC) {
+      return get_super_sync(t, tracker);
+    } else {
+      using namespace std::chrono_literals;
+      return seastar::sleep(1us).then([this, &t, &tracker] {
+        return get_super_sync(t, tracker);
+      });
+    }
+  }
+
+ private:
+  tm_future<NodeExtentRef> read_extent_sync(
       Transaction& t, laddr_t addr, extent_len_t len) {
     auto iter = allocate_map.find(addr);
     assert(iter != allocate_map.end());
@@ -54,7 +95,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     return tm_ertr::make_ready_future<NodeExtentRef>(iter->second);
   }
 
-  tm_future<NodeExtentRef> alloc_extent(
+  tm_future<NodeExtentRef> alloc_extent_sync(
       Transaction& t, extent_len_t len) {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
@@ -67,7 +108,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     return tm_ertr::make_ready_future<NodeExtentRef>(extent);
   }
 
-  tm_future<Super::URef> get_super(Transaction& t, RootNodeTracker& tracker) {
+  tm_future<Super::URef> get_super_sync(
+      Transaction& t, RootNodeTracker& tracker) {
     return tm_ertr::make_ready_future<Super::URef>(
         Super::URef(new DummySuper(t, tracker, &root_laddr)));
   }

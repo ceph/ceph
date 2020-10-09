@@ -222,7 +222,7 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
 TEST_F(a_basic_test_t, 2_node_sizes)
 {
   run_async([this] {
-    auto nm = NodeExtentManager::create_dummy();
+    auto nm = NodeExtentManager::create_dummy(false);
     auto t = make_transaction();
     context_t c{*nm, *t};
     std::array<std::pair<NodeImplURef, NodeExtentMutable>, 16> nodes = {
@@ -262,7 +262,7 @@ struct b_dummy_tree_test_t : public seastar_test_suite_t {
   Btree tree;
 
   b_dummy_tree_test_t()
-    : moved_nm{NodeExtentManager::create_dummy()},
+    : moved_nm{NodeExtentManager::create_dummy(false)},
       ref_t{make_transaction()},
       t{*ref_t},
       c{*moved_nm, t},
@@ -467,7 +467,7 @@ class TestTree {
 
  public:
   TestTree()
-    : moved_nm{NodeExtentManager::create_dummy()},
+    : moved_nm{NodeExtentManager::create_dummy(false)},
       ref_t{make_transaction()},
       t{*ref_t},
       c{*moved_nm, t},
@@ -501,7 +501,7 @@ class TestTree {
 
   seastar::future<> split(const ghobject_t& key, const onode_t& value) {
     return seastar::async([this, key, &value] {
-      Btree tree_clone(NodeExtentManager::create_dummy());
+      Btree tree_clone(NodeExtentManager::create_dummy(false));
       auto ref_t_clone = make_transaction();
       Transaction& t_clone = *ref_t_clone;
       tree_clone.test_clone_from(t_clone, t, tree).unsafe_get0();
@@ -821,7 +821,7 @@ class DummyChildPool {
     reset();
 
     // create tree
-    auto ref_nm = NodeExtentManager::create_dummy();
+    auto ref_nm = NodeExtentManager::create_dummy(false);
     p_nm = ref_nm.get();
     p_btree.emplace(std::move(ref_nm));
     return DummyChild::create_initial(get_context(), keys, *this, *p_btree->root_tracker
@@ -856,7 +856,7 @@ class DummyChildPool {
       logger().info("insert {} at {}:", key_hobj_t(key), pos);
       DummyChildPool pool_clone;
       pool_clone_in_progress = &pool_clone;
-      auto ref_nm = NodeExtentManager::create_dummy();
+      auto ref_nm = NodeExtentManager::create_dummy(false);
       pool_clone.p_nm = ref_nm.get();
       pool_clone.p_btree.emplace(std::move(ref_nm));
       pool_clone.p_btree->test_clone_from(
@@ -1230,7 +1230,7 @@ struct d_seastore_tree_test_t : public seastar_test_suite_t {
       tm(*segment_manager, segment_cleaner, journal, cache, *lba_manager),
       moved_nm{
 #if 0
-        NodeExtentManager::create_dummy()},
+        NodeExtentManager::create_dummy(false)},
 #else
         NodeExtentManager::create_seastore(tm)},
 #endif
