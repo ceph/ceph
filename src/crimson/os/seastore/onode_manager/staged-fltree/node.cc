@@ -25,7 +25,7 @@ using node_future = Node::node_future<ValuesT...>;
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
       : leaf_node{node}, position{pos} {
   assert(!is_end());
-  leaf_node->do_track_cursor(*this);
+  leaf_node->do_track_cursor<true>(*this);
 }
 
 tree_cursor_t::tree_cursor_t(
@@ -34,7 +34,7 @@ tree_cursor_t::tree_cursor_t(
       : leaf_node{node}, position{pos} {
   assert(!is_end());
   update_kv(key, _p_value, v);
-  leaf_node->do_track_cursor(*this);
+  leaf_node->do_track_cursor<true>(*this);
 }
 
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
@@ -59,6 +59,7 @@ const onode_t* tree_cursor_t::get_p_value() const {
   return p_value;
 }
 
+template <bool VALIDATE>
 void tree_cursor_t::update_track(
     Ref<LeafNode> node, const search_position_t& pos) {
   // the cursor must be already untracked
@@ -69,8 +70,10 @@ void tree_cursor_t::update_track(
   position = pos;
   key_view.reset();
   p_value = nullptr;
-  leaf_node->do_track_cursor(*this);
+  leaf_node->do_track_cursor<VALIDATE>(*this);
 }
+template void tree_cursor_t::update_track<true>(Ref<LeafNode>, const search_position_t&);
+template void tree_cursor_t::update_track<false>(Ref<LeafNode>, const search_position_t&);
 
 void tree_cursor_t::update_kv(
     const key_view_t& key, const onode_t* _p_value, layout_version_t v) const {
@@ -709,7 +712,7 @@ Ref<tree_cursor_t> LeafNode::track_insert(
   for (auto& p_cursor : p_cursors) {
     search_position_t new_pos = p_cursor->get_position();
     ++new_pos.index_by_stage(insert_stage);
-    p_cursor->update_track(this, new_pos);
+    p_cursor->update_track<true>(this, new_pos);
   }
 
   // track insert
@@ -726,7 +729,7 @@ void LeafNode::track_split(
   while (iter != tracked_cursors.end()) {
     search_position_t new_pos = iter->first;
     new_pos -= split_pos;
-    iter->second->update_track(right_node, new_pos);
+    iter->second->update_track<false>(right_node, new_pos);
     ++iter;
   }
   tracked_cursors.erase(first, tracked_cursors.end());

@@ -62,6 +62,7 @@ class tree_cursor_t final
   tree_cursor_t(Ref<LeafNode>);
   const search_position_t& get_position() const { return position; }
   Ref<LeafNode> get_leaf_node() { return leaf_node; }
+  template <bool VALIDATE>
   void update_track(Ref<LeafNode>, const search_position_t&);
   void update_kv(const key_view_t&, const onode_t*, layout_version_t) const;
   void ensure_kv() const;
@@ -262,8 +263,11 @@ class LeafNode final : public Node {
   layout_version_t get_layout_version() const { return layout_version; }
   std::tuple<key_view_t, const onode_t*, layout_version_t> get_kv(
       const search_position_t&) const;
+  template <bool VALIDATE>
   void do_track_cursor(tree_cursor_t& cursor) {
-    validate_cursor(cursor);
+    if constexpr (VALIDATE) {
+      validate_cursor(cursor);
+    }
     auto& cursor_pos = cursor.get_position();
     assert(tracked_cursors.find(cursor_pos) == tracked_cursors.end());
     tracked_cursors[cursor_pos] = &cursor;
