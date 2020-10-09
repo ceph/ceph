@@ -4380,6 +4380,7 @@ def check_time_sync(enabler=None):
         'systemd-timesyncd.service',
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
+        'ntpsec.service',  # 20.04 (at least) / buster
     ]
     if not check_units(units, enabler):
         logger.warning('No time sync service is running; checked for %s' % units)
