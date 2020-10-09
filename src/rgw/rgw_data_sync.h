@@ -17,6 +17,7 @@
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
 #include "rgw_sync_policy.h"
+#include "rgw_sync_info.h"
 #include "rgw_remote.h"
 
 #include "rgw_bucket_sync.h"
@@ -580,7 +581,7 @@ struct rgw_bilog_marker_info {
 };
 
 struct rgw_bucket_index_marker_info {
-  string pos;
+  rgw_sip_pos pos;
   bool syncstopped{false};
 };
 

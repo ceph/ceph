@@ -17,6 +17,7 @@
 #include "rgw_orphan.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_tools.h"
+#include "rgw_sync_info.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"

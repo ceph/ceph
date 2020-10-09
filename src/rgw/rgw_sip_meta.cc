@@ -265,15 +265,26 @@ int SIProvider_MetaInc::do_fetch(int shard_id, std::string marker, int max, fetc
 }
 
 
-int SIProvider_MetaInc::do_get_start_marker(int shard_id, std::string *marker) const
+int SIProvider_MetaInc::do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const
 {
   marker->clear();
+  *timestamp = ceph::real_time();
   return 0;
 }
 
-int SIProvider_MetaInc::do_get_cur_state(int shard_id, std::string *marker) const
+int SIProvider_MetaInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp) const
 {
-#warning FIXME
+  RGWMetadataLogInfo info;
+
+  int ret = meta_log->get_info(shard_id, &info);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to get meta log info for shard_id=" << shard_id << ": ret=" << ret << dendl;
+    return ret;
+  }
+
+  *marker = info.marker;
+  *timestamp = info.last_update;
+
   return 0;
 }
 

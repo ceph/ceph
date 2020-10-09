@@ -24,6 +24,14 @@ namespace ceph {
 
 class JSONObj;
 
+struct rgw_sip_pos {
+  string marker;
+  ceph::real_time timestamp;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
 class SIProvider {
 public:
   enum StageType {
@@ -115,8 +123,8 @@ public:
 
   virtual int get_stage_info(const stage_id_t& sid, StageInfo *stage_info) = 0;
   virtual int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) = 0;
-  virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) = 0;
-  virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) = 0;
+  virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) = 0;
+  virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) = 0;
 
   virtual const std::string& get_name() const = 0;
   virtual const std::optional<std::string>& get_instance() const = 0;
@@ -180,8 +188,8 @@ protected:
   SIProvider::TypeHandlerProviderRef type_provider;
 
   virtual int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
-  virtual int do_get_start_marker(int shard_id, std::string *marker) const = 0;
-  virtual int do_get_cur_state(int shard_id, std::string *marker) const = 0;
+  virtual int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const = 0;
+  virtual int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp) const = 0;
   virtual int do_trim(int shard_id, const std::string& marker) = 0;
 public:
   SIProvider_SingleStage(CephContext *_cct,
@@ -222,8 +230,8 @@ public:
   }
 
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
-  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) override;
-  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) override;
+  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
+  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
 
   int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
@@ -269,8 +277,8 @@ public:
   int get_stage_info(const stage_id_t& sid, StageInfo *sinfo) override;
 
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
-  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) override;
-  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) override;
+  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
+  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
 
   SIProvider::TypeHandlerProvider *get_type_provider() override {
     return &type_provider;

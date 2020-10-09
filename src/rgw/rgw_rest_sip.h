@@ -39,9 +39,11 @@ public:
 };
 
 class RGWOp_SIP_GetStageStatus : public RGWRESTOp {
+
   string provider;
-  string start_marker;
-  string cur_marker;
+  rgw_sip_pos start_pos;
+  rgw_sip_pos cur_pos;
+
 public:
   RGWOp_SIP_GetStageStatus(string&& _provider) : provider(std::move(_provider)) {}
   ~RGWOp_SIP_GetStageStatus() override {}

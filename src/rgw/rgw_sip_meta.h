@@ -60,13 +60,15 @@ class SIProvider_MetaFull : public SIProvider_SingleStage
 protected:
   int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int do_get_start_marker(int shard_id, std::string *marker) const override {
+  int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const override {
     marker->clear();
+    *timestamp = ceph::real_time();
     return 0;
   }
 
-  int do_get_cur_state(int shard_id, std::string *marker) const {
+  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp) const {
     marker->clear(); /* full data, no current incremental state */
+    *timestamp = ceph::real_time();
     return 0;
   }
 
@@ -117,8 +119,8 @@ class SIProvider_MetaInc : public SIProvider_SingleStage
 protected:
   int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int do_get_start_marker(int shard_id, std::string *marker) const override;
-  int do_get_cur_state(int shard_id, std::string *marker) const;
+  int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const override;
+  int do_get_cur_state(int shard_id, std::string *marke, ceph::real_time *timestampr) const;
 
   int do_trim( int shard_id, const std::string& marker) override;
 public:

@@ -3396,7 +3396,8 @@ public:
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
-      info->pos = bilog_info.max_marker;
+      info->pos.marker = bilog_info.max_marker;
+      info->pos.timestamp = ceph::real_time(); /* we don't get this info */
       info->syncstopped = bilog_info.syncstopped;
       return set_cr_done();
     }
@@ -3889,7 +3890,7 @@ public:
           // whether or not to do full sync, incremental sync will follow anyway
           if (bsc->env->sync_module->should_full_sync()) {
             status.state = rgw_bucket_shard_sync_info::StateFullSync;
-            status.inc_marker.modify().position = info.pos;
+            status.inc_marker.modify().position = info.pos.marker;
           } else {
             // clear the marker position unless we're resuming from SYNCSTOP
             if (!stopped) {

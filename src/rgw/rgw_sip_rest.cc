@@ -86,22 +86,36 @@ int SIProvider_REST::fetch(const SIProvider::stage_id_t& sid, int shard_id, std:
   return 0;
 }
 
-int SIProvider_REST::get_start_marker(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
+int SIProvider_REST::get_start_marker(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp)
 {
-  int r = cr_mgr->run(sip_cr_mgr->get_start_marker_cr(sid, shard_id, marker));
+  rgw_sip_pos pos;
+  int r = cr_mgr->run(sip_cr_mgr->get_start_marker_cr(sid, shard_id, &pos));
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
     return r;
   }
+  if (marker) {
+    *marker = std::move(pos.marker);
+  }
+  if (timestamp) {
+    *timestamp = std::move(pos.timestamp);
+  }
   return 0;
 }
 
-int SIProvider_REST::get_cur_state(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
+int SIProvider_REST::get_cur_state(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp)
 {
-  int r = cr_mgr->run(sip_cr_mgr->get_cur_state_cr(sid, shard_id, marker));
+  rgw_sip_pos pos;
+  int r = cr_mgr->run(sip_cr_mgr->get_cur_state_cr(sid, shard_id, &pos));
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
     return r;
+  }
+  if (marker) {
+    *marker = std::move(pos.marker);
+  }
+  if (timestamp) {
+    *timestamp = std::move(pos.timestamp);
   }
   return 0;
 }

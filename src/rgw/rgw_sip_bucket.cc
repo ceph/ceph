@@ -188,7 +188,7 @@ int SIProvider_BucketInc::do_fetch(int shard_id, std::string marker, int max, fe
   return 0;
 }
 
-int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker) const
+int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp) const
 {
   int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
 
@@ -199,6 +199,12 @@ int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker) co
     return ret;
   }
   *marker = markers[shard_id];
+
+  /* bucket index header doesn't keep the timestamp info for max marker,
+   * we can add that, but at the moment it's not needed
+   */
+  *timestamp = ceph::real_time();
+
   return 0;
 }
 

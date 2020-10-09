@@ -2576,11 +2576,11 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   for (auto& r : remote_markers) {
     int shard_id = i++;
     auto& m = status[shard_id];
-    if (r.pos.empty()) {
+    if (r.pos.marker.empty()) {
       continue; // empty bucket index shard
     }
     auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker->position);
-    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.pos) {
+    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.pos.marker) {
       shards_behind.insert(shard_id);
     }
   }
@@ -10629,6 +10629,7 @@ next:
    }
 
    string marker;
+   ceph::real_time timestamp;
 
    auto stage_id = opt_stage_id.value_or(provider->get_first_stage());
 
@@ -10647,7 +10648,7 @@ next:
        return EINVAL;
      }
    }
-   r = provider->get_cur_state(stage_id, shard_id, &marker);
+   r = provider->get_cur_state(stage_id, shard_id, &marker, &timestamp);
    if (r < 0) {
      cerr << "ERROR: failed to trim sync info provider: " << cpp_strerror(-r) << std::endl;
      return -r;
