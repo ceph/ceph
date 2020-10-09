@@ -53,155 +53,25 @@ Finally, to mount CephFS on your client nodes, see `Mount CephFS:
 Prerequisites`_ page. Additionally, a command-line shell utility is available
 for interactive access or scripting via the `cephfs-shell`_.
 
+.. _cephfs-administration: administration
 .. _Orchestrator: ../mgr/orchestrator
 .. _deploy MDS manually as needed: add-remove-mds
 .. _Orchestrator deployment table: ../mgr/orchestrator/#current-implementation-status
 .. _Mount CephFS\: Prerequisites: mount-prerequisites
 .. _cephfs-shell: cephfs-shell
 
-
-.. raw:: html
-
-   <!---
-
-Administration
-^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
 .. toctree:: 
-   :maxdepth: 1
+   :maxdepth: 2
    :hidden:
+    
+    Administration <administration>
 
-    Create a CephFS file system <createfs>
-    Administrative commands <administration>
-	Provision/Add/Remove MDS(s) <add-remove-mds>
-    MDS failover and standby configuration <standby>
-    MDS Cache Size Limits <cache-size-limits>
-    MDS Configuration Settings <mds-config-ref>
-    Manual: ceph-mds <../../man/8/ceph-mds>
-    Export over NFS <nfs>
-    Export over NFS with volume nfs interface <fs-nfs-exports>
-    Application best practices <app-best-practices>
-    FS volume and subvolumes <fs-volumes>
-    CephFS Quotas <quota>
-    Health messages <health-messages>
-    Upgrading old file systems <upgrading>
+    Mounting CephFS <mounting-cephfs-overview>
 
+    CephFS Concepts <cephfs-concepts-overview>
 
-.. raw:: html
+    Troubleshooting and Disaster Recovery <troubleshooting-overview>
 
-   <!---
+    Developer Guide <dev-guides-overview>
 
-Mounting CephFS
-^^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
-.. toctree:: 
-   :maxdepth: 1
-   :hidden:
-
-    Client Configuration Settings <client-config-ref>
-    Client Authentication <client-auth>
-    Mount CephFS: Prerequisites <mount-prerequisites>
-    Mount CephFS using Kernel Driver <mount-using-kernel-driver>
-    Mount CephFS using FUSE <mount-using-fuse>
-    Use the CephFS Shell <cephfs-shell>
-    Supported Features of Kernel Driver <kernel-features>
-    Manual: ceph-fuse <../../man/8/ceph-fuse>
-    Manual: mount.ceph <../../man/8/mount.ceph>
-    Manual: mount.fuse.ceph <../../man/8/mount.fuse.ceph>
-
-
-.. raw:: html
-
-   <!---
-
-CephFS Concepts
-^^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
-.. toctree:: 
-   :maxdepth: 1
-   :hidden:
-
-    MDS States <mds-states>
-    POSIX compatibility <posix>
-    MDS Journaling <mds-journaling>
-    File layouts <file-layouts>
-    Distributed Metadata Cache <mdcache>
-    Dynamic Metadata Management in CephFS <dynamic-metadata-management>
-    CephFS IO Path <cephfs-io-path>
-    LazyIO <lazyio>
-    Directory fragmentation <dirfrags>
-    Multiple active MDS daemons <multimds>
-
-
-.. raw:: html
-
-   <!---
-
-Troubleshooting and Disaster Recovery
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
-.. toctree:: 
-   :hidden:
-
-    Client eviction <eviction>
-    Scrubbing the File System <scrub>
-    Handling full file systems <full>
-    Metadata repair <disaster-recovery-experts>
-    Troubleshooting <troubleshooting>
-    Disaster recovery <disaster-recovery>
-    cephfs-journal-tool <cephfs-journal-tool>
-
-
-.. raw:: html
-
-   <!---
-
-Developer Guides
-^^^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
-.. toctree:: 
-   :maxdepth: 1
-   :hidden:
-
-    Journaler Configuration <journaler>
-    Client's Capabilities <capabilities>
-    Java and Python bindings <api/index>
-    Mantle <mantle>
-
-
-.. raw:: html
-
-   <!---
-
-Additional Details
-^^^^^^^^^^^^^^^^^^
-
-.. raw:: html
-
-   --->
-
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-    Experimental Features <experimental-features>
+    Additional Details <additional-details-overview>
