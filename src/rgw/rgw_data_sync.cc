@@ -939,7 +939,21 @@ public:
   }
 };
 
+struct rgw_datalog_info {
+  uint32_t num_shards;
+
+  rgw_datalog_info() : num_shards(0) {}
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("num_objects", num_shards, obj);
+  }
+};
+
 class RGWDataIncSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
+  friend class InitCR;
+
+  rgw_datalog_info remote_datalog_info;
+
   class ReadDatalogStatusCR : public RGWCoroutine {
     RGWDataSyncCtx *sc;
     int shard_id;
@@ -966,6 +980,39 @@ class RGWDataIncSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
         }
         *marker = info.marker;
         *timestamp = info.last_update;
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+  class InitCR : public RGWCoroutine {
+    RGWDataIncSyncInfoCRHandler_Legacy *handler;
+    RGWDataSyncCtx *sc;
+
+  public:
+    InitCR(RGWDataIncSyncInfoCRHandler_Legacy *_handler,
+           RGWDataSyncCtx *_sc) : RGWCoroutine(_sc->cct),
+                                                handler(_handler),
+                                                sc(_sc) {}
+
+    int operate() {
+      reenter(this) {
+        yield {
+          string entrypoint = string("/admin/log");
+
+          rgw_http_param_pair pairs[] = { { "type", "data" },
+                                          { nullptr, nullptr } };
+
+          call(new RGWReadRESTResourceCR<rgw_datalog_info>(sc->env->cct, sc->conns.data,
+                                                           sc->env->http_manager,
+                                                           entrypoint, pairs, &handler->remote_datalog_info));
+        }
+        if (retcode < 0) {
+          ldout(cct, 0) << "ERROR: failed to fetch remote datalog info: retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
+
         return set_cr_done();
       }
       return 0;
@@ -1041,7 +1088,7 @@ public:
   }
 
   int num_shards() const override {
-#warning num_shards in legacy missing
+    return remote_datalog_info.num_shards;
   }
 
   int validate_sync_marker(rgw_data_sync_marker& marker) const override {
@@ -1064,8 +1111,7 @@ public:
   }
 
   RGWCoroutine *init_cr() override {
-    /* nothing to init */
-    return nullptr;
+    return new InitCR(this, sc);
   }
 
   RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos) override {
@@ -4986,7 +5032,6 @@ int RGWBucketShardFullSyncCR::operate(const DoutPrefixProvider *dpp)
       set_status("listing remote bucket");
       tn->log(20, "listing bucket for full sync");
 
-#warning move prefix handler into bsc->hsi
       if (!prefix_handler.revalidate_marker(&list_marker_key)) {
         set_status() << "finished iterating over all available prefixes: last marker=" << list_marker;
         tn->log(20, SSTR("finished iterating over all available prefixes: last marker=" << list_marker));
