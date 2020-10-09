@@ -34,7 +34,6 @@
               "file-saver",
               "lodash"
             ],
-            "i18nLocale": "en",
             "aot": true,
             "i18nMissingTranslation": "ignore",
             "outputPath": "dist",

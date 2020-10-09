@@ -16,5 +16,6 @@
     "mochaJunitReporterReporterOptions": {
       "mochaFile": "cypress/reports/results-[hash].xml"
     }
-  }
+  },
+  "retries": 1
 }
