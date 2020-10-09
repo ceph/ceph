@@ -17,11 +17,7 @@ import { ConfirmationModalComponent } from './confirmation-modal.component';
 export class MockModule {}
 
 @Component({
-  template: `
-    <ng-template #fillTpl>
-      Template based description.
-    </ng-template>
-  `
+  template: `<ng-template #fillTpl>Template based description.</ng-template>`
 })
 class MockComponent {
   @ViewChild('fillTpl', { static: true })
@@ -184,7 +180,7 @@ describe('ConfirmationModalComponent', () => {
 
     it('should show the description', () => {
       expect(fh.getText('.modal-body')).toBe(
-        'Template based description.  String based description.'
+        'Template based description. String based description.'
       );
     });
   });
