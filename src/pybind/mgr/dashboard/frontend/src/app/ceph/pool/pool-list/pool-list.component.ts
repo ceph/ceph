@@ -144,12 +144,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         cellClass: 'text-right'
       },
       {
-        prop: 'last_change',
-        name: $localize`Last Change`,
-        flexGrow: 2,
-        cellClass: 'text-right'
-      },
-      {
         prop: 'erasure_code_profile',
         name: $localize`Erasure Coded Profile`,
         flexGrow: 2
