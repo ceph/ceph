@@ -212,7 +212,7 @@ bool ImageDispatch<I>::list_snaps(
     std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
-  ceph_abort();
+  return false;
 }
 
 
