@@ -91,11 +91,14 @@ class LogSegment {
 
   std::set<metareqid_t> uncommitted_leaders_peers;
   std::set<dirfrag_t> uncommitted_fragments;
+  std::set<dirfrag_t> uncommitted_exports;
 
   MDSContext::vec uncommitted_waiters;
 
   bool is_any_uncommitted() const {
-    return !uncommitted_leaders_peers.empty() || !uncommitted_fragments.empty();
+    return !uncommitted_leaders_peers.empty() ||
+	   !uncommitted_fragments.empty() ||
+	   !uncommitted_exports.empty();
   }
 
   // client request ids
