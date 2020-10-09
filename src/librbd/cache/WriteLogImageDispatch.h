@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_PWL_IMAGE_DISPATCH_H
-#define CEPH_LIBRBD_PWL_IMAGE_DISPATCH_H
+#ifndef CEPH_LIBRBD_WRITELOG_IMAGE_DISPATCH_H
+#define CEPH_LIBRBD_WRITELOG_IMAGE_DISPATCH_H
 
 #include "librbd/io/ImageDispatchInterface.h"
 #include "include/int_types.h"
@@ -19,16 +19,13 @@ struct ImageCtx;
 
 namespace cache {
 
-template<typename>
-class WriteLogCache;
-
-namespace pwl {
+namespace pwl { template <typename> class AbstractWriteLog; }
 
 template <typename ImageCtxT>
-class ImageDispatch : public io::ImageDispatchInterface {
+class WriteLogImageDispatch : public io::ImageDispatchInterface {
 public:
-  ImageDispatch(ImageCtxT* image_ctx,
-                   WriteLogCache<ImageCtx> *image_cache) :
+  WriteLogImageDispatch(ImageCtxT* image_ctx,
+                        pwl::AbstractWriteLog<ImageCtx> *image_cache) :
     m_image_ctx(image_ctx), m_image_cache(image_cache) {
   }
 
@@ -91,16 +88,15 @@ public:
 
 private:
   ImageCtxT* m_image_ctx;
-  cache::WriteLogCache<ImageCtx> *m_image_cache;
+  pwl::AbstractWriteLog<ImageCtx> *m_image_cache;
 
   bool preprocess_length(
       io::AioCompletion* aio_comp, io::Extents &image_extents) const;
 };
 
-} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::pwl::ImageDispatch<librbd::ImageCtx>;
+extern template class librbd::cache::WriteLogImageDispatch<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_PWL_IMAGE_DISPATCH_H
+#endif // CEPH_LIBRBD_WRITELOG_IMAGE_DISPATCH_H
