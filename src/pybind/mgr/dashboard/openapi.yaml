@@ -144,23 +144,25 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  pool_name:
-                    description: pool name
-                    type: string
-                  status:
-                    description: Status of the image
-                    type: integer
-                  value:
-                    description: ''
-                    items:
+                items:
+                  properties:
+                    pool_name:
+                      description: pool name
                       type: string
-                    type: array
+                    status:
+                      description: Status of the image
+                      type: integer
+                    value:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                  type: object
                 required:
                 - status
                 - value
                 - pool_name
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -260,23 +262,25 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  pool_name:
-                    description: pool name
-                    type: string
-                  status:
-                    description: ''
-                    type: integer
-                  value:
-                    description: ''
-                    items:
+                items:
+                  properties:
+                    pool_name:
+                      description: pool name
                       type: string
-                    type: array
+                    status:
+                      description: ''
+                      type: integer
+                    value:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                  type: object
                 required:
                 - status
                 - value
                 - pool_name
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1885,62 +1889,64 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  can_update_at_runtime:
-                    description: Check if can update at runtime
-                    type: boolean
-                  daemon_default:
-                    description: Daemon specific default value
-                    type: string
-                  default:
-                    description: Default value for the config option
-                    type: string
-                  desc:
-                    description: Description of the configuration
-                    type: string
-                  enum_values:
-                    description: List of enums allowed
-                    items:
+                items:
+                  properties:
+                    can_update_at_runtime:
+                      description: Check if can update at runtime
+                      type: boolean
+                    daemon_default:
+                      description: Daemon specific default value
                       type: string
-                    type: array
-                  flags:
-                    description: List of flags associated
-                    items:
+                    default:
+                      description: Default value for the config option
                       type: string
-                    type: array
-                  level:
-                    description: Config option level
-                    type: string
-                  long_desc:
-                    description: Elaborated description
-                    type: string
-                  max:
-                    description: Maximum value
-                    type: string
-                  min:
-                    description: Minimum value
-                    type: string
-                  name:
-                    description: Name of the config option
-                    type: string
-                  see_also:
-                    description: Related config options
-                    items:
+                    desc:
+                      description: Description of the configuration
                       type: string
-                    type: array
-                  services:
-                    description: Services associated with the config option
-                    items:
+                    enum_values:
+                      description: List of enums allowed
+                      items:
+                        type: string
+                      type: array
+                    flags:
+                      description: List of flags associated
+                      items:
+                        type: string
+                      type: array
+                    level:
+                      description: Config option level
                       type: string
-                    type: array
-                  tags:
-                    description: Tags associated with the cluster
-                    items:
+                    long_desc:
+                      description: Elaborated description
                       type: string
-                    type: array
-                  type:
-                    description: Config option type
-                    type: string
+                    max:
+                      description: Maximum value
+                      type: string
+                    min:
+                      description: Minimum value
+                      type: string
+                    name:
+                      description: Name of the config option
+                      type: string
+                    see_also:
+                      description: Related config options
+                      items:
+                        type: string
+                      type: array
+                    services:
+                      description: Services associated with the config option
+                      items:
+                        type: string
+                      type: array
+                    tags:
+                      description: Tags associated with the cluster
+                      items:
+                        type: string
+                      type: array
+                    type:
+                      description: Config option type
+                      type: string
+                  type: object
                 required:
                 - name
                 - type
@@ -1957,7 +1963,7 @@ paths:
                 - max
                 - can_update_at_runtime
                 - flags
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2178,25 +2184,27 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  crush-failure-domain:
-                    description: ''
-                    type: string
-                  k:
-                    description: Number of data chunks
-                    type: integer
-                  m:
-                    description: Number of coding chunks
-                    type: integer
-                  name:
-                    description: Name of the profile
-                    type: string
-                  plugin:
-                    description: Plugin Info
-                    type: string
-                  technique:
-                    description: ''
-                    type: string
+                items:
+                  properties:
+                    crush-failure-domain:
+                      description: ''
+                      type: string
+                    k:
+                      description: Number of data chunks
+                      type: integer
+                    m:
+                      description: Number of coding chunks
+                      type: integer
+                    name:
+                      description: Name of the profile
+                      type: string
+                    plugin:
+                      description: Plugin Info
+                      type: string
+                    technique:
+                      description: ''
+                      type: string
+                  type: object
                 required:
                 - crush-failure-domain
                 - k
@@ -2204,7 +2212,7 @@ paths:
                 - plugin
                 - technique
                 - name
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3113,25 +3121,27 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  mutual_password:
-                    description: ''
-                    type: string
-                  mutual_user:
-                    description: ''
-                    type: string
-                  password:
-                    description: password
-                    type: string
-                  user:
-                    description: username
-                    type: string
+                items:
+                  properties:
+                    mutual_password:
+                      description: ''
+                      type: string
+                    mutual_user:
+                      description: ''
+                      type: string
+                    password:
+                      description: password
+                      type: string
+                    user:
+                      description: username
+                      type: string
+                  type: object
                 required:
                 - user
                 - password
                 - mutual_user
                 - mutual_password
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3477,87 +3487,89 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  always_on:
-                    description: Is it an always on module?
-                    type: boolean
-                  enabled:
-                    description: Is Module Enabled
-                    type: boolean
-                  name:
-                    description: Module Name
-                    type: string
-                  options:
-                    description: Module Options
-                    properties:
-                      Option_name:
-                        description: Options
-                        properties:
-                          default_value:
-                            description: Default value for the option
-                            type: integer
-                          desc:
-                            description: Description of the option
-                            type: string
-                          enum_allowed:
-                            description: ''
-                            items:
+                items:
+                  properties:
+                    always_on:
+                      description: Is it an always on module?
+                      type: boolean
+                    enabled:
+                      description: Is Module Enabled
+                      type: boolean
+                    name:
+                      description: Module Name
+                      type: string
+                    options:
+                      description: Module Options
+                      properties:
+                        Option_name:
+                          description: Options
+                          properties:
+                            default_value:
+                              description: Default value for the option
+                              type: integer
+                            desc:
+                              description: Description of the option
                               type: string
-                            type: array
-                          flags:
-                            description: List of flags associated
-                            type: integer
-                          level:
-                            description: Option level
-                            type: string
-                          long_desc:
-                            description: Elaborated description
-                            type: string
-                          max:
-                            description: Maximum value
-                            type: string
-                          min:
-                            description: Minimum value
-                            type: string
-                          name:
-                            description: Name of the option
-                            type: string
-                          see_also:
-                            description: Related options
-                            items:
+                            enum_allowed:
+                              description: ''
+                              items:
+                                type: string
+                              type: array
+                            flags:
+                              description: List of flags associated
+                              type: integer
+                            level:
+                              description: Option level
                               type: string
-                            type: array
-                          tags:
-                            description: Tags associated with the option
-                            items:
+                            long_desc:
+                              description: Elaborated description
                               type: string
-                            type: array
-                          type:
-                            description: Type of the option
-                            type: string
-                        required:
-                        - name
-                        - type
-                        - level
-                        - flags
-                        - default_value
-                        - min
-                        - max
-                        - enum_allowed
-                        - desc
-                        - long_desc
-                        - tags
-                        - see_also
-                        type: object
-                    required:
-                    - Option_name
-                    type: object
+                            max:
+                              description: Maximum value
+                              type: string
+                            min:
+                              description: Minimum value
+                              type: string
+                            name:
+                              description: Name of the option
+                              type: string
+                            see_also:
+                              description: Related options
+                              items:
+                                type: string
+                              type: array
+                            tags:
+                              description: Tags associated with the option
+                              items:
+                                type: string
+                              type: array
+                            type:
+                              description: Type of the option
+                              type: string
+                          required:
+                          - name
+                          - type
+                          - level
+                          - flags
+                          - default_value
+                          - min
+                          - max
+                          - enum_allowed
+                          - desc
+                          - long_desc
+                          - tags
+                          - see_also
+                          type: object
+                      required:
+                      - Option_name
+                      type: object
+                  type: object
                 required:
                 - name
                 - enabled
                 - always_on
                 - options
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -4116,23 +4128,25 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  cluster_id:
-                    description: Cluster identifier
-                    type: string
-                  daemon_id:
-                    description: Daemon identifier
-                    type: string
-                  desc:
-                    description: Error description (if status==-1)
-                    type: string
-                  status:
-                    description: Status of daemon (1=RUNNING, 0=STOPPED, -1=ERROR
-                    type: integer
+                items:
+                  properties:
+                    cluster_id:
+                      description: Cluster identifier
+                      type: string
+                    daemon_id:
+                      description: Daemon identifier
+                      type: string
+                    desc:
+                      description: Error description (if status==-1)
+                      type: string
+                    status:
+                      description: Status of daemon (1=RUNNING, 0=STOPPED, -1=ERROR
+                      type: integer
+                  type: object
                 required:
                 - daemon_id
                 - cluster_id
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -4156,88 +4170,90 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  access_type:
-                    description: Export access type
-                    type: string
-                  clients:
-                    description: List of client configurations
-                    items:
-                      properties:
-                        access_type:
-                          description: Client access type
-                          type: string
-                        addresses:
-                          description: list of IP addresses
-                          items:
+                items:
+                  properties:
+                    access_type:
+                      description: Export access type
+                      type: string
+                    clients:
+                      description: List of client configurations
+                      items:
+                        properties:
+                          access_type:
+                            description: Client access type
                             type: string
-                          type: array
-                        squash:
-                          description: Client squash policy
+                          addresses:
+                            description: list of IP addresses
+                            items:
+                              type: string
+                            type: array
+                          squash:
+                            description: Client squash policy
+                            type: string
+                        required:
+                        - addresses
+                        - access_type
+                        - squash
+                        type: object
+                      type: array
+                    cluster_id:
+                      description: Cluster identifier
+                      type: string
+                    daemons:
+                      description: List of NFS Ganesha daemons identifiers
+                      items:
+                        type: string
+                      type: array
+                    export_id:
+                      description: Export ID
+                      type: integer
+                    fsal:
+                      description: FSAL configuration
+                      properties:
+                        filesystem:
+                          description: CephFS filesystem ID
+                          type: string
+                        name:
+                          description: name of FSAL
+                          type: string
+                        rgw_user_id:
+                          description: RGW user id
+                          type: string
+                        sec_label_xattr:
+                          description: Name of xattr for security label
+                          type: string
+                        user_id:
+                          description: CephX user id
                           type: string
                       required:
-                      - addresses
-                      - access_type
-                      - squash
+                      - name
                       type: object
-                    type: array
-                  cluster_id:
-                    description: Cluster identifier
-                    type: string
-                  daemons:
-                    description: List of NFS Ganesha daemons identifiers
-                    items:
+                    path:
+                      description: Export path
                       type: string
-                    type: array
-                  export_id:
-                    description: Export ID
-                    type: integer
-                  fsal:
-                    description: FSAL configuration
-                    properties:
-                      filesystem:
-                        description: CephFS filesystem ID
-                        type: string
-                      name:
-                        description: name of FSAL
-                        type: string
-                      rgw_user_id:
-                        description: RGW user id
-                        type: string
-                      sec_label_xattr:
-                        description: Name of xattr for security label
-                        type: string
-                      user_id:
-                        description: CephX user id
-                        type: string
-                    required:
-                    - name
-                    type: object
-                  path:
-                    description: Export path
-                    type: string
-                  protocols:
-                    description: List of protocol types
-                    items:
-                      type: integer
-                    type: array
-                  pseudo:
-                    description: Pseudo FS path
-                    type: string
-                  security_label:
-                    description: Security label
-                    type: string
-                  squash:
-                    description: Export squash policy
-                    type: string
-                  tag:
-                    description: NFSv3 export tag
-                    type: string
-                  transports:
-                    description: List of transport types
-                    items:
+                    protocols:
+                      description: List of protocol types
+                      items:
+                        type: integer
+                      type: array
+                    pseudo:
+                      description: Pseudo FS path
                       type: string
-                    type: array
+                    security_label:
+                      description: Security label
+                      type: string
+                    squash:
+                      description: Export squash policy
+                      type: string
+                    tag:
+                      description: NFSv3 export tag
+                      type: string
+                    transports:
+                      description: List of transport types
+                      items:
+                        type: string
+                      type: array
+                  type: object
                 required:
                 - export_id
                 - path
@@ -4252,7 +4268,7 @@ paths:
                 - transports
                 - fsal
                 - clients
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5838,223 +5854,225 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  application_metadata:
-                    description: ''
-                    items:
-                      type: string
-                    type: array
-                  auid:
-                    description: ''
-                    type: integer
-                  cache_min_evict_age:
-                    description: ''
-                    type: integer
-                  cache_min_flush_age:
-                    description: ''
-                    type: integer
-                  cache_mode:
-                    description: ''
-                    type: string
-                  cache_target_dirty_high_ratio_micro:
-                    description: ''
-                    type: integer
-                  cache_target_dirty_ratio_micro:
-                    description: ''
-                    type: integer
-                  cache_target_full_ratio_micro:
-                    description: ''
-                    type: integer
-                  create_time:
-                    description: ''
-                    type: string
-                  crush_rule:
-                    description: ''
-                    type: string
-                  erasure_code_profile:
-                    description: ''
-                    type: string
-                  expected_num_objects:
-                    description: ''
-                    type: integer
-                  fast_read:
-                    description: ''
-                    type: boolean
-                  flags:
-                    description: ''
-                    type: integer
-                  flags_names:
-                    description: flags name
-                    type: string
-                  grade_table:
-                    description: ''
-                    items:
-                      type: string
-                    type: array
-                  hit_set_count:
-                    description: ''
-                    type: integer
-                  hit_set_grade_decay_rate:
-                    description: ''
-                    type: integer
-                  hit_set_params:
-                    description: ''
-                    properties:
-                      type:
-                        description: ''
+                items:
+                  properties:
+                    application_metadata:
+                      description: ''
+                      items:
                         type: string
-                    required:
-                    - type
-                    type: object
-                  hit_set_period:
-                    description: ''
-                    type: integer
-                  hit_set_search_last_n:
-                    description: ''
-                    type: integer
-                  last_change:
-                    description: ''
-                    type: string
-                  last_force_op_resend:
-                    description: ''
-                    type: string
-                  last_force_op_resend_preluminous:
-                    description: ''
-                    type: string
-                  last_force_op_resend_prenautilus:
-                    description: ''
-                    type: string
-                  last_pg_merge_meta:
-                    description: ''
-                    properties:
-                      last_epoch_clean:
-                        description: ''
-                        type: integer
-                      last_epoch_started:
-                        description: ''
-                        type: integer
-                      ready_epoch:
-                        description: ''
-                        type: integer
-                      source_pgid:
-                        description: ''
-                        type: string
-                      source_version:
-                        description: ''
-                        type: string
-                      target_version:
-                        description: ''
-                        type: string
-                    required:
-                    - ready_epoch
-                    - last_epoch_started
-                    - last_epoch_clean
-                    - source_pgid
-                    - source_version
-                    - target_version
-                    type: object
-                  min_read_recency_for_promote:
-                    description: ''
-                    type: integer
-                  min_size:
-                    description: ''
-                    type: integer
-                  min_write_recency_for_promote:
-                    description: ''
-                    type: integer
-                  object_hash:
-                    description: ''
-                    type: integer
-                  options:
-                    description: ''
-                    properties:
-                      pg_num_min:
-                        description: ''
-                        type: integer
-                    required:
-                    - pg_num_min
-                    type: object
-                  pg_autoscale_mode:
-                    description: ''
-                    type: string
-                  pg_num:
-                    description: ''
-                    type: integer
-                  pg_num_pending:
-                    description: ''
-                    type: integer
-                  pg_num_target:
-                    description: ''
-                    type: integer
-                  pg_placement_num:
-                    description: ''
-                    type: integer
-                  pg_placement_num_target:
-                    description: ''
-                    type: integer
-                  pool:
-                    description: pool id
-                    type: integer
-                  pool_name:
-                    description: pool name
-                    type: string
-                  pool_snaps:
-                    description: ''
-                    items:
+                      type: array
+                    auid:
+                      description: ''
+                      type: integer
+                    cache_min_evict_age:
+                      description: ''
+                      type: integer
+                    cache_min_flush_age:
+                      description: ''
+                      type: integer
+                    cache_mode:
+                      description: ''
                       type: string
-                    type: array
-                  quota_max_bytes:
-                    description: ''
-                    type: integer
-                  quota_max_objects:
-                    description: ''
-                    type: integer
-                  read_tier:
-                    description: ''
-                    type: integer
-                  removed_snaps:
-                    description: ''
-                    items:
+                    cache_target_dirty_high_ratio_micro:
+                      description: ''
+                      type: integer
+                    cache_target_dirty_ratio_micro:
+                      description: ''
+                      type: integer
+                    cache_target_full_ratio_micro:
+                      description: ''
+                      type: integer
+                    create_time:
+                      description: ''
                       type: string
-                    type: array
-                  size:
-                    description: pool size
-                    type: integer
-                  snap_epoch:
-                    description: ''
-                    type: integer
-                  snap_mode:
-                    description: ''
-                    type: string
-                  snap_seq:
-                    description: ''
-                    type: integer
-                  stripe_width:
-                    description: ''
-                    type: integer
-                  target_max_bytes:
-                    description: ''
-                    type: integer
-                  target_max_objects:
-                    description: ''
-                    type: integer
-                  tier_of:
-                    description: ''
-                    type: integer
-                  tiers:
-                    description: ''
-                    items:
+                    crush_rule:
+                      description: ''
                       type: string
-                    type: array
-                  type:
-                    description: type of pool
-                    type: string
-                  use_gmt_hitset:
-                    description: ''
-                    type: boolean
-                  write_tier:
-                    description: ''
-                    type: integer
+                    erasure_code_profile:
+                      description: ''
+                      type: string
+                    expected_num_objects:
+                      description: ''
+                      type: integer
+                    fast_read:
+                      description: ''
+                      type: boolean
+                    flags:
+                      description: ''
+                      type: integer
+                    flags_names:
+                      description: flags name
+                      type: string
+                    grade_table:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                    hit_set_count:
+                      description: ''
+                      type: integer
+                    hit_set_grade_decay_rate:
+                      description: ''
+                      type: integer
+                    hit_set_params:
+                      description: ''
+                      properties:
+                        type:
+                          description: ''
+                          type: string
+                      required:
+                      - type
+                      type: object
+                    hit_set_period:
+                      description: ''
+                      type: integer
+                    hit_set_search_last_n:
+                      description: ''
+                      type: integer
+                    last_change:
+                      description: ''
+                      type: string
+                    last_force_op_resend:
+                      description: ''
+                      type: string
+                    last_force_op_resend_preluminous:
+                      description: ''
+                      type: string
+                    last_force_op_resend_prenautilus:
+                      description: ''
+                      type: string
+                    last_pg_merge_meta:
+                      description: ''
+                      properties:
+                        last_epoch_clean:
+                          description: ''
+                          type: integer
+                        last_epoch_started:
+                          description: ''
+                          type: integer
+                        ready_epoch:
+                          description: ''
+                          type: integer
+                        source_pgid:
+                          description: ''
+                          type: string
+                        source_version:
+                          description: ''
+                          type: string
+                        target_version:
+                          description: ''
+                          type: string
+                      required:
+                      - ready_epoch
+                      - last_epoch_started
+                      - last_epoch_clean
+                      - source_pgid
+                      - source_version
+                      - target_version
+                      type: object
+                    min_read_recency_for_promote:
+                      description: ''
+                      type: integer
+                    min_size:
+                      description: ''
+                      type: integer
+                    min_write_recency_for_promote:
+                      description: ''
+                      type: integer
+                    object_hash:
+                      description: ''
+                      type: integer
+                    options:
+                      description: ''
+                      properties:
+                        pg_num_min:
+                          description: ''
+                          type: integer
+                      required:
+                      - pg_num_min
+                      type: object
+                    pg_autoscale_mode:
+                      description: ''
+                      type: string
+                    pg_num:
+                      description: ''
+                      type: integer
+                    pg_num_pending:
+                      description: ''
+                      type: integer
+                    pg_num_target:
+                      description: ''
+                      type: integer
+                    pg_placement_num:
+                      description: ''
+                      type: integer
+                    pg_placement_num_target:
+                      description: ''
+                      type: integer
+                    pool:
+                      description: pool id
+                      type: integer
+                    pool_name:
+                      description: pool name
+                      type: string
+                    pool_snaps:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                    quota_max_bytes:
+                      description: ''
+                      type: integer
+                    quota_max_objects:
+                      description: ''
+                      type: integer
+                    read_tier:
+                      description: ''
+                      type: integer
+                    removed_snaps:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                    size:
+                      description: pool size
+                      type: integer
+                    snap_epoch:
+                      description: ''
+                      type: integer
+                    snap_mode:
+                      description: ''
+                      type: string
+                    snap_seq:
+                      description: ''
+                      type: integer
+                    stripe_width:
+                      description: ''
+                      type: integer
+                    target_max_bytes:
+                      description: ''
+                      type: integer
+                    target_max_objects:
+                      description: ''
+                      type: integer
+                    tier_of:
+                      description: ''
+                      type: integer
+                    tiers:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                    type:
+                      description: type of pool
+                      type: string
+                    use_gmt_hitset:
+                      description: ''
+                      type: boolean
+                    write_tier:
+                      description: ''
+                      type: integer
+                  type: object
                 required:
                 - pool
                 - pool_name
@@ -6112,7 +6130,7 @@ paths:
                 - last_force_op_resend_prenautilus
                 - last_force_op_resend_preluminous
                 - removed_snaps
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6601,21 +6619,23 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  id:
-                    description: Daemon ID
-                    type: string
-                  server_hostname:
-                    description: ''
-                    type: string
-                  version:
-                    description: Ceph Version
-                    type: string
+                items:
+                  properties:
+                    id:
+                      description: Daemon ID
+                      type: string
+                    server_hostname:
+                      description: ''
+                      type: string
+                    version:
+                      description: Ceph Version
+                      type: string
+                  type: object
                 required:
                 - id
                 - version
                 - server_hostname
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7219,33 +7239,35 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  description:
-                    description: Role Descriptions
-                    type: string
-                  name:
-                    description: Role Name
-                    type: string
-                  scopes_permissions:
-                    description: ''
-                    properties:
-                      cephfs:
-                        description: ''
-                        items:
-                          type: string
-                        type: array
-                    required:
-                    - cephfs
-                    type: object
-                  system:
-                    description: ''
-                    type: boolean
+                items:
+                  properties:
+                    description:
+                      description: Role Descriptions
+                      type: string
+                    name:
+                      description: Role Name
+                      type: string
+                    scopes_permissions:
+                      description: ''
+                      properties:
+                        cephfs:
+                          description: ''
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - cephfs
+                      type: object
+                    system:
+                      description: ''
+                      type: boolean
+                  type: object
                 required:
                 - name
                 - description
                 - scopes_permissions
                 - system
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7587,25 +7609,27 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  default:
-                    description: Default Settings
-                    type: boolean
-                  name:
-                    description: Settings Name
-                    type: string
-                  type:
-                    description: Type of Settings
-                    type: string
-                  value:
-                    description: Settings Value
-                    type: boolean
+                items:
+                  properties:
+                    default:
+                      description: Default Settings
+                      type: boolean
+                    name:
+                      description: Settings Name
+                      type: string
+                    type:
+                      description: Type of Settings
+                      type: string
+                    value:
+                      description: Settings Value
+                      type: boolean
+                  type: object
                 required:
                 - name
                 - default
                 - type
                 - value
-                type: object
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
