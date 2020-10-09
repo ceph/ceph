@@ -1887,6 +1887,12 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         if daemon_type == 'rbd-mirror' or daemon_type == 'crash':
             # these do not search for their keyrings in a data directory
             mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
+        if daemon_type == 'rbd-mirror':
+            remote_info_dir = os.path.join(args.data_dir, fsid, 'remote-cluster-info')
+            if not os.path.exists(remote_info_dir):
+                uid, gid = extract_uid_gid()
+                makedirs(remote_info_dir, uid, gid, 0o755)
+            mounts[remote_info_dir] = '/etc/ceph'
 
     if daemon_type in ['mon', 'osd']:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
