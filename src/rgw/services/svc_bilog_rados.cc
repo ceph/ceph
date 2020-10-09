@@ -14,17 +14,12 @@ RGWSI_BILog_RADOS::RGWSI_BILog_RADOS(CephContext *cct) : RGWServiceInstance(cct)
 {
 }
 
-void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
+void RGWSI_BILog_RADOS_InIndex::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
 {
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
-				const RGWBucketInfo& bucket_info,
-				const rgw::bucket_log_layout_generation& log_layout,
-				int shard_id,
-				std::string_view start_marker,
-				std::string_view end_marker)
+int RGWSI_BILog_RADOS_InIndex::log_trim(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id, std::string& start_marker, std::string& end_marker)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -52,7 +47,7 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
 			      cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
+int RGWSI_BILog_RADOS_InIndex::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -64,7 +59,7 @@ int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketI
   return CLSRGWIssueResyncBucketBILog(index_pool.ioctx(), bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
+int RGWSI_BILog_RADOS_InIndex::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -86,10 +81,7 @@ static void build_bucket_index_marker(const string& shard_id_str,
   }
 }
 
-int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
-				const RGWBucketInfo& bucket_info,
-				const rgw::bucket_log_layout_generation& log_layout,
-				int shard_id, string& marker, uint32_t max,
+int RGWSI_BILog_RADOS_InIndex::log_list(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id, string& marker, uint32_t max,
                                 std::list<rgw_bi_log_entry>& result, bool *truncated)
 {
   ldpp_dout(dpp, 20) << __func__ << ": " << bucket_info.bucket << " marker " << marker << " shard_id=" << shard_id << " max " << max << dendl;
@@ -188,12 +180,10 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_BILog_RADOS::get_log_status(const DoutPrefixProvider *dpp,
-                                      const RGWBucketInfo& bucket_info,
-				      const rgw::bucket_log_layout_generation& log_layout, 
-                                      int shard_id,
-                                      map<int, string> *markers,
-				      optional_yield y)
+int RGWSI_BILog_RADOS_InIndex::get_log_status(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
+                                              int shard_id,
+                                              map<int, string> *markers,
+                                              optional_yield y)
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
