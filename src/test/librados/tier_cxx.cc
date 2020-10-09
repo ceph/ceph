@@ -4647,6 +4647,367 @@ TEST_F(LibRadosTwoPoolsPP, ManifestEvict) {
 
 }
 
+#include <common/CDC.h>
+TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 8192),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  bufferlist gbl;
+  {
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo-chunk", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("DDse chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar-chunk", &op));
+  }
+
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar-chunk", 0,
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo-chunk", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  std::unique_ptr<CDC> cdc = CDC::create("fastcdc", cbits(1024)-1);
+  vector<pair<uint64_t, uint64_t>> chunks;
+  bufferlist chunk;
+  cdc->calc_chunks(gbl, &chunks);
+  chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  string tgt_oid;
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[1], chunk[1]);
+  }
+
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 512),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 512),
+	inbl, NULL, NULL));
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  cdc = CDC::create("fastcdc", cbits(512)-1);
+  cdc->calc_chunks(gbl, &chunks);
+  chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[1], chunk[1]);
+  }
+
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 16384),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 16384),
+	inbl, NULL, NULL));
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  cdc = CDC::create("fastcdc", cbits(16384)-1);
+  cdc->calc_chunks(gbl, &chunks);
+  chunk.substr_of(gbl, chunks[0].first, chunks[0].second);
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[0], chunk[0]);
+  }
+
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 8192),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  bufferlist gbl;
+  {
+    //bufferlist bl;
+    //bl.append("there hi");
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 2, 2, "bar", "foo");
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("Thbbe");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // and another
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("Thcce");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // flush on head (should fail)
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-EBUSY, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on recent snap (should fail)
+  cache_ioctx.snap_set_read(my_snaps[0]);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-EBUSY, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on oldest snap
+  cache_ioctx.snap_set_read(my_snaps[1]);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on oldest snap
+  cache_ioctx.snap_set_read(my_snaps[0]);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on oldest snap
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // check chunk's refcount
+  std::unique_ptr<CDC> cdc = CDC::create("fastcdc", cbits(1024)-1);
+  vector<pair<uint64_t, uint64_t>> chunks;
+  bufferlist chunk;
+  cdc->calc_chunks(gbl, &chunks);
+  chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  string tgt_oid;
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[1], chunk[1]);
+  }
+
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(4, cache_ioctx.read("foo", bl, 4, 0));
+    ASSERT_EQ('c', bl[2]);
+  }
+
+  cache_ioctx.snap_set_read(my_snaps[0]);
+  {
+    bufferlist bl;
+    ASSERT_EQ(4, cache_ioctx.read("foo", bl, 4, 0));
+    ASSERT_EQ('b', bl[2]);
+  }
+}
+
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
