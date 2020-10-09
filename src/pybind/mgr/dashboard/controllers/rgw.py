@@ -74,7 +74,7 @@ class Rgw(BaseController):
 @ControllerDoc("RGW Daemon Management API", "RgwDaemon")
 class RgwDaemon(RESTController):
     @EndpointDoc("Display RGW Daemons",
-                 responses={200: RGW_DAEMON_SCHEMA})
+                 responses={200: [RGW_DAEMON_SCHEMA]})
     def list(self):
         # type: () -> List[dict]
         daemons = []
