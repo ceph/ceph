@@ -5,7 +5,6 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"

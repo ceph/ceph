@@ -14,10 +14,10 @@ namespace io { class ImageDispatchInterface; }
 
 namespace cache {
 
-template<typename>
-class WriteLogCache;
-
 namespace pwl {
+
+template<typename>
+class AbstractWriteLog;
 
 template<typename>
 class ImageCacheState;
@@ -56,7 +56,7 @@ private:
   InitRequest(ImageCtxT &image_ctx, Context *on_finish);
 
   ImageCtxT &m_image_ctx;
-  cache::WriteLogCache<ImageCtx> *m_image_cache;
+  AbstractWriteLog<ImageCtxT> *m_image_cache;
   Context *m_on_finish;
 
   int m_error_result;
