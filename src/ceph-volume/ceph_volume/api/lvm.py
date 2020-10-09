@@ -740,6 +740,18 @@ def get_device_vgs(device, name_prefix=''):
     return [VolumeGroup(**vg) for vg in vgs if vg['vg_name'] and vg['vg_name'].startswith(name_prefix)]
 
 
+def scan():
+    """
+    Scan the system for lvs and vgs. Sometimes
+    the cache can become stale when an lv or vg
+    is deleted. This will rescan the system
+    and ensure that `lvs` and `vgs` return
+    the actual state of the system.
+    """
+    process.run(['lvscan', '--cache'])
+    process.run(['vgscan', '--cache'])
+
+
 #################################
 #
 # Code for LVM Logical Volumes

@@ -188,6 +188,11 @@ class Zap(object):
                 mlogger.info('Removing LV because --destroy was given: %s',
                              device.abspath)
                 api.remove_lv(device.abspath)
+
+            # scan the system for lvs and vgs after deleting.
+            # this avoids and issue where stale lvm cache can
+            # show deleted lvs and vgs as available.
+            api.scan()
         elif lv:
             # just remove all lvm metadata, leaving the LV around
             lv.clear_tags()
