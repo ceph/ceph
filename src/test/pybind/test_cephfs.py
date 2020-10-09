@@ -34,6 +34,11 @@ def setup_test():
     cephfs.closedir(d)
 
     cephfs.chdir(b"/")
+    _, ret_buf = cephfs.listxattr("/")
+    print(f'ret_buf={ret_buf}')
+    xattrs = ret_buf.decode('utf-8').split('\x00')
+    for xattr in xattrs[:-1]:
+        cephfs.removexattr("/", xattr)
 
 @with_setup(setup_test)
 def test_conf_get():
