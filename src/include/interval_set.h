@@ -43,9 +43,15 @@ class interval_set {
 
   class const_iterator;
 
-  class iterator : public std::iterator <std::forward_iterator_tag, T>
+  class iterator
   {
     public:
+        using difference_type = ssize_t;
+        using value_type = typename Map::value_type;
+        using pointer = typename Map::value_type*;
+        using reference = typename Map::value_type&;
+        using iterator_category = std::forward_iterator_tag;
+
         explicit iterator(typename Map::iterator iter)
           : _iter(iter)
         { }
