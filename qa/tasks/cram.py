@@ -16,7 +16,8 @@ log = logging.getLogger(__name__)
 def task(ctx, config):
     """
     Run all cram tests from the specified paths on the specified
-    clients. Each client runs tests in parallel.
+    clients. Each client runs tests in parallel as default, and
+    you can also disable it by adding "parallel: False" option.
 
     Limitations:
     Tests must have a .t suffix. Tests with duplicate names will
@@ -33,6 +34,7 @@ def task(ctx, config):
               - qa/test2.t]
               client.1: [qa/test.t]
             branch: foo
+            parallel: False
 
     You can also run a list of cram tests on all clients::
 
@@ -55,6 +57,8 @@ def task(ctx, config):
 
     overrides = ctx.config.get('overrides', {})
     refspec = get_refspec_after_overrides(config, overrides)
+
+    _parallel = config.get('parallel', True)
 
     git_url = teuth_config.get_ceph_qa_suite_git_url()
     log.info('Pulling tests from %s ref %s', git_url, refspec)
@@ -84,9 +88,13 @@ def task(ctx, config):
                         ],
                     )
 
-        with parallel() as p:
+        if _parallel:
+            with parallel() as p:
+                for role in clients.keys():
+                    p.spawn(_run_tests, ctx, role)
+        else:
             for role in clients.keys():
-                p.spawn(_run_tests, ctx, role)
+                _run_tests(ctx, role)
     finally:
         for client, tests in clients.items():
             (remote,) = ctx.cluster.only(client).remotes.keys()
