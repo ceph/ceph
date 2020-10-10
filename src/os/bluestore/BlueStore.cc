@@ -1211,7 +1211,6 @@ struct TwoQBufferCacheShard : public BlueStore::BufferCacheShard {
   list_t hot;      ///< "Am" hot buffers
   list_t warm_in;  ///< "A1in" newly warm buffers
   list_t warm_out; ///< "A1out" empty buffers we've evicted
-  uint64_t buffer_bytes = 0;     ///< bytes
 
   enum {
     BUFFER_NEW = 0,
