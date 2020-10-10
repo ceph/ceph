@@ -69,7 +69,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   //assert (scheduler != nullptr);
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
                             *env.auth_registry, &client_io, env.olog,
-                            null_yield, scheduler.get() ,&http_ret);
+                            null_yield, scheduler.get(), nullptr, &http_ret);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;

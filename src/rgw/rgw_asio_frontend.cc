@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <atomic>
+#include <ctime>
 #include <thread>
 #include <vector>
 
@@ -138,6 +139,29 @@ std::ostream& operator<<(std::ostream& out, const log_header& h) {
   return out << h.quote << p->value() << h.quote;
 }
 
+// log fractional seconds in milliseconds
+struct log_ms_remainder {
+  ceph::coarse_real_time t;
+  log_ms_remainder(ceph::coarse_real_time t) : t(t) {}
+};
+std::ostream& operator<<(std::ostream& out, const log_ms_remainder& m) {
+  using namespace std::chrono;
+  return out << std::setfill('0') << std::setw(3)
+      << duration_cast<milliseconds>(m.t.time_since_epoch()).count() % 1000;
+}
+
+// log time in apache format: day/month/year:hour:minute:second zone
+struct log_apache_time {
+  ceph::coarse_real_time t;
+  log_apache_time(ceph::coarse_real_time t) : t(t) {}
+};
+std::ostream& operator<<(std::ostream& out, const log_apache_time& a) {
+  const auto t = ceph::coarse_real_clock::to_time_t(a.t);
+  const auto local = std::localtime(&t);
+  return out << std::put_time(local, "%d/%b/%Y:%T.") << log_ms_remainder{a.t}
+      << std::put_time(local, " %z");
+};
+
 using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_type>;
 
 template <typename Stream>
@@ -228,16 +252,17 @@ void handle_connection(boost::asio::io_context& context,
       RGWRestfulIO client(cct, &real_client_io);
       auto y = optional_yield{context, yield};
       int http_ret = 0;
+      string user = "-";
+      const auto started = ceph::coarse_real_clock::now();
+
       process_request(env.store, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y,
-                      scheduler, &http_ret);
+                      scheduler, &user, &http_ret);
 
       if (cct->_conf->subsys.should_gather(dout_subsys, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
-        const auto now = ceph::coarse_real_clock::now();
-        using ceph::operator<<; // for coarse_real_time
-        ldout(cct, 1) << "beast: " << hex << &req << dec << ": "
-            << remote_endpoint.address() << " - - [" << now << "] \""
+        ldout(cct, 1) << "beast: " << std::hex << &req << std::dec << ": "
+            << remote_endpoint.address() << " - " << user << " [" << log_apache_time{started} << "] \""
             << message.method_string() << ' ' << message.target() << ' '
             << http_version{message.version()} << "\" " << http_ret << ' '
             << client.get_bytes_sent() + client.get_bytes_received() << ' '
