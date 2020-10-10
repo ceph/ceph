@@ -159,7 +159,11 @@ struct string_key_view_t {
       return p_length + sizeof(string_size_t);
     }
   }
-  size_t size() const { return length + sizeof(string_size_t); }
+  node_offset_t size() const {
+    size_t ret = length + sizeof(string_size_t);
+    assert(ret < NODE_BLOCK_SIZE);
+    return ret;
+  }
   std::string_view to_string_view() const {
     assert(type() == Type::STR);
     return {p_key, length};
@@ -283,9 +287,11 @@ struct ns_oid_view_t {
   ns_oid_view_t(const char* p_end) : nspace(p_end), oid(nspace.p_next_end()) {}
   Type type() const { return oid.type(); }
   const char* p_start() const { return oid.p_start(); }
-  size_t size() const {
+  node_offset_t size() const {
     if (type() == Type::STR) {
-      return nspace.size() + oid.size();
+      size_t ret = nspace.size() + oid.size();
+      assert(ret < NODE_BLOCK_SIZE);
+      return ret;
     } else {
       return sizeof(string_size_t);
     }

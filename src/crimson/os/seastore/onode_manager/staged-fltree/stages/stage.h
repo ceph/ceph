@@ -190,7 +190,7 @@ struct staged {
     *   operator[](size_t) const -> key_get_type
     *   size_before(size_t) const -> size_t
     *   (IS_BOTTOM) get_p_value(size_t) const -> const value_t*
-    *   (!IS_BOTTOM) size_to_nxt_at(size_t) const -> size_t
+    *   (!IS_BOTTOM) size_to_nxt_at(size_t) const -> node_offset_t
     *   (!IS_BOTTOM) get_nxt_container(size_t) const
     * static:
     *   header_size() -> node_offset_t
@@ -219,7 +219,7 @@ struct staged {
       assert(!is_end());
       return container[_index];
     }
-    size_t size_to_nxt() const {
+    node_offset_t size_to_nxt() const {
       assert(!is_end());
       return container.size_to_nxt_at(_index);
     }
@@ -237,9 +237,10 @@ struct staged {
       return _index + 1 == container.keys();
     }
     bool is_end() const { return _index == container.keys(); }
-    size_t size() const {
+    node_offset_t size() const {
       assert(!is_end());
       assert(header_size() == container.size_before(0));
+      assert(container.size_before(_index + 1) > container.size_before(_index));
       return container.size_before(_index + 1) -
              container.size_before(_index);
     }
@@ -409,13 +410,13 @@ struct staged {
       }
     }
 
-    size_t trim_until(NodeExtentMutable& mut) {
+    node_offset_t trim_until(NodeExtentMutable& mut) {
       return container_t::trim_until(mut, container, _index);
     }
 
-    template <typename T = size_t>
+    template <typename T = node_offset_t>
     std::enable_if_t<!IS_BOTTOM, T>
-    trim_at(NodeExtentMutable& mut, size_t trimmed) {
+    trim_at(NodeExtentMutable& mut, node_offset_t trimmed) {
       return container_t::trim_at(mut, container, _index, trimmed);
     }
 
@@ -424,7 +425,8 @@ struct staged {
     }
 
     template <KeyT KT>
-    static size_t estimate_insert(const full_key_t<KT>& key, const value_t& value) {
+    static node_offset_t estimate_insert(
+        const full_key_t<KT>& key, const value_t& value) {
       return container_t::template estimate_insert<KT>(key, value);
     }
 
@@ -440,8 +442,8 @@ struct staged {
      *   CONTAINER_TYPE = ContainerType::ITERATIVE
      *   index() const -> size_t
      *   get_key() const -> key_get_type
-     *   size() const -> size_t
-     *   size_to_nxt() const -> size_t
+     *   size() const -> node_offset_t
+     *   size_to_nxt() const -> node_offset_t
      *   get_nxt_container() const
      *   has_next() const -> bool
      *   operator++()
@@ -474,7 +476,7 @@ struct staged {
       assert(!is_end());
       return container.get_key();
     }
-    size_t size_to_nxt() const {
+    node_offset_t size_to_nxt() const {
       assert(!is_end());
       return container.size_to_nxt();
     }
@@ -487,7 +489,7 @@ struct staged {
       return !container.has_next();
     }
     bool is_end() const { return _is_end; }
-    size_t size() const {
+    node_offset_t size() const {
       assert(!is_end());
       return container.size();
     }
@@ -694,14 +696,14 @@ struct staged {
       to_index = index();
     }
 
-    size_t trim_until(NodeExtentMutable& mut) {
+    node_offset_t trim_until(NodeExtentMutable& mut) {
       if (is_end()) {
         return 0;
       }
       return container_t::trim_until(mut, container);
     }
 
-    size_t trim_at(NodeExtentMutable& mut, size_t trimmed) {
+    node_offset_t trim_at(NodeExtentMutable& mut, node_offset_t trimmed) {
       assert(!is_end());
       return container_t::trim_at(mut, container, trimmed);
     }
@@ -730,10 +732,10 @@ struct staged {
    *   get_key() -> key_get_type (const reference or value type)
    *   is_last() -> bool
    *   is_end() -> bool
-   *   size() -> size_t
+   *   size() -> node_offset_t
    *   (IS_BOTTOM) get_p_value() -> const value_t*
    *   (!IS_BOTTOM) get_nxt_container() -> nxt_stage::container_t
-   *   (!IS_BOTTOM) size_to_nxt() -> size_t
+   *   (!IS_BOTTOM) size_to_nxt() -> node_offset_t
    * seek:
    *   operator++() -> iterator_t&
    *   seek_at(index)
@@ -1483,7 +1485,15 @@ struct staged {
       assert(is_insert_left.has_value());
       assert(current_size <= target_size);
       if (split_iter.index() == 0) {
-        extra_size += iterator_t::header_size();
+        if (insert_index == 0) {
+          if (*is_insert_left == false) {
+            extra_size += iterator_t::header_size();
+          } else {
+            extra_size = 0;
+          }
+        } else {
+          extra_size += iterator_t::header_size();
+        }
       } else {
         extra_size = 0;
       }
@@ -1868,7 +1878,7 @@ struct staged {
    *   AT: trim happens in the current container, and the according higher
    *       stage iterator needs to be adjusted by the trimmed size.
    */
-  static std::tuple<TrimType, size_t>
+  static std::tuple<TrimType, node_offset_t>
   recursively_trim(NodeExtentMutable& mut, StagedIterator& trim_at) {
     if (!trim_at.valid()) {
       return {TrimType::BEFORE, 0u};
@@ -1881,7 +1891,7 @@ struct staged {
     if constexpr (!IS_BOTTOM) {
       auto [type, trimmed] = NXT_STAGE_T::recursively_trim(
           mut, trim_at.get_nxt());
-      size_t trim_size;
+      node_offset_t trim_size;
       if (type == TrimType::AFTER) {
         if (iter.is_last()) {
           return {TrimType::AFTER, 0u};

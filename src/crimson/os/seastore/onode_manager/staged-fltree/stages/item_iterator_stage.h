@@ -50,11 +50,15 @@ class item_iterator_t {
     }
     return *key;
   }
-  size_t size() const {
-    return item_range.p_end - item_range.p_start + sizeof(node_offset_t);
+  node_offset_t size() const {
+    size_t ret = item_range.p_end - item_range.p_start + sizeof(node_offset_t);
+    assert(ret < NODE_BLOCK_SIZE);
+    return ret;
   };
-  size_t size_to_nxt() const {
-    return get_key().size() + sizeof(node_offset_t);
+  node_offset_t size_to_nxt() const {
+    size_t ret = get_key().size() + sizeof(node_offset_t);
+    assert(ret < NODE_BLOCK_SIZE);
+    return ret;
   }
   memory_range_t get_nxt_container() const {
     return {item_range.p_start, get_key().p_start()};
@@ -88,9 +92,9 @@ class item_iterator_t {
   static void update_size(
       NodeExtentMutable& mut, const item_iterator_t<NODE_TYPE>& iter, int change);
 
-  static size_t trim_until(NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&);
-  static size_t trim_at(
-      NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&, size_t trimmed);
+  static node_offset_t trim_until(NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&);
+  static node_offset_t trim_at(
+      NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&, node_offset_t trimmed);
 
   template <KeyT KT>
   class Appender;

@@ -45,10 +45,10 @@ class node_extent_t {
 
   bool is_level_tail() const { return p_fields->is_level_tail(); }
   level_t level() const { return p_fields->header.level; }
-  size_t free_size() const {
+  node_offset_t free_size() const {
     return p_fields->template free_size_before<NODE_TYPE>(keys());
   }
-  size_t total_size() const { return p_fields->total_size(); }
+  node_offset_t total_size() const { return p_fields->total_size(); }
   const char* p_left_bound() const;
   template <node_type_t T = NODE_TYPE>
   std::enable_if_t<T == node_type_t::INTERNAL, const laddr_packed_t*>
@@ -70,12 +70,12 @@ class node_extent_t {
   static constexpr auto CONTAINER_TYPE = ContainerType::INDEXABLE;
   size_t keys() const { return p_fields->num_keys; }
   key_get_type operator[] (size_t index) const { return p_fields->get_key(index); }
-  size_t size_before(size_t index) const {
+  node_offset_t size_before(size_t index) const {
     auto free_size = p_fields->template free_size_before<NODE_TYPE>(index);
     assert(total_size() >= free_size);
     return total_size() - free_size;
   }
-  size_t size_to_nxt_at(size_t index) const;
+  node_offset_t size_to_nxt_at(size_t index) const;
   memory_range_t get_nxt_container(size_t index) const;
 
   template <typename T = FieldType>
@@ -145,9 +145,10 @@ class node_extent_t {
   static void update_size_at(
       NodeExtentMutable&, const node_extent_t&, size_t index, int change);
 
-  static size_t trim_until(NodeExtentMutable&, const node_extent_t&, size_t index);
-  static size_t trim_at(NodeExtentMutable&, const node_extent_t&,
-                        size_t index, size_t trimmed);
+  static node_offset_t trim_until(
+      NodeExtentMutable&, const node_extent_t&, size_t index);
+  static node_offset_t trim_at(NodeExtentMutable&, const node_extent_t&,
+                        size_t index, node_offset_t trimmed);
 
   template <KeyT KT>
   class Appender;
