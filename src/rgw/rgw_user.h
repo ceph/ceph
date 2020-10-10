@@ -842,7 +842,7 @@ class RGWUserCtl
 
   RGWUserMetadataHandler *umhandler;
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
-  
+
 public:
   RGWUserCtl(RGWSI_Zone *zone_svc,
              RGWSI_User *user_svc,
@@ -962,7 +962,7 @@ public:
                    bool need_stats,
                    RGWUserBuckets *buckets,
                    bool *is_truncated,
-                   uint64_t default_max = 1000);
+                   uint64_t default_max = 1000, const jaeger_tracing::jspan* const parent_span = nullptr);
 
   int flush_bucket_stats(const rgw_user& user,
                          const RGWBucketEnt& ent);

@@ -650,7 +650,7 @@ namespace rgw {
     return ret;
   }
 
-  int RGWLibRequest::read_permissions(RGWOp* op) {
+  int RGWLibRequest::read_permissions(RGWOp* op, const jaeger_tracing::jspan* const parent_span) {
     /* bucket and object ops */
     int ret =
       rgw_build_bucket_policies(rgwlib.get_store(), get_state());

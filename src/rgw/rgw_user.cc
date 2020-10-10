@@ -2819,21 +2819,26 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
                              bool need_stats,
                              RGWUserBuckets *buckets,
                              bool *is_truncated,
-                             uint64_t default_max)
+                             uint64_t default_max, const jaeger_tracing::jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   if (!max) {
     max = default_max;
   }
 
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span("svc_user.h : RGWSi_User::list_buckets", span.get());
     int ret = svc.user->list_buckets(op->ctx(), user, marker, end_marker,
                                      max, buckets, is_truncated);
+    jaeger_tracing::finish_span(span_1.get());
     if (ret < 0) {
       return ret;
     }
     if (need_stats) {
       map<string, RGWBucketEnt>& m = buckets->get_buckets();
+      [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("rgw_bucket.cc : RGWBucketCtl::read_bucket_stats", span.get());
       ret = ctl.bucket->read_buckets_stats(m, null_yield);
+      jaeger_tracing::finish_span(span_2.get());
       if (ret < 0 && ret != -ENOENT) {
         ldout(svc.user->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
         return ret;
