@@ -112,7 +112,7 @@ struct _node_fields_013_t {
     sizeof(node_header_t) + sizeof(num_keys_t);
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  size_t total_size() const { return SIZE; }
+  node_offset_t total_size() const { return SIZE; }
   key_get_type get_key(size_t index) const {
     assert(index < num_keys);
     return slots[index].key;
@@ -199,7 +199,7 @@ struct node_fields_2_t {
     sizeof(node_header_t) + sizeof(num_keys_t);
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  size_t total_size() const { return SIZE; }
+  node_offset_t total_size() const { return SIZE; }
   key_get_type get_key(size_t index) const {
     assert(index < num_keys);
     node_offset_t item_end_offset =
@@ -295,7 +295,7 @@ struct _internal_fields_3_t {
     sizeof(node_header_t) + sizeof(num_keys_t);
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  size_t total_size() const {
+  node_offset_t total_size() const {
     if (is_level_tail()) {
       return SIZE - sizeof(snap_gen_t);
     } else {

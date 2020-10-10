@@ -52,8 +52,10 @@ class internal_sub_items_t {
     assert(index < num_items);
     return (p_first_item - index)->get_key();
   }
-  size_t size_before(size_t index) const {
-    return index * sizeof(internal_sub_item_t);
+  node_offset_t size_before(size_t index) const {
+    size_t ret = index * sizeof(internal_sub_item_t);
+    assert(ret < NODE_BLOCK_SIZE);
+    return ret;
   }
   const laddr_packed_t* get_p_value(size_t index) const {
     assert(index < num_items);
@@ -74,7 +76,7 @@ class internal_sub_items_t {
       const full_key_t<KT>&, const laddr_packed_t&,
       size_t index, node_offset_t size, const char* p_left_bound);
 
-  static size_t trim_until(NodeExtentMutable&, internal_sub_items_t&, size_t);
+  static node_offset_t trim_until(NodeExtentMutable&, internal_sub_items_t&, size_t);
 
   template <KeyT KT>
   class Appender;
@@ -170,15 +172,18 @@ class leaf_sub_items_t {
     assert(get_item_start(index) < pointer);
     return *reinterpret_cast<const snap_gen_t*>(pointer);
   }
-  size_t size_before(size_t index) const {
+  node_offset_t size_before(size_t index) const {
     assert(index <= keys());
+    size_t ret;
     if (index == 0) {
-      return sizeof(num_keys_t);
+      ret = sizeof(num_keys_t);
+    } else {
+      --index;
+      ret = sizeof(num_keys_t) +
+            (index + 1) * sizeof(node_offset_t) +
+            get_offset(index).value;
     }
-    --index;
-    auto ret = sizeof(num_keys_t) +
-               (index + 1) * sizeof(node_offset_t) +
-               get_offset(index).value;
+    assert(ret < NODE_BLOCK_SIZE);
     return ret;
   }
   const onode_t* get_p_value(size_t index) const {
@@ -202,7 +207,7 @@ class leaf_sub_items_t {
       const full_key_t<KT>&, const onode_t&,
       size_t index, node_offset_t size, const char* p_left_bound);
 
-  static size_t trim_until(NodeExtentMutable&, leaf_sub_items_t&, size_t index);
+  static node_offset_t trim_until(NodeExtentMutable&, leaf_sub_items_t&, size_t index);
 
   template <KeyT KT>
   class Appender;

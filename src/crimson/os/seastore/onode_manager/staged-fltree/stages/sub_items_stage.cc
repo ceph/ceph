@@ -28,12 +28,14 @@ template const laddr_packed_t* internal_sub_items_t::insert_at<KeyT::VIEW>(
     NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KeyT::VIEW>&,
     const laddr_packed_t&, size_t, node_offset_t, const char*);
 
-size_t internal_sub_items_t::trim_until(
+node_offset_t internal_sub_items_t::trim_until(
     NodeExtentMutable&, internal_sub_items_t& items, size_t index) {
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
-  return sizeof(internal_sub_item_t) * (keys - index);
+  size_t ret = sizeof(internal_sub_item_t) * (keys - index);
+  assert(ret < NODE_BLOCK_SIZE);
+  return ret;
 }
 
 template class internal_sub_items_t::Appender<KeyT::VIEW>;
@@ -112,7 +114,7 @@ template const onode_t* leaf_sub_items_t::insert_at<KeyT::HOBJ>(
     NodeExtentMutable&, const leaf_sub_items_t&, const full_key_t<KeyT::HOBJ>&,
     const onode_t&, size_t, node_offset_t, const char*);
 
-size_t leaf_sub_items_t::trim_until(
+node_offset_t leaf_sub_items_t::trim_until(
     NodeExtentMutable& mut, leaf_sub_items_t& items, size_t index) {
   assert(index != 0);
   auto keys = items.keys();
@@ -128,7 +130,9 @@ size_t leaf_sub_items_t::trim_until(
   mut.shift_absolute(p_shift_start, p_shift_end - p_shift_start,
                      size_trim_offsets);
   mut.copy_in_absolute((void*)items.p_num_keys, num_keys_t(index));
-  return size_trim_offsets + (p_shift_start - p_items_start);
+  size_t ret = size_trim_offsets + (p_shift_start - p_items_start);
+  assert(ret < NODE_BLOCK_SIZE);
+  return ret;
 }
 
 // helper type for the visitor

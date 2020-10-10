@@ -37,7 +37,7 @@ const char* NODE_T::p_left_bound() const {
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-size_t NODE_T::size_to_nxt_at(size_t index) const {
+node_offset_t NODE_T::size_to_nxt_at(size_t index) const {
   assert(index < keys());
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
@@ -137,7 +137,7 @@ void NODE_T::update_size_at(
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-size_t NODE_T::trim_until(
+node_offset_t NODE_T::trim_until(
     NodeExtentMutable& mut, const node_extent_t& node, size_t index) {
   assert(!node.is_level_tail());
   auto keys = node.keys();
@@ -156,18 +156,20 @@ size_t NODE_T::trim_until(
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-size_t NODE_T::trim_at(
-    NodeExtentMutable& mut, const node_extent_t& node, size_t index, size_t trimmed) {
+node_offset_t NODE_T::trim_at(
+    NodeExtentMutable& mut, const node_extent_t& node,
+    size_t index, node_offset_t trimmed) {
   assert(!node.is_level_tail());
   auto keys = node.keys();
   assert(index < keys);
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
     assert(false && "not implemented");
   } else {
-    auto offset = node.p_fields->get_item_start_offset(index);
-    assert(offset + trimmed < node.p_fields->get_item_end_offset(index));
+    node_offset_t offset = node.p_fields->get_item_start_offset(index);
+    size_t new_offset = offset + trimmed;
+    assert(new_offset < node.p_fields->get_item_end_offset(index));
     mut.copy_in_absolute(const_cast<void*>(node.p_fields->p_offset(index)),
-                         node_offset_t(offset + trimmed));
+                         node_offset_t(new_offset));
     mut.copy_in_absolute(
         (void*)&node.p_fields->num_keys, num_keys_t(index + 1));
   }
