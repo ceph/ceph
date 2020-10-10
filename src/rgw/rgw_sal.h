@@ -134,6 +134,7 @@ class RGWUser {
     uint32_t get_type() const { return info.type; }
     int32_t get_max_buckets() const { return info.max_buckets; }
     const RGWUserCaps& get_caps() const { return info.caps; }
+    static bool empty(RGWUser* u) { return (!u || u->info.user_id.id.empty()); }
 
     /* Placeholders */
     virtual int load_by_id(optional_yield y) = 0;
