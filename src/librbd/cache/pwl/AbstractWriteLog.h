@@ -243,7 +243,6 @@ protected:
   ImageCtxT &m_image_ctx;
 
   std::string m_log_pool_name;
-  bool m_log_is_poolset = false;
   uint64_t m_log_pool_config_size; /* Configured size of RWL */
   uint64_t m_log_pool_actual_size = 0; /* Actual size of RWL pool */
 
@@ -342,7 +341,6 @@ protected:
   virtual void initialize_pool(Context *on_finish, pwl::DeferredContexts &later) = 0;
   virtual void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry, pwl::WriteLogPmemEntry *pmem_entry) {}
-  virtual void get_pool_name(const std::string log_poolset_name) {}
   virtual void alloc_op_log_entries(pwl::GenericLogOperations &ops) {}
   virtual bool retire_entries(const unsigned long int frees_per_tx) {return false;}
   virtual void schedule_flush_and_append(pwl::GenericLogOperationsVector &ops) {}
