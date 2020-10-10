@@ -9,6 +9,7 @@
 #include "common/dout.h"
 #include "common/environment.h"
 #include "common/errno.h"
+#include "common/hostname.h"
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
@@ -487,14 +488,20 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
   std::lock_guard locker(m_lock);
   ceph_assert(!m_initialized);
   ldout(cct,5) << "image name: " << m_image_ctx.name << " id: " << m_image_ctx.id << dendl;
+
+  if (!m_cache_state->present) {
+    m_cache_state->host = ceph_get_short_hostname();
+    m_cache_state->size = m_image_ctx.config.template get_val<uint64_t>("rbd_rwl_size");
+
+    string path = m_image_ctx.config.template get_val<string>("rbd_rwl_path");
+    std::string pool_name = m_image_ctx.md_ctx.get_pool_name();
+    m_cache_state->path = path + "/rbd-pwl." + pool_name + "." + m_image_ctx.id + ".pool";
+  }
+
   ldout(cct,5) << "pwl_size: " << m_cache_state->size << dendl;
-  std::string pwl_path = m_cache_state->path;
-  ldout(cct,5) << "pwl_path: " << pwl_path << dendl;
+  ldout(cct,5) << "pwl_path: " << m_cache_state->path << dendl;
 
-  std::string pool_name = m_image_ctx.md_ctx.get_pool_name();
-  std::string log_pool_name = pwl_path + "/rbd-pwl." + pool_name + "." + m_image_ctx.id + ".pool";
-  m_log_pool_name = log_pool_name;
-
+  m_log_pool_name = m_cache_state->path;
   m_log_pool_config_size = max(m_cache_state->size, MIN_POOL_SIZE);
 
   if ((!m_cache_state->present) &&
@@ -509,6 +516,10 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
     } else {
       ldout(cct, 5) << "Removed the existing pool file." << dendl;
     }
+  } else if ((m_cache_state->present) &&
+             (access(m_log_pool_name.c_str(), F_OK) != 0)) {
+    ldout(cct, 5) << "Can't find the existed pool file " << m_log_pool_name << dendl;
+    on_finish->complete(-errno);
   }
 
   initialize_pool(on_finish, later);
