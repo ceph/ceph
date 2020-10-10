@@ -108,14 +108,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     if (node_stage.keys()) {
       STAGE_T::dump(node_stage, os, "  ", size, p_start);
     } else {
-      if constexpr (NODE_TYPE == node_type_t::LEAF) {
-        return os << " empty!";
-      } else { // internal node
-        if (!node_stage.is_level_tail()) {
-          return os << " empty!";
-        } else {
-          size += node_stage_t::header_size();
-        }
+      size += node_stage_t::header_size();
+      if (NODE_TYPE == node_type_t::LEAF || !node_stage.is_level_tail()) {
+        os << " empty!";
       }
     }
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
@@ -129,6 +124,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
            << "  @" << offset << "B";
       }
     }
+    assert(size == filled_size());
     return os;
   }
 
@@ -139,7 +135,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        << "+" << node_stage_t::EXTENT_SIZE << std::dec
        << (node_stage.is_level_tail() ? "$" : "")
        << "(level=" << (unsigned)node_stage.level()
-       << ", filled=" << node_stage.total_size() - node_stage.free_size() << "B"
+       << ", filled=" << filled_size() << "B"
        << ", free=" << node_stage.free_size() << "B"
        << ")";
     return os;
@@ -279,11 +275,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     auto& node_stage = extent.read();
     typename STAGE_T::StagedIterator split_at;
     bool is_insert_left;
+    size_t split_size = 0;
     {
       size_t empty_size = node_stage.size_before(0);
-      size_t total_size = node_stage.total_size();
-      size_t available_size = total_size - empty_size;
-      size_t filled_size = total_size - node_stage.free_size() - empty_size;
+      size_t filled_kv_size = filled_size() - empty_size;
       /** NODE_BLOCK_SIZE considerations
        *
        * Generally,
@@ -355,10 +350,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        *
        * (TODO) Implement smarter logics to check when "double split" happens.
        */
-      size_t target_split_size = empty_size + (filled_size + insert_size) / 2;
-      assert(insert_size < available_size / 2);
+      size_t target_split_size = empty_size + (filled_kv_size + insert_size) / 2;
+      assert(insert_size < (node_stage.total_size() - empty_size) / 2);
 
-      size_t split_size = 0;
       std::optional<bool> _is_insert_left;
       split_at.set(node_stage);
       bool locate_nxt = STAGE_T::recursively_locate_split_inserted(
@@ -369,7 +363,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
                 << "), is_insert_left=" << is_insert_left
                 << ", estimated_split_size=" << split_size
                 << "(target=" << target_split_size
-                << ", current=" << node_stage.size_before(node_stage.keys())
+                << ", current=" << filled_size()
                 << ")" << std::endl;
       // split_size can be larger than target_split_size in strategy B
       // assert(split_size <= target_split_size);
@@ -435,6 +429,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
               << "), insert_stage=" << (int)insert_stage
               << ", insert_size=" << insert_size
               << std::endl << std::endl;
+    assert(split_size == filled_size());
     return {split_pos, is_insert_left, p_value};
   }
 
@@ -507,6 +502,13 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
  private:
   NodeLayoutT(typename extent_t::state_t state, NodeExtentRef extent)
     : extent{state, extent} {}
+
+  node_offset_t filled_size() const {
+    auto& node_stage = extent.read();
+    auto ret = node_stage.size_before(node_stage.keys());
+    assert(ret == node_stage.total_size() - node_stage.free_size());
+    return ret;
+  }
 
   extent_t extent;
 };
