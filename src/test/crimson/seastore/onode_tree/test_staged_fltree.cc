@@ -456,15 +456,6 @@ static std::set<ghobject_t> build_key_set(
 }
 
 class TestTree {
-  NodeExtentManagerURef moved_nm;
-  TransactionRef ref_t;
-  Transaction& t;
-  context_t c;
-  Btree tree;
-  Onodes onodes;
-  std::vector<std::tuple<
-    ghobject_t, const onode_t*, Btree::Cursor>> insert_history;
-
  public:
   TestTree()
     : moved_nm{NodeExtentManager::create_dummy(false)},
@@ -486,10 +477,29 @@ class TestTree {
       auto keys = build_key_set(range_2, range_1, range_0);
       for (auto& key : keys) {
         auto& value = onodes.create(onode_size);
-        auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
-        assert(success == true);
-        Onodes::validate_cursor(cursor, key, value);
-        insert_history.emplace_back(key, &value, cursor);
+        insert_tree(key, value).get0();
+      }
+      assert(tree.height(t).unsafe_get0() == 1);
+      assert(!tree.test_is_clean());
+      std::ostringstream oss;
+      tree.dump(t, oss);
+      logger().info("\n{}\n", oss.str());
+    });
+  }
+
+  seastar::future<> build_tree(
+      const std::vector<ghobject_t>& keys, const std::vector<const onode_t*>& values) {
+    return seastar::async([this, keys, values] {
+      tree.mkfs(t).unsafe_get0();
+      logger().info("\n---------------------------------------------"
+                    "\nbefore leaf node split:\n");
+      assert(keys.size() == values.size());
+      auto key_iter = keys.begin();
+      auto value_iter = values.begin();
+      while (key_iter != keys.end()) {
+        insert_tree(*key_iter, **value_iter).get0();
+        ++key_iter;
+        ++value_iter;
       }
       assert(tree.height(t).unsafe_get0() == 1);
       assert(!tree.test_is_clean());
@@ -528,6 +538,25 @@ class TestTree {
   const onode_t& create_onode(size_t size) {
     return onodes.create(size);
   }
+
+ private:
+  seastar::future<> insert_tree(const ghobject_t& key, const onode_t& value) {
+    return seastar::async([this, &key, &value] {
+      auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
+      assert(success == true);
+      Onodes::validate_cursor(cursor, key, value);
+      insert_history.emplace_back(key, &value, cursor);
+    });
+  }
+
+  NodeExtentManagerURef moved_nm;
+  TransactionRef ref_t;
+  Transaction& t;
+  context_t c;
+  Btree tree;
+  Onodes onodes;
+  std::vector<std::tuple<
+    ghobject_t, const onode_t*, Btree::Cursor>> insert_history;
 };
 
 struct c_dummy_test_t : public seastar_test_suite_t {};
@@ -628,7 +657,23 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode).get0();
       test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode).get0();
     }
-    // Impossible to split at [END, END, END]
+
+    {
+      TestTree test;
+      std::vector<ghobject_t> keys = {
+        make_ghobj(2, 2, 2, "ns3", "oid3", 3, 3),
+        make_ghobj(3, 3, 3, "ns3", "oid3", 3, 3)};
+      std::vector<const onode_t*> values = {
+        &test.create_onode(1360),
+        &test.create_onode(1632)};
+      test.build_tree(keys, values).get0();
+      auto& onode = test.create_onode(1640);
+      logger().info("\n---------------------------------------------"
+                    "\nsplit at [END, END, END]; insert to right end at stage 0, 1, 2\n");
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4), onode).get0();
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3), onode).get0();
+      test.split(make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3), onode).get0();
+    }
   });
 }
 
@@ -1095,7 +1140,7 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
       pool.test_split(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 2, 3), {1, {1, {1}}}).get();
     }
 
-    // TODO: test split at {0, 0, 0}
+    // Impossible to split at {0, 0, 0}
     // Impossible to split at [END, END, END]
   });
 }
