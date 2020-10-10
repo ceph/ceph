@@ -493,23 +493,21 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
 
   std::string pool_name = m_image_ctx.md_ctx.get_pool_name();
   std::string log_pool_name = pwl_path + "/rbd-pwl." + pool_name + "." + m_image_ctx.id + ".pool";
-  std::string log_poolset_name = pwl_path + "/rbd-pwl." + pool_name + "." + m_image_ctx.id + ".poolset";
-  m_log_pool_config_size = max(m_cache_state->size, MIN_POOL_SIZE);
-
   m_log_pool_name = log_pool_name;
-  get_pool_name(log_poolset_name);
+
+  m_log_pool_config_size = max(m_cache_state->size, MIN_POOL_SIZE);
 
   if ((!m_cache_state->present) &&
       (access(m_log_pool_name.c_str(), F_OK) == 0)) {
-    ldout(cct, 5) << "There's an existing pool/poolset file " << m_log_pool_name
+    ldout(cct, 5) << "There's an existing pool file " << m_log_pool_name
                   << ", While there's no cache in the image metatata." << dendl;
     if (remove(m_log_pool_name.c_str()) != 0) {
-      lderr(cct) << "Failed to remove the pool/poolset file " << m_log_pool_name
+      lderr(cct) << "Failed to remove the pool file " << m_log_pool_name
                  << dendl;
       on_finish->complete(-errno);
       return;
     } else {
-      ldout(cct, 5) << "Removed the existing pool/poolset file." << dendl;
+      ldout(cct, 5) << "Removed the existing pool file." << dendl;
     }
   }
 
