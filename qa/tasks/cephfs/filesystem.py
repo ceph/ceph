@@ -588,6 +588,9 @@ class Filesystem(MDSCluster):
         log.info('Destroying file system ' + self.name +  ' and related '
                  'pools')
 
+        if self.name is None and self.metadata_pool_name is None and self.data_pool_name is None:
+            return
+
         # make sure no MDSs are attached to given FS.
         self.mon_manager.raw_cluster_cmd('fs', 'fail', self.name)
         self.mon_manager.raw_cluster_cmd(

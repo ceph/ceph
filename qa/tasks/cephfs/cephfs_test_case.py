@@ -209,6 +209,9 @@ class CephFSTestCase(CephTestCase):
 
         for m, md in zip(self.mounts, self._orig_mount_details):
             md.restore(m)
+        if self.fs is not None:
+            self.fs.destroy()
+            self.fs = None
 
         for subsys, key in self.configs_set:
             self.mds_cluster.clear_ceph_conf(subsys, key)

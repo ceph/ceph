@@ -185,15 +185,6 @@ class TestVolumes(CephFSTestCase):
     def _enable_multi_fs(self):
         self._fs_cmd("flag", "set", "enable_multiple", "true", "--yes-i-really-mean-it")
 
-    def _create_or_reuse_test_volume(self):
-        result = json.loads(self._fs_cmd("volume", "ls"))
-        if len(result) == 0:
-            self.vol_created = True
-            self.volname = self._generate_random_volume_name()
-            self._fs_cmd("volume", "create", self.volname)
-        else:
-            self.volname = result[0]['name']
-
     def  _get_subvolume_group_path(self, vol_name, group_name):
         args = ("subvolumegroup", "getpath", vol_name, group_name)
         path = self._fs_cmd(*args)
@@ -224,9 +215,6 @@ class TestVolumes(CephFSTestCase):
         args = tuple(args)
         snap_md = self._fs_cmd(*args)
         return snap_md
-
-    def _delete_test_volume(self):
-        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
     def _do_subvolume_pool_and_namespace_update(self, subvolume, pool=None, pool_namespace=None, subvolume_group=None):
         subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
@@ -346,11 +334,8 @@ class TestVolumes(CephFSTestCase):
 
     def setUp(self):
         super(TestVolumes, self).setUp()
-        self.volname = None
-        self.vol_created = False
+        self.volname = self.fs.name
         self._enable_multi_fs()
-        self._create_or_reuse_test_volume()
-        self.config_set('mon', 'mon_allow_pool_delete', True)
         self.volume_start = random.randint(1, (1<<20))
         self.subvolume_start = random.randint(1, (1<<20))
         self.group_start = random.randint(1, (1<<20))
@@ -358,8 +343,6 @@ class TestVolumes(CephFSTestCase):
         self.clone_start = random.randint(1, (1<<20))
 
     def tearDown(self):
-        if self.vol_created:
-            self._delete_test_volume()
         super(TestVolumes, self).tearDown()
 
     def test_connection_expiration(self):
