@@ -36,7 +36,6 @@ public:
     * This is usually multiply of key size.
     * It determines size of chunks that should be passed to \ref encrypt and \ref decrypt.
     */
-  virtual size_t get_block_size() = 0;
 
   /**
    * Encrypts data.
@@ -96,7 +95,6 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   off_t ofs; /**< stream offset of data we expect to show up next through \ref handle_data */
   off_t end; /**< stream offset of last byte that is requested */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
-  size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
 
   int process(bufferlist& cipher, size_t part_ofs, size_t size);
 
@@ -125,7 +123,7 @@ class RGWPutObj_BlockEncrypt : public rgw::putobj::Pipe
   std::unique_ptr<BlockCrypt> crypt; /**< already configured stateless BlockCrypt
                                           for operations when enough data is accumulated */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
-  const size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
+
 public:
   RGWPutObj_BlockEncrypt(CephContext* cct,
                          rgw::putobj::DataProcessor *next,

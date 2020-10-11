@@ -52,7 +52,6 @@ namespace rgw::sal {
 
 using ceph::crypto::MD5;
 
-#define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_HTTP_RGWX_ATTR_PREFIX "RGWX_ATTR_"
 #define RGW_HTTP_RGWX_ATTR_PREFIX_OUT "Rgwx-Attr-"
@@ -121,7 +120,6 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_ID_TAG     RGW_ATTR_OLH_PREFIX "idtag"
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
-#define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
 
 #define RGW_ATTR_APPEND_PART_NUM    RGW_ATTR_PREFIX "append_part_num"
 
@@ -134,8 +132,6 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
 #define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
 
-#define RGW_ATTR_CRYPT_PREFIX   RGW_ATTR_PREFIX "crypt."
-#define RGW_ATTR_CRYPT_MODE     RGW_ATTR_CRYPT_PREFIX "mode"
 #define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
 #define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"

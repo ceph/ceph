@@ -41,6 +41,7 @@ struct compression_block {
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<compression_block*>& o);
 };
 WRITE_CLASS_ENCODER(compression_block)
 
@@ -76,6 +77,7 @@ struct RGWCompressionInfo {
      DECODE_FINISH(bl);
   } 
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWCompressionInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCompressionInfo)
 

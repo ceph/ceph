@@ -5315,7 +5315,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   int r = -ENOENT;
 
   if (!assume_noent) {
-    r = RGWRados::raw_obj_stat(raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch ? &s->data : NULL),  &s->prefetch, NULL, y);
+    r = RGWRados::raw_obj_stat(raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch ? &s->data : NULL),  s->prefetch, NULL, y);
   }
 
   if (r == -ENOENT) {
@@ -7497,7 +7497,7 @@ int RGWRados::follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx
 }
 
 int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                           map<string, bufferlist> *attrs, bufferlist *first_chunk, std::optional<prefetch_range> *prefetch,
+                           map<string, bufferlist> *attrs, bufferlist *first_chunk, std::optional<prefetch_range>& prefetch,
                            RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
   rgw_rados_ref ref;
@@ -7518,7 +7518,7 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
   }
   if (attrs) {
     if (prefetch && first_chunk) {
-      cls_rgw_head_prefetch(op, prefetch->value().off, prefetch->value().len,
+      cls_rgw_head_prefetch(op, prefetch->off, prefetch->len,
                             cct->_conf->rgw_max_chunk_size,
                             &prefetch_ret, &prefetch_offset, first_chunk, &unfiltered_attrset);
     } else {
@@ -7529,7 +7529,7 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
     op.stat2(&size, &mtime_ts, NULL);
   }
   if (prefetch && first_chunk && !attrs) {
-    cls_rgw_head_prefetch(op, prefetch->value().off, prefetch->value().len,
+    cls_rgw_head_prefetch(op, prefetch->off, prefetch->len,
                           cct->_conf->rgw_max_chunk_size,
                           &prefetch_ret, &prefetch_offset, first_chunk, nullptr);
   }
@@ -7537,7 +7537,7 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
   r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
 
   if (prefetch)
-    prefetch->value().off = prefetch_offset;
+    prefetch->off = prefetch_offset;
 
   if (epoch) {
     *epoch = ref.pool.ioctx().get_last_version();
@@ -7547,7 +7547,6 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
     return r;
   if (prefetch_ret < 0)
     return prefetch_ret;
-  // TODO: make use of prefetch_offset
 
   if (psize)
     *psize = size;

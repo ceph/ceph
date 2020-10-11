@@ -139,7 +139,6 @@ class AES_256_CBC : public BlockCrypt {
 public:
   static const size_t AES_256_KEYSIZE = 256 / 8;
   static const size_t AES_256_IVSIZE = 128 / 8;
-  static const size_t CHUNK_SIZE = 4096;
 private:
   static const uint8_t IV[AES_256_IVSIZE];
   CephContext* cct;
@@ -156,9 +155,6 @@ public:
     }
     memcpy(key, _key, AES_256_KEYSIZE);
     return true;
-  }
-  size_t get_block_size() {
-    return CHUNK_SIZE;
   }
 
   bool cbc_transform(unsigned char* out,
@@ -189,8 +185,8 @@ public:
     }
     bool result = true;
     unsigned char iv[AES_256_IVSIZE];
-    for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
-      size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
+    for (size_t offset = 0; result && (offset < size); offset += RGW_CRYPT_BLOCK_SIZE) {
+      size_t process_size = offset + RGW_CRYPT_BLOCK_SIZE <= size ? RGW_CRYPT_BLOCK_SIZE : size - offset;
       prepare_iv(iv, stream_offset + offset);
       if (crypto_accel != nullptr) {
         if (encrypt) {
@@ -231,7 +227,7 @@ public:
                            stream_offset, key, true);
     if (result && (unaligned_rest_size > 0)) {
       /* remainder to encrypt */
-      if (aligned_size % CHUNK_SIZE > 0) {
+      if (aligned_size % RGW_CRYPT_BLOCK_SIZE > 0) {
         /* use last chunk for unaligned part */
         unsigned char iv[AES_256_IVSIZE] = {0};
         result = cbc_transform(buf_raw + aligned_size,
@@ -286,7 +282,7 @@ public:
                            stream_offset, key, false);
     if (result && unaligned_rest_size > 0) {
       /* remainder to decrypt */
-      if (aligned_size % CHUNK_SIZE > 0) {
+      if (aligned_size % RGW_CRYPT_BLOCK_SIZE > 0) {
         /*use last chunk for unaligned part*/
         unsigned char iv[AES_256_IVSIZE] = {0};
         result = cbc_transform(buf_raw + aligned_size,
@@ -377,7 +373,6 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
     end(0),
     cache()
 {
-  block_size = this->crypt->get_block_size();
 }
 
 RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
@@ -430,12 +425,12 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
     }
     //in_end is inside part j, OR j is the last part
 
-    size_t rounded_end = ( in_end & ~(block_size - 1) ) + (block_size - 1);
+    size_t rounded_end = ( in_end & ~(RGW_CRYPT_BLOCK_SIZE - 1) ) + (RGW_CRYPT_BLOCK_SIZE - 1);
     if (rounded_end > parts_len[j]) {
       rounded_end = parts_len[j] - 1;
     }
 
-    enc_begin_skip = in_ofs & (block_size - 1);
+    enc_begin_skip = in_ofs & (RGW_CRYPT_BLOCK_SIZE - 1);
     ofs = bl_ofs - enc_begin_skip;
     end = bl_end;
     bl_end += rounded_end - in_end;
@@ -443,11 +438,11 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   }
   else
   {
-    enc_begin_skip = bl_ofs & (block_size - 1);
-    ofs = bl_ofs & ~(block_size - 1);
+    enc_begin_skip = bl_ofs & (RGW_CRYPT_BLOCK_SIZE - 1);
+    ofs = bl_ofs & ~(RGW_CRYPT_BLOCK_SIZE - 1);
     end = bl_end;
-    bl_ofs = bl_ofs & ~(block_size - 1);
-    bl_end = ( bl_end & ~(block_size - 1) ) + (block_size - 1);
+    bl_ofs = bl_ofs & ~(RGW_CRYPT_BLOCK_SIZE - 1);
+    bl_end = ( bl_end & ~(RGW_CRYPT_BLOCK_SIZE - 1) ) + (RGW_CRYPT_BLOCK_SIZE - 1);
   }
   ldout(cct, 20) << "fixup_range [" << inp_ofs << "," << inp_end
       << "] => [" << bl_ofs << "," << bl_end << "]" << dendl;
@@ -492,7 +487,7 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
     }
   }
   // write up to block boundaries, aligned only
-  off_t aligned_size = cache.length() & ~(block_size - 1);
+  off_t aligned_size = cache.length() & ~(RGW_CRYPT_BLOCK_SIZE - 1);
   if (aligned_size > 0) {
     res = process(cache, part_ofs, aligned_size);
   }
@@ -532,8 +527,7 @@ RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
                                                std::unique_ptr<BlockCrypt> crypt)
   : Pipe(next),
     cct(cct),
-    crypt(std::move(crypt)),
-    block_size(this->crypt->get_block_size())
+    crypt(std::move(crypt))
 {
 }
 
@@ -548,7 +542,7 @@ int RGWPutObj_BlockEncrypt::process(bufferlist&& data, uint64_t logical_offset)
   const bool flush = (data.length() == 0);
   cache.claim_append(data);
 
-  uint64_t proc_size = cache.length() & ~(block_size - 1);
+  uint64_t proc_size = cache.length() & ~(RGW_CRYPT_BLOCK_SIZE - 1);
   if (flush) {
     proc_size = cache.length();
   }

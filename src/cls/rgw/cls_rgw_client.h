@@ -641,10 +641,10 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oi
                                   cls_rgw_bucket_instance_entry *entry);
 #endif
 
-// compression-aware prefetch from the head object. returns up to max_length
-// bytes of possibly-compressed data corresponding to the logical range from
-// offset to offset+length. compressed objects are stored as a sequence of
-// compressed blocks, so prefetch has to read blocks in their entirety. if the
+// compression or encryption aware prefetch from the head object. returns up to max_length
+// bytes of possibly - compressed or encrypted data corresponding to the logical range from
+// offset to offset+length. compressed or encrypted objects are stored as a sequence of
+// compressed or encrypted blocks, so prefetch has to read blocks in their entirety. if the
 // given offset doesn't fall on a block boundary, the offset of the first block
 // returned is written to offset_out
 void cls_rgw_head_prefetch(librados::ObjectReadOperation& op,

@@ -331,7 +331,7 @@ static int get_obj_head(struct req_state *s,
 			bufferlist *pbl)
 {
   std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op = obj->get_read_op(s->obj_ctx);
-  prefetch_range prefetch{0, static_cast<uint64_t>(s->cct->_conf->rgw_max_chunk_size)};
+  prefetch_range prefetch;
   s->obj_ctx->set_prefetch_data(obj->get_obj(), prefetch);
 
   int ret = read_op->prepare(s->yield);
@@ -3477,8 +3477,7 @@ int RGWPutObj::verify_permission(optional_yield y)
       cs_bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
 
     cs_object->set_atomic(s->obj_ctx);
-    s->obj_ctx->set_prefetch_data(s->object->get_obj(), prefetch);
-
+    s->obj_ctx->set_prefetch_data(cs_object.get()->get_obj(), prefetch);
     /* check source object permissions */
     if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
 			policy, cs_bucket.get(), cs_object.get(), y, true) < 0) {

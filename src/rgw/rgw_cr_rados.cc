@@ -904,9 +904,10 @@ int RGWSyncLogTrimCR::request_complete()
 int RGWAsyncStatObj::_send_request()
 {
   rgw_raw_obj raw_obj;
+  std::optional<prefetch_range> prefetch;
   store->getRados()->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
   return store->getRados()->raw_obj_stat(raw_obj, psize, pmtime, pepoch,
-                             nullptr, nullptr, nullptr, objv_tracker, null_yield);
+                             nullptr, nullptr, prefetch, objv_tracker, null_yield);
 }
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, rgw::sal::RGWRadosStore *store,

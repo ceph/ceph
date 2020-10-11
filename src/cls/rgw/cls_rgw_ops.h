@@ -1489,14 +1489,12 @@ struct cls_rgw_head_prefetch_op {
   uint64_t offset; // starting logical offset of range request
   uint64_t length; // logical length of range request (or uint64-max)
   uint64_t max_length; // maximum length of returned data
-  bool getxattrs = false;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(offset, bl);
     encode(length, bl);
     encode(max_length, bl);
-    encode(getxattrs, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
@@ -1504,7 +1502,6 @@ struct cls_rgw_head_prefetch_op {
     decode(offset, bl);
     decode(length, bl);
     decode(max_length, bl);
-    decode(getxattrs, bl);
     DECODE_FINISH(bl);
   }
 

@@ -1097,7 +1097,6 @@ void cls_rgw_head_prefetch(librados::ObjectReadOperation& op,
   call.offset = offset;
   call.length = length;
   call.max_length = max_length;
-  call.getxattrs = (xattrs != nullptr);
   encode(call, in);
 
   class PrefetchCompletion : public librados::ObjectOperationCompletion {

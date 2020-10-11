@@ -4065,7 +4065,6 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx,
   return 0;
 }
 
-#define RGW_ATTR_COMPRESSION "user.rgw.compression" // from rgw_common.h
 
 static void to_compressed_range(const bufferlist& compression,
                                 uint64_t logical_offset,
@@ -4122,6 +4121,15 @@ static void to_compressed_range(const bufferlist& compression,
           compressed_offset, compressed_length,
           new_logical_offset);
 }
+static void to_encrypted_range(uint64_t& offset,
+                              uint64_t& length,
+                              uint64_t max_length)
+{
+  uint64_t end = length + offset - 1;
+  offset = offset & ~(RGW_CRYPT_BLOCK_SIZE - 1);
+  end = (end & ~(RGW_CRYPT_BLOCK_SIZE - 1)) + (RGW_CRYPT_BLOCK_SIZE - 1);
+  length = end - offset + 1;
+}
 
 static int rgw_head_prefetch(cls_method_context_t hctx,
                              bufferlist *in, bufferlist *out)
@@ -4145,31 +4153,22 @@ static int rgw_head_prefetch(cls_method_context_t hctx,
   // the given range
   bufferlist compression;
 
-  if (op.getxattrs) {
-    ret = cls_cxx_getxattrs(hctx, &xattrs);
-    if (ret < 0) {
-      CLS_LOG(1, "ERROR: %s(): failed to read xattrs", __func__);
-      return ret;
-    }
-    CLS_LOG(20, "rgw_head_prefetch read %zu attrs", xattrs.size());
-    auto compress = xattrs.find(RGW_ATTR_COMPRESSION);
-    if (compress != xattrs.end()) {
-      compression = compress->second;
-    }
-  } else {
-    ret = cls_cxx_getxattr(hctx, RGW_ATTR_COMPRESSION, &compression);
-  }
-  if (ret == -ENODATA || compression.length() > 0) {
-    // not compressed, use given offset/length
-  } else if (ret < 0) {
-    CLS_LOG(1, "ERROR: %s(): failed to read compression attribute", __func__);
+  ret = cls_cxx_getxattrs(hctx, &xattrs);
+  if (ret < 0) {
+    CLS_LOG(1, "ERROR: %s(): failed to read xattrs", __func__);
     return ret;
-  } else {
-    to_compressed_range(compression, offset, length, op.max_length,
+  }
+  CLS_LOG(20, "rgw_head_prefetch read %zu attrs", xattrs.size());
+  if (auto c = xattrs.find(RGW_ATTR_COMPRESSION); c != xattrs.end()) {
+    to_compressed_range(c->second, offset, length, op.max_length,
                         logical_offset, offset, length);
+  }
+  if (xattrs.find(RGW_ATTR_CRYPT_MODE) != xattrs.end()) {
+    to_encrypted_range(offset, length, op.max_length);
   }
 
   bufferlist data;
+  length = std::min(length, op.max_length);
   if (length) {
     ret = cls_cxx_read2(hctx, offset, length, &data, 0);
     if (ret < 0) {
@@ -4179,7 +4178,7 @@ static int rgw_head_prefetch(cls_method_context_t hctx,
   }
 
   cls_rgw_head_prefetch_ret op_ret;
-  op_ret.offset = logical_offset;
+  op_ret.offset = offset;
   op_ret.data = std::move(data);
   op_ret.xattrs = std::move(xattrs);
   encode(op_ret, *out);
