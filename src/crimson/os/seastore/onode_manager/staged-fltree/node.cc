@@ -5,12 +5,19 @@
 
 #include <cassert>
 #include <exception>
-#include <iostream>
+#include <sstream>
 
 #include "common/likely.h"
+#include "crimson/common/log.h"
 #include "node_extent_manager.h"
 #include "node_impl.h"
 #include "stages/node_stage_layout.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_filestore);
+  }
+}
 
 namespace crimson::os::seastore::onode {
 
@@ -268,16 +275,9 @@ node_future<> InternalNode::apply_child_split(
   auto left_child_addr_packed = laddr_packed_t{left_child_addr};
   auto right_key = right_child->impl->get_largest_key_view();
   auto right_child_addr = right_child->impl->laddr();
-  std::cout << "internal insert at pos(" << pos << "), "
-            << "left-child[" << left_key << ", 0x"
-            << std::hex << left_child_addr << std::dec
-            << "], right-child[" << right_key << ", 0x" <<
-            std::hex << right_child_addr << std::dec << "]" << std::endl;
-#if 0
-  std::cout << "before insert:" << std::endl;
-  dump(std::cout) << std::endl;
-#endif
-
+  logger().debug("OTree::Internal::Insert: "
+                 "pos({}), left_child({}, {:#x}), right_child({}, {:#x}) ...",
+                 pos, left_key, left_child_addr, right_key, right_child_addr);
   // update pos => left_child to pos => right_child
   impl->replace_child_addr(pos, right_child_addr, left_child_addr);
   replace_track(pos, right_child, left_child);
@@ -412,12 +412,16 @@ node_future<Ref<Node>> InternalNode::get_or_track_child(
   auto found = tracked_child_nodes.find(position);
   Ref<InternalNode> this_ref = this;
   return (found == tracked_child_nodes.end()
-    ? Node::load(c, child_addr, level_tail
-      ).safe_then([this, position] (auto child) {
-        child->as_child(position, this);
-        return child;
-      })
-    : node_ertr::make_ready_future<Ref<Node>>(found->second)
+    ? (logger().trace("OTree::Internal: load child untracked at {:#x}, pos({}), level={}",
+                      child_addr, position, level() - 1),
+       Node::load(c, child_addr, level_tail
+       ).safe_then([this, position] (auto child) {
+         child->as_child(position, this);
+         return child;
+       }))
+    : (logger().trace("OTree::Internal: load child tracked at {:#x}, pos({}), level={}",
+                      child_addr, position, level() - 1),
+       node_ertr::make_ready_future<Ref<Node>>(found->second))
   ).safe_then([this_ref, this, position, child_addr] (auto child) {
     assert(child_addr == child->impl->laddr());
     assert(position == child->parent_info().position);
@@ -596,15 +600,9 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     assert(impl->is_level_tail());
   }
 #endif
-  std::cout << "leaf insert at pos(" << pos << "), "
-            << key << ", " << value << ", " << history
-            << ", mstat(" << (int)mstat << ")"
-            << std::endl;
-#if 0
-  std::cout << "before insert:" << std::endl;
-  dump(std::cout) << std::endl;
-#endif
-
+  logger().debug("OTree::Leaf::Insert: "
+                 "pos({}), {}, {}, {}, mstat({}) ...",
+                 pos, key, value, history, mstat);
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
       key, value, history, mstat, insert_pos);

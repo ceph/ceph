@@ -3,9 +3,6 @@
 
 #pragma once
 
-// TODO: remove
-#include <iostream>
-
 #include "node_extent_mutable.h"
 #include "stages/node_stage.h"
 #include "stages/stage.h"

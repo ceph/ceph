@@ -472,8 +472,8 @@ class TestTree {
       size_t onode_size) {
     return seastar::async([this, range_2, range_1, range_0, onode_size] {
       tree.mkfs(t).unsafe_get0();
-      logger().info("\n---------------------------------------------"
-                    "\nbefore leaf node split:\n");
+      //logger().info("\n---------------------------------------------"
+      //              "\nbefore leaf node split:\n");
       auto keys = build_key_set(range_2, range_1, range_0);
       for (auto& key : keys) {
         auto& value = onodes.create(onode_size);
@@ -481,9 +481,9 @@ class TestTree {
       }
       assert(tree.height(t).unsafe_get0() == 1);
       assert(!tree.test_is_clean());
-      std::ostringstream oss;
-      tree.dump(t, oss);
-      logger().info("\n{}\n", oss.str());
+      //std::ostringstream oss;
+      //tree.dump(t, oss);
+      //logger().info("\n{}\n", oss.str());
     });
   }
 
@@ -491,8 +491,8 @@ class TestTree {
       const std::vector<ghobject_t>& keys, const std::vector<const onode_t*>& values) {
     return seastar::async([this, keys, values] {
       tree.mkfs(t).unsafe_get0();
-      logger().info("\n---------------------------------------------"
-                    "\nbefore leaf node split:\n");
+      //logger().info("\n---------------------------------------------"
+      //              "\nbefore leaf node split:\n");
       assert(keys.size() == values.size());
       auto key_iter = keys.begin();
       auto value_iter = values.begin();
@@ -503,9 +503,9 @@ class TestTree {
       }
       assert(tree.height(t).unsafe_get0() == 1);
       assert(!tree.test_is_clean());
-      std::ostringstream oss;
-      tree.dump(t, oss);
-      logger().info("\n{}\n", oss.str());
+      //std::ostringstream oss;
+      //tree.dump(t, oss);
+      //logger().info("\n{}\n", oss.str());
     });
   }
 
@@ -523,7 +523,7 @@ class TestTree {
 
       std::ostringstream oss;
       tree_clone.dump(t_clone, oss);
-      logger().info("\n{}\n", oss.str());
+      logger().info("dump new root:\n{}\n", oss.str());
       assert(tree_clone.height(t_clone).unsafe_get0() == 2);
 
       for (auto& [k, v, c] : insert_history) {
@@ -887,9 +887,9 @@ class DummyChildPool {
         });
       });
     }).safe_then([this] {
-      std::ostringstream oss;
-      p_btree->dump(t(), oss);
-      logger().info("\n{}\n", oss.str());
+      //std::ostringstream oss;
+      //p_btree->dump(t(), oss);
+      //logger().info("\n{}\n", oss.str());
       return p_btree->height(t());
     }).safe_then([](auto height) {
       assert(height == 2);
@@ -912,7 +912,7 @@ class DummyChildPool {
         pool_clone.get_context(), key, pool_clone.splitable_nodes).unsafe_get0();
       std::ostringstream oss;
       pool_clone.p_btree->dump(pool_clone.t(), oss);
-      logger().info("\n{}\n", oss.str());
+      logger().info("dump new root:\n{}\n", oss.str());
       assert(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0() == 3);
     });
   }

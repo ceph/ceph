@@ -3,11 +3,11 @@
 
 #pragma once
 
-// TODO: remove
-#include <iostream>
 #include <ostream>
+#include <sstream>
 
 #include "common/likely.h"
+#include "crimson/common/log.h"
 #include "node_extent_visitor.h"
 #include "node_impl.h"
 #include "stages/node_stage_layout.h"
@@ -245,18 +245,24 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const full_key_t<KEY_TYPE>& key, const value_t& value,
       search_position_t& insert_pos, match_stage_t& insert_stage,
       node_offset_t& insert_size) override {
-    std::cout << "INSERT start: insert_pos(" << insert_pos
-              << "), insert_stage=" << (int)insert_stage
-              << ", insert_size=" << insert_size << " ..." << std::endl;
+    logger().debug("OTree::Layout::Insert: begin at "
+                   "insert_pos({}), insert_stage={}, insert_size={}B ...",
+                   insert_pos, insert_stage, insert_size);
+    if (unlikely(logger().is_enabled(seastar::log_level::trace))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().trace("OTree::Layout::Insert: -- dump\n{}", sos.str());
+    }
     auto ret = extent.template insert_replayable<KEY_TYPE>(
         key, value, cast_down<STAGE>(insert_pos), insert_stage, insert_size);
-#if 0
-    dump(std::cout) << std::endl;
-#endif
-    std::cout << "INSERT done: insert_pos(" << insert_pos
-              << "), insert_stage=" << (int)insert_stage
-              << ", insert_size=" << insert_size
-              << std::endl << std::endl;
+    logger().debug("OTree::Layout::Insert: done  at "
+                   "insert_pos({}), insert_stage={}, insert_size={}B",
+                   insert_pos, insert_stage, insert_size);
+    if (unlikely(logger().is_enabled(seastar::log_level::trace))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().trace("OTree::Layout::Insert: -- dump\n{}", sos.str());
+    }
     validate_layout();
     assert(get_key_view(insert_pos) == key);
     return ret;
@@ -267,15 +273,23 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const full_key_t<KEY_TYPE>& key, const value_t& value,
       search_position_t& _insert_pos, match_stage_t& insert_stage,
       node_offset_t& insert_size) override {
-    std::cout << "SPLIT-INSERT start: insert_pos(" << _insert_pos
-              << "), insert_stage=" << (int)insert_stage
-              << ", insert_size=" << insert_size
-              << std::endl;
+    logger().info("OTree::Layout::Split: begin at "
+                  "insert_pos({}), insert_stage={}, insert_size={}B, "
+                  "{:#x}=>{:#x} ...",
+                  _insert_pos, insert_stage, insert_size,
+                  laddr(), right_impl.laddr());
+    if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().debug("OTree::Layout::Split: -- dump\n{}", sos.str());
+    }
+
     auto& insert_pos = cast_down<STAGE>(_insert_pos);
     auto& node_stage = extent.read();
     typename STAGE_T::StagedIterator split_at;
     bool is_insert_left;
-    size_t split_size = 0;
+    size_t split_size;
+    size_t target_split_size;
     {
       size_t empty_size = node_stage.size_before(0);
       size_t filled_kv_size = filled_size() - empty_size;
@@ -350,21 +364,21 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        *
        * (TODO) Implement smarter logics to check when "double split" happens.
        */
-      size_t target_split_size = empty_size + (filled_kv_size + insert_size) / 2;
+      target_split_size = empty_size + (filled_kv_size + insert_size) / 2;
       assert(insert_size < (node_stage.total_size() - empty_size) / 2);
 
       std::optional<bool> _is_insert_left;
       split_at.set(node_stage);
+      split_size = 0;
       bool locate_nxt = STAGE_T::recursively_locate_split_inserted(
           split_size, 0, target_split_size, insert_pos,
           insert_stage, insert_size, _is_insert_left, split_at);
       is_insert_left = *_is_insert_left;
-      std::cout << "located_split: split_at(" << split_at << "), insert_pos(" << insert_pos
-                << "), is_insert_left=" << is_insert_left
-                << ", estimated_split_size=" << split_size
-                << "(target=" << target_split_size
-                << ", current=" << filled_size()
-                << ")" << std::endl;
+      logger().debug("OTree::Layout::Split: -- located "
+          "split_at({}), insert_pos({}), is_insert_left={}, "
+          "split_size={}B(target={}B, current={}B)",
+          split_at, insert_pos, is_insert_left,
+          split_size, target_split_size, filled_size());
       // split_size can be larger than target_split_size in strategy B
       // assert(split_size <= target_split_size);
       if (locate_nxt) {
@@ -384,9 +398,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       // right node: append [start(append_at), insert_pos)
       STAGE_T::template append_until<KEY_TYPE>(
           append_at, right_appender, insert_pos, insert_stage);
-      std::cout << "append-insert right: insert_pos(" << insert_pos
-                << "), insert_stage=" << (int)insert_stage
-                << " ..." << std::endl;
+      logger().debug("OTree::Layout::Split: -- right appended until "
+                     "insert_pos({}), insert_stage={}, insert/append the rest ...",
+                     insert_pos, insert_stage);
       // right node: append [insert_pos(key, value)]
       bool is_front_insert = (insert_pos == position_t::begin());
       bool is_end = STAGE_T::template append_insert<KEY_TYPE>(
@@ -394,7 +408,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
           is_front_insert, insert_stage, p_value);
       assert(append_at.is_end() == is_end);
     } else {
-      std::cout << "append right ..." << std::endl;
+      logger().debug("OTree::Layout::Split: -- right appending ...");
     }
 
     // right node: append (insert_pos, end)
@@ -403,32 +417,40 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         append_at, right_appender, pos_end, STAGE);
     assert(append_at.is_end());
     right_appender.wrap();
-    right_impl.dump(std::cout) << std::endl;
+    if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
+      std::ostringstream sos;
+      right_impl.dump(sos);
+      logger().debug("OTree::Layout::Split: -- right node dump\n{}", sos.str());
+    }
     right_impl.validate_layout();
 
     // mutate left node
     if (is_insert_left) {
-      std::cout << "trim-insert left: insert_pos(" << insert_pos
-                << "), insert_stage=" << (int)insert_stage
-                << " ..." << std::endl;
+      logger().debug("OTree::Layout::Split: -- left trim/insert at "
+                     "insert_pos({}), insert_stage={} ...",
+                     insert_pos, insert_stage);
       p_value = extent.template split_insert_replayable<KEY_TYPE>(
           split_at, key, value, insert_pos, insert_stage, insert_size);
       assert(get_key_view(_insert_pos) == key);
     } else {
-      std::cout << "trim left ..." << std::endl;
+      logger().debug("OTree::Layout::Split: -- left trim ...");
       assert(right_impl.get_key_view(_insert_pos) == key);
       extent.split_replayable(split_at);
     }
-    dump(std::cout) << std::endl;
+    if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
+      std::ostringstream sos;
+      dump(sos);
+      logger().debug("OTree::Layout::Split: -- left node dump\n{}", sos.str());
+    }
     validate_layout();
     assert(p_value);
 
     auto split_pos = normalize(split_at.get_pos());
-    std::cout << "SPLIT-INSERT done: split_pos(" << split_pos
-              << "), insert_pos(" << _insert_pos
-              << "), insert_stage=" << (int)insert_stage
-              << ", insert_size=" << insert_size
-              << std::endl << std::endl;
+    logger().info("OTree::Layout::Split: done  at "
+                  "insert_pos({}), insert_stage={}, insert_size={}B, split_at({}), "
+                  "is_insert_left={}, split_size={}B(target={}B)",
+                  _insert_pos, insert_stage, insert_size, split_pos,
+                  is_insert_left, split_size, target_split_size);
     assert(split_size == filled_size());
     return {split_pos, is_insert_left, p_value};
   }
@@ -508,6 +530,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     auto ret = node_stage.size_before(node_stage.keys());
     assert(ret == node_stage.total_size() - node_stage.free_size());
     return ret;
+  }
+
+  static seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_filestore);
   }
 
   extent_t extent;
