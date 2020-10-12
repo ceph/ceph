@@ -15,9 +15,6 @@
 
 #pragma once
 
-#include "rgw_common.h"
-#include "rgw_compression_types.h"
-
 class RGWSI_Zone;
 struct RGWZoneGroup;
 struct RGWZoneParams;

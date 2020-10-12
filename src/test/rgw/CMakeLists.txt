@@ -26,36 +26,45 @@ target_link_libraries(unittest_rgw_bucket_sync_cache ${rgw_libs})
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
-target_link_libraries(unittest_rgw_period_history ${rgw_libs})
+target_link_libraries(unittest_rgw_period_history
+  ${rgw_libs}
+  cls_rgw_client)
 
 # unitttest_rgw_compression
 add_executable(unittest_rgw_compression
   test_rgw_compression.cc
   $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_compression)
-target_link_libraries(unittest_rgw_compression ${rgw_libs})
+target_link_libraries(unittest_rgw_compression
+  ${rgw_libs}
+  cls_rgw_client)
 
 # unitttest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
-target_link_libraries(unittest_http_manager ${rgw_libs})
+target_link_libraries(unittest_http_manager
+  ${rgw_libs}
+  cls_rgw_client)
 
 # unitttest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
-target_link_libraries(unittest_rgw_reshard_wait ${rgw_libs})
-
-set(test_rgw_a_src test_rgw_common.cc)
-add_library(test_rgw_a STATIC ${test_rgw_a_src})
-target_link_libraries(test_rgw_a ${rgw_libs})
+target_link_libraries(unittest_rgw_reshard_wait
+  ${rgw_libs}
+  cls_rgw_client)
 
 # ceph_test_rgw_manifest
 set(test_rgw_manifest_srcs test_rgw_manifest.cc)
 add_executable(ceph_test_rgw_manifest
   ${test_rgw_manifest_srcs}
   )
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(ceph_test_rgw_manifest PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 target_link_libraries(ceph_test_rgw_manifest
   test_rgw_a
+  ${rgw_libs}
   cls_rgw_client
   cls_lock_client
   cls_refcount_client
@@ -76,8 +85,13 @@ set(test_rgw_obj_srcs test_rgw_obj.cc)
 add_executable(ceph_test_rgw_obj
   ${test_rgw_obj_srcs}
   )
+if(WITH_BOOST_CONTEXT)
+  target_include_directories(ceph_test_rgw_obj PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 target_link_libraries(ceph_test_rgw_obj
   test_rgw_a
+  ${rgw_libs}
   cls_rgw_client
   cls_lock_client
   cls_refcount_client
@@ -124,6 +138,7 @@ add_executable(unittest_rgw_reshard
 add_ceph_unittest(unittest_rgw_reshard)
 target_link_libraries(unittest_rgw_reshard
   ${rgw_libs}
+  cls_rgw_client
   )
 
 add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
@@ -133,7 +148,9 @@ target_link_libraries(unittest_rgw_putobj ${rgw_libs} ${UNITTEST_LIBS})
 add_executable(ceph_test_rgw_throttle
   test_rgw_throttle.cc
   $<TARGET_OBJECTS:unit-main>)
-target_link_libraries(ceph_test_rgw_throttle ${rgw_libs}
+target_link_libraries(ceph_test_rgw_throttle
+  ${rgw_libs}
+  cls_rgw_client
   librados global ${UNITTEST_LIBS})
 install(TARGETS ceph_test_rgw_throttle DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -185,13 +202,16 @@ target_link_libraries(unittest_rgw_xml ${rgw_libs} ${EXPAT_LIBRARIES})
 add_executable(unittest_rgw_arn test_rgw_arn.cc)
 add_ceph_unittest(unittest_rgw_arn)
 
-target_link_libraries(unittest_rgw_arn ${rgw_libs})
+target_link_libraries(unittest_rgw_arn
+  ${rgw_libs}
+  cls_rgw_client)
 
 # unittest_rgw_kms
 add_executable(unittest_rgw_kms test_rgw_kms.cc)
 add_ceph_unittest(unittest_rgw_kms)
-
-target_link_libraries(unittest_rgw_kms ${rgw_libs})
+target_link_libraries(unittest_rgw_kms
+  ${rgw_libs}
+  cls_rgw_client)
 
 # unittest_rgw_url
 add_executable(unittest_rgw_url test_rgw_url.cc)
@@ -199,8 +219,13 @@ add_ceph_unittest(unittest_rgw_url)
 
 target_link_libraries(unittest_rgw_url ${rgw_libs})
 
-add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
-target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
+add_executable(ceph_test_rgw_gc_log
+  test_rgw_gc_log.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(ceph_test_rgw_gc_log
+  ${rgw_libs}
+  cls_rgw_client
+  radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_ceph_test(test-ceph-diff-sorted.sh
@@ -209,5 +234,8 @@ add_ceph_test(test-ceph-diff-sorted.sh
 
 # unittest_cls_fifo_legacy
 add_executable(unittest_cls_fifo_legacy test_cls_fifo_legacy.cc)
-target_link_libraries(unittest_cls_fifo_legacy radostest-cxx ${UNITTEST_LIBS}
-  ${rgw_libs})
+target_link_libraries(unittest_cls_fifo_legacy
+  radostest-cxx
+  ${UNITTEST_LIBS}
+  ${rgw_libs}
+  cls_rgw_client)

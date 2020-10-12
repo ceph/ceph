@@ -1897,29 +1897,6 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
   return false;
 }
 
-void rgw_pool::from_str(const string& s)
-{
-  size_t pos = rgw_unescape_str(s, 0, '\\', ':', &name);
-  if (pos != string::npos) {
-    pos = rgw_unescape_str(s, pos, '\\', ':', &ns);
-    /* ignore return; if pos != string::npos it means that we had a colon
-     * in the middle of ns that wasn't escaped, we're going to stop there
-     */
-  }
-}
-
-string rgw_pool::to_str() const
-{
-  string esc_name;
-  rgw_escape_str(name, '\\', ':', &esc_name);
-  if (ns.empty()) {
-    return esc_name;
-  }
-  string esc_ns;
-  rgw_escape_str(ns, '\\', ':', &esc_ns);
-  return esc_name + ":" + esc_ns;
-}
-
 void rgw_raw_obj::decode_from_rgw_obj(bufferlist::const_iterator& bl)
 {
   using ceph::decode;

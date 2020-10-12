@@ -9,6 +9,7 @@ if(${WITH_RADOSGW})
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
     ${BLKID_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS}
     radostest-cxx)
   install(TARGETS

@@ -6,8 +6,7 @@
 
 #include <map>
 #include "rgw_xml.h"
-#include "rgw_obj_manifest.h"
-#include "rgw_compression_types.h"
+#include "rgw_common.h"
 
 namespace rgw { namespace sal {
   class RGWRadosStore;
@@ -17,49 +16,6 @@ namespace rgw { namespace sal {
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
 
 class RGWMPObj;
-
-struct RGWUploadPartInfo {
-  uint32_t num;
-  uint64_t size;
-  uint64_t accounted_size{0};
-  string etag;
-  ceph::real_time modified;
-  RGWObjManifest manifest;
-  RGWCompressionInfo cs_info;
-
-  RGWUploadPartInfo() : num(0), size(0) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(4, 2, bl);
-    encode(num, bl);
-    encode(size, bl);
-    encode(etag, bl);
-    encode(modified, bl);
-    encode(manifest, bl);
-    encode(cs_info, bl);
-    encode(accounted_size, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
-    decode(num, bl);
-    decode(size, bl);
-    decode(etag, bl);
-    decode(modified, bl);
-    if (struct_v >= 3)
-      decode(manifest, bl);
-    if (struct_v >= 4) {
-      decode(cs_info, bl);
-      decode(accounted_size, bl);
-    } else {
-      accounted_size = size;
-    }
-    DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWUploadPartInfo*>& o);
-};
-WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
 class RGWMultiCompleteUpload : public XMLObj
 {
@@ -123,8 +79,15 @@ extern int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state
                                 int *next_marker, bool *truncated,
                                 bool assume_unsorted = false);
 
-extern int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWObjectCtx *obj_ctx,
-                                RGWBucketInfo& bucket_info, RGWMPObj& mp_obj);
+extern int abort_multipart_upload(rgw::sal::RGWRadosStore* store, CephContext *cct, RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info, RGWMPObj& mp_obj);
+
+extern void cleanup_multipart_reuploads(rgw::sal::RGWRadosStore *store,
+					CephContext *cct,
+					RGWObjectCtx *obj_ctx,
+					RGWBucketInfo& bucket_info,
+					RGWUploadPartInfo& obj_part,
+					const rgw_obj& meta_obj,
+					const std::string& upload_id);
 
 extern int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
 				  const string& prefix,

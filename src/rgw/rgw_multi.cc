@@ -200,7 +200,60 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 			      next_marker, truncated, assume_unsorted);
 }
 
-int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
+static inline void cleanup_mp_part(
+  rgw::sal::RGWRadosStore* store,
+  RGWBucketInfo& bucket_info,
+  RGWObjManifest& manifest,
+  const rgw_obj& meta_obj,
+  cls_rgw_obj_chain& chain,
+  list<rgw_obj_index_key>& remove_objs) {
+  /* clean up an mp part */
+  store->getRados()->update_gc_chain(const_cast<rgw_obj&>(meta_obj), manifest,
+				     &chain);
+  RGWObjManifest::obj_iterator oiter = manifest.obj_begin();
+  if (oiter != manifest.obj_end()) {
+    rgw_obj head;
+    rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
+    RGWSI_Tier_RADOS::raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
+
+    rgw_obj_index_key key;
+    head.key.get_index_key(&key);
+    remove_objs.push_back(key);
+  }
+} /* cleanup_part */
+
+void cleanup_multipart_reuploads(rgw::sal::RGWRadosStore* store,
+				 CephContext *cct,
+				 RGWObjectCtx *obj_ctx,
+				 RGWBucketInfo& bucket_info,
+				 RGWUploadPartInfo& obj_part,
+				 const rgw_obj& meta_obj,
+				 const std::string& upload_id)
+{
+  /* cleanup obj_part.failed_prefixes arising from re-uploads
+   * of the given part (if any) */
+  cls_rgw_obj_chain chain;
+  list<rgw_obj_index_key> remove_objs;
+
+  for (const string& failed_prefix : obj_part.failed_prefixes)  {
+    /* cleanup_part relies on manifest obj iterator, so
+     * clone this one and back-form its prefix */
+    RGWObjManifest manifest(obj_part.manifest);
+    manifest.set_prefix(failed_prefix);
+    cleanup_mp_part(store, bucket_info, manifest, meta_obj, chain,
+		    remove_objs);
+  }
+  /* use upload id as tag and do it synchronously */
+  auto ret = store->getRados()->send_chain_to_gc(chain, upload_id);
+  if (ret < 0) {
+    ldout(cct, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+    //Delete objects inline if send chain to gc fails
+    store->getRados()->delete_objs_inline(chain, upload_id);
+  }
+  /* XXXX how to handle remove_objs?  we can't delete meta_obj */
+} /* cleanup_multipart_reuploads */
+
+int abort_multipart_upload(rgw::sal::RGWRadosStore* store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
 			   RGWMPObj& mp_obj)
 {
@@ -239,17 +292,19 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
-        store->getRados()->update_gc_chain(meta_obj, obj_part.manifest, &chain);
-        RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
-        if (oiter != obj_part.manifest.obj_end()) {
-          rgw_obj head;
-          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->getRados());
-          RGWSI_Tier_RADOS::raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
-
-          rgw_obj_index_key key;
-          head.key.get_index_key(&key);
-          remove_objs.push_back(key);
-        }
+	/* cleanup obj_part.failed_prefixes arising from re-uploads
+	 * of the current part (if any) */
+	for (const string& failed_prefix : obj_part.failed_prefixes)  {
+	  /* cleanup_part relies on manifest obj iterator, so
+	   * clone this one and back-form its prefix */
+	  RGWObjManifest manifest(obj_part.manifest);
+	  manifest.set_prefix(failed_prefix);
+	  cleanup_mp_part(store, bucket_info, manifest, meta_obj, chain,
+			  remove_objs);
+	}
+	/* cleanup the final part */
+	cleanup_mp_part(store, bucket_info, obj_part.manifest, meta_obj,
+			chain, remove_objs);
       }
       parts_accounted_size += obj_part.accounted_size;
     }
