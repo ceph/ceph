@@ -12,7 +12,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 
 try:
-    from typing import Dict, Any, Union  # pylint: disable=unused-import
+    from typing import Dict, Any, Optional, Union  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -158,8 +158,9 @@ class CephService(object):
             return {}
         return mgr.get("pg_summary")['by_pool'][pool['pool'].__str__()]
 
-    @classmethod
-    def send_command(cls, srv_type, prefix, srv_spec='', **kwargs):
+    @staticmethod
+    def send_command(srv_type, prefix, srv_spec='', **kwargs):
+        # type: (str, str, Optional[str], Any) -> Any
         """
         :type prefix: str
         :param srv_type: mon |
@@ -247,14 +248,14 @@ class CephService(object):
 
     @staticmethod
     def get_devices_by_host(hostname):
-        # (str) -> dict
+        # type: (str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-host',
                                         host=hostname)
 
     @staticmethod
     def get_devices_by_daemon(daemon_type, daemon_id):
-        # (str, str) -> dict
+        # type: (str, str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-daemon',
                                         who='{}.{}'.format(
