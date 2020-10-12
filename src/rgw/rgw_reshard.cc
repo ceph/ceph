@@ -503,6 +503,7 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
 
 int RGWBucketReshard::do_reshard(int num_shards,
 				 int max_entries,
+         FaultInjector<std::string_view>& f,
 				 bool verbose,
 				 ostream *out,
 				 Formatter *formatter,
@@ -595,6 +596,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  return ret;
 	}
 
+  if (ret = f.check("before_target_shard_entry"); ret < 0) { return ret; }
+
 	int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
 
 	ret = target_shards_mgr.add_entry(shard_index, entry, account,
@@ -602,6 +605,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	if (ret < 0) {
 	  return ret;
 	}
+
+  if (ret = f.check("after_target_shard_entry"); ret < 0) { return ret; }
 
 	Clock::time_point now = Clock::now();
 	if (reshard_lock.should_renew(now)) {
@@ -642,6 +647,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
     return -EIO;
   }
 
+  if (ret = f.check("before_layout_overwrite"); ret < 0) { return ret; }
+
   //overwrite current_index for the next reshard process
   bucket_info.layout.current_index = *bucket_info.layout.target_index;
   bucket_info.layout.target_index = std::nullopt; // target_layout doesn't need to exist after reshard
@@ -671,10 +678,13 @@ int RGWBucketReshard::update_bucket(rgw::BucketReshardState s, const DoutPrefixP
     return 0;
 }
 
-int RGWBucketReshard::execute(int num_shards, int max_op_entries,
+int RGWBucketReshard::execute(int num_shards,
+                              FaultInjector<std::string_view>& f,
+                              int max_op_entries,
                               const DoutPrefixProvider *dpp,
-                              bool verbose, ostream *out, Formatter *formatter,
-			      RGWReshard* reshard_log)
+                              bool verbose, ostream *out,
+                              Formatter *formatter,
+                              RGWReshard* reshard_log)
 {
   int ret = reshard_lock.lock();
   if (ret < 0) {
@@ -697,9 +707,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   // keep a copy of old index layout
   prev_index = bucket_info.layout.current_index;
 
-  ret = do_reshard(num_shards,
-		   max_op_entries,
-                   verbose, out, formatter, dpp);
+  ret = do_reshard(num_shards, max_op_entries, f, verbose, out, formatter, dpp);
   if (ret < 0) {
     goto error_out;
   }
@@ -1022,15 +1030,17 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 	}
 
 	{
-    RGWBucketReshard br(store, bucket_info, attrs, nullptr);
-    ret = br.execute(entry.new_num_shards, max_entries, dpp, false, nullptr,
-        nullptr, this);
-    if (ret < 0) {
-      ldout(store->ctx(), 0) <<  __func__ <<
-        ": Error during resharding bucket " << entry.bucket_name << ":" <<
-        cpp_strerror(-ret)<< dendl;
-      return ret;
-    }
+	RGWBucketReshard br(store, bucket_info, attrs, nullptr);
+
+  FaultInjector<std::string_view> f;
+	ret = br.execute(entry.new_num_shards, f, max_entries, dpp,
+                         false, nullptr, nullptr, this);
+	if (ret < 0) {
+	  ldout(store->ctx(), 0) <<  __func__ <<
+	    ": Error during resharding bucket " << entry.bucket_name << ":" <<
+	    cpp_strerror(-ret)<< dendl;
+	  return ret;
+	}
 
     ldout(store->ctx(), 20) << __func__ <<
       " removing reshard queue entry for bucket " << entry.bucket_name <<
