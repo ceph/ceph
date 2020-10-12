@@ -318,8 +318,6 @@ public:
     header.type = t;
     header.version = version;
     header.compat_version = compat_version;
-    header.priority = 0;  // undef
-    header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
   }
 
