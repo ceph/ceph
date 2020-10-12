@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import logging
+import os
 import re
 
 from orchestrator import OrchestratorError
@@ -491,6 +492,8 @@ class CephFSFSal(FSal):
 
     def create_path(self, path):
         cfs = CephFS(self.fs_name)
+        if path == os.sep:
+            return
         cfs.mk_dirs(path)
 
     @classmethod
