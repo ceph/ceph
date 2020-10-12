@@ -960,7 +960,7 @@ std::string timestr(time_t t) {
   localtime_r(&t, &tm);
 
   char buf[32];
-  strftime(buf, sizeof(buf), "%F %T", &tm);
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
 
   return buf;
 }

@@ -287,7 +287,7 @@ int pipe(int pipefd[2]) {
 long int lrand48(void) {
   long int val;
   val = (long int) rand();
-  val << 16;
+  val <<= 16;
   val += (long int) rand();
   return val;
 }
@@ -385,7 +385,7 @@ int &alloc_tls() {
   return tlsvar;
 }
 
-int apply_tls_workaround() {
+void apply_tls_workaround() {
   // Workaround for the following Mingw bugs:
   // https://sourceforge.net/p/mingw-w64/bugs/727/
   // https://sourceforge.net/p/mingw-w64/bugs/527/
