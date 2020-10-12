@@ -112,9 +112,15 @@ public:
   static timeval to_timeval(time_point t) {
     auto rep = t.time_since_epoch().count();
     timespan ts(rep.count);
+    #ifndef _WIN32
     return { static_cast<time_t>(std::chrono::duration_cast<std::chrono::seconds>(ts).count()),
              static_cast<suseconds_t>(std::chrono::duration_cast<std::chrono::microseconds>(
                ts % std::chrono::seconds(1)).count()) };
+    #else
+    return { static_cast<long>(std::chrono::duration_cast<std::chrono::seconds>(ts).count()),
+             static_cast<long>(std::chrono::duration_cast<std::chrono::microseconds>(
+               ts % std::chrono::seconds(1)).count()) };
+    #endif
   }
 private:
   static time_point coarse_now() {
