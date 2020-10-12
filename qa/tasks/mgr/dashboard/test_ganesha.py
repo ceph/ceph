@@ -11,18 +11,6 @@ class GaneshaTest(DashboardTestCase):
     AUTH_ROLES = ['pool-manager', 'ganesha-manager']
 
     @classmethod
-    def create_pool(cls, name, pg_num, pool_type, application='rbd'):
-        data = {
-            'pool': name,
-            'pg_num': pg_num,
-            'pool_type': pool_type,
-            'application_metadata': [application]
-        }
-        if pool_type == 'erasure':
-            data['flags'] = ['ec_overwrites']
-        cls._task_post("/api/pool", data)
-
-    @classmethod
     def setUpClass(cls):
         super(GaneshaTest, cls).setUpClass()
         cls.create_pool('ganesha', 2**2, 'replicated')

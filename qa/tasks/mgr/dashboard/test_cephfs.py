@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-public-methods
+
 from contextlib import contextmanager
 
 from .helper import DashboardTestCase, JLeaf, JList, JObj

@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import json
-
-from .helper import DashboardTestCase, JList, JObj
-from .test_orchestrator import test_data
+from .helper import DashboardTestCase, JList, JObj, devices_schema
 
 
 class HostControllerTest(DashboardTestCase):
@@ -13,16 +10,11 @@ class HostControllerTest(DashboardTestCase):
 
     URL_HOST = '/api/host'
 
+    ORCHESTRATOR = True
+
     @classmethod
     def setUpClass(cls):
         super(HostControllerTest, cls).setUpClass()
-        cls._load_module("test_orchestrator")
-
-        cmd = ['orch', 'set', 'backend', 'test_orchestrator']
-        cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
-
-        cmd = ['test_orchestrator', 'load_data', '-i', '-']
-        cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd, stdin=json.dumps(test_data))
 
     @classmethod
     def tearDownClass(cls):
@@ -38,7 +30,8 @@ class HostControllerTest(DashboardTestCase):
         data = self._get(self.URL_HOST)
         self.assertStatus(200)
 
-        orch_hostnames = {inventory_node['name'] for inventory_node in test_data['inventory']}
+        orch_hostnames = {inventory_node['name'] for inventory_node in
+                          self.ORCHESTRATOR_TEST_DATA['inventory']}
 
         for server in data:
             self.assertIn('services', server)
@@ -65,13 +58,15 @@ class HostControllerTest(DashboardTestCase):
     def test_host_list_with_sources(self):
         data = self._get('{}?sources=orchestrator'.format(self.URL_HOST))
         self.assertStatus(200)
-        test_hostnames = {inventory_node['name'] for inventory_node in test_data['inventory']}
+        test_hostnames = {inventory_node['name'] for inventory_node in
+                          self.ORCHESTRATOR_TEST_DATA['inventory']}
         resp_hostnames = {host['hostname'] for host in data}
         self.assertEqual(test_hostnames, resp_hostnames)
 
         data = self._get('{}?sources=ceph'.format(self.URL_HOST))
         self.assertStatus(200)
-        test_hostnames = {inventory_node['name'] for inventory_node in test_data['inventory']}
+        test_hostnames = {inventory_node['name'] for inventory_node in
+                          self.ORCHESTRATOR_TEST_DATA['inventory']}
         resp_hostnames = {host['hostname'] for host in data}
         self.assertEqual(len(test_hostnames.intersection(resp_hostnames)), 0)
 
@@ -81,15 +76,7 @@ class HostControllerTest(DashboardTestCase):
         assert hosts[0]
         data = self._get('{}/devices'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
         self.assertStatus(200)
-        self.assertSchema(data, JList(JObj({
-            'daemons': JList(str),
-            'devid': str,
-            'location': JList(JObj({
-                'host': str,
-                'dev': str,
-                'path': str
-            }))
-        })))
+        self.assertSchema(data, devices_schema)
 
     def test_host_daemons(self):
         hosts = self._get('{}'.format(self.URL_HOST))
