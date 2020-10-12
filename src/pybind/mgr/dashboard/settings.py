@@ -51,7 +51,9 @@ class Options(object):
 
     # Prometheus settings
     PROMETHEUS_API_HOST = ('', str)
+    PROMETHEUS_API_SSL_VERIFY = (True, bool)
     ALERTMANAGER_API_HOST = ('', str)
+    ALERTMANAGER_API_SSL_VERIFY = (True, bool)
 
     # iSCSI management settings
     ISCSI_API_SSL_VERIFICATION = (True, bool)

@@ -719,6 +719,19 @@ in order to manage silences.
   should not disturb each other through annoying duplicated notifications
   popping up.
 
+If you are using a self-signed certificate in your Prometheus or your
+Alertmanager setup, you should disable certificate verification in the
+dashboard to avoid refused connections, e.g. caused by certificates signed by
+unknown CA or not matching the host name.
+
+- For Prometheus::
+
+  $ ceph dashboard set-prometheus-api-ssl-verify False
+
+- For Alertmanager::
+
+  $ ceph dashboard set-alertmanager-api-ssl-verify False
+
 .. _dashboard-user-role-management:
 
 User and Role Management
