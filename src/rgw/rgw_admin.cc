@@ -22,6 +22,7 @@ extern "C" {
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/fault_injector.h"
 
 #include "include/util.h"
 
@@ -426,6 +427,8 @@ void usage()
   cout << "   --topic                   bucket notifications/pubsub topic name\n";
   cout << "   --subscription            pubsub subscription name\n";
   cout << "   --event-id                event id in a pubsub subscription\n";
+  cout << "   --fault-inject-at         for testing fault injection\n";
+  cout << "   --fault-abort-at          for testing fault abort\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -3234,6 +3237,9 @@ int main(int argc, const char **argv)
   std::optional<string> opt_mode;
   std::optional<rgw_user> opt_dest_owner;
 
+  std::optional<std::string> inject_error_at;
+  std::optional<std::string> inject_abort_at;
+
   SimpleCmd cmd(all_cmds, cmd_aliases);
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
@@ -3645,6 +3651,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-owner", (char*)NULL)) {
       opt_dest_owner.emplace(val);
       opt_dest_owner = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-error-at", (char*)NULL)) {
+      inject_error_at = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-abort-at", (char*)NULL)) {
+      inject_abort_at = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -5424,6 +5434,9 @@ int main(int argc, const char **argv)
       return EINVAL;
   }
 
+  // to test using FaultInjector
+  FaultInjector<std::string_view> fault;
+
   if (!user_id.empty()) {
     user_op.set_user_id(user_id);
     bucket_op.set_user_id(user_id);
@@ -6886,8 +6899,12 @@ next:
       max_entries = DEFAULT_RESHARD_MAX_ENTRIES;
     }
 
-    return br.execute(num_shards, max_entries,
-                      verbose, &cout, formatter.get());
+    if (inject_error_at) {
+      fault.inject(*inject_error_at, InjectError{-EIO, dpp()});
+    } else if (inject_abort_at) {
+      fault.inject(*inject_abort_at, InjectAbort{});
+    }
+    return br.execute(num_shards, fault, max_entries, verbose, &cout, formatter.get());
   }
 
   if (opt_cmd == OPT::RESHARD_ADD) {
