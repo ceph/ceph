@@ -249,7 +249,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap)
     int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t * snaps, int maxlen)
     int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t * t)
-    uint64_t rados_ioctx_get_id(rados_ioctx_t io)
+    int64_t rados_ioctx_get_id(rados_ioctx_t io)
     int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf, unsigned maxlen)
 
     int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
@@ -327,7 +327,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_omap_get_next(rados_omap_iter_t iter, const char * const* key, const char * const* val, size_t * len)
     void rados_omap_get_end(rados_omap_iter_t iter)
     int rados_notify2(rados_ioctx_t io, const char * o, const char *buf, int buf_len, uint64_t timeout_ms, char **reply_buffer, size_t *reply_buffer_len)
-    int rados_aio_notify(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len, uint64_t timeout_ms, char **reply_buffer, size_t *reply_buffer_len)
+    int rados_aio_notify(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, int len, uint64_t timeout_ms, char **reply_buffer, size_t *reply_buffer_len)
     int rados_decode_notify_response(char *reply_buffer, size_t reply_buffer_len, notify_ack_t **acks, size_t *nr_acks, notify_timeout_t **timeouts, size_t *nr_timeouts)
     void rados_free_notify_response(notify_ack_t *acks, size_t nr_acks, notify_timeout_t *timeouts)
     int rados_notify_ack(rados_ioctx_t io, const char *o, uint64_t notify_id, uint64_t cookie, const char *buf, int buf_len)
