@@ -1471,3 +1471,66 @@ TEST_F(TestMirroring, SnapshotPromoteDemote)
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
 }
+
+TEST_F(TestMirroring, AioSnapshotCreate)
+{
+  REQUIRE_FORMAT_V2();
+
+  std::list<std::string> image_names;
+  for (size_t idx = 0; idx < 10; ++idx) {
+    image_names.push_back(get_temp_image_name());
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
+                                          RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                                          "cluster", "client"));
+  // create mirror images
+  uint64_t features;
+  ASSERT_TRUE(get_features(&features));
+  int order = 20;
+  std::list<librbd::Image> images;
+  for (auto &image_name : image_names) {
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048, features,
+                               &order));
+    images.emplace_back();
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
+    ASSERT_EQ(0, images.back().mirror_image_enable2(
+                RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  }
+
+  // create snapshots
+  std::list<uint64_t> snap_ids;
+  std::list<librbd::RBD::AioCompletion *> aio_comps;
+  for (auto &image : images) {
+    snap_ids.emplace_back();
+    aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
+    ASSERT_EQ(0, image.aio_mirror_image_create_snapshot(0, &snap_ids.back(),
+                                                        aio_comps.back()));
+  }
+  for (auto aio_comp : aio_comps) {
+    ASSERT_EQ(0, aio_comp->wait_for_complete());
+    ASSERT_EQ(1, aio_comp->is_complete());
+    ASSERT_EQ(0, aio_comp->get_return_value());
+    aio_comp->release();
+  }
+  aio_comps.clear();
+
+  // verify
+  for (auto &image : images) {
+    vector<librbd::snap_info_t> snaps;
+    ASSERT_EQ(0, image.snap_list(snaps));
+    ASSERT_EQ(2U, snaps.size());
+    ASSERT_EQ(snaps[1].id, snap_ids.front());
+
+    std::string image_name;
+    ASSERT_EQ(0, image.get_name(&image_name));
+    ASSERT_EQ(0, image.close());
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    snap_ids.pop_front();
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+}

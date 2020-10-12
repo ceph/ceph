@@ -2834,7 +2834,7 @@ namespace librbd {
   int Image::mirror_image_create_snapshot(uint64_t *snap_id)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::api::Mirror<>::image_snapshot_create(ictx, snap_id);
+    return librbd::api::Mirror<>::image_snapshot_create(ictx, 0U, snap_id);
   }
 
   int Image::mirror_image_get_info(mirror_image_info_t *mirror_image_info,
@@ -2985,6 +2985,17 @@ namespace librbd {
   }
 
 #pragma GCC diagnostic pop
+
+  int Image::aio_mirror_image_create_snapshot(uint32_t flags, uint64_t *snap_id,
+                                              RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    librbd::api::Mirror<>::image_snapshot_create(
+        ictx, flags, snap_id, new C_AioCompletion(ictx,
+                                                  librbd::io::AIO_TYPE_GENERIC,
+                                                  get_aio_completion(c)));
+    return 0;
+  }
 
   int Image::update_watch(UpdateWatchCtx *wctx, uint64_t *handle) {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -6301,7 +6312,7 @@ extern "C" int rbd_mirror_image_create_snapshot(rbd_image_t image,
                                                 uint64_t *snap_id)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::api::Mirror<>::image_snapshot_create(ictx, snap_id);
+  return librbd::api::Mirror<>::image_snapshot_create(ictx, 0U, snap_id);
 }
 
 extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
@@ -6496,6 +6507,20 @@ extern "C" int rbd_aio_mirror_image_get_status(
 }
 
 #pragma GCC diagnostic pop
+
+extern "C" int rbd_aio_mirror_image_create_snapshot(rbd_image_t image,
+                                                    uint32_t flags,
+                                                    uint64_t *snap_id,
+                                                    rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  librbd::api::Mirror<>::image_snapshot_create(
+      ictx, flags, snap_id, new C_AioCompletion(ictx,
+                                                librbd::io::AIO_TYPE_GENERIC,
+                                                get_aio_completion(comp)));
+  return 0;
+}
 
 extern "C" int rbd_update_watch(rbd_image_t image, uint64_t *handle,
 				rbd_update_callback_t watch_cb, void *arg)

@@ -1251,6 +1251,11 @@ CEPH_RBD_API int rbd_aio_mirror_image_get_status(
     size_t status_size, rbd_completion_t c)
   CEPH_RBD_DEPRECATED;
 
+CEPH_RBD_API int rbd_aio_mirror_image_create_snapshot(rbd_image_t image,
+                                                      uint32_t flags,
+                                                      uint64_t *snap_id,
+                                                      rbd_completion_t c);
+
 // RBD groups support functions
 CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_group_remove(rados_ioctx_t p, const char *name);
