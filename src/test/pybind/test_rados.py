@@ -970,6 +970,22 @@ class TestIoctx(object):
 
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_setxattr(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_setxattr("obj", "key", b'value', cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(self.ioctx.get_xattr("obj", "key"), b'value')
+
     def test_applications(self):
         cmd = {"prefix":"osd dump", "format":"json"}
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'')
