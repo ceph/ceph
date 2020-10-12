@@ -481,7 +481,7 @@ Context *DisableFeaturesRequest<I>::handle_remove_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result < 0 && *result != -ENOENT) {
     lderr(cct) << "failed to remove object map: " << cpp_strerror(*result) << dendl;
     return handle_finish(*result);
   }
