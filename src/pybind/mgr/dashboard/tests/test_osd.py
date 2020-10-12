@@ -221,6 +221,23 @@ class OsdTest(ControllerTestCase):
                     with mock.patch.object(mgr, 'get_latest', return_value=1146609664):
                         yield
 
+    def _get_drive_group_data(self, service_id='all_hdd', host_pattern_k='host_pattern',
+                              host_pattern_v='*'):
+        return {
+            'method': 'drive_groups',
+            'data': [
+                {
+                    'service_type': 'osd',
+                    'service_id': service_id,
+                    'data_devices': {
+                        'rotational': True
+                    },
+                    host_pattern_k: host_pattern_v
+                }
+            ],
+            'tracking_id': 'all_hdd, b_ssd'
+        }
+
     def test_osd_list_aggregation(self):
         """
         This test emulates the state of a cluster where an OSD has only been
@@ -239,12 +256,14 @@ class OsdTest(ControllerTestCase):
     @mock.patch('dashboard.controllers.osd.CephService')
     def test_osd_create_bare(self, ceph_service):
         ceph_service.send_command.return_value = '5'
+        sample_data = {
+            'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
+            'svc_id': 5
+        }
+
         data = {
             'method': 'bare',
-            'data': {
-                'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
-                'svc_id': 5
-            },
+            'data': sample_data,
             'tracking_id': 'bare-5'
         }
         self._task_post('/api/osd', data)
@@ -258,20 +277,7 @@ class OsdTest(ControllerTestCase):
         instance.return_value = fake_client
 
         # Valid DriveGroup
-        data = {
-            'method': 'drive_groups',
-            'data': [
-                {
-                    'service_type': 'osd',
-                    'service_id': 'all_hdd',
-                    'data_devices': {
-                        'rotational': True
-                    },
-                    'host_pattern': '*',
-                }
-            ],
-            'tracking_id': 'all_hdd, b_ssd'
-        }
+        data = self._get_drive_group_data()
 
         # Without orchestrator service
         fake_client.available.return_value = False
@@ -297,20 +303,7 @@ class OsdTest(ControllerTestCase):
         fake_client.get_missing_features.return_value = []
 
         # Invalid DriveGroup
-        data = {
-            'method': 'drive_groups',
-            'data': [
-                {
-                    'service_type': 'osd',
-                    'service_id': 'invalid_dg',
-                    'data_devices': {
-                        'rotational': True
-                    },
-                    'host_pattern_wrong': 'unknown',
-                }
-            ],
-            'tracking_id': 'all_hdd, b_ssd'
-        }
+        data = self._get_drive_group_data('invalid_dg', 'host_pattern_wrong', 'unknown')
         self._task_post('/api/osd', data)
         self.assertStatus(400)
 

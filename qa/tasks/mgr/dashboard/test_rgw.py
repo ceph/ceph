@@ -424,7 +424,7 @@ class RgwBucketTest(RgwTestCase):
                 'lock_retention_period_days': JLeaf(int),
                 'lock_retention_period_years': JLeaf(int)
             },
-                 allow_unknown=True))
+                allow_unknown=True))
         self.assertTrue(data['lock_enabled'])
         self.assertEqual(data['lock_mode'], 'GOVERNANCE')
         self.assertEqual(data['lock_retention_period_days'], 0)

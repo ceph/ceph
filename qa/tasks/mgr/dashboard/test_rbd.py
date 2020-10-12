@@ -11,18 +11,6 @@ from .helper import DashboardTestCase, JLeaf, JList, JObj
 class RbdTest(DashboardTestCase):
     AUTH_ROLES = ['pool-manager', 'block-manager', 'cluster-manager']
 
-    @classmethod
-    def create_pool(cls, name, pg_num, pool_type, application='rbd'):
-        data = {
-            'pool': name,
-            'pg_num': pg_num,
-            'pool_type': pool_type,
-            'application_metadata': [application]
-        }
-        if pool_type == 'erasure':
-            data['flags'] = ['ec_overwrites']
-        cls._task_post("/api/pool", data)
-
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
         self._get('/api/block/image')
@@ -203,8 +191,8 @@ class RbdTest(DashboardTestCase):
     def get_trash(cls, pool, image_id):
         trash = cls._get('/api/block/image/trash/?pool_name={}'.format(pool))
         if isinstance(trash, list):
-            for pool in trash:
-                for image in pool['value']:
+            for trash_pool in trash:
+                for image in trash_pool['value']:
                     if image['id'] == image_id:
                         return image
 
@@ -827,67 +815,67 @@ class RbdTest(DashboardTestCase):
         self.remove_namespace('rbd', 'ns')
 
     def test_move_image_to_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd')
+        img_id = self.create_image_in_trash('rbd', 'test_rbd')
 
         self.get_image('rbd', None, 'test_rbd')
         self.assertStatus(404)
 
         time.sleep(1)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNotNone(image)
 
-        self.remove_trash('rbd', id)
+        self.remove_trash('rbd', img_id)
 
     def test_list_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 0)
         data = self._get('/api/block/image/trash/?pool_name={}'.format('rbd'))
         self.assertStatus(200)
         self.assertIsInstance(data, list)
         self.assertIsNotNone(data)
 
-        self.remove_trash('rbd', id)
+        self.remove_trash('rbd', img_id)
         self.assertStatus(204)
 
     def test_restore_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd')
+        img_id = self.create_image_in_trash('rbd', 'test_rbd')
 
-        self.restore_trash('rbd', None, id, 'test_rbd')
+        self.restore_trash('rbd', None, img_id, 'test_rbd')
 
         self.get_image('rbd', None, 'test_rbd')
         self.assertStatus(200)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNone(image)
 
         self.remove_image('rbd', None, 'test_rbd')
 
     def test_remove_expired_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
-        self.remove_trash('rbd', id, False)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        self.remove_trash('rbd', img_id, False)
         self.assertStatus(204)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNone(image)
 
     def test_remove_not_expired_trash(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
-        self.remove_trash('rbd', id, False)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', img_id, False)
         self.assertStatus(400)
 
         time.sleep(1)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNotNone(image)
 
-        self.remove_trash('rbd', id, True)
+        self.remove_trash('rbd', img_id, True)
 
     def test_remove_not_expired_trash_with_force(self):
-        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
-        self.remove_trash('rbd', id, True)
+        img_id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', img_id, True)
         self.assertStatus(204)
 
-        image = self.get_trash('rbd', id)
+        image = self.get_trash('rbd', img_id)
         self.assertIsNone(image)
 
     def test_purge_trash(self):
