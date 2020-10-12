@@ -428,13 +428,8 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        fs = Filesystem(ctx, name='cephfs', create=True,
-                        ec_profile=config.get('cephfs_ec_profile', None))
-
-        cephfs_conf = config['cephfs']
-        max_mds = config_conf.get('max_mds', 1)
-        if max_mds > 1:
-            fs.set_max_mds(max_mds)
+        Filesystem(ctx, fs_config=config.get('cephfs', None), name='cephfs',
+                   create=True, ec_profile=config.get('cephfs_ec_profile', None))
 
     yield
 
