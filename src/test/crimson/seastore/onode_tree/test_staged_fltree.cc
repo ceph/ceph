@@ -20,8 +20,6 @@
 
 #include "test/crimson/gtest_seastar.h"
 
-// TODO: use assert instead of logging
-
 using namespace crimson::os::seastore::onode;
 using crimson::os::seastore::Cache;
 using crimson::os::seastore::Journal;
@@ -509,8 +507,9 @@ class TestTree {
     });
   }
 
-  seastar::future<> split(const ghobject_t& key, const onode_t& value) {
-    return seastar::async([this, key, &value] {
+  seastar::future<> split(const ghobject_t& key, const onode_t& value,
+                          const split_expectation_t& expected) {
+    return seastar::async([this, key, &value, expected] {
       Btree tree_clone(NodeExtentManager::create_dummy(false));
       auto ref_t_clone = make_transaction();
       Transaction& t_clone = *ref_t_clone;
@@ -532,6 +531,7 @@ class TestTree {
       }
       auto result = tree_clone.lower_bound(t_clone, key).unsafe_get0();
       Onodes::validate_cursor(result, key, value);
+      assert(last_split.match(expected));
     });
   }
 
@@ -571,80 +571,119 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       auto& onode = test.create_onode(1144);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left front at stage 2, 1, 0\n");
-      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode).get0();
-      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode).get0();
-      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode).get0();
+      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode,
+                 {2u, 2u, true, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode,
+                 {2u, 1u, true, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode,
+                 {2u, 0u, true, InsertType::BEGIN}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode).get0();
-      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode).get0();
-      test.split(make_ghobj(2, 3, 3, "ns3", "oid3", 3, 3), onode).get0();
-      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode).get0();
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode).get0();
+      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode,
+                 {2u, 0u, true, InsertType::LAST}).get0();
+      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode,
+                 {2u, 1u, true, InsertType::LAST}).get0();
+      test.split(make_ghobj(2, 3, 3, "ns3", "oid3", 3, 3), onode,
+                 {2u, 2u, true, InsertType::LAST}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode,
+                 {2u, 1u, true, InsertType::LAST}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode,
+                 {2u, 0u, true, InsertType::LAST}).get0();
 
       auto& onode0 = test.create_onode(1416);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode0).get0();
-      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode0).get0();
-      test.split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), onode0).get0();
-      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode0).get0();
-      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode0).get0();
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode0,
+                 {2u, 0u, false, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode0,
+                 {2u, 1u, false, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), onode0,
+                 {2u, 2u, false, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode0,
+                 {2u, 1u, false, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode0,
+                 {2u, 0u, false, InsertType::BEGIN}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
-      test.split(make_ghobj(4, 4, 4, "ns4", "oid4", 5, 5), onode0).get0();
-      test.split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), onode0).get0();
-      test.split(make_ghobj(5, 5, 5, "ns3", "oid3", 3, 3), onode0).get0();
+      test.split(make_ghobj(4, 4, 4, "ns4", "oid4", 5, 5), onode0,
+                 {2u, 0u, false, InsertType::LAST}).get0();
+      test.split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), onode0,
+                 {2u, 1u, false, InsertType::LAST}).get0();
+      test.split(make_ghobj(5, 5, 5, "ns3", "oid3", 3, 3), onode0,
+                 {2u, 2u, false, InsertType::LAST}).get0();
 
       auto& onode1 = test.create_onode(316);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left middle at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode1).get0();
-      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode1).get0();
-      test.split(make_ghobj(2, 2, 3, "ns3", "oid3", 3, 3), onode1).get0();
-      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode1).get0();
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode1).get0();
+      test.split(make_ghobj(2, 2, 2, "ns4", "oid4", 5, 5), onode1,
+                 {1u, 0u, true, InsertType::MID}).get0();
+      test.split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), onode1,
+                 {1u, 1u, true, InsertType::MID}).get0();
+      test.split(make_ghobj(2, 2, 3, "ns3", "oid3", 3, 3), onode1,
+                 {1u, 2u, true, InsertType::MID}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), onode1,
+                 {1u, 1u, true, InsertType::MID}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 1, 1), onode1,
+                 {1u, 0u, true, InsertType::MID}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage 0, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 5, 5), onode1).get0();
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), onode1).get0();
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 1, 1), onode1).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 5, 5), onode1,
+                 {1u, 0u, true, InsertType::LAST}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), onode1,
+                 {1u, 1u, true, InsertType::LAST}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 1, 1), onode1,
+                 {1u, 0u, true, InsertType::LAST}).get0();
 
       auto& onode2 = test.create_onode(452);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 5, 5), onode2).get0();
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid4", 3, 3), onode2).get0();
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 1, 1), onode2).get0();
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 5, 5), onode2,
+                 {1u, 0u, false, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid4", 3, 3), onode2,
+                 {1u, 1u, false, InsertType::BEGIN}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 1, 1), onode2,
+                 {1u, 0u, false, InsertType::BEGIN}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right middle at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode2).get0();
-      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode2).get0();
-      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode2).get0();
-      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode2).get0();
-      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode2).get0();
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode2,
+                 {1u, 0u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode2,
+                 {1u, 1u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode2,
+                 {1u, 2u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode2,
+                 {1u, 1u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode2,
+                 {1u, 0u, false, InsertType::MID}).get0();
 
       auto& onode3 = test.create_onode(834);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right middle at stage 0, 1, 2, 1, 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode3).get0();
-      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode3).get0();
-      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode3).get0();
-      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode3).get0();
-      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode3).get0();
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 5, 5), onode3,
+                 {0u, 0u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), onode3,
+                 {0u, 1u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(3, 3, 4, "ns3", "oid3", 3, 3), onode3,
+                 {0u, 2u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), onode3,
+                 {0u, 1u, false, InsertType::MID}).get0();
+      test.split(make_ghobj(4, 4, 4, "ns2", "oid2", 1, 1), onode3,
+                 {0u, 0u, false, InsertType::MID}).get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right front at stage 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 2, 3), onode3).get0();
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 2, 3), onode3,
+                 {0u, 0u, false, InsertType::BEGIN}).get0();
 
       auto& onode4 = test.create_onode(572);
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left back at stage 0\n");
-      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), onode4).get0();
+      test.split(make_ghobj(3, 3, 3, "ns2", "oid2", 3, 4), onode4,
+                 {0u, 0u, true, InsertType::LAST}).get0();
     }
 
     {
@@ -653,9 +692,15 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       auto& onode = test.create_onode(1996);
       logger().info("\n---------------------------------------------"
                     "\nsplit at [0, 0, 0]; insert to left front at stage 2, 1, 0\n");
-      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode).get0();
-      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode).get0();
-      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode).get0();
+      test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode,
+                 {2u, 2u, true, InsertType::BEGIN}).get0();
+      assert(last_split.match_split_pos({0, {0, {0}}}));
+      test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode,
+                 {2u, 1u, true, InsertType::BEGIN}).get0();
+      assert(last_split.match_split_pos({0, {0, {0}}}));
+      test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode,
+                 {2u, 0u, true, InsertType::BEGIN}).get0();
+      assert(last_split.match_split_pos({0, {0, {0}}}));
     }
 
     {
@@ -669,10 +714,16 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
       test.build_tree(keys, values).get0();
       auto& onode = test.create_onode(1640);
       logger().info("\n---------------------------------------------"
-                    "\nsplit at [END, END, END]; insert to right end at stage 0, 1, 2\n");
-      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4), onode).get0();
-      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3), onode).get0();
-      test.split(make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3), onode).get0();
+                    "\nsplit at [END, END, END]; insert to right at stage 0, 1, 2\n");
+      test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4), onode,
+                 {0u, 0u, false, InsertType::BEGIN}).get0();
+      assert(last_split.match_split_pos({1, {0, {1}}}));
+      test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3), onode,
+                 {1u, 1u, false, InsertType::BEGIN}).get0();
+      assert(last_split.match_split_pos({1, {1, {0}}}));
+      test.split(make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3), onode,
+                 {2u, 2u, false, InsertType::BEGIN}).get0();
+      assert(last_split.match_split_pos({2, {0, {0}}}));
     }
   });
 }
@@ -896,8 +947,9 @@ class DummyChildPool {
     });
   }
 
-  seastar::future<> test_split(ghobject_t key, search_position_t pos) {
-    return seastar::async([this, key, pos] {
+  seastar::future<> test_split(ghobject_t key, search_position_t pos,
+                               const split_expectation_t& expected) {
+    return seastar::async([this, key, pos, expected] {
       logger().info("insert {} at {}:", key_hobj_t(key), pos);
       DummyChildPool pool_clone;
       pool_clone_in_progress = &pool_clone;
@@ -914,6 +966,7 @@ class DummyChildPool {
       pool_clone.p_btree->dump(pool_clone.t(), oss);
       logger().info("dump new root:\n{}\n", oss.str());
       assert(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0() == 3);
+      assert(last_split.match(expected));
     });
   }
 
@@ -993,45 +1046,65 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}}).get();
-      pool.test_split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), {2, {0, {0}}}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), {2, {0, {0}}}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "ns2", "oid2" + padding, 1, 1), {2, {0, {0}}}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}},
+                      {2u, 0u, false, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}},
+                      {2u, 1u, false, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), {2, {0, {0}}},
+                      {2u, 2u, false, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(4, 4, 4, "ns1", "oid1", 3, 3), {2, {0, {0}}},
+                      {2u, 1u, false, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(4, 4, 4, "ns2", "oid2" + padding, 1, 1), {2, {0, {0}}},
+                      {2u, 0u, false, InsertType::BEGIN}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right middle at stage 0, 1, 2, 1, 0\n");
-      pool.test_split(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5), {3, {0, {0}}}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), {3, {0, {0}}}).get();
-      pool.test_split(make_ghobj(4, 4, 5, "ns3", "oid3", 3, 3), {3, {0, {0}}}).get();
-      pool.test_split(make_ghobj(5, 5, 5, "ns1", "oid1", 3, 3), {3, {0, {0}}}).get();
-      pool.test_split(make_ghobj(5, 5, 5, "ns2", "oid2" + padding, 1, 1), {3, {0, {0}}}).get();
+      pool.test_split(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5), {3, {0, {0}}},
+                      {2u, 0u, false, InsertType::MID}).get();
+      pool.test_split(make_ghobj(4, 4, 4, "ns5", "oid5", 3, 3), {3, {0, {0}}},
+                      {2u, 1u, false, InsertType::MID}).get();
+      pool.test_split(make_ghobj(4, 4, 5, "ns3", "oid3", 3, 3), {3, {0, {0}}},
+                      {2u, 2u, false, InsertType::MID}).get();
+      pool.test_split(make_ghobj(5, 5, 5, "ns1", "oid1", 3, 3), {3, {0, {0}}},
+                      {2u, 1u, false, InsertType::MID}).get();
+      pool.test_split(make_ghobj(5, 5, 5, "ns2", "oid2" + padding, 1, 1), {3, {0, {0}}},
+                      {2u, 0u, false, InsertType::MID}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to right back at stage 0, 1, 2\n");
-      pool.test_split(
-          make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 5, 5), search_position_t::end()).get();
-      pool.test_split(make_ghobj(5, 5, 5, "ns5", "oid5", 3, 3), search_position_t::end()).get();
-      pool.test_split(make_ghobj(6, 6, 6, "ns3", "oid3", 3, 3), search_position_t::end()).get();
+      pool.test_split(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 5, 5), search_position_t::end(),
+                      {2u, 0u, false, InsertType::LAST}).get();
+      pool.test_split(make_ghobj(5, 5, 5, "ns5", "oid5", 3, 3), search_position_t::end(),
+                      {2u, 1u, false, InsertType::LAST}).get();
+      pool.test_split(make_ghobj(6, 6, 6, "ns3", "oid3", 3, 3), search_position_t::end(),
+                      {2u, 2u, false, InsertType::LAST}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left front at stage 2, 1, 0\n");
-      pool.test_split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), {0, {0, {0}}}).get();
-      pool.test_split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), {0, {0, {0}}}).get();
-      pool.test_split(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 1, 1), {0, {0, {0}}}).get();
+      pool.test_split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), {0, {0, {0}}},
+                      {0u, 2u, true, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), {0, {0, {0}}},
+                      {0u, 1u, true, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 1, 1), {0, {0, {0}}},
+                      {0u, 0u, true, InsertType::BEGIN}).get();
 
       logger().info("\n---------------------------------------------"
-                    "\nsplit at stage 0/1; insert to left middle at stage 0, 1, 2, 1, 0\n");
-      pool.test_split(make_ghobj(2, 2, 2, "ns4", "oid4" + padding, 5, 5), {1, {0, {0}}}).get();
-      pool.test_split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), {1, {0, {0}}}).get();
-      pool.test_split(
-          make_ghobj(2, 2, 3, "ns3", "oid3" + std::string(80, '_'), 3, 3), {1, {0, {0}}}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), {1, {0, {0}}}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 1, 1), {1, {0, {0}}}).get();
+                    "\nsplit at stage 0; insert to left middle at stage 0, 1, 2, 1, 0\n");
+      pool.test_split(make_ghobj(2, 2, 2, "ns4", "oid4" + padding, 5, 5), {1, {0, {0}}},
+                      {0u, 0u, true, InsertType::MID}).get();
+      pool.test_split(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), {1, {0, {0}}},
+                      {0u, 1u, true, InsertType::MID}).get();
+      pool.test_split(make_ghobj(2, 2, 3, "ns3", "oid3" + std::string(80, '_'), 3, 3), {1, {0, {0}}},
+                      {0u, 2u, true, InsertType::MID}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), {1, {0, {0}}},
+                      {0u, 1u, true, InsertType::MID}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 1, 1), {1, {0, {0}}},
+                      {0u, 0u, true, InsertType::MID}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to left back at stage 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 3, 4), {1, {2, {2}}}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 3, 4), {1, {2, {2}}},
+                      {0u, 0u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1046,14 +1119,19 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage 0, 1, 2, 1\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}}).get();
-      pool.test_split(make_ghobj(3, 4, 4, "n", "o", 3, 3), {2, {0, {0}}}).get();
-      pool.test_split(make_ghobj(4, 4, 4, "n", "o", 3, 3), {2, {0, {0}}}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}},
+                      {2u, 0u, true, InsertType::LAST}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}},
+                      {2u, 1u, true, InsertType::LAST}).get();
+      pool.test_split(make_ghobj(3, 4, 4, "n", "o", 3, 3), {2, {0, {0}}},
+                      {2u, 2u, true, InsertType::LAST}).get();
+      pool.test_split(make_ghobj(4, 4, 4, "n", "o", 3, 3), {2, {0, {0}}},
+                      {2u, 1u, true, InsertType::LAST}).get();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left middle at stage 2\n");
-      pool.test_split(make_ghobj(2, 3, 3, "n", "o", 3, 3), {1, {0, {0}}}).get();
+      pool.test_split(make_ghobj(2, 3, 3, "n", "o", 3, 3), {1, {0, {0}}},
+                      {2u, 2u, true, InsertType::MID}).get();
     }
 
     {
@@ -1068,7 +1146,8 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage (0, 1, 2, 1,) 0\n");
-      pool.test_split(make_ghobj(4, 4, 4, "n", "o", 2, 2), {2, {0, {0}}}).get();
+      pool.test_split(make_ghobj(4, 4, 4, "n", "o", 2, 2), {2, {0, {0}}},
+                      {2u, 0u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1083,9 +1162,12 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 1, 1), {1, {1, {0}}}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}},
+                      {1u, 0u, false, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
+                      {1u, 1u, false, InsertType::BEGIN}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 1, 1), {1, {1, {0}}},
+                      {1u, 0u, false, InsertType::BEGIN}).get();
     }
 
     {
@@ -1104,8 +1186,10 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage 0, 1\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}}).get();
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}},
+                      {1u, 0u, true, InsertType::LAST}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
+                      {1u, 1u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1123,7 +1207,8 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 1; insert to left back at stage (0, 1,) 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 2, 2), {1, {1, {0}}}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns2", "oid3", 2, 2), {1, {1, {0}}},
+                      {1u, 0u, true, InsertType::LAST}).get();
     }
 
     {
@@ -1137,7 +1222,8 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 0; insert to right front at stage 0\n");
-      pool.test_split(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 2, 3), {1, {1, {1}}}).get();
+      pool.test_split(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 2, 3), {1, {1, {1}}},
+                      {0u, 0u, false, InsertType::BEGIN}).get();
     }
 
     // Impossible to split at {0, 0, 0}

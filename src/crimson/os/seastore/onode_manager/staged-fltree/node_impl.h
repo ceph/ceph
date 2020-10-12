@@ -11,6 +11,42 @@
 
 namespace crimson::os::seastore::onode {
 
+#ifdef UNIT_TESTS_BUILT
+enum class InsertType { BEGIN, LAST, MID };
+struct split_expectation_t {
+  uint8_t split_stage;
+  uint8_t insert_stage;
+  bool is_insert_left;
+  InsertType insert_type;
+};
+struct last_split_info_t {
+  search_position_t split_pos;
+  uint8_t insert_stage;
+  bool is_insert_left;
+  InsertType insert_type;
+  bool match(const split_expectation_t& e) const {
+    match_stage_t split_stage;
+    if (split_pos.nxt.nxt.index == 0) {
+      if (split_pos.nxt.index == 0) {
+        split_stage = 2;
+      } else {
+        split_stage = 1;
+      }
+    } else {
+      split_stage = 0;
+    }
+    return split_stage == e.split_stage &&
+           insert_stage == e.insert_stage &&
+           is_insert_left == e.is_insert_left &&
+           insert_type == e.insert_type;
+  }
+  bool match_split_pos(const search_position_t& pos) const {
+    return split_pos == pos;
+  }
+};
+extern last_split_info_t last_split;
+#endif
+
 struct key_hobj_t;
 struct key_view_t;
 class NodeExtentMutable;

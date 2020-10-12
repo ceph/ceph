@@ -6,6 +6,10 @@
 
 namespace crimson::os::seastore::onode {
 
+#ifdef UNIT_TESTS_BUILT
+last_split_info_t last_split = {};
+#endif
+
 // XXX: branchless allocation
 InternalNodeImpl::alloc_ertr::future<InternalNodeImpl::fresh_impl_t>
 InternalNodeImpl::allocate(
