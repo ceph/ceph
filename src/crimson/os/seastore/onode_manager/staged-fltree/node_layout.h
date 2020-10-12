@@ -283,6 +283,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       dump(sos);
       logger().debug("OTree::Layout::Split: -- dump\n{}", sos.str());
     }
+#ifdef UNIT_TESTS_BUILT
+    auto insert_stage_pre = insert_stage;
+#endif
 
     auto& insert_pos = cast_down<STAGE>(_insert_pos);
     auto& node_stage = extent.read();
@@ -452,6 +455,27 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
                   _insert_pos, insert_stage, insert_size, split_pos,
                   is_insert_left, split_size, target_split_size);
     assert(split_size == filled_size());
+
+#ifdef UNIT_TESTS_BUILT
+    InsertType insert_type;
+    search_position_t last_pos;
+    if (is_insert_left) {
+      STAGE_T::template lookup_largest_slot<true, false, false>(
+          extent.read(), &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
+    } else {
+      node_stage_t right_stage{reinterpret_cast<FieldType*>(right_mut.get_write())};
+      STAGE_T::template lookup_largest_slot<true, false, false>(
+          right_stage, &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
+    }
+    if (_insert_pos == search_position_t::begin()) {
+      insert_type = InsertType::BEGIN;
+    } else if (_insert_pos == last_pos) {
+      insert_type = InsertType::LAST;
+    } else {
+      insert_type = InsertType::MID;
+    }
+    last_split = {split_pos, insert_stage_pre, is_insert_left, insert_type};
+#endif
     return {split_pos, is_insert_left, p_value};
   }
 
