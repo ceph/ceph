@@ -22,6 +22,7 @@ extern "C" {
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/fault_injector.h"
 
 #include "include/util.h"
 
@@ -420,6 +421,8 @@ void usage()
   cout << "   --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,\n";
   cout << "                             the trimming process will sleep the specified msec for every 1000 entries trimmed\n";
   cout << "   --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)\n";
+  cout << "   --fault-inject-at         for testing fault injection\n";
+  cout << "   --fault-abort-at          for testing fault abort\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -3592,6 +3595,9 @@ int main(int argc, const char **argv)
   ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
+  std::optional<std::string> inject_error_at;
+  std::optional<std::string> inject_abort_at;
+
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
 
@@ -4067,6 +4073,10 @@ int main(int argc, const char **argv)
       opt_retry_delay_ms = std::chrono::milliseconds(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--timeout-sec", (char*)NULL)) {
       opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-error-at", (char*)NULL)) {
+      inject_error_at = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-abort-at", (char*)NULL)) {
+      inject_abort_at = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
@@ -6102,6 +6112,8 @@ int main(int argc, const char **argv)
       return EINVAL;
   }
 
+  // to test using FaultInjector
+  FaultInjector<std::string_view> fault;
   if (!rgw::sal::User::empty(user)) {
     user_op.set_user_id(user->get_id());
     bucket_op.set_user_id(user->get_id());
@@ -7587,7 +7599,12 @@ next:
       max_entries = DEFAULT_RESHARD_MAX_ENTRIES;
     }
 
-    return br.execute(num_shards, max_entries, dpp(),
+    if (inject_error_at) {
+      fault.inject(*inject_error_at, InjectError{-EIO, dpp()});
+    } else if (inject_abort_at) {
+      fault.inject(*inject_abort_at, InjectAbort{});
+    }
+    return br.execute(num_shards, fault, max_entries, dpp(),
                       verbose, &cout, formatter.get());
   }
 
