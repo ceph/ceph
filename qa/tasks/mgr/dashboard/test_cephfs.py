@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from contextlib import contextmanager
 
-from .helper import DashboardTestCase, JObj, JList, JLeaf
+from .helper import DashboardTestCase, JLeaf, JList, JObj
 
 
 class CephfsTest(DashboardTestCase):

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+
 import json
 
 from .helper import DashboardTestCase
-
 
 test_data = {
     'inventory': [

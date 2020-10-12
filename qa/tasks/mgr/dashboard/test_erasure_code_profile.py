@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, JObj, JList
+from .helper import DashboardTestCase, JList, JObj
 
 
 class ECPTest(DashboardTestCase):

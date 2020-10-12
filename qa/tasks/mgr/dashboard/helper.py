@@ -4,14 +4,12 @@ from __future__ import absolute_import
 
 import json
 import logging
-from collections import namedtuple
 import time
+from collections import namedtuple
 
 import requests
-from teuthology.exceptions import CommandFailedError
-
 from tasks.mgr.mgr_test_case import MgrTestCase
-
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
