@@ -2,9 +2,10 @@
 from __future__ import absolute_import
 
 import logging
+
 import requests
 
-from .helper import DashboardTestCase, JAny, JObj, JList, JLeaf
+from .helper import DashboardTestCase, JAny, JLeaf, JList, JObj
 
 logger = logging.getLogger(__name__)
 

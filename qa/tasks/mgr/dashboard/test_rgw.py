@@ -4,14 +4,13 @@ from __future__ import absolute_import
 import base64
 import logging
 import time
-
 from urllib import parse
 
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.twofactor.totp import TOTP
 from cryptography.hazmat.primitives.hashes import SHA1
+from cryptography.hazmat.primitives.twofactor.totp import TOTP
 
-from .helper import DashboardTestCase, JObj, JList, JLeaf
+from .helper import DashboardTestCase, JLeaf, JList, JObj
 
 logger = logging.getLogger(__name__)
 

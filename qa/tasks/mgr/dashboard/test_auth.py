@@ -6,7 +6,7 @@ import time
 
 import jwt
 
-from .helper import DashboardTestCase, JObj, JLeaf
+from .helper import DashboardTestCase, JLeaf, JObj
 
 
 class AuthTest(DashboardTestCase):
