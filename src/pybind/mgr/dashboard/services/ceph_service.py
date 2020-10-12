@@ -279,6 +279,8 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            logger.debug('[SMART] could not retrieve device list from host %s', hostname)
         return smart_data
 
     @staticmethod
@@ -299,6 +301,10 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            msg = '[SMART] could not retrieve device list from daemon with type %s and ' +\
+                'with ID %d'
+            logger.debug(msg, daemon_type, daemon_id)
         return smart_data
 
     @classmethod
