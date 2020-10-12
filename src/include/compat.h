@@ -214,6 +214,7 @@ int ceph_memzero_s(void *dest, size_t destsz, size_t count);
 #include "include/win32/winsock_compat.h"
 
 #include <windows.h>
+#include <time.h>
 
 #include "include/win32/win32_errno.h"
 

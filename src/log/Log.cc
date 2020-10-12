@@ -375,7 +375,7 @@ void Log::dump_recent()
   {
     char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
     ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
-    snprintf(buf, sizeof(buf), "  %lx / %s", pthread_id, pthread_name);
+    snprintf(buf, sizeof(buf), "  %llx / %s", pthread_id, pthread_name);
     _log_message(buf, true);
   }
 
