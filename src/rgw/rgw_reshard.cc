@@ -756,6 +756,8 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 	  return ret;
 	}
 
+  if (ret = f.check("before_target_shard_entry"); ret < 0) { return ret; }
+
 	int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
 
 	ret = target_shards_mgr.add_entry(shard_index, entry, account,
@@ -763,6 +765,8 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 	if (ret < 0) {
 	  return ret;
 	}
+
+  if (ret = f.check("after_target_shard_entry"); ret < 0) { return ret; }
 
 	Clock::time_point now = Clock::now();
 	if (reshard_lock.should_renew(now)) {

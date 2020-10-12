@@ -6210,6 +6210,8 @@ int main(int argc, const char **argv)
       return EINVAL;
   }
 
+  // to test using FaultInjector
+  FaultInjector<std::string_view> fault;
   if (!rgw::sal::User::empty(user)) {
     user_op.set_user_id(user->get_id());
     bucket_op.set_user_id(user->get_id());
