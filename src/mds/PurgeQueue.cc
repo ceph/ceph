@@ -371,13 +371,11 @@ uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
     ops_required = 1 + leaves.size();
   } else {
     // File, work out concurrent Filer::purge deletes
+    // Account for removing (or zeroing) backtrace
     const uint64_t num = (item.size > 0) ?
       Striper::get_num_objects(item.layout, item.size) : 1;
 
     ops_required = std::min(num, g_conf()->filer_max_purge_ops);
-
-    // Account for removing (or zeroing) backtrace
-    ops_required += 1;
 
     // Account for deletions for old pools
     if (item.action != PurgeItem::TRUNCATE_FILE) {
