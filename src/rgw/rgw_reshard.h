@@ -21,6 +21,7 @@
 #include "cls/lock/cls_lock_client.h"
 
 #include "rgw_common.h"
+#include "common/fault_injector.h"
 
 
 class RGWReshard;
@@ -85,14 +86,15 @@ private:
   static const std::initializer_list<uint16_t> reshard_primes;
 
   int create_new_bucket_instance(int new_num_shards,
-				 RGWBucketInfo& new_bucket_info,
+                                 RGWBucketInfo& new_bucket_info,
                                  const DoutPrefixProvider *dpp);
   int do_reshard(int num_shards,
-		 RGWBucketInfo& new_bucket_info,
-		 int max_entries,
+                 RGWBucketInfo& new_bucket_info,
+                 int max_entries,
+                 FaultInjector<std::string_view>& f,
                  bool verbose,
                  std::ostream *os,
-		 Formatter *formatter,
+                 Formatter *formatter,
                  const DoutPrefixProvider *dpp);
 public:
 
@@ -102,10 +104,10 @@ public:
 		   const RGWBucketInfo& _bucket_info,
                    const std::map<std::string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
-  int execute(int num_shards, int max_op_entries,
-              const DoutPrefixProvider *dpp,
+  int execute(int num_shards, FaultInjector<std::string_view>& f,
+              int max_op_entries, const DoutPrefixProvider *dpp,
               bool verbose = false, std::ostream *out = nullptr,
-              Formatter *formatter = nullptr,
+              ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider *dpp);

@@ -540,6 +540,7 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
 int RGWBucketReshard::do_reshard(int num_shards,
 				 RGWBucketInfo& new_bucket_info,
 				 int max_entries,
+         FaultInjector<std::string_view>& f,
 				 bool verbose,
 				 ostream *out,
 				 Formatter *formatter,
@@ -712,10 +713,13 @@ int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_buc
 }
 
 
-int RGWBucketReshard::execute(int num_shards, int max_op_entries,
+int RGWBucketReshard::execute(int num_shards,
+                              FaultInjector<std::string_view>& f,
+                              int max_op_entries,
                               const DoutPrefixProvider *dpp,
-                              bool verbose, ostream *out, Formatter *formatter,
-			      RGWReshard* reshard_log)
+                              bool verbose, ostream *out,
+                              Formatter *formatter,
+                              RGWReshard* reshard_log)
 {
   int ret = reshard_lock.lock(dpp);
   if (ret < 0) {
@@ -745,8 +749,9 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   }
 
   ret = do_reshard(num_shards,
-		   new_bucket_info,
-		   max_op_entries,
+                   new_bucket_info,
+                   max_op_entries,
+                   f,
                    verbose, out, formatter, dpp);
   if (ret < 0) {
     goto error_out;
@@ -1079,7 +1084,9 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 	}
 
 	RGWBucketReshard br(store, bucket_info, attrs, nullptr);
-	ret = br.execute(entry.new_num_shards, max_entries, dpp, false, nullptr,
+
+  FaultInjector<std::string_view> f;
+	ret = br.execute(entry.new_num_shards, f, max_entries, dpp, false, nullptr,
 			 nullptr, this);
 	if (ret < 0) {
 	  ldpp_dout(dpp, 0) <<  __func__ <<
