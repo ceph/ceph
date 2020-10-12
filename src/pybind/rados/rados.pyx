@@ -298,6 +298,7 @@ cdef extern from "rados/librados.h" nogil:
                    const char * in_buf, size_t in_len, char * buf, size_t out_len)
     int rados_aio_exec(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * cls, const char * method,
                        const char * in_buf, size_t in_len, char * buf, size_t out_len)
+    int rados_aio_setxattr(rados_ioctx_t io, const char *o, rados_completion_t completion, const char *name, const char *buf, size_t len)
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
@@ -2801,6 +2802,41 @@ cdef class Ioctx(object):
         if ret < 0:
             completion._cleanup()
             raise make_ex(ret, "error executing %s::%s on %s" % (cls, method, object_name))
+        return completion
+
+    def aio_setxattr(self, object_name: str, xattr_name: str, xattr_value: bytes,
+                     oncomplete: Optional[Callable] = None) -> Completion:
+        """
+        Asynchronously set an extended attribute on an object
+
+        :param object_name: the name of the object to set xattr to
+        :param xattr_name: which extended attribute to set
+        :param xattr_value: the value of the  extended attribute
+        :param oncomplete: what to do when the setxttr completes
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+        object_name_raw = cstr(object_name, 'object_name')
+        xattr_name_raw = cstr(xattr_name , 'xattr_name')
+
+        cdef:
+            Completion completion
+            char* _object_name = object_name_raw
+            char* _xattr_name = xattr_name_raw
+            char* _xattr_value = xattr_value
+            size_t xattr_value_len = len(xattr_value)
+
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_setxattr(self.io, _object_name,
+                               completion.rados_comp,
+                               _xattr_name, _xattr_value, xattr_value_len)
+
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to set xattr %r" % xattr_name)
         return completion
 
     def aio_remove(self, object_name: str,
