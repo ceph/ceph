@@ -26,6 +26,22 @@ int ceph_arch_intel_sse2 = 0;
 int ceph_arch_intel_aesni = 0;
 int ceph_arch_intel_avx = 0;
 int ceph_arch_intel_avx2 = 0;
+int ceph_arch_intel_avx512f = 0;
+int ceph_arch_intel_avx512er = 0;
+int ceph_arch_intel_avx512pf = 0;
+int ceph_arch_intel_avx512vl = 0;
+int ceph_arch_intel_avx512cd = 0;
+int ceph_arch_intel_avx512dq = 0;
+int ceph_arch_intel_avx512bw = 0;
+int ceph_arch_intel_avx512ifma = 0;
+int ceph_arch_intel_avx512vbmi = 0;
+int ceph_arch_intel_avx512vbmi2 = 0;
+int ceph_arch_intel_avx512vaes = 0;
+int ceph_arch_intel_avx512bitalg = 0;
+int ceph_arch_intel_avx512vpopcntdq = 0;
+int ceph_arch_intel_avx512vnni = 0;
+int ceph_arch_intel_avx5124vnniw = 0;
+int ceph_arch_intel_avx5124fmaps = 0;
 
 #ifdef __x86_64__
 #include <cpuid.h>
@@ -36,6 +52,11 @@ int ceph_arch_intel_avx2 = 0;
 
 #ifndef _XCR_XMM_YMM_STATE_ENABLED_BY_OS
 #define _XCR_XMM_YMM_STATE_ENABLED_BY_OS 0x6
+#endif
+
+#ifndef _XCR_XMM_YMM_ZMM_STATE_ENABLED_BY_OS
+#define _XCR_XMM_YMM_ZMM_STATE_ENABLED_BY_OS \
+        ((0x7 << 5) | 0x6)
 #endif
 
 static inline int64_t _xgetbv(uint32_t index) {
@@ -86,6 +107,81 @@ static void detect_avx2(void) {
     }
 }
 
+static void detect_avx512(void) {
+    uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
+
+    uint32_t max_level = __get_cpuid_max(0, NULL);
+    if (max_level == 0) {
+        return;
+    }
+    __cpuid_count(1, 0, eax, ebx, ecx, edx);
+    if ((ecx & bit_OSXSAVE) == 0) {
+        return;
+    }
+    int64_t xcr_mask = _xgetbv(_XCR_XFEATURE_ENABLED_MASK);
+    if ((xcr_mask & _XCR_XMM_YMM_ZMM_STATE_ENABLED_BY_OS) == 0) {
+        return;
+    }
+    if (max_level < 7) {
+        return;
+    }
+    __cpuid_count(7, 0, eax, ebx, ecx, edx);
+    if ((ebx & bit_AVX512F) == 0) {
+        return;
+    }
+    ceph_arch_intel_avx512f = 1;
+
+    if (ebx & bit_AVX512ER) {
+        ceph_arch_intel_avx512er = 1;
+    }
+    if (ebx & bit_AVX512PF) {
+        ceph_arch_intel_avx512pf = 1;
+    }
+    if (ebx & bit_AVX512VL) {
+        ceph_arch_intel_avx512vl = 1;
+    }
+    if (ebx & bit_AVX512CD) {
+        ceph_arch_intel_avx512cd = 1;
+    }
+    if (ebx & bit_AVX512DQ) {
+        ceph_arch_intel_avx512dq = 1;
+    }
+    if (ebx & bit_AVX512BW) {
+        ceph_arch_intel_avx512bw = 1;
+    }
+    if (ebx & bit_AVX512IFMA) {
+        ceph_arch_intel_avx512ifma = 1;
+    }
+    if (ecx & bit_AVX512VBMI) {
+        ceph_arch_intel_avx512vbmi = 1;
+    }
+    if (ecx & bit_AVX512VPOPCNTDQ) {
+        ceph_arch_intel_avx512vpopcntdq = 1;
+    }
+    if (ecx & bit_AVX512VNNI) {
+        ceph_arch_intel_avx512vnni = 1;
+    }
+    if (edx & bit_AVX5124VNNIW) {
+        ceph_arch_intel_avx5124vnniw = 1;
+    }
+    if (edx & bit_AVX5124FMAPS) {
+        ceph_arch_intel_avx5124fmaps = 1;
+    }
+
+    if (ceph_arch_intel_avx512vl != 1)
+        return;
+
+    if (ecx & bit_AVX512VBMI2) {
+        ceph_arch_intel_avx512vbmi2 = 1;
+    }
+    if (ecx & bit_VAES) {
+        ceph_arch_intel_avx512vaes = 1;
+    }
+    if (ecx & bit_AVX512BITALG) {
+        ceph_arch_intel_avx512bitalg = 1;
+    }
+}
+
 int ceph_arch_intel_probe(void)
 {
     uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
@@ -120,6 +216,7 @@ int ceph_arch_intel_probe(void)
 
     detect_avx();
     detect_avx2();
+    detect_avx512();
 
     return 0;
 }
