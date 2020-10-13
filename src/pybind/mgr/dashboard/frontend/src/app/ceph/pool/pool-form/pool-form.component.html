@@ -325,6 +325,10 @@
                             [ngClass]="{'active': data.crushInfo}"
                             id="crush-info-button"
                             type="button"
+                            ngbTooltip="Placement and
+                            replication strategies or distribution policies that allow to
+                            specify how CRUSH places data replicas."
+                            i18n-ngbTooltip
                             (click)="data.crushInfo = !data.crushInfo">
                       <i [ngClass]="[icons.questionCircle]"
                          aria-hidden="true"></i>
