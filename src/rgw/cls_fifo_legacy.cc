@@ -442,7 +442,7 @@ int FIFO::process_journal(optional_yield y)
   auto new_max = info.max_push_part_num;
   l.unlock();
 
-  int r;
+  int r = 0;
   for (auto& [n, entry] : tmpjournal) {
     switch (entry.op) {
     case fifo::journal_entry::Op::create:
@@ -452,6 +452,7 @@ int FIFO::process_journal(optional_yield y)
       }
       break;
     case fifo::journal_entry::Op::set_head:
+      r = 0;
       if (entry.part_num > new_head) {
 	new_head = entry.part_num;
       }
@@ -497,12 +498,12 @@ int FIFO::process_journal(optional_yield y)
       canceled = false;
       break;
     }
-    _update_meta(fifo::update()
-		 .tail_part_num(tail_part_num)
-		 .head_part_num(head_part_num)
-		 .max_push_part_num(max_part_num)
-		 .journal_entries_rm(processed),
-		 objv, &canceled, y);
+    r = _update_meta(fifo::update()
+		     .tail_part_num(tail_part_num)
+		     .head_part_num(head_part_num)
+		     .max_push_part_num(max_part_num)
+		     .journal_entries_rm(processed),
+		     objv, &canceled, y);
     if (r < 0) break;
 
     if (canceled) {
@@ -589,8 +590,8 @@ int FIFO::_prepare_new_head(optional_yield y) {
   } else {
     bool canceled = true;
     for (auto i = 0; canceled && i < MAX_RACE_RETRIES; ++i) {
-      _update_meta(fifo::update{}.head_part_num(new_head_num),
-		   version, &canceled, y);
+      r = _update_meta(fifo::update{}.head_part_num(new_head_num),
+		       version, &canceled, y);
       if (r < 0)
 	break;
       std::unique_lock l(m);
@@ -872,8 +873,8 @@ int FIFO::list(int max_entries,
     auto part_oid = info.part_oid(part_num);
     l.unlock();
 
-    list_part(ioctx, part_oid, {}, ofs, max_entries, &entries,
-	      &part_more, &part_full, nullptr, y);
+    r = list_part(ioctx, part_oid, {}, ofs, max_entries, &entries,
+		  &part_more, &part_full, nullptr, y);
     if (r == -ENOENT) {
       r = read_meta(y);
       if (r < 0) return r;
@@ -939,7 +940,7 @@ int FIFO::trim(std::string_view markstr, bool exclusive, optional_yield y)
   auto pn = info.tail_part_num;
   l.unlock();
 
-  int r;
+  int r = 0;
   while (pn < part_num) {
     std::unique_lock l(m);
     auto max_part_size = info.params.max_part_size;
@@ -1059,10 +1060,10 @@ void FIFO::trim_callback(lr::completion_t, void* arg)
 	trimmer->cur = lr::Rados::aio_create_completion(arg,
 							&FIFO::trim_callback);
 	++trimmer->retries;
-	auto r = trimmer->fifo->_update_meta(fifo::update{}
-					     .tail_part_num(trimmer->part_num),
-			                     objv, &trimmer->canceled,
-                                             trimmer->cur);
+	r = trimmer->fifo->_update_meta(fifo::update{}
+					.tail_part_num(trimmer->part_num),
+			                objv, &trimmer->canceled,
+                                        trimmer->cur);
 	if (r < 0) {
 	  complete(trimmer->super, r);
 	  delete trimmer;
