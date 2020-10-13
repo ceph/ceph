@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+VERSION="0.1"
 DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-master-devel'
 DEFAULT_IMAGE_IS_MASTER = True
 LATEST_STABLE_RELEASE = 'octopus'
@@ -2637,10 +2638,10 @@ class CephContainer:
 @infer_image
 def command_version():
     # type: () -> int
-    out = CephContainer(args.image, 'ceph', ['--version']).run()
+    out = "cephadm script version %s\n" % VERSION
+    out += CephContainer(args.image, 'ceph', ['--version']).run()
     print(out.strip())
     return 0
-
 ##################################
 
 
@@ -5503,8 +5504,13 @@ def _get_parser():
     subparsers = parser.add_subparsers(help='sub-command')
 
     parser_version = subparsers.add_parser(
-        'version', help='get ceph version from container')
+        'version', help='get cephadm script version and ceph version from container')
     parser_version.set_defaults(func=command_version)
+    parser_version.add_argument(
+        '--cephadm',
+        action='version',
+        version=VERSION,
+        help='Only shows the cephadm script version')
 
     parser_pull = subparsers.add_parser(
         'pull', help='pull latest image version')

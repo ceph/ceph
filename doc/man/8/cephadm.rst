@@ -16,6 +16,7 @@ Synopsis
 |               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install}
 |               ...
 
+| **cephadm** **version** [-h] [--cephadm]
 
 | **cephadm** **pull**
 
@@ -493,6 +494,17 @@ Arguments:
 
 * [--fsid FSID]           cluster FSID
 * [--name NAME, -n NAME]  daemon name (type.id)
+
+
+version
+-------
+
+Provides information about the ceph container image used, the Ceph version included in the image,
+and the cephadm script version.
+
+Arguments:
+
+* [--cephadm]              only shows the cephadm script version
 
 
 Availability
