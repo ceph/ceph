@@ -700,8 +700,8 @@ int EntryReader::get_next_entry(ceph::buffer::list* pbl,
     *pofs = ofs;
   }
 
-  CLS_LOG(10, "%s():%d: pre_header.pre_size=%llu", __func__, __LINE__,
-	  pre_header.pre_size);
+  CLS_LOG(10, "%s():%d: pre_header.pre_size=%" PRIu64, __func__, __LINE__,
+	  uint64_t(pre_header.pre_size));
   r = seek(pre_header.pre_size);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): failed to seek: r=%d", __func__, r);

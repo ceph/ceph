@@ -24,6 +24,7 @@
 #include "ScrubStore.h"
 #include "Session.h"
 #include "objclass/objclass.h"
+#include "osd/ClassHandler.h"
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/ceph_crypto.h"
