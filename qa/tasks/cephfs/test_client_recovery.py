@@ -414,6 +414,9 @@ class TestClientRecovery(CephFSTestCase):
             # succeed
             self.wait_until_true(lambda: lock_taker.finished, timeout=10)
         finally:
+            # Tear down the background process
+            self.mount_a._kill_background(lock_holder)
+
             # teardown() doesn't quite handle this case cleanly, so help it out
             self.mount_a.kill()
             self.mount_a.kill_cleanup()
