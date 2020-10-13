@@ -148,7 +148,6 @@ static int log_index_operation(cls_method_context_t hctx,
   entry.op = op.op;
   entry.ver = ver;
   entry.state = CLS_RGW_STATE_COMPLETE;
-  entry.index_ver = index_ver;
   entry.tag = op.op_tag;
   entry.bilog_flags = op.bilog_flags;
   entry.zones_trace = op.zones_trace;
@@ -190,7 +189,6 @@ static int log_index_operation(cls_method_context_t hctx,
   entry.op = op;
   entry.ver = ver;
   entry.state = CLS_RGW_STATE_COMPLETE;
-  entry.index_ver = index_ver;
   entry.tag = tag;
   entry.bilog_flags = bilog_flags;
   if (owner) {
@@ -1045,7 +1043,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     return rc;
   }
 
-  entry.index_ver = header.ver;
   /* resetting entry flags, entry might have been previously a delete
    * marker */
   entry.flags = (entry.key.instance.empty() ?
@@ -2260,7 +2257,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
         stats.actual_size += cur_change.meta.size;
         header_changed = true;
-        cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;
         encode(cur_change, cur_state_bl);
         ret = cls_cxx_map_set_val(hctx, cur_change_key, &cur_state_bl);
