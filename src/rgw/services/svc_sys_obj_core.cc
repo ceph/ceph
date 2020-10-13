@@ -298,7 +298,7 @@ int RGWSI_SysObj_Core::set_attrs(const rgw_raw_obj& obj,
                                  map<string, bufferlist>& attrs,
                                  map<string, bufferlist> *rmattrs,
                                  RGWObjVersionTracker *objv_tracker,
-                                 optional_yield y)
+                                 bool exclusive, optional_yield y)
 {
   RGWSI_RADOS::Obj rados_obj;
   int r = get_rados_obj(zone_svc, obj, &rados_obj);
@@ -309,6 +309,9 @@ int RGWSI_SysObj_Core::set_attrs(const rgw_raw_obj& obj,
 
   librados::ObjectWriteOperation op;
 
+  if (exclusive) {
+    op.create(true); // exclusive create
+  }
   if (objv_tracker) {
     objv_tracker->prepare_op_for_write(&op);
   }
