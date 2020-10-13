@@ -1165,6 +1165,11 @@ function test_mon_mon()
   ceph mon feature set kraken --yes-i-really-mean-it
   expect_false ceph mon feature set abcd
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
+
+  # test mon stat
+  # don't check output, just ensure it does not fail.
+  ceph mon stat
+  ceph mon stat -f json | jq '.'
 }
 
 function test_mon_priority_and_weight()
