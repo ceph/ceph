@@ -38,8 +38,7 @@ public:
 
   virtual int log_trim(const RGWBucketInfo& bucket_info,
                        int shard_id,
-                       std::string& start_marker,
-                       std::string& end_marker) = 0;
+                       std::string& marker) = 0;
   virtual int log_list(const RGWBucketInfo& bucket_info,
                        int shard_id,
                        std::string& marker,
@@ -68,8 +67,7 @@ public:
 
   int log_trim(const RGWBucketInfo& bucket_info,
                int shard_id,
-               std::string& start_marker,
-               std::string& end_marker) override;
+               std::string& marker) override;
   int log_list(const RGWBucketInfo& bucket_info,
                int shard_id,
                std::string& marker,

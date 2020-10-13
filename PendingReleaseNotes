@@ -8,6 +8,7 @@
     single marker giving the end of the trimmed range.
   * Similarly the date ranges and marker ranges have been removed on
     the RESTful DATALog and MDLog list and trim operations.
+  * The same as above happened also to "bilog-trim"
 
 * ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
   a number of bugs and improves usability in terms of size specification and
