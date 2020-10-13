@@ -24,21 +24,10 @@ int RGWDebugLog(lua_State* L)
 {
   auto cct = reinterpret_cast<CephContext*>(lua_touserdata(L, lua_upvalueindex(1)));
 
-  constexpr auto NUM_RETURN = 0;
-
-  if (!lua_isstring(L, -1)) {
-    if (cct) {
-      ldout(cct, 1) << "Lua ERROR: missing/invalid 'message' parameter when calling Log"  << dendl;
-    }
-    return NUM_RETURN;
-  }
-  const char* message = lua_tostring(L, -1);
-  if (cct) {
-    ldout(cct, 20) << "Lua INFO: " << message << dendl;
-  }
-
-  return NUM_RETURN;
-};
+  auto message = luaL_checkstring(L, 1);
+  ldout(cct, 20) << "Lua INFO: " << message << dendl;
+  return 0;
+}
 
 void create_debug_action(lua_State* L, CephContext* cct) {
   lua_pushlightuserdata(L, cct);
