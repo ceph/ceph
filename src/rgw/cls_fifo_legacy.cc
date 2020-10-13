@@ -668,6 +668,18 @@ int FIFO::_prepare_new_part(bool is_head, std::uint64_t tid, optional_yield y)
 		 << " entering: tid=" << tid << dendl;
   std::unique_lock l(m);
   std::vector jentries = { info.next_journal_entry(generate_tag()) };
+  if (info.journal.find(jentries.front().part_num) != info.journal.end()) {
+    l.unlock();
+    ldout(cct, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		  << " new part journaled, but not processed: tid="
+		  << tid << dendl;
+    auto r = process_journal(tid, y);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		 << " process_journal failed: r=" << r << " tid=" << tid << dendl;
+    }
+    return r;
+  }
   std::int64_t new_head_part_num = info.head_part_num;
   auto version = info.version;
 
