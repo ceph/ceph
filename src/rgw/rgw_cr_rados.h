@@ -341,13 +341,14 @@ class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
   RGWSI_SysObj *svc;
   rgw_raw_obj obj;
   map<string, bufferlist> attrs;
+  bool exclusive;
 
 protected:
   int _send_request() override;
 public:
   RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       map<string, bufferlist> _attrs);
+                       map<string, bufferlist> _attrs, bool exclusive);
 
   RGWObjVersionTracker objv_tracker;
 };
@@ -551,16 +552,18 @@ class RGWSimpleRadosWriteAttrsCR : public RGWSimpleCoroutine {
 
   rgw_raw_obj obj;
   map<string, bufferlist> attrs;
+  bool exclusive;
   RGWAsyncPutSystemObjAttrs *req = nullptr;
 
 public:
   RGWSimpleRadosWriteAttrsCR(RGWAsyncRadosProcessor *_async_rados,
                              RGWSI_SysObj *_svc, const rgw_raw_obj& _obj,
                              map<string, bufferlist> _attrs,
-                             RGWObjVersionTracker *objv_tracker = nullptr)
+                             RGWObjVersionTracker *objv_tracker = nullptr,
+                             bool exclusive = false)
     : RGWSimpleCoroutine(_svc->ctx()), async_rados(_async_rados),
       svc(_svc), objv_tracker(objv_tracker), obj(_obj),
-      attrs(std::move(_attrs)) {
+      attrs(std::move(_attrs)), exclusive(exclusive) {
   }
   ~RGWSimpleRadosWriteAttrsCR() override {
     request_cleanup();
@@ -575,7 +578,8 @@ public:
 
   int send_request() override {
     req = new RGWAsyncPutSystemObjAttrs(this, stack->create_completion_notifier(),
-			           svc, objv_tracker, obj, std::move(attrs));
+			           svc, objv_tracker, obj, std::move(attrs),
+                                   exclusive);
     async_rados->queue(req);
     return 0;
   }
