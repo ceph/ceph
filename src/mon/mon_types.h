@@ -35,21 +35,6 @@
 #define PAXOS_CONFIG     8
 #define PAXOS_NUM        9
 
-inline const char *get_paxos_name(int p) {
-  switch (p) {
-  case PAXOS_MDSMAP: return "mdsmap";
-  case PAXOS_MONMAP: return "monmap";
-  case PAXOS_OSDMAP: return "osdmap";
-  case PAXOS_LOG: return "logm";
-  case PAXOS_AUTH: return "auth";
-  case PAXOS_MGR: return "mgr";
-  case PAXOS_MGRSTAT: return "mgrstat";
-  case PAXOS_HEALTH: return "health";
-  case PAXOS_CONFIG: return "config";
-  default: ceph_abort(); return 0;
-  }
-}
-
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
 
 extern const std::string CONFIG_PREFIX;
