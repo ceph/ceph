@@ -71,7 +71,9 @@
 #define MDS_INO_STRAY_INDEX(i) (((unsigned (i)) - MDS_INO_STRAY_OFFSET) % NUM_STRAY)
 
 typedef int32_t mds_rank_t;
-constexpr mds_rank_t MDS_RANK_NONE = -1;
+constexpr mds_rank_t MDS_RANK_NONE		= -1;
+constexpr mds_rank_t MDS_RANK_EPHEMERAL_DIST	= -2;
+constexpr mds_rank_t MDS_RANK_EPHEMERAL_RAND	= -3;
 
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;

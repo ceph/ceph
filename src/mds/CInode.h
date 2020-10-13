@@ -1052,24 +1052,22 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     return !projected_parent.empty();
   }
 
-  mds_rank_t get_export_pin(bool inherit=true, bool ephemeral=true) const;
+  mds_rank_t get_export_pin(bool inherit=true) const;
+  void check_pin_policy(mds_rank_t target);
   void set_export_pin(mds_rank_t rank);
   void queue_export_pin(mds_rank_t target);
   void maybe_export_pin(bool update=false);
 
-  void check_pin_policy();
+  void set_ephemeral_pin(bool dist, bool rand);
+  void clear_ephemeral_pin(bool dist, bool rand);
 
-  void set_ephemeral_dist(bool yes);
-  void maybe_ephemeral_dist(bool update=false);
-  void maybe_ephemeral_dist_children(bool update=false);
   void setxattr_ephemeral_dist(bool val=false);
   bool is_ephemeral_dist() const {
     return state_test(STATE_DISTEPHEMERALPIN);
   }
 
-  double get_ephemeral_rand(bool inherit=true) const;
-  void set_ephemeral_rand(bool yes);
-  void maybe_ephemeral_rand(bool fresh=false, double threshold=-1.0);
+  double get_ephemeral_rand() const;
+  void maybe_ephemeral_rand(double threshold=-1.0);
   void setxattr_ephemeral_rand(double prob=0.0);
   bool is_ephemeral_rand() const {
     return state_test(STATE_RANDEPHEMERALPIN);
@@ -1082,13 +1080,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_ephemerally_pinned() const {
     return state_test(STATE_DISTEPHEMERALPIN) ||
            state_test(STATE_RANDEPHEMERALPIN);
-  }
-  bool is_exportable(mds_rank_t dest) const;
-
-  void maybe_pin() {
-    maybe_export_pin();
-    maybe_ephemeral_dist();
-    maybe_ephemeral_rand();
   }
 
   void print(std::ostream& out) override;

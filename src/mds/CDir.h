@@ -439,10 +439,7 @@ public:
            (int)get_frag_size() > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
-  bool should_merge() const {
-    return get_frag() != frag_t() &&
-	   (int)get_frag_size() < g_conf()->mds_bal_merge_size;
-  }
+  bool should_merge() const;
 
   mds_authority_t authority() const override;
   mds_authority_t get_dir_auth() const { return dir_auth; }
@@ -546,6 +543,9 @@ public:
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
 
   // -- import/export --
+  mds_rank_t get_export_pin(bool inherit=true) const;
+  bool is_exportable(mds_rank_t dest) const;
+
   void encode_export(ceph::buffer::list& bl);
   void finish_export();
   void abort_export() {
