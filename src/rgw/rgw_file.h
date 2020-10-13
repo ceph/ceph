@@ -216,7 +216,7 @@ namespace rgw {
       struct timespec mtime;
       struct timespec atime;
       uint32_t version;
-      State() : dev(0), size(0), nlink(1), owner_uid(0), owner_gid(0),
+      State() : dev(0), size(0), nlink(1), owner_uid(0), owner_gid(0), unix_mode(0),
 		ctime{0,0}, mtime{0,0}, atime{0,0}, version(0) {}
     } state;
 
@@ -1355,16 +1355,16 @@ public:
   }
 
   int header_init() override {
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
 
     /* XXX derp derp derp */
-    s->relative_uri = "/";
-    s->info.request_uri = "/"; // XXX
-    s->info.effective_uri = "/";
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = "/";
+    state->info.request_uri = "/"; // XXX
+    state->info.effective_uri = "/";
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
@@ -1491,17 +1491,17 @@ public:
   }
 
   int header_init() override {
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
 
     /* XXX derp derp derp */
     std::string uri = "/" + rgw_fh->bucket_name() + "/";
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -1551,7 +1551,7 @@ public:
   }
 
   void send_response() override {
-    struct req_state* s = get_state();
+    struct req_state* state = get_state();
     for (const auto& iter : objs) {
 
       std::string_view sref {iter.key.name};
@@ -1569,7 +1569,7 @@ public:
 
       lsubdout(cct, rgw, 15) << "RGWReaddirRequest "
 			     << __func__ << " "
-			     << "list uri=" << s->relative_uri << " "
+			     << "list uri=" << state->relative_uri << " "
 			     << " prefix=" << prefix << " "
 			     << " obj path=" << iter.key.name
 			     << " (" << sref << ")" << ""
@@ -1617,7 +1617,7 @@ public:
 
       lsubdout(cct, rgw, 15) << "RGWReaddirRequest "
 			     << __func__ << " "
-			     << "list uri=" << s->relative_uri << " "
+			     << "list uri=" << state->relative_uri << " "
 			     << " prefix=" << prefix << " "
 			     << " cpref=" << sref
 			     << dendl;
@@ -1696,16 +1696,16 @@ public:
   }
 
   int header_init() override {
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
 
     std::string uri = "/" + rgw_fh->bucket_name() + "/";
-    s->relative_uri = uri;
-    s->info.request_uri = uri;
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri;
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -1779,26 +1779,26 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "PUT";
-    s->op = OP_PUT;
+    struct req_state* state = get_state();
+    state->info.method = "PUT";
+    state->op = OP_PUT;
 
     string uri = "/" + bucket_name;
     /* XXX derp derp derp */
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
 
   int get_params() override {
-    struct req_state* s = get_state();
-    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    struct req_state* state = get_state();
+    RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
-    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+    int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
     policy = s3policy;
     return ret;
   }
@@ -1839,17 +1839,17 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "DELETE";
-    s->op = OP_DELETE;
+    struct req_state* state = get_state();
+    state->info.method = "DELETE";
+    state->op = OP_DELETE;
 
     string uri = "/" + bucket_name;
     /* XXX derp derp derp */
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
@@ -1898,29 +1898,29 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "PUT";
-    s->op = OP_PUT;
+    struct req_state* state = get_state();
+    state->info.method = "PUT";
+    state->op = OP_PUT;
 
     /* XXX derp derp derp */
     std::string uri = make_uri(bucket_name, obj_name);
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     /* XXX required in RGWOp::execute() */
-    s->content_length = bl.length();
+    state->content_length = bl.length();
 
     return 0;
   }
 
   int get_params() override {
-    struct req_state* s = get_state();
-    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    struct req_state* state = get_state();
+    RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
-    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+    int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
     policy = s3policy;
     return ret;
   }
@@ -1992,17 +1992,17 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
 
     /* XXX derp derp derp */
-    s->relative_uri = make_uri(rgw_fh->bucket_name(),
+    state->relative_uri = make_uri(rgw_fh->bucket_name(),
 			       rgw_fh->relative_object_name());
-    s->info.request_uri = s->relative_uri; // XXX
-    s->info.effective_uri = s->relative_uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->info.request_uri = state->relative_uri; // XXX
+    state->info.effective_uri = state->relative_uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
@@ -2074,17 +2074,17 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "DELETE";
-    s->op = OP_DELETE;
+    struct req_state* state = get_state();
+    state->info.method = "DELETE";
+    state->op = OP_DELETE;
 
     /* XXX derp derp derp */
     std::string uri = make_uri(bucket_name, obj_name);
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
@@ -2152,16 +2152,16 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
 
     /* XXX derp derp derp */
-    s->relative_uri = make_uri(bucket_name, obj_name);
-    s->info.request_uri = s->relative_uri; // XXX
-    s->info.effective_uri = s->relative_uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = make_uri(bucket_name, obj_name);
+    state->info.request_uri = state->relative_uri; // XXX
+    state->info.effective_uri = state->relative_uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
@@ -2229,16 +2229,16 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
 
     /* XXX derp derp derp */
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
@@ -2295,17 +2295,17 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
 
     /* XXX derp derp derp */
     std::string uri = "/" + rgw_fh->bucket_name() + "/";
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -2322,39 +2322,41 @@ public:
   }
 
   void send_response() override {
-    struct req_state* s = get_state();
+    struct req_state* state = get_state();
     // try objects
     for (const auto& iter : objs) {
       auto& name = iter.key.name;
       lsubdout(cct, rgw, 15) << "RGWStatLeafRequest "
 			     << __func__ << " "
-			     << "list uri=" << s->relative_uri << " "
+			     << "list uri=" << state->relative_uri << " "
 			     << " prefix=" << prefix << " "
 			     << " obj path=" << name << ""
 			     << " target = " << path << ""
 			     << dendl;
       /* XXX is there a missing match-dir case (trailing '/')? */
       matched = true;
-      if (name == path)
+      if (name == path) {
 	exact_matched = true;
-      return;
+        return;
+      }
     }
     // try prefixes
     for (auto& iter : common_prefixes) {
       auto& name = iter.first;
       lsubdout(cct, rgw, 15) << "RGWStatLeafRequest "
 			     << __func__ << " "
-			     << "list uri=" << s->relative_uri << " "
+			     << "list uri=" << state->relative_uri << " "
 			     << " prefix=" << prefix << " "
 			     << " pref path=" << name << " (not chomped)"
 			     << " target = " << path << ""
 			     << dendl;
       matched = true;
       /* match-dir case (trailing '/') */
-      if (name == prefix + "/")
+      if (name == prefix + "/") {
 	exact_matched = true;
-      is_dir = true;
-      break;
+        is_dir = true;
+        return;
+      }
     }
   }
 
@@ -2390,10 +2392,12 @@ public:
 		  RGWFileHandle* _fh, const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(store->ctx(), std::move(_user)),
       bucket_name(_bname), obj_name(_oname),
-      rgw_fh(_fh), filter(nullptr), real_ofs(0),
+      rgw_fh(_fh), filter(nullptr), timer_id(0), real_ofs(0),
       bytes_written(0), eio(false) {
 
-    int ret = header_init();
+    // in ctr this is not a virtual call
+    // invoking this classes's header_init()
+    int ret = RGWWriteRequest::header_init();
     if (ret == 0) {
       ret = init_from_header(store, get_state());
     }
@@ -2415,26 +2419,26 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "PUT";
-    s->op = OP_PUT;
+    struct req_state* state = get_state();
+    state->info.method = "PUT";
+    state->op = OP_PUT;
 
     /* XXX derp derp derp */
     std::string uri = make_uri(bucket_name, obj_name);
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
 
   int get_params() override {
-    struct req_state* s = get_state();
-    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    struct req_state* state = get_state();
+    RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
-    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+    int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
     policy = s3policy;
     return ret;
   }
@@ -2507,9 +2511,9 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "PUT"; // XXX check
-    s->op = OP_PUT;
+    struct req_state* state = get_state();
+    state->info.method = "PUT"; // XXX check
+    state->op = OP_PUT;
 
     src_bucket_name = src_parent->bucket_name();
     // need s->src_bucket_name?
@@ -2533,11 +2537,11 @@ public:
     emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
 
 #if 0 /* XXX needed? */
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 #endif
 
     return 0;
@@ -2585,17 +2589,17 @@ public:
 
   int header_init() override {
 
-    struct req_state* s = get_state();
-    s->info.method = "PUT";
-    s->op = OP_PUT;
+    struct req_state* state = get_state();
+    state->info.method = "PUT";
+    state->op = OP_PUT;
 
     /* XXX derp derp derp */
     std::string uri = make_uri(bucket_name, obj_name);
-    s->relative_uri = uri;
-    s->info.request_uri = uri; // XXX
-    s->info.effective_uri = uri;
-    s->info.request_params = "";
-    s->info.domain = ""; /* XXX ? */
+    state->relative_uri = uri;
+    state->info.request_uri = uri; // XXX
+    state->info.effective_uri = uri;
+    state->info.request_params = "";
+    state->info.domain = ""; /* XXX ? */
 
     return 0;
   }
@@ -2633,9 +2637,9 @@ public:
   }
 
   int header_init() override {
-    struct req_state* s = get_state();
-    s->info.method = "GET";
-    s->op = OP_GET;
+    struct req_state* state = get_state();
+    state->info.method = "GET";
+    state->op = OP_GET;
     return 0;
   }
 
