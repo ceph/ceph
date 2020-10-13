@@ -132,6 +132,8 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   list_op.max = op.max;
   list_op.start_marker = op.marker;
 
+  CLS_LOG(5, "INFO: cls_rgw_gc_queue_list_entries(): num_entries requested: %lu and start marker: %s\n", list_op.max, list_op.start_marker.c_str());
+
   cls_rgw_gc_list_ret list_ret;
   uint32_t num_entries = 0; //Entries excluding the deferred ones
   bool is_truncated = true;
@@ -145,6 +147,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
     }
     is_truncated = op_ret.is_truncated;
     next_marker = op_ret.next_marker;
+    CLS_LOG(5, "INFO: cls_rgw_gc_queue_list_entries(): returned truncated flag: %u and next marker: %s\n", is_truncated, next_marker.c_str());
   
     if (op_ret.entries.size()) {
       for (auto it : op_ret.entries) {
@@ -220,8 +223,11 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   list_ret.truncated = is_truncated;
   if (list_ret.truncated) {
     list_ret.next_marker = next_marker;
+  } else {
+    list_ret.next_marker.clear();
   }
-  CLS_LOG(5, "INFO: cls_rgw_gc_queue_list_entries(): truncated flag: %u and next marker: %s\n", list_ret.truncated, list_ret.next_marker);
+
+  CLS_LOG(5, "INFO: cls_rgw_gc_queue_list_entries(): truncated flag: %u and next marker: %s\n", list_ret.truncated, list_ret.next_marker.c_str());
   out->clear();
   encode(list_ret, *out);
   return 0;

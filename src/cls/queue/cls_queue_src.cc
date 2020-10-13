@@ -265,9 +265,13 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     op_ret.is_truncated = false;
     return 0;
   }
-
+  CLS_LOG(10, "INFO: queue_list_entries(): Input start marker is %s", op.start_marker.c_str());
   cls_queue_marker start_marker;
-  start_marker.from_str(op.start_marker.c_str());
+  int ret = 0;
+  ret = start_marker.from_str(op.start_marker.c_str());
+  if (ret < 0) {
+    CLS_LOG(10, "INFO: queue_list_entries(): Unable to parse start marker: %s\n", op.start_marker.c_str());
+  }
   cls_queue_marker next_marker = {0, 0};
 
   uint64_t start_offset = 0, gen = 0;
@@ -451,8 +455,8 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     op_ret.is_truncated = false;
   }
 
-  CLS_LOG(5, "INFO: queue_list_entries(): next offset: %s", next_marker.to_str().c_str());
   op_ret.next_marker = next_marker.to_str();
+  CLS_LOG(5, "INFO: queue_list_entries(): next offset: %s and truncated is %u\n", op_ret.next_marker.c_str(), op_ret.is_truncated);
 
   return 0;
 }
