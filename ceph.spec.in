@@ -815,7 +815,7 @@ Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{relea
 Provides:	python-rgw = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-rgw < %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rgw
-This package contains Python 3 libraries for interacting with Cephs RADOS
+This package contains Python 3 libraries for interacting with Ceph RADOS
 gateway.
 
 %package -n python%{python3_pkgversion}-rados
@@ -829,7 +829,7 @@ Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Provides:	python-rados = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-rados < %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
-This package contains Python 3 libraries for interacting with Cephs RADOS
+This package contains Python 3 libraries for interacting with Ceph RADOS
 object store.
 
 %if 0%{with libradosstriper}
@@ -904,7 +904,7 @@ Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{relea
 Provides:	python-rbd = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-rbd < %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rbd
-This package contains Python 3 libraries for interacting with Cephs RADOS
+This package contains Python 3 libraries for interacting with Ceph RADOS
 block device.
 
 %package -n libcephfs2
@@ -935,7 +935,7 @@ Provides:	libcephfs2-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	libcephfs2-devel < %{_epoch_prefix}%{version}-%{release}
 %description -n libcephfs-devel
 This package contains libraries and headers needed to develop programs
-that use Cephs distributed file system.
+that use Ceph distributed file system.
 
 %if 0%{with jaeger}
 %package -n libjaeger
@@ -949,6 +949,7 @@ Provides:	libthrift.so.0.13.0()(64bit)
 %description -n libjaeger
 This package contains libraries needed to provide distributed
 tracing for Ceph.
+%endif
 
 %package -n python%{python3_pkgversion}-cephfs
 Summary:	Python 3 libraries for Ceph distributed file system
@@ -962,7 +963,7 @@ Requires:	python%{python3_pkgversion}-ceph-argparse = %{_epoch_prefix}%{version}
 Provides:	python-cephfs = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-cephfs < %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-cephfs
-This package contains Python 3 libraries for interacting with Cephs distributed
+This package contains Python 3 libraries for interacting with Ceph distributed
 file system.
 
 %package -n python%{python3_pkgversion}-ceph-argparse
@@ -1107,7 +1108,7 @@ Summary:        Prometheus alerts for a Ceph deployment
 BuildArch:      noarch
 Group:          System/Monitoring
 %description prometheus-alerts
-This package provides Ceph’s default alerts for Prometheus.
+This package provides Ceph default alerts for Prometheus.
 
 #################################################################################
 # common
