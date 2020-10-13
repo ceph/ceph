@@ -198,21 +198,21 @@ void AioCompletion::set_request_count(uint32_t count) {
 
 void AioCompletion::complete_request(ssize_t r)
 {
-  uint32_t previous_pending_count = pending_count--;
-  ceph_assert(previous_pending_count > 0);
-  auto pending_count = previous_pending_count - 1;
-
   ceph_assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
   if (r > 0) {
     rval += r;
-  } else if (r != -EEXIST) {
+  } else if (r < 0 && r != -EEXIST) {
     // might race w/ another thread setting an error code but
     // first one wins
     int zero = 0;
     error_rval.compare_exchange_strong(zero, r);
   }
+
+  uint32_t previous_pending_count = pending_count--;
+  ceph_assert(previous_pending_count > 0);
+  auto pending_count = previous_pending_count - 1;
 
   ldout(cct, 20) << "cb=" << complete_cb << ", "
                  << "pending=" << pending_count << dendl;
