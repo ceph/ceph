@@ -305,12 +305,19 @@ namespace PriorityCache
 
       // Commit the new cache size
       int64_t committed = it->second->commit_cache_size(tuned_mem);
-
       // Update the perf counters
       int64_t alloc = it->second->get_cache_bytes();
 
       l.second->set(indexes[it->first][Extra::E_RESERVED], committed - alloc);
       l.second->set(indexes[it->first][Extra::E_COMMITTED], committed);
+    }
+  }
+
+  void Manager::shift_bins()
+  {
+    for (auto &l : loggers) {
+      auto it = caches.find(l.first);
+      it->second->shift_bins();
     }
   }
 
