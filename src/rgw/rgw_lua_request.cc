@@ -80,7 +80,7 @@ struct ResponseMetaTable : public EmptyMetaTable {
     } else {
       throw_unknown_field(index, TableName());
     }
-    return ONE_RETURNVAL;
+    return NO_RETURNVAL;
   }
 };
 
@@ -244,7 +244,22 @@ struct ObjectMetaTable : public EmptyMetaTable {
   }
 };
 
-template<typename MapType=std::map<std::string, std::string>>
+typedef int MetaTableClosure(lua_State* L);
+
+template<typename MapType>
+int StringMapWriteableNewIndex(lua_State* L) {
+  const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+  ceph_assert(lua_isstring(L, -1));
+  ceph_assert(lua_isstring(L, -2));
+  const char* value = lua_tostring(L, -1);
+  const char* index = lua_tostring(L, -2);
+  map->insert_or_assign(index, value);
+  return NO_RETURNVAL;
+}
+
+template<typename MapType=std::map<std::string, std::string>,
+  MetaTableClosure NewIndex=EmptyMetaTable::NewIndexClosure>
 struct StringMapMetaTable : public EmptyMetaTable {
 
   static std::string TableName() {return "StringMap";}
@@ -263,6 +278,10 @@ struct StringMapMetaTable : public EmptyMetaTable {
       pushstring(L, it->second);
     }
     return ONE_RETURNVAL;
+  }
+
+  static int NewIndexClosure(lua_State* L) {
+    return NewIndex(L);
   }
 
   static int PairsClosure(lua_State* L) {
@@ -628,7 +647,7 @@ struct HTTPMetaTable : public EmptyMetaTable {
       create_metatable<StringMapMetaTable<>>(L, false, 
           const_cast<std::map<std::string, std::string>*>(&(info->args.get_sub_resources())));
     } else if (strcasecmp(index, "Metadata") == 0) {
-      create_metatable<StringMapMetaTable<meta_map_t>>(L, false, &(info->x_meta_map));
+      create_metatable<StringMapMetaTable<meta_map_t, StringMapWriteableNewIndex<meta_map_t>>>(L, false, &(info->x_meta_map));
     } else if (strcasecmp(index, "Host") == 0) {
       pushstring(L, info->host);
     } else if (strcasecmp(index, "Method") == 0) {
