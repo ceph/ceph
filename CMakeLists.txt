@@ -354,6 +354,11 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" ON)
+if(WITH_JAEGER)
+  set(HAVE_JAEGER TRUE)
+endif()
+
 option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
 if(WITH_BOOST_CONTEXT)
   set(HAVE_BOOST_CONTEXT ON)

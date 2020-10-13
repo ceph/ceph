@@ -386,6 +386,51 @@ set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
 
+if(WITH_JAEGER)
+  find_package(yaml-cpp 0.6.0)
+  if(NOT yaml-cpp_FOUND)
+    set(jaeger_libs
+      ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6.2
+      ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6
+      ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so)
+    execute_process(COMMAND bash -c "echo 'usr/lib/libyaml-cpp.so.*' >> debian/libjaeger.install"
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      RESULT_VARIABLE result
+      OUTPUT_VARIABLE out)
+    message(STATUS "result ${result}")
+  endif()
+  include(IncludeJaeger)
+  add_library(jaeger-base INTERFACE)
+  add_dependencies(common-objs
+  yaml-cpp::yaml-cpp
+  opentracing::libopentracing
+  thrift::libthrift
+  jaegertracing::libjaegertracing)
+  target_link_libraries(jaeger-base INTERFACE
+  yaml-cpp::yaml-cpp
+  opentracing::libopentracing
+  thrift::libthrift
+  jaegertracing::libjaegertracing)
+  include_directories(${CMAKE_BINARY_DIR}/external/include)
+  #with CMake 3.12+ the following can be replaced by:
+  #target_link_libraries(common-objs jaeger-base)
+  install(DIRECTORY ${CMAKE_BINARY_DIR}/external/include/jaegertracing
+    ${CMAKE_BINARY_DIR}/external/include/opentracing
+    ${CMAKE_BINARY_DIR}/external/include/thrift
+     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+   list(APPEND jaeger_libs
+    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so
+    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
+    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0
+    ${CMAKE_BINARY_DIR}/external/lib/libthrift.so
+    ${CMAKE_BINARY_DIR}/external/lib/libthrift.so.0.13.0)
+  install(FILES ${jaeger_libs}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
 add_subdirectory(common)
@@ -444,6 +489,10 @@ endif()
 
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
+endif()
+
+if(WITH_JAEGER)
+  list(APPEND ceph_common_deps jaeger-base)
 endif()
 
 if(WIN32)

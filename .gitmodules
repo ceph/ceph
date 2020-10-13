@@ -70,3 +70,15 @@
 [submodule "s3select"]
 	path = src/s3select
 	url = https://github.com/ceph/s3select.git
+[submodule "src/jaegertracing/opentracing-cpp"]
+	path = src/jaegertracing/opentracing-cpp
+	url = https://github.com/opentracing/opentracing-cpp.git
+	branch = v1.6.0
+[submodule "src/jaegertracing/jaeger-client-cpp"]
+	path = src/jaegertracing/jaeger-client-cpp
+	url = https://github.com/ideepika/jaeger-client-cpp.git
+	branch = hunter-disabled
+[submodule "src/jaegertracing/thrift"]
+	path = src/jaegertracing/thrift
+	url = https://github.com/apache/thrift.git
+	branch = 0.13.0

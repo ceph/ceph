@@ -91,6 +91,10 @@ if(WITH_LTTNG)
   add_dependencies(os bluestore-tp)
 endif()
 
+if(WITH_JAEGER)
+  target_link_libraries(os jaeger-base)
+endif()
+
 target_link_libraries(os kv)
 
 add_dependencies(os compressor_plugins)

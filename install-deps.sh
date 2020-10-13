@@ -284,9 +284,15 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
+                $SUDO apt-get install -y nlohmann-json-dev
                 ;;
             *Disco*)
                 [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.67-all-dev
+                $SUDO apt-get install -y nlohmann-json-dev
+                ;;
+	    *Focal*)
+                [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.71-all-dev
+                $SUDO apt-get install -y nlohmann-json3-dev
                 ;;
             *)
                 $SUDO apt-get install -y gcc

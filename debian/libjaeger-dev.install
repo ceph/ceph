@@ -1,0 +1,6 @@
+usr/include/thrift
+usr/include/jaegertracing
+usr/include/opentracing
+usr/lib/libjaegertracing.so
+usr/lib/libopentracing.so
+usr/lib/libthrift.so
