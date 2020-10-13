@@ -409,18 +409,20 @@ struct Updater {
 
 void FIFO::update_callback(lr::completion_t, void* arg)
 {
-  auto updater = static_cast<Updater*>(arg);
+  std::unique_ptr<Updater> updater(static_cast<Updater*>(arg));
   auto cct = updater->fifo->cct;
   auto tid = updater->tid;
   ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " entering: tid=" << tid << dendl;
   if (!updater->reread) {
+    ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		   << " handling async update_meta: tid="
+		   << tid << dendl;
     int r = updater->cur->get_return_value();
     if (r < 0 && r != -ECANCELED) {
       lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " update failed: r=" << r << " tid=" << tid << dendl;
       complete(updater->super, r);
-      delete updater;
       return;
     }
     bool canceled = (r == -ECANCELED);
@@ -435,17 +437,10 @@ void FIFO::update_callback(lr::completion_t, void* arg)
 	canceled = true;
       }
     }
-    if (!canceled) {
-      if (updater->pcanceled)
-	*updater->pcanceled = false;
-      ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		     << " completing: tid=" << tid << dendl;
-      complete(updater->super, 0);
-    } else {
+    if (canceled) {
       updater->cur->release();
       updater->cur = lr::Rados::aio_create_completion(
 	arg, &FIFO::update_callback);
-      assert(uintptr_t(updater->cur) >= 0x1000);
       updater->reread = true;
       auto r = updater->fifo->read_meta(tid, updater->cur);
       if (r < 0) {
@@ -453,27 +448,37 @@ void FIFO::update_callback(lr::completion_t, void* arg)
 		   << " failed dispatching read_meta: r=" << r << " tid="
 		   << tid << dendl;
 	complete(updater->super, r);
-	delete updater;
+      } else {
+	updater.release();
       }
+      return;
     }
-  } else {
-    int r = updater->cur->get_return_value();
-    if (r < 0 && updater->pcanceled) {
+    if (updater->pcanceled)
       *updater->pcanceled = false;
-    } else if (r >= 0 && updater->pcanceled) {
-      *updater->pcanceled = true;
-    }
-    if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << " failed dispatching read_meta: r=" << r << " tid="
-		 << tid << dendl;
-    } else {
-      ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		     << " completing: tid=" << tid << dendl;
-    }
-    complete(updater->super, r);
-    delete updater;
+    ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		   << " completing: tid=" << tid << dendl;
+    complete(updater->super, 0);
+    return;
   }
+
+  ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		 << " handling async read_meta: tid="
+		 << tid << dendl;
+  int r = updater->cur->get_return_value();
+  if (r < 0 && updater->pcanceled) {
+    *updater->pcanceled = false;
+  } else if (r >= 0 && updater->pcanceled) {
+    *updater->pcanceled = true;
+  }
+  if (r < 0) {
+    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	       << " failed dispatching read_meta: r=" << r << " tid="
+	       << tid << dendl;
+  } else {
+    ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		   << " completing: tid=" << tid << dendl;
+  }
+  complete(updater->super, r);
 }
 
 int FIFO::_update_meta(const fifo::update& update,
@@ -484,17 +489,15 @@ int FIFO::_update_meta(const fifo::update& update,
 		 << " entering: tid=" << tid << dendl;
   lr::ObjectWriteOperation op;
   update_meta(&op, info.version, update);
-  auto updater = new Updater(this, c, update, version, pcanceled, tid);
-  lr::AioCompletion* cur = lr::Rados::aio_create_completion(
-    static_cast<void*>(updater), &FIFO::update_callback);
-  updater->cur = cur;
-  assert(uintptr_t(updater->cur) >= 0x1000);
-  auto r = ioctx.aio_operate(oid, cur, &op);
+  auto updater = std::make_unique<Updater>(this, c, update, version, pcanceled,
+					   tid);
+  auto r = ioctx.aio_operate(oid, updater->cur, &op);
   if (r < 0) {
     lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " failed dispatching update_meta: r=" << r << " tid="
 	       << tid << dendl;
-    delete updater;
+  } else {
+    updater.release();
   }
   return r;
 }
@@ -971,7 +974,7 @@ struct Reader {
 
 void FIFO::read_callback(lr::completion_t, void* arg)
 {
-  auto reader = static_cast<Reader*>(arg);
+  std::unique_ptr<Reader> reader(static_cast<Reader*>(arg));
   auto cct = reader->fifo->cct;
   auto tid = reader->tid;
   ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -998,7 +1001,6 @@ void FIFO::read_callback(lr::completion_t, void* arg)
 	       << " tid=" << tid << dendl;
   }
   complete(reader->super, r);
-  delete reader;
 }
 
 int FIFO::read_meta(std::uint64_t tid, lr::AioCompletion* c)
@@ -1009,14 +1011,15 @@ int FIFO::read_meta(std::uint64_t tid, lr::AioCompletion* c)
   fifo::op::get_meta gm;
   cb::list in;
   encode(gm, in);
-  auto reader = new Reader(this, c, tid);
+  auto reader = std::make_unique<Reader>(this, c, tid);
   auto r = ioctx.aio_exec(oid, reader->cur, fifo::op::CLASS,
 			  fifo::op::GET_META, in, &reader->bl);
   if (r < 0) {
     lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " failed scheduling read_meta r=" << r
 	       << " tid=" << tid << dendl;
-    delete reader;
+  } else {
+    reader.release();
   }
   return r;
 }
@@ -1360,7 +1363,7 @@ struct Trimmer {
 
 void FIFO::trim_callback(lr::completion_t, void* arg)
 {
-  auto trimmer = static_cast<Trimmer*>(arg);
+  std::unique_ptr<Trimmer> trimmer(static_cast<Trimmer*>(arg));
   auto cct = trimmer->fifo->cct;
   auto tid = trimmer->tid;
   ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -1374,8 +1377,12 @@ void FIFO::trim_callback(lr::completion_t, void* arg)
     lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " trim failed: r=" << r << " tid=" << tid << dendl;
     complete(trimmer->super, r);
-    delete trimmer;
-  } else if (!trimmer->update) {
+    return;
+  }
+
+  if (!trimmer->update) {
+    ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		   << " handling preceding trim callback: tid=" << tid << dendl;
     trimmer->retries = 0;
     if (trimmer->pn < trimmer->part_num) {
       std::unique_lock l(trimmer->fifo->m);
@@ -1389,57 +1396,63 @@ void FIFO::trim_callback(lr::completion_t, void* arg)
 	lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " trim failed: r=" << r << " tid=" << tid << dendl;
 	complete(trimmer->super, r);
-	delete trimmer;
+      } else {
+	trimmer.release();
       }
+      return;
+    }
+
+    std::unique_lock l(trimmer->fifo->m);
+    const auto tail_part_num = trimmer->fifo->info.tail_part_num;
+    l.unlock();
+    trimmer->cur->release();
+    trimmer->cur = lr::Rados::aio_create_completion(arg, &FIFO::trim_callback);
+    trimmer->update = true;
+    trimmer->canceled = tail_part_num < trimmer->part_num;
+    r = trimmer->fifo->trim_part(trimmer->part_num, trimmer->ofs,
+				 std::nullopt, trimmer->exclusive, tid, trimmer->cur);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		 << " failed scheduling trim: r=" << r << " tid=" << tid << dendl;
+      complete(trimmer->super, r);
     } else {
-      std::unique_lock l(trimmer->fifo->m);
-      const auto tail_part_num = trimmer->fifo->info.tail_part_num;
-      l.unlock();
-      trimmer->cur->release();
-      trimmer->cur = lr::Rados::aio_create_completion(arg, &FIFO::trim_callback);
-      trimmer->update = true;
-      trimmer->canceled = tail_part_num < trimmer->part_num;
-      r = trimmer->fifo->trim_part(trimmer->part_num, trimmer->ofs,
-				   std::nullopt, trimmer->exclusive, tid, trimmer->cur);
-      if (r < 0) {
-	lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		   << " failed scheduling trim: r=" << r << " tid=" << tid << dendl;
-	complete(trimmer->super, r);
-	delete trimmer;
-      }
+      trimmer.release();
+    }
+    return;
+  }
+
+  ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		 << " handling update-needed callback: tid=" << tid << dendl;
+  std::unique_lock l(trimmer->fifo->m);
+  auto tail_part_num = trimmer->fifo->info.tail_part_num;
+  auto objv = trimmer->fifo->info.version;
+  l.unlock();
+  if ((tail_part_num < trimmer->part_num) &&
+      trimmer->canceled) {
+    if (trimmer->retries > MAX_RACE_RETRIES) {
+      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		 << " canceled too many times, giving up: tid=" << tid << dendl;
+      complete(trimmer->super, -EIO);
+      return;
+    }
+    trimmer->cur->release();
+    trimmer->cur = lr::Rados::aio_create_completion(arg,
+						    &FIFO::trim_callback);
+    ++trimmer->retries;
+    r = trimmer->fifo->_update_meta(fifo::update{}
+				    .tail_part_num(trimmer->part_num),
+			            objv, &trimmer->canceled,
+                                    tid, trimmer->cur);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		 << " failed scheduling _update_meta: r="
+		 << r << " tid=" << tid << dendl;
+      complete(trimmer->super, r);
+    } else {
+      trimmer.release();
     }
   } else {
-    std::unique_lock l(trimmer->fifo->m);
-    auto tail_part_num = trimmer->fifo->info.tail_part_num;
-    auto objv = trimmer->fifo->info.version;
-    l.unlock();
-    if ((tail_part_num < trimmer->part_num) &&
-	trimmer->canceled) {
-      if (trimmer->retries > MAX_RACE_RETRIES) {
-	lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		   << " canceled too many times, giving up: tid=" << tid << dendl;
-	complete(trimmer->super, -EIO);
-	delete trimmer;
-      } else {
-	trimmer->cur->release();
-	trimmer->cur = lr::Rados::aio_create_completion(arg,
-							&FIFO::trim_callback);
-	++trimmer->retries;
-	r = trimmer->fifo->_update_meta(fifo::update{}
-					.tail_part_num(trimmer->part_num),
-			                objv, &trimmer->canceled,
-                                        tid, trimmer->cur);
-	if (r < 0) {
-	  lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		     << " failed scheduling _update_meta: r="
-		     << r << " tid=" << tid << dendl;
-	  complete(trimmer->super, r);
-	  delete trimmer;
-	}
-      }
-    } else {
-      complete(trimmer->super, 0);
-    }
+    complete(trimmer->super, 0);
   }
 }
 
@@ -1454,8 +1467,8 @@ int FIFO::trim(std::string_view markstr, bool exclusive, lr::AioCompletion* c) {
   const auto part_oid = info.part_oid(pn);
   auto tid = ++next_tid;
   l.unlock();
-  auto trimmer = new Trimmer(this, marker->num, marker->ofs, pn, exclusive, c,
-			     tid);
+  auto trimmer = std::make_unique<Trimmer>(this, marker->num, marker->ofs, pn, exclusive, c,
+					   tid);
   ++trimmer->pn;
   auto ofs = marker->ofs;
   if (pn < marker->num) {
@@ -1470,7 +1483,8 @@ int FIFO::trim(std::string_view markstr, bool exclusive, lr::AioCompletion* c) {
 	       << " failed scheduling trim_part: r="
 	       << r << " tid=" << tid << dendl;
     complete(trimmer->super, r);
-    delete trimmer;
+  } else {
+    trimmer.release();
   }
   return r;
 }
