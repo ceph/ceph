@@ -556,7 +556,7 @@ class FSExport(object):
             pseudo_path = self.format_path(pseudo_path)
             if not isabs(pseudo_path) or pseudo_path == "/":
                 return -errno.EINVAL, "", f"pseudo path {pseudo_path} is invalid. "\
-                        "It should not be absolute path or just '/'."
+                        "It should be an absolute path and it cannot be just '/'."
 
             if cluster_id not in self.exports:
                 self.exports[cluster_id] = []
