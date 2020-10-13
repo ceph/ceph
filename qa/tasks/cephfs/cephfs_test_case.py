@@ -363,8 +363,8 @@ class CephFSTestCase(CephTestCase):
                     if filtered == test:
                         # Confirm export_pin in output is correct:
                         for s in subtrees:
-                            if s['export_pin'] >= 0:
-                                self.assertTrue(s['export_pin'] == s['auth_first'])
+                            if s['export_pin_target'] >= 0:
+                                self.assertTrue(s['export_pin_target'] == s['auth_first'])
                         return subtrees
                     if action is not None:
                         action()
@@ -384,7 +384,9 @@ class CephFSTestCase(CephTestCase):
             with contextutil.safe_while(sleep=5, tries=20) as proceed:
                 while proceed():
                     subtrees = self._get_subtrees(status=status, rank=rank, path=path)
-                    subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == True, subtrees))
+                    subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == True and
+                                                     s['auth_first'] == s['export_pin_target'],
+                                           subtrees))
                     log.info(f"len={len(subtrees)} {subtrees}")
                     if len(subtrees) >= count:
                         return subtrees
@@ -396,7 +398,9 @@ class CephFSTestCase(CephTestCase):
             with contextutil.safe_while(sleep=5, tries=20) as proceed:
                 while proceed():
                     subtrees = self._get_subtrees(status=status, rank=rank, path=path)
-                    subtrees = list(filter(lambda s: s['random_ephemeral_pin'] == True, subtrees))
+                    subtrees = list(filter(lambda s: s['random_ephemeral_pin'] == True and
+                                                     s['auth_first'] == s['export_pin_target'],
+                                           subtrees))
                     log.info(f"len={len(subtrees)} {subtrees}")
                     if len(subtrees) >= count:
                         return subtrees
