@@ -49,8 +49,8 @@ protected:
 
 public:
   virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
-  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
   virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
