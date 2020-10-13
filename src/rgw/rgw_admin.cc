@@ -9833,6 +9833,19 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
+    if (!start_marker.empty()) {
+      std::cerr << "start-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      if (marker.empty()) {
+	marker = end_marker;
+      } else {
+	std::cerr << "end-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
+    RGWBucketInfo bucket_info;
     int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -9844,7 +9857,7 @@ next:
     }
     ret = bilog_trim(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
 		     bucket->get_info(), *gen,
-		     shard_id, start_marker, end_marker);
+		     shard_id, marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;

@@ -594,21 +594,36 @@ void RGWOp_BILog_Info::send_response() {
 }
 
 void RGWOp_BILog_Delete::execute(optional_yield y) {
+  if (s->info.args.exists("start-marker")) {
+    dout(5) << "start-marker is no longer accepted" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  string marker;
+  if (s->info.args.exists("end-marker")) {
+    if (!s->info.args.exists("marker")) {
+      marker = s->info.args.get("end-marker");
+    } else {
+      dout(5) << "end-marker and marker cannot both be provided" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+  }
+
   bool gen_specified = false;
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
-         start_marker = s->info.args.get("start-marker"),
-         end_marker = s->info.args.get("end-marker"),
-         bucket_instance = s->info.args.get("bucket-instance"),
-	 gen_str = s->info.args.get("generation", &gen_specified);
+         bucket_instance = s->info.args.get("bucket-instance");
+         gen_str = s->info.args.get("generation", &gen_specified);
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
   rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
 
   op_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
-      end_marker.empty()) {
-    ldpp_dout(this, 5) << "ERROR: one of bucket or bucket instance, and also end-marker is mandatory" << dendl;
+      marker.empty()) {
+    ldpp_dout(this, 5) << "ERROR: one of bucket and bucket instance, and also marker is mandatory" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -631,6 +646,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
+  RGWBucketInfo bucket_info;
   if (!bucket_instance.empty()) {
     b.name = bn;
     b.bucket_id = bucket_instance;
