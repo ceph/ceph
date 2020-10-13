@@ -551,7 +551,6 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
   } else {
     state = CLS_RGW_STATE_UNKNOWN;
   }
-  JSONDecoder::decode_json("index_ver", index_ver, obj);
   utime_t ut;
   JSONDecoder::decode_json("timestamp", ut, obj);
   timestamp = ut.to_real_time();
@@ -584,7 +583,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
       break;
   }
 
-  f->dump_int("index_ver", index_ver);
+  f->dump_int("index_ver", uint64_t{0});
   utime_t ut(timestamp);
   ut.gmtime_nsec(f->dump_stream("timestamp"));
   f->open_object_section("ver");
