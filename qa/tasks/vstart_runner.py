@@ -28,6 +28,13 @@ Alternative usage:
     python ~/git/ceph/qa/tasks/vstart_runner.py tasks.mgr.dashboard.test_health
     python ~/git/ceph/qa/tasks/vstart_runner.py tasks.mgr.dashboard.test_rgw
 
+Following are few important notes that might save some investigation around
+vstart_runner.py -
+
+* The presence of binary file named after the first argument in the command
+  arguments received by the method LocalRemote.run() is checked for in
+  <ceph-repo-root>/build/bin/. If present, the first argument is replaced with
+  the path to binary file.
 """
 
 from io import StringIO
@@ -50,7 +57,7 @@ import logging
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import Raw, quote, PIPE
+from teuthology.orchestra.run import quote, PIPE
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
@@ -360,47 +367,42 @@ class LocalRemote(object):
         """
         self.write_file(path, data, sudo=True, **kwargs)
 
-    def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
-        # Since Python's shell simulation can only work when commands are
-        # provided as a list of argumensts...
-        if isinstance(args, str):
-            args = args.split()
+    # XXX: the presence of binary file named after the first argument is
+    # checked in build/bin/, if present the first argument is replaced with
+    # the path to binary file.
+    def _perform_checks_and_adjustments(self, args, omit_sudo, shell):
+        if isinstance(args, list):
+            args = quote(args)
+
+        assert isinstance(args, str)
+        args = args.replace('ceph-coverage', '')
+        args = args.replace('adjust-ulimits', '')
+        args = args.replace('None/archive/ceph-coverage', '')
+
+        first_arg = args[ : args.find(' ')]
+        if '/' not in first_arg:
+            local_bin = os.path.join(BIN_PREFIX, first_arg)
+            if os.path.exists(local_bin):
+                args = args.replace(first_arg, local_bin, 1)
 
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
-        try:
-            if args[args.index('sudo') + 1] in ['-u', 'passwd', 'chown']:
-                omit_sudo = False
-        except ValueError:
-            pass
-
-        # Quotes wrapping a command argument don't work fine in Python's shell
-        # simulation if the arguments contains spaces too. E.g. '"ls"' is OK
-        # but "ls /" isn't.
-        errmsg = "Don't surround arguments commands by quotes if it " + \
-                 "contains spaces.\nargs - %s" % (args)
-        for arg in args:
-            if isinstance(arg, Raw):
-                continue
-
-            if arg and (arg[0] in ['"', "'"] or arg[-1] in ['"', "'"]) and \
-               (arg.find(' ') != -1 and 0 < arg.find(' ') < len(arg) - 1):
-                raise RuntimeError(errmsg)
-
-        # ['sudo', '-u', 'user', '-s', 'path-to-shell', '-c', 'ls', 'a']
-        # and ['sudo', '-u', user, '-s', path_to_shell, '-c', 'ls a'] are
-        # treated differently by Python's shell simulation. Only latter has
-        # the desired effect.
-        errmsg = 'The entire command to executed as other user should be a ' +\
-                 'single argument.\nargs - %s' % (args)
-        if 'sudo' in args and '-u' in args and '-c' in args and \
-           args.count('-c') == 1:
-            if args.index('-c') != len(args) - 2 and \
-               args[args.index('-c') + 2].find('-') == -1:
-                raise RuntimeError(errmsg)
+        last_arg = args[args.rfind(' ') + 1 : ]
+        if 'sudo' in args:
+            for x in ('passwd', 'chown'):
+                if x == first_arg or x == last_arg or f' {x} ' in args:
+                    omit_sudo = False
 
         if omit_sudo:
-            args = [a for a in args if a != "sudo"]
+            args.replace('sudo', '')
+
+        # we'll have double spaces due to previous calls to str.replace().
+        # let's get rid of them.
+        args.replace(' ', '')
+
+        # we're intentionally logging the command before overriding to avoid
+        # this clutter in the log.
+        log.debug('> ' + args)
 
         return args
 
@@ -415,50 +417,12 @@ class LocalRemote(object):
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
                 env=None, timeout=None, omit_sudo=True, shell=True):
-        args = self._perform_checks_and_return_list_of_args(args, omit_sudo)
+        args = self._perform_checks_and_adjustments(args, omit_sudo, shell)
 
-        # We have to use shell=True if any run.Raw was present, e.g. &&
-        if not shell:
-            shell = any([a for a in args if isinstance(a, Raw)])
-
-        # Filter out helper tools that don't exist in a vstart environment
-        args = [a for a in args if a not in ('adjust-ulimits',
-                                             'ceph-coverage',
-                                             'None/archive/coverage')]
-
-        # Adjust binary path prefix if given a bare program name
-        if not isinstance(args[0], Raw) and "/" not in args[0]:
-            # If they asked for a bare binary name, and it exists
-            # in our built tree, use the one there.
-            local_bin = os.path.join(BIN_PREFIX, args[0])
-            if os.path.exists(local_bin):
-                args = [local_bin] + args[1:]
-
-        log.debug('> ' +
-                 ' '.join([str(a.value) if isinstance(a, Raw) else a for a in args]))
-
-        if shell:
-            subproc = subprocess.Popen(quote(args),
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       stdin=subprocess.PIPE,
-                                       cwd=cwd,
-                                       env=env,
-                                       shell=True)
-        else:
-            # Sanity check that we've got a list of strings
-            for arg in args:
-                if not isinstance(arg, str):
-                    raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
-                        arg, arg.__class__
-                    ))
-
-            subproc = subprocess.Popen(args,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       stdin=subprocess.PIPE,
-                                       cwd=cwd,
-                                       env=env)
+        subproc = subprocess.Popen(args, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE,
+                                   stdin=subprocess.PIPE, cwd=cwd, env=env,
+                                   shell=shell)
 
         if stdin:
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
