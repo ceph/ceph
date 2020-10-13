@@ -76,7 +76,7 @@ protected:
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist> *rmattrs,
                         RGWObjVersionTracker *objv_tracker,
-                        optional_yield y);
+                        bool exclusive, optional_yield y);
 
   virtual int omap_get_all(const rgw_raw_obj& obj, std::map<string, bufferlist> *m,
                            optional_yield y);

@@ -96,7 +96,7 @@ int RGWSI_SysObj::Obj::WOp::write_attrs(optional_yield y)
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->set_attrs(obj, attrs, nullptr, objv_tracker, y);
+  return svc->set_attrs(obj, attrs, nullptr, objv_tracker, exclusive, y);
 }
 
 int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
@@ -108,7 +108,7 @@ int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
   map<string, bufferlist> m;
   m[name] = bl;
 
-  return svc->set_attrs(obj, m, nullptr, objv_tracker, y);
+  return svc->set_attrs(obj, m, nullptr, objv_tracker, exclusive, y);
 }
 
 int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, std::function<void(const string&)> cb)
