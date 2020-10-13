@@ -60,6 +60,7 @@ extern "C" {
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_checkpoint.h"
+#include "rgw_lua.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -279,6 +280,9 @@ void usage()
   cout << "  subscription rm            remove a pubsub subscription\n";
   cout << "  subscription pull          show events in a pubsub subscription\n";
   cout << "  subscription ack           ack (remove) an events in a pubsub subscription\n";
+  cout << "  script put                 upload a lua script to a context\n";
+  cout << "  script get                 get the lua script of a context\n";
+  cout << "  script rm                  remove the lua scripts of a context\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -428,6 +432,8 @@ void usage()
   cout << "   --topic                   bucket notifications/pubsub topic name\n";
   cout << "   --subscription            pubsub subscription name\n";
   cout << "   --event-id                event id in a pubsub subscription\n";
+  cout << "\nScript options:\n";
+  cout << "   --context                 context in which the script runs. one of: preRequest, postRequest\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -759,6 +765,9 @@ enum class OPT {
   PUBSUB_SUB_RM,
   PUBSUB_SUB_PULL,
   PUBSUB_EVENT_RM,
+  SCRIPT_PUT,
+  SCRIPT_GET,
+  SCRIPT_RM,
 };
 
 }
@@ -972,6 +981,9 @@ static SimpleCmd::Commands all_cmds = {
   { "subscription rm", OPT::PUBSUB_SUB_RM },
   { "subscription pull", OPT::PUBSUB_SUB_PULL },
   { "subscription ack", OPT::PUBSUB_EVENT_RM },
+  { "script put", OPT::SCRIPT_PUT },
+  { "script get", OPT::SCRIPT_GET },
+  { "script rm", OPT::SCRIPT_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3158,6 +3170,8 @@ int main(int argc, const char **argv)
   string sub_name;
   string event_id;
 
+  std::optional<std::string> str_script_ctx;
+
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
   std::optional<string> opt_flow_type;
@@ -3616,6 +3630,8 @@ int main(int argc, const char **argv)
       opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
+      str_script_ctx = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3834,6 +3850,7 @@ int main(int argc, const char **argv)
        OPT::PUBSUB_TOPIC_GET,
        OPT::PUBSUB_SUB_GET,
        OPT::PUBSUB_SUB_PULL,
+       OPT::SCRIPT_GET,
   };
 
 
@@ -9270,5 +9287,79 @@ next:
     }
   }
 
+  if (opt_cmd == OPT::SCRIPT_PUT) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    if (infile.empty()) {
+      cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
+      return EINVAL;
+    }
+    bufferlist bl;
+    auto rc = read_input(infile, bl);
+    if (rc < 0) {
+      cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
+      return rc;
+    }
+    const std::string script = bl.to_str();
+    std::string err_msg;
+    if (!rgw::lua::verify(script, err_msg)) {
+      cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
+      return EINVAL;
+    }
+    rc = rgw::lua::write_script(store, tenant, null_yield, script_ctx, script);
+    if (rc < 0) {
+      cerr << "ERROR: failed to put script. error: " << rc << std::endl;
+      return rc;
+    }
+  }
+
+  if (opt_cmd == OPT::SCRIPT_GET) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
+      return EINVAL;
+    }
+    std::string script;
+    const auto rc = rgw::lua::read_script(store, tenant, null_yield, script_ctx, script);
+    if (rc == -ENOENT) {
+      std::cout << "no script exists for context: " << *str_script_ctx << 
+        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+    } else if (rc < 0) {
+      cerr << "ERROR: failed to read script. error: " << rc << std::endl;
+      return rc;
+    } else {
+      std::cout << script << std::endl;
+    }
+  }
+  
+  if (opt_cmd == OPT::SCRIPT_RM) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
+      return EINVAL;
+    }
+    const auto rc = rgw::lua::delete_script(store, tenant, null_yield, script_ctx);
+    if (rc < 0) {
+      cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
+      return rc;
+    }
+  }
+
   return 0;
 }
+

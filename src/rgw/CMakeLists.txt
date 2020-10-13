@@ -155,7 +155,10 @@ set(librgw_common_srcs
   rgw_url.cc
   rgw_oidc_provider
   rgw_datalog.cc
-  cls_fifo_legacy.cc)
+  cls_fifo_legacy.cc
+  rgw_lua_utils.cc
+  rgw_lua.cc
+  rgw_lua_request.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -170,6 +173,9 @@ target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/lua/src")
+target_include_directories(rgw_common PRIVATE "${CMAKE_BINARY_DIR}/src/lua")
+
 
 if(WITH_BOOST_CONTEXT)
   target_include_directories(rgw_common PRIVATE
@@ -252,6 +258,8 @@ if(WITH_CURL_OPENSSL)
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
 endif()
 
+target_link_libraries(rgw_a PRIVATE liblua)
+
 if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_a PUBLIC spawn)
 endif()
@@ -265,6 +273,8 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   list(APPEND rgw_libs RDKafka::RDKafka)
 endif()
+
+list(APPEND rgw_libs ${LUA_LIBRARIES})
 
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
@@ -399,6 +409,8 @@ endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw PRIVATE RDKafka::RDKafka)
 endif()
+
+target_link_libraries(rgw PRIVATE ${LUA_LIBRARIES})
 
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
