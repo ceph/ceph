@@ -39,49 +39,27 @@ int RGWRole::store_info(bool exclusive, optional_yield y)
 			      RGWRoleCtl::PutParams().
 			      set_exclusive(exclusive));
 }
-// {
-//   using ceph::encode;
-//   string oid = get_info_oid_prefix() + id;
 
-//   bufferlist bl;
-//   encode(*this, bl);
+int RGWRole::store_name(bool exclusive, optional_yield y)
+{
+  return role_ctl->store_name(info.id,
+			      info.name,
+			      info.tenant,
+			      y,
+			      RGWRoleCtl::PutParams().
+			      set_exclusive(exclusive)
+			      );
+}
 
-//   auto svc = ctl->svc;
-
-//   auto obj_ctx = ctl->svc->sysobj->init_obj_ctx();
-//   return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
-//                             bl, exclusive, NULL, real_time(), NULL);
-// }
-
-// int RGWRole::store_name(bool exclusive)
-// {
-//   RGWNameToId nameToId;
-//   nameToId.obj_id = id;
-
-//   string oid = tenant + get_names_oid_prefix() + name;
-
-//   bufferlist bl;
-//   using ceph::encode;
-//   encode(nameToId, bl);
-
-//   auto svc = ctl->svc;
-
-//   auto obj_ctx = svc->sysobj->init_obj_ctx();
-//   return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
-//               bl, exclusive, NULL, real_time(), NULL);
-// }
-
-// int RGWRole::store_path(bool exclusive)
-// {
-//   string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
-
-//   auto svc = ctl->svc;
-
-//   bufferlist bl;
-//   auto obj_ctx = svc->sysobj->init_obj_ctx();
-//   return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
-//               bl, exclusive, NULL, real_time(), NULL);
-// }
+int RGWRole::store_path(bool exclusive, optional_yield y)
+{
+  return role_ctl->store_path(info.id,
+			      info.path,
+			      info.tenant,
+			      y,
+			      RGWRoleCtl::PutParams().
+			      set_exclusive(exclusive));
+}
 
 // int RGWRole::create(bool exclusive)
 // {

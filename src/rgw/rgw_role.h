@@ -122,8 +122,8 @@ class RGWRole
   RGWRoleInfo info;
 
   int store_info(bool exclusive, optional_yield y = null_yield);
-  int store_name(bool exclusive) { return 0; }
-  int store_path(bool exclusive) { return 0; }
+  int store_name(bool exclusive, optional_yield y = null_yield);
+  int store_path(bool exclusive, optional_yield y = null_yield);
   int read_id(const string& role_name, const string& tenant, string& role_id);
   int read_name() { return 0; }
   int read_info() { return 0; };
