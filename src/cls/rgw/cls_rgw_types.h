@@ -410,13 +410,12 @@ struct rgw_bucket_dir_entry {
   bool exists;
   rgw_bucket_dir_entry_meta meta;
   std::multimap<std::string, rgw_bucket_pending_info> pending_map;
-  uint64_t index_ver;
   std::string tag;
   uint16_t flags;
   uint64_t versioned_epoch;
 
   rgw_bucket_dir_entry() :
-    exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
+    exists(false), flags(0), versioned_epoch(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(8, 3, bl);
@@ -427,7 +426,7 @@ struct rgw_bucket_dir_entry {
     encode(pending_map, bl);
     encode(locator, bl);
     encode(ver, bl);
-    encode_packed_val(index_ver, bl);
+    encode_packed_val(std::uint64_t{0} /* index_ver */, bl);
     encode(tag, bl);
     encode(key.instance, bl);
     encode(flags, bl);
@@ -450,7 +449,11 @@ struct rgw_bucket_dir_entry {
       ver.pool = -1;
     }
     if (struct_v >= 5) {
-      decode_packed_val(index_ver, bl);
+      // just for backward compatibility; this field is unused
+      {
+        uint64_t index_ver;
+        decode_packed_val(index_ver, bl);
+      }
       decode(tag, bl);
     }
     if (struct_v >= 6) {
@@ -659,14 +662,13 @@ struct rgw_bi_log_entry {
   rgw_bucket_entry_ver ver;
   RGWModifyOp op;
   RGWPendingState state;
-  uint64_t index_ver;
   std::string tag;
   uint16_t bilog_flags;
   std::string owner; /* only being set if it's a delete marker */
   std::string owner_display_name; /* only being set if it's a delete marker */
   rgw_zone_set zones_trace;
 
-  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
+  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), bilog_flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(4, 1, bl);
@@ -679,7 +681,7 @@ struct rgw_bi_log_entry {
     encode(c, bl);
     c = (uint8_t)state;
     encode(c, bl);
-    encode_packed_val(index_ver, bl);
+    encode_packed_val(uint64_t{0} /* index_ver */, bl);
     encode(instance, bl);
     encode(bilog_flags, bl);
     encode(owner, bl);
@@ -699,7 +701,11 @@ struct rgw_bi_log_entry {
     op = (RGWModifyOp)c;
     decode(c, bl);
     state = (RGWPendingState)c;
-    decode_packed_val(index_ver, bl);
+    // just for backward compatibility; index_ver is unused
+    {
+      uint64_t index_ver;
+      decode_packed_val(index_ver, bl);
+    }
     if (struct_v >= 2) {
       decode(instance, bl);
       decode(bilog_flags, bl);
