@@ -232,6 +232,17 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen)
 #endif
 }
 
+int ceph_memzero_s(void *dest, size_t destsz, size_t count) {
+#ifdef __STDC_LIB_EXT1__
+    return memset_s(dest, destsz, 0, count);
+#elif defined(_WIN32)
+    SecureZeroMemory(dest, count);
+#else
+    explicit_bzero(dest, count);
+#endif
+    return 0;
+}
+
 #ifdef _WIN32
 
 #include <iomanip>
