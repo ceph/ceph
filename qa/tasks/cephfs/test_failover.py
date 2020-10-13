@@ -172,48 +172,6 @@ class TestClusterResize(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 3
 
-    def grow(self, n):
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
-        fscid = self.fs.id
-        status = self.fs.status()
-        log.info("status = {0}".format(status))
-
-        original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        _ = set([info['gid'] for info in status.get_standbys()])
-
-        oldmax = self.fs.get_var('max_mds')
-        self.assertTrue(n > oldmax)
-        self.fs.set_max_mds(n)
-
-        log.info("Waiting for cluster to grow.")
-        status = self.fs.wait_for_daemons(timeout=60+grace*2)
-        ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        self.assertTrue(original_ranks.issubset(ranks) and len(ranks) == n)
-        return status
-
-    def shrink(self, n):
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
-        fscid = self.fs.id
-        status = self.fs.status()
-        log.info("status = {0}".format(status))
-
-        original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        _ = set([info['gid'] for info in status.get_standbys()])
-
-        oldmax = self.fs.get_var('max_mds')
-        self.assertTrue(n < oldmax)
-        self.fs.set_max_mds(n)
-
-        # Wait until the monitor finishes stopping ranks >= n
-        log.info("Waiting for cluster to shink.")
-        status = self.fs.wait_for_daemons(timeout=60+grace*2)
-        ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        self.assertTrue(ranks.issubset(original_ranks) and len(ranks) == n)
-        return status
-
-
     def test_grow(self):
         """
         That the MDS cluster grows after increasing max_mds.
@@ -222,8 +180,8 @@ class TestClusterResize(CephFSTestCase):
         # Need all my standbys up as well as the active daemons
         # self.wait_for_daemon_start() necessary?
 
-        self.grow(2)
-        self.grow(3)
+        self.fs.grow(2)
+        self.fs.grow(3)
 
 
     def test_shrink(self):
@@ -231,8 +189,8 @@ class TestClusterResize(CephFSTestCase):
         That the MDS cluster shrinks automatically after decreasing max_mds.
         """
 
-        self.grow(3)
-        self.shrink(1)
+        self.fs.grow(3)
+        self.fs.shrink(1)
 
     def test_up_less_than_max(self):
         """
@@ -243,7 +201,7 @@ class TestClusterResize(CephFSTestCase):
         mdss = [info['gid'] for info in status.get_all()]
         self.fs.set_max_mds(len(mdss)+1)
         self.wait_for_health("MDS_UP_LESS_THAN_MAX", 30)
-        self.shrink(2)
+        self.fs.shrink(2)
         self.wait_for_health_clear(30)
 
     def test_down_health(self):
@@ -270,7 +228,7 @@ class TestClusterResize(CephFSTestCase):
 
         self.mount_a.umount_wait()
 
-        self.grow(2)
+        self.fs.grow(2)
         self.fs.set_down()
         self.fs.wait_for_daemons()
         self.fs.set_down(False)
@@ -286,7 +244,7 @@ class TestClusterResize(CephFSTestCase):
 
         self.fs.set_down()
         self.fs.wait_for_daemons()
-        self.grow(2)
+        self.fs.grow(2)
         self.fs.wait_for_daemons()
 
     def test_down(self):
@@ -311,7 +269,7 @@ class TestClusterResize(CephFSTestCase):
 
         fscid = self.fs.id
 
-        self.grow(2)
+        self.fs.grow(2)
 
         self.fs.set_max_mds(1)
         log.info("status = {0}".format(self.fs.status()))

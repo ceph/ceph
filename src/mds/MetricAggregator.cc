@@ -329,7 +329,6 @@ MetricPayload MetricAggregator::get_perf_reports() {
     query.get_performance_counter_descriptors(&report.performance_counter_descriptors);
 
     auto &descriptors = report.performance_counter_descriptors;
-    ceph_assert(descriptors.size() > 0);
 
     dout(20) << ": descriptors=" << descriptors << dendl;
 

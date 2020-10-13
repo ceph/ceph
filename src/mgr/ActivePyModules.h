@@ -110,6 +110,12 @@ public:
   void remove_osd_perf_query(MetricQueryID query_id);
   PyObject *get_osd_perf_counters(MetricQueryID query_id);
 
+  MetricQueryID add_mds_perf_query(
+      const MDSPerfMetricQuery &query,
+      const std::optional<MDSPerfMetricLimit> &limit);
+  void remove_mds_perf_query(MetricQueryID query_id);
+  PyObject *get_mds_perf_counters(MetricQueryID query_id);
+
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
   PyObject *get_store_prefix(const std::string &module_name,
