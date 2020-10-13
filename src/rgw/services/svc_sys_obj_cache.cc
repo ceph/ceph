@@ -246,7 +246,7 @@ int RGWSI_SysObj_Cache::set_attrs(const DoutPrefixProvider *dpp,
                                   map<string, bufferlist>& attrs,
                                   map<string, bufferlist> *rmattrs,
                                   RGWObjVersionTracker *objv_tracker,
-                                  optional_yield y)
+                                  bool exclusive, optional_yield y)
 {
   rgw_pool pool;
   string oid;
@@ -258,7 +258,7 @@ int RGWSI_SysObj_Cache::set_attrs(const DoutPrefixProvider *dpp,
   }
   info.status = 0;
   info.flags = CACHE_FLAG_MODIFY_XATTRS;
-  int ret = RGWSI_SysObj_Core::set_attrs(dpp, obj, attrs, rmattrs, objv_tracker, y);
+  int ret = RGWSI_SysObj_Core::set_attrs(dpp, obj, attrs, rmattrs, objv_tracker, exclusive, y);
   string name = normal_name(pool, oid);
   if (ret >= 0) {
     if (objv_tracker && objv_tracker->read_version.ver) {
