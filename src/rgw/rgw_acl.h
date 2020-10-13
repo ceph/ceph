@@ -141,6 +141,7 @@ public:
       return true;
     }
   }
+
   ACLGranteeType& get_type() { return type; }
   const ACLGranteeType& get_type() const { return type; }
   ACLPermission& get_permission() { return permission; }
@@ -295,6 +296,8 @@ namespace auth {
 }
 }
 
+using ACLGrantMap = std::multimap<std::string, ACLGrant>;
+
 class RGWAccessControlList
 {
 protected:
@@ -304,7 +307,7 @@ protected:
   map<string, int> acl_user_map;
   map<uint32_t, int> acl_group_map;
   list<ACLReferer> referer_list;
-  multimap<string, ACLGrant> grant_map;
+  ACLGrantMap grant_map;
   void _add_grant(ACLGrant *grant);
 public:
   explicit RGWAccessControlList(CephContext *_cct) : cct(_cct) {}
@@ -342,7 +345,7 @@ public:
     if (struct_v >= 2) {
       decode(acl_group_map, bl);
     } else if (!maps_initialized) {
-      multimap<string, ACLGrant>::iterator iter;
+      ACLGrantMap::iterator iter;
       for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
         ACLGrant& grant = iter->second;
         _add_grant(&grant);
@@ -359,8 +362,8 @@ public:
   void add_grant(ACLGrant *grant);
   void remove_canon_user_grant(rgw_user& user_id);
 
-  multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
-  const multimap<string, ACLGrant>& get_grant_map() const { return grant_map; }
+  ACLGrantMap& get_grant_map() { return grant_map; }
+  const ACLGrantMap& get_grant_map() const { return grant_map; }
 
   void create_default(const rgw_user& id, string name) {
     acl_user_map.clear();
@@ -411,7 +414,7 @@ public:
   rgw_user& get_id() { return id; }
   const rgw_user& get_id() const { return id; }
   string& get_display_name() { return display_name; }
-
+  const string& get_display_name() const { return display_name; }
   friend bool operator==(const ACLOwner& lhs, const ACLOwner& rhs);
   friend bool operator!=(const ACLOwner& lhs, const ACLOwner& rhs);
 };
