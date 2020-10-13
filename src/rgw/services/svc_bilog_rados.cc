@@ -18,7 +18,9 @@ void RGWSI_BILog_RADOS_InIndex::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS_InIndex::log_trim(const RGWBucketInfo& bucket_info, int shard_id, string& start_marker, string& end_marker)
+int RGWSI_BILog_RADOS_InIndex::log_trim(const RGWBucketInfo& bucket_info,
+                                        const int shard_id,
+                                        string& end_marker)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -31,7 +33,9 @@ int RGWSI_BILog_RADOS_InIndex::log_trim(const RGWBucketInfo& bucket_info, int sh
     return r;
   }
 
-  r = start_marker_mgr.from_string(start_marker, shard_id);
+  // empty string nowadays. In the past we supported `start_marker` but
+  // it has to die because of cls_fifo. See also ae5660fbb6.
+  r = start_marker_mgr.from_string(std::string{}, shard_id);
   if (r < 0) {
     return r;
   }
