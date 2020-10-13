@@ -36,29 +36,12 @@ void create_debug_action(lua_State* L, CephContext* cct) {
 }
 
 void stack_dump(lua_State* L) {
-	auto i = lua_gettop(L);
+  int top = lua_gettop(L);
   std::cout << std::endl << " ----------------  Stack Dump ----------------" << std::endl;
-  std::cout << "Stack Size: " << i << std::endl;
-  while (i > 0) {
-    const auto t = lua_type(L, i);
-    switch (t) {
-      case LUA_TNIL:
-        std::cout << i << ": nil" << std::endl;
-        break;
-      case LUA_TSTRING:
-        std::cout << i << ": " << lua_tostring(L, i) << std::endl;
-        break;
-      case LUA_TBOOLEAN:
-        std::cout << i << ": " << lua_toboolean(L, i) << std::endl;
-        break;
-      case LUA_TNUMBER:
-        std::cout << i << ": " << lua_tonumber(L, i) << std::endl;
-        break;
-      default: 
-        std::cout << i << ": " << lua_typename(L, t) << std::endl;
-        break;
-    }
-    i--;
+  std::cout << "Stack Size: " << top << std::endl;
+  for (int i = 1, j = -top; i <= top; i++, j++) {
+    std::cout << "[" << i << "," << j << "]: " << luaL_tolstring(L, i, NULL) << std::endl;
+    lua_pop(L, 1);
   }
   std::cout << "--------------- Stack Dump Finished ---------------" << std::endl;
 }
