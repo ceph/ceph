@@ -4677,6 +4677,105 @@ options:
   default: 5
   see_also:
   - bluestore_cache_autotune
+- name: bluestore_cache_age_bin_interval
+  type: float
+  level: dev
+  desc: The duration (in seconds) represented by a single cache age bin.
+  fmt_desc: |
+    The caches used by bluestore will assign cache entries to an 'age bin'
+    that represents a period of time during which that cache entry was most
+    recently updated.  By binning the caches in this way, Ceph's priority
+    cache balancing code can make better decisions about which caches should
+    receive priority based on the relative ages of items in the caches.  By
+    default, a single cache age bin represents 1 second of time.  Note:
+    Setting this interval too small can result in high CPU usage and lower
+    performance.
+  default: 1
+  see_also:
+  - bluestore_cache_age_bins_kv
+  - bluestore_cache_age_bins_kv_onode
+  - bluestore_cache_age_bins_meta
+  - bluestore_cache_age_bins_data
+- name: bluestore_cache_age_bins_kv
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for kv cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "1 2 6 24 120 720 0 0 0 0"
+  see_also:
+  - bluestore_cache_age_bin_interval
+- name: bluestore_cache_age_bins_kv_onode
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for kv onode cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "0 0 0 0 0 0 0 0 0 720"
+  see_also:
+  - bluestore_cache_age_bin_interval
+- name: bluestore_cache_age_bins_meta
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for onode cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "1 2 6 24 120 720 0 0 0 0"
+  see_also:
+  - bluestore_cache_age_bin_interval
+- name: bluestore_cache_age_bins_data
+  type: str
+  level: dev
+  desc: A 10 element, space separated list of age bins for data cache
+  fmt_desc: |
+    A 10 element, space separated list of cache age bins grouped by
+    priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ...
+    PRI10=[n+8,n+9).  Values represent the starting and ending bin for each
+    priority level.  A 0 in the 2nd term will prevent any items from being
+    associated with that priority.  bin duration is based on the
+    bluestore_cache_age_bin_interval value.  For example,
+    "1 5 0 0 0 0 0 0 0 0" defines bin ranges for two priority levels. PRI1
+    contains 1 age bin.  Assuming the default age bin interval of 1 second,
+    PRI1 represents cache items that are less than 1 second old. PRI2 has 4
+    bins representing cache items that are 1 to less than 5 seconds old. All
+    other cache items in this example are associated with the lowest priority
+    level as PRI3-PRI10 all have 0s in their second term.
+  default: "1 2 6 24 120 720 0 0 0 0"
+  see_also:
+  - bluestore_cache_age_bin_interval
 - name: bluestore_alloc_stats_dump_interval
   type: float
   level: dev

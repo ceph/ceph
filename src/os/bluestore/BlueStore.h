@@ -281,6 +281,7 @@ public:
     uint64_t seq;
     uint32_t offset, length;
     ceph::buffer::list data;
+    std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
@@ -1152,6 +1153,7 @@ public:
     /// protect flush_txns
     ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k)
@@ -1260,8 +1262,11 @@ public:
 
     std::atomic<uint64_t> max = {0};
     std::atomic<uint64_t> num = {0};
+    boost::circular_buffer<std::shared_ptr<int64_t>> age_bins;
 
-    CacheShard(CephContext* cct) : cct(cct), logger(nullptr) {}
+    CacheShard(CephContext* cct) : cct(cct), logger(nullptr), age_bins(1) {
+      shift_bins();
+    }
     virtual ~CacheShard() {}
 
     void set_max(uint64_t max_) {
@@ -1288,8 +1293,34 @@ public:
     void flush() {
       std::lock_guard l(lock);
       // we should not be shutting down after the blackhole is enabled
-      assert(!cct->_conf->objectstore_blackhole);
+      ceph_assert(!cct->_conf->objectstore_blackhole);
       _trim_to(0);
+    }
+
+    virtual void shift_bins() {
+      std::lock_guard l(lock);
+      age_bins.push_front(std::make_shared<int64_t>(0));
+    }
+    virtual uint32_t get_bin_count() {
+      std::lock_guard l(lock);
+      return age_bins.capacity();
+    }
+    virtual void set_bin_count(uint32_t count) {
+      std::lock_guard l(lock);
+      age_bins.set_capacity(count);
+    }
+    virtual uint64_t sum_bins(uint32_t start, uint32_t end) {
+      std::lock_guard l(lock);
+      auto size = age_bins.size();
+      if (size < start) {
+        return 0;
+      }
+      uint64_t count = 0;
+      end = (size < end) ? size : end;
+      for (auto i = start; i < end; i++) {
+        count += *(age_bins[i]);
+      }
+      return count;
     }
 
 #ifdef DEBUG_CACHE
@@ -1302,7 +1333,6 @@ public:
   /// A Generic onode Cache Shard
   struct OnodeCacheShard : public CacheShard {
     std::atomic<uint64_t> num_pinned = {0};
-
     std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
 
     virtual void _pin(Onode* o) = 0;
@@ -1990,7 +2020,7 @@ public:
 
     void flush_all_but_last() {
       std::unique_lock l(qlock);
-      assert (q.size() >= 1);
+      ceph_assert (q.size() >= 1);
       while (true) {
 	// std::set flag before the check because the condition
 	// may become true outside qlock, and we need to make
@@ -2240,7 +2270,12 @@ private:
   double cache_kv_onode_ratio = 0; ///< cache ratio dedicated to kv onodes (e.g., rocksdb onode CF)
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
+  double cache_age_bin_interval = 0; ///< time to wait between cache age bin rotations
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
+  std::vector<uint64_t> kv_bins; ///< kv autotune bins
+  std::vector<uint64_t> kv_onode_bins; ///< kv onode autotune bins
+  std::vector<uint64_t> meta_bins; ///< meta autotune bins
+  std::vector<uint64_t> data_bins; ///< data autotune bins
   uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
   uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
@@ -2270,6 +2305,7 @@ private:
 
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
+      uint64_t bins[PriorityCache::Priority::LAST+1] = {0};
       int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
       int64_t committed_bytes = 0;
       double cache_ratio = 0;
@@ -2277,21 +2313,34 @@ private:
       MempoolCache(BlueStore *s) : store(s) {};
 
       virtual uint64_t _get_used_bytes() const = 0;
+      virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const = 0;
 
       virtual int64_t request_cache_bytes(
           PriorityCache::Priority pri, uint64_t total_cache) const {
         int64_t assigned = get_cache_bytes(pri);
 
         switch (pri) {
-        // All cache items are currently shoved into the PRI1 priority 
-        case PriorityCache::Priority::PRI1:
+        case PriorityCache::Priority::PRI0:
+	  {
+            // BlueStore caches currently don't put anything in PRI0
+	    break;
+	  }
+        case PriorityCache::Priority::LAST:
           {
-            int64_t request = _get_used_bytes();
+            uint32_t max = get_bin_count();
+	    int64_t request = _get_used_bytes() - _sum_bins(0, max);
             return(request > assigned) ? request - assigned : 0;
           }
         default:
-          break;
-        }
+	  {
+	    ceph_assert(pri > 0 && pri < PriorityCache::Priority::LAST);
+            auto prev_pri = static_cast<PriorityCache::Priority>(pri - 1);
+            uint64_t start = get_bins(prev_pri);
+            uint64_t end = get_bins(pri);
+            int64_t request = _sum_bins(start, end);
+            return(request > assigned) ? request - assigned : 0;
+	  }
+	}
         return -EOPNOTSUPP;
       }
  
@@ -2321,6 +2370,42 @@ private:
       virtual int64_t get_committed_size() const {
         return committed_bytes;
       }
+      virtual uint64_t get_bins(PriorityCache::Priority pri) const {
+        if (pri > PriorityCache::Priority::PRI0 &&
+            pri < PriorityCache::Priority::LAST) {
+          return bins[pri];
+        }
+        return 0;
+      }
+      virtual void set_bins(PriorityCache::Priority pri, uint64_t end_bin) {
+        if (pri <= PriorityCache::Priority::PRI0 ||
+            pri >= PriorityCache::Priority::LAST) {
+          return;
+        }
+        bins[pri] = end_bin;
+        uint64_t max = 0;
+        for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+          if (bins[pri] > max) {
+            max = bins[pri];
+          }
+        }
+        set_bin_count(max);
+      }
+      virtual void import_bins(const std::vector<uint64_t> &bins_v) {
+        uint64_t max = 0;
+        for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+          unsigned i = (unsigned) pri - 1;
+          if (i < bins_v.size()) {
+            bins[pri] = bins_v[i];
+            if (bins[pri] > max) {
+              max = bins[pri];
+            }
+          } else {
+            bins[pri] = 0;
+          }
+        }
+        set_bin_count(max);
+      }
       virtual double get_cache_ratio() const {
         return cache_ratio;
       }
@@ -2328,11 +2413,21 @@ private:
         cache_ratio = ratio;
       }
       virtual std::string get_cache_name() const = 0;
+      virtual uint32_t get_bin_count() const = 0;
+      virtual void set_bin_count(uint32_t count) = 0;
     };
 
     struct MetaCache : public MempoolCache {
       MetaCache(BlueStore *s) : MempoolCache(s) {};
 
+      virtual uint32_t get_bin_count() const {
+        return store->onode_cache_shards[0]->get_bin_count();
+      }
+      virtual void set_bin_count(uint32_t count) {
+        for (auto i : store->onode_cache_shards) {
+          i->set_bin_count(count);
+        }
+      }
       virtual uint64_t _get_used_bytes() const {
         return mempool::bluestore_Buffer::allocated_bytes() +
           mempool::bluestore_Blob::allocated_bytes() +
@@ -2343,17 +2438,26 @@ private:
           mempool::bluestore_SharedBlob::allocated_bytes() +
           mempool::bluestore_inline_bl::allocated_bytes();
       }
-
+      virtual void shift_bins() {
+        for (auto i : store->onode_cache_shards) {
+          i->shift_bins();
+        }
+      }
+      virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const {
+        uint64_t onodes = 0;
+	for (auto i : store->onode_cache_shards) {
+	  onodes += i->sum_bins(start, end);
+	}
+	return onodes*get_bytes_per_onode();
+      }
       virtual std::string get_cache_name() const {
         return "BlueStore Meta Cache";
       }
-
       uint64_t _get_num_onodes() const {
         uint64_t onode_num =
             mempool::bluestore_cache_onode::allocated_items();
         return (2 > onode_num) ? 2 : onode_num;
       }
-
       double get_bytes_per_onode() const {
         return (double)_get_used_bytes() / (double)_get_num_onodes();
       }
@@ -2363,12 +2467,32 @@ private:
     struct DataCache : public MempoolCache {
       DataCache(BlueStore *s) : MempoolCache(s) {};
 
+      virtual uint32_t get_bin_count() const {
+        return store->buffer_cache_shards[0]->get_bin_count();
+      }
+      virtual void set_bin_count(uint32_t count) {
+        for (auto i : store->buffer_cache_shards) {
+          i->set_bin_count(count);
+        }
+      }
       virtual uint64_t _get_used_bytes() const {
         uint64_t bytes = 0;
         for (auto i : store->buffer_cache_shards) {
           bytes += i->_get_bytes();
         }
         return bytes; 
+      }
+      virtual void shift_bins() {
+        for (auto i : store->buffer_cache_shards) {
+          i->shift_bins();
+        }
+      }
+      virtual uint64_t _sum_bins(uint32_t start, uint32_t end) const {
+        uint64_t bytes = 0;
+        for (auto i : store->buffer_cache_shards) {
+          bytes += i->sum_bins(start, end);
+        }
+        return bytes;
       }
       virtual std::string get_cache_name() const {
         return "BlueStore Data Cache";
@@ -2396,7 +2520,6 @@ private:
     }
 
   private:
-    void _adjust_cache_settings();
     void _update_cache_settings();
     void _resize_shards(bool interval_stats);
   } mempool_thread;
