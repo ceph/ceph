@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <ctime>
 #include <lua.hpp>
 
@@ -11,7 +12,7 @@ namespace rgw::lua {
 
 // push ceph time in string format: "%Y-%m-%d %H:%M:%S"
 template <typename CephTime>
-void lua_pushtime(lua_State* L, const CephTime& tp) 
+void pushtime(lua_State* L, const CephTime& tp)
 {
   const auto tt = CephTime::clock::to_time_t(tp);
   const auto tm = *std::localtime(&tt);
@@ -20,8 +21,10 @@ void lua_pushtime(lua_State* L, const CephTime& tp)
   lua_pushstring(L, buff);
 }
 
-// push std::string
-void lua_pushstring(lua_State* L, const std::string& str);
+static inline void pushstring(lua_State* L, std::string_view str)
+{
+  lua_pushlstring(L, str.data(), str.size());
+}
 
 // dump the lua stack to stdout
 void stack_dump(lua_State* L);

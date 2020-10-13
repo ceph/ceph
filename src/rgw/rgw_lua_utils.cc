@@ -8,11 +8,6 @@
 
 namespace rgw::lua {
 
-void lua_pushstring(lua_State* L, const std::string& str) 
-{
-  lua_pushstring(L, str.c_str());
-}
-
 // TODO - add the folowing generic functions
 // lua_push(lua_State* L, const std::string& str)
 // template<typename T> lua_push(lua_State* L, const std::optional<T>& val)
