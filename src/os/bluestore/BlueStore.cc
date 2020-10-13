@@ -4147,16 +4147,22 @@ void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
 
   uint64_t max_shard_onodes = static_cast<uint64_t>(
       (meta_alloc / (double) onode_shards) / meta_cache->get_bytes_per_onode());
-  uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / buffer_shards);
-
-  dout(30) << __func__ << " max_shard_onodes: " << max_shard_onodes
-                 << " max_shard_buffer: " << max_shard_buffer << dendl;
 
   for (auto i : store->onode_cache_shards) {
     i->set_max(max_shard_onodes);
   }
+  //sum is in data_used
+  dout(30) << __func__ << " cache shards allocation: ";
   for (auto i : store->buffer_cache_shards) {
-    i->set_max(max_shard_buffer);
+    *_dout << i->_get_bytes() << "/" << i->max << "  ";
+  }
+  *_dout << dendl;
+
+  int64_t delta = (static_cast<int64_t>(data_alloc) - static_cast<int64_t>(data_used)) / int64_t(buffer_shards);
+  dout(5) << __func__ << "buffer cache per shard delta=" << delta << dendl; 
+  for (auto i : store->buffer_cache_shards) {
+    int64_t nw = std::max<int64_t>(0, static_cast<int64_t>(i->_get_bytes() + delta));
+    i->set_max(nw);
   }
 }
 
