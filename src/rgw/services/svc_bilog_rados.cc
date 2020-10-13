@@ -6,8 +6,10 @@
 
 #include "rgw_asio_thread.h"
 #include "driver/rados/shard_io.h"
+#include "common/errno.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "common/async/blocked_completion.h"
+
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -354,7 +356,7 @@ int RGWSI_BILog_RADOS_InIndex::get_log_status(const DoutPrefixProvider *dpp,
                                       const RGWBucketInfo& bucket_info,
 				      const rgw::bucket_log_layout_generation& log_layout, 
                                       int shard_id,
-                                      map<int, string> *markers,
+                                      map<int, std::string> *markers,
 				      optional_yield y)
 {
   vector<rgw_bucket_dir_header> headers;
@@ -380,3 +382,168 @@ int RGWSI_BILog_RADOS_InIndex::get_log_status(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+// CLS FIFO
+void RGWSI_BILog_RADOS_FIFO::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
+{
+  svc.bi = bi_rados_svc;
+}
+
+int RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
+               const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
+               int shard_id,
+               std::string_view marker)
+{
+  if (shard_id > 0) {
+    // the initial implementation does support single shard only.
+    // this is supposed to change in the future. It's worth to
+    // point out the plan is to decouple the BILog's sharding
+    // policy from the BI's one.
+    return 0;
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+
+  auto fifo = _open_fifo(bucket_info);
+  if (!fifo) {
+    lderr(cct) << __PRETTY_FUNCTION__
+               << ": unable to open FIFO: " << ""//get_oid(index)
+               << dendl;
+    return -EIO;
+  }
+  if (int ret = fifo->trim(marker, false, null_yield); ret < 0) {
+    lderr(cct) << __PRETTY_FUNCTION__
+               << ": unable to trim FIFO: " << ""//get_oid(index)
+               << ": " << cpp_strerror(-ret) << dendl;
+  }
+  return 0;
+}
+
+int RGWSI_BILog_RADOS_FIFO::log_start(const DoutPrefixProvider *dpp, optional_yield y,
+                const RGWBucketInfo& bucket_info,
+                const rgw::bucket_log_layout_generation& log_layout,
+                int shard_id)
+{
+  if (shard_id > 0) {
+    // the initial implementation does support single shard only.
+    return 0;
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  return 0;
+}
+
+int RGWSI_BILog_RADOS_FIFO::log_stop(const DoutPrefixProvider *dpp, optional_yield y,
+               const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
+               int shard_id)
+{
+  if (shard_id > 0) {
+    // the initial implementation does support single shard only.
+    return 0;
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  return 0;
+}
+
+std::unique_ptr<rgw::cls::fifo::FIFO>
+RGWSI_BILog_RADOS_FIFO::_open_fifo(const RGWBucketInfo& bucket_info)
+{
+  librados::IoCtx index_pool;
+  std::string bucket_oid;
+  ceph_assert(svc.bi);
+  if (const int ret = svc.bi->open_bucket_index(dpp, bucket_info,
+                                                &index_pool,
+                                                &bucket_oid);
+      ret < 0) {
+    return nullptr;
+  }
+
+  static constexpr char BILOG_FIFO_SUFFIX[] = ".bilog_fifo";
+  std::unique_ptr<rgw::cls::fifo::FIFO> ret_fifo;
+  rgw::cls::fifo::FIFO::create(index_pool,
+                               bucket_oid + BILOG_FIFO_SUFFIX,
+                               &ret_fifo,
+                               null_yield /* FIXME */);
+  return ret_fifo;
+}
+
+int RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp, optional_yield y,
+               const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
+               int shard_id,
+               std::string& _marker,
+               uint32_t max_entries,
+               std::list<rgw_bi_log_entry>& result,
+               bool *truncated)
+{
+  ldout(cct, 20) << __func__ << ": " << bucket_info.bucket
+                 << " _marker=" << _marker << " shard_id=" << shard_id
+                 << " max_entries=" << max_entries << dendl;
+  if (shard_id > 0) {
+    // the initial implementation does support single shard only.
+    return 0;
+  } else {
+    ceph_assert(shard_id == 0 || shard_id == -1);
+  }
+
+  auto fifo = _open_fifo(bucket_info);
+  if (!fifo) {
+    lderr(cct) << __PRETTY_FUNCTION__
+               << ": unable to open FIFO: " << ""//get_oid(index)
+               << dendl;
+    return -EIO;
+  }
+
+  std::optional<std::string_view> marker;
+  if (!_marker.empty()) {
+    marker.emplace(std::move(_marker));
+  }
+
+  std::vector<rgw::cls::fifo::list_entry> raw_entries;
+  bool more = false;
+  auto r = fifo->list(max_entries, marker, &raw_entries, &more,
+                              null_yield);
+  if (r < 0) {
+    lderr(cct) << __PRETTY_FUNCTION__
+               << ": unable to list FIFO: " << ""//get_oid(index)
+               << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  for (const auto& raw_entry : raw_entries) {
+    result.emplace_back();
+    auto& bilog_entry = result.back();
+
+    auto liter = raw_entry.data.cbegin();
+    try {
+      decode(bilog_entry, liter);
+    } catch (const buffer::error& err) {
+      lderr(cct) << __PRETTY_FUNCTION__
+                 << ": failed to decode data changes log entry: "
+                 << err.what() << dendl;
+      return -EIO;
+    }
+  }
+
+  if (truncated) {
+    *truncated = more;
+  }
+  if (!raw_entries.empty()) {
+    _marker = raw_entries.back().marker;
+  }
+  return 0;
+}
+
+int RGWSI_BILog_RADOS_FIFO::get_log_status(const DoutPrefixProvider *dpp,
+                     const RGWBucketInfo& bucket_info,
+                     const rgw::bucket_log_layout_generation& log_layout,
+                     int shard_id,
+                     std::map<int, std::string> *markers,
+                     optional_yield y)
+{
+  if (shard_id > 1) {
+    // the initial implementation does support single shard only.
+    return 0;
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  return 0;
+}

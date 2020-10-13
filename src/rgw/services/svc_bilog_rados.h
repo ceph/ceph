@@ -17,6 +17,7 @@
 #pragma once
 
 #include "rgw_service.h"
+#include "cls_fifo_legacy.h"
 
 class RGWSI_BILog_RADOS : public RGWServiceInstance
 {
@@ -65,6 +66,60 @@ public:
     RGWSI_BucketIndex_RADOS *bi{nullptr};
   } svc;
 
+  using RGWSI_BILog_RADOS::RGWSI_BILog_RADOS;
+
+  void init(RGWSI_BucketIndex_RADOS *bi_rados_svc) override;
+
+  int log_start(const DoutPrefixProvider *dpp, optional_yield y,
+                const RGWBucketInfo& bucket_info,
+                const rgw::bucket_log_layout_generation& log_layout,
+                int shard_id) override;
+  int log_stop(const DoutPrefixProvider *dpp, optional_yield y,
+               const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
+               int shard_id) override;
+
+  int log_trim(const DoutPrefixProvider *dpp, optional_yield y,
+               const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
+               int shard_id,
+               std::string_view marker) override;
+  int log_list(const DoutPrefixProvider *dpp, optional_yield y,
+               const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
+               int shard_id,
+               std::string& marker,
+               uint32_t max,
+               std::list<rgw_bi_log_entry>& result,
+               bool *truncated) override;
+
+  int get_log_status(const DoutPrefixProvider *dpp,
+                     const RGWBucketInfo& bucket_info,
+                     const rgw::bucket_log_layout_generation& log_layout,
+                     int shard_id,
+                     std::map<int, std::string> *markers,
+                     optional_yield y) override;
+};
+
+// RGWSI_BILog_RADOS_FIFO -- the reader part of the cls_fifo-based backend
+// for BIlog.
+//
+// Responsibilities:
+//   * reading and treaming entries,
+//   * discovery of `max_marker` (imporant for our incremental sync feature),
+//   * managing the logging state (on/off).
+class RGWSI_BILog_RADOS_FIFO : public RGWSI_BILog_RADOS
+{
+  struct Svc {
+    RGWSI_BucketIndex_RADOS *bi{nullptr};
+  } svc;
+
+  std::unique_ptr<rgw::cls::fifo::FIFO> _open_fifo(
+    const RGWBucketInfo& bucket_info);
+
+  friend struct BILogUpdateBatchFIFO;
+
+public:
   using RGWSI_BILog_RADOS::RGWSI_BILog_RADOS;
 
   void init(RGWSI_BucketIndex_RADOS *bi_rados_svc) override;
