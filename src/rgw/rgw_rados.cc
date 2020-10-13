@@ -77,6 +77,7 @@
 #include "rgw_reshard.h"
 #include "rgw_cr_rados.h"
 
+#include "services/svc_bilog_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
@@ -7094,7 +7095,8 @@ static uint16_t get_olh_op_bilog_flags()
 }
 
 struct BILogUpdateBatchFIFO {
-  static constexpr char BILOG_FIFO_SUFFIX[] = ".bilog_fifo";
+  static constexpr auto BILOG_FIFO_SUFFIX = \
+    RGWSI_BILog_RADOS_FIFO::BILOG_FIFO_SUFFIX;
   std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
 
   BILogUpdateBatchFIFO(RGWRados& store, const RGWBucketInfo& bucket_info);
