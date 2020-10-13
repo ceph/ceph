@@ -64,6 +64,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import signal
 import io
 from contextlib import redirect_stdout
+import ssl
 
 
 try:
@@ -5321,6 +5322,21 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
         f'/{api_version}/metadata/daemons',
         f'/{api_version}/metadata/host',
     ]
+    class Decorators:
+        @classmethod
+        def authorize(cls, f):
+            """Implement a basic token check.
+            
+            The token is installed at deployment time and must be provided to
+            ensure we only respond to callers who know our token i.e. mgr
+            """
+            def wrapper(self, *args, **kwargs):
+                auth = self.headers.get("Authorization", None)
+                if auth != "Bearer " + self.server.auth_token:
+                    self.send_error(401)
+                    return
+                f(self, *args, **kwargs)
+            return wrapper
     
     def _help_page(self):
         return """<!DOCTYPE html>
@@ -5364,13 +5380,10 @@ td,th {{
         self.end_headers()
         self.wfile.write(self._help_page().encode('utf-8'))
 
+    @Decorators.authorize
     def do_GET(self):
         """Handle *all* GET requests"""
 
-        # we could wrap this to include some form of auth, but at this point the 
-        # data is read only and we offer no means of remotely invoking a cephadm
-        # command - so auth is not required (we're basically in the same category
-        # as the prometheus node-exporter)
         if self.path == '/':
             # provide a html response if someone hits the root url, to document the 
             # available api endpoints
@@ -5409,12 +5422,15 @@ td,th {{
 class CephadmDaemon():
 
     daemon_type = "cephadm"
-    default_port = 5003
+    default_port = 9443
     bin_name = 'cephadm'
+    key_name = "key"
+    crt_name = "crt"
+    token_name = "authtoken"
     loop_delay = 1
     thread_check_interval = 5
 
-    def __init__(self, fsid, daemon_id, port=None):
+    def __init__(self, fsid, daemon_id=None, port=None):
         self.fsid = fsid
         self.daemon_id = daemon_id 
         if not port:
@@ -5425,6 +5441,8 @@ class CephadmDaemon():
         self.http_server: CephadmHTTPServer
         self.stop = False
         self.cephadm_cache = CephadmCache()
+        self.errors = []
+        self.auth_token = read_file([os.path.join(self.daemon_path, CephadmDaemon.token_name)])
 
     @property
     def port_active(self):
@@ -5432,7 +5450,16 @@ class CephadmDaemon():
 
     @property
     def can_run(self):
-        return not self.port_active
+        # if port is in use
+        if self.port_active:
+            self.errors.append(f"TCP port {self.port} already in use, unable to bind")
+        if not os.path.exists(os.path.join(self.daemon_path, CephadmDaemon.key_name)):
+            self.errors.append(f"Key file '{CephadmDaemon.key_name}' is missing from {self.daemon_path}")
+        if not os.path.exists(os.path.join(self.daemon_path, CephadmDaemon.crt_name)):
+            self.errors.append(f"Certificate file '{CephadmDaemon.crt_name}' is missing from {self.daemon_path}")
+        if self.auth_token == "Unknown":
+            self.errors.append(f"Authentication token '{CephadmDaemon.token_name}' is missing from {self.daemon_path}")
+        return len(self.errors) == 0
 
     @staticmethod
     def _unit_name(fsid, daemon_id):
@@ -5610,7 +5637,9 @@ class CephadmDaemon():
     def run(self):
         logger.info(f"cephadm exporter starting for FSID '{self.fsid}'")
         if not self.can_run:
-            logger.error("Unable to start")
+            logger.error("Unable to start the exporter daemon")
+            for e in self.errors:
+                logger.error(e)
             return
 
         # register signal handlers for running under systemd control
@@ -5629,9 +5658,15 @@ class CephadmDaemon():
         self.workers.append(disks)
 
         self.http_server = CephadmHTTPServer(('0.0.0.0', self.port), CephadmDaemonHandler)  # IPv4 only
+        self.http_server.socket = ssl.wrap_socket(self.http_server.socket,
+                                                  keyfile=os.path.join(self.daemon_path, CephadmDaemon.key_name),
+                                                  certfile=os.path.join(self.daemon_path, CephadmDaemon.crt_name),
+                                                  server_side=True)
+
         self.http_server.cephadm_cache = self.cephadm_cache
+        self.http_server.auth_token = self.auth_token
         server_thread = self._create_thread(self.http_server.serve_forever, 'http_server')
-        logger.info(f"http server listening on {self.http_server.server_address[0]}:{self.http_server.server_port}")
+        logger.info(f"https server listening on {self.http_server.server_address[0]}:{self.http_server.server_port}")
         
         ctr = 0
         while server_thread.is_alive():
@@ -5658,10 +5693,11 @@ class CephadmDaemon():
     def unit_run(self):
         
         return """set -e 
-{py3} {bin_path} exporter --fsid {fsid} --port {port} &""".format(
+{py3} {bin_path} exporter --fsid {fsid} --id {daemon_id} --port {port} &""".format(
             py3 = shutil.which('python3'),
             bin_path=self.binary_path,
             fsid=self.fsid,
+            daemon_id=self.daemon_id,
             port=self.port
         )
 
@@ -5755,7 +5791,7 @@ WantedBy=ceph-{fsid}.target
 
 def command_exporter():
     
-    exporter = CephadmDaemon(args.fsid, args.port)
+    exporter = CephadmDaemon(args.fsid, daemon_id=args.id, port=args.port)
 
     if args.fsid not in os.listdir(args.data_dir):
         raise Error(f"cluster fsid '{args.fsid}' not found in '{args.data_dir}'")
@@ -6293,8 +6329,13 @@ def _get_parser():
     parser_exporter.add_argument(
         '--port',
         type=int,
-        default=5003,
+        default=CephadmDaemon.default_port,
         help='port number for the cephadm exporter service')
+    parser_exporter.add_argument(
+        '--id',
+        type=str,
+        default=get_hostname().split('.')[0],
+        help='daemon identifer for the exporter')
     parser_exporter.set_defaults(func=command_exporter)
 
     return parser
