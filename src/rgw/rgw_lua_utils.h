@@ -95,25 +95,25 @@ void create_metatable(lua_State* L, bool toplevel, Upvalues... upvalues)
   }
   // create metatable
   [[maybe_unused]] const auto rc = luaL_newmetatable(L, MetaTable::Name().c_str());
-  lua_pushstring(L, "__index");
+  lua_pushliteral(L, "__index");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::IndexClosure, upvals_size);
   lua_rawset(L, -3);
-  lua_pushstring(L, "__newindex");
+  lua_pushliteral(L, "__newindex");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::NewIndexClosure, upvals_size);
   lua_rawset(L, -3);
-  lua_pushstring(L, "__pairs");
+  lua_pushliteral(L, "__pairs");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::PairsClosure, upvals_size);
   lua_rawset(L, -3);
-  lua_pushstring(L, "__len");
+  lua_pushliteral(L, "__len");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
