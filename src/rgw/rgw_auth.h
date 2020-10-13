@@ -671,7 +671,7 @@ public:
     return false;
   }
   bool is_owner_of(const rgw_user& uid) const override {
-    return (this->user_id.id == uid.id && this->user_id.tenant == uid.tenant && this->user_id.ns == this->user_id.ns);
+    return (this->user_id.id == uid.id && this->user_id.tenant == uid.tenant && this->user_id.ns == uid.ns);
   }
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
