@@ -107,20 +107,20 @@ TEST_F(LegacyClsFIFO, TestGetInfo)
   std::uint32_t part_header_size;
   std::uint32_t part_entry_overhead;
   r = RCf::get_meta(ioctx, fifo_id, std::nullopt, &info, &part_header_size,
-		    &part_entry_overhead, null_yield);
+		    &part_entry_overhead, 0, null_yield);
   EXPECT_EQ(0, r);
   EXPECT_GT(part_header_size, 0);
   EXPECT_GT(part_entry_overhead, 0);
   EXPECT_FALSE(info.version.instance.empty());
 
   r = RCf::get_meta(ioctx, fifo_id, info.version, &info, &part_header_size,
-		    &part_entry_overhead, null_yield);
+		    &part_entry_overhead, 0, null_yield);
   EXPECT_EQ(0, r);
   fifo::objv objv;
   objv.instance = "foo";
   objv.ver = 12;
   r = RCf::get_meta(ioctx, fifo_id, objv, &info, &part_header_size,
-			&part_entry_overhead, null_yield);
+		    &part_entry_overhead, 0, null_yield);
   EXPECT_EQ(-ECANCELED, r);
 }
 
