@@ -323,6 +323,48 @@ TEST(TestRGWLua, Tags)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, TagsNotWriteable)
+{
+  const std::string script = R"(
+    Request.Tags["hello"] = "goodbye"
+  )";
+
+  DEFINE_REQ_STATE;
+  s.tagset.add_tag("hello", "world");
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_NE(rc, 0);
+}
+
+TEST(TestRGWLua, Metadata)
+{
+  const std::string script = R"(
+    print("number of metadata entries is: " .. #Request.HTTP.Metadata)
+    for k, v in pairs(Request.HTTP.Metadata) do
+      print("key=" .. k .. ", " .. "value=" .. v)
+    end
+    print("value of 'hello' is:")
+    print(Request.HTTP.Metadata["hello"])
+    print("value of 'kaboom' is:")
+    print(Request.HTTP.Metadata["kaboom"])
+    Request.HTTP.Metadata["hello"] = "goodbye"
+    Request.HTTP.Metadata["kaboom"] = "boom"
+    print("new number of metadata entries is: " .. #Request.HTTP.Metadata)
+    print("new value of 'hello' is:")
+    print(Request.HTTP.Metadata["hello"])
+    print("new value of 'kaboom' is:")
+    print(Request.HTTP.Metadata["kaboom"])
+  )";
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["hello"] = "world";
+  s.info.x_meta_map["foo"] = "bar";
+  s.info.x_meta_map["ka"] = "boom";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_EQ(rc, 0);
+}
+
 TEST(TestRGWLua, Acl)
 {
   const std::string script = R"(

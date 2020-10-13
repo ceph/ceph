@@ -43,6 +43,7 @@ constexpr auto THREE_UPVALS = 3;
 constexpr auto FOUR_UPVALS  = 4;
 constexpr auto FIVE_UPVALS  = 5;
 
+constexpr auto NO_RETURNVAL    = 0;
 constexpr auto ONE_RETURNVAL    = 1;
 constexpr auto TWO_RETURNVALS   = 2;
 constexpr auto THREE_RETURNVALS = 3;
@@ -143,21 +144,21 @@ struct EmptyMetaTable {
   // to change, overload this function in the derived
   static int NewIndexClosure(lua_State* L) {
     throw std::runtime_error("trying to write to readonly field");
-    return 1;
+    return NO_RETURNVAL;
   }
   
   // by default nothing is iterable
   // to change, overload this function in the derived
   static int PairsClosure(lua_State* L) {
     throw std::runtime_error("trying to iterate over non-iterable field");
-    return 1;
+    return ONE_RETURNVAL;
   }
   
   // by default nothing is iterable
   // to change, overload this function in the derived
   static int LenClosure(lua_State* L) {
     throw std::runtime_error("trying to get length of non-iterable field");
-    return 1;
+    return ONE_RETURNVAL;
   }
 
   static void throw_unknown_field(const std::string& index, const std::string& table) {
