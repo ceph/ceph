@@ -34,3 +34,23 @@ void MDSPerfMetricCollector::process_reports(const MetricPayload &payload) {
   delayed_ranks = metric_report.rank_metrics_delayed;
   dout(20) << ": delayed ranks=[" << delayed_ranks << "]" << dendl;
 }
+
+int MDSPerfMetricCollector::get_counters(PerfCollector *collector) {
+  MDSPerfCollector *c = static_cast<MDSPerfCollector *>(collector);
+
+  std::lock_guard locker(lock);
+
+  int r = get_counters_generic(c->query_id, &c->counters);
+  if (r != 0) {
+    return r;
+  }
+
+  get_delayed_ranks(&c->delayed_ranks);
+
+  return r;
+}
+
+void MDSPerfMetricCollector::get_delayed_ranks(std::set<mds_rank_t> *ranks) {
+  ceph_assert(ceph_mutex_is_locked(lock));
+  *ranks = delayed_ranks;
+}

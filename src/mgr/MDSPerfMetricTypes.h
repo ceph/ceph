@@ -302,6 +302,15 @@ WRITE_CLASS_DENC(MDSPerfMetricQuery)
 
 std::ostream &operator<<(std::ostream &os, const MDSPerfMetricQuery &query);
 
+struct MDSPerfCollector : PerfCollector {
+  std::map<MDSPerfMetricKey, PerformanceCounters> counters;
+  std::set<mds_rank_t> delayed_ranks;
+
+  MDSPerfCollector(MetricQueryID query_id)
+    : PerfCollector(query_id) {
+  }
+};
+
 struct MDSPerfMetrics {
   MDSPerformanceCounterDescriptors performance_counter_descriptors;
   std::map<MDSPerfMetricKey, ceph::buffer::list> group_packed_performance_counters;

@@ -1023,6 +1023,262 @@ ceph_get_osd_perf_counters(BaseMgrModule *self, PyObject *args)
   return self->py_modules->get_osd_perf_counters(query_id);
 }
 
+// MDS perf query interface -- mostly follows ceph_add_osd_perf_query()
+// style
+
+static PyObject*
+ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
+{
+  static const std::string NAME_KEY_DESCRIPTOR = "key_descriptor";
+  static const std::string NAME_COUNTERS_DESCRIPTORS =
+      "performance_counter_descriptors";
+  static const std::string NAME_LIMIT = "limit";
+  static const std::string NAME_SUB_KEY_TYPE = "type";
+  static const std::string NAME_SUB_KEY_REGEX = "regex";
+  static const std::string NAME_LIMIT_ORDER_BY = "order_by";
+  static const std::string NAME_LIMIT_MAX_COUNT = "max_count";
+  static const std::map<std::string, MDSPerfMetricSubKeyType> sub_key_types = {
+    {"mds_rank", MDSPerfMetricSubKeyType::MDS_RANK},
+    {"client_id", MDSPerfMetricSubKeyType::CLIENT_ID},
+  };
+  static const std::map<std::string, MDSPerformanceCounterType> counter_types = {
+    {"cap_hit", MDSPerformanceCounterType::CAP_HIT_METRIC},
+    {"read_latency", MDSPerformanceCounterType::READ_LATENCY_METRIC},
+    {"write_latency", MDSPerformanceCounterType::WRITE_LATENCY_METRIC},
+    {"metadata_latency", MDSPerformanceCounterType::METADATA_LATENCY_METRIC},
+  };
+
+  PyObject *py_query = nullptr;
+  if (!PyArg_ParseTuple(args, "O:ceph_add_mds_perf_query", &py_query)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+  if (!PyDict_Check(py_query)) {
+    derr << __func__ << " arg not a dict" << dendl;
+    Py_RETURN_NONE;
+  }
+
+  PyObject *query_params = PyDict_Items(py_query);
+  MDSPerfMetricQuery query;
+  std::optional<MDSPerfMetricLimit> limit;
+
+  // {
+  //   'key_descriptor': [
+  //     {'type': subkey_type, 'regex': regex_pattern},
+  //     ...
+  //   ],
+  //   'performance_counter_descriptors': [
+  //     list, of, descriptor, types
+  //   ],
+  //   'limit': {'order_by': performance_counter_type, 'max_count': n},
+  // }
+
+  for (int i = 0; i < PyList_Size(query_params); ++i) {
+    PyObject *kv = PyList_GET_ITEM(query_params, i);
+    char *query_param_name = nullptr;
+    PyObject *query_param_val = nullptr;
+    if (!PyArg_ParseTuple(kv, "sO:pair", &query_param_name, &query_param_val)) {
+      derr << __func__ << " dict item " << i << " not a size 2 tuple" << dendl;
+      Py_RETURN_NONE;
+    }
+    if (query_param_name == NAME_KEY_DESCRIPTOR) {
+      if (!PyList_Check(query_param_val)) {
+        derr << __func__ << " " << query_param_name << " not a list" << dendl;
+        Py_RETURN_NONE;
+      }
+      for (int j = 0; j < PyList_Size(query_param_val); j++) {
+        PyObject *sub_key = PyList_GET_ITEM(query_param_val, j);
+        if (!PyDict_Check(sub_key)) {
+          derr << __func__ << " query " << query_param_name << " item " << j
+               << " not a dict" << dendl;
+          Py_RETURN_NONE;
+        }
+        MDSPerfMetricSubKeyDescriptor d;
+        PyObject *sub_key_params = PyDict_Items(sub_key);
+        for (int k = 0; k < PyList_Size(sub_key_params); ++k) {
+          PyObject *pair = PyList_GET_ITEM(sub_key_params, k);
+          if (!PyTuple_Check(pair)) {
+            derr << __func__ << " query " << query_param_name << " item " << j
+                 << " pair " << k << " not a tuple" << dendl;
+            Py_RETURN_NONE;
+          }
+          char *param_name = nullptr;
+          PyObject *param_value = nullptr;
+          if (!PyArg_ParseTuple(pair, "sO:pair", &param_name, &param_value)) {
+            derr << __func__ << " query " << query_param_name << " item " << j
+                 << " pair " << k << " not a size 2 tuple" << dendl;
+            Py_RETURN_NONE;
+          }
+          if (param_name == NAME_SUB_KEY_TYPE) {
+            if (!PyUnicode_Check(param_value)) {
+              derr << __func__ << " query " << query_param_name << " item " << j
+                   << " contains invalid param " << param_name << dendl;
+              Py_RETURN_NONE;
+            }
+            auto type = PyUnicode_AsUTF8(param_value);
+            auto it = sub_key_types.find(type);
+            if (it == sub_key_types.end()) {
+              derr << __func__ << " query " << query_param_name << " item " << j
+                   << " contains invalid type " << dendl;
+              Py_RETURN_NONE;
+            }
+            d.type = it->second;
+          } else if (param_name == NAME_SUB_KEY_REGEX) {
+            if (!PyUnicode_Check(param_value)) {
+              derr << __func__ << " query " << query_param_name << " item " << j
+                   << " contains invalid param " << param_name << dendl;
+              Py_RETURN_NONE;
+            }
+            d.regex_str = PyUnicode_AsUTF8(param_value);
+            try {
+              d.regex = d.regex_str.c_str();
+            } catch (const std::regex_error& e) {
+              derr << __func__ << " query " << query_param_name << " item " << j
+                   << " contains invalid regex " << d.regex_str << dendl;
+              Py_RETURN_NONE;
+            }
+            if (d.regex.mark_count() == 0) {
+              derr << __func__ << " query " << query_param_name << " item " << j
+                   << " regex " << d.regex_str << ": no capturing groups"
+                   << dendl;
+              Py_RETURN_NONE;
+            }
+          } else {
+            derr << __func__ << " query " << query_param_name << " item " << j
+                 << " contains invalid param " << param_name << dendl;
+            Py_RETURN_NONE;
+          }
+        }
+        if (d.type == static_cast<MDSPerfMetricSubKeyType>(-1) ||
+            d.regex_str.empty()) {
+          derr << __func__ << " query " << query_param_name << " item " << i
+               << " invalid" << dendl;
+          Py_RETURN_NONE;
+        }
+        query.key_descriptor.push_back(d);
+      }
+    } else if (query_param_name == NAME_COUNTERS_DESCRIPTORS) {
+      if (!PyList_Check(query_param_val)) {
+        derr << __func__ << " " << query_param_name << " not a list" << dendl;
+        Py_RETURN_NONE;
+      }
+      for (int j = 0; j < PyList_Size(query_param_val); j++) {
+        PyObject *py_type = PyList_GET_ITEM(query_param_val, j);
+        if (!PyUnicode_Check(py_type)) {
+          derr << __func__ << " query " << query_param_name << " item " << j
+               << " not a string" << dendl;
+          Py_RETURN_NONE;
+        }
+        auto type = PyUnicode_AsUTF8(py_type);
+        auto it = counter_types.find(type);
+        if (it == counter_types.end()) {
+          derr << __func__ << " query " << query_param_name << " item " << type
+               << " is not valid type" << dendl;
+          Py_RETURN_NONE;
+        }
+        query.performance_counter_descriptors.push_back(it->second);
+      }
+    } else if (query_param_name == NAME_LIMIT) {
+      if (!PyDict_Check(query_param_val)) {
+        derr << __func__ << " query " << query_param_name << " not a dict"
+             << dendl;
+        Py_RETURN_NONE;
+      }
+
+      limit = MDSPerfMetricLimit();
+      PyObject *limit_params = PyDict_Items(query_param_val);
+
+      for (int j = 0; j < PyList_Size(limit_params); ++j) {
+        PyObject *kv = PyList_GET_ITEM(limit_params, j);
+        char *limit_param_name = nullptr;
+        PyObject *limit_param_val = nullptr;
+        if (!PyArg_ParseTuple(kv, "sO:pair", &limit_param_name,
+                              &limit_param_val)) {
+          derr << __func__ << " limit item " << j << " not a size 2 tuple"
+               << dendl;
+          Py_RETURN_NONE;
+        }
+
+        if (limit_param_name == NAME_LIMIT_ORDER_BY) {
+          if (!PyUnicode_Check(limit_param_val)) {
+            derr << __func__ << " " << limit_param_name << " not a string"
+                 << dendl;
+            Py_RETURN_NONE;
+          }
+          auto order_by = PyUnicode_AsUTF8(limit_param_val);
+          auto it = counter_types.find(order_by);
+          if (it == counter_types.end()) {
+            derr << __func__ << " limit " << limit_param_name
+                 << " not a valid counter type" << dendl;
+            Py_RETURN_NONE;
+          }
+          limit->order_by = it->second;
+        } else if (limit_param_name == NAME_LIMIT_MAX_COUNT) {
+#if PY_MAJOR_VERSION <= 2
+          if (!PyInt_Check(limit_param_val) && !PyLong_Check(limit_param_val)) {
+#else
+          if (!PyLong_Check(limit_param_val)) {
+#endif
+            derr << __func__ << " " << limit_param_name << " not an int"
+                 << dendl;
+            Py_RETURN_NONE;
+          }
+          limit->max_count = PyLong_AsLong(limit_param_val);
+        } else {
+          derr << __func__ << " unknown limit param: " << limit_param_name
+               << dendl;
+          Py_RETURN_NONE;
+        }
+      }
+    } else {
+      derr << __func__ << " unknown query param: " << query_param_name << dendl;
+      Py_RETURN_NONE;
+    }
+  }
+
+  if (query.key_descriptor.empty()) {
+    derr << __func__ << " invalid query" << dendl;
+    Py_RETURN_NONE;
+  }
+
+  if (limit) {
+    auto &ds = query.performance_counter_descriptors;
+    if (std::find(ds.begin(), ds.end(), limit->order_by) == ds.end()) {
+      derr << __func__ << " limit order_by " << limit->order_by
+           << " not in performance_counter_descriptors" << dendl;
+      Py_RETURN_NONE;
+    }
+  }
+
+  auto query_id = self->py_modules->add_mds_perf_query(query, limit);
+  return PyLong_FromLong(query_id);
+}
+
+static PyObject*
+ceph_remove_mds_perf_query(BaseMgrModule *self, PyObject *args)
+{
+  MetricQueryID query_id;
+  if (!PyArg_ParseTuple(args, "i:ceph_remove_mds_perf_query", &query_id)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  self->py_modules->remove_mds_perf_query(query_id);
+  Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_get_mds_perf_counters(BaseMgrModule *self, PyObject *args)
+{
+  MetricQueryID query_id;
+  if (!PyArg_ParseTuple(args, "i:ceph_get_mds_perf_counters", &query_id)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  return self->py_modules->get_mds_perf_counters(query_id);
+}
+
 static PyObject*
 ceph_is_authorized(BaseMgrModule *self, PyObject *args)
 {
@@ -1179,6 +1435,15 @@ PyMethodDef BaseMgrModule_methods[] = {
     METH_VARARGS, "Remove an osd perf query"},
 
   {"_ceph_get_osd_perf_counters", (PyCFunction)ceph_get_osd_perf_counters,
+    METH_VARARGS, "Get osd perf counters"},
+
+  {"_ceph_add_mds_perf_query", (PyCFunction)ceph_add_mds_perf_query,
+    METH_VARARGS, "Add an osd perf query"},
+
+  {"_ceph_remove_mds_perf_query", (PyCFunction)ceph_remove_mds_perf_query,
+    METH_VARARGS, "Remove an osd perf query"},
+
+  {"_ceph_get_mds_perf_counters", (PyCFunction)ceph_get_mds_perf_counters,
     METH_VARARGS, "Get osd perf counters"},
 
   {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized,
