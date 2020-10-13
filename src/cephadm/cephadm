@@ -3599,10 +3599,18 @@ def command_unit():
 
     unit_name = get_unit_name_by_daemon_name(args.fsid, args.name)
 
-    call_throws([
-        'systemctl',
-        args.command,
-        unit_name])
+    def _readable_return(tpl, cmd):
+        # queries for status need to be passed-through
+        if cmd == 'status':
+            return tpl[0]
+        # all other queries (start, stop, restart, enable, disable)
+        # do not return anything. judge based on the return-code.
+        return 'success'
+
+    out_tpl = call_throws(['systemctl',
+                           args.command,
+                           unit_name])
+    logger.info(_readable_return(out_tpl, args.command))
 
 ##################################
 
