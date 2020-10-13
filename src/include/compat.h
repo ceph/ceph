@@ -203,6 +203,8 @@ int pipe_cloexec(int pipefd[2], int flags);
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 unsigned get_page_size();
 
+int ceph_memzero_s(void *dest, size_t destsz, size_t count);
+
 #ifdef __cplusplus
 }
 #endif
