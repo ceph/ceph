@@ -44,6 +44,29 @@ int RGWRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_
 			      set_exclusive(exclusive));
 }
 
+int RGWRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  return role_ctl->store_name(id,
+			      name,
+			      tenant,
+			      y,
+            dpp,
+			      RGWRoleCtl::PutParams().
+			      set_exclusive(exclusive)
+			      );
+}
+
+int RGWRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  return role_ctl->store_path(id,
+			      path,
+			      tenant,
+			      y,
+            dpp,
+			      RGWRoleCtl::PutParams().
+			      set_exclusive(exclusive));
+}
+
 int RGWRole::get(const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret = read_name(dpp, y);
