@@ -35,6 +35,7 @@ MGR_MODULE_SCHEMA = ([{
 @ControllerDoc("Get details of MGR Module", "MgrModule")
 class MgrModules(RESTController):
     ignore_modules = ['selftest']
+
     @EndpointDoc("List Mgr modules",
                  responses={200: MGR_MODULE_SCHEMA})
     def list(self):
