@@ -78,3 +78,16 @@ void ReplicaMonitor::check_sub(Subscription *sub)
 {
 // TODO:
 }
+
+void ReplicaMonitor::decode_replicadaemon_map(bufferlist &replicadaemon_map_bl)
+{
+  cur_cache_replicadaemon_map.decode(replicadaemon_map_bl);
+}
+
+template<int dbg_level>
+void ReplicaMonitor::print_map(const ReplicaDaemonMap& replicadaemon_map) const
+{
+  dout(dbg_level) << "print map\n";
+  replicadaemon_map.print_map(*_dout);
+  *_dout << dendl;
+}

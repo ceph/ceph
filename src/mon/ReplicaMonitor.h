@@ -37,11 +37,15 @@ public:
   void on_restart() override;
 
   void check_sub(Subscription *sub);
+  void decode_replicadaemon_map(bufferlist &replicadaemon_map_bl);
 private:
   /* The trusted ReplicaDaemonMap is at the ReplicMonitor attached with Leader Monitor */
   ReplicaDaemonMap cur_cache_replicadaemon_map;  /* cache replicadaemon_map at current epoch */
   /* cache replicadaemon_map pending to be updated to MonitorDBStore */
   ReplicaDaemonMap pending_cache_replicadaemon_map;
+
+  template<int dbg_level = 10>
+  void print_map(const ReplicaDaemonMap& replicadaemon_map) const;
 };
 
 #endif // defined CEPH_REPLICA_MONITOR_H
