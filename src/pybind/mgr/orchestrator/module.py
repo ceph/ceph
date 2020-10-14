@@ -1063,7 +1063,7 @@ Usage:
                     inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = """Usage:
   ceph orch apply -i <yaml spec> [--dry-run]
-  ceph orch apply <service_type> <placement> [--unmanaged]
+  ceph orch apply <service_type> [--placement=<placement_string>] [--unmanaged]
         """
         if inbuf:
             if service_type or placement or unmanaged:
