@@ -3,6 +3,24 @@
 CephFS Administrative commands
 ==============================
 
+.. toctree:: 
+   :maxdepth: 1
+   :hidden:
+
+    Create a CephFS file system <createfs>
+	Provision/Add/Remove MDS(s) <add-remove-mds>
+    MDS failover and standby configuration <standby>
+    MDS Cache Size Limits <cache-size-limits>
+    MDS Configuration Settings <mds-config-ref>
+    Manual: ceph-mds <../../man/8/ceph-mds>
+    Export over NFS <nfs>
+    Export over NFS with volume nfs interface <fs-nfs-exports>
+    Application best practices <app-best-practices>
+    FS volume and subvolumes <fs-volumes>
+    CephFS Quotas <quota>
+    Health messages <health-messages>
+    Upgrading old file systems <upgrading>
+
 File Systems
 ------------
 
@@ -385,30 +403,3 @@ This removes a rank from the failed set.
 This command resets the file system state to defaults, except for the name and
 pools. Non-zero ranks are saved in the stopped set.
 
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-
-    Create a CephFS file system <createfs>
-    Provision/Add/Remove MDS(s) <add-remove-mds>
-    MDS failover and standby configuration <standby>
-    MDS Cache Size Limits <cache-size-limits>
-    MDS Configuration Settings <mds-config-ref>
-    Manual: ceph-mds <../../man/8/ceph-mds>
-    Export over NFS <nfs>
-    Export over NFS with volume nfs interface <fs-nfs-exports>
-    Application best practices <app-best-practices>
-    FS volume and subvolumes <fs-volumes>
-    CephFS Quotas <quota>
-    Health messages <health-messages>
-    Upgrading old file systems <upgrading>
-    Ceph File System IO Path <cephfs-io-path>
-    Configuring Directory Fragmentation <dirfrags>
-    Dynamic Metadata Management <dynamic-metadata-management>
-    File Layouts <file-layouts>
-    LazyIO <lazyio>
-    CephFS Distributed Metada Cache <mdcache>
-    MDS Journaling <mds-journaling>
-    MDS States <mds-states>
-    Configuring Multiple Active MDS Daemons <multimds>
-    Differences from POSIX <posix>

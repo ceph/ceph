@@ -1,3 +1,7 @@
+==================
+Additional Details
+==================
+
 This page links to information about experimental features and other matters that don't fit neatly into the other categories in the CephFS Guide.
 
 

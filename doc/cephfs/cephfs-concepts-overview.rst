@@ -1,13 +1,20 @@
-The pages here explain basic CephFS concepts.
+===============
+CephFS Concepts
+===============
 
 .. toctree::
-   :hidden:
    :maxdepth: 1
+   :hidden:
 
-    Client eviction <eviction>
-    Scrubbing the File System <scrub>
-    Handling full file systems <full>
-    Metadata repair <disaster-recovery-experts>
-    Troubleshooting <troubleshooting>
-    Disaster recovery <disaster-recovery>
-    cephfs-journal-tool <cephfs-journal-tool>
+    MDS States <mds-states>
+    POSIX compatibility <posix>
+    MDS Journaling <mds-journaling>
+    File layouts <file-layouts>
+    Distributed Metadata Cache <mdcache>
+    Dynamic Metadata Management in CephFS <dynamic-metadata-management>
+    CephFS IO Path <cephfs-io-path>
+    LazyIO <lazyio>
+    Directory fragmentation <dirfrags>
+    Multiple active MDS daemons <multimds>
+
+The pages here explain basic CephFS concepts.
