@@ -279,7 +279,7 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
   if (auto r_arn = rgw::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
-    RGWRole role(cct, store->getRados()->pctl, roleName, r_arn->account);
+    RGWRole role(cct, store->ctl()->role, roleName, r_arn->account);
     if (int ret = role.get(); ret < 0) {
       if (ret == -ENOENT) {
         ldout(cct, 0) << "Role doesn't exist: " << roleName << dendl;

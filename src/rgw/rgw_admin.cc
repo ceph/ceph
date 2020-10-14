@@ -5743,7 +5743,7 @@ int main(int argc, const char **argv)
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, path, assume_role_doc, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, path, assume_role_doc, tenant);
       ret = role.create(true);
       if (ret < 0) {
         return -ret;
@@ -5757,7 +5757,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, tenant);
       ret = role.delete_obj();
       if (ret < 0) {
         return -ret;
@@ -5771,7 +5771,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5799,7 +5799,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5847,7 +5847,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5866,7 +5866,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: Role name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5886,7 +5886,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, tenant);
       int ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5910,7 +5910,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
+      RGWRole role(g_ceph_context, store->ctl()->role, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;

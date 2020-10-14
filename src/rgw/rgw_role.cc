@@ -213,8 +213,6 @@ int RGWRole::get_by_id()
 
 int RGWRole::update()
 {
-  //auto& pool = ctl->svc->zone->get_zone_params().roles_pool;
-
   int ret = store_info(false);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  updating info "
@@ -420,7 +418,7 @@ int RGWRole::get_roles_by_path_prefix(RGWRados *store,
       //Get id from info oid prefix + id
       string id = it.substr(pos + role_oid_prefix.length());
 
-      RGWRole role(cct, store->pctl);
+      RGWRole role(cct, store->ctl.role);
       role.set_id(id);
       int ret = role.read_info();
       if (ret < 0) {

@@ -5854,7 +5854,7 @@ rgw::auth::s3::STSEngine::authenticate(
   string role_id;
   rgw::auth::RoleApplier::Role r;
   if (! token.roleId.empty()) {
-    RGWRole role(s->cct, ctl, token.roleId);
+    RGWRole role(s->cct, ctl->role, token.roleId);
     if (role.get_by_id() < 0) {
       return result_t::deny(-EPERM);
     }

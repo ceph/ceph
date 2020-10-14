@@ -117,7 +117,6 @@ class RGWRole
   static const string role_arn_prefix;
 
   CephContext *cct;
-  RGWCtl *ctl; // fixme
   RGWRoleCtl *role_ctl;
   RGWRoleInfo info;
 
@@ -134,17 +133,17 @@ public:
   // args for RGWRoleInfo
   template <typename ...Args>
   RGWRole(CephContext *cct,
-          RGWCtl *ctl,
+          RGWRoleCtl *role_ctl,
           Args&& ...args)
   : cct(cct),
-    ctl(ctl),
+    role_ctl(role_ctl),
     info(std::forward<Args>(args)...)
  {}
 
   RGWRole(CephContext *cct,
-          RGWCtl *ctl)
+          RGWRoleCtl *role_ctl)
   : cct(cct),
-    ctl(ctl) {}
+    role_ctl(role_ctl) {}
 
   RGWRole() {}
 
