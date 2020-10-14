@@ -76,7 +76,7 @@ from unittest import suite, loader
 
 from teuthology.orchestra.run import quote, PIPE
 from teuthology.orchestra.daemon import DaemonGroup
-from teuthology.orchestra.remote import Remote
+from teuthology.orchestra.remote import RemoteShell
 from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
 from teuthology.contextutil import MaxWhileTries
@@ -294,7 +294,7 @@ class LocalRemoteProcess(object):
         return FakeStdIn(self)
 
 
-class LocalRemote(object):
+class LocalRemote(RemoteShell):
     """
     Amusingly named class to present the teuthology RemoteProcess interface when we are really
     running things locally for vstart
@@ -302,13 +302,17 @@ class LocalRemote(object):
     Run this inside your src/ dir!
     """
 
-    os = Remote.os
-    arch = Remote.arch
-
     def __init__(self):
+        super().__init__()
         self.name = "local"
-        self.hostname = "localhost"
+        self._hostname = "localhost"
         self.user = getpass.getuser()
+
+    @property
+    def hostname(self):
+        if not hasattr(self, '_hostname'):
+            self._hostname = 'localhost'
+        return self._hostname
 
     def get_file(self, path, sudo, dest_dir):
         tmpfile = tempfile.NamedTemporaryFile(delete=False).name
@@ -323,76 +327,6 @@ class LocalRemote(object):
             shutil.copy(src, dst)
         except shutil.SameFileError:
             pass
-
-    # XXX: accepts only two arugments to maintain compatibility with
-    # teuthology's mkdtemp.
-    def mkdtemp(self, suffix='', parentdir=None):
-        from tempfile import mkdtemp
-
-        # XXX: prefix had to be set without that this method failed against
-        # Python2.7 -
-        # > /usr/lib64/python2.7/tempfile.py(337)mkdtemp()
-        # -> file = _os.path.join(dir, prefix + name + suffix)
-        # (Pdb) p prefix
-        # None
-        return mkdtemp(suffix=suffix, prefix='', dir=parentdir)
-
-    def mktemp(self, suffix='', parentdir='', path=None, data=None,
-               owner=None, mode=None):
-        """
-        Make a remote temporary file
-
-        Returns: the path of the temp file created.
-        """
-        from tempfile import mktemp
-        if not path:
-            path = mktemp(suffix=suffix, dir=parentdir)
-        if not parentdir:
-            path = os.path.join('/tmp', path)
-
-        if data:
-            # sudo is set to False since root user can't write files in /tmp
-            # owned by other users.
-            self.write_file(path=path, data=data, sudo=False)
-
-        return path
-
-    def write_file(self, path, data, sudo=False, mode=None, owner=None,
-                                     mkdir=False, append=False):
-        """
-        Write data to file
-
-        :param path:    file path on host
-        :param data:    str, binary or fileobj to be written
-        :param sudo:    use sudo to write file, defaults False
-        :param mode:    set file mode bits if provided
-        :param owner:   set file owner if provided
-        :param mkdir:   preliminary create the file directory, defaults False
-        :param append:  append data to the file, defaults False
-        """
-        dd = 'sudo dd' if sudo else 'dd'
-        args = dd + ' of=' + path
-        if append:
-            args += ' conv=notrunc oflag=append'
-        if mkdir:
-            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
-            dirpath = os.path.dirname(path)
-            if dirpath:
-                args = mkdirp + ' ' + dirpath + '\n' + args
-        if mode:
-            chmod = 'sudo chmod' if sudo else 'chmod'
-            args += '\n' + chmod + ' ' + mode + ' ' + path
-        if owner:
-            chown = 'sudo chown' if sudo else 'chown'
-            args += '\n' + chown + ' ' + owner + ' ' + path
-        omit_sudo = False if sudo else True
-        self.run(args=args, stdin=data, omit_sudo=omit_sudo)
-
-    def sudo_write_file(self, path, data, **kwargs):
-        """
-        Write data to file with sudo, for more info see `write_file()`.
-        """
-        self.write_file(path, data, sudo=True, **kwargs)
 
     # XXX: omit_sudo is re-set to False even in cases of commands like passwd
     # and chown.
@@ -464,7 +398,7 @@ sudo() {
     # vstart_runner.py.
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
-                env=None, timeout=None, omit_sudo=True, shell=True):
+                env=None, timeout=None, omit_sudo=True, shell=True, quiet=False):
         args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo,
                                                               shell)
 
@@ -491,29 +425,6 @@ sudo() {
             proc.wait()
 
         return proc
-
-    # XXX: for compatibility keep this method same as teuthology.orchestra.remote.sh
-    # BytesIO is being used just to keep things identical
-    def sh(self, script, **kwargs):
-        """
-        Shortcut for run method.
-
-        Usage:
-            my_name = remote.sh('whoami')
-            remote_date = remote.sh('date')
-        """
-        from io import BytesIO
-
-        if 'stdout' not in kwargs:
-            kwargs['stdout'] = BytesIO()
-        if 'args' not in kwargs:
-            kwargs['args'] = script
-        proc = self.run(**kwargs)
-        out = proc.stdout.getvalue()
-        if isinstance(out, bytes):
-            return out.decode()
-        else:
-            return out
 
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
