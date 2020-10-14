@@ -19,10 +19,11 @@ Linux Kernel
   your Linux distribution on any client hosts.
 
   For RBD, if you choose to *track* long-term kernels, we currently recommend
-  4.x-based "longterm maintenance" kernel series:
+  4.x-based "longterm maintenance" kernel series or later:
 
   - 4.19.z
   - 4.14.z
+  - 5.x
 
   For CephFS, see the section about `Mounting CephFS using Kernel Driver`_
   for kernel version guidance.
@@ -111,30 +112,30 @@ Luminous (12.2.z)
 Notes
 -----
 
-- **1**: The default kernel has an older version of ``btrfs`` that we do not
-  recommend for ``ceph-osd`` storage nodes.  We recommend using ``bluestore``
-  starting from Mimic, and ``XFS`` for previous releases with ``filestore``.
+- **1**: The default kernel has an older version of ``Btrfs`` that we do not
+  recommend for ``ceph-osd`` storage nodes.  We recommend using ``BlueStore``
+  starting with Luminous, and ``XFS`` for previous releases with ``Filestore``.
 
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
 
-- **3**: The default kernel regularly fails in QA when the ``btrfs``
-  file system is used.  We recommend using ``bluestore`` starting from
-  Mimic, and ``XFS`` for previous releases with ``filestore``.
+- **3**: The default kernel regularly fails in QA when the ``Btrfs``
+  file system is used.  We recommend using ``BlueStore`` starting from
+  Luminous, and ``XFS`` for previous releases with ``Filestore``.
 
 - **4**: ``btrfs`` is no longer tested on this release. We recommend
   using ``bluestore``.
 
 - **5**: Some additional features related to dashboard are not available.
 
-- **6**: Building packages are built regularly, but not distributed by Ceph.
+- **6**: Packages are built regularly, but not distributed by upstream Ceph.
 
 Testing
 -------
 
 - **B**: We build release packages for this platform. For some of these
-  platforms, we may also continuously build all ceph branches and exercise
+  platforms, we may also continuously build all Ceph branches and perform
   basic unit tests.
 
 - **I**: We do basic installation and functionality tests of releases on this
