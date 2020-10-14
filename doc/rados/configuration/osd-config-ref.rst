@@ -274,7 +274,7 @@ scrubbing operations.
               thread.
 
 :Type: 32-bit Integer
-:Default: ``60*10``
+:Default: ``10*60``
 
 
 ``osd scrub load threshold``
@@ -293,7 +293,7 @@ scrubbing operations.
               when the Ceph Storage Cluster load is low.
 
 :Type: Float
-:Default: Once per day. ``60*60*24``
+:Default: Once per day. ``24*60*60``
 
 
 ``osd scrub max interval``
@@ -302,7 +302,7 @@ scrubbing operations.
               irrespective of cluster load.
 
 :Type: Float
-:Default: Once per week. ``7*60*60*24``
+:Default: Once per week. ``7*24*60*60``
 
 
 ``osd scrub chunk min``
@@ -337,7 +337,7 @@ scrubbing operations.
               ``osd scrub load threshold`` does not affect this setting.
 
 :Type: Float
-:Default: Once per week.  ``60*60*24*7``
+:Default: Once per week.  ``7*24*60*60``
 
 
 ``osd scrub interval randomize ratio``
@@ -996,14 +996,14 @@ Miscellaneous
 
 :Description: The maximum time in seconds before timing out a snap trim thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1``
+:Default: ``1*60*60``
 
 
 ``osd backlog thread timeout``
 
 :Description: The maximum time in seconds before timing out a backlog thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1``
+:Default: ``1*60*60``
 
 
 ``osd default notify timeout``
