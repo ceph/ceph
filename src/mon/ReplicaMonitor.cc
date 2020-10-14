@@ -8,6 +8,7 @@
  */
 
 #include "ReplicaMonitor.h"
+#include "messages/MReplicaDaemonMap.h"
 
 #define FN_NAME (__CEPH_ASSERT_FUNCTION == nullptr ? __func__ : __CEPH_ASSERT_FUNCTION)
 #define dout_context g_ceph_context
@@ -100,7 +101,22 @@ void ReplicaMonitor::on_restart()
 
 void ReplicaMonitor::check_sub(Subscription *sub)
 {
-// TODO:
+  // Only support subscribe "replicamap"
+  ceph_assert(sub->type == "replicamap");
+
+  ReplicaDaemonMap *replicadaemon_map = nullptr;
+  ReplicaDaemonMap reply_map;
+  //TODO build reply_map according to cur_cache_replicadaemon_map;
+  replicadaemon_map = &cur_cache_replicadaemon_map;
+
+  //reply subscription
+  auto reply_msg = make_message<MReplicaDaemonMap>(*replicadaemon_map);
+  sub->session->con->send_message(reply_msg.detach());
+  if (sub->onetime) {
+    mon.session_map.remove_sub(sub);
+  } else {
+    sub->next = cur_cache_replicadaemon_map.get_epoch() + 1;
+  }
 }
 
 void ReplicaMonitor::decode_replicadaemon_map(bufferlist &replicadaemon_map_bl)
