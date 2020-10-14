@@ -28,8 +28,12 @@ using namespace std::chrono_literals;
 #define dout_context (m_pg->cct)
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix *_dout << " scrbr.pg(~" << m_pg->pg_id << "~) "
+#define dout_prefix _prefix(_dout, this->m_pg)
 
+template <class T> static ostream& _prefix(std::ostream* _dout, T* t)
+{
+  return t->gen_prefix(*_dout) << " scrbr.pg(~" << t->pg_id << "~) ";
+}
 
 ostream& operator<<(ostream& out, const scrub_flags_t& sf)
 {
@@ -341,24 +345,24 @@ bool PgScrubber::is_scrub_registered() const
   return !m_scrub_reg_stamp.is_zero();
 }
 
-void PgScrubber::reg_next_scrub(requested_scrub_t& request_flags, bool is_explicit)
+void PgScrubber::reg_next_scrub(requested_scrub_t& request_flags)
 {
-  dout(10) << __func__ << ": explicit: " << is_explicit
-	   << " planned.m.s: " << request_flags.must_scrub
-	   << ": planned.n.a.: " << request_flags.need_auto
-	   << " stamp: " << m_pg->info.history.last_scrub_stamp << dendl;
 
   if (!is_primary()) {
     dout(10) << __func__ << ": not a primary!" << dendl;
     return;
   }
 
+  dout(10) << __func__ << " planned.m.s: " << request_flags.must_scrub
+	   << ": planned.n.a.: " << request_flags.need_auto
+	   << " stamp: " << m_pg->info.history.last_scrub_stamp << dendl;
+
   ceph_assert(!is_scrub_registered());
 
   utime_t reg_stamp;
   bool must = false;
 
-  if (request_flags.must_scrub || request_flags.need_auto || is_explicit) {
+  if (request_flags.must_scrub || request_flags.need_auto) {
     // Set the smallest time that isn't utime_t()
     reg_stamp = PgScrubber::scrub_must_stamp();
     must = true;
@@ -395,61 +399,63 @@ void PgScrubber::unreg_next_scrub()
   }
 }
 
-void PgScrubber::scrub_requested(bool deep,
-				 bool repair,
-				 bool need_auto,
+/// debug/development temporary code:
+void PgScrubber::debug_dump_reservations(std::string_view header_txt)
+{
+  std::string format;
+  auto f = Formatter::create(format, "json-pretty", "json-pretty");
+  m_osds->dump_scrub_reservations(f);
+  std::stringstream o;
+  f->flush(o);
+  dout(9) << header_txt << o.str() << dendl;
+  delete f;
+}
+
+void PgScrubber::scrub_requested(scrub_level_t is_deep,
+				 scrub_type_t is_repair,
 				 requested_scrub_t& req_flags)
 {
-  dout(9) << __func__ << " pg(" << m_pg_id << ") d/r/na:" << deep << repair << need_auto
-	  << " existing-" << m_scrub_reg_stamp << " ## " << is_scrub_registered()
-	  << dendl;
+  dout(9) << __func__ << (is_deep == scrub_level_t::deep ? " deep " : " shallow ")
+	  << (is_repair == scrub_type_t::do_repair ? " +rpr " : " -rpr ") << " existing-"
+	  << m_scrub_reg_stamp << " ## " << is_scrub_registered() << dendl;
 
-  /* debug code */ {
-    /* debug code */ std::string format;
-    /* debug code */ auto f = Formatter::create(format, "json-pretty", "json-pretty");
-    /* debug code */ m_osds->dump_scrub_reservations(f);
-    /* debug code */ std::stringstream o;
-    /* debug code */ f->flush(o);
-    /* debug code */ dout(9) << __func__ << " b4_unreg " << o.str() << dendl;
-    /* debug code */ delete f;
-  /* debug code */ }
+  debug_dump_reservations(" b4_unreg ");
 
   unreg_next_scrub();
 
-  if (need_auto) {
-    req_flags.need_auto = true;
-  } else {
-    req_flags.must_scrub = true;
-    req_flags.must_deep_scrub = deep || repair;
-    req_flags.must_repair = repair;
-    // User might intervene, so clear this
-    req_flags.need_auto = false;
-    req_flags.req_scrub = true;
-  }
+  req_flags.must_scrub = true;
+  req_flags.must_deep_scrub = bool(is_deep) || bool(is_repair);
+  req_flags.must_repair = bool(is_repair);
+  // User might intervene, so clear this
+  req_flags.need_auto = false;
+  req_flags.req_scrub = true;
 
-  /* debug code */ dout(9) << __func__ << " pg(" << m_pg_id << ") planned:" << req_flags
-			   << dendl;
-  /* debug code */ {
-    /* debug code */ std::string format;
-    /* debug code */ auto f = Formatter::create(format, "json-pretty", "json-pretty");
-    /* debug code */ m_osds->dump_scrub_reservations(f);
-    /* debug code */ std::stringstream o;
-    /* debug code */ f->flush(o);
-    /* debug code */ dout(9) << __func__ << " b4_reg " << o.str() << dendl;
-    /* debug code */ delete f;
-  /* debug code */ }
+  dout(9) << __func__ << " pg(" << m_pg_id << ") planned:" << req_flags << dendl;
+  debug_dump_reservations(" b4_reg ");
 
-  reg_next_scrub(req_flags, true);
+  reg_next_scrub(req_flags);
 
-  /* debug code */ {
-    /* debug code */ std::string format;
-    /* debug code */ auto f = Formatter::create(format, "json-pretty", "json-pretty");
-    /* debug code */ m_osds->dump_scrub_reservations(f);
-    /* debug code */ std::stringstream o;
-    /* debug code */ f->flush(o);
-    /* debug code */ dout(9) << __func__ << " af_unreg " << o.str() << dendl;
-    /* debug code */ delete f;
-  /* debug code */ }
+  debug_dump_reservations(" af_reg ");
+}
+
+void PgScrubber::request_rescrubbing(requested_scrub_t& req_flags)
+{
+  dout(9) << __func__ << " existing-" << m_scrub_reg_stamp << " ## "
+	  << is_scrub_registered() << dendl;
+  debug_dump_reservations(" auto-scrub b4 ");
+  unreg_next_scrub();
+
+  req_flags.need_auto = true;
+
+  //   req_flags.must_scrub = true;
+  //   req_flags.must_deep_scrub =
+  //   req_flags.must_deep_scrub = bool(is_deep) || bool(is_repair);
+  //   req_flags.must_repair = bool(is_repair);
+  //   req_flags.need_auto = false;
+  //   req_flags.req_scrub = true;
+
+  reg_next_scrub(req_flags);
+  debug_dump_reservations(" auto-scrub after ");
 }
 
 bool PgScrubber::reserve_local()
@@ -1441,9 +1447,8 @@ void PgScrubber::handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from)
   op->mark_started();
 
   if (m_reservations.has_value()) {
+    // there is an active reservation process. No action is required otherwise.
     m_reservations->handle_reserve_reject(op, from);
-  } else {
-    ;  // No active reservation process. No action is required.
   }
 }
 
@@ -1717,7 +1722,7 @@ void PgScrubber::scrub_finish()
 
   cleanup_on_finish();
   if (do_auto_scrub) {
-    scrub_requested(false, false, true, m_pg->m_planned_scrub);
+    request_rescrubbing(m_pg->m_planned_scrub);
   }
 
   if (m_pg->is_active() && m_pg->is_primary()) {

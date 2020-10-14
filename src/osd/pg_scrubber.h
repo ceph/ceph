@@ -235,13 +235,12 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   bool is_scrub_registered() const final;
 
-  void reg_next_scrub(requested_scrub_t& request_flags, bool is_explicit) final;
+  void reg_next_scrub(requested_scrub_t& request_flags) final;
 
   void unreg_next_scrub() final;
 
-  void scrub_requested(bool deep,
-		       bool repair,
-		       bool need_auto,
+  void scrub_requested(scrub_level_t is_deep,
+		       scrub_type_t is_repair,
 		       requested_scrub_t& req_flags) final;
 
   /**
@@ -308,7 +307,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void cleanup_store(ObjectStore::Transaction* t) final;
 
-  bool get_store_errors(const scrub_ls_arg_t& arg, scrub_ls_result_t& res_inout) const override
+  bool get_store_errors(const scrub_ls_arg_t& arg,
+			scrub_ls_result_t& res_inout) const override
   {
     return false;
   };
@@ -519,6 +519,11 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   inline static int fake_count{2};  // unit-tests. To be removed
 
+  /**
+   * initiate a deep-scrub after the current scrub ended with errors.
+   */
+  void request_rescrubbing(requested_scrub_t& req_flags);
+
   std::list<Context*> m_callbacks;
 
   void message_all_replicas(int32_t opcode, std::string_view op_text);
@@ -659,4 +664,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   };
 
   preemption_data_t preemption_data;
+
+  // debug/development temporary code:
+  void debug_dump_reservations(std::string_view header_txt);
 };

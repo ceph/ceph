@@ -360,7 +360,7 @@ void PG::clear_primary_state()
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();
 
-  /// RRR \todo ask: no clearing of the whole scrubber state?
+  /// RRR clearing the whole state crashes the OSD. To do.
   m_scrubber->unreserve_replicas();
   scrub_after_recovery = false;
 
@@ -1466,8 +1466,6 @@ bool PG::is_time_for_deep(bool allow_deep_scrub, bool allow_scrub, bool has_deep
   return false;
 }
 
-// RRR \todo move to scrubber.cc
-
 // retval 'false' if we are not to scrub now
 bool PG::sched_scrub_initial()
 {
@@ -1570,33 +1568,24 @@ bool PG::sched_scrub_initial()
     return false;
   }
 
-  // Unless precluded this was handled above
-  // RRR note that I moved here the flags clearing, so that it will not happen if the
-  // scrubbing is delayed. Not sure what should happen if delayed in the calling function.
-  m_planned_scrub.need_auto =
-    false;  // RRR. The whole 'planned_scrub' should be reset. To verify
+  m_planned_scrub.need_auto = false;
   return true;
 }
 
 void PG::reg_next_scrub()
 {
-  if (!is_primary())
-    return;
-
-  m_scrubber->reg_next_scrub(m_planned_scrub, false);
+  m_scrubber->reg_next_scrub(m_planned_scrub);
 }
 
 void PG::on_info_history_change()
 {
   m_scrubber->unreg_next_scrub();
-  m_scrubber->reg_next_scrub(m_planned_scrub, false); // false = not a result of an explicit request
+  m_scrubber->reg_next_scrub(m_planned_scrub);
 }
 
-void PG::scrub_requested(bool deep, bool repair, bool need_auto)
+void PG::scrub_requested(scrub_level_t is_deep, scrub_type_t is_repair)
 {
-  dout(9) << __func__ << " pg(" << pg_id << ") d/r/na:" << deep << repair << need_auto << dendl;
-
-  m_scrubber->scrub_requested(deep, repair, need_auto, m_planned_scrub);
+  m_scrubber->scrub_requested(is_deep, is_repair, m_planned_scrub);
 }
 
 void PG::clear_ready_to_merge() {

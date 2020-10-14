@@ -24,8 +24,6 @@ namespace sc = boost::statechart;
 #define DECLARE_LOCALS                                           \
   ScrubMachineListener* scrbr = context<ScrubMachine>().m_scrbr; \
   std::ignore = scrbr;                                           \
-  PG* pg = context<ScrubMachine>().m_pg;                         \
-  std::ignore = pg;                                              \
   auto pg_id = context<ScrubMachine>().m_pg_id;                  \
   std::ignore = pg_id;
 
@@ -76,7 +74,11 @@ bool ScrubMachine::is_reserving() const
 
 // for the rest of the code in this file - we know what PG we are dealing with:
 #undef dout_prefix
-#define dout_prefix *_dout << "scrbrFSM.pg(~" << context<ScrubMachine>().m_pg_id << "~) "
+#define dout_prefix _prefix(_dout, this->context<ScrubMachine>().m_pg)
+template <class T> static ostream& _prefix(std::ostream* _dout, T* t)
+{
+  return t->gen_prefix(*_dout) << " scrbrFSM.pg(~" << t->pg_id << "~) ";
+}
 
 // ////////////// the actual actions
 
@@ -98,7 +100,7 @@ sc::result NotActive::react(const EpochChanged&)
 ReservingReplicas::ReservingReplicas(my_context ctx)
     : my_base(ctx), state_logger_t{"ReservingReplicas"s}
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << __func__ << dendl;
   scrbr->reserve_replicas();
 }
@@ -108,7 +110,7 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
  */
 sc::result ReservingReplicas::react(const ReservationFailure&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "ReservingReplicas::react(const ReservationFailure&)" << dendl;
 
   // the Scrubber must release all resources and abort the scrubbing
@@ -120,7 +122,7 @@ sc::result ReservingReplicas::react(const ReservationFailure&)
  */
 sc::result ReservingReplicas::react(const EpochChanged&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "ReservingReplicas::react(const EpochChanged&)" << dendl;
 
   // the Scrubber must release all resources and abort the scrubbing
@@ -133,7 +135,7 @@ sc::result ReservingReplicas::react(const EpochChanged&)
  */
 sc::result ReservingReplicas::react(const FullReset&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "ReservingReplicas::react(const FullReset&)" << dendl;
 
   // caller takes care of this: scrbr->clear_pgscrub_state(false);
@@ -145,7 +147,7 @@ sc::result ReservingReplicas::react(const FullReset&)
 ActiveScrubbing::ActiveScrubbing(my_context ctx)
     : my_base(ctx), state_logger_t{"ActiveScrubbing"s}
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << __func__ << dendl;
   scrbr->on_init();
 }
@@ -155,21 +157,21 @@ ActiveScrubbing::ActiveScrubbing(my_context ctx)
  */
 ActiveScrubbing::~ActiveScrubbing()
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << __func__ << dendl;
   scrbr->unreserve_replicas();
 }
 
 void ScrubMachine::down_on_epoch_change(const EpochChanged&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << __func__ << dendl;
   scrbr->unreserve_replicas();
 }
 
 void ScrubMachine::on_epoch_changed(const EpochChanged&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << __func__ << dendl;
   // the Scrubber must release all resources and abort the scrubbing
   scrbr->clear_pgscrub_state(false);
@@ -177,7 +179,7 @@ void ScrubMachine::on_epoch_changed(const EpochChanged&)
 
 sc::result ActiveScrubbing::react(const FullReset&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "ActiveScrubbing::react(const FullReset&)" << dendl;
   // caller takes care of this: scrbr->clear_pgscrub_state(false);
   return transit<NotActive>();
@@ -204,7 +206,7 @@ RangeBlocked::RangeBlocked(my_context ctx)
 PendingTimer::PendingTimer(my_context ctx)
     : my_base(ctx), state_logger_t{"Act/PendingTimer"s}
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << __func__ << dendl;
 
   scrbr->add_delayed_scheduling();
@@ -219,7 +221,7 @@ PendingTimer::PendingTimer(my_context ctx)
  */
 NewChunk::NewChunk(my_context ctx) : my_base(ctx), state_logger_t{"Act/NewChunk"s}
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << __func__ << dendl;
 
   scrbr->get_preemptor()->adjust_parameters();
@@ -238,7 +240,7 @@ NewChunk::NewChunk(my_context ctx) : my_base(ctx), state_logger_t{"Act/NewChunk"
 
 sc::result NewChunk::react(const SelectedChunkFree&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "NewChunk::react(const SelectedChunkFree&)" << dendl;
 
   scrbr->set_subset_last_update(scrbr->search_log_for_updates());
@@ -258,7 +260,7 @@ WaitPushes::WaitPushes(my_context ctx) : my_base(ctx), state_logger_t{"Act/WaitP
  */
 sc::result WaitPushes::react(const ActivePushesUpd&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "WaitPushes::react(const ActivePushesUpd&)"
 	  << " actp: " << scrbr->pending_active_pushes() << dendl;
 
@@ -281,7 +283,7 @@ WaitLastUpdate::WaitLastUpdate(my_context ctx)
 
 void WaitLastUpdate::on_new_updates(const UpdatesApplied&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "WaitLastUpdate::on_new_updates(const UpdatesApplied&)" << dendl;
 
   if (scrbr->has_pg_marked_new_updates()) {
@@ -297,7 +299,7 @@ void WaitLastUpdate::on_new_updates(const UpdatesApplied&)
  */
 sc::result WaitLastUpdate::react(const InternalAllUpdates&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "WaitLastUpdate::react(const InternalAllUpdates&)" << dendl;
 
   if (scrbr->was_epoch_changed()) {
@@ -316,7 +318,7 @@ sc::result WaitLastUpdate::react(const InternalAllUpdates&)
 
 BuildMap::BuildMap(my_context ctx) : my_base(ctx), state_logger_t{"Act/BuildMap"s}
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << __func__ << " same epoch? " << (scrbr->was_epoch_changed() ? "no" : "yes")
 	   << dendl;
 
@@ -365,7 +367,7 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx), state_logger_t{"Act/BuildMap"
 
 sc::result BuildMap::react(const IntLocalMapDone&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "BuildMap::react(const IntLocalMapDone&)" << dendl;
 
   scrbr->mark_local_map_ready();
@@ -384,7 +386,7 @@ DrainReplMaps::DrainReplMaps(my_context ctx)
 
 sc::result DrainReplMaps::react(const GotReplicas&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "DrainReplMaps::react(const GotReplicas&)" << dendl;
 
   if (scrbr->are_all_maps_available()) {
@@ -408,7 +410,7 @@ WaitReplicas::WaitReplicas(my_context ctx)
 
 sc::result WaitReplicas::react(const GotReplicas&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "WaitReplicas::react(const GotReplicas&)" << dendl;
 
   if (scrbr->are_all_maps_available()) {
@@ -446,7 +448,7 @@ WaitDigestUpdate::WaitDigestUpdate(my_context ctx)
 
 sc::result WaitDigestUpdate::react(const DigestUpdate&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "WaitDigestUpdate::react(const DigestUpdate&)" << dendl;
 
   switch (scrbr->on_digest_updates()) {
@@ -488,7 +490,7 @@ ScrubMachine::~ScrubMachine()
 ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx)
     : my_base(ctx), state_logger_t{"ReplicaWaitUpdates"s}
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << __func__ << dendl;
 
   scrbr->on_replica_init();
@@ -506,7 +508,7 @@ sc::result ReplicaWaitUpdates::react(const EpochChanged&)
  */
 sc::result ReplicaWaitUpdates::react(const ReplicaPushesUpd&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "ReplicaWaitUpdates::react(const ReplicaPushesUpd&): "
 	  << scrbr->pending_active_pushes() << dendl;
   dout(8) << "same epoch? " << !scrbr->was_epoch_changed() << dendl;
@@ -536,7 +538,7 @@ ActiveReplica::ActiveReplica(my_context ctx)
 
 sc::result ActiveReplica::react(const SchedReplica&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(7) << "ActiveReplica::react(const SchedReplica&) shard:" << pg_id << " is-p? "
 	  << scrbr->get_preemptor()->is_preemptable() << " force? " << m_fake_preemption
 	  << dendl;
@@ -601,7 +603,7 @@ sc::result ActiveReplica::react(const SchedReplica&)
 sc::result ActiveReplica::react(const IntLocalMapDone&)
 {
   dout(10) << "ActiveReplica::react(const IntLocalMapDone&)" << dendl;
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   scrbr->replica_handling_done();
   return transit<NotActive>();
@@ -609,7 +611,7 @@ sc::result ActiveReplica::react(const IntLocalMapDone&)
 
 sc::result ActiveReplica::react(const InternalError&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(1) << "Error! Aborting."
 	  << " ActiveReplica::react(const InternalError&) " << dendl;
 
@@ -619,7 +621,7 @@ sc::result ActiveReplica::react(const InternalError&)
 
 sc::result ActiveReplica::react(const EpochChanged&)
 {
-  DECLARE_LOCALS;  // aliases for 'scrbr', 'pg' pointers
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "ActiveReplica::react(const EpochChanged&) " << dendl;
 
   scrbr->send_replica_map(false);

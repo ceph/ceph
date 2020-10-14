@@ -4881,7 +4881,7 @@ boost::statechart::result PeeringState::Primary::react(
 {
   DECLARE_LOCALS;
   if (ps->is_primary()) {
-    pl->scrub_requested(evt.deep, evt.repair, false);
+    pl->scrub_requested(scrub_level_t(evt.deep), scrub_type_t(evt.repair));
     psdout(10) << "marking for scrub" << dendl;
   }
   return discard_event();

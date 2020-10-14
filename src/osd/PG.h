@@ -409,7 +409,7 @@ public:
 
   void on_info_history_change() override;
 
-  void scrub_requested(bool deep, bool repair, bool need_auto) override;
+  void scrub_requested(scrub_level_t is_deep, scrub_type_t is_repair) override;
 
   uint64_t get_snap_trimq_size() const override {
     return snap_trimq.size();

@@ -150,7 +150,7 @@ public:
     // Not needed yet -- mainly for scrub scheduling
   }
 
-  void scrub_requested(bool deep, bool repair, bool need_auto = false) final;
+  void scrub_requested(scrub_level_t deep, scrub_type_t repair) final;
 
   uint64_t get_snap_trimq_size() const final {
     return 0;

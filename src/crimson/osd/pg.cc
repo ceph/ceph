@@ -314,7 +314,7 @@ void PG::do_delete_work(ceph::os::Transaction &t)
   shard_services.dec_pg_num();
 }
 
-void PG::scrub_requested(bool deep, bool repair, bool need_auto)
+void PG::scrub_requested(scrub_level_t deep, scrub_type_t repair)
 {
   // TODO: should update the stats upon finishing the scrub
   peering_state.update_stats([deep, this](auto& history, auto& stats) {
@@ -322,7 +322,7 @@ void PG::scrub_requested(bool deep, bool repair, bool need_auto)
     history.last_scrub = peering_state.get_info().last_update;
     history.last_scrub_stamp = now;
     history.last_clean_scrub_stamp = now;
-    if (deep) {
+    if ((bool)deep) {
       history.last_deep_scrub = history.last_scrub;
       history.last_deep_scrub_stamp = now;
     }

@@ -7603,6 +7603,8 @@ bool OSD::scrub_load_below_threshold()
 
 void OSD::sched_scrub()
 {
+  dout(20) << "sched_scrub starts" << dendl;
+
   // if not permitted, fail fast
   if (!service.can_inc_scrubs()) {
     dout(10) << __func__ << "(): OSD cannot inc scrubs" << dendl;

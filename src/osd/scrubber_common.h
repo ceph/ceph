@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "include/types.h"
 #include "common/scrub_types.h"
+#include "include/types.h"
 #include "os/ObjectStore.h"
 
 #include "OpRequest.h"
@@ -237,11 +237,10 @@ struct ScrubPgIF {
   // --------------- until after we move the scrub OP registration flow into the FSM:
 
   virtual bool is_scrub_registered() const = 0;
-  virtual void reg_next_scrub(requested_scrub_t& request_flags, bool is_explicit) = 0;
+  virtual void reg_next_scrub(requested_scrub_t& request_flags) = 0;
   virtual void unreg_next_scrub() = 0;
-  virtual void scrub_requested(bool deep,
-			       bool repair,
-			       bool need_auto,
+  virtual void scrub_requested(scrub_level_t is_deep,
+			       scrub_type_t is_repair,
 			       requested_scrub_t& req_flags) = 0;
 
   // -------------------------------------------------------
@@ -270,5 +269,6 @@ struct ScrubPgIF {
 
   virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
 
-  virtual bool get_store_errors(const scrub_ls_arg_t& arg, scrub_ls_result_t& res_inout) const = 0;
+  virtual bool get_store_errors(const scrub_ls_arg_t& arg,
+				scrub_ls_result_t& res_inout) const = 0;
 };

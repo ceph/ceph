@@ -110,7 +110,7 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   explicit ScrubMachine(PG* pg, PgScrubber* pg_scrub);
   ~ScrubMachine();
 
-  PG* m_pg;  // used only for testing
+  PG* m_pg;  // used only for testing and messages
   spg_t m_pg_id;
 
   ScrubMachineListener* const m_scrbr;
