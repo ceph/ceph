@@ -76,6 +76,8 @@ class node_extent_t {
     return total_size() - free_size;
   }
   node_offset_t size_to_nxt_at(size_t index) const;
+  node_offset_t size_overhead_at(size_t index) const {
+    return FieldType::ITEM_OVERHEAD; }
   memory_range_t get_nxt_container(size_t index) const;
 
   template <typename T = FieldType>

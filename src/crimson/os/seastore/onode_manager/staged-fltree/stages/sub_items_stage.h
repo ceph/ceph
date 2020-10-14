@@ -61,6 +61,7 @@ class internal_sub_items_t {
     assert(index < num_items);
     return (p_first_item - index)->get_p_value();
   }
+  node_offset_t size_overhead_at(size_t index) const { return 0u; }
 
   static node_offset_t header_size() { return 0u; }
 
@@ -186,6 +187,7 @@ class leaf_sub_items_t {
     assert(ret < NODE_BLOCK_SIZE);
     return ret;
   }
+  node_offset_t size_overhead_at(size_t index) const { return sizeof(node_offset_t); }
   const onode_t* get_p_value(size_t index) const {
     assert(index < keys());
     auto pointer = get_item_start(index);
