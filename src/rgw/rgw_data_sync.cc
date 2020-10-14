@@ -486,10 +486,7 @@ struct sip_data_list_result {
   vector<entry> entries;
 };
 
-struct sip_data_inc_pos {
-  string marker;
-  ceph::real_time timestamp;
-};
+using sip_data_inc_pos  = rgw_sip_pos;
 
 template <class T, class M>
 class RGWSyncInfoCRHandler {
@@ -1353,8 +1350,7 @@ public:
   }
 
   RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos) override {
-#warning FIXME
-    return nullptr;
+    return sip->get_cur_state_cr(sid, shard_id, pos);
   }
 };
 
