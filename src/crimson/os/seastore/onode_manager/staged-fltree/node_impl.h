@@ -69,7 +69,9 @@ class NodeImpl {
   virtual node_offset_t free_size() const = 0;
   virtual key_view_t get_key_view(const search_position_t&) const = 0;
   virtual key_view_t get_largest_key_view() const = 0;
+  virtual void next_position(search_position_t&) const = 0;
 
+  virtual node_stats_t get_stats() const = 0;
   virtual std::ostream& dump(std::ostream&) const = 0;
   virtual std::ostream& dump_brief(std::ostream&) const = 0;
   virtual void validate_layout() const = 0;

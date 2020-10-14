@@ -767,6 +767,10 @@ class DummyChildPool {
       assert(false && "impossible path"); }
     key_view_t get_key_view(const search_position_t&) const override {
       assert(false && "impossible path"); }
+    void next_position(search_position_t&) const override {
+      assert(false && "impossible path"); }
+    node_stats_t get_stats() const override {
+      assert(false && "impossible path"); }
     std::ostream& dump(std::ostream&) const override {
       assert(false && "impossible path"); }
     std::ostream& dump_brief(std::ostream&) const override {
@@ -890,6 +894,8 @@ class DummyChildPool {
       assert(false && "impossible path"); }
     node_future<search_result_t> lower_bound_tracked(
         context_t, const key_hobj_t&, MatchHistory&) override {
+      assert(false && "impossible path"); }
+    node_future<> do_get_tree_stats(context_t, tree_stats_t&) override {
       assert(false && "impossible path"); }
 
    private:
@@ -1418,7 +1424,8 @@ TEST_F(d_seastore_tree_test_t, 6_random_insert_leaf_node)
       ++iter;
     }
 
-    logger().info("Insert done! Tree height: {}", tree.height(t).unsafe_get0());
+    logger().info("Insert done!");
+    logger().info("{}", tree.get_stats_slow(t).unsafe_get0());
 
     if (!cursors.empty()) {
       auto kv_iter = kvs.random_begin();

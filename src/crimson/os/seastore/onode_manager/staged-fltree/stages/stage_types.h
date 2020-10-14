@@ -374,4 +374,14 @@ lookup_result_t<NODE_TYPE> normalize(
   return {normalize(std::move(result.position)), result.p_value, result.mstat};
 }
 
+struct node_stats_t {
+  size_t size_persistent = 0;
+  size_t size_filled = 0;
+  // filled by staged::get_stats()
+  size_t size_logical = 0;
+  size_t size_overhead = 0;
+  size_t size_value = 0;
+  unsigned num_kvs = 0;
+};
+
 }

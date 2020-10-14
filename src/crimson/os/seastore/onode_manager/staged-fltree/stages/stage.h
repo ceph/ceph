@@ -188,7 +188,8 @@ struct staged {
     *   CONTAINER_TYPE = ContainerType::INDEXABLE
     *   keys() const -> size_t
     *   operator[](size_t) const -> key_get_type
-    *   size_before(size_t) const -> size_t
+    *   size_before(size_t) const -> node_offset_t
+    *   size_overhead_at(size_t) const -> node_offset_t
     *   (IS_BOTTOM) get_p_value(size_t) const -> const value_t*
     *   (!IS_BOTTOM) size_to_nxt_at(size_t) const -> node_offset_t
     *   (!IS_BOTTOM) get_nxt_container(size_t) const
@@ -243,6 +244,10 @@ struct staged {
       assert(container.size_before(_index + 1) > container.size_before(_index));
       return container.size_before(_index + 1) -
              container.size_before(_index);
+    }
+    node_offset_t size_overhead() const {
+      assert(!is_end());
+      return container.size_overhead_at(_index);
     }
 
     me_t& operator++() {
@@ -444,6 +449,7 @@ struct staged {
      *   get_key() const -> key_get_type
      *   size() const -> node_offset_t
      *   size_to_nxt() const -> node_offset_t
+     *   size_overhead() const -> node_offset_t
      *   get_nxt_container() const
      *   has_next() const -> bool
      *   operator++()
@@ -492,6 +498,10 @@ struct staged {
     node_offset_t size() const {
       assert(!is_end());
       return container.size();
+    }
+    node_offset_t size_overhead() const {
+      assert(!is_end());
+      return container.size_overhead();
     }
 
     me_t& operator++() {
@@ -733,6 +743,7 @@ struct staged {
    *   is_last() -> bool
    *   is_end() -> bool
    *   size() -> node_offset_t
+   *   size_overhead() -> node_offset_t
    *   (IS_BOTTOM) get_p_value() -> const value_t*
    *   (!IS_BOTTOM) get_nxt_container() -> nxt_stage::container_t
    *   (!IS_BOTTOM) size_to_nxt() -> node_offset_t
@@ -1311,6 +1322,64 @@ struct staged {
         key = iter.get_key();
       }
     } while (true);
+  }
+
+  static void get_stats(const container_t& container, node_stats_t& stats,
+                        full_key_t<KeyT::VIEW>& index_key) {
+    auto iter = iterator_t(container);
+    assert(!iter.is_end());
+    stats.size_overhead += iterator_t::header_size();
+    do {
+      index_key.replace(iter.get_key());
+      stats.size_overhead += iter.size_overhead();
+      if constexpr (!IS_BOTTOM) {
+        auto nxt_container = iter.get_nxt_container();
+        NXT_STAGE_T::get_stats(nxt_container, stats, index_key);
+      } else {
+        ++stats.num_kvs;
+        size_t kv_logical_size = index_key.size_logical();
+        size_t value_size;
+        if constexpr (NODE_TYPE == node_type_t::LEAF) {
+          value_size = iter.get_p_value()->size;
+        } else {
+          value_size = sizeof(value_t);
+        }
+        stats.size_value += value_size;
+        kv_logical_size += value_size;
+        stats.size_logical += kv_logical_size;
+      }
+      if (iter.is_last()) {
+        break;
+      } else {
+        ++iter;
+      }
+    } while (true);
+  }
+
+  static bool next_position(const container_t& container, position_t& pos) {
+    auto iter = iterator_t(container);
+    assert(!iter.is_end());
+    iter.seek_at(pos.index);
+    bool find_next;
+    if constexpr (!IS_BOTTOM) {
+      auto nxt_container = iter.get_nxt_container();
+      find_next = NXT_STAGE_T::next_position(nxt_container, pos.nxt);
+    } else {
+      find_next = true;
+    }
+    if (find_next) {
+      if (iter.is_last()) {
+        return true;
+      } else {
+        pos.index = iter.index() + 1;
+        if constexpr (!IS_BOTTOM) {
+          pos.nxt = NXT_STAGE_T::position_t::begin();
+        }
+        return false;
+      }
+    } else {
+      return false;
+    }
   }
 
   struct _BaseEmpty {};

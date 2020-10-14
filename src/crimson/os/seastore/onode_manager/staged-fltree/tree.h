@@ -60,6 +60,7 @@ class Btree {
 
   // stats
   btree_future<size_t> height(Transaction&);
+  btree_future<tree_stats_t> get_stats_slow(Transaction&);
   std::ostream& dump(Transaction&, std::ostream&);
 
   // test_only

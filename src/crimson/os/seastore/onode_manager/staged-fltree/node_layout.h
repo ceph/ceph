@@ -99,10 +99,42 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return index_key;
   }
 
+  void next_position(search_position_t& pos) const override {
+    assert(!pos.is_end());
+    bool find_next = STAGE_T::next_position(extent.read(), cast_down<STAGE>(pos));
+    if (find_next) {
+      pos = search_position_t::end();
+    }
+  }
+
+  node_stats_t get_stats() const override {
+    node_stats_t stats;
+    auto& node_stage = extent.read();
+    key_view_t index_key;
+    if (node_stage.keys()) {
+      STAGE_T::get_stats(node_stage, stats, index_key);
+    }
+    stats.size_persistent = node_stage_t::EXTENT_SIZE;
+    stats.size_filled = filled_size();
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      if (is_level_tail()) {
+        stats.size_logical += sizeof(value_t);
+        stats.size_value += sizeof(value_t);
+        stats.num_kvs += 1;
+      }
+    }
+    return stats;
+  }
+
   std::ostream& dump(std::ostream& os) const override {
     auto& node_stage = extent.read();
     auto p_start = node_stage.p_start();
     dump_brief(os);
+    auto stats = get_stats();
+    os << " num_kvs=" << stats.num_kvs
+       << ", logical=" << stats.size_logical
+       << "B, overhead=" << stats.size_overhead
+       << "B, value=" << stats.size_value << "B";
     os << ":\n  header: " << node_stage_t::header_size() << "B";
     size_t size = 0u;
     if (node_stage.keys()) {

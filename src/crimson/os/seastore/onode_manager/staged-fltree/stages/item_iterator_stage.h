@@ -60,6 +60,9 @@ class item_iterator_t {
     assert(ret < NODE_BLOCK_SIZE);
     return ret;
   }
+  node_offset_t size_overhead() const {
+    return sizeof(node_offset_t) + get_key().size_overhead();
+  }
   memory_range_t get_nxt_container() const {
     return {item_range.p_start, get_key().p_start()};
   }

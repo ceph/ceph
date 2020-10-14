@@ -61,6 +61,7 @@ template <typename FixedKeyType, field_type_t _FIELD_TYPE>
 struct _slot_t {
   using key_t = FixedKeyType;
   static constexpr field_type_t FIELD_TYPE = _FIELD_TYPE;
+  static constexpr node_offset_t OVERHEAD = sizeof(_slot_t) - sizeof(key_t);
 
   key_t key;
   node_offset_t right_offset;
@@ -110,6 +111,7 @@ struct _node_fields_013_t {
   static constexpr node_offset_t SIZE = NODE_BLOCK_SIZE;
   static constexpr node_offset_t HEADER_SIZE =
     sizeof(node_header_t) + sizeof(num_keys_t);
+  static constexpr node_offset_t ITEM_OVERHEAD = SlotType::OVERHEAD;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
   node_offset_t total_size() const { return SIZE; }
@@ -197,6 +199,7 @@ struct node_fields_2_t {
   static constexpr node_offset_t SIZE = NODE_BLOCK_SIZE;
   static constexpr node_offset_t HEADER_SIZE =
     sizeof(node_header_t) + sizeof(num_keys_t);
+  static constexpr node_offset_t ITEM_OVERHEAD = sizeof(node_offset_t);
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
   node_offset_t total_size() const { return SIZE; }
@@ -293,6 +296,7 @@ struct _internal_fields_3_t {
   static constexpr node_offset_t SIZE = sizeof(me_t);
   static constexpr node_offset_t HEADER_SIZE =
     sizeof(node_header_t) + sizeof(num_keys_t);
+  static constexpr node_offset_t ITEM_OVERHEAD = 0u;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
   node_offset_t total_size() const {
