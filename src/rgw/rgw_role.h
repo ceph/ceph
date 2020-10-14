@@ -51,9 +51,9 @@ public:
   virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
-  virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y);
+  virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y);
+  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y);
   bool validate_input(const DoutPrefixProvider* dpp);
   void extract_name_tenant(const std::string& str);
 
@@ -124,8 +124,8 @@ public:
 
   void set_id(const std::string& id) { this->id = id; }
 
-  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
-  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
   int get(const DoutPrefixProvider *dpp, optional_yield y);
   int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
   int update(const DoutPrefixProvider *dpp, optional_yield y);
