@@ -1944,8 +1944,9 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
     if not reconfig:
         if daemon_type == CephadmDaemon.daemon_type:
             port = next(iter(ports), None)  # get first tcp port provided or None
+            config_js = get_parm(args.config_json)  # type: Dict[str, str]
             cephadmd = CephadmDaemon(fsid, daemon_id, port)
-            cephadmd.deploy_daemon_unit()
+            cephadmd.deploy_daemon_unit(config_js)
         else:
             if c:
                 deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
@@ -3240,6 +3241,9 @@ def command_deploy():
         # get current user gid and uid
         uid = os.getuid()
         gid = os.getgid()
+        config_js = get_parm(args.config_json)  # type: Dict[str, str]
+        if not CephadmDaemon.valid_config(config_js):
+            return
         deploy_daemon(args.fsid, daemon_type, daemon_id, None,
                       uid, gid, ports=daemon_ports)
 
@@ -5311,6 +5315,7 @@ class CephadmHTTPServer(ThreadingMixIn, HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
     cephadm_cache: CephadmCache
+    token: str
 
 class CephadmDaemonHandler(BaseHTTPRequestHandler):
     server: CephadmHTTPServer
@@ -5332,7 +5337,7 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
             """
             def wrapper(self, *args, **kwargs):
                 auth = self.headers.get("Authorization", None)
-                if auth != "Bearer " + self.server.auth_token:
+                if auth != "Bearer " + self.server.token:
                     self.send_error(401)
                     return
                 f(self, *args, **kwargs)
@@ -5426,7 +5431,12 @@ class CephadmDaemon():
     bin_name = 'cephadm'
     key_name = "key"
     crt_name = "crt"
-    token_name = "authtoken"
+    token_name = "token"
+    config_requirements = [
+        key_name,
+        crt_name,
+        token_name,
+    ]
     loop_delay = 1
     thread_check_interval = 5
 
@@ -5442,7 +5452,18 @@ class CephadmDaemon():
         self.stop = False
         self.cephadm_cache = CephadmCache()
         self.errors = []
-        self.auth_token = read_file([os.path.join(self.daemon_path, CephadmDaemon.token_name)])
+        self.token = read_file([os.path.join(self.daemon_path, CephadmDaemon.token_name)])
+
+    @classmethod
+    def valid_config(cls, config):
+        reqs = ", ".join(CephadmDaemon.config_requirements)
+        if not config:
+            logger.error("Missing parameter: --config-json must supply {}.".format(reqs))
+            return False
+        elif not all(k_name in config for k_name in CephadmDaemon.config_requirements):
+            logger.error("Incomplete configuration: --config-json must contain the following fields: {}".format(reqs))
+            return False
+        return True
 
     @property
     def port_active(self):
@@ -5457,7 +5478,7 @@ class CephadmDaemon():
             self.errors.append(f"Key file '{CephadmDaemon.key_name}' is missing from {self.daemon_path}")
         if not os.path.exists(os.path.join(self.daemon_path, CephadmDaemon.crt_name)):
             self.errors.append(f"Certificate file '{CephadmDaemon.crt_name}' is missing from {self.daemon_path}")
-        if self.auth_token == "Unknown":
+        if self.token == "Unknown":
             self.errors.append(f"Authentication token '{CephadmDaemon.token_name}' is missing from {self.daemon_path}")
         return len(self.errors) == 0
 
@@ -5664,7 +5685,7 @@ class CephadmDaemon():
                                                   server_side=True)
 
         self.http_server.cephadm_cache = self.cephadm_cache
-        self.http_server.auth_token = self.auth_token
+        self.http_server.token = self.token
         server_thread = self._create_thread(self.http_server.serve_forever, 'http_server')
         logger.info(f"https server listening on {self.http_server.server_address[0]}:{self.http_server.server_port}")
         
@@ -5726,13 +5747,21 @@ WantedBy=ceph-{fsid}.target
         daemon_path=self.daemon_path
 )
 
-    def deploy_daemon_unit(self):
+    def deploy_daemon_unit(self, config=None):
         """deploy a specific unit file for cephadm
 
         the normal deploy_daemon_units doesn't apply for this
         daemon since it's not a container, so we just create a
         simple service definition and add it to the fsid's target
         """
+        if not config:
+            raise Error("Attempting to deploy cephadm daemon without a config")
+        
+        # Create the required config files in the daemons dir, with restricted permissions
+        for filename in config:
+            with open(os.open(os.path.join(self.daemon_path, filename), os.O_CREAT | os.O_WRONLY, mode=0o640), "w") as f:
+                f.write(config[filename])
+
         shutil.copy(__file__,
                     self.binary_path)
         
