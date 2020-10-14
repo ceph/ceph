@@ -1,19 +1,19 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 ::ng-deep cd-pool-list {
   .pg-clean {
-    color: bd.$success;
+    color: vv.$success;
   }
 
   .pg-working {
-    color: bd.$primary;
+    color: vv.$primary;
   }
 
   .pg-warning {
-    color: bd.$warning;
+    color: vv.$warning;
   }
 
   .pg-unknown {
-    color: bd.$danger;
+    color: vv.$danger;
   }
 }

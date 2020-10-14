@@ -1,4 +1,4 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 cd-info-card {
   padding: 0 0.5vw;
@@ -27,7 +27,7 @@ cd-info-card {
 }
 
 .card-text-error {
-  color: bd.$danger;
+  color: vv.$danger;
   display: inline;
 }
 

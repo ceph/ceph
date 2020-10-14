@@ -1,4 +1,4 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 /* Dropdown */
 .dropdown-menu {
@@ -20,13 +20,13 @@
 }
 
 .dropdown-menu > .active > a {
-  background-color: bd.$primary;
-  color: bd.$gray-200;
+  background-color: vv.$primary;
+  color: vv.$gray-200;
 
   &,
   &:hover,
   &:focus {
-    background-color: darken(bd.$primary, 10);
+    background-color: darken(vv.$primary, 10);
   }
 }
 
