@@ -183,6 +183,17 @@ btree_future<size_t> Btree::height(Transaction& t) {
   });
 }
 
+btree_future<tree_stats_t> Btree::get_stats_slow(Transaction& t) {
+  return get_root(t).safe_then([this, &t](auto root) {
+    unsigned height = root->level() + 1;
+    return root->get_tree_stats(get_context(t)
+    ).safe_then([height](auto stats) {
+      stats.height = height;
+      return btree_ertr::make_ready_future<tree_stats_t>(stats);
+    });
+  });
+}
+
 std::ostream& Btree::dump(Transaction& t, std::ostream& os) {
   auto root = root_tracker->get_root(t);
   if (root) {

@@ -152,6 +152,16 @@ node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
   );
 }
 
+node_future<tree_stats_t> Node::get_tree_stats(context_t c) {
+  return seastar::do_with(
+    tree_stats_t(), [this, c](auto& stats) {
+      return do_get_tree_stats(c, stats).safe_then([&stats] {
+        return stats;
+      });
+    }
+  );
+}
+
 std::ostream& Node::dump(std::ostream& os) const {
   return impl->dump(os);
 }
@@ -375,6 +385,48 @@ InternalNode::lower_bound_tracked(
   });
 }
 
+node_future<> InternalNode::do_get_tree_stats(
+    context_t c, tree_stats_t& stats) {
+  auto nstats = impl->get_stats();
+  stats.size_persistent_internal += nstats.size_persistent;
+  stats.size_filled_internal += nstats.size_filled;
+  stats.size_logical_internal += nstats.size_logical;
+  stats.size_overhead_internal += nstats.size_overhead;
+  stats.size_value_internal += nstats.size_value;
+  stats.num_kvs_internal += nstats.num_kvs;
+  stats.num_nodes_internal += 1;
+
+  Ref<const InternalNode> this_ref = this;
+  return seastar::do_with(
+    search_position_t(), [this, this_ref, c, &stats](auto& pos) {
+      pos = search_position_t::begin();
+      return crimson::do_until(
+          [this, this_ref, c, &stats, &pos]() -> node_future<bool> {
+        auto child_addr = impl->get_p_value(pos)->value;
+        return get_or_track_child(c, pos, child_addr
+        ).safe_then([c, &stats](auto child) {
+          return child->do_get_tree_stats(c, stats);
+        }).safe_then([this, this_ref, &pos] {
+          if (pos.is_end()) {
+            return node_ertr::make_ready_future<bool>(true);
+          } else {
+            impl->next_position(pos);
+            if (pos.is_end()) {
+              if (impl->is_level_tail()) {
+                return node_ertr::make_ready_future<bool>(false);
+              } else {
+                return node_ertr::make_ready_future<bool>(true);
+              }
+            } else {
+              return node_ertr::make_ready_future<bool>(false);
+            }
+          }
+        });
+      });
+    }
+  );
+}
+
 node_future<> InternalNode::test_clone_root(
     context_t c_other, RootNodeTracker& tracker_other) const {
   assert(is_root());
@@ -572,6 +624,18 @@ LeafNode::lower_bound_tracked(
   }
   return node_ertr::make_ready_future<search_result_t>(
       search_result_t{cursor, result.mstat});
+}
+
+node_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats) {
+  auto nstats = impl->get_stats();
+  stats.size_persistent_leaf += nstats.size_persistent;
+  stats.size_filled_leaf += nstats.size_filled;
+  stats.size_logical_leaf += nstats.size_logical;
+  stats.size_overhead_leaf += nstats.size_overhead;
+  stats.size_value_leaf += nstats.size_value;
+  stats.num_kvs_leaf += nstats.num_kvs;
+  stats.num_nodes_leaf += 1;
+  return node_ertr::now();
 }
 
 node_future<> LeafNode::test_clone_root(

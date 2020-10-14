@@ -164,6 +164,15 @@ struct string_key_view_t {
     assert(ret < NODE_BLOCK_SIZE);
     return ret;
   }
+  node_offset_t size_logical() const {
+    assert(type() == Type::STR);
+    return length;
+  }
+  node_offset_t size_overhead() const {
+    assert(type() == Type::STR);
+    return sizeof(string_size_t);
+  }
+
   std::string_view to_string_view() const {
     assert(type() == Type::STR);
     return {p_key, length};
@@ -295,6 +304,14 @@ struct ns_oid_view_t {
     } else {
       return sizeof(string_size_t);
     }
+  }
+  node_offset_t size_logical() const {
+    assert(type() == Type::STR);
+    return nspace.size_logical() + oid.size_logical();
+  }
+  node_offset_t size_overhead() const {
+    assert(type() == Type::STR);
+    return nspace.size_overhead() + oid.size_overhead();
   }
   bool operator==(const ns_oid_view_t& x) const {
     return (nspace == x.nspace && oid == x.oid);
@@ -479,6 +496,11 @@ class key_view_t {
     return *p_snap_gen;
   }
 
+  size_t size_logical() const {
+    return sizeof(shard_t) + sizeof(pool_t) + sizeof(crush_hash_t) +
+           sizeof(snap_t) + sizeof(gen_t) + ns_oid_view().size_logical();
+  }
+
   ghobject_t to_ghobj() const {
     ghobject_t ghobj;
     ghobj.shard_id.id = shard();
@@ -491,22 +513,26 @@ class key_view_t {
     return ghobj;
   }
 
+  void replace(const crush_t& key) { p_crush = &key; }
   void set(const crush_t& key) {
     assert(!has_crush());
-    p_crush = &key;
+    replace(key);
   }
+  void replace(const shard_pool_crush_t& key) { p_shard_pool = &key.shard_pool; }
   void set(const shard_pool_crush_t& key) {
     set(key.crush);
     assert(!has_shard_pool());
-    p_shard_pool = &key.shard_pool;
+    replace(key);
   }
+  void replace(const ns_oid_view_t& key) { p_ns_oid = key; }
   void set(const ns_oid_view_t& key) {
     assert(!has_ns_oid());
-    p_ns_oid = key;
+    replace(key);
   }
+  void replace(const snap_gen_t& key) { p_snap_gen = &key; }
   void set(const snap_gen_t& key) {
     assert(!has_snap_gen());
-    p_snap_gen = &key;
+    replace(key);
   }
 
   std::ostream& dump(std::ostream& os) const {

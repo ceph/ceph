@@ -114,6 +114,7 @@ class Node
   node_future<search_result_t> lower_bound(context_t c, const key_hobj_t& key);
   node_future<std::pair<Ref<tree_cursor_t>, bool>> insert(
       context_t, const key_hobj_t&, const onode_t&);
+  node_future<tree_stats_t> get_tree_stats(context_t);
   std::ostream& dump(std::ostream&) const;
   std::ostream& dump_brief(std::ostream&) const;
 
@@ -129,6 +130,7 @@ class Node
   }
   virtual node_future<search_result_t> lower_bound_tracked(
       context_t, const key_hobj_t&, MatchHistory&) = 0;
+  virtual node_future<> do_get_tree_stats(context_t, tree_stats_t&) = 0;
 
  protected:
   Node(NodeImplURef&&);
@@ -213,6 +215,7 @@ class InternalNode final : public Node {
   node_future<Ref<tree_cursor_t>> lookup_largest(context_t) override;
   node_future<search_result_t> lower_bound_tracked(
       context_t, const key_hobj_t&, MatchHistory&) override;
+  node_future<> do_get_tree_stats(context_t, tree_stats_t&) override;
 
   node_future<> test_clone_root(context_t, RootNodeTracker&) const override;
 
@@ -285,6 +288,7 @@ class LeafNode final : public Node {
   node_future<Ref<tree_cursor_t>> lookup_largest(context_t) override;
   node_future<search_result_t> lower_bound_tracked(
       context_t, const key_hobj_t&, MatchHistory&) override;
+  node_future<> do_get_tree_stats(context_t, tree_stats_t&) override;
 
   node_future<> test_clone_root(context_t, RootNodeTracker&) const override;
 
