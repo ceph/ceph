@@ -66,6 +66,7 @@ class User(RESTController):
             raise DashboardException(msg='Role does not exist',
                                      code='role_does_not_exist',
                                      component='user')
+
     @EndpointDoc("Get List Of Users",
                  responses={200: USER_SCHEMA})
     def list(self):
