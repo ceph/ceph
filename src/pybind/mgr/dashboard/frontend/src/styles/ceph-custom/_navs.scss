@@ -1,5 +1,5 @@
-@use '../defaults/bootstrap-defaults' as bd;
+@use '../vendor/variables' as vv;
 
 .nav-tabs {
-  margin-bottom: bd.$nav-tabs-margin-bottom;
+  margin-bottom: vv.$nav-tabs-margin-bottom;
 }

@@ -1,5 +1,3 @@
-@use '../vendor/variables';
-
 // Color system
 
 $white: #fff !default;
@@ -17,62 +15,66 @@ $black: #000 !default;
 $blue: #007bff !default;
 $indigo: #6610f2 !default;
 $purple: #6f42c1 !default;
-$pink: #a94442;
-$red: #ef5c55;
+$pink: #a94442 !default;
+$red: #ef5c55 !default;
 $orange: #fd7e14 !default;
-$yellow: #ffc200;
-$green: #0b0;
+$yellow: #ffc200 !default;
+$green: #0b0 !default;
 $teal: #20c997 !default;
 $cyan: #17a2b8 !default;
 
-$primary: #2b99a8;
-$secondary: #374249;
-$success: $green;
-$info: $primary;
-$warning: $yellow;
-$danger: $red;
-$light: $gray-100;
-$dark: #777;
+$primary: #2b99a8 !default;
+$secondary: #374249 !default;
+$success: $green !default;
+$info: $primary !default;
+$warning: $yellow !default;
+$danger: $red !default;
+$light: $gray-100 !default;
+$dark: #777 !default;
 
-$fg-color-over-dark-bg: $white;
-$fg-hover-color-over-dark-bg: $gray-500;
+// Extra theme colors.
+$accent: $red !default;
+$warning-dark: $orange !default;
+
+$fg-color-over-dark-bg: $white !default;
+$fg-hover-color-over-dark-bg: $gray-500 !default;
 
 $theme-colors: (
-  'accent': #ef5c55,
-  'warning-dark': $orange
-);
+  'accent': $accent,
+  'warning-dark': $warning-dark
+) !default;
 
 // Body
 
-$body-color-bright: $light;
-$body-bg: $white;
-$body-color: $gray-900;
+$body-color-bright: $light !default;
+$body-bg: $white !default;
+$body-color: $gray-900 !default;
 
 // Typography
 
 $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-serif,
-  'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji' !default;
 
 // Card
 
-$card-cap-bg: $gray-100;
+$card-cap-bg: $gray-100 !default;
 
 // Grid
 
-$grid-gutter-width: 30px;
+$grid-gutter-width: 30px !default;
 
 // Table
 
-$datatable-divider-color: rgba($black, 0.09);
+$datatable-divider-color: rgba($black, 0.09) !default;
 
 // Navs
 
-$nav-tabs-margin-bottom: 1rem;
+$nav-tabs-margin-bottom: 1rem !default;
 
 // Tooltips
 
-$tooltip-color: $white;
-$tooltip-bg: $body-color;
+$tooltip-color: $white !default;
+$tooltip-bg: $body-color !default;
 
 // Misc
 
@@ -81,10 +83,10 @@ $screen-md-min: 768px !default;
 $screen-lg-min: 992px !default;
 $screen-xl-min: 1200px !default;
 
-$screen-xs-max: calc(#{$screen-sm-min} - 1px);
-$screen-sm-max: calc(#{$screen-md-min} - 1px);
-$screen-md-max: calc(#{$screen-lg-min} - 1px);
-$screen-lg-max: calc(#{$screen-xl-min} - 1px);
+$screen-xs-max: calc(#{$screen-sm-min} - 1px) !default;
+$screen-sm-max: calc(#{$screen-md-min} - 1px) !default;
+$screen-md-max: calc(#{$screen-lg-min} - 1px) !default;
+$screen-lg-max: calc(#{$screen-xl-min} - 1px) !default;
 
-$navbar-height: 43px;
-$top-notification-height: 37.6px;
+$navbar-height: 43px !default;
+$top-notification-height: 37.6px !default;

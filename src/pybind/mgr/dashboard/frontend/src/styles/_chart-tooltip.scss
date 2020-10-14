@@ -1,4 +1,4 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 .chart-container {
   cursor: pointer;
@@ -12,9 +12,9 @@ canvas {
 }
 
 .chartjs-tooltip {
-  background: rgba(bd.$black, 0.7);
+  background: rgba(vv.$black, 0.7);
   border-radius: 3px;
-  color: bd.$white;
+  color: vv.$white;
   font-family: 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif !important;
   opacity: 0;
   pointer-events: none;
@@ -41,7 +41,7 @@ canvas {
 }
 
 .chartjs-tooltip::after {
-  border-color: bd.$black transparent transparent transparent;
+  border-color: vv.$black transparent transparent transparent;
   border-style: solid;
   border-width: 5px;
   content: ' ';

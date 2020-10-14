@@ -1,11 +1,11 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 ::ng-deep cd-login-layout .login {
-  background-color: bd.$secondary;
+  background-color: vv.$secondary;
   background-image: url('../../../../assets/ceph_background.gif');
   background-position: right bottom;
   background-repeat: no-repeat;
-  color: bd.$body-color-bright;
+  color: vv.$body-color-bright;
 
   header {
     position: absolute;
@@ -17,7 +17,7 @@
 
         li a {
           &:hover {
-            background-color: bd.$primary;
+            background-color: vv.$primary;
           }
         }
       }
@@ -36,10 +36,10 @@
   }
 
   a {
-    color: bd.$fg-color-over-dark-bg;
+    color: vv.$fg-color-over-dark-bg;
 
     &:hover {
-      color: bd.$fg-hover-color-over-dark-bg;
+      color: vv.$fg-hover-color-over-dark-bg;
     }
   }
 }

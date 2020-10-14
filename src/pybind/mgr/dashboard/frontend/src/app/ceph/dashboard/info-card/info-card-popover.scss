@@ -1,4 +1,4 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 .info-card-popover-cluster-status {
   max-height: 20vh;
@@ -12,31 +12,31 @@
   }
 }
 
-@media (max-width: bd.$screen-lg-max) {
+@media (max-width: vv.$screen-lg-max) {
   .info-card-popover-cluster-status {
     max-width: 31vw;
   }
 }
 
-@media (max-width: bd.$screen-md-max) {
+@media (max-width: vv.$screen-md-max) {
   .info-card-popover-cluster-status {
     max-width: 46vw;
   }
 }
-@media (max-width: bd.$screen-sm-max) {
+@media (max-width: vv.$screen-sm-max) {
   .info-card-popover-cluster-status {
     max-width: 83vw;
   }
 }
 
 .info-card-content-clickable {
-  border: 1px solid bd.$gray-200;
+  border: 1px solid vv.$gray-200;
   border-radius: 3px;
   cursor: pointer;
   padding: 7px;
 }
 
 .info-card-content-clickable:hover {
-  background-color: bd.$gray-200;
-  border-color: bd.$gray-400;
+  background-color: vv.$gray-200;
+  border-color: vv.$gray-400;
 }
