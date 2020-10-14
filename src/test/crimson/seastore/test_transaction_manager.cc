@@ -4,6 +4,7 @@
 #include <random>
 
 #include "test/crimson/gtest_seastar.h"
+#include "test/crimson/seastore/transaction_manager_test_state.h"
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
@@ -48,44 +49,16 @@ std::ostream &operator<<(std::ostream &lhs, const test_extent_record_t &rhs) {
 	     << ", refcount=" << rhs.refcount << ")";
 }
 
-struct transaction_manager_test_t : public seastar_test_suite_t {
-  std::unique_ptr<SegmentManager> segment_manager;
-  std::unique_ptr<SegmentCleaner> segment_cleaner;
-  std::unique_ptr<Journal> journal;
-  std::unique_ptr<Cache> cache;
-  LBAManagerRef lba_manager;
-  std::unique_ptr<TransactionManager> tm;
+struct transaction_manager_test_t :
+  public seastar_test_suite_t,
+  TMTestState {
 
   std::random_device rd;
   std::mt19937 gen;
 
   transaction_manager_test_t()
-    : segment_manager(create_ephemeral(segment_manager::DEFAULT_TEST_EPHEMERAL)),
-      gen(rd()) {
+    : gen(rd()) {
     init();
-  }
-
-  void init() {
-    segment_cleaner = std::make_unique<SegmentCleaner>(
-      SegmentCleaner::config_t::default_from_segment_manager(
-	*segment_manager),
-      true);
-    journal = std::make_unique<Journal>(*segment_manager);
-    cache = std::make_unique<Cache>(*segment_manager);
-    lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
-    tm = std::make_unique<TransactionManager>(
-      *segment_manager, *segment_cleaner, *journal, *cache, *lba_manager);
-
-    journal->set_segment_provider(&*segment_cleaner);
-    segment_cleaner->set_extent_callback(&*tm);
-  }
-
-  void destroy() {
-    tm.reset();
-    lba_manager.reset();
-    cache.reset();
-    journal.reset();
-    segment_cleaner.reset();
   }
 
   laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
@@ -98,30 +71,11 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
   }
 
   seastar::future<> set_up_fut() final {
-    return segment_manager->init().safe_then([this] {
-      return tm->mkfs();
-    }).safe_then([this] {
-      return tm->close();
-    }).safe_then([this] {
-      destroy();
-      static_cast<segment_manager::EphemeralSegmentManager*>(
-	&*segment_manager)->remount();
-      init();
-      return tm->mount();
-    }).handle_error(
-      crimson::ct_error::all_same_way([] {
-	ASSERT_FALSE("Unable to mount");
-      })
-    );
+    return tm_setup();
   }
 
   seastar::future<> tear_down_fut() final {
-    return tm->close(
-    ).handle_error(
-      crimson::ct_error::all_same_way([] {
-	ASSERT_FALSE("Unable to close");
-      })
-    );
+    return tm_teardown();
   }
 
   struct test_extents_t : std::map<laddr_t, test_extent_record_t> {
