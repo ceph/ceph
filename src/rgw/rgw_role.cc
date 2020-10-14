@@ -67,6 +67,131 @@ int RGWRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_
 			      set_exclusive(exclusive));
 }
 
+int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  int ret;
+
+  if (! validate_input(dpp)) {
+    return -EINVAL;
+  }
+
+  /* check to see the name is not used */
+  ret = read_id(dpp, name, tenant, id, y);
+  if (exclusive && ret == 0) {
+    ldpp_dout(dpp, 0) << "ERROR: name " << name << " already in use for role id "
+                    << id << dendl;
+    return -EEXIST;
+  } else if ( ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "failed reading role id  " << id << ": "
+                  << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  /* create unique id */
+  uuid_d new_uuid;
+  char uuid_str[37];
+  new_uuid.generate_random();
+  new_uuid.print(uuid_str);
+  id = uuid_str;
+
+  //arn
+  arn = role_arn_prefix + tenant + ":role" + path + name;
+
+  // Creation time
+  real_clock::time_point t = real_clock::now();
+
+  struct timeval tv;
+  real_clock::to_timeval(t, tv);
+
+  char buf[30];
+  struct tm result;
+  gmtime_r(&tv.tv_sec, &result);
+  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
+  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
+  creation_date.assign(buf, strlen(buf));
+
+  ret = store_info(dpp, exclusive, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR:  storing role info "
+                  << id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = store_name(dpp, exclusive, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: storing role name"
+                  << name << ": " << cpp_strerror(-ret) << dendl;
+
+    //Delete the role info that was stored in the previous call
+    int info_ret = role_ctl->delete_info(id, y, dpp);
+    if (info_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id"
+                  << id << ": " << cpp_strerror(-info_ret) << dendl;
+    }
+    return ret;
+  }
+
+  ret = store_path(dpp, exclusive, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: storing role path"
+                  << path << ": " << cpp_strerror(-ret) << dendl;
+    //Delete the role info that was stored in the previous call
+    int info_ret = role_ctl->delete_info(id, y, dpp);
+    if (info_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id"
+		    << id << ": " << cpp_strerror(-info_ret) << dendl;
+    }
+    //Delete role name that was stored in previous call
+    int name_ret = role_ctl->delete_name(name, tenant, y, dpp);
+    if (name_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role name"
+		    << name << ": " << cpp_strerror(-name_ret) << dendl;
+    }
+    return ret;
+  }
+  return 0;
+}
+
+int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
+{
+
+  int ret = read_name(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = read_info(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (! perm_policy_map.empty()) {
+    return -ERR_DELETE_CONFLICT;
+  }
+
+  // Delete id
+  ret = role_ctl->delete_info(id, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting role id: "
+                  << id << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  // Delete name
+  ret = role_ctl->delete_name(name, tenant, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting role: "
+                  << name << ":" << cpp_strerror(-ret) << dendl;
+  }
+
+  // Delete path
+  ret = role_ctl->delete_path(id, path, tenant, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting role path:"
+                  << path << ": " << cpp_strerror(-ret) << dendl;
+  }
+  return ret;
+}
+
 int RGWRole::get(const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret = read_name(dpp, y);
@@ -176,6 +301,45 @@ void RGWRole::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("create_date", creation_date, obj);
   JSONDecoder::decode_json("max_session_duration", max_session_duration, obj);
   JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
+}
+
+int RGWRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
+{
+  int ret;
+  std::tie(ret, role_id) = role_ctl->read_name(role_name, tenant, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed reading role id with params"
+		 << role_name << ", " << tenant << ":"
+		 << cpp_strerror(ret) << dendl;
+  }
+
+  return ret;
+}
+
+int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
+{
+
+  auto ret = role_ctl->read_info(id, y, dpp, this);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed reading role info from pool: "
+                  ": " << id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  auto [ret, _id] = role_ctl->read_name(name, tenant, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed reading role name from pool: "
+                  << name << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  id = _id;
+  return 0;
 }
 
 bool RGWRole::validate_input(const DoutPrefixProvider* dpp)
