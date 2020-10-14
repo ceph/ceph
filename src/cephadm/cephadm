@@ -2332,16 +2332,17 @@ class Firewalld(object):
             return
 
         for port in fw_ports:
-            tcp_port = str(port) + '/tcp'
-            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbose_on_failure=False)
+            if not re.findall("udp", str(port)):
+                port = str(port) + '/tcp'
+            out, err, ret = call([self.cmd, '--permanent', '--query-port', port], verbose_on_failure=False)
             if ret:
-                logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
-                out, err, ret = call([self.cmd, '--permanent', '--add-port', tcp_port])
+                logger.info('Enabling firewalld port %s in current zone...' % port)
+                out, err, ret = call([self.cmd, '--permanent', '--add-port', port])
                 if ret:
                     raise RuntimeError('unable to add port %s to current zone: %s' %
                                     (tcp_port, err))
             else:
-                logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
+                logger.debug('firewalld port %s is enabled in current zone' % port)
 
     def apply_rules(self):
         # type: () -> None
@@ -2531,7 +2532,10 @@ class CephContainer:
         if self.host_network:
             cmd_args.append('--net=host')
         if self.entrypoint:
-            cmd_args.extend(['--entrypoint', self.entrypoint])
+            if self.entrypoint == "doesnotmatter":
+                cmd_args.extend(['-d'])
+            else:
+                cmd_args.extend(['--entrypoint', self.entrypoint])
         if self.privileged:
             cmd_args.extend([
                 '--privileged',
@@ -3229,6 +3233,9 @@ def command_bootstrap():
                         args.initial_dashboard_user,
                         password))
 
+    if not args.skip_tracing:
+        command_init_tracing()
+        
     if args.apply_spec:
         logger.info('Applying %s to cluster' % args.apply_spec)
 
@@ -5447,7 +5454,43 @@ def command_gather_facts():
     host = HostFacts()
     print(host.dump())
 
+def command_init_tracing():
+    
+    global container_path
 
+    ports = ['5775/udp', '6831/udp', '6832/udp', '5778', '16686', '14268', '14250']
+       
+    c = CephContainer(
+        image='jaegertracing/all-in-one:1.20',
+        entrypoint='doesnotmatter',
+        cname='jaeger',
+        container_args=['-p', '5775:5775/udp',
+        '-p', '6831:6831/udp',
+        '-p', '6832:6832/udp',
+        '-p', '5778:5778',
+        '-p', '16686:16686',
+        '-p', '14268:14268',
+        '-p', '14250:14250',
+        '-p', '9411:9411'],
+        host_network=False)
+    try:
+        #remove any container existing with name jaeger
+        out, _, _ = call_throws(c.rm_cmd(), verbose=False)
+    except:
+        pass
+    fw = Firewalld()
+    fw.open_ports(ports)
+    fw.apply_rules()
+    
+    out, err, code = call_throws(c.run_cmd(), verbose=True)
+    if not code:
+        print(out)
+        logger.info('Jaegertracing available at:\n\n'
+                    '\t Jaeger Frontend URL: https://%s:16686/\n'
+                    '\t serve config: https://%s:5778/\n'
+                        % (get_fqdn(), get_fqdn()))
+
+    
 ##################################
 
 
@@ -5793,6 +5836,10 @@ def _get_parser():
         action='store_true',
         help='do not enable the Ceph Dashboard')
     parser_bootstrap.add_argument(
+        '--skip-tracing',
+        action='store_true',
+        help='skip using jaegertracing')
+    parser_bootstrap.add_argument(
         '--dashboard-password-noupdate',
         action='store_true',
         help='stop forced dashboard password change')
@@ -5858,6 +5905,8 @@ def _get_parser():
         action='store_true',
         help='Run podman/docker with `--init`')
 
+    parser_deploy = subparsers.add_parser(
+        'deploy', help='deploy a daemon')
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
     parser_deploy.set_defaults(func=command_deploy)
@@ -5977,6 +6026,10 @@ def _get_parser():
     parser_gather_facts = subparsers.add_parser(
         'gather-facts', help='gather and return host related information (JSON format)')
     parser_gather_facts.set_defaults(func=command_gather_facts)
+
+    parser_init_tracing = subparsers.add_parser(
+        'init-tracing', help='deploy jaegertracing frontend services')
+    parser_init_tracing.set_defaults(func=command_init_tracing)
 
     return parser
 
