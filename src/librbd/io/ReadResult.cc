@@ -152,15 +152,17 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
   ldout(cct, 10) << "C_ImageReadRequest: r=" << r
                  << dendl;
   if (r >= 0) {
+    striper::LightweightBufferExtents buffer_extents;
     size_t length = 0;
     for (auto &image_extent : image_extents) {
+      buffer_extents.emplace_back(length, image_extent.second);
       length += image_extent.second;
     }
     ceph_assert(length == bl.length());
 
     aio_completion->lock.lock();
     aio_completion->read_result.m_destriper.add_partial_result(
-      cct, bl, image_extents);
+      cct, std::move(bl), buffer_extents);
     aio_completion->lock.unlock();
     r = length;
   }
