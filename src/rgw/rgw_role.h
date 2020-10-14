@@ -125,8 +125,8 @@ class RGWRole
   int store_name(bool exclusive, optional_yield y = null_yield);
   int store_path(bool exclusive, optional_yield y = null_yield);
   int read_id(const string& role_name, const string& tenant, string& role_id);
-  int read_name() { return 0; }
-  int read_info() { return 0; };
+  int read_name();
+  int read_info();
   bool validate_input();
   void extract_name_tenant(const std::string& str);
   void get_role_policy(const string& policy_name, string& perm_policy);
@@ -161,8 +161,8 @@ public:
 
   void set_id(const string& id) { this->info.id = id; }
 
-  int create(bool exclusive) { return 0; }
-  int delete_obj() {return 0;}
+  int create(bool exclusive);
+  int delete_obj();
   int get();
   int get_by_id();
   int update();

@@ -61,141 +61,130 @@ int RGWRole::store_path(bool exclusive, optional_yield y)
 			      set_exclusive(exclusive));
 }
 
-// int RGWRole::create(bool exclusive)
-// {
-//   int ret;
+int RGWRole::create(bool exclusive)
+{
+  int ret;
 
-//   if (! validate_input()) {
-//     return -EINVAL;
-//   }
+  if (! info.validate_input()) {
+    return -EINVAL;
+  }
 
-//   /* check to see the name is not used */
-//   ret = read_id(info.name, info.tenant, info.id);
-//   if (exclusive && ret == 0) {
-//     ldout(cct, 0) << "ERROR: name " << info.name << " already in use for role id "
-//                     << info.id << dendl;
-//     return -EEXIST;
-//   } else if ( ret < 0 && ret != -ENOENT) {
-//     ldout(cct, 0) << "failed reading role id  " << id << ": "
-//                   << cpp_strerror(-ret) << dendl;
-//     return ret;
-//   }
+  /* check to see the name is not used */
+  ret = read_id(info.name, info.tenant, info.id);
+  if (exclusive && ret == 0) {
+    ldout(cct, 0) << "ERROR: name " << info.name << " already in use for role id "
+                    << info.id << dendl;
+    return -EEXIST;
+  } else if ( ret < 0 && ret != -ENOENT) {
+    ldout(cct, 0) << "failed reading role id  " << info.id << ": "
+                  << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
 
-//   /* create unique id */
-//   uuid_d new_uuid;
-//   char uuid_str[37];
-//   new_uuid.generate_random();
-//   new_uuid.print(uuid_str);
-//   info.id = uuid_str;
+  /* create unique id */
+  uuid_d new_uuid;
+  char uuid_str[37];
+  new_uuid.generate_random();
+  new_uuid.print(uuid_str);
+  info.id = uuid_str;
 
-//   //arn
-//   info.arn = role_arn_prefix + tenant + ":role" + path + name;
+  //arn
+  info.arn = role_arn_prefix + info.tenant + ":role" + info.path + info.name;
 
-//   // Creation time
-//   real_clock::time_point t = real_clock::now();
+  // Creation time
+  real_clock::time_point t = real_clock::now();
 
-//   struct timeval tv;
-//   real_clock::to_timeval(t, tv);
+  struct timeval tv;
+  real_clock::to_timeval(t, tv);
 
-//   char buf[30];
-//   struct tm result;
-//   gmtime_r(&tv.tv_sec, &result);
-//   strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-//   sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
-//   creation_date.assign(buf, strlen(buf));
+  char buf[30];
+  struct tm result;
+  gmtime_r(&tv.tv_sec, &result);
+  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
+  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
+  info.creation_date.assign(buf, strlen(buf));
 
-//   auto svc = ctl->svc;
+  ret = store_info(exclusive);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR:  storing role info "
+                  << info.id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
 
-//   auto& pool = svc->zone->get_zone_params().roles_pool;
-//   ret = store_info(exclusive);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
-//                   << id << ": " << cpp_strerror(-ret) << dendl;
-//     return ret;
-//   }
+  ret = store_name(exclusive);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: storing role name"
+                  << info.name << ": " << cpp_strerror(-ret) << dendl;
 
-//   ret = store_name(exclusive);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR: storing role name in pool: " << pool.name << ": "
-//                   << name << ": " << cpp_strerror(-ret) << dendl;
+    //Delete the role info that was stored in the previous call
+    int info_ret = role_ctl->delete_info(info.id, null_yield);
+    if (info_ret < 0) {
+      ldout(cct, 0) << "ERROR: cleanup of role id"
+                  << info.id << ": " << cpp_strerror(-info_ret) << dendl;
+    }
+    return ret;
+  }
 
-//     //Delete the role info that was stored in the previous call
-//     string oid = get_info_oid_prefix() + id;
-//     int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
-//     if (info_ret < 0) {
-//       ldout(cct, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
-//                   << id << ": " << cpp_strerror(-info_ret) << dendl;
-//     }
-//     return ret;
-//   }
+  ret = store_path(exclusive);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: storing role path"
+                  << info.path << ": " << cpp_strerror(-ret) << dendl;
+    //Delete the role info that was stored in the previous call
+    int info_ret = role_ctl->delete_info(info.id, null_yield);
+    if (info_ret < 0) {
+      ldout(cct, 0) << "ERROR: cleanup of role id"
+		    << info.id << ": " << cpp_strerror(-info_ret) << dendl;
+    }
+    //Delete role name that was stored in previous call
+    int name_ret = role_ctl->delete_name(info.name, info.tenant, null_yield);
+    if (name_ret < 0) {
+      ldout(cct, 0) << "ERROR: cleanup of role name"
+		    << info.name << ": " << cpp_strerror(-name_ret) << dendl;
+    }
+    return ret;
+  }
+  return 0;
+}
 
-//   ret = store_path(exclusive);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR: storing role path in pool: " << pool.name << ": "
-//                   << path << ": " << cpp_strerror(-ret) << dendl;
-//     //Delete the role info that was stored in the previous call
-//     string oid = get_info_oid_prefix() + id;
-//     int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
-//     if (info_ret < 0) {
-//       ldout(cct, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
-//                   << id << ": " << cpp_strerror(-info_ret) << dendl;
-//     }
-//     //Delete role name that was stored in previous call
-//     oid = info.tenant + get_names_oid_prefix() + info.name;
-//     int name_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
-//     if (name_ret < 0) {
-//       ldout(cct, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
-//                   << name << ": " << cpp_strerror(-name_ret) << dendl;
-//     }
-//     return ret;
-//   }
-//   return 0;
-// }
+int RGWRole::delete_obj()
+{
 
-// int RGWRole::delete_obj()
-// {
-//   auto svc = ctl->svc;
-//   auto& pool = svc->zone->get_zone_params().roles_pool;
+  int ret = read_name();
+  if (ret < 0) {
+    return ret;
+  }
 
-//   int ret = read_name();
-//   if (ret < 0) {
-//     return ret;
-//   }
+  ret = read_info();
+  if (ret < 0) {
+    return ret;
+  }
 
-//   ret = read_info();
-//   if (ret < 0) {
-//     return ret;
-//   }
+  if (! info.perm_policy_map.empty()) {
+    return -ERR_DELETE_CONFLICT;
+  }
 
-//   if (! perm_policy_map.empty()) {
-//     return -ERR_DELETE_CONFLICT;
-//   }
+  // Delete id
+  ret = role_ctl->delete_info(info.id, null_yield);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: deleting role id: "
+                  << info.id << ": " << cpp_strerror(-ret) << dendl;
+  }
 
-//   // Delete id
-//   string oid = get_info_oid_prefix() + info.id;
-//   ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR: deleting role id from pool: " << pool.name << ": "
-//                   << id << ": " << cpp_strerror(-ret) << dendl;
-//   }
+  // Delete name
+  ret = role_ctl->delete_name(info.name, info.tenant, null_yield);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: deleting role: "
+                  << info.name << ":" << cpp_strerror(-ret) << dendl;
+  }
 
-//   // Delete name
-//   oid = tenant + get_names_oid_prefix() + name;
-//   ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR: deleting role name from pool: " << pool.name << ": "
-//                   << name << ": " << cpp_strerror(-ret) << dendl;
-//   }
-
-//   // Delete path
-//   oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
-//   ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
-//                   << path << ": " << cpp_strerror(-ret) << dendl;
-//   }
-//   return ret;
-// }
+  // Delete path
+  ret = role_ctl->delete_path(info.id, info.path, info.tenant, null_yield);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: deleting role path:"
+                  << info.path << ": " << cpp_strerror(-ret) << dendl;
+  }
+  return ret;
+}
 
 int RGWRole::get()
 {
@@ -298,89 +287,45 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
 }
 
-// int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
-// {
-//   auto svc = ctl->svc;
-//   auto& pool = svc->zone->get_zone_params().roles_pool;
-//   string oid = tenant + get_names_oid_prefix() + role_name;
-//   bufferlist bl;
-//   auto obj_ctx = svc->sysobj->init_obj_ctx();
+int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
+{
+  int ret;
+  std::tie(ret, role_id) = role_ctl->read_name(role_name, tenant, null_yield);
+  if (ret < 0) {
+    ldout(cct,0) << "ERROR: failed reading role id with params"
+		 << role_name << ", " << tenant << ":"
+		 << cpp_strerror(ret) << dendl;
+  }
 
-//   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
-//   if (ret < 0) {
-//     return ret;
-//   }
+  return ret;
+}
 
-//   RGWNameToId nameToId;
-//   try {
-//     auto iter = bl.cbegin();
-//     using ceph::decode;
-//     decode(nameToId, iter);
-//   } catch (buffer::error& err) {
-//     ldout(cct, 0) << "ERROR: failed to decode role from pool: " << pool.name << ": "
-//                   << role_name << dendl;
-//     return -EIO;
-//   }
-//   role_id = nameToId.obj_id;
-//   return 0;
-// }
+int RGWRole::read_info()
+{
 
-// int RGWRole::read_info()
-// {
-//   auto svc = ctl->svc;
-//   auto& pool = svc->zone->get_zone_params().roles_pool;
-//   string oid = get_info_oid_prefix() + info.id;
-//   bufferlist bl;
-//   auto obj_ctx = svc->sysobj->init_obj_ctx();
+  auto [ret, _info] = role_ctl->read_info(info.id, null_yield);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed reading role info from pool: "
+                  ": " << info.id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
 
-//   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR: failed reading role info from pool: " << pool.name <<
-//                   ": " << info.id << ": " << cpp_strerror(-ret) << dendl;
-//     return ret;
-//   }
+  info = std::move(_info);
+  return 0;
+}
 
-//   try {
-//     using ceph::decode;
-//     auto iter = bl.cbegin();
-//     decode(info, iter);
-//   } catch (buffer::error& err) {
-//     ldout(cct, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
-//                   ": " << info.id << dendl;
-//     return -EIO;
-//   }
+int RGWRole::read_name()
+{
+  auto [ret, _id] = role_ctl->read_name(info.name, info.tenant, null_yield);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed reading role name from pool: "
+                  << info.name << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
 
-//   return 0;
-// }
-
-// int RGWRole::read_name()
-// {
-//   auto svc = ctl->svc;
-//   auto& pool = svc->zone->get_zone_params().roles_pool;
-//   string oid = tenant + get_names_oid_prefix() + name;
-//   bufferlist bl;
-//   auto obj_ctx = svc->sysobj->init_obj_ctx();
-
-//   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
-//   if (ret < 0) {
-//     ldout(cct, 0) << "ERROR: failed reading role name from pool: " << pool.name << ": "
-//                   << name << ": " << cpp_strerror(-ret) << dendl;
-//     return ret;
-//   }
-
-//   RGWNameToId nameToId;
-//   try {
-//     using ceph::decode;
-//     auto iter = bl.cbegin();
-//     decode(nameToId, iter);
-//   } catch (buffer::error& err) {
-//     ldout(cct, 0) << "ERROR: failed to decode role name from pool: " << pool.name << ": "
-//                   << name << dendl;
-//     return -EIO;
-//   }
-//   id = nameToId.obj_id;
-//   return 0;
-// }
+  info.id = _id;
+  return 0;
+}
 
 bool RGWRoleInfo::validate_input()
 {
