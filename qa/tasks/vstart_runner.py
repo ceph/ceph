@@ -616,6 +616,20 @@ class LocalKernelMount(KernelMount):
             client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
+        # Make vstart_runner compatible with teuth and qa/tasks/cephfs.
+        self._mount_bin = [os.path.join(BIN_PREFIX , 'mount.ceph')]
+
+    def setup_netns(self):
+        if opt_use_ns:
+            super(type(self), self).setup_netns()
+
+    @property
+    def _nsenter_args(self):
+            if opt_use_ns:
+                return super(type(self), self)._nsenter_args
+            else:
+                return []
+
     @property
     def config_path(self):
         return "./ceph.conf"
@@ -630,15 +644,6 @@ class LocalKernelMount(KernelMount):
             return os.path.join(os.getcwd(), 'keyring')
         else:
             return keyring_path
-
-    def setupfs(self, name=None):
-        if name is None and self.fs is not None:
-            # Previous mount existed, reuse the old name
-            name = self.fs.name
-        self.fs = LocalFilesystem(self.ctx, name=name)
-        log.debug('Wait for MDS to reach steady state...')
-        self.fs.wait_for_daemons()
-        log.debug('Ready to start {}...'.format(type(self).__name__))
 
     @property
     def _prefix(self):
@@ -663,77 +668,6 @@ class LocalKernelMount(KernelMount):
                     break
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
-
-    def mount(self, mntopts=[], check_status=True, **kwargs):
-        self.update_attrs(**kwargs)
-        self.assert_and_log_minimum_mount_details()
-
-        if opt_use_ns:
-            self.using_namespace = True
-            self.setup_netns()
-        else:
-            self.using_namespace = False
-
-        if not self.cephfs_mntpt:
-            self.cephfs_mntpt = "/"
-
-        opts = 'norequire_active_mds'
-        if self.client_id:
-            opts += ',name=' + self.client_id
-        if self.client_keyring_path and self.client_id:
-            opts += ",secret=" + self.get_key_from_keyfile()
-        if self.config_path:
-            opts += ',conf=' + self.config_path
-        if self.cephfs_name:
-            opts += ",mds_namespace={0}".format(self.cephfs_name)
-        if mntopts:
-            opts += ',' + ','.join(mntopts)
-
-        stderr = StringIO()
-        try:
-            self.client_remote.run(args=['mkdir', '--', self.hostfs_mntpt],
-                                   timeout=(5*60), stderr=stderr)
-        except CommandFailedError:
-            if 'file exists' not in stderr.getvalue().lower():
-                raise
-
-        if self.cephfs_mntpt is None:
-            self.cephfs_mntpt = "/"
-        cmdargs = ['sudo']
-        if self.using_namespace:
-           cmdargs += ['nsenter',
-                       '--net=/var/run/netns/{0}'.format(self.netns_name)]
-        cmdargs += ['./bin/mount.ceph', ':' + self.cephfs_mntpt,
-                    self.hostfs_mntpt, '-v', '-o', opts]
-
-        mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
-        try:
-            self.client_remote.run(args=cmdargs, timeout=(30*60),
-                omit_sudo=False, stdout=mountcmd_stdout,
-                stderr=mountcmd_stderr)
-        except CommandFailedError as e:
-            if check_status:
-                raise
-            else:
-                return (e, mountcmd_stdout.getvalue(),
-                        mountcmd_stderr.getvalue())
-
-        stderr = StringIO()
-        try:
-            self.client_remote.run(args=['sudo', 'chmod', '1777',
-                                   self.hostfs_mntpt], stderr=stderr,
-                                   timeout=(5*60))
-        except CommandFailedError:
-            # the client does not have write permissions in cap it holds for
-            # the Ceph FS that was just mounted.
-            if 'permission denied' in stderr.getvalue().lower():
-                pass
-
-        self.mounted = True
-
-    def cleanup_netns(self):
-        if self.using_namespace:
-            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
