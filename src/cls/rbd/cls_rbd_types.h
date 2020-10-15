@@ -950,6 +950,7 @@ struct MigrationSpec {
   std::string pool_namespace;
   std::string image_name;
   std::string image_id;
+  std::string source_spec;
   std::map<uint64_t, uint64_t> snap_seqs;
   uint64_t overlap = 0;
   bool flatten = false;
@@ -962,14 +963,15 @@ struct MigrationSpec {
   }
   MigrationSpec(MigrationHeaderType header_type, int64_t pool_id,
                 const std::string& pool_namespace,
-                const std::string &image_name, const std::string &image_id,
+                const std::string& image_name, const std::string &image_id,
+                const std::string& source_spec,
                 const std::map<uint64_t, uint64_t> &snap_seqs, uint64_t overlap,
                 bool mirroring, MirrorImageMode mirror_image_mode, bool flatten,
                 MigrationState state, const std::string &state_description)
     : header_type(header_type), pool_id(pool_id),
       pool_namespace(pool_namespace), image_name(image_name),
-      image_id(image_id), snap_seqs(snap_seqs), overlap(overlap),
-      flatten(flatten), mirroring(mirroring),
+      image_id(image_id), source_spec(source_spec), snap_seqs(snap_seqs),
+      overlap(overlap), flatten(flatten), mirroring(mirroring),
       mirror_image_mode(mirror_image_mode), state(state),
       state_description(state_description) {
   }
@@ -983,10 +985,11 @@ struct MigrationSpec {
   inline bool operator==(const MigrationSpec& ms) const {
     return header_type == ms.header_type && pool_id == ms.pool_id &&
       pool_namespace == ms.pool_namespace && image_name == ms.image_name &&
-      image_id == ms.image_id && snap_seqs == ms.snap_seqs &&
-      overlap == ms.overlap && flatten == ms.flatten &&
-      mirroring == ms.mirroring && mirror_image_mode == ms.mirror_image_mode &&
-      state == ms.state && state_description == ms.state_description;
+      image_id == ms.image_id && source_spec == ms.source_spec &&
+      snap_seqs == ms.snap_seqs && overlap == ms.overlap &&
+      flatten == ms.flatten && mirroring == ms.mirroring &&
+      mirror_image_mode == ms.mirror_image_mode && state == ms.state &&
+      state_description == ms.state_description;
   }
 };
 
