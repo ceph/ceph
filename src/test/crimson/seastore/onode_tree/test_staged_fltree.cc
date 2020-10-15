@@ -4,7 +4,6 @@
 #include <array>
 #include <cstring>
 #include <memory>
-#include <random>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -15,38 +14,22 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_layout.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
 #include "test/crimson/gtest_seastar.h"
 
 using namespace crimson::os::seastore::onode;
-using crimson::os::seastore::Cache;
-using crimson::os::seastore::Journal;
-using crimson::os::seastore::LBAManagerRef;
-using crimson::os::seastore::lba_manager::create_lba_manager;
-using crimson::os::seastore::SegmentCleaner;
-using crimson::os::seastore::SegmentManager;
-using crimson::os::seastore::segment_manager::create_ephemeral;
-using crimson::os::seastore::segment_manager::DEFAULT_TEST_EPHEMERAL;
+namespace seastore = crimson::os::seastore;
+using seastore::lba_manager::create_lba_manager;
+using seastore::segment_manager::create_ephemeral;
+using seastore::segment_manager::DEFAULT_TEST_EPHEMERAL;
+using sc_config_t = seastore::SegmentCleaner::config_t;
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
-  }
-
-  ghobject_t make_ghobj(
-      shard_t shard, pool_t pool, crush_hash_t crush,
-      std::string ns, std::string oid, snap_t snap, gen_t gen) {
-    ghobject_t ghobj;
-    ghobj.shard_id.id = shard;
-    ghobj.hobj.pool = pool;
-    ghobj.hobj.set_hash(crush);
-    ghobj.hobj.nspace = ns;
-    ghobj.hobj.oid.name = oid;
-    ghobj.hobj.snap = snap;
-    ghobj.generation = gen;
-    return ghobj;
   }
 
   // return a key_view_t and its underlying memory buffer.
@@ -78,76 +61,6 @@ namespace {
 
     return {key_view, p_mem};
   }
-
-  class Onodes {
-   public:
-    Onodes(size_t n) {
-      for (size_t i = 1; i <= n; ++i) {
-        auto p_onode = &create(i * 8);
-        onodes.push_back(p_onode);
-      }
-    }
-
-    Onodes(std::vector<size_t> sizes) {
-      for (auto& size : sizes) {
-        auto p_onode = &create(size);
-        onodes.push_back(p_onode);
-      }
-    }
-
-    ~Onodes() {
-      std::for_each(tracked_onodes.begin(), tracked_onodes.end(),
-                    [] (onode_t* onode) {
-        std::free(onode);
-      });
-    }
-
-    const onode_t& create(size_t size) {
-      assert(size >= sizeof(onode_t) + sizeof(uint32_t));
-      uint32_t target = size * 137;
-      auto p_mem = (char*)std::malloc(size);
-      auto p_onode = (onode_t*)p_mem;
-      tracked_onodes.push_back(p_onode);
-      p_onode->size = size;
-      p_onode->id = id++;
-      p_mem += (size - sizeof(uint32_t));
-      std::memcpy(p_mem, &target, sizeof(uint32_t));
-      validate(*p_onode);
-      return *p_onode;
-    }
-
-    const onode_t& pick() const {
-      auto index = rd() % onodes.size();
-      return *onodes[index];
-    }
-
-    const onode_t& pick_largest() const {
-      return *onodes[onodes.size() - 1];
-    }
-
-    static void validate_cursor(
-        const Btree::Cursor& cursor, const ghobject_t& key, const onode_t& onode) {
-      assert(!cursor.is_end());
-      assert(cursor.get_ghobj() == key);
-      assert(cursor.value());
-      assert(cursor.value() != &onode);
-      assert(*cursor.value() == onode);
-      validate(*cursor.value());
-    }
-
-   private:
-    static void validate(const onode_t& node) {
-      auto p_target = (const char*)&node + node.size - sizeof(uint32_t);
-      uint32_t target;
-      std::memcpy(&target, p_target, sizeof(uint32_t));
-      assert(target == node.size * 137);
-    }
-
-    uint16_t id = 0;
-    mutable std::random_device rd;
-    std::vector<const onode_t*> onodes;
-    std::vector<onode_t*> tracked_onodes;
-  };
 }
 
 struct a_basic_test_t : public seastar_test_suite_t {};
@@ -433,6 +346,7 @@ static std::set<ghobject_t> build_key_set(
     std::pair<unsigned, unsigned> range_0,
     std::string padding = "",
     bool is_internal = false) {
+  assert(range_1.second <= 10);
   std::set<ghobject_t> ret;
   ghobject_t key;
   for (unsigned i = range_2.first; i < range_2.second; ++i) {
@@ -1237,143 +1151,33 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
   });
 }
 
-class KVPool {
-  struct kv_conf_t {
-    unsigned index_2;
-    unsigned index_1;
-    unsigned index_0;
-    size_t ns_size;
-    size_t oid_size;
-    const onode_t* p_value;
-
-    ghobject_t get_ghobj() const {
-      assert(index_1 < 10);
-      std::ostringstream os_ns;
-      os_ns << "ns" << index_1;
-      unsigned current_size = (unsigned)os_ns.tellp();
-      assert(ns_size >= current_size);
-      os_ns << std::string(ns_size - current_size, '_');
-
-      std::ostringstream os_oid;
-      os_oid << "oid" << index_1;
-      current_size = (unsigned)os_oid.tellp();
-      assert(oid_size >= current_size);
-      os_oid << std::string(oid_size - current_size, '_');
-
-      return make_ghobj(index_2, index_2, index_2,
-                        os_ns.str(), os_oid.str(), index_0, index_0);
-    }
-  };
-  using kv_vector_t = std::vector<kv_conf_t>;
-
- public:
-  using kv_t = std::pair<ghobject_t, const onode_t*>;
-
-  KVPool(std::vector<size_t> str_sizes,
-         std::vector<size_t> onode_sizes,
-         std::pair<unsigned, unsigned> range_2,
-         std::pair<unsigned, unsigned> range_1,
-         std::pair<unsigned, unsigned> range_0)
-      : str_sizes{str_sizes}, onodes{onode_sizes} {
-    std::random_device rd;
-    for (unsigned i = range_2.first; i < range_2.second; ++i) {
-      for (unsigned j = range_1.first; j < range_1.second; ++j) {
-        auto ns_size = (unsigned)str_sizes[rd() % str_sizes.size()];
-        auto oid_size = (unsigned)str_sizes[rd() % str_sizes.size()];
-        for (unsigned k = range_0.first; k < range_0.second; ++k) {
-          kvs.emplace_back(kv_conf_t{i, j, k, ns_size, oid_size, &onodes.pick()});
-        }
-      }
-    }
-    random_kvs = kvs;
-    std::random_shuffle(random_kvs.begin(), random_kvs.end());
-  }
-
-  class iterator_t {
-   public:
-    kv_t get_kv() const {
-      assert(!is_end());
-      auto& conf = (*p_kvs)[i];
-      return std::make_pair(conf.get_ghobj(), conf.p_value);
-    }
-    bool is_end() const { return i >= p_kvs->size(); }
-    size_t index() const { return i; }
-
-    iterator_t& operator++() {
-      assert(!is_end());
-      ++i;
-      return *this;
-    }
-
-    iterator_t operator++(int) {
-      iterator_t tmp = *this;
-      ++*this;
-      return tmp;
-    }
-
-   private:
-    iterator_t(const kv_vector_t& kvs) : p_kvs{&kvs} {}
-
-    const kv_vector_t* p_kvs;
-    size_t i = 0;
-    friend class KVPool;
-  };
-
-  iterator_t begin() const {
-    return iterator_t(kvs);
-  }
-
-  iterator_t random_begin() const {
-    return iterator_t(random_kvs);
-  }
-
-  size_t size() const {
-    return kvs.size();
-  }
-
-  kv_t make_kv(unsigned index_2, unsigned index_1, unsigned index_0,
-               size_t ns_size, size_t oid_size, size_t onode_size) {
-    auto& onode = onodes.create(onode_size);
-    kv_conf_t conf{index_2, index_1, index_0, ns_size, oid_size, &onode};
-    return std::make_pair(conf.get_ghobj(), &onode);
-  }
-
- private:
-  std::vector<size_t> str_sizes;
-  Onodes onodes;
-  kv_vector_t kvs;
-  kv_vector_t random_kvs;
-};
-
 struct d_seastore_tree_test_t : public seastar_test_suite_t {
-  std::unique_ptr<SegmentManager> segment_manager;
-  SegmentCleaner segment_cleaner;
-  Journal journal;
-  Cache cache;
-  LBAManagerRef lba_manager;
-  TransactionManager tm;
-  NodeExtentManagerURef moved_nm;
-  TransactionRef ref_t;
-  Transaction& t;
-  Btree tree;
+  std::unique_ptr<seastore::SegmentManager> segment_manager;
+  seastore::SegmentCleaner segment_cleaner;
+  seastore::Journal journal;
+  seastore::Cache cache;
+  seastore::LBAManagerRef lba_manager;
+  seastore::TransactionManager tm;
+  KVPool kvs;
+  TreeBuilder<true> tree;
 
   d_seastore_tree_test_t()
     : segment_manager(create_ephemeral(DEFAULT_TEST_EPHEMERAL)),
-      segment_cleaner(SegmentCleaner::config_t::default_from_segment_manager(
-                        *segment_manager)),
+      segment_cleaner(sc_config_t::default_from_segment_manager(*segment_manager)),
       journal(*segment_manager),
       cache(*segment_manager),
       lba_manager(create_lba_manager(*segment_manager, cache)),
       tm(*segment_manager, segment_cleaner, journal, cache, *lba_manager),
-      moved_nm{
+      kvs({8, 11, 64, 256, 301, 320},
+          {8, 16, 128, 512, 576, 640},
+          {0, 32}, {0, 10}, {0, 4}),
+      tree{kvs,
 #if 0
-        NodeExtentManager::create_dummy(false)},
+        NodeExtentManager::create_dummy(false)
 #else
-        NodeExtentManager::create_seastore(tm)},
+        NodeExtentManager::create_seastore(tm)
 #endif
-      ref_t{make_transaction()},
-      t{*ref_t},
-      tree{std::move(moved_nm)} {
+      } {
     journal.set_segment_provider(&segment_cleaner);
     segment_cleaner.set_extent_callback(&tm);
   }
@@ -1384,7 +1188,7 @@ struct d_seastore_tree_test_t : public seastar_test_suite_t {
     }).safe_then([this] {
       return tm.mount();
     }).safe_then([this] {
-      return tree.mkfs(t);
+      return tree.bootstrap();
     }).handle_error(
       crimson::ct_error::all_same_way([] {
         ASSERT_FALSE("Unable to mkfs");
@@ -1403,45 +1207,11 @@ struct d_seastore_tree_test_t : public seastar_test_suite_t {
 
 TEST_F(d_seastore_tree_test_t, 6_random_insert_leaf_node)
 {
-  run_async([this] {
-    KVPool kvs({8, 11, 64, 256, 301, 320},
-               {8, 16, 128, 512, 576, 640},
-               {0, 32}, {0, 10}, {0, 4});
-    auto iter = kvs.random_begin();
-    std::vector<Btree::Cursor> cursors;
-    while (!iter.is_end()) {
-      auto [key, p_value] = iter.get_kv();
-      logger().info("[{}] {} -> {}", iter.index(), key_hobj_t{key}, *p_value);
-      auto [cursor, success] = tree.insert(t, key, *p_value).unsafe_get0();
-      assert(success == true);
-#if 1 // validate cursor tracking
-      cursors.emplace_back(cursor);
-#endif
-      Onodes::validate_cursor(cursor, key, *p_value);
-      auto cursor_ = tree.lower_bound(t, key).unsafe_get0();
-      assert(cursor_.get_ghobj() == key);
-      assert(cursor_.value() == cursor.value());
-      ++iter;
-    }
-
-    logger().info("Insert done!");
-    logger().info("{}", tree.get_stats_slow(t).unsafe_get0());
-
-    if (!cursors.empty()) {
-      auto kv_iter = kvs.random_begin();
-      auto c_iter = cursors.begin();
-      while (!kv_iter.is_end()) {
-        assert(c_iter != cursors.end());
-        auto [k, v] = kv_iter.get_kv();
-        // validate values in tree keep intact
-        auto cursor = tree.lower_bound(t, k).unsafe_get0();
-        Onodes::validate_cursor(cursor, k, *v);
-        // validate values in cursors keep intact
-        Onodes::validate_cursor(*c_iter, k, *v);
-
-        ++kv_iter;
-        ++c_iter;
-      }
-    }
+  run([this] {
+    return tree.run().handle_error(
+      crimson::ct_error::all_same_way([] {
+        ASSERT_FALSE("Test failed");
+      })
+    );
   });
 }
