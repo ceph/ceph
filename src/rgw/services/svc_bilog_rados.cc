@@ -543,7 +543,38 @@ int RGWSI_BILog_RADOS_FIFO::get_log_status(const DoutPrefixProvider *dpp,
   if (shard_id > 1) {
     // the initial implementation does support single shard only.
     return 0;
+  } else {
+    ceph_assert(shard_id == 0 || shard_id == -1);
   }
-  ceph_assert(shard_id == 0 || shard_id == -1);
+  auto fifo = _open_fifo(bucket_info);
+  if (!fifo) {
+    lderr(cct) << __PRETTY_FUNCTION__
+               << ": unable to open FIFO: " << ""//get_oid(index)
+               << dendl;
+    return -EIO;
+  }
+  if (int ret = fifo->read_meta(null_yield); ret < 0) {
+    lderr(cct) << __PRETTY_FUNCTION__
+               << ": unable to read_meta() on FIFO: "
+               << cpp_strerror(-ret)
+               << dendl;
+    return ret;
+  }
+  const auto head_part_num = fifo->meta().head_part_num;
+  rados::cls::fifo::part_header head_part_header;
+  if (int ret = fifo->get_part_info(head_part_num,
+                                    &head_part_header,
+                                    null_yield);
+      ret < 0) {
+    lderr(cct) << __PRETTY_FUNCTION__
+               << ": unable to read_part_header() on FIFO: "
+               << cpp_strerror(-ret)
+               << dendl;
+    return ret;
+  }
+  (*markers)[0] = rgw::cls::fifo::marker{
+    head_part_num,
+    head_part_header.last_ofs
+  }.to_string();
   return 0;
 }
