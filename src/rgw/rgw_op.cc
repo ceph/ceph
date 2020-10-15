@@ -2798,8 +2798,13 @@ void RGWListBucket::execute()
     return;
   }
 
+  op_ret = store->get_bucket(s->user.get(), s->bucket->get_key(), &bucket);
+  if (op_ret) {
+    return;
+  }
+
   if (need_container_stats()) {
-    op_ret = s->bucket->update_container_stats();
+    op_ret = bucket->update_container_stats();
   }
 
   rgw::sal::RGWBucket::ListParams params;
@@ -2813,7 +2818,7 @@ void RGWListBucket::execute()
 
   rgw::sal::RGWBucket::ListResults results;
 
-  op_ret = s->bucket->list(params, max, results, s->yield);
+  op_ret = bucket->list(params, max, results, s->yield);
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;

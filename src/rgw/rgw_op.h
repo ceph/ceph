@@ -842,6 +842,8 @@ protected:
 
   int shard_id;
 
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+
   int parse_max_keys();
 
 public:
