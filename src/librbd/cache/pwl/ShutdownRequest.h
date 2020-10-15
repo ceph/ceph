@@ -12,10 +12,10 @@ class ImageCtx;
 
 namespace cache {
 
-template<typename>
-class WriteLogCache;
-
 namespace pwl {
+
+template<typename>
+class AbstractWriteLog;
 
 template<typename>
 class ImageCacheState;
@@ -25,7 +25,7 @@ class ShutdownRequest {
 public:
   static ShutdownRequest* create(
       ImageCtxT &image_ctx,
-      cache::WriteLogCache<ImageCtx> *image_cache,
+      AbstractWriteLog<ImageCtxT> *image_cache,
       Context *on_finish);
 
   void send();
@@ -55,11 +55,11 @@ private:
    */
 
   ShutdownRequest(ImageCtxT &image_ctx,
-    cache::WriteLogCache<ImageCtx> *image_cache,
+    AbstractWriteLog<ImageCtxT> *image_cache,
     Context *on_finish);
 
   ImageCtxT &m_image_ctx;
-  cache::WriteLogCache<ImageCtx> *m_image_cache;
+  AbstractWriteLog<ImageCtxT> *m_image_cache;
   Context *m_on_finish;
 
   int m_error_result;
