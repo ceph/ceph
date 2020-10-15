@@ -2026,8 +2026,9 @@ void OSDService::_queue_for_recovery(
 // Commands shared between OSD's console and admin console:
 namespace ceph::osd_cmds {
 
-int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f, std::ostream& os);
-
+std::tuple<int, std::stringstream, bufferlist>
+heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f);
+ 
 } // namespace ceph::osd_cmds
 
 int OSD::mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami, string osdspec_affinity)
@@ -2978,7 +2979,7 @@ will start to track new ops received afterwards.";
   }
 
   else if (prefix == "heap") {
-    ret = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
+    std::tie(ret, ss, outbl) = ceph::osd_cmds::heap(*cct, cmdmap, *f);
   }
 
   else if (prefix == "debug dump_missing") {
@@ -11013,18 +11014,19 @@ void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)
 
 namespace ceph::osd_cmds {
 
-int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
-	 std::ostream& os)
+std::tuple<int, std::stringstream, bufferlist>
+heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f)
 {
+  std::stringstream os;
   if (!ceph_using_tcmalloc()) {
         os << "could not issue heap profiler command -- not using tcmalloc!";
-        return -EOPNOTSUPP;
+	return {-EOPNOTSUPP, std::move(os), bufferlist()};
   }
 
   string cmd;
   if (!cmd_getval(cmdmap, "heapcmd", cmd)) {
         os << "unable to get value for command \"" << cmd << "\"";
-       return -EINVAL;
+	return {-EINVAL, std::move(os), bufferlist()};
   }
 
   std::vector<std::string> cmd_vec;
@@ -11034,10 +11036,11 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
   if (cmd_getval(cmdmap, "value", val)) {
     cmd_vec.push_back(val);
   }
-
-  ceph_heap_profiler_handle_command(cmd_vec, os);
-
-  return 0;
+  std::stringstream heap_str;
+  ceph_heap_profiler_handle_command(cmd_vec, heap_str);
+  bufferlist heap;
+  heap.append(heap_str);
+  return {0, std::move(os), heap};
 }
 
 } // namespace ceph::osd_cmds
