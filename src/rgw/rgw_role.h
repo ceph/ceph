@@ -225,6 +225,7 @@ public:
 	     RGWRoleMetadataHandler *_rmhandler) {
     svc.role = _role_svc;
     rmhandler = _rmhandler;
+    be_handler = _rmhandler->get_be_handler();
   }
 
   struct PutParams {
