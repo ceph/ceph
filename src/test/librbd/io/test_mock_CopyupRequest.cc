@@ -584,7 +584,8 @@ TEST_F(TestMockIoCopyupRequest, DeepCopy) {
 
   MockAbstractObjectWriteRequest mock_write_request;
   MockObjectCopyRequest mock_object_copy_request;
-  mock_image_ctx.migration_info = {1, "", "", "image id", {}, ictx->size, true};
+  mock_image_ctx.migration_info = {1, "", "", "image id", "", {}, ictx->size,
+                                   true};
   expect_is_empty_write_op(mock_write_request, false);
   expect_object_copy(mock_image_ctx, mock_object_copy_request, true, 0);
 
@@ -630,7 +631,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyOnRead) {
   InSequence seq;
 
   MockObjectCopyRequest mock_object_copy_request;
-  mock_image_ctx.migration_info = {1, "", "", "image id", {}, ictx->size,
+  mock_image_ctx.migration_info = {1, "", "", "image id", "", {}, ictx->size,
                                    false};
   expect_object_copy(mock_image_ctx, mock_object_copy_request, true, 0);
 
@@ -680,7 +681,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithPostSnaps) {
 
   MockAbstractObjectWriteRequest mock_write_request;
   MockObjectCopyRequest mock_object_copy_request;
-  mock_image_ctx.migration_info = {1, "", "", "image id",
+  mock_image_ctx.migration_info = {1, "", "", "image id", "",
                                    {{CEPH_NOSNAP, {2, 1}}},
                                    ictx->size, true};
   expect_is_empty_write_op(mock_write_request, false);
@@ -752,7 +753,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithPreAndPostSnaps) {
 
   MockAbstractObjectWriteRequest mock_write_request;
   MockObjectCopyRequest mock_object_copy_request;
-  mock_image_ctx.migration_info = {1, "", "", "image id",
+  mock_image_ctx.migration_info = {1, "", "", "image id", "",
                                    {{CEPH_NOSNAP, {2, 1}}, {10, {1}}},
                                    ictx->size, true};
   expect_is_empty_write_op(mock_write_request, false);
@@ -1018,7 +1019,8 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyError) {
 
   MockAbstractObjectWriteRequest mock_write_request;
   MockObjectCopyRequest mock_object_copy_request;
-  mock_image_ctx.migration_info = {1, "", "", "image id", {}, ictx->size, true};
+  mock_image_ctx.migration_info = {1, "", "", "image id", "", {}, ictx->size,
+                                   true};
   expect_is_empty_write_op(mock_write_request, false);
   expect_object_copy(mock_image_ctx, mock_object_copy_request, true, -EPERM);
 
