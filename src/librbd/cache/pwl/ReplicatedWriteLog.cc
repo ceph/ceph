@@ -197,28 +197,12 @@ void ReplicatedWriteLog<I>::flush_op_log_entries(GenericLogOperationsVector &ops
 }
 
 template <typename I>
-void ReplicatedWriteLog<I>::get_pool_name(const std::string log_poolset_name) {
-  CephContext *cct = m_image_ctx.cct;
-  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
-  if (access(log_poolset_name.c_str(), F_OK) == 0) {
-    this->m_log_pool_name = log_poolset_name;
-    this->m_log_is_poolset = true;
-  } else {
-    ldout(cct, 5) << "Poolset file " << log_poolset_name
-                  << " not present (or can't open). Using unreplicated pool" << dendl;
-  }               
-}
-
-template <typename I>
 void ReplicatedWriteLog<I>::remove_pool_file() {
   if (m_log_pool) {
     ldout(m_image_ctx.cct, 6) << "closing pmem pool" << dendl;
     pmemobj_close(m_log_pool);
   } 
   if (m_cache_state->clean) {
-    if (this->m_log_is_poolset) {
-      ldout(m_image_ctx.cct, 5) << "Not removing poolset " << this->m_log_pool_name << dendl;
-    } else {
       ldout(m_image_ctx.cct, 5) << "Removing empty pool file: " << this->m_log_pool_name << dendl;
       if (remove(this->m_log_pool_name.c_str()) != 0) {
         lderr(m_image_ctx.cct) << "failed to remove empty pool \"" << this->m_log_pool_name << "\": "
@@ -228,13 +212,8 @@ void ReplicatedWriteLog<I>::remove_pool_file() {
         m_cache_state->empty = true;
         m_cache_state->present = false;
       } 
-    } 
   } else {
-    if (this->m_log_is_poolset) {
-      ldout(m_image_ctx.cct, 5) << "Not removing poolset " << this->m_log_pool_name << dendl;
-    } else {
-      ldout(m_image_ctx.cct, 5) << "Not removing pool file: " << this->m_log_pool_name << dendl;
-    } 
+    ldout(m_image_ctx.cct, 5) << "Not removing pool file: " << this->m_log_pool_name << dendl;
   } 
 }
 
