@@ -144,9 +144,9 @@ int PluginRegistry::load(const std::string &type,
   if (!library) {
     string err1(dlerror());
     // fall back to plugin_dir
-    std::string fname2 = cct->_conf.get_val<std::string>("plugin_dir") + "/" + PLUGIN_PREFIX +
+    fname = cct->_conf.get_val<std::string>("plugin_dir") + "/" + PLUGIN_PREFIX +
       name + PLUGIN_SUFFIX;
-    library = dlopen(fname2.c_str(), RTLD_NOW);
+    library = dlopen(fname.c_str(), RTLD_NOW);
     if (!library) {
       lderr(cct) << __func__
 		 << " failed dlopen(): \""	<< err1.c_str() 
