@@ -55,12 +55,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               uint32_t num_shards, rgw::BucketHashType hash_type,
                               string *bucket_obj, int *shard_id);
 
-  int cls_bucket_head(const RGWBucketInfo& bucket_info,
-                      int shard_id,
-                      vector<rgw_bucket_dir_header> *headers,
-                      map<int, string> *bucket_instance_ids,
-                      optional_yield y);
-
 public:
 
   struct Svc {
@@ -127,6 +121,12 @@ public:
                         RGWSI_RADOS::Pool *index_pool,
                         map<int, string> *bucket_objs,
                         map<int, string> *bucket_instance_ids);
+
+  int cls_bucket_head(const RGWBucketInfo& bucket_info,
+                      int shard_id,
+                      vector<rgw_bucket_dir_header> *headers,
+                      map<int, string> *bucket_instance_ids,
+                      optional_yield y) override;
 };
 
 

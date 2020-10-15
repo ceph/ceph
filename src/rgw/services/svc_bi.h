@@ -38,5 +38,11 @@ public:
 
   virtual int handle_overwrite(const RGWBucketInfo& info,
                                const RGWBucketInfo& orig_info) = 0;
+
+  virtual int cls_bucket_head(const RGWBucketInfo& bucket_info,
+                              int shard_id,
+                              vector<rgw_bucket_dir_header> *headers,
+                              map<int, string> *bucket_instance_ids,
+                              optional_yield y) = 0;
 };
 
