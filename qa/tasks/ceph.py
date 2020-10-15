@@ -594,8 +594,9 @@ def cluster(ctx, config):
         Setup mon nodes.
         Setup mds nodes.
         Mkfs osd nodes.
-        Add keyring information to monmaps
+        Add keyring information to monmaps.
         Mkfs mon nodes.
+        Deploy Tracing.
 
     On exit:
         If errors occurred, extract a failure message and store in ctx.summary.
@@ -683,6 +684,13 @@ def cluster(ctx, config):
     keyring_path = config.get('keyring_path', default_keyring)
 
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
+
+    if not config.get('skip_tracing', False):
+        log.info("Deploying jaegertracing...")
+        ctx.cluster.run(args=[
+            ctx.cephadm,
+            'init-tracing',
+        ])
 
     firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
 
