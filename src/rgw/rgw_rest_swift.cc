@@ -176,7 +176,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             global_stats,
             policies_stats,
             attrs,
-            user_quota,
+            s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
@@ -282,7 +282,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             global_stats,
             policies_stats,
             attrs,
-            user_quota,
+            s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
@@ -556,7 +556,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
             global_stats,
             policies_stats,
             attrs,
-            user_quota,
+            s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 

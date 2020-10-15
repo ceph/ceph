@@ -2537,11 +2537,10 @@ void RGWGetUsage::execute()
   bool is_truncated = true;
 
   RGWUsageIter usage_iter;
-  
+
   while (is_truncated) {
     op_ret = store->getRados()->read_usage(s->user->get_id(), s->bucket_name, start_epoch, end_epoch, max_entries,
                                 &is_truncated, usage_iter, usage);
-
     if (op_ret == -ENOENT) {
       op_ret = 0;
       is_truncated = false;

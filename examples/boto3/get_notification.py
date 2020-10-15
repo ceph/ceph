@@ -4,7 +4,7 @@ import boto3
 import sys
 
 if len(sys.argv) != 3:
-    print 'Usage: ' + sys.argv[0] + ' <bucket> <notification>'
+    print('Usage: ' + sys.argv[0] + ' <bucket> <notification>')
     sys.exit(1)
 
 # bucket name as first argument
@@ -24,5 +24,5 @@ client = boto3.client('s3',
 
 # getting a specific notification configuration is an extension to AWS S3 API
 
-print client.get_bucket_notification_configuration(Bucket=bucketname,
-                                                   Notification=notification_name)
+print(client.get_bucket_notification_configuration(Bucket=bucketname,
+                                                   Notification=notification_name))
