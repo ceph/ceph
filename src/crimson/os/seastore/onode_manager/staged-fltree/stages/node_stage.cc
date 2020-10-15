@@ -46,14 +46,14 @@ node_offset_t NODE_T::size_to_nxt_at(size_t index) const {
     auto p_end = p_start() + p_fields->get_item_end_offset(index);
     return FieldType::estimate_insert_one() + ns_oid_view_t(p_end).size();
   } else {
-    assert(false && "N3 node is not nested");
+    ceph_abort("N3 node is not nested");
   }
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
 memory_range_t NODE_T::get_nxt_container(size_t index) const {
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    assert(false && "N3 internal node doesn't have the right part");
+    ceph_abort("N3 internal node doesn't have the right part");
   } else {
     node_offset_t item_start_offset = p_fields->get_item_start_offset(index);
     node_offset_t item_end_offset = p_fields->get_item_end_offset(index);
@@ -107,9 +107,9 @@ memory_range_t NODE_T::insert_prefix_at(
                        -(int)size_right);
     return {p_insert_front, p_insert};
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   } else {
-    assert(false && "impossible");
+    ceph_abort("impossible");
   }
 }
 #define IPA_TEMPLATE(FT, NT, KT)                                         \
@@ -146,7 +146,7 @@ node_offset_t NODE_T::trim_until(
     return 0;
   }
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   } else {
     mut.copy_in_absolute(
         (void*)&node.p_fields->num_keys, num_keys_t(index));
@@ -160,10 +160,9 @@ node_offset_t NODE_T::trim_at(
     NodeExtentMutable& mut, const node_extent_t& node,
     size_t index, node_offset_t trimmed) {
   assert(!node.is_level_tail());
-  auto keys = node.keys();
-  assert(index < keys);
+  assert(index < node.keys());
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   } else {
     node_offset_t offset = node.p_fields->get_item_start_offset(index);
     size_t new_offset = offset + trimmed;
@@ -212,7 +211,7 @@ void APPEND_T::append(const node_extent_t& src, size_t from, size_t items) {
   assert(from + items <= src.keys());
   num_keys += items;
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   } else {
     // append left part forwards
     node_offset_t offset_left_start = src.fields().get_key_start_offset(from);
@@ -261,9 +260,9 @@ template <KeyT KT>
 void APPEND_T::append(
     const full_key_t<KT>& key, const value_t& value, const value_t*& p_value) {
   if constexpr (FIELD_TYPE == field_type_t::N3) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   } else {
-    assert(false && "should not happen");
+    ceph_abort("should not happen");
   }
 }
 
@@ -277,7 +276,7 @@ APPEND_T::open_nxt(const key_get_type& partial_key) {
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
     FieldType::append_key(*p_mut, partial_key, p_append_right);
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   return {p_mut, p_append_right};
 }
@@ -292,7 +291,7 @@ APPEND_T::open_nxt(const full_key_t<KT>& key) {
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
     FieldType::template append_key<KT>(*p_mut, key, p_append_right);
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   return {p_mut, p_append_right};
 }
