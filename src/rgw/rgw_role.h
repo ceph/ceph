@@ -46,9 +46,11 @@ struct RGWRoleInfo
 	      std::string path,
 	      std::string trust_policy,
 	      std::string tenant,
-	      std::string max_session_duration_str="") :
-    path(std::move(path)),
-    trust_policy(std::move(trust_policy)) {
+	      std::string max_session_duration_str="") :name(std::move(name)),
+							path(std::move(path)),
+							trust_policy(std::move(trust_policy)),
+							tenant(std::move(tenant))
+  {
     if (this->path.empty())
       this->path = "/";
     extract_name_tenant(name);
@@ -60,7 +62,10 @@ struct RGWRoleInfo
   }
 
   RGWRoleInfo(std::string _name,
-	      std::string _tenant) {
+	      std::string _tenant) : name(std::move(_name)),
+				     tenant(std::move(_tenant))
+
+  {
     extract_name_tenant(_name);
     if (tenant.empty()) {
       tenant = std::move(_tenant);
