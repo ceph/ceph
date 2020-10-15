@@ -54,13 +54,14 @@ void create_meta(lr::ObjectWriteOperation* op, std::string_view id,
 int get_meta(lr::IoCtx& ioctx, const std::string& oid,
 	     std::optional<fifo::objv> objv, fifo::info* info,
 	     std::uint32_t* part_header_size,
-	     std::uint32_t* part_entry_overhead, optional_yield y);
+	     std::uint32_t* part_entry_overhead,
+	     std::uint64_t tid, optional_yield y);
 void update_meta(lr::ObjectWriteOperation* op, const fifo::objv& objv,
 		 const fifo::update& update);
 void part_init(lr::ObjectWriteOperation* op, std::string_view tag,
 	       fifo::data_params params);
 int push_part(lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
-	      std::deque<cb::list> data_bufs, optional_yield y);
+	      std::deque<cb::list> data_bufs, std::uint64_t tid, optional_yield y);
 void trim_part(lr::ObjectWriteOperation* op,
 	       std::optional<std::string_view> tag, std::uint64_t ofs,
 	       bool exclusive);
@@ -69,9 +70,10 @@ int list_part(lr::IoCtx& ioctx, const std::string& oid,
 	      std::uint64_t max_entries,
 	      std::vector<fifo::part_list_entry>* entries,
 	      bool* more, bool* full_part, std::string* ptag,
-	      optional_yield y);
+	      std::uint64_t tid, optional_yield y);
 int get_part_info(lr::IoCtx& ioctx, const std::string& oid,
-		  fifo::part_header* header, optional_yield y);
+		  fifo::part_header* header, std::uint64_t,
+		  optional_yield y);
 
 struct marker {
   std::int64_t num = 0;
@@ -116,8 +118,10 @@ class FIFO {
   friend struct Trimmer;
 
   mutable lr::IoCtx ioctx;
+  CephContext* cct = static_cast<CephContext*>(ioctx.cct());
   const std::string oid;
   std::mutex m;
+  std::uint64_t next_tid = 0;
 
   fifo::info info;
 
@@ -134,30 +138,37 @@ class FIFO {
 
   int apply_update(fifo::info* info,
 		   const fifo::objv& objv,
-		   const fifo::update& update);
+		   const fifo::update& update,
+		   std::uint64_t tid);
   int _update_meta(const fifo::update& update,
 		   fifo::objv version, bool* pcanceled,
-		   optional_yield y);
+		   std::uint64_t tid, optional_yield y);
   int _update_meta(const fifo::update& update,
 		   fifo::objv version, bool* pcanceled,
-		   lr::AioCompletion* c);
-  int create_part(int64_t part_num, std::string_view tag, optional_yield y);
-  int remove_part(int64_t part_num, std::string_view tag, optional_yield y);
-  int process_journal(optional_yield y);
-  int _prepare_new_part(bool is_head, optional_yield y);
-  int _prepare_new_head(optional_yield y);
+		   std::uint64_t tid, lr::AioCompletion* c);
+  int create_part(int64_t part_num, std::string_view tag, std::uint64_t tid,
+		  optional_yield y);
+  int remove_part(int64_t part_num, std::string_view tag, std::uint64_t tid,
+		  optional_yield y);
+  int process_journal(std::uint64_t tid, optional_yield y);
+  int _prepare_new_part(bool is_head, std::uint64_t tid, optional_yield y);
+  int _prepare_new_head(std::uint64_t tid, optional_yield y);
   int push_entries(const std::deque<cb::list>& data_bufs,
-		   optional_yield y);
+		   std::uint64_t tid, optional_yield y);
   int trim_part(int64_t part_num, uint64_t ofs,
 		std::optional<std::string_view> tag, bool exclusive,
-		optional_yield y);
+		std::uint64_t tid, optional_yield y);
   int trim_part(int64_t part_num, uint64_t ofs,
 		std::optional<std::string_view> tag, bool exclusive,
-		lr::AioCompletion* c);
+		std::uint64_t tid, lr::AioCompletion* c);
 
   static void trim_callback(lr::completion_t, void* arg);
   static void update_callback(lr::completion_t, void* arg);
   static void read_callback(lr::completion_t, void* arg);
+  /// Force refresh of metadata, yielding/blocking style
+  int read_meta(std::uint64_t tid, optional_yield y);
+  /// Force refresh of metadata, with a librados Completion
+  int read_meta(std::uint64_t tid, lr::AioCompletion* c);
 
 public:
 
@@ -192,8 +203,6 @@ public:
 
   /// Force refresh of metadata, yielding/blocking style
   int read_meta(optional_yield y);
-  /// Force refresh of metadata, with a librados Completion
-  int read_meta(lr::AioCompletion* c);
   /// Get currently known metadata
   const fifo::info& meta() const;
   /// Get partition header and entry overhead size
