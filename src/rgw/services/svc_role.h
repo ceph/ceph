@@ -98,3 +98,8 @@ class RGWSI_Role: public RGWServiceInstance
 			  optional_yield y) = 0;
 
 };
+
+const string role_name_oid_prefix = "role_names.";
+const string role_oid_prefix = "roles.";
+const string role_path_oid_prefix = "role_paths.";
+const string role_arn_prefix = "arn:aws:iam::";

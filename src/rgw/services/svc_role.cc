@@ -1,10 +1,5 @@
 #include "svc_role.h"
 
-const string role_name_oid_prefix = "role_names.";
-const string role_oid_prefix = "roles.";
-const string role_path_oid_prefix = "role_paths.";
-const string role_arn_prefix = "arn:aws:iam::";
-
 std::string RGWSI_Role::get_role_meta_key(const std::string& role_id)
 {
   return role_oid_prefix + role_id;

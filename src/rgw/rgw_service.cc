@@ -366,6 +366,7 @@ int RGWCtlDef::init(RGWServices& svc)
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
+  meta.role = std::make_unique<RGWRoleMetadataHandler>(svc.role);
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
@@ -411,10 +412,12 @@ int RGWCtl::init(RGWServices *_svc)
   meta.bucket = _ctl.meta.bucket.get();
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
   meta.otp = _ctl.meta.otp.get();
+  meta.role = _ctl.meta.role.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
   otp = _ctl.otp.get();
+  role = _ctl.role.get();
 
   r = meta.user->attach(meta.mgr);
   if (r < 0) {
@@ -440,6 +443,11 @@ int RGWCtl::init(RGWServices *_svc)
     return r;
   }
 
+  r = meta.role->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
   return 0;
 }
 
