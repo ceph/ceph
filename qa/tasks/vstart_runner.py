@@ -687,6 +687,52 @@ class LocalFuseMount(FuseMount):
             client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
+        # Following block makes tests meant for teuthology compatible with
+        # vstart_runner.
+        self._mount_bin = [os.path.join(BIN_PREFIX, 'ceph-fuse')]
+        self._mount_cmd_cwd, self._mount_cmd_logger, \
+            self._mount_cmd_stdin = None, None, None
+
+    def setup_netns(self):
+        if opt_use_ns:
+            super(type(self), self).setup_netns()
+
+    def _create_mntpt(self, cwd=None):
+        stderr = StringIO()
+        script = f'mkdir -p -v {self.hostfs_mntpt}'.split()
+        try:
+            self.client_remote.run(args=script, cwd=self.test_dir,
+                                   stderr=stderr)
+        except CommandFailedError:
+            if 'file exists' not in stderr.getvalue().lower():
+                raise
+
+    def _run_mount_cmd(self, mntopts, check_status):
+        super(type(self), self)._run_mount_cmd(mntopts, check_status)
+        self._set_fuse_daemon_pid(check_status)
+
+    def _get_mount_cmd(self, mntopts):
+        mount_cmd = super(type(self), self)._get_mount_cmd(mntopts)
+
+        if os.getuid() != 0:
+            mount_cmd += ['--client_die_on_failed_dentry_invalidate=false']
+
+        return mount_cmd
+
+    @property
+    def _nsenter_args(self):
+        if opt_use_ns:
+            return super(type(self), self)._nsenter_args
+        else:
+            return []
+
+    @property
+    def _fuse_conn_check_timeout(self):
+        return 30
+
+    def _add_valgrind_args(self, mount_cmd):
+        return []
+
     @property
     def config_path(self):
         return "./ceph.conf"
@@ -695,15 +741,6 @@ class LocalFuseMount(FuseMount):
         # This is going to end up in a config file, so use an absolute path
         # to avoid assumptions about daemons' pwd
         return os.path.abspath("./client.{0}.keyring".format(self.client_id))
-
-    def setupfs(self, name=None):
-        if name is None and self.fs is not None:
-            # Previous mount existed, reuse the old name
-            name = self.fs.name
-        self.fs = LocalFilesystem(self.ctx, name=name)
-        log.debug('Wait for MDS to reach steady state...')
-        self.fs.wait_for_daemons()
-        log.debug('Ready to start {}...'.format(type(self).__name__))
 
     @property
     def _prefix(self):
@@ -729,113 +766,6 @@ class LocalFuseMount(FuseMount):
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def mount(self, mntopts=[], check_status=True, **kwargs):
-        self.update_attrs(**kwargs)
-        self.assert_and_log_minimum_mount_details()
-
-        if opt_use_ns:
-            self.using_namespace = True
-            self.setup_netns()
-        else:
-            self.using_namespace = False
-
-        stderr = StringIO()
-        try:
-            self.client_remote.run(args=['mkdir', '-p', self.hostfs_mntpt],
-                                   stderr=stderr)
-        except CommandFailedError:
-            if 'file exists' not in stderr.getvalue().lower():
-                raise
-
-        def list_connections():
-            self.client_remote.run(
-                args=["mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
-                check_status=False
-            )
-
-            p = self.client_remote.run(args=["ls", "/sys/fs/fuse/connections"],
-                                       check_status=False, stdout=StringIO())
-            if p.exitstatus != 0:
-                log.warning("ls conns failed with {0}, assuming none".format(p.exitstatus))
-                return []
-
-            ls_str = p.stdout.getvalue().strip()
-            if ls_str:
-                return [int(n) for n in ls_str.split("\n")]
-            else:
-                return []
-
-        # Before starting ceph-fuse process, note the contents of
-        # /sys/fs/fuse/connections
-        pre_mount_conns = list_connections()
-        log.debug("Pre-mount connections: {0}".format(pre_mount_conns))
-
-        cmdargs = []
-        if self.using_namespace:
-            cmdargs = ['sudo', 'nsenter',
-                       '--net=/var/run/netns/{0}'.format(self.netns_name),
-                       '--setuid', str(os.getuid())]
-        cmdargs += [os.path.join(BIN_PREFIX, 'ceph-fuse'), self.hostfs_mntpt,
-                    '-f']
-        if self.client_id is not None:
-            cmdargs += ["--id", self.client_id]
-        if self.client_keyring_path and self.client_id is not None:
-            cmdargs.extend(['-k', self.client_keyring_path])
-        if self.cephfs_name:
-            cmdargs += ["--client_fs=" + self.cephfs_name]
-        if self.cephfs_mntpt:
-            cmdargs += ["--client_mountpoint=" + self.cephfs_mntpt]
-        if os.getuid() != 0:
-            cmdargs += ["--client_die_on_failed_dentry_invalidate=false"]
-        if mntopts:
-            cmdargs += mntopts
-
-        mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
-        self.fuse_daemon = self.client_remote.run(args=cmdargs, wait=False,
-            omit_sudo=False, stdout=mountcmd_stdout, stderr=mountcmd_stderr)
-        self._set_fuse_daemon_pid(check_status)
-        log.debug("Mounting client.{0} with pid "
-                 "{1}".format(self.client_id, self.fuse_daemon.subproc.pid))
-
-        # Wait for the connection reference to appear in /sys
-        waited = 0
-        post_mount_conns = list_connections()
-        while len(post_mount_conns) <= len(pre_mount_conns):
-            if self.fuse_daemon.finished:
-                # Did mount fail?  Raise the CommandFailedError instead of
-                # hitting the "failed to populate /sys/" timeout
-                try:
-                    self.fuse_daemon.wait()
-                except CommandFailedError as e:
-                    if check_status:
-                        raise
-                    else:
-                        return (e, mountcmd_stdout.getvalue(),
-                                mountcmd_stderr.getvalue())
-            time.sleep(1)
-            waited += 1
-            if waited > 30:
-                raise RuntimeError("Fuse mount failed to populate /sys/ after {0} seconds".format(
-                    waited
-                ))
-            post_mount_conns = list_connections()
-
-        log.debug("Post-mount connections: {0}".format(post_mount_conns))
-
-        # Record our fuse connection number so that we can use it when
-        # forcing an unmount
-        new_conns = list(set(post_mount_conns) - set(pre_mount_conns))
-        if len(new_conns) == 0:
-            raise RuntimeError("New fuse connection directory not found ({0})".format(new_conns))
-        elif len(new_conns) > 1:
-            raise RuntimeError("Unexpectedly numerous fuse connections {0}".format(new_conns))
-        else:
-            self._fuse_conn = new_conns[0]
-
-        self.gather_mount_info()
-
-        self.mounted = True
-
     def _set_fuse_daemon_pid(self, check_status):
         # NOTE: When a command <args> is launched with sudo, two processes are
         # launched, one with sudo in <args> and other without. Make sure we
@@ -856,10 +786,6 @@ class LocalFuseMount(FuseMount):
                 raise
             else:
                 pass
-
-    def cleanup_netns(self):
-        if self.using_namespace:
-            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
