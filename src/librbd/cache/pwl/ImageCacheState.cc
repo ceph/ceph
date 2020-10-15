@@ -6,10 +6,10 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Operations.h"
-#include "common/environment.h"
-#include "common/hostname.h"
 #include "common/config_proxy.h"
 #include "common/ceph_json.h"
+#include "common/environment.h"
+#include "common/hostname.h"
 
 #undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_pwl
@@ -38,9 +38,6 @@ ImageCacheState<I>::ImageCacheState(I *image_ctx) : m_image_ctx(image_ctx) {
                             << dendl;
 
   ConfigProxy &config = image_ctx->config;
-  host = ceph_get_short_hostname();
-  path = config.get_val<std::string>("rbd_rwl_path");
-  size = config.get_val<uint64_t>("rbd_rwl_size");
   log_periodic_stats = config.get_val<bool>("rbd_rwl_log_periodic_stats");
 }
 

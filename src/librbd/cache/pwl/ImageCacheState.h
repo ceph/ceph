@@ -22,12 +22,12 @@ class ImageCacheState {
 private:
   ImageCtxT* m_image_ctx;
 public:
-  bool present = true;
+  bool present = false;
   bool empty = true;
   bool clean = true;
   std::string host;
   std::string path;
-  uint64_t size;
+  uint64_t size = 0;
   bool log_periodic_stats;
 
   ImageCacheState(ImageCtxT* image_ctx);
