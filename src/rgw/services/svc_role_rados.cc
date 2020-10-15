@@ -9,7 +9,6 @@
 
 class RGWSI_Role_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Role_RADOS::Svc& svc;
-  std::string prefix;
 public:
   RGWSI_Role_Module(RGWSI_Role_RADOS::Svc& _svc): RGWSI_MBSObj_Handler_Module("Role"),
                                                   svc(_svc) {}
@@ -28,8 +27,7 @@ public:
   }
 
   bool is_valid_oid(const std::string& oid) override {
-    return !boost::algorithm::starts_with(oid, role_name_oid_prefix) ||
-      !boost::algorithm::starts_with(oid, role_path_oid_prefix);
+    return boost::algorithm::starts_with(oid, role_oid_prefix);
   }
 
   std::string key_to_oid(const std::string& key) override {
@@ -41,7 +39,7 @@ public:
   }
 
   const std::string& get_oid_prefix() {
-    return prefix;
+    return role_oid_prefix;
   }
 };
 
