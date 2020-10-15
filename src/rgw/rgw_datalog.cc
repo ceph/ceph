@@ -314,7 +314,8 @@ public:
       std::vector<rgw::cls::fifo::list_entry> log_entries;
       bool more = false;
       auto r = rgw::cls::fifo::FIFO::open(ioctx, oid,
-					  &fifo, null_yield);
+					  &fifo, null_yield,
+					  std::nullopt, true);
       if (r == -ENOENT || r == -ENODATA) {
 	continue;
       } else if (r < 0) {
