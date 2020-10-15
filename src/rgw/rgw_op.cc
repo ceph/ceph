@@ -4747,13 +4747,13 @@ void RGWDeleteObj::execute(optional_yield y)
       }
 
       if (check_obj_lock) {
-	/* check if obj exists, read orig attrs */
-	if (op_ret == -ENOENT) {
-	  /* object maybe delete_marker, skip check_obj_lock*/
-	  check_obj_lock = false;
-	} else {
-	  return;
-	}
+        /* check if obj exists, read orig attrs */
+        if (op_ret == -ENOENT) {
+          /* object maybe delete_marker, skip check_obj_lock*/
+          check_obj_lock = false;
+        } else {
+          return;
+        }
       }
     } else {
       attrs = s->object->get_attrs();
@@ -4763,37 +4763,10 @@ void RGWDeleteObj::execute(optional_yield y)
     op_ret = 0;
 
     if (check_obj_lock) {
-      auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
-      if (aiter != attrs.end()) {
-        RGWObjectRetention obj_retention;
-        try {
-          decode(obj_retention, aiter->second);
-        } catch (buffer::error& err) {
-          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
-          op_ret = -EIO;
-          return;
-        }
-        if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) > ceph_clock_now()) {
-          if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
-            op_ret = -EACCES;
-            return;
-          }
-        }
-      }
-      aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-      if (aiter != attrs.end()) {
-        RGWObjectLegalHold obj_legal_hold;
-        try {
-          decode(obj_legal_hold, aiter->second);
-        } catch (buffer::error& err) {
-          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
-          op_ret = -EIO;
-          return;
-        }
-        if (obj_legal_hold.is_enabled()) {
-          op_ret = -EACCES;
-          return;
-        }
+      int object_lock_response = verify_object_lock(this, attrs, bypass_perm, bypass_governance_mode);
+      if (object_lock_response != 0) {
+        op_ret = object_lock_response;
+        return;
       }
     }
 
@@ -6525,6 +6498,27 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 	      send_partial_response(*iter, false, "", -EACCES);
 	      continue;
       }
+    }
+
+    // verify_object_lock
+    bool check_obj_lock = obj->have_instance() && bucket->get_info().obj_lock_enabled();
+    if (check_obj_lock) {
+      int get_attrs_response = obj->get_obj_attrs(s->obj_ctx, s->yield);
+      if (get_attrs_response < 0) {
+        if (get_attrs_response == -ENOENT) {
+          // object maybe delete_marker, skip check_obj_lock
+          check_obj_lock = false;
+        } else {
+          // Something went wrong.
+          send_partial_response(*iter, false, "", get_attrs_response);
+          continue;
+        }
+      }
+    }
+    int object_lock_response = verify_object_lock(this, obj->get_attrs(), false, false);
+    if (object_lock_response != 0) {
+      send_partial_response(*iter, false, "", object_lock_response);
+      continue;
     }
     
     // make reservation for notification if needed
