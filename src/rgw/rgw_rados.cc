@@ -2235,15 +2235,14 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     info.owner = owner.user_id;
     info.zonegroup = zonegroup_id;
     info.placement_rule = selected_placement_rule;
-    info.layout.current_index.layout.type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
+    init_default_bucket_layout(cct, info, svc.zone->get_zone());
     if (pmaster_num_shards) {
+      // TODO: remove this once sync doesn't require the same shard count
       info.layout.current_index.layout.normal.num_shards = *pmaster_num_shards;
-    } else {
-      info.layout.current_index.layout.normal.num_shards = bucket_index_max_shards;
     }
-    info.layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
+    info.layout.current_index.layout.type = rule_info.index_type;
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time)) {
       info.creation_time = ceph::real_clock::now();

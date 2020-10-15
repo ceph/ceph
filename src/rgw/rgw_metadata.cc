@@ -311,7 +311,7 @@ public:
   }
 
   int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-          optional_yield y, RGWMDLogSyncType type) override {
+          optional_yield y, RGWMDLogSyncType type, bool from_remote_zone) override {
     return -ENOTSUP;
   }
 
@@ -388,19 +388,20 @@ RGWMetadataHandler_GenericMetaBE::Put::Put(RGWMetadataHandler_GenericMetaBE *_ha
 					   string& _entry, RGWMetadataObject *_obj,
 					   RGWObjVersionTracker& _objv_tracker,
 					   optional_yield _y,
-					   RGWMDLogSyncType _type):
+					   RGWMDLogSyncType _type, bool _from_remote_zone):
   handler(_handler), op(_op),
   entry(_entry), obj(_obj),
   objv_tracker(_objv_tracker),
   apply_type(_type),
-  y(_y)
+  y(_y),
+  from_remote_zone(_from_remote_zone)
 {
 }
 
 RGWMetadataHandlerPut_SObj::RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
                                                        string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
 						       optional_yield y,
-                                                       RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, y, type) {
+                                                       RGWMDLogSyncType type, bool from_remote_zone) : Put(handler, op, entry, obj, objv_tracker, y, type, from_remote_zone) {
 }
 
 RGWMetadataHandlerPut_SObj::~RGWMetadataHandlerPut_SObj() {
@@ -482,10 +483,11 @@ int RGWMetadataHandler_GenericMetaBE::get(string& entry, RGWMetadataObject **obj
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield y, RGWMDLogSyncType type)
+int RGWMetadataHandler_GenericMetaBE::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+                                          optional_yield y, RGWMDLogSyncType type, bool from_remote_zone)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return do_put(op, entry, obj, objv_tracker, y, type);
+    return do_put(op, entry, obj, objv_tracker, y, type, from_remote_zone);
   });
 }
 
@@ -659,6 +661,7 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y
 int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 			    optional_yield y,
                             RGWMDLogSyncType sync_type,
+                            bool from_remote_zone,
                             obj_version *existing_version)
 {
   RGWMetadataHandler *handler;
@@ -698,7 +701,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
     return -EINVAL;
   }
 
-  ret = handler->put(entry, obj, objv_tracker, y, sync_type);
+  ret = handler->put(entry, obj, objv_tracker, y, sync_type, from_remote_zone);
   if (existing_version) {
     *existing_version = objv_tracker.read_version;
   }
