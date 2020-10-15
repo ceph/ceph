@@ -66,6 +66,7 @@ int RGWRole::create(bool exclusive)
   int ret;
 
   if (! info.validate_input()) {
+    ldout(cct, 0) << "ERROR: invalid input " << dendl;
     return -EINVAL;
   }
 
