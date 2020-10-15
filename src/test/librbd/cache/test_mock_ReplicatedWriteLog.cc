@@ -65,20 +65,13 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
   void validate_cache_state(librbd::ImageCtx *image_ctx,
                             MockImageCacheStateRWL &state,
                             bool present, bool empty, bool clean,
-                            string host="", string path="",
-                            uint64_t size=0) {
+                            string host, string path,
+                            uint64_t size) {
     ConfigProxy &config = image_ctx->config;
     ASSERT_EQ(present, state.present);
     ASSERT_EQ(empty, state.empty);
     ASSERT_EQ(clean, state.clean);
-    
-    if (host.empty())
-      host = ceph_get_short_hostname();
-    if (path.empty())
-      path = config.get_val<string>("rbd_rwl_path");
-    if (!size)
-      size = config.get_val<uint64_t>("rbd_rwl_size");
-    
+   
     ASSERT_EQ(host, state.host);
     ASSERT_EQ(path, state.path);
     ASSERT_EQ(size, state.size);
@@ -122,7 +115,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_write) {
   MockImageCtx mock_image_ctx(*ictx);
   MockImageCacheStateRWL image_cache_state(&mock_image_ctx);
 
-  validate_cache_state(ictx, image_cache_state, true, true, true);
+  validate_cache_state(ictx, image_cache_state, false, true, true, "", "", 0);
   
   image_cache_state.empty = false;
   image_cache_state.clean = false;
