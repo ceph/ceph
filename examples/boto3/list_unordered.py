@@ -4,7 +4,7 @@ import boto3
 import sys
 
 if len(sys.argv) != 2:
-    print 'Usage: ' + sys.argv[0] + ' <bucket>'
+    print('Usage: ' + sys.argv[0] + ' <bucket>')
     sys.exit(1)
 
 # bucket name as first argument
@@ -22,4 +22,4 @@ client = boto3.client('s3',
 
 # geting an unordered list of objets is an extension to AWS S3 API
 
-print client.list_objects(Bucket=bucketname, AllowUnordered=True)
+print(client.list_objects(Bucket=bucketname, AllowUnordered=True))
