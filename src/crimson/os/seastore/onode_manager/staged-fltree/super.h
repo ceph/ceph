@@ -82,7 +82,7 @@ class RootNodeTrackerIsolated final : public RootNodeTracker {
     tracked_supers[&t] = &super;
   }
   void do_untrack_super(Transaction& t, Super& super) override {
-    auto removed = tracked_supers.erase(&t);
+    [[maybe_unused]] auto removed = tracked_supers.erase(&t);
     assert(removed);
   }
   ::Ref<Node> get_root(Transaction& t) const override;

@@ -92,24 +92,24 @@ class InternalNodeImpl : public NodeImpl {
   virtual const laddr_packed_t* get_p_value(
       const search_position_t&,
       key_view_t* = nullptr, internal_marker_t = {}) const {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual lookup_result_t<node_type_t::INTERNAL> lower_bound(
       const key_hobj_t&, MatchHistory&,
       key_view_t* = nullptr, internal_marker_t = {}) const {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const laddr_packed_t* insert(
       const key_view_t&, const laddr_packed_t&, search_position_t&, match_stage_t&, node_offset_t&) {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual std::tuple<search_position_t, bool, const laddr_packed_t*> split_insert(
       NodeExtentMutable&, NodeImpl&, const key_view_t&, const laddr_packed_t&,
       search_position_t&, match_stage_t&, node_offset_t&) {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 
   virtual void replace_child_addr(const search_position_t&, laddr_t dst, laddr_t src) = 0;
@@ -139,24 +139,24 @@ class LeafNodeImpl : public NodeImpl {
   virtual const onode_t* get_p_value(
       const search_position_t&,
       key_view_t* = nullptr, leaf_marker_t={}) const {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual lookup_result_t<node_type_t::LEAF> lower_bound(
       const key_hobj_t&, MatchHistory&,
       key_view_t* = nullptr, leaf_marker_t = {}) const {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const onode_t* insert(
       const key_hobj_t&, const onode_t&, search_position_t&, match_stage_t&, node_offset_t&) {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual std::tuple<search_position_t, bool, const onode_t*> split_insert(
       NodeExtentMutable&, NodeImpl&, const key_hobj_t&, const onode_t&,
       search_position_t&, match_stage_t&, node_offset_t&) {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 
   virtual void get_largest_slot(

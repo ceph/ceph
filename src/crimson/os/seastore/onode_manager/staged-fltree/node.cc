@@ -258,7 +258,7 @@ node_future<Ref<Node>> Node::load(
       auto impl = InternalNodeImpl::load(extent, *field_type, expect_is_level_tail);
       return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
     } else {
-      assert(false && "impossible path");
+      ceph_abort("impossible path");
     }
   });
 }
@@ -298,8 +298,8 @@ node_future<> InternalNode::apply_child_split(
   auto free_size = impl->free_size();
   if (free_size >= insert_size) {
     // insert
-    auto p_value = impl->insert(left_key, left_child_addr_packed,
-                                insert_pos, insert_stage, insert_size);
+    [[maybe_unused]] auto p_value = impl->insert(
+        left_key, left_child_addr_packed, insert_pos, insert_stage, insert_size);
     assert(impl->free_size() == free_size - insert_size);
     assert(insert_pos <= pos);
     assert(p_value->value == left_child_addr);
