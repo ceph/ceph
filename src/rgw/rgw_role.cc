@@ -588,6 +588,22 @@ void RGWRoleCompleteInfo::decode_json(JSONObj *obj)
   has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
 }
 
+
+RGWMetadataObject *RGWRoleMetadataHandler::get_meta_obj(JSONObj *jo,
+							const obj_version& objv,
+							const ceph::real_time& mtime)
+{
+  RGWRoleCompleteInfo rci;
+
+  try {
+    decode_json_obj(rci, jo);
+  } catch (JSONDecoder:: err& e) {
+    return nullptr;
+  }
+
+  return new RGWRoleMetadataObject(rci, objv, mtime);
+}
+
 int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
                                    std::string& entry,
                                    RGWMetadataObject **obj,

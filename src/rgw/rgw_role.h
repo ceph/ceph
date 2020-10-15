@@ -186,6 +186,12 @@ public:
 
   RGWRoleMetadataHandler(RGWSI_Role *role_svc);
 
+  std::string get_type() final { return "roles";  }
+
+  RGWMetadataObject *get_meta_obj(JSONObj *jo,
+				  const obj_version& objv,
+				  const ceph::real_time& mtime);
+
   int do_get(RGWSI_MetaBackend_Handler::Op *op,
 	     std::string& entry,
 	     RGWMetadataObject **obj,
