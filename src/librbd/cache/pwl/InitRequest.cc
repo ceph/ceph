@@ -10,8 +10,8 @@
 
 #if defined(WITH_RBD_RWL)
 #include "librbd/cache/pwl/ImageCacheState.h"
-#include "librbd/cache/pwl/ImageDispatch.h"
-#include "librbd/cache/WriteLogCache.h"
+#include "librbd/cache/pwl/ReplicatedWriteLog.h"
+#include "librbd/cache/WriteLogImageDispatch.h"
 #endif // WITH_RBD_RWL
 
 #include "librbd/cache/Utils.h"
@@ -78,8 +78,8 @@ void InitRequest<I>::get_image_cache_state() {
   switch(cache_type) {
     case cache::IMAGE_CACHE_TYPE_RWL:
       m_image_cache =
-        new librbd::cache::WriteLogCache<I>(m_image_ctx,
-                                            cache_state);
+        new librbd::cache::pwl::ReplicatedWriteLog<I>(m_image_ctx,
+                                                      cache_state);
       break;
     default:
       delete cache_state;
@@ -161,7 +161,7 @@ void InitRequest<I>::handle_set_feature_bit(int r) {
   }
 
   // Register RWL dispatch
-  auto image_dispatch = new cache::pwl::ImageDispatch<I>(&m_image_ctx, m_image_cache);
+  auto image_dispatch = new cache::WriteLogImageDispatch<I>(&m_image_ctx, m_image_cache);
 
   m_image_ctx.io_image_dispatcher->register_dispatch(image_dispatch);
 

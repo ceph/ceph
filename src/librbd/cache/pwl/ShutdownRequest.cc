@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/cache/pwl/ShutdownRequest.h"
-#include "librbd/cache/WriteLogCache.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "common/dout.h"
@@ -11,6 +10,9 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/Types.h"
 
+#if defined(WITH_RBD_RWL)
+#include "librbd/cache/pwl/AbstractWriteLog.h"
+#endif // WITH_RBD_RWL
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
@@ -27,7 +29,7 @@ using librbd::util::create_context_callback;
 template <typename I>
 ShutdownRequest<I>* ShutdownRequest<I>::create(
     I &image_ctx,
-    cache::WriteLogCache<ImageCtx> *image_cache,
+    AbstractWriteLog<I> *image_cache,
     Context *on_finish) {
   return new ShutdownRequest(image_ctx, image_cache, on_finish);
 }
@@ -35,7 +37,7 @@ ShutdownRequest<I>* ShutdownRequest<I>::create(
 template <typename I>
 ShutdownRequest<I>::ShutdownRequest(
     I &image_ctx,
-    cache::WriteLogCache<ImageCtx> *image_cache,
+    AbstractWriteLog<I> *image_cache,
     Context *on_finish)
   : m_image_ctx(image_ctx),
     m_image_cache(image_cache),
@@ -45,9 +47,14 @@ ShutdownRequest<I>::ShutdownRequest(
 
 template <typename I>
 void ShutdownRequest<I>::send() {
+#if defined(WITH_RBD_RWL)
   send_shutdown_image_cache();
+#else
+  finish();
+#endif // WITH_RBD_RWL
 }
 
+#if defined(WITH_RBD_RWL)
 template <typename I>
 void ShutdownRequest<I>::send_shutdown_image_cache() {
   CephContext *cct = m_image_ctx.cct;
@@ -143,6 +150,8 @@ void ShutdownRequest<I>::handle_remove_image_cache_state(int r) {
   }
   finish();
 }
+
+#endif // WITH_RBD_RWL
 
 template <typename I>
 void ShutdownRequest<I>::finish() {
