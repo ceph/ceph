@@ -438,7 +438,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
                      insert_pos, insert_stage);
       // right node: append [insert_pos(key, value)]
       bool is_front_insert = (insert_pos == position_t::begin());
-      bool is_end = STAGE_T::template append_insert<KEY_TYPE>(
+      [[maybe_unused]] bool is_end = STAGE_T::template append_insert<KEY_TYPE>(
           key, value, append_at, right_appender,
           is_front_insert, insert_stage, p_value);
       assert(append_at.is_end() == is_end);
@@ -521,7 +521,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       assert(p_value->value == src);
       extent.update_child_addr_replayable(dst, const_cast<laddr_packed_t*>(p_value));
     } else {
-      assert(false && "impossible path");
+      ceph_abort("impossible path");
     }
   }
 
@@ -543,7 +543,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       }
       return {insert_stage, insert_size};
     } else {
-      assert(false && "impossible path");
+      ceph_abort("impossible path");
     }
   }
 
@@ -556,7 +556,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       STAGE_T::template lookup_largest_slot<true, true, true>(
           extent.read(), &cast_down_fill_0<STAGE>(pos), &index_key, pp_value);
     } else {
-      assert(false && "impossible path");
+      ceph_abort("impossible path");
     }
   }
 
@@ -573,7 +573,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
             key, value, history, mstat, cast_down<STAGE>(insert_pos));
       }
     } else {
-      assert(false && "impossible path");
+      ceph_abort("impossible path");
     }
   }
 

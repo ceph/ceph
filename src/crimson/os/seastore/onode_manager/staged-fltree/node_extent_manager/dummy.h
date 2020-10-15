@@ -39,15 +39,15 @@ class DummyNodeExtent final: public NodeExtent {
   ~DummyNodeExtent() override = default;
  protected:
   NodeExtentRef mutate(context_t) override {
-    assert(false && "impossible path"); }
+    ceph_abort("impossible path"); }
   CachedExtentRef duplicate_for_write() override {
-    assert(false && "impossible path"); }
+    ceph_abort("impossible path"); }
   extent_types_t get_type() const override {
-    assert(false && "impossible path"); }
+    ceph_abort("impossible path"); }
   ceph::bufferlist get_delta() override {
-    assert(false && "impossible path"); }
+    ceph_abort("impossible path"); }
   void apply_delta(const ceph::bufferlist&) override {
-    assert(false && "impossible path"); }
+    ceph_abort("impossible path"); }
 };
 
 template <bool SYNC>

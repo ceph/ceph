@@ -88,7 +88,7 @@ struct MatchHistory {
     } else if (*match == MatchKindCMP::PO) {
       return os << "PO";
     } else {
-      assert(false && "impossble path");
+      ceph_abort("impossble path");
     }
   }
 
@@ -283,7 +283,7 @@ const staged_position_t<STAGE>& cast_down(const search_position_t& pos) {
 #endif
     return pos.nxt.nxt;
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 }
 
@@ -305,7 +305,7 @@ staged_position_t<STAGE>& cast_down_fill_0(search_position_t& pos) {
     pos.nxt.index = 0;
     return pos.nxt.nxt;
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 }
 
@@ -321,7 +321,7 @@ search_position_t normalize(staged_position_t<STAGE>&& pos) {
   } else if (STAGE == STAGE_RIGHT) {
     return {0u, {0u, std::move(pos)}};
   } else {
-    assert(false);
+    ceph_abort("impossible path");
   }
 }
 

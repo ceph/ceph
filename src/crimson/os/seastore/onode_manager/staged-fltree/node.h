@@ -126,7 +126,7 @@ class Node
 
  protected:
   virtual node_future<> test_clone_non_root(context_t, Ref<InternalNode>) const {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
   virtual node_future<search_result_t> lower_bound_tracked(
       context_t, const key_hobj_t&, MatchHistory&) = 0;
@@ -203,7 +203,7 @@ class InternalNode final : public Node {
   void do_untrack_child(const Node& child) {
     auto& child_pos = child.parent_info().position;
     assert(tracked_child_nodes.find(child_pos)->second == &child);
-    auto removed = tracked_child_nodes.erase(child_pos);
+    [[maybe_unused]] auto removed = tracked_child_nodes.erase(child_pos);
     assert(removed);
   }
 
@@ -279,7 +279,7 @@ class LeafNode final : public Node {
     validate_cursor(cursor);
     auto& cursor_pos = cursor.get_position();
     assert(tracked_cursors.find(cursor_pos)->second == &cursor);
-    auto removed = tracked_cursors.erase(cursor_pos);
+    [[maybe_unused]] auto removed = tracked_cursors.erase(cursor_pos);
     assert(removed);
   }
 

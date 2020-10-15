@@ -55,7 +55,7 @@ namespace {
 
     auto sg = snap_gen_t::from_key<KeyT::HOBJ>(key_hobj);
     p_fill -= sizeof(snap_gen_t);
-    assert(p_fill == (char*)p_mem);
+    ceph_assert(p_fill == (char*)p_mem);
     std::memcpy(p_fill, &sg, sizeof(snap_gen_t));
     key_view.set(*reinterpret_cast<const snap_gen_t*>(p_fill));
 
@@ -196,9 +196,9 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     auto key_s = make_ghobj(0, 0, 0, "ns", "oid", 0, 0);
     auto key_e = make_ghobj(
         std::numeric_limits<shard_t>::max(), 0, 0, "ns", "oid", 0, 0);
-    assert(tree.find(t, key_s).unsafe_get0().is_end());
-    assert(tree.begin(t).unsafe_get0().is_end());
-    assert(tree.last(t).unsafe_get0().is_end());
+    ASSERT_TRUE(tree.find(t, key_s).unsafe_get0().is_end());
+    ASSERT_TRUE(tree.begin(t).unsafe_get0().is_end());
+    ASSERT_TRUE(tree.last(t).unsafe_get0().is_end());
 
     std::vector<std::tuple<ghobject_t,
                            const onode_t*,
@@ -206,12 +206,12 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     auto f_validate_insert_new = [this, &insert_history] (
         const ghobject_t& key, const onode_t& value) {
       auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
-      assert(success == true);
+      ceph_assert(success);
       insert_history.emplace_back(key, &value, cursor);
       Onodes::validate_cursor(cursor, key, value);
       auto cursor_ = tree.lower_bound(t, key).unsafe_get0();
-      assert(cursor_.get_ghobj() == key);
-      assert(cursor_.value() == cursor.value());
+      ceph_assert(cursor_.get_ghobj() == key);
+      ceph_assert(cursor_.value() == cursor.value());
       return cursor.value();
     };
     auto onodes = Onodes(15);
@@ -224,10 +224,10 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     // validate lookup
     {
       auto cursor1_s = tree.lower_bound(t, key_s).unsafe_get0();
-      assert(cursor1_s.get_ghobj() == key1);
-      assert(cursor1_s.value() == p_value1);
+      ASSERT_EQ(cursor1_s.get_ghobj(), key1);
+      ASSERT_EQ(cursor1_s.value(), p_value1);
       auto cursor1_e = tree.lower_bound(t, key_e).unsafe_get0();
-      assert(cursor1_e.is_end());
+      ASSERT_TRUE(cursor1_e.is_end());
     }
 
     // insert the same key1 with a different onode
@@ -235,7 +235,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       auto& onode1_dup = onodes.pick();
       auto [cursor1_dup, ret1_dup] = tree.insert(
           t, key1, onode1_dup).unsafe_get0();
-      assert(ret1_dup == false);
+      ASSERT_FALSE(ret1_dup);
       Onodes::validate_cursor(cursor1_dup, key1, onode1);
     }
 
@@ -315,8 +315,8 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
     std::for_each(kvs.begin(), kvs.end(), [&f_validate_insert_new] (auto& kv) {
       f_validate_insert_new(kv.first, *kv.second);
     });
-    assert(tree.height(t).unsafe_get0() == 1);
-    assert(!tree.test_is_clean());
+    ASSERT_EQ(tree.height(t).unsafe_get0(), 1);
+    ASSERT_FALSE(tree.test_is_clean());
 
     for (auto& [k, v, c] : insert_history) {
       // validate values in tree keep intact
@@ -346,7 +346,7 @@ static std::set<ghobject_t> build_key_set(
     std::pair<unsigned, unsigned> range_0,
     std::string padding = "",
     bool is_internal = false) {
-  assert(range_1.second <= 10);
+  ceph_assert(range_1.second <= 10);
   std::set<ghobject_t> ret;
   ghobject_t key;
   for (unsigned i = range_2.first; i < range_2.second; ++i) {
@@ -391,8 +391,8 @@ class TestTree {
         auto& value = onodes.create(onode_size);
         insert_tree(key, value).get0();
       }
-      assert(tree.height(t).unsafe_get0() == 1);
-      assert(!tree.test_is_clean());
+      ASSERT_EQ(tree.height(t).unsafe_get0(), 1);
+      ASSERT_FALSE(tree.test_is_clean());
       //std::ostringstream oss;
       //tree.dump(t, oss);
       //logger().info("\n{}\n", oss.str());
@@ -405,7 +405,7 @@ class TestTree {
       tree.mkfs(t).unsafe_get0();
       //logger().info("\n---------------------------------------------"
       //              "\nbefore leaf node split:\n");
-      assert(keys.size() == values.size());
+      ASSERT_EQ(keys.size(), values.size());
       auto key_iter = keys.begin();
       auto value_iter = values.begin();
       while (key_iter != keys.end()) {
@@ -413,8 +413,8 @@ class TestTree {
         ++key_iter;
         ++value_iter;
       }
-      assert(tree.height(t).unsafe_get0() == 1);
-      assert(!tree.test_is_clean());
+      ASSERT_EQ(tree.height(t).unsafe_get0(), 1);
+      ASSERT_FALSE(tree.test_is_clean());
       //std::ostringstream oss;
       //tree.dump(t, oss);
       //logger().info("\n{}\n", oss.str());
@@ -431,13 +431,13 @@ class TestTree {
 
       logger().info("insert {}:", key_hobj_t(key));
       auto [cursor, success] = tree_clone.insert(t_clone, key, value).unsafe_get0();
-      assert(success == true);
+      ASSERT_TRUE(success);
       Onodes::validate_cursor(cursor, key, value);
 
       std::ostringstream oss;
       tree_clone.dump(t_clone, oss);
-      logger().info("dump new root:\n{}\n", oss.str());
-      assert(tree_clone.height(t_clone).unsafe_get0() == 2);
+      logger().info("dump new root:\n{}", oss.str());
+      EXPECT_EQ(tree_clone.height(t_clone).unsafe_get0(), 2);
 
       for (auto& [k, v, c] : insert_history) {
         auto result = tree_clone.lower_bound(t_clone, k).unsafe_get0();
@@ -445,7 +445,7 @@ class TestTree {
       }
       auto result = tree_clone.lower_bound(t_clone, key).unsafe_get0();
       Onodes::validate_cursor(result, key, value);
-      assert(last_split.match(expected));
+      EXPECT_TRUE(last_split.match(expected));
     });
   }
 
@@ -457,7 +457,7 @@ class TestTree {
   seastar::future<> insert_tree(const ghobject_t& key, const onode_t& value) {
     return seastar::async([this, &key, &value] {
       auto [cursor, success] = tree.insert(t, key, value).unsafe_get0();
-      assert(success == true);
+      ASSERT_TRUE(success);
       Onodes::validate_cursor(cursor, key, value);
       insert_history.emplace_back(key, &value, cursor);
     });
@@ -608,13 +608,13 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
                     "\nsplit at [0, 0, 0]; insert to left front at stage 2, 1, 0\n");
       test.split(make_ghobj(1, 1, 1, "ns3", "oid3", 3, 3), onode,
                  {2u, 2u, true, InsertType::BEGIN}).get0();
-      assert(last_split.match_split_pos({0, {0, {0}}}));
+      EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
       test.split(make_ghobj(2, 2, 2, "ns1", "oid1", 3, 3), onode,
                  {2u, 1u, true, InsertType::BEGIN}).get0();
-      assert(last_split.match_split_pos({0, {0, {0}}}));
+      EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
       test.split(make_ghobj(2, 2, 2, "ns2", "oid2", 1, 1), onode,
                  {2u, 0u, true, InsertType::BEGIN}).get0();
-      assert(last_split.match_split_pos({0, {0, {0}}}));
+      EXPECT_TRUE(last_split.match_split_pos({0, {0, {0}}}));
     }
 
     {
@@ -631,13 +631,13 @@ TEST_F(c_dummy_test_t, 4_split_leaf_node)
                     "\nsplit at [END, END, END]; insert to right at stage 0, 1, 2\n");
       test.split(make_ghobj(3, 3, 3, "ns3", "oid3", 4, 4), onode,
                  {0u, 0u, false, InsertType::BEGIN}).get0();
-      assert(last_split.match_split_pos({1, {0, {1}}}));
+      EXPECT_TRUE(last_split.match_split_pos({1, {0, {1}}}));
       test.split(make_ghobj(3, 3, 3, "ns4", "oid4", 3, 3), onode,
                  {1u, 1u, false, InsertType::BEGIN}).get0();
-      assert(last_split.match_split_pos({1, {1, {0}}}));
+      EXPECT_TRUE(last_split.match_split_pos({1, {1, {0}}}));
       test.split(make_ghobj(4, 4, 4, "ns3", "oid3", 3, 3), onode,
                  {2u, 2u, false, InsertType::BEGIN}).get0();
-      assert(last_split.match_split_pos({2, {0, {0}}}));
+      EXPECT_TRUE(last_split.match_split_pos({2, {0, {0}}}));
     }
   });
 }
@@ -674,27 +674,27 @@ class DummyChildPool {
     level_t level() const override { return 0u; }
     key_view_t get_largest_key_view() const override { return key_view; }
     void prepare_mutate(context_t) override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     bool is_empty() const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     node_offset_t free_size() const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     key_view_t get_key_view(const search_position_t&) const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     void next_position(search_position_t&) const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     std::ostream& dump(std::ostream&) const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     std::ostream& dump_brief(std::ostream&) const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     void validate_layout() const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     void test_copy_to(NodeExtentMutable&) const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     void test_set_tail(NodeExtentMutable&) override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
 
    private:
     std::set<ghobject_t> keys;
@@ -711,8 +711,8 @@ class DummyChildPool {
 
     node_future<> populate_split(
         context_t c, std::set<Ref<DummyChild>>& splitable_nodes) {
-      assert(can_split());
-      assert(splitable_nodes.find(this) != splitable_nodes.end());
+      ceph_assert(can_split());
+      ceph_assert(splitable_nodes.find(this) != splitable_nodes.end());
 
       size_t index;
       const auto& keys = impl->get_keys();
@@ -742,9 +742,9 @@ class DummyChildPool {
         context_t c, const ghobject_t& insert_key,
         std::set<Ref<DummyChild>>& splitable_nodes) {
       const auto& keys = impl->get_keys();
-      assert(keys.size() == 1);
+      ceph_assert(keys.size() == 1);
       auto& key = *keys.begin();
-      assert(insert_key < key);
+      ceph_assert(insert_key < key);
 
       std::set<ghobject_t> new_keys;
       new_keys.insert(insert_key);
@@ -754,12 +754,12 @@ class DummyChildPool {
       splitable_nodes.clear();
       splitable_nodes.insert(this);
       auto fut = populate_split(c, splitable_nodes);
-      assert(!splitable_nodes.size());
+      ceph_assert(splitable_nodes.size() == 0);
       return fut;
     }
 
     bool match_pos(const search_position_t& pos) const {
-      assert(!is_root());
+      ceph_assert(!is_root());
       return pos == parent_info().position;
     }
 
@@ -792,25 +792,25 @@ class DummyChildPool {
    protected:
     node_future<> test_clone_non_root(
         context_t, Ref<InternalNode> new_parent) const override {
-      assert(!is_root());
+      ceph_assert(!is_root());
       auto p_pool_clone = pool.pool_clone_in_progress;
-      assert(p_pool_clone);
+      ceph_assert(p_pool_clone != nullptr);
       auto clone = create(
           impl->get_keys(), impl->is_level_tail(), impl->laddr(), *p_pool_clone);
       clone->as_child(parent_info().position, new_parent);
       return node_ertr::now();
     }
     node_future<Ref<tree_cursor_t>> lookup_smallest(context_t) override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     node_future<Ref<tree_cursor_t>> lookup_largest(context_t) override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     node_future<> test_clone_root(context_t, RootNodeTracker&) const override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     node_future<search_result_t> lower_bound_tracked(
         context_t, const key_hobj_t&, MatchHistory&) override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
     node_future<> do_get_tree_stats(context_t, tree_stats_t&) override {
-      assert(false && "impossible path"); }
+      ceph_abort("impossible path"); }
 
    private:
     DummyChild(DummyChildImpl* impl, DummyChildImpl::URef&& ref, DummyChildPool& pool)
@@ -863,7 +863,7 @@ class DummyChildPool {
       //logger().info("\n{}\n", oss.str());
       return p_btree->height(t());
     }).safe_then([](auto height) {
-      assert(height == 2);
+      ceph_assert(height == 2);
     });
   }
 
@@ -884,29 +884,29 @@ class DummyChildPool {
         pool_clone.get_context(), key, pool_clone.splitable_nodes).unsafe_get0();
       std::ostringstream oss;
       pool_clone.p_btree->dump(pool_clone.t(), oss);
-      logger().info("dump new root:\n{}\n", oss.str());
-      assert(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0() == 3);
-      assert(last_split.match(expected));
+      logger().info("dump new root:\n{}", oss.str());
+      EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 3);
+      EXPECT_TRUE(last_split.match(expected));
     });
   }
 
  private:
   void reset() {
-    assert(!pool_clone_in_progress);
+    ceph_assert(pool_clone_in_progress == nullptr);
     if (tracked_children.size()) {
-      assert(!p_btree->test_is_clean());
+      ceph_assert(!p_btree->test_is_clean());
       tracked_children.clear();
-      assert(p_btree->test_is_clean());
+      ceph_assert(p_btree->test_is_clean());
       p_nm = nullptr;
       p_btree.reset();
     } else {
-      assert(!p_btree);
+      ceph_assert(!p_btree.has_value());
     }
     splitable_nodes.clear();
   }
 
   void track_node(Ref<DummyChild> node) {
-    assert(tracked_children.find(node) == tracked_children.end());
+    ceph_assert(tracked_children.find(node) == tracked_children.end());
     tracked_children.insert(node);
   }
 
@@ -915,12 +915,12 @@ class DummyChildPool {
         tracked_children.begin(), tracked_children.end(), [&pos](auto& child) {
       return child->match_pos(pos);
     });
-    assert(iter != tracked_children.end());
+    ceph_assert(iter != tracked_children.end());
     return *iter;
   }
 
   context_t get_context() {
-    assert(p_nm != nullptr);
+    ceph_assert(p_nm != nullptr);
     return {*p_nm, t()};
   }
 

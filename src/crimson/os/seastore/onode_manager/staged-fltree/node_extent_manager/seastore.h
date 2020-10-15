@@ -44,11 +44,11 @@ class SeastoreNodeExtent final: public NodeExtent {
   }
   ceph::bufferlist get_delta() override {
     //TODO
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   }
   void apply_delta(const ceph::bufferlist&) override {
     //TODO
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   }
  private:
   static seastar::logger& logger() {

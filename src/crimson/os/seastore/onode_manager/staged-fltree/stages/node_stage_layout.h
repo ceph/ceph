@@ -261,11 +261,11 @@ struct node_fields_2_t {
   static void insert_at(
       NodeExtentMutable& mut, const full_key_t<KT>& key,
       const node_fields_2_t& node, size_t index, node_offset_t size_right) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   }
   static void update_size_at(
       NodeExtentMutable& mut, const node_fields_2_t& node, size_t index, int change) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   }
   static void append_key(
       NodeExtentMutable& mut, const key_t& key, char*& p_append) {
@@ -314,8 +314,7 @@ struct _internal_fields_3_t {
   std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, node_offset_t>
   free_size_before(size_t index) const {
     assert(index <= num_keys);
-    auto allowed_num_keys = is_level_tail() ? MAX_NUM_KEYS - 1 : MAX_NUM_KEYS;
-    assert(num_keys <= allowed_num_keys);
+    assert(num_keys <= (is_level_tail() ? MAX_NUM_KEYS - 1 : MAX_NUM_KEYS));
     auto free = (MAX_NUM_KEYS - index) * (sizeof(snap_gen_t) + sizeof(laddr_t));
     if (is_level_tail() && index == num_keys) {
       free -= (sizeof(snap_gen_t) + sizeof(laddr_t));
@@ -367,11 +366,11 @@ struct _internal_fields_3_t {
   static void insert_at(
       NodeExtentMutable& mut, const full_key_t<KT>& key,
       const me_t& node, size_t index, node_offset_t size_right) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   }
   static void update_size_at(
       NodeExtentMutable& mut, const me_t& node, size_t index, int change) {
-    assert(false && "not implemented");
+    ceph_abort("not implemented");
   }
 
   node_header_t header;

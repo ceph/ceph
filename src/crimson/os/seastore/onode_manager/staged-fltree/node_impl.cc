@@ -23,7 +23,7 @@ InternalNodeImpl::allocate(
   } else if (type == field_type_t::N3) {
     return InternalNode3::allocate(c, is_level_tail, level);
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 }
 
@@ -39,7 +39,7 @@ LeafNodeImpl::allocate(
   } else if (type == field_type_t::N3) {
     return LeafNode3::allocate(c, is_level_tail, 0);
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 }
 
@@ -54,7 +54,7 @@ InternalNodeImplURef InternalNodeImpl::load(
   } else if (type == field_type_t::N3) {
     return InternalNode3::load(extent, expect_is_level_tail);
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 }
 
@@ -69,7 +69,7 @@ LeafNodeImplURef LeafNodeImpl::load(
   } else if (type == field_type_t::N3) {
     return LeafNode3::load(extent, expect_is_level_tail);
   } else {
-    assert(false && "impossible path");
+    ceph_abort("impossible path");
   }
 }
 

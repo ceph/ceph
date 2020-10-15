@@ -107,7 +107,7 @@ inline void assert_mstat(
     }
     break;
    default:
-    assert(false);
+    ceph_abort("impossible path");
   }
   // key == index ...
   switch (mstat) {
@@ -1020,8 +1020,7 @@ struct staged {
       auto match = compare_to<KeyT::VIEW>(key, iter.get_key());
       if (match == MatchKindCMP::EQ) {
         if constexpr (IS_BOTTOM) {
-          // ceph_abort?
-          assert(false && "insert conflict at current index!");
+          ceph_abort("insert conflict at current index!");
         } else {
           // insert into the current index
           auto nxt_container = iter.get_nxt_container();
@@ -1051,7 +1050,7 @@ struct staged {
       assert(match == MatchKindCMP::EQ);
       if constexpr (IS_BOTTOM) {
         // ceph_abort?
-        assert(false && "insert conflict at the previous index!");
+        ceph_abort("insert conflict at the previous index!");
       } else {
         // insert into the previous index
         auto nxt_container = iter.get_nxt_container();
@@ -1072,7 +1071,7 @@ struct staged {
       return true;
     } else {
       if constexpr (IS_BOTTOM) {
-        assert(false && "impossible");
+        ceph_abort("impossible path");
       } else {
         assert(stage < STAGE);
         bool compensate = NXT_STAGE_T::
@@ -1134,7 +1133,7 @@ struct staged {
         assert(insert_stage <= STAGE && "incompatible insert");
       } else {
         assert(insert_stage <= STAGE && "impossible insert stage");
-        bool ret = compensate_insert_position_at(insert_stage, position);
+        [[maybe_unused]] bool ret = compensate_insert_position_at(insert_stage, position);
         assert(!ret);
       }
     }
@@ -1157,7 +1156,7 @@ struct staged {
     StagedAppender<KT> appender;
     appender.init(&mut, p_insert);
     appender.append(key, value, p_value);
-    const char* p_insert_front = appender.wrap();
+    [[maybe_unused]] const char* p_insert_front = appender.wrap();
     assert(p_insert_front == range.p_start);
     return p_value;
   }
@@ -1226,7 +1225,7 @@ struct staged {
         iter.update_size(mut, _insert_size);
         return p_value;
       } else {
-        assert(false && "impossible path");
+        ceph_abort("impossible path");
       }
     }
   }
@@ -1247,7 +1246,7 @@ struct staged {
         stage = STAGE;
         _insert_size = insert_size<KT>(key, value);
       } else {
-        assert(false && "impossible path");
+        ceph_abort("impossible path");
       }
       if constexpr (IS_BOTTOM) {
         return container_t::template insert_at<KT>(
@@ -1428,14 +1427,14 @@ struct staged {
         }
         return this->_nxt;
       } else {
-        assert(false);
+        ceph_abort("impossible path");
       }
     }
     typename NXT_STAGE_T::StagedIterator& get_nxt() {
       if constexpr (!IS_BOTTOM) {
         return this->_nxt;
       } else {
-        assert(false);
+        ceph_abort("impossible path");
       }
     }
     StagedIterator& operator++() {
@@ -1695,7 +1694,7 @@ struct staged {
           return false;
         }
       } else {
-        assert(false && "impossible path");
+        ceph_abort("impossible path");
         return false;;
       }
     }
@@ -1787,7 +1786,7 @@ struct staged {
         this->_nxt.init(p_mut, p_append);
         return this->_nxt;
       } else {
-        assert(false);
+        ceph_abort("impossible path");
       }
     }
     typename NXT_STAGE_T::template StagedAppender<KT>&
@@ -1799,7 +1798,7 @@ struct staged {
         this->_nxt.init(p_mut, p_append);
         return this->_nxt;
       } else {
-        assert(false);
+        ceph_abort("impossible path");
       }
     }
     typename NXT_STAGE_T::template StagedAppender<KT>& get_nxt() {
@@ -1807,7 +1806,7 @@ struct staged {
         assert(require_wrap_nxt);
         return this->_nxt;
       } else {
-        assert(false);
+        ceph_abort("impossible path");
       }
     }
     void wrap_nxt() {
@@ -1818,7 +1817,7 @@ struct staged {
         appender->wrap_nxt(p_append);
         ++_index;
       } else {
-        assert(false);
+        ceph_abort("impossible path");
       }
     }
    private:
@@ -1934,7 +1933,7 @@ struct staged {
         }
         return false;
       } else {
-        assert(false && "impossible path");
+        ceph_abort("impossible path");
       }
     }
   }
