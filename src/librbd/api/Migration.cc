@@ -683,12 +683,12 @@ Migration<I>::Migration(I *src_image_ctx, librados::IoCtx& dst_io_ctx,
     m_mirror_image_mode(mirror_image_mode), m_prog_ctx(prog_ctx),
     m_src_migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_SRC,
                          m_dst_io_ctx.get_id(), m_dst_io_ctx.get_namespace(),
-                         m_dst_image_name, m_dst_image_id, {}, 0, mirroring,
+                         m_dst_image_name, m_dst_image_id, "", {}, 0, mirroring,
                          mirror_image_mode, flatten, state, state_description),
     m_dst_migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST,
                          src_image_ctx->md_ctx.get_id(),
                          src_image_ctx->md_ctx.get_namespace(),
-                         m_src_image_ctx->name, m_src_image_ctx->id, {}, 0,
+                         m_src_image_ctx->name, m_src_image_ctx->id, "", {}, 0,
                          mirroring, mirror_image_mode, flatten, state,
                          state_description) {
   m_src_io_ctx.dup(src_image_ctx->md_ctx);
@@ -1369,7 +1369,7 @@ int Migration<I>::create_dst_image() {
 
   m_dst_migration_spec = {cls::rbd::MIGRATION_HEADER_TYPE_DST,
                           m_src_io_ctx.get_id(), m_src_io_ctx.get_namespace(),
-                          m_src_image_name, m_src_image_id, snap_seqs, size,
+                          m_src_image_name, m_src_image_id, "", snap_seqs, size,
                           m_mirroring, m_mirror_image_mode, m_flatten,
                           cls::rbd::MIGRATION_STATE_PREPARING, ""};
 
