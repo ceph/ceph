@@ -37,6 +37,7 @@ class RGWSI_Role_RADOS: public RGWSI_Role
 	    RGWSI_SysObj *_sysobj_svc);
 
   RGWSI_MetaBackend_Handler * get_be_handler() override;
+  int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
 
   int store_info(RGWSI_MetaBackend::Context *ctx,
 		 const rgw::sal::RGWRole& role,
