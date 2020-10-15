@@ -2048,7 +2048,7 @@ public:
              RGWMetadataObject *obj,
              RGWObjVersionTracker& objv_tracker,
              optional_yield y,
-             RGWMDLogSyncType type) override;
+             RGWMDLogSyncType type, bool from_remote_zone) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
                 optional_yield y) override {
@@ -2102,7 +2102,7 @@ public:
                                RGWSI_MetaBackend_Handler::Op *op, string& entry,
                                RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 			       optional_yield y,
-                               RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type),
+                               RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type, from_remote_zone),
                                                         bhandler(_handler) {
     obj = static_cast<RGWBucketEntryMetadataObject *>(_obj);
   }
@@ -2120,9 +2120,9 @@ int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& 
                                      RGWMetadataObject *obj,
                                      RGWObjVersionTracker& objv_tracker,
 				     optional_yield y,
-                                     RGWMDLogSyncType type)
+                                     RGWMDLogSyncType type, bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_Bucket put_op(this, op, entry, obj, objv_tracker, y, type);
+  RGWMetadataHandlerPut_Bucket put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op);
 }
 
@@ -2365,7 +2365,7 @@ public:
              RGWMetadataObject *obj,
              RGWObjVersionTracker& objv_tracker,
              optional_yield y,
-             RGWMDLogSyncType type) override {
+             RGWMDLogSyncType type, bool from_remote_zone) override {
     if (entry.find("-deleted-") != string::npos) {
       RGWObjVersionTracker ot;
       RGWMetadataObject *robj;
@@ -2385,7 +2385,7 @@ public:
     }
 
     return RGWBucketMetadataHandler::do_put(op, entry, obj,
-                                            objv_tracker, y, type);
+                                            objv_tracker, y, type, from_remote_zone);
   }
 
 };
@@ -2456,7 +2456,7 @@ public:
   int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
              RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 	     optional_yield y,
-             RGWMDLogSyncType sync_type) override;
+             RGWMDLogSyncType sync_type, bool from_remote_zone) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
                 optional_yield y) override {
@@ -2490,13 +2490,13 @@ class RGWMetadataHandlerPut_BucketInstance : public RGWMetadataHandlerPut_SObj
   RGWBucketInstanceMetadataHandler *bihandler;
   RGWBucketInstanceMetadataObject *obj;
 public:
-  RGWMetadataHandlerPut_BucketInstance(CephContext *cct,
+  RGWMetadataHandlerPut_BucketInstance(CephContext *_cct,
                                        RGWBucketInstanceMetadataHandler *_handler,
                                        RGWSI_MetaBackend_Handler::Op *_op, string& entry,
                                        RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 				       optional_yield y,
-                                       RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj, objv_tracker, y, type),
-                                                                bihandler(_handler) {
+                                       RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj, objv_tracker, y, type, from_remote_zone),
+                                       cct(_cct), bihandler(_handler) {
     obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
 
     auto& bci = obj->get_bci();
@@ -2517,11 +2517,21 @@ int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
                                              RGWMetadataObject *obj,
                                              RGWObjVersionTracker& objv_tracker,
                                              optional_yield y,
-                                             RGWMDLogSyncType type)
+                                             RGWMDLogSyncType type, bool from_remote_zone)
 {
   RGWMetadataHandlerPut_BucketInstance put_op(svc.bucket->ctx(), this, op, entry, obj,
-                                              objv_tracker, y, type);
+                                              objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op);
+}
+
+void init_default_bucket_layout(CephContext *cct, RGWBucketInfo& info, const RGWZone& zone) {
+  info.layout.current_index.gen = 0;
+  info.layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
+  info.layout.current_index.layout.type = rgw::BucketIndexType::Normal;
+
+  info.layout.current_index.layout.normal.num_shards = (
+      cct->_conf->rgw_override_bucket_index_max_shards > 0 ?
+      cct->_conf->rgw_override_bucket_index_max_shards : zone.bucket_index_max_shards);
 }
 
 int RGWMetadataHandlerPut_BucketInstance::put_check()
@@ -2535,6 +2545,15 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
   RGWBucketCompleteInfo *old_bci = (orig_obj ? &orig_obj->get_bci() : nullptr);
 
   bool exists = (!!orig_obj);
+
+  if (from_remote_zone) {
+    // don't sync bucket layout changes
+    if (!exists) {
+      init_default_bucket_layout(cct, bci.info, bihandler->svc.zone->get_zone());
+    } else {
+      bci.info.layout = old_bci->info.layout;
+    }
+  }
 
   if (!exists || old_bci->info.bucket.bucket_id != bci.info.bucket.bucket_id) {
     /* a new bucket, we need to select a new bucket placement for it */
