@@ -191,12 +191,22 @@
         "UsageStatsSummary": {
             "type": "structure",
             "members": {
-                "TotalBytes":{"shape":"TotalBytes"},
+		        "QuotaMaxBytes":{"shape":"QuotaMaxBytes"},
+		        "QuotaMaxBuckets":{"shape": "QuotaMaxBuckets"},
+		        "QuotaMaxObjCount":{"shape":"QuotaMaxObjCount"},
+		        "QuotaMaxBytesPerBucket":{"shape":"QuotaMaxBytesPerBucket"},
+                "QuotaMaxObjCountPerBucket":{"shape":"QuotaMaxObjCountPerBucket"},
+		        "TotalBytes":{"shape":"TotalBytes"},
                 "TotalBytesRounded":{"shape":"TotalBytesRounded"},
                 "TotalEntries":{"shape":"TotalEntries"}
             }
         },
-        "TotalBytesRounded":{"type":"integer"},
+        "QuotaMaxBytes":{"type":"integer"},
+	    "QuotaMaxBuckets":{"type": "integer"},
+	    "QuotaMaxObjCount":{"type":"integer"},
+	    "QuotaMaxBytesPerBucket":{"type":"integer"},
+	    "QuotaMaxObjCountPerBucket":{"type":"integer"},
+	    "TotalBytesRounded":{"type":"integer"},
         "TotalBytes":{"type":"integer"},
         "TotalEntries":{"type":"integer"}
     },
