@@ -122,7 +122,11 @@ int SIProvider_REST::get_cur_state(const SIProvider::stage_id_t& sid, int shard_
 
 int SIProvider_REST::trim(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker)
 {
-#warning FIXME
-  return -ENOTSUP;
+  int r = cr_mgr->run(sip_cr_mgr->trim_cr(sid, shard_id, marker));
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
+    return r;
+  }
+  return 0;
 }
 

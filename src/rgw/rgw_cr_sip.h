@@ -39,6 +39,7 @@ public:
   virtual RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
   virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
   virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
+  virtual RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) = 0;
 
   virtual RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) {
     return new GetNextStageCR(this, sid, next_sid);
@@ -64,6 +65,7 @@ public:
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
+  RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
 class RGWRESTConn;
@@ -104,6 +106,7 @@ public:
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
+  RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
 
   SIProvider::TypeHandler *get_type_handler();
 };

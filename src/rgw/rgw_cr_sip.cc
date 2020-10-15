@@ -43,6 +43,7 @@ class RGWSafeRetAsyncCR : public RGWCoroutine {
 
   T *pret;
   std::function<int(T *)> cb;
+  std::function<int()> cb_void;
 
   struct Action : public RGWGenericAsyncCR::Action {
     RGWSafeRetAsyncCR *caller;
@@ -65,7 +66,6 @@ public:
                                async_rados(_async_rados),
                                pret(_pret),
                                cb(_cb) {}
-
   int operate() {
     reenter(this) {
       action = make_shared<Action>(this);
@@ -77,13 +77,59 @@ public:
       }
 
       /* now it is safe to copy return value */
-      *pret = action->ret;
+      if (pret) {
+        *pret = action->ret;
+      }
 
       return set_cr_done();
     }
     return 0;
   }
 };
+
+template <class T>
+class RGWAsyncLambdaCR : public RGWCoroutine {
+  friend struct Action;
+
+  RGWAsyncRadosProcessor *async_rados;
+
+  std::function<int()> cb;
+
+  struct Action : public RGWGenericAsyncCR::Action {
+    RGWAsyncLambdaCR *caller;
+
+    Action(RGWAsyncLambdaCR *_caller) : caller(_caller) {}
+
+    int operate() override {
+      return caller->cb();
+    }
+  };
+
+  std::shared_ptr<Action> action;
+
+public:
+  RGWAsyncLambdaCR(CephContext *cct,
+                   RGWAsyncRadosProcessor *_async_rados,
+                   std::function<int()> _cb) : RGWCoroutine(cct),
+                               async_rados(_async_rados),
+                               cb(_cb) {}
+
+  int operate() {
+    reenter(this) {
+      action = make_shared<Action>(this);
+
+      yield call(new RGWGenericAsyncCR(cct, async_rados, action));
+
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+
+      return set_cr_done();
+    }
+    return 0;
+  }
+};
+
 
 #if WILL_BE_NEEDED_IN_THE_FUTURE
 
@@ -230,6 +276,16 @@ RGWCoroutine *SIProviderCRMgr_Local::get_cur_state_cr(const SIProvider::stage_id
                                pos,
                                [=](rgw_sip_pos *_pos) {
                                  return pvd->get_cur_state(sid, shard_id, &_pos->marker, &_pos->timestamp);
+                               });
+}
+
+RGWCoroutine *SIProviderCRMgr_Local::trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const string& marker)
+{
+  auto pvd = provider; /* capture another reference */
+  return new RGWAsyncLambdaCR<void>(cct,
+                               async_rados,
+                               [=]() {
+                                 return pvd->trim(sid, shard_id, marker);
                                });
 }
 
@@ -504,6 +560,56 @@ struct SIProviderRESTCRs {
       return 0;
     }
   };
+
+  class TrimCR : public RGWCoroutine {
+    SIProviderCRMgr_REST *mgr;
+    SIProvider::stage_id_t sid;
+    int shard_id;
+    string marker;
+
+    string path;
+
+  public:
+    TrimCR(SIProviderCRMgr_REST *_mgr,
+           const SIProvider::stage_id_t& _sid,
+           int _shard_id,
+           const string& _marker) : RGWCoroutine(_mgr->ctx()),
+                                              mgr(_mgr),
+                                              sid(_sid),
+                                              shard_id(_shard_id),
+                                              marker(_marker) {
+      path = mgr->path_prefix;
+    }
+
+    int operate() override {
+      reenter(this) {
+        yield {
+          const char *instance_key = (mgr->instance ? "instance" : "");
+          char shard_id_buf[16];
+          snprintf(shard_id_buf, sizeof(shard_id_buf), "%d", shard_id);
+          const char *instance_val = (mgr->instance ? mgr->instance->c_str() : "");
+          rgw_http_param_pair pairs[] = { { "provider" , mgr->remote_provider_name.c_str() },
+					  { instance_key , instance_val },
+					  { "stage-id" , sid.c_str() },
+					  { "shard-id" , shard_id_buf },
+					  { "marker" , marker.c_str() },
+	                                  { nullptr, nullptr } };
+          call(new RGWDeleteRESTResourceCR(mgr->ctx(),
+                                           mgr->conn,
+                                           mgr->http_manager,
+                                           path,
+                                           pairs));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        return set_cr_done();
+      }
+
+      return 0;
+    }
+  };
 };
 
 RGWCoroutine *SIProviderCRMgr_REST::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
@@ -537,6 +643,11 @@ RGWCoroutine *SIProviderCRMgr_REST::get_cur_state_cr(const SIProvider::stage_id_
 {
   return new SIProviderRESTCRs::GetStagesStatusCR(this, sid, shard_id,
                                                   nullptr, pos);
+}
+
+RGWCoroutine *SIProviderCRMgr_REST::trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const string& marker)
+{
+  return new SIProviderRESTCRs::TrimCR(this, sid, shard_id, marker);
 }
 
 SIProvider::TypeHandler *SIProviderCRMgr_REST::get_type_handler()
