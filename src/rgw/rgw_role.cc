@@ -672,12 +672,12 @@ public:
     map<std::string, bufferlist> *pattrs = rci.has_attrs ? &rci.attrs : nullptr;
 
     int ret = rhandler->svc.role->store_info(op->ctx(),
-                                           rci.info,
-                                           &objv_tracker,
-                                           mtime,
-                                           false,
-                                           pattrs,
-                                           y);
+					     rci.info,
+					     &objv_tracker,
+					     mtime,
+					     false,
+					     pattrs,
+					     y);
 
     return ret < 0 ? ret : STATUS_APPLIED;
   }
