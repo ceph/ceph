@@ -2414,7 +2414,7 @@ void RGWGetUsage::execute()
 
   RGWUsageIter usage_iter;
   
-  while (is_truncated) {
+  while (s->bucket && is_truncated) {
     op_ret = s->bucket->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
 				   usage_iter, usage);
     if (op_ret == -ENOENT) {

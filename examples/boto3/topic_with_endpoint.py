@@ -15,7 +15,7 @@ elif len(sys.argv) == 2:
     topic_name = sys.argv[1]
     region_name = ""
 else:
-    print 'Usage: ' + sys.argv[0] + ' <topic name> [region name]'
+    print('Usage: ' + sys.argv[0] + ' <topic name> [region name]')
     sys.exit(1)
 
 # endpoint and keys from vstart
@@ -38,4 +38,4 @@ client = boto3.client('sns',
 endpoint_args = 'push-endpoint=amqp://127.0.0.1:5672&amqp-exchange=ex1&amqp-ack-level=broker'
 attributes = {nvp[0] : nvp[1] for nvp in urlparse.parse_qsl(endpoint_args, keep_blank_values=True)}
 
-print client.create_topic(Name=topic_name, Attributes=attributes)
+print(client.create_topic(Name=topic_name, Attributes=attributes))
