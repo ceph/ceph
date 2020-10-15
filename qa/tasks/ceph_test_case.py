@@ -163,8 +163,7 @@ class CephTestCase(unittest.TestCase):
 
         self.wait_until_true(is_clear, timeout)
 
-    def wait_until_equal(self, get_fn, expect_val, timeout, reject_fn=None):
-        period = 5
+    def wait_until_equal(self, get_fn, expect_val, timeout, reject_fn=None, period=5):
         elapsed = 0
         while True:
             val = get_fn()
