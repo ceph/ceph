@@ -410,7 +410,6 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
   return cap;
 }
 
-
 void PG::queue_recovery()
 {
   if (!is_primary() || !is_peered()) {
@@ -425,31 +424,29 @@ void PG::queue_recovery()
   }
 }
 
-
-// RRR \todo move the 'after-recovery'-specific m_planned_scrub flags here.
 void PG::queue_scrub_after_recovery()
 {
   dout(10) << __func__ << dendl;
-
   ceph_assert(ceph_mutex_is_locked(_lock));
+
+  m_planned_scrub.must_deep_scrub = true;
+  m_planned_scrub.check_repair = true;
+  m_planned_scrub.must_scrub = true;
+
   if (is_scrubbing()) {
+    dout(10) << __func__ << ": scrubbing already" << dendl;
     return;
   }
-  // An interrupted recovery repair could leave this set. RRR ask someone to verify this is still true
-  state_clear(PG_STATE_REPAIR);
-
-  // I am not comfortable with having this check *after* the destructive set_op_parameters()
   if (scrub_queued) {
     dout(10) << __func__ << ": already queued" << dendl;
     return;
   }
 
   m_scrubber->set_op_parameters(m_planned_scrub);
-
-  dout(10) << __func__ << ": queueing" << dendl;
+  dout(15) << __func__ << ": queueing" << dendl;
 
   scrub_queued = true;
-  osd->queue_scrub_after_recovery(this, Scrub::scrub_prio_t::high_priority); // RRR verify the 'high_priority'
+  osd->queue_scrub_after_recovery(this, Scrub::scrub_prio_t::high_priority);
 }
 
 void PG::set_last_deep_scrub_stamp(utime_t t, pg_history_t& history, pg_stat_t& stats)
@@ -503,10 +500,6 @@ void PG::_finish_recovery(Context *c)
     if (scrub_after_recovery) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       scrub_after_recovery = false;
-      m_planned_scrub.must_deep_scrub = true;
-      m_planned_scrub.check_repair = true;
-      m_planned_scrub.must_scrub = true; // RRR added this line, as I don't see how the comment in PG::sched_scrub_initial() is true otherwise
-
       queue_scrub_after_recovery();
     }
   } else {
@@ -2158,17 +2151,16 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle& handle)
 /**
  *  a special version of PG::scrub(), which:
  *  - is initiated when some recovery operations are done, and
- *  - is not require to allocate loca/remote OSD scrub resources (RRR \todo ask if true)
+ *  - is not require to allocate local/remote OSD scrub resources (RRR \todo ask if true)
  */
-void PG::recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
+void PG::recovery_scrub(epoch_t epoch_queued, ThreadPool::TPHandle& handle)
 {
-  dout(7) << __func__ << " " << (is_primary() ? "<P>" : "<NP>") << pg_id << dendl;
+  dout(7) << "pg::" << __func__ << " qed at: " << epoch_queued << dendl;
 
   scrub_queued = false;
 
-  /// RRR \ask do we need this check when called after recovery?
-  if (pg_has_reset_since(queued)) {
-    dout(7) << " reset_since " << __func__ << " " << queued << dendl;
+  if (pg_has_reset_since(epoch_queued)) {
+    dout(7) << " reset_since " << __func__ << " " << epoch_queued << dendl;
     dout(7) << " reset_since " << __func__ << " "
 	    << recovery_state.get_last_peering_reset() << dendl;
     return;
@@ -2179,7 +2171,7 @@ void PG::recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
 
   // a new scrub
 
-  m_scrubber->reset_epoch(queued);
+  m_scrubber->reset_epoch(epoch_queued);
   m_scrubber->send_start_after_rec();
 }
 

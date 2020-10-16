@@ -347,7 +347,6 @@ bool PgScrubber::is_scrub_registered() const
 
 void PgScrubber::reg_next_scrub(requested_scrub_t& request_flags)
 {
-
   if (!is_primary()) {
     dout(10) << __func__ << ": not a primary!" << dendl;
     return;
@@ -731,9 +730,6 @@ bool PgScrubber::was_epoch_changed() const
   // for crimson we have m_pg->get_info().history.same_interval_since
   dout(10) << __func__ << " epoch_start: " << m_epoch_start
 	   << " from pg: " << m_pg->get_history().same_interval_since << dendl;
-
-  /// RRR \todo ask: why are we using the same_interval? it's OK for the primary, but
-  /// for the replica?
 
   return m_epoch_start != m_pg->get_history().same_interval_since;
 }
@@ -1599,12 +1595,7 @@ void PgScrubber::scrub_finish()
   // type-specific finish (can tally more errors)
   _scrub_finish();
 
-  // dout(20) << __func__ << ": af _scrub_finish(). flags: " << m_flags << dendl;
-  // dout(20) << __func__ << ": af state-deep-scrub: " << state_test(PG_STATE_DEEP_SCRUB)
-  //	  << dendl;
-
   bool has_error = scrub_process_inconsistent();
-  // dout(10) << __func__ << ": from scrub_p_inc: " << has_error << dendl;
 
   {
     stringstream oss;

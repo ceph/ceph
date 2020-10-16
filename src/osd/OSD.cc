@@ -7630,11 +7630,11 @@ void OSD::sched_scrub()
   OSDService::ScrubJob scrub_job;
   if (service.first_scrub_stamp(&scrub_job)) {
     do {
-      dout(30) << "sched_scrub examine (~" << scrub_job.pgid << "~) at " << scrub_job.sched_time << dendl;
+      dout(20) << "sched_scrub examine (~" << scrub_job.pgid << "~) at " << scrub_job.sched_time << dendl;
 
       if (scrub_job.sched_time > now) {
 	// save ourselves some effort
-	dout(30) << "sched_scrub " << scrub_job.pgid << " scheduled at " << scrub_job.sched_time
+	dout(20) << "sched_scrub " << scrub_job.pgid << " scheduled at " << scrub_job.sched_time
 		 << " > " << now << dendl;
 	break;
       }
@@ -7681,7 +7681,7 @@ void OSD::sched_scrub()
 	       << dendl;
       if (pg->sched_scrub()) {
 	pg->unlock();
-        dout(20) << __func__ << " scheduled a scrub!" << " (~" << scrub_job.pgid << "~)" << dendl;
+        dout(10) << __func__ << " scheduled a scrub!" << " (~" << scrub_job.pgid << "~)" << dendl;
 	break;
       }
       pg->unlock();
