@@ -57,7 +57,30 @@ public:
   void send_response() override;
   void execute() override;
   const char* name() const override {
-    return "get_stage_status";
+    return "sip_get_stage_status";
+  }
+};
+
+class RGWOp_SIP_GetMarkerInfo : public RGWRESTOp {
+
+  string provider;
+
+  RGWSI_SIP_Marker::stage_shard_info sinfo;
+
+public:
+  RGWOp_SIP_GetMarkerInfo(string&& _provider) : provider(std::move(_provider)) {}
+  ~RGWOp_SIP_GetMarkerInfo() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("sip", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->get_caps());
+  }
+  void send_response() override;
+  void execute() override;
+  const char* name() const override {
+    return "sip_get_marker_info";
   }
 };
 
