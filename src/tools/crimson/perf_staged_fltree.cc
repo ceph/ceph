@@ -8,43 +8,19 @@
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
-#include "crimson/os/seastore/segment_manager.h"
-#include "crimson/os/seastore/transaction_manager.h"
+#include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson::os::seastore::onode;
 namespace bpo = boost::program_options;
-namespace seastore = crimson::os::seastore;
-using seastore::lba_manager::create_lba_manager;
-using seastore::segment_manager::create_ephemeral;
-using seastore::segment_manager::DEFAULT_TEST_EPHEMERAL;
-using sc_config_t = seastore::SegmentCleaner::config_t;
 
 template <bool TRACK>
-class PerfTree {
+class PerfTree : public TMTestState {
  public:
-  PerfTree(bool is_dummy,
-           const std::vector<size_t>& str_sizes,
-           const std::vector<size_t>& onode_sizes,
-           const std::pair<int, int>& range2,
-           const std::pair<unsigned, unsigned>& range1,
-           const std::pair<unsigned, unsigned>& range0)
-    : is_dummy{is_dummy},
-      segment_manager(create_ephemeral(DEFAULT_TEST_EPHEMERAL)),
-      segment_cleaner(sc_config_t::default_from_segment_manager(*segment_manager)),
-      journal(*segment_manager),
-      cache(*segment_manager),
-      lba_manager(create_lba_manager(*segment_manager, cache)),
-      tm(*segment_manager, segment_cleaner, journal, cache, *lba_manager),
-      kvs(str_sizes, onode_sizes, range2, range1, range0),
-      tree{kvs, is_dummy ? NodeExtentManager::create_dummy(true)
-                         : NodeExtentManager::create_seastore(tm)} {
-    journal.set_segment_provider(&segment_cleaner);
-    segment_cleaner.set_extent_callback(&tm);
-  }
+  PerfTree(bool is_dummy) : is_dummy{is_dummy} {}
 
-  seastar::future<> run() {
-    return start().then([this] {
-      return tree.run().handle_error(
+  seastar::future<> run(KVPool& kvs) {
+    return start(kvs).then([this] {
+      return tree->run().handle_error(
         crimson::ct_error::all_same_way([] {
           ceph_abort("runtime error");
         })
@@ -55,20 +31,20 @@ class PerfTree {
   }
 
  private:
-  seastar::future<> start() {
+  seastar::future<> start(KVPool& kvs) {
     if (is_dummy) {
-      return tree.bootstrap().handle_error(
+      tree = std::make_unique<TreeBuilder<TRACK>>(
+          kvs,  NodeExtentManager::create_dummy(true));
+      return tree->bootstrap().handle_error(
         crimson::ct_error::all_same_way([] {
           ceph_abort("Unable to mkfs");
         })
       );
     } else {
-      return segment_manager->init().safe_then([this] {
-        return tm.mkfs();
-      }).safe_then([this] {
-        return tm.mount();
-      }).safe_then([this] {
-        return tree.bootstrap();
+      return tm_setup().then([this, &kvs] {
+        tree = std::make_unique<TreeBuilder<TRACK>>(
+            kvs,  NodeExtentManager::create_seastore(*tm));
+        return tree->bootstrap();
       }).handle_error(
         crimson::ct_error::all_same_way([] {
           ceph_abort("Unable to mkfs");
@@ -78,26 +54,16 @@ class PerfTree {
   }
 
   seastar::future<> stop() {
+    tree.reset();
     if (is_dummy) {
       return seastar::now();
     } else {
-      return tm.close().handle_error(
-        crimson::ct_error::all_same_way([] {
-          ceph_abort("Unable to close");
-        })
-      );
+      return tm_teardown();
     }
   }
 
   bool is_dummy;
-  std::unique_ptr<seastore::SegmentManager> segment_manager;
-  seastore::SegmentCleaner segment_cleaner;
-  seastore::Journal journal;
-  seastore::Cache cache;
-  seastore::LBAManagerRef lba_manager;
-  seastore::TransactionManager tm;
-  KVPool kvs;
-  TreeBuilder<TRACK> tree;
+  std::unique_ptr<TreeBuilder<TRACK>> tree;
 };
 
 template <bool TRACK>
@@ -121,9 +87,12 @@ seastar::future<> run(const bpo::variables_map& config) {
     auto range0 = config["range0"].as<std::vector<unsigned>>();
     ceph_assert(range0.size() == 2);
 
-    PerfTree<TRACK> perf{is_dummy, str_sizes, onode_sizes,
-      {range2[0], range2[1]}, {range1[0], range1[1]}, {range0[0], range0[1]}};
-    perf.run().get0();
+    KVPool kvs{str_sizes, onode_sizes,
+               {range2[0], range2[1]},
+               {range1[0], range1[1]},
+               {range0[0], range0[1]}};
+    PerfTree<TRACK> perf{is_dummy};
+    perf.run(kvs).get0();
   });
 }
 
