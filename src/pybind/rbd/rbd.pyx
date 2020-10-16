@@ -15,6 +15,7 @@ method.
 # Copyright 2015 Hector Martin <marcan@marcan.st>
 
 import cython
+import json
 import sys
 
 from cpython cimport PyObject, ref, exc
@@ -497,6 +498,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_parent(rbd_image_t image,
                        rbd_linked_image_spec_t *parent_image,
                        rbd_snap_spec_t *parent_snap)
+    int rbd_get_migration_source_spec(rbd_image_t image,
+                                      char* source_spec, size_t* max_len)
     int rbd_get_flags(rbd_image_t image, uint64_t *flags)
     int rbd_get_group(rbd_image_t image, rbd_group_info_t *group_info,
                       size_t group_info_size)
@@ -3671,6 +3674,30 @@ cdef class Image(object):
         rbd_linked_image_spec_cleanup(&parent_spec)
         rbd_snap_spec_cleanup(&snap_spec)
         return result
+
+    @requires_not_closed
+    def migration_source_spec(self):
+        """
+        Get migration source spec (if any)
+
+        :returns: dict
+        :raises: :class:`ImageNotFound` if the image is not migration destination
+        """
+        cdef:
+            size_t size = 512
+            char *spec = NULL
+        try:
+            while True:
+                spec = <char *>realloc_chk(spec, size)
+                with nogil:
+                    ret = rbd_get_migration_source_spec(self.image, spec, &size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error retrieving migration source')
+            return json.loads(decode_cstr(spec))
+        finally:
+            free(spec)
 
     @requires_not_closed
     def old_format(self):
