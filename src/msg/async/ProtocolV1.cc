@@ -2046,6 +2046,10 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   bufferlist auth_bl_copy = authorizer_buf;
   auto am = auth_meta;
   am->auth_method = connect_msg.authorizer_protocol;
+  if (!HAVE_FEATURE((uint64_t)connect_msg.features, CEPHX_V2)) {
+    // peer doesn't support it and we won't get here if we require it
+    am->skip_authorizer_challenge = true;
+  }
   connection->lock.unlock();
   ldout(cct,10) << __func__ << " authorizor_protocol "
 		<< connect_msg.authorizer_protocol
