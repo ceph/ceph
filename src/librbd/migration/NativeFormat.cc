@@ -9,6 +9,8 @@
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ImageDispatchSpec.h"
+#include "json_spirit/json_spirit.h"
+#include <sstream>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -17,6 +19,22 @@
 
 namespace librbd {
 namespace migration {
+
+template <typename I>
+std::string NativeFormat<I>::build_source_spec(
+    int64_t pool_id, const std::string& pool_namespace,
+    const std::string& image_name, const std::string& image_id) {
+  json_spirit::mObject source_spec;
+  source_spec["type"] = "native";
+  source_spec["pool_id"] = pool_id;
+  source_spec["pool_namespace"] = pool_namespace;
+  if (!image_id.empty()) {
+    source_spec["image_id"] = image_id;
+  } else {
+    source_spec["image_name"] = image_name;
+  }
+  return json_spirit::write(source_spec);
+}
 
 template <typename I>
 NativeFormat<I>::NativeFormat(
