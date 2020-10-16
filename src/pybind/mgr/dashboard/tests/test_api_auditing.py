@@ -4,8 +4,6 @@ from __future__ import absolute_import
 import json
 import re
 
-import cherrypy
-
 try:
     import mock
 except ImportError:
@@ -13,7 +11,6 @@ except ImportError:
 
 from .. import mgr
 from ..controllers import Controller, RESTController
-from ..tools import RequestLoggingTool
 from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
@@ -35,10 +32,7 @@ class FooResource(RESTController):
 
 class ApiAuditingTest(ControllerTestCase, KVStoreMockMixin):
 
-    def __init__(self, *args, **kwargs):
-        cherrypy.tools.request_logging = RequestLoggingTool()
-        cherrypy.config.update({'tools.request_logging.on': True})
-        super(ApiAuditingTest, self).__init__(*args, **kwargs)
+    _request_logging = True
 
     @classmethod
     def setup_server(cls):
