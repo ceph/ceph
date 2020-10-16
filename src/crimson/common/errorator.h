@@ -54,8 +54,10 @@ inline auto do_until(AsyncAction action) {
 
   while (true) {
     auto f = futurator::invoke(action);
-    if (!seastar::need_preempt() && f.available() && f.get()) {
-      return futurator::type::errorator_type::template make_ready_future<>();
+    if (f.failed()) {
+      return futurator::type::errorator_type::template make_exception_future2<>(
+        f.get_exception()
+      );
     }
     if (!f.available() || seastar::need_preempt()) {
       return std::move(f)._then(
@@ -66,11 +68,8 @@ inline auto do_until(AsyncAction action) {
           return ::crimson::do_until(
 	    std::move(action));
 	});
-    }
-    if (f.failed()) {
-      return futurator::type::errorator_type::template make_exception_future2<>(
-	f.get_exception()
-      );
+    } else if (bool stop_cond = f.get0()) {
+      return futurator::type::errorator_type::template make_ready_future<>();
     }
   }
 }

@@ -71,3 +71,10 @@ add_library(crimson-gtest STATIC
   gtest_seastar.cc)
 target_link_libraries(crimson-gtest crimson-common GTest::GTest)
 add_library(crimson::gtest ALIAS crimson-gtest)
+
+add_executable(unittest-seastar-errorator
+  test_errorator.cc)
+target_link_libraries(
+  unittest-seastar-errorator
+  crimson::gtest)
+
