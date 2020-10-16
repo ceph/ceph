@@ -21,6 +21,11 @@ namespace migration {
 template <typename ImageCtxT>
 class NativeFormat : public FormatInterface {
 public:
+  static std::string build_source_spec(int64_t pool_id,
+                                       const std::string& pool_namespace,
+                                       const std::string& image_name,
+                                       const std::string& image_id);
+
   static NativeFormat* create(ImageCtxT* image_ctx,
                               const MigrationInfo& migration_info) {
     return new NativeFormat(image_ctx, migration_info);
