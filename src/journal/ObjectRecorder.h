@@ -142,7 +142,7 @@ private:
 
   bufferlist m_prefetch_bl;
 
-  bool m_in_flight_callbacks = false;
+  uint32_t m_in_flight_callbacks = 0;
   Cond m_in_flight_callbacks_cond;
   uint64_t m_in_flight_bytes = 0;
 
