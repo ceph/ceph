@@ -9,23 +9,16 @@
 #include <vector>
 
 #include "crimson/common/log.h"
-#include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_layout.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
-#include "crimson/os/seastore/segment_manager.h"
-#include "crimson/os/seastore/transaction_manager.h"
 
 #include "test/crimson/gtest_seastar.h"
+#include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson::os::seastore::onode;
-namespace seastore = crimson::os::seastore;
-using seastore::lba_manager::create_lba_manager;
-using seastore::segment_manager::create_ephemeral;
-using seastore::segment_manager::DEFAULT_TEST_EPHEMERAL;
-using sc_config_t = seastore::SegmentCleaner::config_t;
 
 namespace {
   constexpr bool IS_DUMMY_SYNC = false;
@@ -1153,64 +1146,43 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
   });
 }
 
-struct d_seastore_tree_test_t : public seastar_test_suite_t {
-  std::unique_ptr<seastore::SegmentManager> segment_manager;
-  seastore::SegmentCleaner segment_cleaner;
-  seastore::Journal journal;
-  seastore::Cache cache;
-  seastore::LBAManagerRef lba_manager;
-  seastore::TransactionManager tm;
+struct d_seastore_tree_test_t :
+    public seastar_test_suite_t, TMTestState {
   KVPool kvs;
-  TreeBuilder<true> tree;
+  std::unique_ptr<TreeBuilder<true>> tree;
 
   d_seastore_tree_test_t()
-    : segment_manager(create_ephemeral(DEFAULT_TEST_EPHEMERAL)),
-      segment_cleaner(sc_config_t::default_from_segment_manager(*segment_manager)),
-      journal(*segment_manager),
-      cache(*segment_manager),
-      lba_manager(create_lba_manager(*segment_manager, cache)),
-      tm(*segment_manager, segment_cleaner, journal, cache, *lba_manager),
-      kvs({8, 11, 64, 256, 301, 320},
+    : kvs{{8, 11, 64, 256, 301, 320},
           {8, 16, 128, 512, 576, 640},
-          {0, 32}, {0, 10}, {0, 4}),
-      tree{kvs,
+          {0, 32}, {0, 10}, {0, 4}} {}
+
+  seastar::future<> set_up_fut() override final {
+    return tm_setup().then([this] {
+      tree = std::make_unique<TreeBuilder<true>>(kvs,
 #if 0
         NodeExtentManager::create_dummy(IS_DUMMY_SYNC)
 #else
-        NodeExtentManager::create_seastore(tm)
+        NodeExtentManager::create_seastore(*tm)
 #endif
-      } {
-    journal.set_segment_provider(&segment_cleaner);
-    segment_cleaner.set_extent_callback(&tm);
-  }
-
-  seastar::future<> set_up_fut() override final {
-    return segment_manager->init().safe_then([this] {
-      return tm.mkfs();
-    }).safe_then([this] {
-      return tm.mount();
-    }).safe_then([this] {
-      return tree.bootstrap();
+      );
+      return tree->bootstrap();
     }).handle_error(
       crimson::ct_error::all_same_way([] {
-        ASSERT_FALSE("Unable to mkfs");
+        ASSERT_FALSE("Unable to initiate tree");
       })
     );
   }
 
-  seastar::future<> tear_down_fut() final {
-    return tm.close().handle_error(
-      crimson::ct_error::all_same_way([] {
-        ASSERT_FALSE("Unable to close");
-      })
-    );
+  seastar::future<> tear_down_fut() override final {
+    tree.reset();
+    return tm_teardown();
   }
 };
 
 TEST_F(d_seastore_tree_test_t, 6_random_insert_leaf_node)
 {
   run([this] {
-    return tree.run().handle_error(
+    return tree->run().handle_error(
       crimson::ct_error::all_same_way([] {
         ASSERT_FALSE("Test failed");
       })
