@@ -33,7 +33,7 @@ class Ganesha(object):
             raise NFSException("Ganesha config location is not configured. "
                                "Please set the GANESHA_RADOS_POOL_NAMESPACE "
                                "setting.")
-        location_list = [l.strip() for l in location_list_str.split(",")]
+        location_list = [loc.strip() for loc in location_list_str.split(",")]
         for location in location_list:
             cluster = None
             pool = None
