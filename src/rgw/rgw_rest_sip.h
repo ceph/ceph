@@ -105,6 +105,27 @@ public:
   }
 };
 
+class RGWOp_SIP_RemoveMarkerInfo : public RGWRESTOp {
+
+  string provider;
+
+public:
+  RGWOp_SIP_RemoveMarkerInfo(string&& _provider) : provider(std::move(_provider)) {}
+  ~RGWOp_SIP_RemoveMarkerInfo() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("sip", RGW_CAP_WRITE);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->get_caps());
+  }
+  void send_response() override;
+  void execute() override;
+  const char* name() const override {
+    return "sip_remove_marker_info";
+  }
+};
+
 class RGWOp_SIP_List : public RGWRESTOp {
   /* result */
   std::vector<std::string> providers;

@@ -225,6 +225,63 @@ void RGWOp_SIP_SetMarkerInfo::send_response() {
     return;
 }
 
+void RGWOp_SIP_RemoveMarkerInfo::execute() {
+  auto opt_instance = s->info.args.get_std_optional("instance");
+
+  auto sip = store->ctl()->si.mgr->find_sip(provider, opt_instance);
+  if (!sip) {
+    ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
+    op_ret = -ENOENT;
+    return;
+  }
+
+  auto opt_stage_id = s->info.args.get_std_optional("stage-id");
+  if (!opt_stage_id) {
+    ldout(s->cct,  5) << "ERROR: missing 'stage-id' param" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+  auto& sid = *opt_stage_id;
+
+  int shard_id;
+  op_ret = s->info.args.get_int("shard-id", &shard_id, 0);
+  if (op_ret < 0) {
+    ldout(s->cct, 5) << "ERROR: invalid 'shard-id' param: " << op_ret << dendl;
+    return;
+  }
+
+  auto opt_target_id = s->info.args.get_std_optional("target-id");
+  if (!opt_target_id) {
+    ldout(s->cct,  5) << "ERROR: missing 'target-id' param" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  auto marker_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker->get_handler(sip);
+  if (!marker_handler) {
+    ldout(s->cct, 0) << "ERROR: can't get sip marker handler" << dendl;
+    op_ret = -EIO;
+    return;
+  }
+
+  RGWSI_SIP_Marker::Handler::modify_result result;
+
+  op_ret = marker_handler->remove_target(*opt_target_id, sid, shard_id, &result);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to remove target marker info: " << cpp_strerror(-op_ret) << dendl;
+    return;
+  }
+}
+
+void RGWOp_SIP_RemoveMarkerInfo::send_response() {
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (op_ret < 0)
+    return;
+}
+
 void RGWOp_SIP_List::execute() {
   providers = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->list_sip();
 }
