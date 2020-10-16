@@ -234,6 +234,21 @@ void ObjectDispatcher<I>::extent_overwritten(
 }
 
 template <typename I>
+void ObjectDispatcher<I>::prepare_copyup(
+    uint64_t object_no,
+    SnapshotSparseBufferlist* snapshot_sparse_bufferlist) {
+  auto cct = this->m_image_ctx->cct;
+  ldout(cct, 20) << "object_no=" << object_no << dendl;
+
+  std::shared_lock locker{this->m_lock};
+  for (auto it : this->m_dispatches) {
+    auto& object_dispatch_meta = it.second;
+    auto object_dispatch = object_dispatch_meta.dispatch;
+    object_dispatch->prepare_copyup(object_no, snapshot_sparse_bufferlist);
+  }
+}
+
+template <typename I>
 bool ObjectDispatcher<I>::send_dispatch(
     ObjectDispatchInterface* object_dispatch,
     ObjectDispatchSpec* object_dispatch_spec) {

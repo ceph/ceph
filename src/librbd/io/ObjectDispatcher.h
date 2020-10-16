@@ -34,6 +34,10 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       uint64_t journal_tid, uint64_t new_journal_tid) override;
 
+  void prepare_copyup(
+      uint64_t object_no,
+      SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override;
+
 protected:
   bool send_dispatch(ObjectDispatchInterface* object_dispatch,
                      ObjectDispatchSpec* object_dispatch_spec) override;

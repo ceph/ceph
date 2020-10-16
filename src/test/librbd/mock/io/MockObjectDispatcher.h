@@ -32,6 +32,8 @@ public:
   MOCK_METHOD5(extent_overwritten, void(uint64_t, uint64_t, uint64_t, uint64_t,
                                         uint64_t));
 
+  MOCK_METHOD2(prepare_copyup, void(uint64_t, SnapshotSparseBufferlist*));
+
   MOCK_METHOD1(send, void(ObjectDispatchSpec*));
 };
 

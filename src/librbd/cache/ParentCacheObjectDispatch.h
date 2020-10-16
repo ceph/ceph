@@ -118,6 +118,11 @@ public:
       uint64_t journal_tid, uint64_t new_journal_tid) {
   }
 
+  void prepare_copyup(
+      uint64_t object_no,
+      io::SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override {
+  }
+
   ImageCtxT* get_image_ctx() {
     return m_image_ctx;
   }
