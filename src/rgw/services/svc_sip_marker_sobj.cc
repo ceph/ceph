@@ -72,12 +72,9 @@ public:
   }
 
 
-  int set_marker(const string& target_id,
-                 const RGWSI_SIP_Marker::stage_id_t& sid,
+  int set_marker(const RGWSI_SIP_Marker::stage_id_t& sid,
                  int shard_id,
-                 const std::string& marker,
-                 const ceph::real_time& mtime,
-                 bool init_target,
+                 const RGWSI_SIP_Marker::SetParams& params,
                  RGWSI_SIP_Marker::Handler::modify_result *result) override {
 
 #define NUM_RACE_RETRY 10
@@ -85,6 +82,9 @@ public:
     stage_shard_info sinfo;
 
     int i;
+
+    auto& target_id = params.target_id;
+    auto& marker = params.marker;
 
     for (i = 0; i < NUM_RACE_RETRY; ++i) {
       RGWObjVersionTracker objv_tracker;
@@ -98,7 +98,7 @@ public:
 
       auto citer = sinfo.targets.find(target_id);
       if (citer == sinfo.targets.end()) {
-        if (!init_target) {
+        if (!params.init_target) {
           ldout(cct, 20) << __func__ << "(): couldn't find target (target_id=" << target_id << ")" << dendl;
           return -ENOENT;
         }
@@ -118,7 +118,7 @@ public:
       }
 
       marker_info->pos = marker;
-      marker_info->mtime = mtime;
+      marker_info->mtime = params.mtime;
 
       if (sinfo.targets.size() > 1) {
         string min = std::move(marker);

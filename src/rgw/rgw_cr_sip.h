@@ -1,6 +1,8 @@
 #include "rgw_coroutine.h"
 #include "rgw_sync_info.h"
 
+#include "services/svc_sip_marker.h"
+
 #pragma once
 
 class SIProviderCRMgr
@@ -40,6 +42,8 @@ public:
   virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
   virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
   virtual RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) = 0;
+  virtual RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+                                         const RGWSI_SIP_Marker::SetParams& params) = 0;
 
   virtual RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) {
     return new GetNextStageCR(this, sid, next_sid);
@@ -50,14 +54,16 @@ class RGWAsyncRadosProcessor;
 
 class SIProviderCRMgr_Local : public SIProviderCRMgr
 {
+  struct {
+    RGWSI_SIP_Marker *sip_marker;
+  } svc;
+
   RGWAsyncRadosProcessor *async_rados;
   SIProviderRef provider;
 public:
-  SIProviderCRMgr_Local(CephContext *_cct,
+  SIProviderCRMgr_Local(RGWSI_SIP_Marker *_sip_marker_svc,
                         RGWAsyncRadosProcessor *_async_rados,
-                        SIProviderRef& _provider) : SIProviderCRMgr(_cct),
-                                                    async_rados(_async_rados),
-                                                    provider(_provider) {}
+                        SIProviderRef& _provider);
 
   RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
   RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
@@ -66,6 +72,8 @@ public:
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
+  RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+                                 const RGWSI_SIP_Marker::SetParams& params) override;
 };
 
 class RGWRESTConn;
@@ -107,6 +115,8 @@ public:
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
+  RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+                                 const RGWSI_SIP_Marker::SetParams& params) override;
 
   SIProvider::TypeHandler *get_type_handler();
 };

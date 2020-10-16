@@ -10716,7 +10716,11 @@ next:
 
    if (set_cmd) {
      auto init_flag = opt_init_target.value_or(false);
-     r = marker_handler->set_marker(*opt_target_id, stage_id, shard_id, *opt_marker, real_clock::now(), init_flag, &result);
+     auto params = RGWSI_SIP_Marker::SetParams{*opt_target_id,
+                                               *opt_marker,
+                                               real_clock::now(),
+                                               init_flag};
+     r = marker_handler->set_marker(stage_id, shard_id, params, &result);
      if (r < 0) {
        cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;
        return -r;

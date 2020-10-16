@@ -65,6 +65,16 @@ public:
     void dump(Formatter *f) const;
   };
 
+  struct SetParams {
+    std::string target_id;
+    std::string marker;
+    ceph::real_time mtime;
+    bool init_target{false};
+
+    void dump(Formatter *f) const;
+    void decode_json(JSONObj *obj);
+  };
+
   class Handler {
   public:
     virtual ~Handler() {}
@@ -76,12 +86,9 @@ public:
       void dump(Formatter *f) const;
     };
 
-    virtual int set_marker(const string& target_id,
-                           const stage_id_t& sid,
+    virtual int set_marker(const stage_id_t& sid,
                            int shard_id,
-                           const std::string& marker,
-                           const ceph::real_time& mtime,
-                           bool init_target,
+                           const RGWSI_SIP_Marker::SetParams& params,
                            modify_result *result) = 0;
 
     virtual int remove_target(const string& target_id,

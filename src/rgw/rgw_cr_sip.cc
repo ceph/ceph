@@ -211,6 +211,14 @@ public:
 #endif
 
 
+SIProviderCRMgr_Local::SIProviderCRMgr_Local(RGWSI_SIP_Marker *_sip_marker_svc,
+                                             RGWAsyncRadosProcessor *_async_rados,
+                                             SIProviderRef& _provider) : SIProviderCRMgr(_sip_marker_svc->ctx()),
+                                                                         async_rados(_async_rados),
+                                                                         provider(_provider) {
+  svc.sip_marker = _sip_marker_svc;
+}
+
 RGWCoroutine *SIProviderCRMgr_Local::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
 {
   auto pvd = provider; /* capture another reference */
@@ -286,6 +294,30 @@ RGWCoroutine *SIProviderCRMgr_Local::trim_cr(const SIProvider::stage_id_t& sid, 
                                async_rados,
                                [=]() {
                                  return pvd->trim(sid, shard_id, marker);
+                               });
+}
+
+RGWCoroutine *SIProviderCRMgr_Local::update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+                                                      const RGWSI_SIP_Marker::SetParams& params)
+{
+  auto pvd = provider; /* capture another reference */
+  return new RGWAsyncLambdaCR<void>(cct,
+                               async_rados,
+                               [=]() {
+                                 auto marker_handler = svc.sip_marker->get_handler(provider);
+                                 if (!marker_handler) {
+                                   ldout(cct, 0) << "ERROR: can't get sip marker handler" << dendl;
+                                   return -EIO;
+                                 }
+
+                                 RGWSI_SIP_Marker::Handler::modify_result result;
+
+                                 int r = marker_handler->set_marker(sid, shard_id, params, &result);
+                                 if (r < 0) {
+                                   ldout(cct, 0) << "ERROR: failed to set target marker info: r=" << r << dendl;
+                                   return r;
+                                 }
+                                 return 0;
                                });
 }
 
@@ -610,6 +642,59 @@ struct SIProviderRESTCRs {
       return 0;
     }
   };
+
+  class UpdateMarkerCR : public RGWCoroutine {
+    SIProviderCRMgr_REST *mgr;
+    SIProvider::stage_id_t sid;
+    int shard_id;
+
+    RGWSI_SIP_Marker::SetParams params;
+
+    string path;
+
+  public:
+    UpdateMarkerCR(SIProviderCRMgr_REST *_mgr,
+           const SIProvider::stage_id_t& _sid,
+           int _shard_id,
+           const RGWSI_SIP_Marker::SetParams& _params) : RGWCoroutine(_mgr->ctx()),
+                                                         mgr(_mgr),
+                                                         sid(_sid),
+                                                         shard_id(_shard_id),
+                                                         params(_params)  {
+      path = mgr->path_prefix;
+    }
+
+    int operate() override {
+      reenter(this) {
+        yield {
+          const char *instance_key = (mgr->instance ? "instance" : "");
+          char shard_id_buf[16];
+          snprintf(shard_id_buf, sizeof(shard_id_buf), "%d", shard_id);
+          const char *instance_val = (mgr->instance ? mgr->instance->c_str() : "");
+          rgw_http_param_pair pairs[] = { { "marker-info", nullptr },
+                                          { "provider" , mgr->remote_provider_name.c_str() },
+					  { instance_key , instance_val },
+					  { "stage-id" , sid.c_str() },
+					  { "shard-id" , shard_id_buf },
+	                                  { nullptr, nullptr } };
+          call(new RGWPutRESTResourceCR<RGWSI_SIP_Marker::SetParams, int>(mgr->ctx(),
+                                                                     mgr->conn,
+                                                                     mgr->http_manager,
+                                                                     path,
+                                                                     pairs,
+                                                                     params,
+                                                                     nullptr));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        return set_cr_done();
+      }
+
+      return 0;
+    }
+  };
 };
 
 RGWCoroutine *SIProviderCRMgr_REST::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
@@ -648,6 +733,12 @@ RGWCoroutine *SIProviderCRMgr_REST::get_cur_state_cr(const SIProvider::stage_id_
 RGWCoroutine *SIProviderCRMgr_REST::trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const string& marker)
 {
   return new SIProviderRESTCRs::TrimCR(this, sid, shard_id, marker);
+}
+
+RGWCoroutine *SIProviderCRMgr_REST::update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+                                                     const RGWSI_SIP_Marker::SetParams& params)
+{
+  return new SIProviderRESTCRs::UpdateMarkerCR(this, sid, shard_id, params);
 }
 
 SIProvider::TypeHandler *SIProviderCRMgr_REST::get_type_handler()

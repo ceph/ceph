@@ -22,3 +22,20 @@ void RGWSI_SIP_Marker::Handler::modify_result::dump(Formatter *f) const
   encode_json("modified", modified, f);
   encode_json("min_pos", min_pos, f);
 }
+
+void RGWSI_SIP_Marker::SetParams::dump(Formatter *f) const
+{
+  encode_json("target_id", target_id, f);
+  encode_json("marker", marker, f);
+  encode_json("mtime", mtime, f);
+  encode_json("init", init_target, f);
+}
+
+void RGWSI_SIP_Marker::SetParams::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("target_id", target_id, obj);
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("mtime", mtime, obj);
+  JSONDecoder::decode_json("init", init_target, obj);
+}
+
