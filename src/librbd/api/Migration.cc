@@ -34,6 +34,7 @@
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/image/Types.h"
 #include "librbd/internal.h"
+#include "librbd/migration/NativeFormat.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 
@@ -656,6 +657,29 @@ int Migration<I>::status(librados::IoCtx& io_ctx,
 
   if (r < 0) {
     return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Migration<I>::get_source_spec(I* image_ctx, std::string* source_spec) {
+  auto cct = image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  if (image_ctx->migration_info.empty()) {
+    return -ENOENT;
+  }
+
+  if (!image_ctx->migration_info.source_spec.empty()) {
+    *source_spec = image_ctx->migration_info.source_spec;
+  } else {
+    // legacy migration source
+    *source_spec = migration::NativeFormat<I>::build_source_spec(
+      image_ctx->migration_info.pool_id,
+      image_ctx->migration_info.pool_namespace,
+      image_ctx->migration_info.image_name,
+      image_ctx->migration_info.image_id);
   }
 
   return 0;

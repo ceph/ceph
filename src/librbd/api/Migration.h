@@ -32,6 +32,8 @@ public:
   static int status(librados::IoCtx& io_ctx, const std::string &image_name,
                     image_migration_status_t *status);
 
+  static int get_source_spec(ImageCtxT* image_ctx, std::string* source_spec);
+
 private:
   CephContext* m_cct;
   ImageCtxT *m_src_image_ctx;

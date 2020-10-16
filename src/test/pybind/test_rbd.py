@@ -2521,6 +2521,10 @@ class TestMigration(object):
         eq(image_name, status['dest_image_name'])
         eq(RBD_IMAGE_MIGRATION_STATE_PREPARED, status['state'])
 
+        with Image(ioctx, image_name) as image:
+            source_spec = image.migration_source_spec()
+            eq("native", source_spec["type"])
+
         RBD().migration_execute(ioctx, image_name)
         RBD().migration_commit(ioctx, image_name)
         remove_image()

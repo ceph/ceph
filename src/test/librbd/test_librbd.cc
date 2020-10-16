@@ -20,6 +20,7 @@
 #include "include/event_type.h"
 #include "include/err.h"
 #include "common/ceph_mutex.h"
+#include "json_spirit/json_spirit.h"
 
 #include "gtest/gtest.h"
 
@@ -7370,6 +7371,16 @@ TEST_F(TestLibRBD, Migration) {
   ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
   rbd_migration_status_cleanup(&status);
 
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  char source_spec[2048];
+  size_t source_spec_length = sizeof(source_spec);
+  ASSERT_EQ(0, rbd_get_migration_source_spec(image, source_spec,
+                                             &source_spec_length));
+  json_spirit::mValue json_source_spec;
+  json_spirit::read(source_spec, json_source_spec);
+  EXPECT_EQ(0, rbd_close(image));
+
   ASSERT_EQ(-EBUSY, rbd_remove(ioctx, name.c_str()));
   ASSERT_EQ(-EBUSY, rbd_trash_move(ioctx, name.c_str(), 0));
 
@@ -7392,7 +7403,6 @@ TEST_F(TestLibRBD, Migration) {
 
   ASSERT_EQ(0, rbd_migration_abort(ioctx, name.c_str()));
 
-  rbd_image_t image;
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
   EXPECT_EQ(0, rbd_close(image));
 }
@@ -7433,6 +7443,22 @@ TEST_F(TestLibRBD, MigrationPP) {
   ASSERT_NE(status.dest_image_id, "");
   ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
 
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+  std::string source_spec;
+  ASSERT_EQ(0, image.get_migration_source_spec(&source_spec));
+  json_spirit::mValue json_source_spec;
+  json_spirit::read(source_spec, json_source_spec);
+  json_spirit::mObject json_source_spec_obj = json_source_spec.get_obj();
+  ASSERT_EQ(ioctx.get_id(), json_source_spec_obj["pool_id"].get_int64());
+  ASSERT_EQ("", json_source_spec_obj["pool_namespace"].get_str());
+  if (old_format) {
+    ASSERT_EQ(1, json_source_spec_obj.count("image_name"));
+  } else {
+    ASSERT_EQ(1, json_source_spec_obj.count("image_id"));
+  }
+  ASSERT_EQ(0, image.close());
+
   ASSERT_EQ(-EBUSY, rbd.remove(ioctx, name.c_str()));
   ASSERT_EQ(-EBUSY, rbd.trash_move(ioctx, name.c_str(), 0));
 
@@ -7454,7 +7480,6 @@ TEST_F(TestLibRBD, MigrationPP) {
 
   ASSERT_EQ(0, rbd.migration_abort(ioctx, name.c_str()));
 
-  librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 }
 
