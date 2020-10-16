@@ -99,11 +99,11 @@ struct C_AssembleSnapshotDeltas : public C_AioRequest {
         auto& intervals = (*image_snapshot_delta)[key];
         auto& assembled_intervals = (*assembled_image_snapshot_delta)[key];
         for (auto [image_offset, image_length] : image_extents) {
-          SnapshotExtent snapshot_extent{object_extent.get_val().state,
-                                         image_length};
-          intervals.insert(image_offset, image_length, snapshot_extent);
+          SparseExtent sparse_extent{object_extent.get_val().state,
+                                     image_length};
+          intervals.insert(image_offset, image_length, sparse_extent);
           assembled_intervals.insert(image_offset, image_length,
-                                     snapshot_extent);
+                                     sparse_extent);
         }
       }
     }

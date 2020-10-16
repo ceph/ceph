@@ -502,15 +502,15 @@ TEST_F(TestMockIoImageRequest, ListSnaps) {
 
   SnapshotDelta object_snapshot_delta;
   object_snapshot_delta[{5,6}].insert(
-    0, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   object_snapshot_delta[{5,5}].insert(
-    4096, 4096, {SNAPSHOT_EXTENT_STATE_ZEROED, 4096});
+    4096, 4096, {SPARSE_EXTENT_STATE_ZEROED, 4096});
   expect_object_list_snaps_request(mock_image_ctx, 0, object_snapshot_delta, 0);
   object_snapshot_delta = {};
   object_snapshot_delta[{5,6}].insert(
-    1024, 3072, {SNAPSHOT_EXTENT_STATE_DATA, 3072});
+    1024, 3072, {SPARSE_EXTENT_STATE_DATA, 3072});
   object_snapshot_delta[{5,5}].insert(
-    2048, 2048, {SNAPSHOT_EXTENT_STATE_ZEROED, 2048});
+    2048, 2048, {SPARSE_EXTENT_STATE_ZEROED, 2048});
   expect_object_list_snaps_request(mock_image_ctx, 1, object_snapshot_delta, 0);
 
   SnapshotDelta snapshot_delta;
@@ -528,11 +528,11 @@ TEST_F(TestMockIoImageRequest, ListSnaps) {
 
   SnapshotDelta expected_snapshot_delta;
   expected_snapshot_delta[{5,6}].insert(
-    0, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+    0, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
   expected_snapshot_delta[{5,6}].insert(
-    5120, 3072, {SNAPSHOT_EXTENT_STATE_DATA, 3072});
+    5120, 3072, {SPARSE_EXTENT_STATE_DATA, 3072});
   expected_snapshot_delta[{5,5}].insert(
-    6144, 6144, {SNAPSHOT_EXTENT_STATE_ZEROED, 6144});
+    6144, 6144, {SPARSE_EXTENT_STATE_ZEROED, 6144});
   ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 

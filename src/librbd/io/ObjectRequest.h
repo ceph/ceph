@@ -199,6 +199,10 @@ protected:
     return r;
   }
 
+  virtual Extents get_copyup_overwrite_extents() const {
+    return {{m_object_off, m_object_len}};
+  }
+
 private:
   /**
    * @verbatim
@@ -304,7 +308,6 @@ public:
         } else {
           m_discard_action = DISCARD_ACTION_TRUNCATE;
         }
-        this->m_object_len = 0;
       } else {
         m_discard_action = DISCARD_ACTION_REMOVE;
       }
@@ -425,6 +428,10 @@ protected:
   void add_write_ops(neorados::WriteOp *wr) override;
 
   int filter_write_result(int r) const override;
+
+  Extents get_copyup_overwrite_extents() const override {
+    return {};
+  }
 
 private:
   ceph::bufferlist m_cmp_bl;
