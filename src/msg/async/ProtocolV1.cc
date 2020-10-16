@@ -1996,7 +1996,8 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   // require signatures for cephx?
   if (connect_msg.authorizer_protocol == CEPH_AUTH_CEPHX) {
     if (connection->peer_type == CEPH_ENTITY_TYPE_OSD ||
-        connection->peer_type == CEPH_ENTITY_TYPE_MDS) {
+        connection->peer_type == CEPH_ENTITY_TYPE_MDS ||
+        connection->peer_type == CEPH_ENTITY_TYPE_MGR) {
       if (cct->_conf->cephx_require_signatures ||
           cct->_conf->cephx_cluster_require_signatures) {
         ldout(cct, 10)
