@@ -62,16 +62,15 @@ with open(os.environ['HOME'] + '/.github_token', 'r') as myfile:
 # get prs
 baseurl = urljoin('https://api.github.com', (
                       'repos/{repo}/issues?labels={label}'
-                      '&access_token={token}'
                       '&sort=created'
                       '&direction=asc'
                     )
                  )
 url = baseurl.format(
     label=label,
-    repo=repo,
-    token=token)
-r = requests.get(url)
+    repo=repo)
+r = requests.get(url,
+                 headers={'Authorization': 'token %s' % token})
 assert(r.ok)
 j = json.loads(r.text or r.content)
 print("--- found %d issues tagged with %s" % (len(j), label))
@@ -81,7 +80,8 @@ prtext = []
 for issue in j:
     if 'pull_request' not in issue:
         continue
-    r = requests.get(issue['pull_request']['url'] + '?access_token=' + token)
+    r = requests.get(issue['pull_request']['url'],
+                     headers={'Authorization': 'token %s' % token})
     pr = json.loads(r.text or r.content)
     prs.append(pr)
     prtext.append(pr['html_url'] + ' - ' + pr['title'])
