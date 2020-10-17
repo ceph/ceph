@@ -590,6 +590,10 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
 
       bufferlist authorizer_reply;
       auth_meta->auth_method = h.connect.authorizer_protocol;
+      if (!HAVE_FEATURE((uint64_t)h.connect.features, CEPHX_V2)) {
+        // peer doesn't support it and we won't get here if we require it
+        auth_meta->skip_authorizer_challenge = true;
+      }
       auto more = static_cast<bool>(auth_meta->authorizer_challenge);
       ceph_assert(messenger.get_auth_server());
       int r = messenger.get_auth_server()->handle_auth_request(
