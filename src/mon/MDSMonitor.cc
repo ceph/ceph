@@ -419,6 +419,10 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   dout(10) << __func__ << ": GID exists in map: " << gid << dendl;
   info = fsmap.get_info_gid(gid);
 
+  if (state == MDSMap::STATE_DNE) {
+    return false;
+  }
+
   // old seq?
   if (info.state_seq > seq) {
     dout(7) << "mds_beacon " << *m << " has old seq, ignoring" << dendl;
