@@ -486,7 +486,7 @@ class MDCache {
   void cancel_ambiguous_import(CDir *);
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start(MDSContext *resolve_done_);
-  void send_resolves();
+  void send_resolves(bool reset_gather);
   void maybe_send_pending_resolves() {
     if (resolves_pending)
       send_subtree_resolves();

@@ -2740,8 +2740,12 @@ void MDCache::resolve_start(MDSContext *resolve_done_)
   resolve_snapclient_commits = mds->snapclient->get_journaled_tids();
 }
 
-void MDCache::send_resolves()
+void MDCache::send_resolves(bool reset_gather)
 {
+  if (reset_gather){
+    resolve_gather = recovery_set;
+  }
+
   send_peer_resolves();
 
   if (!resolve_done) {
@@ -4037,6 +4041,8 @@ void MDCache::rejoin_send_rejoins()
     rejoins_pending = true;
     return;
   }
+  rejoin_gather = recovery_set;
+
   if (!resolve_gather.empty()) {
     dout(7) << "rejoin_send_rejoins still waiting for resolves ("
 	    << resolve_gather << ")" << dendl;

@@ -1945,6 +1945,7 @@ void MDSRank::reconnect_done()
 void MDSRank::rejoin_joint_start()
 {
   dout(1) << "rejoin_joint_start" << dendl;
+  calc_recovery_set();
   mdcache->rejoin_send_rejoins();
 }
 void MDSRank::rejoin_start()
@@ -2367,7 +2368,11 @@ void MDSRankDispatcher::handle_mds_map(
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
       dout(10) << " resolve set is " << resolve << dendl;
       calc_recovery_set();
-      mdcache->send_resolves();
+      if (state == MDSMap::STATE_RESOLVE) {
+        mdcache->send_resolves(true);
+      } else {
+        mdcache->send_resolves(false);
+      }
     }
   }
 
