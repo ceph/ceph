@@ -16,19 +16,19 @@ class BlockCrypto : public CryptoInterface {
 
 public:
     BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
-                uint32_t block_size);
+                uint64_t block_size);
 
     int encrypt(ceph::bufferlist* data, uint64_t image_offset) override;
     int decrypt(ceph::bufferlist* data, uint64_t image_offset) override;
 
-    uint32_t get_block_size() const {
+    uint64_t get_block_size() const override {
       return m_block_size;
     }
 
 private:
     CephContext* m_cct;
     DataCryptor<T>* m_data_cryptor;
-    uint32_t m_block_size;
+    uint64_t m_block_size;
     uint32_t m_iv_size;
 
     int crypt(ceph::bufferlist* data, uint64_t image_offset, CipherMode mode);
