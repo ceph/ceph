@@ -1299,7 +1299,8 @@ int RGWOp::init_quota()
   }
 
   /* only interested in object related ops */
-  if (rgw::sal::RGWObject::empty(s->object.get())) {
+  if (rgw::sal::RGWBucket::empty(s->bucket.get())
+      || rgw::sal::RGWObject::empty(s->object.get())) {
     return 0;
   }
 
