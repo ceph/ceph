@@ -21,7 +21,8 @@ public:
     return new CryptoObjectDispatch(image_ctx, nullptr);
   }
 
-  CryptoObjectDispatch(ImageCtxT* image_ctx, CryptoInterface *crypto);
+  CryptoObjectDispatch(ImageCtxT* image_ctx,
+                       ceph::ref_t<CryptoInterface> crypto);
 
   io::ObjectDispatchLayer get_dispatch_layer() const override {
     return io::OBJECT_DISPATCH_LAYER_CRYPTO;
@@ -105,7 +106,7 @@ public:
 private:
 
   ImageCtxT* m_image_ctx;
-  CryptoInterface *m_crypto;
+  ceph::ref_t<CryptoInterface> m_crypto;
 
 };
 
