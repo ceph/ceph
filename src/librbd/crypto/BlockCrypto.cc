@@ -12,9 +12,10 @@ namespace crypto {
 
 template <typename T>
 BlockCrypto<T>::BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
-                            uint32_t block_size)
+                            uint64_t block_size)
      : m_cct(cct), m_data_cryptor(data_cryptor), m_block_size(block_size),
        m_iv_size(data_cryptor->get_iv_size()) {
+  ceph_assert(isp2(block_size));
   ceph_assert((block_size % data_cryptor->get_block_size()) == 0);
 }
 
