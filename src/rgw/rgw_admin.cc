@@ -8710,7 +8710,7 @@ next:
 					log_marker, &truncated);
       }
       if (ret < 0) {
-        cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: datalog_svc->list_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
