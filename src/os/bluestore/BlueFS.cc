@@ -2874,6 +2874,18 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
              << " and padding block with 0x" << (super.block_size - tail)
              << std::dec << dendl;
     h->tail_block.substr_of(bl, bl.length() - tail, tail);
+    // Because class page_aligned_appender, bl.append_zero will create a new ptr.
+    // This make rebuild for direct-io. We split ptr into two parts which make only rebuild size < 4k.
+    if (bl.get_num_buffers() == 1) {
+      bufferptr buf = bl.buffers().front();
+      if (length > super.block_size && buf.is_aligned(super.block_size) && !buf.is_n_align_sized(super.block_size)) {
+	bl.clear();
+	bufferptr tmp(buf, length - tail, tail);
+	buf.set_length(length - tail);
+	bl.append(buf);
+	bl.append(tmp);
+      }
+    }
     bl.append_zero(super.block_size - tail);
     length += super.block_size - tail;
   } else {
