@@ -488,8 +488,27 @@ void RGWOp_BILog_Info::execute() {
       return;
     }
   }
+  /* `RGWRados::get_bucket_stats()` mixes different resposibilities:
+   * retrieval of bucket's statistics with max_marker and sync control.
+   * Unfortunately, this is just a reflection of our data structures.
+   * The same `rgw_bucket_dir_header` carries things from both domains:
+   * _Bucket Index_ and _Bucket Index Log_.
+   * In the future we should consider introduction of an interface:
+   *
+   *   class RGWBucketMetaInfo {
+   *     virtual get_stats();
+   *     virtual get_max_marker();
+   *     virtual is_sync_stopped();
+   *   };
+   */
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->getRados()->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret =  store->getRados()->get_bucket_stats_and_bilog_meta(bucket_info,
+                                                                shard_id,
+                                                                &bucket_ver,
+                                                                &master_ver,
+                                                                stats,
+                                                                &max_marker,
+                                                                &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;

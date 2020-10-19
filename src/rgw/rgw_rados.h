@@ -1294,8 +1294,12 @@ public:
     rctx->set_prefetch_data(obj);
   }
   int decode_policy(bufferlist& bl, ACLOwner *owner);
+  int get_bucket_stats_and_bilog_meta(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
+      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = nullptr);
   int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
-      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = NULL);
+      map<RGWObjCategory, RGWStorageStats>& stats) {
+    return get_bucket_stats_and_bilog_meta(bucket_info, shard_id, bucket_ver, master_ver, stats, nullptr, nullptr);
+  }
   int get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs);

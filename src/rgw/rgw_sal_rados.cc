@@ -203,7 +203,7 @@ int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
 				     std::map<RGWObjCategory, RGWStorageStats>& stats,
 				     std::string *max_marker, bool *syncstopped)
 {
-  return store->getRados()->get_bucket_stats(bucket_info, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats_and_bilog_meta(bucket_info, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RGWRadosBucket::read_bucket_stats(optional_yield y)

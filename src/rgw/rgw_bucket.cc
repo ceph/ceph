@@ -375,7 +375,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
   if (ret < 0)
     return ret;
 
-  ret = store->getRados()->get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = store->getRados()->get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats);
   if (ret < 0)
     return ret;
 
@@ -1318,9 +1318,12 @@ static int bucket_stats(rgw::sal::RGWRadosStore *store,
 
   string bucket_ver, master_ver;
   string max_marker;
-  int ret = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD,
-						&bucket_ver, &master_ver, stats,
-						&max_marker);
+  int ret = store->getRados()->get_bucket_stats_and_bilog_meta(bucket_info,
+                                                               RGW_NO_SHARD,
+                                                               &bucket_ver,
+                                                               &master_ver,
+                                                               stats,
+                                                               &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats bucket=" << bucket.name << " ret=" << ret << std::endl;
     return ret;
@@ -1432,7 +1435,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::RGWRadosStore *store,
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
 	ret = store->getRados()->get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver,
-				      &master_ver, stats, nullptr);
+						  &master_ver, stats);
 
 	if (ret < 0)
 	  continue;

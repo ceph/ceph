@@ -7786,8 +7786,14 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
-    map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool *syncstopped)
+int RGWRados::get_bucket_stats_and_bilog_meta(
+  RGWBucketInfo& bucket_info,
+  const int shard_id,
+  string *bucket_ver,
+  string *master_ver,
+  map<RGWObjCategory, RGWStorageStats>& stats,
+  string *max_marker,
+  bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
