@@ -1303,8 +1303,12 @@ public:
     rctx->set_compressed(obj);
   }
   int decode_policy(const DoutPrefixProvider *dpp, bufferlist& bl, ACLOwner *owner);
+  int get_bucket_stats_and_bilog_meta(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
+      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = nullptr);
   int get_bucket_stats(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
-      std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
+      std::map<RGWObjCategory, RGWStorageStats>& stats) {
+    return get_bucket_stats_and_bilog_meta(bucket_info, shard_id, bucket_ver, master_ver, stats, nullptr, nullptr);
+  }
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *cb);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp);

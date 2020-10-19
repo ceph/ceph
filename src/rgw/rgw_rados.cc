@@ -8099,12 +8099,14 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp,
-			       RGWBucketInfo& bucket_info,
-			       const rgw::bucket_index_layout_generation& idx_layout,
-			       int shard_id, string *bucket_ver, string *master_ver,
-			       map<RGWObjCategory, RGWStorageStats>& stats,
-			       string *max_marker, bool *syncstopped)
+int RGWRados::get_bucket_stats_and_bilog_meta(
+  const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
+  const int shard_id,
+  string *bucket_ver,
+  string *master_ver,
+  map<RGWObjCategory, RGWStorageStats>& stats,
+  string *max_marker,
+  bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
