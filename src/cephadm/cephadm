@@ -108,6 +108,7 @@ logging_config = {
         'console':{
             'level':'INFO',
             'class':'logging.StreamHandler',
+            'stream': sys.stdout,
         },
         'log_file': {
             'level': 'DEBUG',
