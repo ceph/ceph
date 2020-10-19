@@ -175,6 +175,34 @@ class CephFSMount(object):
         self.fs.wait_for_daemons()
         log.info('Ready to start {}...'.format(type(self).__name__))
 
+    def _create_mntpt(self, cwd=None):
+        stderr = StringIO()
+        # Use 0000 mode to prevent undesired modifications to the mountpoint on
+        # the local file system.
+        script = f'mkdir -m 0000 -p -v {self.hostfs_mntpt}'.split()
+        try:
+            self.client_remote.run(args=script, timeout=(15*60),
+                                   stderr=stderr)
+        except CommandFailedError:
+            if 'file exists' not in stderr.getvalue().lower():
+                raise
+
+    @property
+    def _nsenter_args(self):
+        return ['nsenter', f'--net=/var/run/netns/{self.netns_name}']
+
+    def _set_filemode_on_mntpt(self):
+        stderr = StringIO()
+        try:
+            self.client_remote.run(
+                args=['sudo', 'chmod', '1777', self.hostfs_mntpt],
+                stderr=stderr, timeout=(5*60))
+        except CommandFailedError:
+            # the client does not have write permissions in the caps it holds
+            # for the Ceph FS that was just mounted.
+            if 'permission denied' in stderr.getvalue().lower():
+                pass
+
     def _setup_brx_and_nat(self):
         # The ip for ceph-brx should be
         ip = IP(self.ceph_brx_net)[-2]

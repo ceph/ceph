@@ -51,15 +51,6 @@ class KernelMount(CephFSMount):
 
         self.mounted = True
 
-    def _create_mntpt(self):
-        stderr = StringIO()
-        try:
-            self.client_remote.run(args=['mkdir', '-p', self.hostfs_mntpt],
-                                   timeout=(5*60), stderr=stderr)
-        except CommandFailedError:
-            if 'file exists' not in stderr.getvalue().lower():
-                raise
-
     def _run_mount_cmd(self, mntopts, check_status):
         mount_cmd = self._get_mount_cmd(mntopts)
         mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
@@ -100,22 +91,6 @@ class KernelMount(CephFSMount):
                                         '-o', opts]
 
         return mount_cmd
-
-    @property
-    def _nsenter_args(self):
-        return ['nsenter', f'--net=/var/run/netns/{self.netns_name}']
-
-    def _set_filemode_on_mntpt(self):
-        stderr = StringIO()
-        try:
-            self.client_remote.run(
-                args=['sudo', 'chmod', '1777', self.hostfs_mntpt],
-                stderr=stderr, timeout=(5*60))
-        except CommandFailedError:
-            # the client does not have write permissions in the caps it holds
-            # for the Ceph FS that was just mounted.
-            if 'permission denied' in stderr.getvalue().lower():
-                pass
 
     def umount(self, force=False):
         if not self.is_mounted():
