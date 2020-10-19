@@ -184,8 +184,6 @@ struct LBAInternalNode
   }
 
   /**
-   * resolve_relative_addrs
-   *
    * Internal relative addresses on read or in memory prior to commit
    * are either record or block relative depending on whether this
    * physical node is is_initial_pending() or just is_pending().
@@ -195,6 +193,26 @@ struct LBAInternalNode
    * based on base.
    */
   void resolve_relative_addrs(paddr_t base) final;
+  void node_resolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	if (i->get_val().is_relative()) {
+	  assert(i->get_val().is_block_relative());
+	  i->set_val(get_paddr().add_relative(i->get_val()));
+	}
+      }
+    }
+  }
+  void node_unresolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	if (i->get_val().is_relative()) {
+	  assert(i->get_val().is_record_relative());
+	  i->set_val(i->get_val() - get_paddr());
+	}
+      }
+    }
+  }
 
   extent_types_t get_type() const final {
     return type;
@@ -440,6 +458,31 @@ struct LBALeafNode
 
   // See LBAInternalNode, same concept
   void resolve_relative_addrs(paddr_t base) final;
+  void node_resolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	auto val = i->get_val();
+	if (val.paddr.is_relative()) {
+	  assert(val.paddr.is_block_relative());
+	  val.paddr = get_paddr().add_relative(val.paddr);
+	  i->set_val(val);
+	}
+      }
+    }
+  }
+  void node_unresolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	auto val = i->get_val();
+	if (val.paddr.is_relative()) {
+	  auto val = i->get_val();
+	  assert(val.paddr.is_record_relative());
+	  val.paddr = val.paddr - get_paddr();
+	  i->set_val(val);
+	}
+      }
+    }
+  }
 
   ceph::bufferlist get_delta() final {
     assert(!delta_buffer.empty());
