@@ -7085,7 +7085,9 @@ void OSD::ms_fast_dispatch(Message *m)
   }
 #ifdef HAVE_JAEGER
   op->set_osd_parent_span(dispatch_span);
-  auto op_req_span = jaeger_tracing::child_span("op-request-created", op->osd_parent_span);
+  if(op->osd_parent_span){
+    auto op_req_span = jaeger_tracing::child_span("op-request-created", op->osd_parent_span);
+  }
   op->set_osd_parent_span(op_req_span);
 //  op->osd_parent_span->Log({
 //      {"sent epoch by op", op->sent_epoch},
@@ -9642,14 +9644,16 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
   op->osd_trace.keyval("priority", priority);
   op->osd_trace.keyval("cost", cost);
 #ifdef HAVE_JAEGER
-  auto enqueue_span = jaeger_tracing::child_span(__func__, op->osd_parent_span);
-  enqueue_span->Log({
-      {"priority", priority},
-      {"cost", cost},
-      {"epoch", epoch},
-      {"owner", owner} //Not got owner in UI
-      });
-//  op->set_osd_parent_span(enqueue_span);
+  if(op->osd_parent_span){
+    auto enqueue_span = jaeger_tracing::child_span(__func__, op->osd_parent_span);
+    enqueue_span->Log({
+	{"priority", priority},
+	{"cost", cost},
+	{"epoch", epoch},
+	{"owner", owner} //Not got owner in UI
+	});
+  //  op->set_osd_parent_span(enqueue_span);
+  }
 #endif
   op->mark_queued_for_pg();
   logger->tinc(l_osd_op_before_queue_op_lat, latency);

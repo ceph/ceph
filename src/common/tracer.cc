@@ -1,6 +1,12 @@
 #include "tracer.h"
 #include <arpa/inet.h>
 #include <yaml-cpp/yaml.h>
+#ifdef __linux__
+#include <linux/types.h>
+#else
+typedef int64_t __s64;
+#endif
+
 #include "common/debug.h"
 
 #define dout_context g_ceph_context

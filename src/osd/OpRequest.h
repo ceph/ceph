@@ -89,10 +89,12 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
-  jspan osd_parent_span;
+  jspan osd_parent_span = nullptr;
 #ifdef HAVE_JAEGER
   void set_osd_parent_span(jspan& span) {
-    jaeger_tracing::finish_span(osd_parent_span);
+    if(osd_parent_span){
+      jaeger_tracing::finish_span(osd_parent_span);
+    }
     osd_parent_span = move(span); }
 #else
   void set_osd_parent_span(...) {}
