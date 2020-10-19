@@ -11728,7 +11728,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     if (vxattr->flags & VXATTR_RSTAT) {
       flags |= CEPH_STAT_RSTAT;
     }
-    r = _getattr(in, flags, perms, true);
+    r = _getattr(in, flags | CEPH_STAT_CAP_XATTR, perms, true);
     if (r != 0) {
       // Error from getattr!
       return r;
@@ -11821,8 +11821,12 @@ int Client::_listxattr(Inode *in, char *name, size_t size,
   }
 
   r = 0;
-  for (const auto& p : in->xattrs) {
-    size_t this_len = p.first.length() + 1;
+  for ([[maybe_unused]] const auto &[xattr_name, xattr_value_bl] : in->xattrs) {
+    if (xattr_name.rfind("ceph.", 0) == 0) {
+      continue;
+    }
+
+    size_t this_len = xattr_name.length() + 1;
     r += this_len;
     if (len_only)
       continue;
@@ -11832,7 +11836,7 @@ int Client::_listxattr(Inode *in, char *name, size_t size,
       goto out;
     }
 
-    memcpy(name, p.first.c_str(), this_len);
+    memcpy(name, xattr_name.c_str(), this_len);
     name += this_len;
     size -= this_len;
   }
@@ -12266,6 +12270,21 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
       (long unsigned)in->snap_btime.nsec());
 }
 
+bool Client::_vxattrcb_mirror_info_exists(Inode *in)
+{
+  // checking one of the xattrs would suffice
+  return in->xattrs.count("ceph.mirror.info.cluster_id") != 0;
+}
+
+size_t Client::_vxattrcb_mirror_info(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "cluster_id=%.*s fs_id=%.*s",
+                  in->xattrs["ceph.mirror.info.cluster_id"].length(),
+                  in->xattrs["ceph.mirror.info.cluster_id"].c_str(),
+                  in->xattrs["ceph.mirror.info.fs_id"].length(),
+                  in->xattrs["ceph.mirror.info.fs_id"].c_str());
+}
+
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
 #define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
 
@@ -12345,6 +12364,13 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     getxattr_cb: &Client::_vxattrcb_snap_btime,
     readonly: true,
     exists_cb: &Client::_vxattrcb_snap_btime_exists,
+    flags: 0,
+  },
+  {
+    name: "ceph.mirror.info",
+    getxattr_cb: &Client::_vxattrcb_mirror_info,
+    readonly: false,
+    exists_cb: &Client::_vxattrcb_mirror_info_exists,
     flags: 0,
   },
   { name: "" }     /* Required table terminator */

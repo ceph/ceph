@@ -56,7 +56,9 @@
 
 #include <list>
 #include <iostream>
+#include <regex>
 #include <string_view>
+#include <functional>
 
 #include "common/config.h"
 
@@ -5816,19 +5818,202 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur)
   respond_to_request(mdr, -ENODATA);
 }
 
+const Server::XattrHandler Server::xattr_handlers[] = {
+  {
+    xattr_name: Server::DEFAULT_HANDLER,
+    description: "default xattr handler",
+    validate:  &Server::default_xattr_validate,
+    setxattr: &Server::default_setxattr_handler,
+    removexattr: &Server::default_removexattr_handler,
+  },
+  {
+    xattr_name: "ceph.mirror.info",
+    description: "mirror info xattr handler",
+    validate: &Server::mirror_info_xattr_validate,
+    setxattr: &Server::mirror_info_setxattr_handler,
+    removexattr: &Server::mirror_info_removexattr_handler
+  },
+};
+
+const Server::XattrHandler* Server::get_xattr_or_default_handler(std::string_view xattr_name) {
+  const XattrHandler *default_xattr_handler = nullptr;
+
+  for (auto &handler : xattr_handlers) {
+    if (handler.xattr_name == Server::DEFAULT_HANDLER) {
+      ceph_assert(default_xattr_handler == nullptr);
+      default_xattr_handler = &handler;
+    }
+    if (handler.xattr_name == xattr_name) {
+      dout(20) << "handler=" << handler.description << dendl;
+      return &handler;
+    }
+  }
+
+  ceph_assert(default_xattr_handler != nullptr);
+  dout(20) << "handler=" << default_xattr_handler->description << dendl;
+  return default_xattr_handler;
+}
+
+int Server::xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                           const std::string &xattr_name, int op, int flags) {
+  if (op == CEPH_MDS_OP_SETXATTR) {
+    if (xattrs) {
+      if ((flags & CEPH_XATTR_CREATE) && xattrs->count(mempool::mds_co::string(xattr_name))) {
+        dout(10) << "setxattr '" << xattr_name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
+        return -EEXIST;
+      }
+    }
+    if ((flags & CEPH_XATTR_REPLACE) && !(xattrs && xattrs->count(mempool::mds_co::string(xattr_name)))) {
+      dout(10) << "setxattr '" << xattr_name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
+      return -ENODATA;
+    }
+
+    return 0;
+  }
+
+  if (op == CEPH_MDS_OP_RMXATTR) {
+    if (xattrs && xattrs->count(mempool::mds_co::string(xattr_name)) == 0) {
+      dout(10) << "removexattr '" << xattr_name << "' and ENODATA on " << *cur << dendl;
+      return -ENODATA;
+    }
+
+    return 0;
+  }
+
+  derr << ": unhandled validation for: " << xattr_name << dendl;
+  return -EINVAL;
+}
+
+void Server::xattr_set(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name,
+                       const bufferlist &xattr_value) {
+  size_t len = xattr_value.length();
+  bufferptr b = buffer::create(len);
+  if (len) {
+    xattr_value.begin().copy(len, b.c_str());
+  }
+  auto em = xattrs->emplace(std::piecewise_construct,
+                            std::forward_as_tuple(mempool::mds_co::string(xattr_name)),
+                            std::forward_as_tuple(b));
+  if (!em.second) {
+    em.first->second = b;
+  }
+}
+
+void Server::xattr_rm(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name) {
+  xattrs->erase(mempool::mds_co::string(xattr_name));
+}
+
+int Server::default_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                   XattrOp *xattr_op) {
+  return xattr_validate(cur, xattrs, xattr_op->xattr_name, xattr_op->op, xattr_op->flags);
+}
+
+void Server::default_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                      const XattrOp &xattr_op) {
+  xattr_set(xattrs, xattr_op.xattr_name, xattr_op.xattr_value);
+}
+
+void Server::default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                         const XattrOp &xattr_op) {
+  xattr_rm(xattrs, xattr_op.xattr_name);
+}
+
+// mirror info xattr handlers
+const std::string Server::MirrorXattrInfo::MIRROR_INFO_REGEX = "^cluster_id=([a-f0-9]{8}-" \
+                                                               "[a-f0-9]{4}-[a-f0-9]{4}-" \
+                                                               "[a-f0-9]{4}-[a-f0-9]{12})" \
+                                                               " fs_id=(\\d+)$";
+const std::string Server::MirrorXattrInfo::CLUSTER_ID = "ceph.mirror.info.cluster_id";
+const std::string Server::MirrorXattrInfo::FS_ID = "ceph.mirror.info.fs_id";
+int Server::parse_mirror_info_xattr(const std::string &name, const std::string &value,
+                                    std::string &cluster_id, std::string &fs_id) {
+  dout(20) << "parsing name=" << name << ", value=" << value << dendl;
+
+  static const std::regex regex(Server::MirrorXattrInfo::MIRROR_INFO_REGEX);
+  std::smatch match;
+
+  std::regex_search(value, match, regex);
+  if (match.size() != 3) {
+    derr << "mirror info parse error" << dendl;
+    return -EINVAL;
+  }
+
+  cluster_id = match[1];
+  fs_id = match[2];
+  dout(20) << " parsed cluster_id=" << cluster_id << ", fs_id=" << fs_id << dendl;
+  return 0;
+}
+
+int Server::mirror_info_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                       XattrOp *xattr_op) {
+  if (!cur->is_root()) {
+    return -EINVAL;
+  }
+
+  int v1 = xattr_validate(cur, xattrs, Server::MirrorXattrInfo::CLUSTER_ID, xattr_op->op, xattr_op->flags);
+  int v2 = xattr_validate(cur, xattrs, Server::MirrorXattrInfo::FS_ID, xattr_op->op, xattr_op->flags);
+  if (v1 != v2) {
+    derr << "inconsistent mirror info state (" << v1 << "," << v2 << ")" << dendl;
+    return -EINVAL;
+  }
+
+  if (v1 < 0) {
+    return v1;
+  }
+
+  if (xattr_op->op == CEPH_MDS_OP_RMXATTR) {
+    return 0;
+  }
+
+  std::string cluster_id;
+  std::string fs_id;
+  int r = parse_mirror_info_xattr(xattr_op->xattr_name, xattr_op->xattr_value.to_str(),
+                                  cluster_id, fs_id);
+  if (r < 0) {
+    return r;
+  }
+
+  xattr_op->xinfo = std::make_unique<MirrorXattrInfo>(cluster_id, fs_id);
+  return 0;
+}
+
+void Server::mirror_info_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                          const XattrOp &xattr_op) {
+  auto mirror_info = dynamic_cast<MirrorXattrInfo&>(*(xattr_op.xinfo));
+
+  bufferlist bl;
+  bl.append(mirror_info.cluster_id.c_str(), mirror_info.cluster_id.length());
+  xattr_set(xattrs, Server::MirrorXattrInfo::CLUSTER_ID, bl);
+
+  bl.clear();
+  bl.append(mirror_info.fs_id.c_str(), mirror_info.fs_id.length());
+  xattr_set(xattrs, Server::MirrorXattrInfo::FS_ID, bl);
+}
+
+void Server::mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                             const XattrOp &xattr_op) {
+  xattr_rm(xattrs, Server::MirrorXattrInfo::CLUSTER_ID);
+  xattr_rm(xattrs, Server::MirrorXattrInfo::FS_ID);
+}
+
 void Server::handle_client_setxattr(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
   string name(req->get_path2());
 
-  // magic ceph.* namespace?
-  if (name.compare(0, 5, "ceph.") == 0) {
+  // is a ceph virtual xattr?
+  if (is_ceph_vxattr(name)) {
     // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
     CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
     if (!cur)
       return;
 
     handle_set_vxattr(mdr, cur);
+    return;
+  }
+
+  if (!is_allowed_ceph_xattr(name)) {
+    respond_to_request(mdr, -EINVAL);
     return;
   }
 
@@ -5854,6 +6039,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   size_t len = req->get_data().length();
   size_t inc = len + name.length();
 
+  auto handler = Server::get_xattr_or_default_handler(name);
   const auto& pxattrs = cur->get_projected_xattrs();
   if (pxattrs) {
     // check xattrs kv pairs size
@@ -5871,18 +6057,12 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
       respond_to_request(mdr, -ENOSPC);
       return;
     }
-
-    if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(mempool::mds_co::string(name))) {
-      dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
-      respond_to_request(mdr, -EEXIST);
-      return;
-    }
   }
 
-  if ((flags & CEPH_XATTR_REPLACE) &&
-      !(pxattrs && pxattrs->count(mempool::mds_co::string(name)))) {
-    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
-    respond_to_request(mdr, -ENODATA);
+  XattrOp xattr_op(CEPH_MDS_OP_SETXATTR, name, req->get_data(), flags);
+  int r = std::invoke(handler->validate, this, cur, pxattrs, &xattr_op);
+  if (r < 0) {
+    respond_to_request(mdr, r);
     return;
   }
 
@@ -5896,15 +6076,11 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     pi.inode->rstat.rctime = mdr->get_op_stamp();
   pi.inode->change_attr++;
   pi.inode->xattr_version++;
+
   if ((flags & CEPH_XATTR_REMOVE)) {
-    pi.xattrs->erase(mempool::mds_co::string(name));
+    std::invoke(handler->removexattr, this, cur, pi.xattrs, xattr_op);
   } else {
-    bufferptr b = buffer::create(len);
-    if (len)
-      req->get_data().begin().copy(len, b.c_str());
-    auto em = pi.xattrs->emplace(std::piecewise_construct, std::forward_as_tuple(mempool::mds_co::string(name)), std::forward_as_tuple(b));
-    if (!em.second)
-      em.first->second = b;
+    std::invoke(handler->setxattr, this, cur, pi.xattrs, xattr_op);
   }
 
   // log + wait
@@ -5923,13 +6099,19 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   const cref_t<MClientRequest> &req = mdr->client_request;
   std::string name(req->get_path2());
 
-  if (name.compare(0, 5, "ceph.") == 0) {
+  // is a ceph virtual xattr?
+  if (is_ceph_vxattr(name)) {
     // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
     CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
     if (!cur)
       return;
 
     handle_remove_vxattr(mdr, cur);
+    return;
+  }
+
+  if (!is_allowed_ceph_xattr(name)) {
+    respond_to_request(mdr, -EINVAL);
     return;
   }
 
@@ -5947,10 +6129,15 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
+
+  auto handler = Server::get_xattr_or_default_handler(name);
+  bufferlist bl;
+  XattrOp xattr_op(CEPH_MDS_OP_RMXATTR, name, bl, 0);
+
   const auto& pxattrs = cur->get_projected_xattrs();
-  if (pxattrs && pxattrs->count(mempool::mds_co::string(name)) == 0) {
-    dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
-    respond_to_request(mdr, -ENODATA);
+  int r = std::invoke(handler->validate, this, cur, pxattrs, &xattr_op);
+  if (r < 0) {
+    respond_to_request(mdr, r);
     return;
   }
 
@@ -5958,14 +6145,13 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
 
   // project update
   auto pi = cur->project_inode(mdr, true);
-  auto &px = *pi.xattrs;
   pi.inode->version = cur->pre_dirty();
   pi.inode->ctime = mdr->get_op_stamp();
   if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
     pi.inode->rstat.rctime = mdr->get_op_stamp();
   pi.inode->change_attr++;
   pi.inode->xattr_version++;
-  px.erase(mempool::mds_co::string(name));
+  std::invoke(handler->removexattr, this, cur, pi.xattrs, xattr_op);
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();

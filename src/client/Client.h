@@ -1294,6 +1294,9 @@ private:
   bool _vxattrcb_snap_btime_exists(Inode *in);
   size_t _vxattrcb_snap_btime(Inode *in, char *val, size_t size);
 
+  bool _vxattrcb_mirror_info_exists(Inode *in);
+  size_t _vxattrcb_mirror_info(Inode *in, char *val, size_t size);
+
   static const VXattr *_get_vxattrs(Inode *in);
   static const VXattr *_match_vxattr(Inode *in, const char *name);
 
