@@ -3725,6 +3725,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
 
   utime_t snap_btime;
+  std::map<std::string, std::string> snap_metadata;
   SnapRealm *realm = find_snaprealm();
   if (snapid != CEPH_NOSNAP && realm) {
     // add snapshot timestamp vxattr
@@ -3736,6 +3737,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       ceph_assert(infomap.size() == 1);
       const SnapInfo *si = infomap.begin()->second;
       snap_btime = si->stamp;
+      snap_metadata = si->metadata;
     }
   }
 
@@ -3995,7 +3997,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(oi->ino, bl);
     encode(snapid, bl);
     encode(oi->rdev, bl);
@@ -4039,6 +4041,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(file_i->export_pin, bl);
     encode(snap_btime, bl);
     encode(file_i->rstat.rsnaps, bl);
+    encode(snap_metadata, bl);
     ENCODE_FINISH(bl);
   }
   else {

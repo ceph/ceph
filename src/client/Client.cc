@@ -899,6 +899,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->gid = st->gid;
     in->btime = st->btime;
     in->snap_btime = st->snap_btime;
+    in->snap_metadata = st->snap_metadata;
   }
 
   if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) &&
