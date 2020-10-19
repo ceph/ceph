@@ -76,7 +76,7 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
 				pin_list.begin(), pin_list.end());
 		});
 	  });
-    }).safe_then([result=std::move(result_up)] {
+    }).safe_then([result=std::move(result_up), ref=LBANodeRef(this)] {
       return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
 	std::move(*result));
     });
@@ -250,7 +250,7 @@ LBAInternalNode::scan_mappings_ret LBAInternalNode::scan_mappings(
 	get_paddr()).safe_then([=, &f](auto child) {
 	  return child->scan_mappings(c, begin, end, f);
 	});
-    });
+    }).safe_then([ref=LBANodeRef(this)]{});
 }
 
 LBAInternalNode::scan_mapped_space_ret LBAInternalNode::scan_mapped_space(
@@ -269,7 +269,7 @@ LBAInternalNode::scan_mapped_space_ret LBAInternalNode::scan_mapped_space(
 	get_paddr()).safe_then([=, &f](auto child) {
 	  return child->scan_mapped_space(c, f);
 	});
-    });
+    }).safe_then([ref=LBANodeRef(this)]{});
 }
 
 
