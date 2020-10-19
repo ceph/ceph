@@ -359,6 +359,37 @@ TEST_F(transaction_manager_test_t, create_remove_same_transaction)
   });
 }
 
+TEST_F(transaction_manager_test_t, split_merge_read_same_transaction)
+{
+  constexpr laddr_t SIZE = 4096;
+  run_async([this] {
+    {
+      auto t = create_transaction();
+      for (unsigned i = 0; i < 300; ++i) {
+	auto extent = alloc_extent(
+	  t,
+	  laddr_t(i * SIZE),
+	  SIZE);
+      }
+      check_mappings(t);
+      submit_transaction(std::move(t));
+      check();
+    }
+    {
+      auto t = create_transaction();
+      for (unsigned i = 0; i < 240; ++i) {
+	dec_ref(
+	  t,
+	  laddr_t(i * SIZE));
+      }
+      check_mappings(t);
+      submit_transaction(std::move(t));
+      check();
+    }
+  });
+}
+
+
 TEST_F(transaction_manager_test_t, inc_dec_ref)
 {
   constexpr laddr_t SIZE = 4096;
