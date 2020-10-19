@@ -7733,6 +7733,18 @@ int RGWRados::update_olh(RGWObjectCtx& obj_ctx,
   return 0;
 }
 
+static rgw_zone_set get_zones_trace(const RGWZone& zone,
+                                    const rgw_bucket& bucket,
+                                    const rgw_zone_set* const maybe_zones_trace)
+{
+  rgw_zone_set zones_trace;
+  if (maybe_zones_trace) {
+    zones_trace = *maybe_zones_trace;
+  }
+  zones_trace.insert(zone.id, bucket.get_key());
+  return zones_trace;
+}
+
 template <bool DeleteMarkerV>
 int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, rgw_bucket_dir_entry_meta *meta,
                       uint64_t olh_epoch, real_time unmod_since, bool high_precision_time,
@@ -7744,16 +7756,8 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, cons
   olh_obj->clear_instance();
 
   RGWObjState *state = NULL;
-  RGWObjManifest *manifest = nullptr;
-
-  int ret = 0;
-  int i;
-  
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bucket_info.bucket.get_key());
+  const auto zones_trace = \
+    get_zones_trace(svc.zone->get_zone(), bucket_info.bucket, _zones_trace);
 #define MAX_ECANCELED_RETRY 100
   return with_bilog<CLSRGWLinkOLH<DeleteMarkerV>>(
     [&] (auto op_issuer, auto bilog_handler) {
@@ -7831,14 +7835,9 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
   std::unique_ptr<rgw::sal::Object> olh_obj = target_obj->clone();
   olh_obj->clear_instance();
 
-  RGWObjState *state = NULL;
-
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bucket_info.bucket.get_key());
-
+  RGWObjState *state = nullptr;
+  const auto zones_trace = \
+    get_zones_trace(svc.zone->get_zone(), bucket_info.bucket, _zones_trace);
   return with_bilog<CLSRGWUnlinkInstance>(
     [&] (auto op_issuer, auto bilog_handler) {
       int ret, i;
@@ -8734,12 +8733,8 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs << " obj=" << obj << " tag=" << tag << " op=" << op << dendl_bitx;
   ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
-
+  const auto zones_trace = \
+    get_zones_trace(svc.zone->get_zone(), bs.bucket, _zones_trace);
   ObjectWriteOperation o;
   o.assert_exists(); // bucket index shard must exist
 
@@ -8758,11 +8753,8 @@ int RGWRados::cls_obj_complete_op(const RGWBucketInfo& bucket_info,
                                   const rgw_bucket_dir_entry& ent, RGWObjCategory category,
 				  list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *_zones_trace)
 {
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
+  const auto zones_trace = \
+    get_zones_trace(svc.zone->get_zone(), bs.bucket, _zones_trace);
   return with_bilog<CLSRGWBucketModifyOpT>(
     [&, this] (auto op_issuer, auto bilog_handler) {
       // handle the bilog. It may be stored altogether with Bucket
