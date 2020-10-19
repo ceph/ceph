@@ -62,7 +62,7 @@ class FuseMount(CephFSMount):
         log.info("Client client.%s config is %s" % (self.client_id,
                                                     self.client_config))
 
-        self._create_mntpt()
+        self._create_mntpt(cwd=self.test_dir)
 
         retval = self._run_mount_cmd(mntopts, check_status)
         if retval:
@@ -71,18 +71,6 @@ class FuseMount(CephFSMount):
         self.gather_mount_info()
 
         self.mounted = True
-
-    def _create_mntpt(self):
-        stderr = StringIO()
-        # Use 0000 mode to prevent undesired modifications to the mountpoint on
-        # the local file system.
-        script = f'mkdir -m 0000 -p -v {self.hostfs_mntpt}'.split()
-        try:
-            self.client_remote.run(args=script, timeout=(15*60),
-                                   stderr=stderr)
-        except CommandFailedError:
-            if 'file exists' not in stderr.getvalue().lower():
-                raise
 
     def _run_mount_cmd(self, mntopts, check_status):
         mount_cmd = self._get_mount_cmd(mntopts)
@@ -132,10 +120,6 @@ class FuseMount(CephFSMount):
             mount_cmd += mntopts
 
         return mount_cmd
-
-    @property
-    def _nsenter_args(self):
-        return ['nsenter', f'--net=/var/run/netns/{self.netns_name}']
 
     def _add_valgrind_args(self, mount_cmd):
         if self.client_config.get('valgrind') is not None:
