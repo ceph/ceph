@@ -606,30 +606,7 @@ def mon_in_localhost(config_path="./ceph.conf"):
                 return True
     return False
 
-class LocalKernelMount(KernelMount):
-    def __init__(self, ctx, test_dir, client_id=None,
-                 client_keyring_path=None, client_remote=None,
-                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
-                 brxnet=None):
-        super(LocalKernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
-            client_id=client_id, client_keyring_path=client_keyring_path,
-            client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
-            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
-
-        # Make vstart_runner compatible with teuth and qa/tasks/cephfs.
-        self._mount_bin = [os.path.join(BIN_PREFIX , 'mount.ceph')]
-
-    def setup_netns(self):
-        if opt_use_ns:
-            super(type(self), self).setup_netns()
-
-    @property
-    def _nsenter_args(self):
-            if opt_use_ns:
-                return super(type(self), self)._nsenter_args
-            else:
-                return []
-
+class LocalCephFSMount():
     @property
     def config_path(self):
         return "./ceph.conf"
@@ -650,11 +627,12 @@ class LocalKernelMount(KernelMount):
         return BIN_PREFIX
 
     def _asok_path(self):
-        # In teuthology, the asok is named after the PID of the ceph-fuse process, because it's
-        # run foreground.  When running it daemonized however, the asok is named after
-        # the PID of the launching process, not the long running ceph-fuse process.  Therefore
-        # we need to give an exact path here as the logic for checking /proc/ for which
-        # asok is alive does not work.
+        # In teuthology, the asok is named after the PID of the ceph-fuse
+        # process, because it's run foreground.  When running it daemonized
+        # however, the asok is named after the PID of the launching process,
+        # not the long running ceph-fuse process.  Therefore we need to give
+        # an exact path here as the logic for checking /proc/ for which asok
+        # is alive does not work.
 
         # Load the asok path from ceph.conf as vstart.sh now puts admin sockets
         # in a tmpdir. All of the paths are the same, so no need to select
@@ -677,7 +655,42 @@ class LocalKernelMount(KernelMount):
         return self.client_remote.run(args=[py_version, '-c', pyscript],
                                       wait=False, stdout=StringIO())
 
-class LocalFuseMount(FuseMount):
+    def setup_netns(self):
+        if opt_use_ns:
+            super(type(self), self).setup_netns()
+
+    @property
+    def _nsenter_args(self):
+            if opt_use_ns:
+                return super(type(self), self)._nsenter_args
+            else:
+                return []
+
+    def setupfs(self, name=None):
+        if name is None and self.fs is not None:
+            # Previous mount existed, reuse the old name
+            name = self.fs.name
+        self.fs = LocalFilesystem(self.ctx, name=name)
+        log.info('Wait for MDS to reach steady state...')
+        self.fs.wait_for_daemons()
+        log.info('Ready to start {}...'.format(type(self).__name__))
+
+
+class LocalKernelMount(LocalCephFSMount, KernelMount):
+    def __init__(self, ctx, test_dir, client_id=None,
+                 client_keyring_path=None, client_remote=None,
+                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
+                 brxnet=None):
+        super(LocalKernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
+            client_id=client_id, client_keyring_path=client_keyring_path,
+            client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
+
+        # Make vstart_runner compatible with teuth and qa/tasks/cephfs.
+        self._mount_bin = [os.path.join(BIN_PREFIX , 'mount.ceph')]
+
+
+class LocalFuseMount(LocalCephFSMount, FuseMount):
     def __init__(self, ctx, test_dir, client_id, client_keyring_path=None,
                  client_remote=None, hostfs_mntpt=None, cephfs_name=None,
                  cephfs_mntpt=None, brxnet=None):
@@ -692,10 +705,6 @@ class LocalFuseMount(FuseMount):
         self._mount_bin = [os.path.join(BIN_PREFIX, 'ceph-fuse')]
         self._mount_cmd_cwd, self._mount_cmd_logger, \
             self._mount_cmd_stdin = None, None, None
-
-    def setup_netns(self):
-        if opt_use_ns:
-            super(type(self), self).setup_netns()
 
     def _create_mntpt(self, cwd=None):
         stderr = StringIO()
@@ -720,51 +729,11 @@ class LocalFuseMount(FuseMount):
         return mount_cmd
 
     @property
-    def _nsenter_args(self):
-        if opt_use_ns:
-            return super(type(self), self)._nsenter_args
-        else:
-            return []
-
-    @property
     def _fuse_conn_check_timeout(self):
         return 30
 
     def _add_valgrind_args(self, mount_cmd):
         return []
-
-    @property
-    def config_path(self):
-        return "./ceph.conf"
-
-    def get_keyring_path(self):
-        # This is going to end up in a config file, so use an absolute path
-        # to avoid assumptions about daemons' pwd
-        return os.path.abspath("./client.{0}.keyring".format(self.client_id))
-
-    @property
-    def _prefix(self):
-        return BIN_PREFIX
-
-    def _asok_path(self):
-        # In teuthology, the asok is named after the PID of the ceph-fuse process, because it's
-        # run foreground.  When running it daemonized however, the asok is named after
-        # the PID of the launching process, not the long running ceph-fuse process.  Therefore
-        # we need to give an exact path here as the logic for checking /proc/ for which
-        # asok is alive does not work.
-
-        # Load the asok path from ceph.conf as vstart.sh now puts admin sockets
-        # in a tmpdir. All of the paths are the same, so no need to select
-        # based off of the service type.
-        d = "./out"
-        with open(self.config_path) as f:
-            for line in f:
-                asok_conf = re.search("^\s*admin\s+socket\s*=\s*(.*?)[^/]+$", line)
-                if asok_conf:
-                    d = asok_conf.groups(1)[0]
-                    break
-        path = "{0}/client.{1}.*.asok".format(d, self.client_id)
-        return path
 
     def _set_fuse_daemon_pid(self, check_status):
         # NOTE: When a command <args> is launched with sudo, two processes are
@@ -786,14 +755,6 @@ class LocalFuseMount(FuseMount):
                 raise
             else:
                 pass
-
-    def _run_python(self, pyscript, py_version='python'):
-        """
-        Override this to remove the daemon-helper prefix that is used otherwise
-        to make the process killable.
-        """
-        return self.client_remote.run(args=[py_version, '-c', pyscript],
-                                      wait=False, stdout=StringIO())
 
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
