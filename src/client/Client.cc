@@ -6588,6 +6588,25 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
   return r;
 }
 
+bool Client::_dentry_valid(const Dentry *dn)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  // is dn lease valid?
+  utime_t now = ceph_clock_now();
+  if (dn->lease_mds >= 0 && dn->lease_ttl > now &&
+      mds_sessions.count(dn->lease_mds)) {
+    MetaSession &s = mds_sessions.at(dn->lease_mds);
+    if (s.cap_ttl > now && s.cap_gen == dn->lease_gen)
+      return true;
+
+    ldout(cct, 20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
+                   << " vs lease_gen " << dn->lease_gen << dendl;
+  }
+
+  return false;
+}
+
 int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 		    const UserPerm& perms)
 {
@@ -6647,21 +6666,11 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 	     << dendl;
 
     if (!dn->inode || dn->inode->caps_issued_mask(mask, true)) {
-      // is dn lease valid?
-      utime_t now = ceph_clock_now();
-      if (dn->lease_mds >= 0 &&
-	  dn->lease_ttl > now &&
-	  mds_sessions.count(dn->lease_mds)) {
-	MetaSession &s = mds_sessions.at(dn->lease_mds);
-	if (s.cap_ttl > now &&
-	    s.cap_gen == dn->lease_gen) {
-	  // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
-	  // make trim_caps() behave.
-	  dir->try_touch_cap(dn->lease_mds);
-	  goto hit_dn;
-	}
-	ldout(cct, 20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
-		       << " vs lease_gen " << dn->lease_gen << dendl;
+      if (_dentry_valid(dn)) {
+        // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
+        // make trim_caps() behave.
+        dir->try_touch_cap(dn->lease_mds);
+          goto hit_dn;
       }
       // dir shared caps?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
@@ -6713,19 +6722,9 @@ int Client::get_or_create(Inode *dir, const char* name,
   dir->open_dir();
   if (dir->dir->dentries.count(name)) {
     Dentry *dn = dir->dir->dentries[name];
-    
-    // is dn lease valid?
-    utime_t now = ceph_clock_now();
-    if (dn->inode &&
-	dn->lease_mds >= 0 &&
-	dn->lease_ttl > now &&
-	mds_sessions.count(dn->lease_mds)) {
-      MetaSession &s = mds_sessions.at(dn->lease_mds);
-      if (s.cap_ttl > now &&
-	  s.cap_gen == dn->lease_gen) {
-	if (expect_null)
-	  return -EEXIST;
-      }
+    if (_dentry_valid(dn)) {
+      if (expect_null)
+        return -EEXIST;
     }
     *pdn = dn;
   } else {

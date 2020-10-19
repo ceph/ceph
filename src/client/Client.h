@@ -1174,6 +1174,8 @@ private:
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
 
+  bool _dentry_valid(const Dentry *dn);
+
   // internal interface
   //   call these with client_lock held!
   int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
