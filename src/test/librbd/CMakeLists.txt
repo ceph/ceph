@@ -89,6 +89,7 @@ set(unittest_librbd_srcs
   managed_lock/test_mock_GetLockerRequest.cc
   managed_lock/test_mock_ReacquireRequest.cc
   managed_lock/test_mock_ReleaseRequest.cc
+  migration/test_mock_FileStream.cc
   mirror/snapshot/test_mock_CreateNonPrimaryRequest.cc
   mirror/snapshot/test_mock_CreatePrimaryRequest.cc
   mirror/snapshot/test_mock_ImageMeta.cc
