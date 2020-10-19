@@ -9,8 +9,8 @@
    :hidden:
 
     Getting Started with CephFS <getting-started>
-    
-    Administration <administration>
+
+    Administration <admin-overview>
 
     Mounting CephFS <mounting-cephfs-overview>
     
@@ -52,4 +52,4 @@ Ceph and was once the primary use-case for RADOS.  Now it is joined by two
 other storage interfaces to form a modern unified storage system: RBD (Ceph
 Block Devices) and RGW (Ceph Object Storage Gateway).
 
-
+.. include:: ./getting-started.rst
