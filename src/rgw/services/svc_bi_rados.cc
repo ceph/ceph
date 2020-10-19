@@ -290,30 +290,30 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
+int RGWSI_BucketIndex_RADOS::get_dir_headers(const RGWBucketInfo& bucket_info,
                                              int shard_id,
-                                             vector<rgw_bucket_dir_header> *headers,
-                                             map<int, string> *bucket_instance_ids,
+                                             std::map<int, rgw_bucket_dir_header> *headers,
                                              optional_yield y)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> oids;
-  int r = open_bucket_index(bucket_info, shard_id, &index_pool, &oids, bucket_instance_ids);
-  if (r < 0)
+  int r = open_bucket_index(bucket_info, shard_id, &index_pool, &oids, nullptr);
+  if (r < 0) {
     return r;
+  }
 
   map<int, struct rgw_cls_list_ret> list_results;
-  for (auto& iter : oids) {
-    list_results.emplace(iter.first, rgw_cls_list_ret());
+  for ([[maybe_unused]] const auto& [ key, val ] : oids) {
+    list_results.emplace(key, rgw_cls_list_ret());
   }
 
   r = CLSRGWIssueGetDirHeader(index_pool.ioctx(), oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
-  map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
-  for(; iter != list_results.end(); ++iter) {
-    headers->push_back(std::move(iter->second.dir.header));
+  for (auto& [ key, val ] : list_results) {
+    headers->emplace(std::make_pair(key, std::move(val.dir.header)));
   }
   return 0;
 }
@@ -363,20 +363,19 @@ int RGWSI_BucketIndex_RADOS::read_stats(const RGWBucketInfo& bucket_info,
                                         RGWBucketEnt *result,
                                         optional_yield y)
 {
-  vector<rgw_bucket_dir_header> headers;
+  std::map<int, rgw_bucket_dir_header> headers;
 
   result->bucket = bucket_info.bucket;
-  int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, &headers, nullptr, y);
+  int r = get_dir_headers(bucket_info, RGW_NO_SHARD, &headers, y);
   if (r < 0) {
     return r;
   }
 
-  auto hiter = headers.begin();
-  for (; hiter != headers.end(); ++hiter) {
+  for ([[maybe_unused]] const auto& [ header_shard_id, header ] : headers) {
     RGWObjCategory category = RGWObjCategory::Main;
-    auto iter = (hiter->stats).find(category);
-    if (iter != hiter->stats.end()) {
-      struct rgw_bucket_category_stats& stats = iter->second;
+    if (const auto iter = header.stats.find(category);
+        iter != std::end(header.stats)) {
+      const struct rgw_bucket_category_stats& stats = iter->second;
       result->count += stats.num_entries;
       result->size += stats.total_size;
       result->size_rounded += stats.total_size_rounded;
