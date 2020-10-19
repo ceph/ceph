@@ -173,7 +173,7 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                const cls_rgw_obj_key& key, const string& locator,
-                               rgw_zone_set& zones_trace)
+                               const rgw_zone_set& zones_trace)
 {
   rgw_cls_obj_prepare_op call;
   call.op = op;
