@@ -1,8 +1,8 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 /* Basics */
 html {
-  background-color: bd.$body-bg;
+  background-color: vv.$body-bg;
 }
 
 html,

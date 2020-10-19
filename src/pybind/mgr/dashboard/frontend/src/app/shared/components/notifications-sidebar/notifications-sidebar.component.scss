@@ -1,11 +1,11 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 :host {
   bottom: 10px;
   max-width: 90vw;
   position: fixed;
   right: -350px;
-  top: bd.$navbar-height + 10px;
+  top: vv.$navbar-height + 10px;
 
   transition: all 0.6s;
 
@@ -31,14 +31,14 @@ ngx-simplebar {
 }
 
 .separator {
-  background-color: bd.$gray-200;
-  color: bd.$gray-600;
+  background-color: vv.$gray-200;
+  color: vv.$gray-600;
   font-size: 1rem;
   padding: 5px 12px;
 }
 
 .btn-link .fa-trash-o {
-  color: bd.$black;
+  color: vv.$black;
 }
 
 table {

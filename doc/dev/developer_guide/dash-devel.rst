@@ -795,11 +795,11 @@ to add the file replacements manually to the angular.json file
 Nevertheless you should stick to the suggested naming scheme because it makes
 it easier for you to use glob expressions once it's supported in the future.
 
-To change the variable defaults you can overwrite them in the file
-``./frontend/src/vendor.variables.scss``. Just reassign the variable you want
-to change, for example ``$color-primary: teal;``
+To change the variable defaults or add your own ones you can overwrite them in
+``./frontend/src/styles/vendor/_variables.scss``.
+Just reassign the variable you want to change, for example ``$color-primary: teal;``
 To overwrite or extend the default CSS, you can add your own styles in
-``./frontend/src/vendor.overrides.scss``.
+``./frontend/src/styles/vendor/_style-overrides.scss``.
 
 I18N
 ----
