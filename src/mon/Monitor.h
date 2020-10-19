@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <cmath>
 #include <string>
+#include <array>
 
 #include "include/types.h"
 #include "include/health.h"
@@ -637,7 +638,7 @@ public:
   /**
    * Vector holding the Services serviced by this Monitor.
    */
-  std::vector<std::unique_ptr<PaxosService>> paxos_service;
+  std::array<std::unique_ptr<PaxosService>, PAXOS_NUM> paxos_service;
 
   class MDSMonitor *mdsmon() {
     return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP].get();

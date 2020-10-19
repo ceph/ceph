@@ -24,31 +24,19 @@
 #include "common/bit_str.h"
 #include "common/ceph_releases.h"
 
-#define PAXOS_MDSMAP     0
-#define PAXOS_OSDMAP     1
-#define PAXOS_LOG        2
-#define PAXOS_MONMAP     3
-#define PAXOS_AUTH       4
-#define PAXOS_MGR        5
-#define PAXOS_MGRSTAT    6
-#define PAXOS_HEALTH     7
-#define PAXOS_CONFIG     8
-#define PAXOS_NUM        9
-
-inline const char *get_paxos_name(int p) {
-  switch (p) {
-  case PAXOS_MDSMAP: return "mdsmap";
-  case PAXOS_MONMAP: return "monmap";
-  case PAXOS_OSDMAP: return "osdmap";
-  case PAXOS_LOG: return "logm";
-  case PAXOS_AUTH: return "auth";
-  case PAXOS_MGR: return "mgr";
-  case PAXOS_MGRSTAT: return "mgrstat";
-  case PAXOS_HEALTH: return "health";
-  case PAXOS_CONFIG: return "config";
-  default: ceph_abort(); return 0;
-  }
-}
+// use as paxos_service index
+enum {
+  PAXOS_MDSMAP,
+  PAXOS_OSDMAP,
+  PAXOS_LOG,
+  PAXOS_MONMAP,
+  PAXOS_AUTH,
+  PAXOS_MGR,
+  PAXOS_MGRSTAT,
+  PAXOS_HEALTH,
+  PAXOS_CONFIG,
+  PAXOS_NUM
+};
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
 
