@@ -77,7 +77,7 @@ class GaneshaTest(DashboardTestCase):
             "path": path,
             "fsal": fsal,
             "cluster_id": cluster_id,
-            "daemons": ["node1", "node3"],
+            "daemons": daemons,
             "pseudo": pseudo,
             "tag": None,
             "access_type": "RW",
