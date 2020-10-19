@@ -47,9 +47,10 @@ public:
                        std::list<rgw_bi_log_entry>& result,
                        bool *truncated) = 0;
 
-  virtual int get_log_status(const RGWBucketInfo& bucket_info,
-                             int shard_id,
-                             map<int, string> *markers) = 0;
+  virtual int log_get_max_marker(const RGWBucketInfo& bucket_info,
+                                 const std::map<int, rgw_bucket_dir_header>& headers,
+                                 int shard_id,
+                                 std::map<int, std::string> *max_markers) = 0;
 };
 
 class RGWSI_BILog_RADOS_InIndex : public RGWSI_BILog_RADOS
@@ -77,12 +78,10 @@ public:
                std::list<rgw_bi_log_entry>& result,
                bool *truncated) override;
 
-  int get_log_status(const DoutPrefixProvider *dpp,
-                     const RGWBucketInfo& bucket_info,
-                     const rgw::bucket_log_layout_generation& log_layout,
-                     int shard_id,
-                     std::map<int, std::string> *markers,
-                     optional_yield y) override;
+  int log_get_max_marker(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout,
+                         const std::map<int, rgw_bucket_dir_header>& headers,
+                         int shard_id,
+                         std::map<int, std::string> *max_markers) override;
 };
 
 // RGWSI_BILog_RADOS_FIFO -- the reader part of the cls_fifo-based backend
@@ -121,7 +120,8 @@ public:
                std::list<rgw_bi_log_entry>& result,
                bool *truncated) override;
 
-  int get_log_status(const RGWBucketInfo& bucket_info,
-                     int shard_id,
-                     map<int, string> *markers) override;
+  int log_get_max_marker(const RGWBucketInfo& bucket_info,
+                         const std::map<int, rgw_bucket_dir_header>& headers,
+                         int shard_id,
+                         std::map<int, string> *max_markers) override;
 };

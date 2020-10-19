@@ -1379,16 +1379,10 @@ public:
 				bool *is_truncated,
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
-				RGWBucketListNameFilter force_check_filter = {});
-  int cls_bucket_head(const DoutPrefixProvider *dpp,
-		      const RGWBucketInfo& bucket_info,
-		      const rgw::bucket_index_layout_generation& idx_layout,
-		      int shard_id, std::vector<rgw_bucket_dir_header>& headers,
-		      std::map<int, std::string> *bucket_instance_ids = NULL);
-  int cls_bucket_head_async(const DoutPrefixProvider *dpp,
-			    const RGWBucketInfo& bucket_info,
-			    const rgw::bucket_index_layout_generation& idx_layout,
-			    int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
+				check_filter_t = nullptr);
+  int get_dir_headers(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::map<int, rgw_bucket_dir_header>& headers);
+  int cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
+
   int bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_dir_entry *dirent);
   int bi_get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_olh_entry *olh);
   int bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);

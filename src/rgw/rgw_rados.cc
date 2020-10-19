@@ -8108,34 +8108,29 @@ int RGWRados::get_bucket_stats_and_bilog_meta(
   string *max_marker,
   bool *syncstopped)
 {
-  vector<rgw_bucket_dir_header> headers;
-  map<int, string> bucket_instance_ids;
-  int r = cls_bucket_head(dpp, bucket_info, idx_layout, shard_id, headers, &bucket_instance_ids);
+  std::map<int, rgw_bucket_dir_header> headers;
+  int r = get_dir_headers(dpp, bucket_info, idx_layout, shard_id, headers);
   if (r < 0) {
     return r;
   }
 
-  ceph_assert(headers.size() == bucket_instance_ids.size());
-
-  auto iter = headers.begin();
-  map<int, string>::iterator viter = bucket_instance_ids.begin();
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
   char buf[64];
-  for(; iter != headers.end(); ++iter, ++viter) {
-    accumulate_raw_stats(*iter, stats);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->ver);
-    ver_mgr.add(viter->first, string(buf));
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->master_ver);
-    master_ver_mgr.add(viter->first, string(buf));
+  for (const auto& [header_shard_id, header ] : headers) {
+    accumulate_raw_stats(header, stats);
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)header.ver);
+    ver_mgr.add(header_shard_id, string(buf));
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)header.master_ver);
+    master_ver_mgr.add(header_shard_id, string(buf));
     if (shard_id >= 0) {
-      *max_marker = iter->max_marker;
+      *max_marker = header.max_marker;
     } else {
-      marker_mgr.add(viter->first, iter->max_marker);
+      marker_mgr.add(header_shard_id, header.max_marker);
     }
     if (syncstopped != NULL)
-      *syncstopped = iter->syncstopped;
+      *syncstopped = header.syncstopped;
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
@@ -8317,24 +8312,23 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m, const DoutPr
     ent.size = 0;
     ent.size_rounded = 0;
 
-    vector<rgw_bucket_dir_header> headers;
-
     RGWBucketInfo bucket_info;
     int ret = get_bucket_instance_info(bucket, bucket_info, NULL, NULL, null_yield, dpp);
     if (ret < 0) {
       return ret;
     }
 
-    int r = cls_bucket_head(dpp, bucket_info, bucket_info.layout.current_index, RGW_NO_SHARD, headers);
-    if (r < 0)
+    std::map<int, rgw_bucket_dir_header> headers;
+    int r = get_dir_headers(dpp, bucket_info, bucket_info.layout.current_index, RGW_NO_SHARD, headers);
+    if (r < 0) {
       return r;
+    }
 
-    auto hiter = headers.begin();
-    for (; hiter != headers.end(); ++hiter) {
+    for ([[maybe_unused]] const auto& [ header_shard_id, header ] : headers) {
       RGWObjCategory category = main_category;
-      auto iter = (hiter->stats).find(category);
-      if (iter != hiter->stats.end()) {
-        struct rgw_bucket_category_stats& stats = iter->second;
+      if (const auto iter = header.stats.find(category);
+          iter != std::end(header.stats)) {
+        const struct rgw_bucket_category_stats& stats = iter->second;
         ent.count += stats.num_entries;
         ent.size += stats.total_size;
         ent.size_rounded += stats.total_size_rounded;
@@ -9742,12 +9736,13 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   return 0;
 } // RGWRados::check_disk_state
 
-int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
+int RGWRados::get_dir_headers(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
+                              const int shard_id,
+                              std::map<int, rgw_bucket_dir_header>& headers /* out */)
 {
-  return svc.bi->cls_bucket_head(bucket_info,
+  return svc.bi->get_dir_headers(bucket_info,
                                  shard_id,
                                  &headers,
-                                 bucket_instance_ids,
                                  null_yield /* the impl. ignores that */);
 }
 
