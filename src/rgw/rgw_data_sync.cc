@@ -503,6 +503,11 @@ public:
   virtual RGWCoroutine *fetch_cr(int shard_id,
                                  const string& marker,
                                  T *result) = 0;
+
+  virtual RGWCoroutine *update_marker_cr(int shard_id,
+                                         const RGWSI_SIP_Marker::SetParams& params) {
+    return nullptr;
+  }
 };
 
 class RGWDataSyncInfoCRHandler : virtual public RGWSyncInfoCRHandler<sip_data_list_result, sip_data_inc_pos> {
@@ -1352,6 +1357,11 @@ public:
   RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos) override {
     return sip->get_cur_state_cr(sid, shard_id, pos);
   }
+
+  RGWCoroutine *update_marker_cr(int shard_id,
+                                 const RGWSI_SIP_Marker::SetParams& params) override {
+    return sip->update_marker_cr(sid, shard_id, params);
+  }
 };
 
 class RGWListBucketIndexesCR : public RGWCoroutine {
@@ -1896,6 +1906,7 @@ public:
 class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
+  int shard_id;
   rgw::bucket_sync::Handle state; // cached bucket-shard state
   rgw_data_sync_obligation obligation; // input obligation
   std::optional<rgw_data_sync_obligation> complete; // obligation to complete
@@ -1905,16 +1916,21 @@ class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
   RGWSyncTraceNodeRef tn;
 
+  bool has_lowerbound_marker{false};
+  RGWDataSyncShardMarkerTrack::marker_entry_type lowerbound_marker;
+
   ceph::real_time progress;
   int sync_status = 0;
 public:
-  RGWDataSyncSingleEntryCR(RGWDataSyncCtx *_sc, rgw::bucket_sync::Handle state,
+  RGWDataSyncSingleEntryCR(RGWDataSyncCtx *_sc, int _shard_id,
+                           rgw::bucket_sync::Handle state,
                            rgw_data_sync_obligation obligation,
                            RGWDataSyncShardMarkerTrack *_marker_tracker,
                            const rgw_raw_obj& error_repo,
                            boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
                            const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
+      shard_id(_shard_id),
       state(std::move(state)), obligation(std::move(obligation)),
       marker_tracker(_marker_tracker), error_repo(error_repo),
       lease_cr(std::move(lease_cr)) {
@@ -2007,12 +2023,25 @@ public:
       if (marker_tracker && !complete->marker.empty()) {
         /* update marker */
         yield call(marker_tracker->finish(dpp, complete->marker));
+
+        has_lowerbound_marker = marker_tracker->get_lowerbound(&lowerbound_marker);
       }
       if (sync_status == 0) {
         sync_status = retcode;
       }
       if (sync_status < 0) {
         return set_cr_error(sync_status);
+      }
+      if (has_lowerbound_marker) {
+        yield call(sc->dsi.inc->update_marker_cr(shard_id, { sc->env->svc->zone->get_zone().id,
+                                                             lowerbound_marker.marker,
+                                                             lowerbound_marker.timestamp,
+                                                             false }));
+      }
+      if (retcode < 0) {
+        tn->log(0, SSTR("ERROR: failed to update source with minimu marker: retcode=" << retcode));
+        /* not much to do about it now, assuming this is transient issue and will be fixed
+         * next time */
       }
       return set_cr_done();
     }
@@ -2106,7 +2135,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
                                   ceph::real_time timestamp, bool retry) {
     auto state = bucket_shard_cache->get(src);
     auto obligation = rgw_data_sync_obligation{key, marker, timestamp, retry};
-    return new RGWDataSyncSingleEntryCR(sc, std::move(state), std::move(obligation),
+    return new RGWDataSyncSingleEntryCR(sc, shard_id, std::move(state), std::move(obligation),
                                         &*marker_tracker, error_repo,
                                         lease_cr.get(), tn);
   }
