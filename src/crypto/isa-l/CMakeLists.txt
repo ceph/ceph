@@ -22,9 +22,6 @@ set(isal_crypto_plugin_srcs
   ${isal_dir}/aes/cbc_enc_256_x4_sb.asm
   ${isal_dir}/aes/cbc_enc_256_x8_sb.asm)
 
-add_library(isal_crypto_plugin_objs OBJECT ${isal_crypto_plugin_srcs})
-target_include_directories(isal_crypto_plugin_objs PRIVATE ${isal_dir}/include)
-
 if(HAVE_GOOD_YASM_ELF64)
 add_dependencies(crypto_plugins ceph_crypto_isal)
 endif(HAVE_GOOD_YASM_ELF64)
