@@ -95,6 +95,7 @@
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_bucket.h"
 #include "services/svc_mdlog.h"
+#include "services/svc_bilog_rados.h"
 
 #include "compressor/Compressor.h"
 
@@ -8976,6 +8977,18 @@ void RGWRados::bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjSt
   op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_state.olh_tag);
 }
 
+static rgw_zone_set get_zones_trace(const RGWZone& zone,
+                                    const rgw_bucket& bucket,
+                                    const rgw_zone_set* const maybe_zones_trace)
+{
+  rgw_zone_set zones_trace;
+  if (maybe_zones_trace) {
+    zones_trace = *maybe_zones_trace;
+  }
+  zones_trace.insert(zone.id, bucket.get_key());
+  return zones_trace;
+}
+
 template <class OpIssuerT>
 int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
                                            OpIssuerT& op_issuer,
@@ -8992,11 +9005,8 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bucket_info.bucket.get_key());
+  const auto zones_trace = \
+    get_zones_trace(svc.zone->get_zone(), bucket_info.bucket, _zones_trace);
 
   BucketShard bs(this);
 
@@ -9486,11 +9496,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
   RGWObjState *state = NULL;
   RGWObjManifest *manifest = nullptr;
 
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bucket_info.bucket.get_key());
+  const auto zones_trace = get_zones_trace(svc.zone->get_zone(), bucket_info.bucket, _zones_trace);
 
 #define MAX_ECANCELED_RETRY 100
   return with_bilog<CLSRGWLinkOLH<DeleteMarkerV>>(
@@ -9590,15 +9596,11 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider* dpp,
   rgw_obj olh_obj = target_obj;
   olh_obj.key.instance.clear();
 
-  RGWObjState *state = NULL;
-  RGWObjManifest *manifest = NULL;
+  RGWObjState *state = nullptr;
+  RGWObjManifest *manifest = nullptr;
 
-
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bucket_info.bucket.get_key());
+  const auto zones_trace = \
+    get_zones_trace(svc.zone->get_zone(), bucket_info.bucket, _zones_trace);
 
   return with_bilog<CLSRGWUnlinkInstance>(
     [&] (auto op_issuer, auto bilog_handler) {
@@ -10500,11 +10502,7 @@ int RGWRados::cls_obj_complete_op(const RGWBucketInfo& bucket_info, BucketShard&
     ", log_op=" << log_op << dendl_bitx;
   ldout_bitx_c(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
+  const auto zones_trace = get_zones_trace(svc.zone->get_zone(), bs.bucket, _zones_trace);
 
   return with_bilog<CLSRGWBucketModifyOpT>(
     [&, this] (auto op_issuer, auto bilog_handler) {
