@@ -3178,7 +3178,7 @@ void RGWCreateBucket::execute()
 				info.swift_ver_location,
 				pquota_info, policy, attrs, info, ep_objv,
 				true, obj_lock_enabled, &s->bucket_exists, s->info,
-				&s->bucket);
+				&s->bucket, s->err.message);
 
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
@@ -6909,7 +6909,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
                                 pquota_info, policy, attrs,
                                 out_info, ep_objv,
                                 true, false, &bucket_exists,
-				info, &bucket);
+				info, &bucket, s->err.message);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret
