@@ -148,7 +148,7 @@ struct btree_lba_manager_test :
 	bottom->first + bottom->second.len <= addr)
       ++bottom;
 
-    auto top = t.mappings.upper_bound(addr + len);
+    auto top = t.mappings.lower_bound(addr + len);
     return std::make_pair(
       bottom,
       top
