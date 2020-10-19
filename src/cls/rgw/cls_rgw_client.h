@@ -360,7 +360,7 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, std::string& tag,
                                const cls_rgw_obj_key& key, const std::string& locator,
-                               rgw_zone_set& zones_trace);
+                               const rgw_zone_set& zones_trace);
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, std::list<std::string>& keep_attr_prefixes);
 void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const std::string& attr);
