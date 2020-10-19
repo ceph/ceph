@@ -1,6 +1,6 @@
-@use '../defaults/bootstrap-defaults' as bd;
+@use '../vendor/variables' as vv;
 
 /* Grid */
 .container-fluid {
-  padding: 0 bd.$grid-gutter-width;
+  padding: 0 vv.$grid-gutter-width;
 }

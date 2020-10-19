@@ -1,4 +1,4 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 /* Reset checkbox success color */
 .was-validated .custom-control-input:valid,
@@ -27,12 +27,12 @@
 
 /* Buttons */
 .btn-light {
-  background-color: bd.$white;
-  border-color: bd.$gray-400 !important;
+  background-color: vv.$white;
+  border-color: vv.$gray-400 !important;
 
   &:hover {
-    background-color: bd.$gray-300;
-    border-color: bd.$gray-600 !important;
+    background-color: vv.$gray-300;
+    border-color: vv.$gray-600 !important;
   }
 }
 
@@ -55,8 +55,8 @@
 }
 
 .btn-primary .badge {
-  background-color: bd.$gray-200;
-  color: bd.$primary;
+  background-color: vv.$gray-200;
+  color: vv.$primary;
 }
 
 .btn-group > .btn > i.fa,
