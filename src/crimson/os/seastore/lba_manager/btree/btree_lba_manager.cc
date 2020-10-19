@@ -67,7 +67,8 @@ BtreeLBAManager::get_mapping(
     t).safe_then([this, &t, offset, length](auto extent) {
       return extent->lookup_range(
 	get_context(t),
-	offset, length);
+	offset, length
+      ).safe_then([extent](auto ret) { return ret; });
     }).safe_then([](auto &&e) {
       logger().debug("BtreeLBAManager::get_mapping: got mapping {}", e);
       return get_mapping_ret(
@@ -306,9 +307,11 @@ BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
 {
   return seastar::do_with(
     std::move(f),
-    [=, &t](auto &f) {
+    LBANodeRef(),
+    [=, &t](auto &f, auto &lbarootref) {
       return get_root(t).safe_then(
 	[=, &t, &f](LBANodeRef lbaroot) mutable {
+	  lbarootref = lbaroot;
 	  return lbaroot->scan_mappings(
 	    get_context(t),
 	    begin,
@@ -324,9 +327,11 @@ BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
 {
   return seastar::do_with(
     std::move(f),
-    [=, &t](auto &f) {
+    LBANodeRef(),
+    [=, &t](auto &f, auto &lbarootref) {
       return get_root(t).safe_then(
 	[=, &t, &f](LBANodeRef lbaroot) mutable {
+	  lbarootref = lbaroot;
 	  return lbaroot->scan_mapped_space(
 	    get_context(t),
 	    f);
