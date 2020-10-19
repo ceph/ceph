@@ -249,6 +249,15 @@ struct btree_lba_manager_test :
     return addresses;
   }
 
+  std::vector<laddr_t> get_mapped_addresses(test_transaction_t &t) {
+    std::vector<laddr_t> addresses;
+    addresses.reserve(t.mappings.size());
+    for (auto &i: t.mappings) {
+      addresses.push_back(i.first);
+    }
+    return addresses;
+  }
+
   void check_mappings() {
     auto t = create_transaction();
     check_mappings(t);
@@ -352,5 +361,47 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       }
     }
     submit_test_transaction(std::move(t));
+  });
+}
+
+TEST_F(btree_lba_manager_test, single_transaction_split_merge)
+{
+  run_async([this] {
+    {
+      auto t = create_transaction();
+      for (unsigned i = 0; i < 600; ++i) {
+	alloc_mapping(t, 0, block_size, get_paddr());
+      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+    }
+    check_mappings();
+
+    {
+      auto addresses = get_mapped_addresses();
+      auto t = create_transaction();
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	if (i % 4 != 0) {
+	  decref_mapping(t, addresses[i]);
+	}
+      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+    }
+    check_mappings();
+
+    {
+      auto t = create_transaction();
+      for (unsigned i = 0; i < 600; ++i) {
+	alloc_mapping(t, 0, block_size, get_paddr());
+      }
+      auto addresses = get_mapped_addresses(t);
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	decref_mapping(t, addresses[i]);
+      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+    }
+    check_mappings();
   });
 }
