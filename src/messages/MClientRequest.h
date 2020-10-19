@@ -45,6 +45,23 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+struct SnapPayload {
+  std::map<std::string, std::string> metadata;
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(metadata, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &iter) {
+    DECODE_START(1, iter);
+    decode(metadata, iter);
+    DECODE_FINISH(iter);
+  }
+};
+
+WRITE_CLASS_ENCODER(SnapPayload)
 
 // metadata ops.
 
