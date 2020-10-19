@@ -3764,7 +3764,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_sip_instance;
   std::optional<SIProvider::stage_id_t> opt_stage_id;
   std::optional<string> opt_target_id;
-  std::optional<bool> opt_init_target;
+  std::optional<bool> opt_check_exists;
 
   std::optional<string> opt_object_name;
   std::optional<string> opt_object_version;
@@ -4291,8 +4291,8 @@ int main(int argc, const char **argv)
       opt_stage_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-id", (char*)NULL)) {
       opt_target_id = val;
-    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--init-target", (char*)NULL)) {
-      opt_init_target = (bool)tmp_int;
+    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--check-exists", (char*)NULL)) {
+      opt_check_exists = (bool)tmp_int;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
@@ -10715,11 +10715,11 @@ next:
    RGWSI_SIP_Marker::Handler::modify_result result;
 
    if (set_cmd) {
-     auto init_flag = opt_init_target.value_or(false);
+     auto check_exists_flag = opt_check_exists.value_or(false);
      auto params = RGWSI_SIP_Marker::SetParams{*opt_target_id,
                                                *opt_marker,
                                                real_clock::now(),
-                                               init_flag};
+                                               check_exists_flag};
      r = marker_handler->set_marker(stage_id, shard_id, params, &result);
      if (r < 0) {
        cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;

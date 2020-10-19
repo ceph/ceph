@@ -69,7 +69,7 @@ public:
     std::string target_id;
     std::string marker;
     ceph::real_time mtime;
-    bool init_target{false};
+    bool check_exists{false};
 
     void dump(Formatter *f) const;
     void decode_json(JSONObj *obj);

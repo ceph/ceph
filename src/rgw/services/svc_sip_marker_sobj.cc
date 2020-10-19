@@ -98,7 +98,7 @@ public:
 
       auto citer = sinfo.targets.find(target_id);
       if (citer == sinfo.targets.end()) {
-        if (!params.init_target) {
+        if (params.check_exists) {
           ldout(cct, 20) << __func__ << "(): couldn't find target (target_id=" << target_id << ")" << dendl;
           return -ENOENT;
         }
