@@ -181,26 +181,17 @@ int RGWSI_BILog_RADOS_InIndex::log_list(const RGWBucketInfo& bucket_info, int sh
   return 0;
 }
 
-int RGWSI_BILog_RADOS_InIndex::get_log_status(const RGWBucketInfo& bucket_info,
-                                              int shard_id,
-                                              map<int, string> *markers)
+int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(
+  const RGWBucketInfo&,
+  const std::map<int, rgw_bucket_dir_header>& headers,
+  const int shard_id,
+  std::map<int, std::string> *max_markers)
 {
-  vector<rgw_bucket_dir_header> headers;
-  map<int, string> bucket_instance_ids;
-  int r = svc.bi->cls_bucket_head(bucket_info, shard_id, &headers, &bucket_instance_ids, null_yield);
-  if (r < 0)
-    return r;
-
-  ceph_assert(headers.size() == bucket_instance_ids.size());
-
-  auto iter = headers.begin();
-  map<int, string>::iterator viter = bucket_instance_ids.begin();
-
-  for(; iter != headers.end(); ++iter, ++viter) {
+  for (const auto& [ header_shard_id, header ] : headers) {
     if (shard_id >= 0) {
-      (*markers)[shard_id] = iter->max_marker;
+      (*max_markers)[shard_id] = header.max_marker;
     } else {
-      (*markers)[viter->first] = iter->max_marker;
+      (*max_markers)[header_shard_id] = header.max_marker;
     }
   }
 
@@ -350,9 +341,11 @@ int RGWSI_BILog_RADOS_FIFO::log_list(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWSI_BILog_RADOS_FIFO::get_log_status(const RGWBucketInfo& bucket_info,
-                                           int shard_id,
-                                           map<int, string> *markers)
+int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(
+  const RGWBucketInfo& bucket_info,
+  const std::map<int, rgw_bucket_dir_header>&,
+  const int shard_id,
+  std::map<int, std::string>* max_markers)
 {
   if (shard_id > 1) {
     // the initial implementation does support single shard only.
@@ -386,7 +379,7 @@ int RGWSI_BILog_RADOS_FIFO::get_log_status(const RGWBucketInfo& bucket_info,
                << dendl;
     return ret;
   }
-  (*markers)[0] = rgw::cls::fifo::marker{
+  (*max_markers)[0] = rgw::cls::fifo::marker{
     head_part_num,
     head_part_header.last_ofs
   }.to_string();

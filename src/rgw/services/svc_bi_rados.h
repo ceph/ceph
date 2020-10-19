@@ -122,10 +122,9 @@ public:
                         map<int, string> *bucket_objs,
                         map<int, string> *bucket_instance_ids);
 
-  int cls_bucket_head(const RGWBucketInfo& bucket_info,
+  int get_dir_headers(const RGWBucketInfo& bucket_info,
                       int shard_id,
-                      vector<rgw_bucket_dir_header> *headers,
-                      map<int, string> *bucket_instance_ids,
+                      std::map<int, rgw_bucket_dir_header> *headers,
                       optional_yield y) override;
 };
 
