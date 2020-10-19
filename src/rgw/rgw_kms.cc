@@ -252,6 +252,8 @@ protected:
       secret_req.append_header("X-Vault-Namespace", vault_namespace);
     }
 
+    secret_req.set_verify_ssl(cct->_conf->rgw_crypt_vault_verify_ssl);
+
     res = secret_req.process(null_yield);
     if (res < 0) {
       ldout(cct, 0) << "ERROR: Request to Vault failed with error " << res << dendl;
