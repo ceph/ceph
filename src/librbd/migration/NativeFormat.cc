@@ -20,18 +20,27 @@
 namespace librbd {
 namespace migration {
 
+namespace {
+
+const std::string TYPE_KEY{"type"};
+const std::string POOL_ID_KEY{"pool_id"};
+const std::string POOL_NAMESPACE_KEY{"pool_namespace"};
+const std::string IMAGE_NAME_KEY{"image_name"};
+const std::string IMAGE_ID_KEY{"image_id"};
+
+} // anonymous namespace
+
 template <typename I>
 std::string NativeFormat<I>::build_source_spec(
     int64_t pool_id, const std::string& pool_namespace,
     const std::string& image_name, const std::string& image_id) {
   json_spirit::mObject source_spec;
-  source_spec["type"] = "native";
-  source_spec["pool_id"] = pool_id;
-  source_spec["pool_namespace"] = pool_namespace;
+  source_spec[TYPE_KEY] = "native";
+  source_spec[POOL_ID_KEY] = pool_id;
+  source_spec[POOL_NAMESPACE_KEY] = pool_namespace;
+  source_spec[IMAGE_NAME_KEY] = image_name;
   if (!image_id.empty()) {
-    source_spec["image_id"] = image_id;
-  } else {
-    source_spec["image_name"] = image_name;
+    source_spec[IMAGE_ID_KEY] = image_id;
   }
   return json_spirit::write(source_spec);
 }
