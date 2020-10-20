@@ -5499,6 +5499,11 @@ def _get_parser():
         action='append',
         default=[],
         help='set environment variable')
+    parser.add_argument(
+        '--container-init',
+        action='store_true',
+        default=False,
+        help='spawn as init container')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
