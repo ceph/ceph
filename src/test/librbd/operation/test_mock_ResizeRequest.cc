@@ -146,7 +146,7 @@ public:
 
   void expect_invalidate_cache(MockImageCtx &mock_image_ctx,
                                int r) {
-    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, invalidate_cache(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, invalidate_cache(_))
                    .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
     expect_op_work_queue(mock_image_ctx);
   }

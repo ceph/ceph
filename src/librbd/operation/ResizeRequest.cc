@@ -225,8 +225,7 @@ void ResizeRequest<I>::send_invalidate_cache() {
 
   // need to invalidate since we're deleting objects, and
   // ObjectCacher doesn't track non-existent objects
-  std::shared_lock owner_locker{image_ctx.owner_lock};
-  image_ctx.io_object_dispatcher->invalidate_cache(create_context_callback<
+  image_ctx.io_image_dispatcher->invalidate_cache(create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_invalidate_cache>(this));
 }
 
