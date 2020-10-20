@@ -686,7 +686,8 @@ int Migration<I>::get_source_spec(I* image_ctx, std::string* source_spec) {
 }
 
 template <typename I>
-Migration<I>::Migration(I *src_image_ctx, librados::IoCtx& dst_io_ctx,
+Migration<I>::Migration(ImageCtx* src_image_ctx,
+                        librados::IoCtx& dst_io_ctx,
                         const std::string &dstname,
                         const std::string &dst_image_id,
                         ImageOptions& opts, bool flatten, bool mirroring,
@@ -695,11 +696,9 @@ Migration<I>::Migration(I *src_image_ctx, librados::IoCtx& dst_io_ctx,
                         const std::string &state_description,
                         ProgressContext *prog_ctx)
   : m_cct(static_cast<CephContext *>(dst_io_ctx.cct())),
-    m_src_image_ctx(src_image_ctx), m_dst_io_ctx(dst_io_ctx),
-    m_src_old_format(m_src_image_ctx->old_format),
-    m_src_image_name(m_src_image_ctx->old_format ? m_src_image_ctx->name : ""),
-    m_src_image_id(m_src_image_ctx->id),
-    m_src_header_oid(m_src_image_ctx->header_oid), m_dst_image_name(dstname),
+    m_src_image_ctx(src_image_ctx),
+    m_dst_io_ctx(dst_io_ctx),
+    m_dst_image_name(dstname),
     m_dst_image_id(dst_image_id.empty() ?
                    util::generate_image_id(m_dst_io_ctx) : dst_image_id),
     m_dst_header_oid(util::header_name(m_dst_image_id)), m_image_options(opts),
@@ -712,17 +711,16 @@ Migration<I>::Migration(I *src_image_ctx, librados::IoCtx& dst_io_ctx,
     m_dst_migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST,
                          src_image_ctx->md_ctx.get_id(),
                          src_image_ctx->md_ctx.get_namespace(),
-                         m_src_image_ctx->name, m_src_image_ctx->id, "", {}, 0,
+                         src_image_ctx->name, src_image_ctx->id, "", {}, 0,
                          mirroring, mirror_image_mode, flatten, state,
                          state_description) {
-  m_src_io_ctx.dup(src_image_ctx->md_ctx);
 }
 
 template <typename I>
 int Migration<I>::prepare() {
   ldout(m_cct, 10) << dendl;
 
-  int r = validate_src_snaps();
+  int r = validate_src_snaps(m_src_image_ctx);
   if (r < 0) {
     return r;
   }
@@ -732,15 +730,15 @@ int Migration<I>::prepare() {
     return r;
   }
 
-  r = unlink_src_image();
+  r = unlink_src_image(m_src_image_ctx);
   if (r < 0) {
     enable_mirroring(m_src_image_ctx, m_mirroring, m_mirror_image_mode);
     return r;
   }
 
-  r = set_migration();
+  r = set_src_migration(m_src_image_ctx);
   if (r < 0) {
-    relink_src_image();
+    relink_src_image(m_src_image_ctx);
     enable_mirroring(m_src_image_ctx, m_mirroring, m_mirror_image_mode);
     return r;
   }
@@ -779,7 +777,8 @@ int Migration<I>::execute() {
   }
 
   while (true) {
-    MigrationProgressContext prog_ctx(m_src_io_ctx, m_src_header_oid,
+    MigrationProgressContext prog_ctx(m_src_image_ctx->md_ctx,
+                                      m_src_image_ctx->header_oid,
                                       cls::rbd::MIGRATION_STATE_EXECUTING,
                                       m_prog_ctx);
     r = dst_image_ctx->operations->migrate(prog_ctx);
@@ -934,7 +933,7 @@ int Migration<I>::abort() {
     }
   }
 
-  r = relink_src_image();
+  r = relink_src_image(m_src_image_ctx);
   if (r < 0) {
     return r;
   }
@@ -987,7 +986,7 @@ int Migration<I>::commit() {
     return r;
   }
 
-  r = remove_src_image();
+  r = remove_src_image(&m_src_image_ctx);
   if (r < 0) {
     return r;
   }
@@ -1044,12 +1043,16 @@ int Migration<I>::status(image_migration_status_t *status) {
 template <typename I>
 int Migration<I>::set_state(cls::rbd::MigrationState state,
                             const std::string &description) {
-  int r = cls_client::migration_set_state(&m_src_io_ctx, m_src_header_oid,
-                                          state, description);
-  if (r < 0) {
-    lderr(m_cct) << "failed to set source migration header: " << cpp_strerror(r)
-                 << dendl;
-    return r;
+  int r;
+  if (m_src_image_ctx != nullptr) {
+    r = cls_client::migration_set_state(&m_src_image_ctx->md_ctx,
+                                        m_src_image_ctx->header_oid,
+                                        state, description);
+    if (r < 0) {
+      lderr(m_cct) << "failed to set source migration header: "
+                   << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   r = cls_client::migration_set_state(&m_dst_io_ctx, m_dst_header_oid, state,
@@ -1064,10 +1067,11 @@ int Migration<I>::set_state(cls::rbd::MigrationState state,
 }
 
 template <typename I>
-int Migration<I>::list_src_snaps(std::vector<librbd::snap_info_t> *snaps) {
+int Migration<I>::list_src_snaps(I* image_ctx,
+                                 std::vector<librbd::snap_info_t> *snaps) {
   ldout(m_cct, 10) << dendl;
 
-  int r = Snapshot<I>::list(m_src_image_ctx, *snaps);
+  int r = Snapshot<I>::list(image_ctx, *snaps);
   if (r < 0) {
     lderr(m_cct) << "failed listing snapshots: " << cpp_strerror(r) << dendl;
     return r;
@@ -1075,7 +1079,7 @@ int Migration<I>::list_src_snaps(std::vector<librbd::snap_info_t> *snaps) {
 
   for (auto &snap : *snaps) {
     librbd::snap_namespace_type_t namespace_type;
-    r = Snapshot<I>::get_namespace_type(m_src_image_ctx, snap.id,
+    r = Snapshot<I>::get_namespace_type(image_ctx, snap.id,
                                         &namespace_type);
     if (r < 0) {
       lderr(m_cct) << "error getting snap namespace type: " << cpp_strerror(r)
@@ -1100,11 +1104,11 @@ int Migration<I>::list_src_snaps(std::vector<librbd::snap_info_t> *snaps) {
 }
 
 template <typename I>
-int Migration<I>::validate_src_snaps() {
+int Migration<I>::validate_src_snaps(I* image_ctx) {
   ldout(m_cct, 10) << dendl;
 
   std::vector<librbd::snap_info_t> snaps;
-  int r = list_src_snaps(&snaps);
+  int r = list_src_snaps(image_ctx, &snaps);
   if (r < 0) {
     return r;
   }
@@ -1113,17 +1117,17 @@ int Migration<I>::validate_src_snaps() {
   r = m_image_options.get(RBD_IMAGE_OPTION_FEATURES, &dst_features);
   ceph_assert(r == 0);
 
-  if (!m_src_image_ctx->test_features(RBD_FEATURE_LAYERING)) {
+  if (!image_ctx->test_features(RBD_FEATURE_LAYERING)) {
     return 0;
   }
 
   for (auto &snap : snaps) {
-    std::shared_lock image_locker{m_src_image_ctx->image_lock};
-    cls::rbd::ParentImageSpec parent_spec{m_src_image_ctx->md_ctx.get_id(),
-                                          m_src_image_ctx->md_ctx.get_namespace(),
-                                          m_src_image_ctx->id, snap.id};
+    std::shared_lock image_locker{image_ctx->image_lock};
+    cls::rbd::ParentImageSpec parent_spec{image_ctx->md_ctx.get_id(),
+                                          image_ctx->md_ctx.get_namespace(),
+                                          image_ctx->id, snap.id};
     std::vector<librbd::linked_image_spec_t> child_images;
-    r = api::Image<I>::list_children(m_src_image_ctx, parent_spec,
+    r = api::Image<I>::list_children(image_ctx, parent_spec,
                                      &child_images);
     if (r < 0) {
       lderr(m_cct) << "failed listing children: " << cpp_strerror(r)
@@ -1131,7 +1135,7 @@ int Migration<I>::validate_src_snaps() {
       return r;
     }
     if (!child_images.empty()) {
-      ldout(m_cct, 1) << m_src_image_ctx->name << "@" << snap.name
+      ldout(m_cct, 1) << image_ctx->name << "@" << snap.name
                       << " has children" << dendl;
 
       if ((dst_features & RBD_FEATURE_LAYERING) == 0) {
@@ -1147,20 +1151,20 @@ int Migration<I>::validate_src_snaps() {
 
 
 template <typename I>
-int Migration<I>::set_migration() {
+int Migration<I>::set_src_migration(I* image_ctx) {
   ldout(m_cct, 10) << dendl;
 
-  m_src_image_ctx->ignore_migrating = true;
+  image_ctx->ignore_migrating = true;
 
-  int r = cls_client::migration_set(&m_src_io_ctx, m_src_header_oid,
+  int r = cls_client::migration_set(&image_ctx->md_ctx, image_ctx->header_oid,
                                     m_src_migration_spec);
   if (r < 0) {
-    lderr(m_cct) << "failed to set migration header: " << cpp_strerror(r)
+    lderr(m_cct) << "failed to set source migration header: " << cpp_strerror(r)
                  << dendl;
     return r;
   }
 
-  m_src_image_ctx->notify_update();
+  image_ctx->notify_update();
 
   return 0;
 }
@@ -1187,21 +1191,22 @@ int Migration<I>::remove_migration(I *image_ctx) {
 }
 
 template <typename I>
-int Migration<I>::unlink_src_image() {
-  if (m_src_old_format) {
-    return v1_unlink_src_image();
+int Migration<I>::unlink_src_image(I* image_ctx) {
+  if (image_ctx->old_format) {
+    return v1_unlink_src_image(image_ctx);
   } else {
-    return v2_unlink_src_image();
+    return v2_unlink_src_image(image_ctx);
   }
 }
 
 template <typename I>
-int Migration<I>::v1_unlink_src_image() {
+int Migration<I>::v1_unlink_src_image(I* image_ctx) {
   ldout(m_cct, 10) << dendl;
 
-  int r = tmap_rm(m_src_io_ctx, m_src_image_name);
+  std::shared_lock image_locker{image_ctx->image_lock};
+  int r = tmap_rm(image_ctx->md_ctx, image_ctx->name);
   if (r < 0) {
-    lderr(m_cct) << "failed removing " << m_src_image_name << " from tmap: "
+    lderr(m_cct) << "failed removing " << image_ctx->name << " from tmap: "
                  << cpp_strerror(r) << dendl;
     return r;
   }
@@ -1210,15 +1215,15 @@ int Migration<I>::v1_unlink_src_image() {
 }
 
 template <typename I>
-int Migration<I>::v2_unlink_src_image() {
+int Migration<I>::v2_unlink_src_image(I* image_ctx) {
   ldout(m_cct, 10) << dendl;
 
-  m_src_image_ctx->owner_lock.lock_shared();
-  if (m_src_image_ctx->exclusive_lock != nullptr &&
-      m_src_image_ctx->exclusive_lock->is_lock_owner()) {
+  image_ctx->owner_lock.lock_shared();
+  if (image_ctx->exclusive_lock != nullptr &&
+      image_ctx->exclusive_lock->is_lock_owner()) {
     C_SaferCond ctx;
-    m_src_image_ctx->exclusive_lock->release_lock(&ctx);
-    m_src_image_ctx->owner_lock.unlock_shared();
+    image_ctx->exclusive_lock->release_lock(&ctx);
+    image_ctx->owner_lock.unlock_shared();
     int r = ctx.wait();
      if (r < 0) {
       lderr(m_cct) << "error releasing exclusive lock: " << cpp_strerror(r)
@@ -1226,11 +1231,11 @@ int Migration<I>::v2_unlink_src_image() {
       return r;
      }
   } else {
-    m_src_image_ctx->owner_lock.unlock_shared();
+    image_ctx->owner_lock.unlock_shared();
   }
 
-  int r = Trash<I>::move(m_src_io_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
-                         m_src_image_ctx->name, 0);
+  int r = Trash<I>::move(image_ctx->md_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
+                         image_ctx->name, 0);
   if (r < 0) {
     lderr(m_cct) << "failed moving image to trash: " << cpp_strerror(r)
                  << dendl;
@@ -1241,21 +1246,22 @@ int Migration<I>::v2_unlink_src_image() {
 }
 
 template <typename I>
-int Migration<I>::relink_src_image() {
-  if (m_src_old_format) {
-    return v1_relink_src_image();
+int Migration<I>::relink_src_image(I* image_ctx) {
+  if (image_ctx->old_format) {
+    return v1_relink_src_image(image_ctx);
   } else {
-    return v2_relink_src_image();
+    return v2_relink_src_image(image_ctx);
   }
 }
 
 template <typename I>
-int Migration<I>::v1_relink_src_image() {
+int Migration<I>::v1_relink_src_image(I* image_ctx) {
   ldout(m_cct, 10) << dendl;
 
-  int r = tmap_set(m_src_io_ctx, m_src_image_name);
+  std::shared_lock image_locker{image_ctx->image_lock};
+  int r = tmap_set(image_ctx->md_ctx, image_ctx->name);
   if (r < 0) {
-    lderr(m_cct) << "failed adding " << m_src_image_name << " to tmap: "
+    lderr(m_cct) << "failed adding " << image_ctx->name << " to tmap: "
                  << cpp_strerror(r) << dendl;
     return r;
   }
@@ -1264,12 +1270,13 @@ int Migration<I>::v1_relink_src_image() {
 }
 
 template <typename I>
-int Migration<I>::v2_relink_src_image() {
+int Migration<I>::v2_relink_src_image(I* image_ctx) {
   ldout(m_cct, 10) << dendl;
 
-  int r = Trash<I>::restore(m_src_io_ctx,
+  std::shared_lock image_locker{image_ctx->image_lock};
+  int r = Trash<I>::restore(image_ctx->md_ctx,
                             {cls::rbd::TRASH_IMAGE_SOURCE_MIGRATION},
-                            m_src_image_ctx->id, m_src_image_ctx->name);
+                            image_ctx->id, image_ctx->name);
   if (r < 0) {
     lderr(m_cct) << "failed restoring image from trash: " << cpp_strerror(r)
                  << dendl;
@@ -1391,11 +1398,16 @@ int Migration<I>::create_dst_image() {
     return r;
   }
 
+  m_src_image_ctx->image_lock.lock_shared();
   m_dst_migration_spec = {cls::rbd::MIGRATION_HEADER_TYPE_DST,
-                          m_src_io_ctx.get_id(), m_src_io_ctx.get_namespace(),
-                          m_src_image_name, m_src_image_id, "", snap_seqs, size,
-                          m_mirroring, m_mirror_image_mode, m_flatten,
-                          cls::rbd::MIGRATION_STATE_PREPARING, ""};
+                          m_src_image_ctx->md_ctx.get_id(),
+                          m_src_image_ctx->md_ctx.get_namespace(),
+                          (m_src_image_ctx->old_format ?
+                            m_src_image_ctx->name : ""),
+                          m_src_image_ctx->id, "",
+                          snap_seqs, size, m_mirroring, m_mirror_image_mode,
+                          m_flatten, cls::rbd::MIGRATION_STATE_PREPARING, ""};
+  m_src_image_ctx->image_lock.unlock_shared();
 
   r = cls_client::migration_set(&m_dst_io_ctx, m_dst_header_oid,
                                 m_dst_migration_spec);
@@ -1616,13 +1628,14 @@ template <typename I>
 int Migration<I>::relink_children(I *from_image_ctx, I *to_image_ctx) {
   ldout(m_cct, 10) << dendl;
 
+  bool migration_abort = (to_image_ctx == m_src_image_ctx);
+
   std::vector<librbd::snap_info_t> snaps;
-  int r = list_src_snaps(&snaps);
+  int r = list_src_snaps(
+    migration_abort ? to_image_ctx : from_image_ctx, &snaps);
   if (r < 0) {
     return r;
   }
-
-  bool migration_abort = (to_image_ctx == m_src_image_ctx);
 
   for (auto it = snaps.begin(); it != snaps.end(); it++) {
     auto &snap = *it;
@@ -1813,11 +1826,13 @@ int Migration<I>::relink_child(I *from_image_ctx, I *to_image_ctx,
 }
 
 template <typename I>
-int Migration<I>::remove_src_image() {
+int Migration<I>::remove_src_image(I** image_ctx) {
   ldout(m_cct, 10) << dendl;
 
+  auto src_image_ctx = *image_ctx;
+
   std::vector<librbd::snap_info_t> snaps;
-  int r = list_src_snaps(&snaps);
+  int r = list_src_snaps(src_image_ctx, &snaps);
   if (r < 0) {
     return r;
   }
@@ -1826,7 +1841,7 @@ int Migration<I>::remove_src_image() {
     auto &snap = *it;
 
     librbd::NoOpProgressContext prog_ctx;
-    int r = Snapshot<I>::remove(m_src_image_ctx, snap.name.c_str(),
+    int r = Snapshot<I>::remove(src_image_ctx, snap.name.c_str(),
                                 RBD_SNAP_REMOVE_UNPROTECT, prog_ctx);
     if (r < 0) {
       lderr(m_cct) << "failed removing source image snapshot '" << snap.name
@@ -1835,18 +1850,21 @@ int Migration<I>::remove_src_image() {
     }
   }
 
-  ceph_assert(m_src_image_ctx->ignore_migrating);
+  ceph_assert(src_image_ctx->ignore_migrating);
 
-  auto asio_engine = m_src_image_ctx->asio_engine;
+  auto asio_engine = src_image_ctx->asio_engine;
+  auto src_image_id = src_image_ctx->id;
+  librados::IoCtx src_io_ctx;
+  src_io_ctx.dup(src_image_ctx->md_ctx);
 
   C_SaferCond on_remove;
   auto req = librbd::image::RemoveRequest<I>::create(
-      m_src_io_ctx, m_src_image_ctx, false, true, *m_prog_ctx,
+      src_io_ctx, src_image_ctx, false, true, *m_prog_ctx,
       asio_engine->get_work_queue(), &on_remove);
   req->send();
   r = on_remove.wait();
 
-  m_src_image_ctx = nullptr;
+  *image_ctx = nullptr;
 
   // For old format image it will return -ENOENT due to expected
   // tmap_rm failure at the end.
@@ -1856,10 +1874,10 @@ int Migration<I>::remove_src_image() {
     return r;
   }
 
-  if (!m_src_image_id.empty()) {
-    r = cls_client::trash_remove(&m_src_io_ctx, m_src_image_id);
+  if (!src_image_id.empty()) {
+    r = cls_client::trash_remove(&src_io_ctx, src_image_id);
     if (r < 0 && r != -ENOENT) {
-      lderr(m_cct) << "error removing image " << m_src_image_id
+      lderr(m_cct) << "error removing image " << src_image_id
                    << " from rbd_trash object" << dendl;
     }
   }
