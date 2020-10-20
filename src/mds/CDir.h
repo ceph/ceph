@@ -644,6 +644,7 @@ protected:
       bufferlist &bl,
       int pos,
       const std::set<snapid_t> *snaps,
+      double rand_threshold,
       bool *force_dirty);
 
   /**
