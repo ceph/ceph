@@ -44,9 +44,27 @@ void OpenSourceImageRequest<I>::open_source() {
     m_dst_image_ctx->md_ctx, true);
   (*m_src_image_ctx)->child = m_dst_image_ctx;
 
+  auto source_spec = m_migration_info.source_spec;
+  if (source_spec.empty()) {
+    // implies legacy migration from RBD image in same cluster
+    source_spec = NativeFormat<I>::build_source_spec(
+      m_migration_info.pool_id, m_migration_info.pool_namespace,
+      m_migration_info.image_name, m_migration_info.image_id);
+  }
+
   // TODO use factory once multiple sources are available
+
+  json_spirit::mValue json_root;
+  json_spirit::mObject json_source_spec_object;
+  if(json_spirit::read(source_spec, json_root)) {
+    try {
+      json_source_spec_object = json_root.get_obj();
+    } catch (std::runtime_error&) {
+    }
+  }
+
   m_format = std::unique_ptr<FormatInterface>(NativeFormat<I>::create(
-    *m_src_image_ctx, m_migration_info));
+    *m_src_image_ctx, json_source_spec_object));
 
   auto ctx = util::create_context_callback<
     OpenSourceImageRequest<I>,
