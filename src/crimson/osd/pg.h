@@ -274,7 +274,13 @@ public:
     shard_services.remove_want_pg_temp(pgid.pgid);
   }
   void publish_stats_to_osd() final {
-    // Not needed yet
+    if (!is_primary())
+      return;
+
+    (void) peering_state.prepare_stats_for_publish(
+      false,
+      pg_stat_t(),
+      object_stat_collection_t());
   }
   void clear_publish_stats() final {
     // Not needed yet
