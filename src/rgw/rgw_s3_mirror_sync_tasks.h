@@ -105,8 +105,8 @@ public:
   std::shared_ptr<CustomStreamBuffer> customStreamBuf = nullptr;
   std::basic_iostream<char, std::char_traits<char>>  *ioStream;
   // S3 object properties to dump the headers
-  ceph::time_detail::real_clock::time_point expires;
-  ceph::time_detail::real_clock::time_point last_modified;
+  real_clock::time_point expires;
+  real_clock::time_point last_modified;
   string etag = "";
   string cache_control = "";
   string content_disposition = "";
