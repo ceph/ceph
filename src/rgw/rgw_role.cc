@@ -299,13 +299,13 @@ void RGWRole::dump(Formatter *f) const
 
 void RGWRole::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("id", id, obj);
-  JSONDecoder::decode_json("name", name, obj);
-  JSONDecoder::decode_json("path", path, obj);
-  JSONDecoder::decode_json("arn", arn, obj);
-  JSONDecoder::decode_json("create_date", creation_date, obj);
-  JSONDecoder::decode_json("max_session_duration", max_session_duration, obj);
-  JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
+  JSONDecoder::decode_json("RoleId", id, obj);
+  JSONDecoder::decode_json("RoleName", name, obj);
+  JSONDecoder::decode_json("Path", path, obj);
+  JSONDecoder::decode_json("Arn", arn, obj);
+  JSONDecoder::decode_json("CreateDate", creation_date, obj);
+  JSONDecoder::decode_json("MaxSessionDuration", max_session_duration, obj);
+  JSONDecoder::decode_json("AssumeRolePolicyDocument", trust_policy, obj);
 }
 
 int RGWRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
