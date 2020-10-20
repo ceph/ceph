@@ -9,6 +9,7 @@
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/migration/ImageDispatch.h"
 #include "librbd/migration/NativeFormat.h"
+#include "librbd/migration/SourceSpecBuilder.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -40,8 +41,8 @@ void OpenSourceImageRequest<I>::open_source() {
   ldout(cct, 10) << dendl;
 
   // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", m_src_snap_id,
-    m_dst_image_ctx->md_ctx, true);
+  *m_src_image_ctx = I::create("", "", m_src_snap_id, m_dst_image_ctx->md_ctx,
+                               true);
   (*m_src_image_ctx)->child = m_dst_image_ctx;
 
   auto source_spec = m_migration_info.source_spec;
@@ -52,19 +53,24 @@ void OpenSourceImageRequest<I>::open_source() {
       m_migration_info.image_name, m_migration_info.image_id);
   }
 
-  // TODO use factory once multiple sources are available
-
-  json_spirit::mValue json_root;
-  json_spirit::mObject json_source_spec_object;
-  if(json_spirit::read(source_spec, json_root)) {
-    try {
-      json_source_spec_object = json_root.get_obj();
-    } catch (std::runtime_error&) {
-    }
+  SourceSpecBuilder<I> source_spec_builder{*m_src_image_ctx};
+  json_spirit::mObject source_spec_object;
+  int r = source_spec_builder.parse_source_spec(source_spec,
+                                                &source_spec_object);
+  if (r < 0) {
+    lderr(cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
   }
 
-  m_format = std::unique_ptr<FormatInterface>(NativeFormat<I>::create(
-    *m_src_image_ctx, json_source_spec_object));
+  r = source_spec_builder.build_format(source_spec_object, &m_format);
+  if (r < 0) {
+    lderr(cct) << "failed to build migration format handler: "
+               << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
 
   auto ctx = util::create_context_callback<
     OpenSourceImageRequest<I>,
