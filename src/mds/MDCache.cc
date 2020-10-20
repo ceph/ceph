@@ -6007,6 +6007,7 @@ bool MDCache::open_undef_inodes_dirfrags()
        ++p) {
     CInode *in = *p;
     ceph_assert(!in->is_base());
+    ceph_assert(in->get_parent_dir());
     fetch_queue.insert(in->get_parent_dir());
   }
 
