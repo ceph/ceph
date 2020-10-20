@@ -251,7 +251,7 @@ int main(int argc, char **argv)
     ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
-    ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'/'bluefs-slow'")
+    ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ;
@@ -399,14 +399,13 @@ int main(int argc, char **argv)
       if (!name.empty() &&
           name != "block" &&
           name != "bluefs-db" &&
-          name != "bluefs-wal" &&
-          name != "bluefs-slow") {
+          name != "bluefs-wal") {
         cerr << "unknown allocator '" << name << "'" << std::endl;
         exit(EXIT_FAILURE);
       }
     }
     if (allocs_name.empty())
-      allocs_name = vector<string>{"block", "bluefs-db", "bluefs-wal", "bluefs-slow"};
+      allocs_name = vector<string>{"block", "bluefs-db", "bluefs-wal"};
   }
   if (action == "reshard") {
     if (path.empty()) {
