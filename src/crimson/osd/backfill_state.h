@@ -261,6 +261,9 @@ public:
     backfill_machine.process_event(*std::move(evt));
   }
 
+  hobject_t get_last_backfill_started() const {
+    return last_backfill_started;
+  }
 private:
   hobject_t last_backfill_started;
   BackfillInterval backfill_info;
