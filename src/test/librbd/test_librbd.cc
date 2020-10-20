@@ -7452,11 +7452,11 @@ TEST_F(TestLibRBD, MigrationPP) {
   json_spirit::mValue json_source_spec;
   json_spirit::read(source_spec, json_source_spec);
   json_spirit::mObject json_source_spec_obj = json_source_spec.get_obj();
+  ASSERT_EQ("native", json_source_spec_obj["type"].get_str());
   ASSERT_EQ(ioctx.get_id(), json_source_spec_obj["pool_id"].get_int64());
   ASSERT_EQ("", json_source_spec_obj["pool_namespace"].get_str());
-  if (old_format) {
-    ASSERT_EQ(1, json_source_spec_obj.count("image_name"));
-  } else {
+  ASSERT_EQ(1, json_source_spec_obj.count("image_name"));
+  if (!old_format) {
     ASSERT_EQ(1, json_source_spec_obj.count("image_id"));
   }
   ASSERT_EQ(0, image.close());
