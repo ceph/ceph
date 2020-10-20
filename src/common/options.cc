@@ -7837,7 +7837,7 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_replay_unsafe_with_closed_session", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_flag(Option::FLAG_RUNTIME)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("complete all the replay request when mds is restarted, no matter the session is closed or not"),
 
     Option("mds_default_dir_hash", Option::TYPE_INT, Option::LEVEL_ADVANCED)
