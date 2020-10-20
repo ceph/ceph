@@ -221,6 +221,7 @@ struct dir_result_t {
   frag_t buffer_frag;
 
   vector<dentry> buffer;
+  struct dirent de;
 };
 
 class Client : public Dispatcher, public md_config_obs_t {
