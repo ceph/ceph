@@ -512,6 +512,7 @@ class CephFSMount(object):
 
         Prerequisite: the client is not mounted.
         """
+        log.info('Cleaning up mount {0}'.format(self.client_remote.name))
         stderr = StringIO()
         try:
             self.client_remote.run(args=['rmdir', '--', self.mountpoint],
