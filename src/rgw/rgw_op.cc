@@ -6626,10 +6626,12 @@ void RGWDeleteMultiObj::execute()
       }
     }
 
-    int object_lock_response = verify_object_lock(this, attrs, false, false);
-    if (object_lock_response != 0) {
-      send_partial_response(*iter, false, "", object_lock_response);
-      continue;
+    if (check_obj_lock) {
+      int object_lock_response = verify_object_lock(this, attrs, bypass_perm, bypass_governance_mode);
+      if (object_lock_response != 0) {
+        send_partial_response(*iter, false, "", object_lock_response);
+        continue;
+      }
     }
 
     obj_ctx->set_atomic(obj);
