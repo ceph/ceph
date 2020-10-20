@@ -1723,6 +1723,13 @@ def task(ctx, config):
             cephfs:
               max_mds: 2
 
+    To change the mdsmap's default session_timeout (60 seconds), use::
+
+        tasks:
+        - ceph:
+            cephfs:
+              session_timeout: 300
+
     Note, this will cause the task to check the /scratch_devs file on each node
     for available devices.  If no such file is found, /dev/sdb will be used.
 
