@@ -95,6 +95,7 @@ def get_block_db_size(lv_format=True):
         logger.debug(
             'block.db has no size configuration, will fallback to using as much as possible'
         )
+        # TODO better to return disk.Size(b=0) here
         return None
     logger.debug('bluestore_block_db_size set to %s' % conf_db_size)
     db_size = disk.Size(b=str_to_int(conf_db_size))
