@@ -36,35 +36,40 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
 int RGWRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
-
+  RGWObjVersionTracker objv_tracker;
   return role_ctl->store_info(this,
 			      y,
             dpp,
 			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive));
+			      set_exclusive(exclusive).
+			      set_objv_tracker(&objv_tracker));
 }
 
 int RGWRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
+  RGWObjVersionTracker objv_tracker;
   return role_ctl->store_name(id,
 			      name,
 			      tenant,
 			      y,
             dpp,
 			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive)
+			      set_exclusive(exclusive).
+			      set_objv_tracker(&objv_tracker)
 			      );
 }
 
 int RGWRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
+  RGWObjVersionTracker objv_tracker;
   return role_ctl->store_path(id,
 			      path,
 			      tenant,
 			      y,
             dpp,
 			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive));
+			      set_exclusive(exclusive).
+			      set_objv_tracker(&objv_tracker));
 }
 
 int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -306,7 +311,10 @@ void RGWRole::decode_json(JSONObj *obj)
 int RGWRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
 {
   int ret;
-  std::tie(ret, role_id) = role_ctl->read_name(role_name, tenant, y, dpp);
+  RGWObjVersionTracker ot;
+  std::tie(ret, role_id) = role_ctl->read_name(role_name, tenant, y, dpp,
+					       RGWRoleCtl::GetParams().
+					       set_objv_tracker(&ot));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role id with params"
 		 << role_name << ", " << tenant << ":"
@@ -319,7 +327,10 @@ int RGWRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name
 int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 {
 
-  auto ret = role_ctl->read_info(id, y, dpp, this);
+  RGWObjVersionTracker ot;
+  auto ret = role_ctl->read_info(id, y, dpp, this,
+					  RGWRoleCtl::GetParams().
+					  set_objv_tracker(&ot));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from pool: "
                   ": " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -331,7 +342,10 @@ int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 
 int RGWRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto [ret, _id] = role_ctl->read_name(name, tenant, y, dpp);
+  RGWObjVersionTracker ot;
+  auto [ret, _id] = role_ctl->read_name(name, tenant, y, dpp,
+					RGWRoleCtl::GetParams().
+					set_objv_tracker(&ot));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role name from pool: "
                   << name << ": " << cpp_strerror(-ret) << dendl;
