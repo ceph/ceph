@@ -817,11 +817,12 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   } else if (session->is_closing() ||
 	     session->is_killing()) {
     // kill any lingering capabilities, leases, requests
+    bool killing = session->is_killing();
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->locker->remove_client_cap(in, cap, true);
+      mds->locker->remove_client_cap(in, cap, killing);
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
