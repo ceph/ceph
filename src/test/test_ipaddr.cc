@@ -1,6 +1,5 @@
 #include "include/ipaddr.h"
 #include "common/pick_address.h"
-#include "global/global_context.h"
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "common/ceph_context.h"
@@ -624,9 +623,11 @@ TEST(pick_address, find_ip_in_subnet_list)
   ipv4(&a_two, "10.2.1.123");
   ipv6(&a_three, "2001:1234:5678:90ab::cdef");
 
+  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+
   // match by network
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct,
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.1.0.0/16",
@@ -634,7 +635,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct,
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.2.0.0/16",
@@ -643,7 +644,7 @@ TEST(pick_address, find_ip_in_subnet_list)
 
   // match by eth name
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct,
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
@@ -651,7 +652,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct,
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
@@ -659,7 +660,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   ASSERT_EQ((struct sockaddr*)&a_two, result);
 
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct,
     &one,
     CEPH_PICK_ADDRESS_IPV6,
     "2001::/16",
