@@ -63,7 +63,6 @@ public:
   ReadResult(ceph::bufferlist *bl);
   ReadResult(Extents* extent_map, ceph::bufferlist* bl);
 
-  void set_clip_length(size_t length);
   void set_image_extents(const Extents& image_extents);
 
   void assemble_result(CephContext *cct);
@@ -112,7 +111,6 @@ private:
                          Vector,
                          Bufferlist,
                          SparseBufferlist> Buffer;
-  struct SetClipLengthVisitor;
   struct SetImageExtentsVisitor;
   struct AssembleResultVisitor;
 

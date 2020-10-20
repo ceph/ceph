@@ -403,7 +403,6 @@ void ImageReadRequest<I>::send_request() {
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
-  aio_comp->read_result.set_clip_length(buffer_ofs);
   aio_comp->read_result.set_image_extents(image_extents);
 
   // issue the requests

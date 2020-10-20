@@ -37,7 +37,13 @@ void read_parent(ImageCtxT *image_ctx, uint64_t object_no,
 template <typename ImageCtxT = librbd::ImageCtx>
 int clip_request(ImageCtxT *image_ctx, Extents *image_extents);
 
-uint64_t extents_length(Extents &extents);
+inline uint64_t get_extents_length(const Extents &extents) {
+  uint64_t total_bytes = 0;
+  for (auto [_, extent_length] : extents) {
+    total_bytes += extent_length;
+  }
+  return total_bytes;
+}
 
 void unsparsify(CephContext* cct, ceph::bufferlist* bl,
                 const Extents& extent_map, uint64_t bl_off,
