@@ -7803,7 +7803,6 @@ int RGWRados::get_bucket_stats_and_bilog_meta(
 
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
-  BucketIndexShardsManager marker_mgr;
   char buf[64];
   for (const auto& [header_shard_id, header ] : headers) {
     accumulate_raw_stats(header, stats);
@@ -7811,20 +7810,19 @@ int RGWRados::get_bucket_stats_and_bilog_meta(
     ver_mgr.add(header_shard_id, string(buf));
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)header.master_ver);
     master_ver_mgr.add(header_shard_id, string(buf));
-    if (shard_id >= 0) {
-      *max_marker = header.max_marker;
-    } else {
-      marker_mgr.add(header_shard_id, header.max_marker);
-    }
     if (syncstopped != NULL)
       *syncstopped = header.syncstopped;
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
-  if (shard_id < 0) {
-    marker_mgr.to_string(max_marker);
+  if (max_marker) {
+    return svc.bilog_rados->log_get_max_marker(bucket_info,
+                                               headers,
+                                               shard_id,
+                                               max_marker);
+  } else {
+    return 0;
   }
-  return 0;
 }
 
 class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
