@@ -20,7 +20,11 @@
 namespace librbd {
 namespace migration {
 
-static std::string FILE_PATH {"file_path"};
+namespace {
+
+const std::string FILE_PATH {"file_path"};
+
+} // anonymous namespace
 
 #ifdef BOOST_ASIO_HAS_POSIX_STREAM_DESCRIPTOR
 
@@ -135,6 +139,7 @@ void FileStream<I>::open(Context* on_finish) {
   if (file_path_value.type() != json_spirit::str_type) {
     lderr(m_cct) << "failed to locate '" << FILE_PATH << "' key" << dendl;
     on_finish->complete(-EINVAL);
+    return;
   }
 
   auto& file_path = file_path_value.get_str();

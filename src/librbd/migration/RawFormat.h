@@ -19,17 +19,20 @@ struct ImageCtx;
 
 namespace migration {
 
+template <typename> struct SourceSpecBuilder;
 struct StreamInterface;
 
 template <typename ImageCtxT>
 class RawFormat : public FormatInterface {
 public:
-  static RawFormat* create(ImageCtxT* image_ctx,
-                           const json_spirit::mObject& json_object) {
-    return new RawFormat(image_ctx, json_object);
+  static RawFormat* create(
+      ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+      const SourceSpecBuilder<ImageCtxT>* source_spec_builder) {
+    return new RawFormat(image_ctx, json_object, source_spec_builder);
   }
 
-  RawFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object);
+  RawFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+            const SourceSpecBuilder<ImageCtxT>* source_spec_builder);
   RawFormat(const RawFormat&) = delete;
   RawFormat& operator=(const RawFormat&) = delete;
 
@@ -53,6 +56,7 @@ public:
 private:
   ImageCtxT* m_image_ctx;
   json_spirit::mObject m_json_object;
+  const SourceSpecBuilder<ImageCtxT>* m_source_spec_builder;
 
   std::unique_ptr<StreamInterface> m_stream;
 
