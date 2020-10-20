@@ -33,32 +33,37 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
 int RGWRole::store_info(bool exclusive, optional_yield y)
 {
-
+  RGWObjVersionTracker objv_tracker;
   return role_ctl->store_info(info,
 			      y,
 			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive));
+			      set_exclusive(exclusive).
+			      set_objv_tracker(&objv_tracker));
 }
 
 int RGWRole::store_name(bool exclusive, optional_yield y)
 {
+  RGWObjVersionTracker objv_tracker;
   return role_ctl->store_name(info.id,
 			      info.name,
 			      info.tenant,
 			      y,
 			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive)
+			      set_exclusive(exclusive).
+			      set_objv_tracker(&objv_tracker)
 			      );
 }
 
 int RGWRole::store_path(bool exclusive, optional_yield y)
 {
+  RGWObjVersionTracker objv_tracker;
   return role_ctl->store_path(info.id,
 			      info.path,
 			      info.tenant,
 			      y,
 			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive));
+			      set_exclusive(exclusive).
+			      set_objv_tracker(&objv_tracker));
 }
 
 int RGWRole::create(bool exclusive)
@@ -289,7 +294,10 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
 int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
 {
   int ret;
-  std::tie(ret, role_id) = role_ctl->read_name(role_name, tenant, null_yield);
+  RGWObjVersionTracker ot;
+  std::tie(ret, role_id) = role_ctl->read_name(role_name, tenant, null_yield,
+					       RGWRoleCtl::GetParams().
+					       set_objv_tracker(&ot));
   if (ret < 0) {
     ldout(cct,0) << "ERROR: failed reading role id with params"
 		 << role_name << ", " << tenant << ":"
@@ -302,7 +310,10 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
 int RGWRole::read_info()
 {
 
-  auto [ret, _info] = role_ctl->read_info(info.id, null_yield);
+  RGWObjVersionTracker ot;
+  auto [ret, _info] = role_ctl->read_info(info.id, null_yield,
+					  RGWRoleCtl::GetParams().
+					  set_objv_tracker(&ot));
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed reading role info from pool: "
                   ": " << info.id << ": " << cpp_strerror(-ret) << dendl;
@@ -315,7 +326,10 @@ int RGWRole::read_info()
 
 int RGWRole::read_name()
 {
-  auto [ret, _id] = role_ctl->read_name(info.name, info.tenant, null_yield);
+  RGWObjVersionTracker ot;
+  auto [ret, _id] = role_ctl->read_name(info.name, info.tenant, null_yield,
+					RGWRoleCtl::GetParams().
+					set_objv_tracker(&ot));
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed reading role name from pool: "
                   << info.name << ": " << cpp_strerror(-ret) << dendl;
