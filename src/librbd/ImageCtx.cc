@@ -121,6 +121,10 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       asok_hook(nullptr),
       trace_endpoint("librbd")
   {
+    ldout(cct, 10) << this << " " << __func__ << ": "
+                   << "image_name=" << image_name << ", "
+                   << "image_id=" << image_id << dendl;
+
     if (snap)
       snap_name = snap;
 
@@ -147,6 +151,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   ImageCtx::~ImageCtx() {
+    ldout(cct, 10) << this << " " << __func__ << dendl;
+
     ceph_assert(config_watcher == nullptr);
     ceph_assert(image_watcher == NULL);
     ceph_assert(exclusive_lock == NULL);
