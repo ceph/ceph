@@ -45,10 +45,7 @@ RADOS::RADOS(boost::asio::io_context& ioctx,
   messenger->set_default_policy(
     Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  objecter.reset(new Objecter(cct.get(), messenger.get(), &monclient,
-			      ioctx,
-			      cct->_conf->rados_mon_op_timeout,
-			      cct->_conf->rados_osd_op_timeout));
+  objecter = std::make_unique<Objecter>(cct.get(), messenger.get(), &monclient, ioctx);
 
   objecter->set_balanced_budget();
   monclient.set_messenger(messenger.get());
