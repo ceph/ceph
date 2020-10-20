@@ -61,7 +61,7 @@ class TcmuService(object):
                 perf_key = "{}lock_acquired_time".format(perf_key_prefix)
                 lock_acquired_time = (mgr.get_counter(
                     'tcmu-runner', service_id, perf_key)[perf_key]
-                    or [[0, 0]])[-1][1] / 1000000000
+                                      or [[0, 0]])[-1][1] / 1000000000
                 if lock_acquired_time > image.get('optimized_since', 0):
                     image['optimized_daemon'] = hostname
                     image['optimized_since'] = lock_acquired_time
