@@ -368,6 +368,21 @@ This is similar to::
 
     journalctl -u mgr.myhost.ysubfo
 
+Can also specify additional journal arguments::
+
+    cephadm logs --name mgr.myhost.ysubfo -- -n 20 # last 20 lines
+    cephadm logs --name mgr.myhost.ysubfo -- -f # follow the log
+
+
+Positional arguments:
+
+* [command]               command (optional)
+
+Arguments:
+
+* [--fsid FSID]           cluster FSID
+* [--name NAME, -n NAME]  daemon name (type.id)
+
 
 prepare-host
 ------------
