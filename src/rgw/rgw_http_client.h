@@ -40,6 +40,8 @@ class RGWHTTPClient : public RGWIOProvider,
 
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
+  string ca_path;
+
   std::atomic<unsigned> stopped { 0 };
 
 
@@ -171,6 +173,10 @@ public:
 
   void *get_io_user_info() override {
     return user_info;
+  }
+
+  void set_ca_path(const string& _ca_path) {
+    ca_path = _ca_path;
   }
 };
 
