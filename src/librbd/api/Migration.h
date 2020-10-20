@@ -36,13 +36,8 @@ public:
 
 private:
   CephContext* m_cct;
-  ImageCtxT *m_src_image_ctx;
-  librados::IoCtx m_src_io_ctx;
+  ImageCtx* m_src_image_ctx;
   librados::IoCtx &m_dst_io_ctx;
-  bool m_src_old_format;
-  std::string m_src_image_name;
-  std::string m_src_image_id;
-  std::string m_src_header_oid;
   std::string m_dst_image_name;
   std::string m_dst_image_id;
   std::string m_dst_header_oid;
@@ -55,7 +50,7 @@ private:
   cls::rbd::MigrationSpec m_src_migration_spec;
   cls::rbd::MigrationSpec m_dst_migration_spec;
 
-  Migration(ImageCtxT *image_ctx, librados::IoCtx& dest_io_ctx,
+  Migration(ImageCtx* src_image_ctx, librados::IoCtx& dest_io_ctx,
             const std::string &dest_image_name, const std::string &dst_image_id,
             ImageOptions& opts, bool flatten, bool mirroring,
             cls::rbd::MirrorImageMode mirror_image_mode,
@@ -70,29 +65,30 @@ private:
 
   int set_state(cls::rbd::MigrationState state, const std::string &description);
 
-  int list_src_snaps(std::vector<librbd::snap_info_t> *snaps);
-  int validate_src_snaps();
-  int disable_mirroring(ImageCtxT *image_ctx, bool *was_enabled,
+  int list_src_snaps(ImageCtxT* image_ctx,
+                     std::vector<librbd::snap_info_t> *snaps);
+  int validate_src_snaps(ImageCtxT* image_ctx);
+  int disable_mirroring(ImageCtxT* image_ctx, bool *was_enabled,
                         cls::rbd::MirrorImageMode *mirror_image_mode);
-  int enable_mirroring(ImageCtxT *image_ctx, bool was_enabled,
+  int enable_mirroring(ImageCtxT* image_ctx, bool was_enabled,
                        cls::rbd::MirrorImageMode mirror_image_mode);
-  int set_migration();
-  int unlink_src_image();
-  int relink_src_image();
+  int set_src_migration(ImageCtxT* image_ctx);
+  int unlink_src_image(ImageCtxT* image_ctx);
+  int relink_src_image(ImageCtxT* image_ctx);
   int create_dst_image();
-  int remove_group(ImageCtxT *image_ctx, group_info_t *group_info);
-  int add_group(ImageCtxT *image_ctx, group_info_t &group_info);
+  int remove_group(ImageCtxT* image_ctx, group_info_t *group_info);
+  int add_group(ImageCtxT* image_ctx, group_info_t &group_info);
   int update_group(ImageCtxT *from_image_ctx, ImageCtxT *to_image_ctx);
-  int remove_migration(ImageCtxT *image_ctx);
+  int remove_migration(ImageCtxT* image_ctx);
   int relink_children(ImageCtxT *from_image_ctx, ImageCtxT *to_image_ctx);
-  int remove_src_image();
+  int remove_src_image(ImageCtxT** image_ctx);
 
-  int v1_set_migration();
-  int v2_set_migration();
-  int v1_unlink_src_image();
-  int v2_unlink_src_image();
-  int v1_relink_src_image();
-  int v2_relink_src_image();
+  int v1_set_src_migration(ImageCtxT* image_ctx);
+  int v2_set_src_migration(ImageCtxT* image_ctx);
+  int v1_unlink_src_image(ImageCtxT* image_ctx);
+  int v2_unlink_src_image(ImageCtxT* image_ctx);
+  int v1_relink_src_image(ImageCtxT* image_ctx);
+  int v2_relink_src_image(ImageCtxT* image_ctx);
 
   int relink_child(ImageCtxT *from_image_ctx, ImageCtxT *to_image_ctx,
                    const librbd::snap_info_t &src_snap,
