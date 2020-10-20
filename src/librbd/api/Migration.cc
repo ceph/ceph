@@ -753,7 +753,7 @@ int Migration<I>::prepare() {
 
   BOOST_SCOPE_EXIT_TPL(&m_dst_image_ctx) {
     if (m_dst_image_ctx != nullptr) {
-      delete m_dst_image_ctx;
+      m_dst_image_ctx->state->close();
     }
   } BOOST_SCOPE_EXIT_END;
 
