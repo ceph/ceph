@@ -431,7 +431,8 @@ def cephfs_setup(ctx, config):
         fs = Filesystem(ctx, name='cephfs', create=True,
                         ec_profile=config.get('cephfs_ec_profile', None))
 
-        max_mds = config.get('max_mds', 1)
+        cephfs_conf = config['cephfs']
+        max_mds = config_conf.get('max_mds', 1)
         if max_mds > 1:
             fs.set_max_mds(max_mds)
 
@@ -1719,6 +1720,13 @@ def task(ctx, config):
             fs: xfs
             mkfs_options: [-b,size=65536,-l,logdev=/dev/sdc1]
             mount_options: [nobarrier, inode64]
+
+    To change the cephfs's default max_mds (1), use::
+
+        tasks:
+        - ceph:
+            cephfs:
+              max_mds: 2
 
     Note, this will cause the task to check the /scratch_devs file on each node
     for available devices.  If no such file is found, /dev/sdb will be used.
