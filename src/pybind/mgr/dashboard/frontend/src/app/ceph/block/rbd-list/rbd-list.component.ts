@@ -131,7 +131,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       permission: 'update',
       icon: Icons.edit,
       routerLink: () => this.urlBuilder.getEdit(getImageUri()),
-      name: this.actionLabels.EDIT
+      name: this.actionLabels.EDIT,
+      disable: this.getInvalidNameDisable
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
@@ -144,7 +145,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting,
+        this.getInvalidNameDisable(selection) || !!selection.first().cdExecuting,
       icon: Icons.copy,
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
       name: this.actionLabels.COPY
@@ -152,7 +153,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const flattenAction: CdTableAction = {
       permission: 'update',
       disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent,
+        this.getInvalidNameDisable(selection) ||
+        selection.first().cdExecuting ||
+        !selection.first().parent,
       icon: Icons.flatten,
       click: () => this.flattenRbdModal(),
       name: this.actionLabels.FLATTEN
@@ -163,8 +166,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       click: () => this.trashRbdModal(),
       name: this.actionLabels.TRASH,
       disable: (selection: CdTableSelection) =>
-        !selection.first() ||
-        !selection.hasSingleSelection ||
+        this.getInvalidNameDisable(selection) ||
         selection.first().image_format === RBDImageFormat.V1
     };
     this.tableActions = [
@@ -442,10 +444,16 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       return $localize`This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.`;
     }
 
-    return (
-      !selection.first() ||
-      !selection.hasSingleSelection ||
-      this.hasClonedSnapshots(selection.first())
-    );
+    return this.getInvalidNameDisable(selection) || this.hasClonedSnapshots(selection.first());
+  }
+
+  getInvalidNameDisable(selection: CdTableSelection): string | boolean {
+    const first = selection.first();
+
+    if (first?.name?.match(/[@/]/)) {
+      return $localize`This RBD image has an invalid name and can't be managed by ceph.`;
+    }
+
+    return !selection.first() || !selection.hasSingleSelection;
   }
 }
