@@ -2385,6 +2385,14 @@ options:
   services:
   - rgw
   with_legacy: true
+# TLS certs options
+- name: rgw_crypt_vault_ssl_cacert
+  type: str
+  level: advanced
+  desc: Path for custom ca certificate for accessing vault server
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_crypt_kmip_addr
   type: str
   level: advanced
