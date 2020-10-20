@@ -1104,6 +1104,9 @@ To check that the host is reachable:
 
             final_args = []
 
+            if self.container_init:
+                final_args += ['--container-init']
+
             if env_vars:
                 for env_var_pair in env_vars:
                     final_args.extend(['--env', env_var_pair])
@@ -1114,9 +1117,6 @@ To check that the host is reachable:
 
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
-
-            if self.container_init:
-                final_args += ['--container-init']
 
             final_args += args
 
