@@ -873,10 +873,10 @@ int main(int argc, char **argv)
 	in, err, &out);
       if (r != 0) {
         cerr << "failure querying '" << alloc_name << "'" << std::endl;
-        exit(EXIT_FAILURE);
+      } else {
+        cout << alloc_name << ":" << std::endl;
+        cout << std::string(out.c_str(),out.length()) << std::endl;
       }
-      cout << alloc_name << ":" << std::endl;
-      cout << std::string(out.c_str(),out.length()) << std::endl;
     }
 
     bluestore.cold_close();
