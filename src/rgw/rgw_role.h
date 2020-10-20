@@ -131,7 +131,6 @@ class RGWRole
   int read_id(const string& role_name, const string& tenant, string& role_id);
   int read_name();
   int read_info();
-  bool validate_input();
   void extract_name_tenant(const std::string& str);
   void get_role_policy(const string& policy_name, string& perm_policy);
 public:
