@@ -1510,6 +1510,7 @@ OPTION(rgw_crypt_vault_prefix, OPT_STR) // Optional URL prefix to Vault secret p
 OPTION(rgw_crypt_vault_secret_engine, OPT_STR) // kv, transit or other supported secret engines
 OPTION(rgw_crypt_vault_namespace, OPT_STR) // Vault Namespace (only availabe in Vault Enterprise Version)
 OPTION(rgw_crypt_vault_verify_ssl, OPT_BOOL) // should we try to verify vault's ssl
+OPTION(rgw_crypt_vault_ssl_cacert, OPT_STR) // optional ca certificate for accessing vault
 
 OPTION(rgw_crypt_kmip_addr, OPT_STR) // kmip server address
 OPTION(rgw_crypt_kmip_ca_path, OPT_STR) // ca for kmip servers

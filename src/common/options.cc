@@ -7179,6 +7179,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Should RGW verify the vault server SSL certificate."),
 
+    Option("rgw_crypt_vault_ssl_cacert", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Path for custom ca certificate for accessing vault server"),
+
     Option("rgw_crypt_kmip_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("kmip server address"),

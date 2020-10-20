@@ -564,6 +564,9 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);
     dout(20) << "ssl verification is set to off" << dendl;
+  } else if (!ca_path.empty()) {
+    curl_easy_setopt(easy_handle, CURLOPT_CAINFO, ca_path.c_str());
+    dout(20) << "using custom ca cert "<< ca_path.c_str() << " for ssl" << dendl;
   }
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_TIMEOUT, req_timeout);
