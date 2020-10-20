@@ -2420,3 +2420,80 @@ TEST(LibCephFS, Lseek) {
   ASSERT_EQ(0, ceph_close(cmount, fd));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, SnapInfoOnNonSnapshot) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  struct snap_info info;
+  ASSERT_EQ(-EINVAL, ceph_get_snap_info(cmount, "/", &info));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, EmptySnapInfo) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char snap_name[64];
+  char snap_path[128];
+  sprintf(snap_name, "%s_%d", "snap0", getpid());
+  sprintf(snap_path, "/.snap/%s", snap_name);
+
+  // snapshot without custom metadata
+  ASSERT_EQ(0, ceph_mkdir(cmount, snap_path, 0755));
+
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 0);
+  ASSERT_EQ(info.nr_snap_metadata, 0);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, snap_path));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SnapInfo) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char snap_name[64];
+  char snap_path[128];
+  sprintf(snap_name, "%s_%d", "snap0", getpid());
+  sprintf(snap_path, "/.snap/%s", snap_name);
+
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"},{"this", "that"},{"abcdefg", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, "/", snap_name, 0755, snap_meta, std::size(snap_meta)));
+
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 0);
+  ASSERT_EQ(info.nr_snap_metadata, std::size(snap_meta));
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto &k1 = info.snap_metadata[i].key;
+    auto &v1 = info.snap_metadata[i].value;
+    bool found = false;
+    for (size_t j = 0; j < info.nr_snap_metadata; ++j) {
+      auto &k2 = snap_meta[j].key;
+      auto &v2 = snap_meta[j].value;
+      if (strncmp(k1, k2, strlen(k1)) == 0 && strncmp(v1, v2, strlen(v1)) == 0) {
+        found = true;
+        break;
+      }
+    }
+    ASSERT_TRUE(found);
+  }
+  ceph_free_snap_info_buffer(&info);
+
+  ASSERT_EQ(0, ceph_rmsnap(cmount, "/", snap_name));
+  ceph_shutdown(cmount);
+}
