@@ -85,8 +85,10 @@ class InventoryManager(ResourceManager):
 
 class ServiceManager(ResourceManager):
     @wait_api_result
-    def list(self, service_name: Optional[str] = None) -> List[ServiceDescription]:
-        return self.api.describe_service(None, service_name)
+    def list(self,
+             service_type: Optional[str] = None,
+             service_name: Optional[str] = None) -> List[ServiceDescription]:
+        return self.api.describe_service(service_type, service_name)
 
     @wait_api_result
     def get(self, service_name: str) -> ServiceDescription:
@@ -95,8 +97,11 @@ class ServiceManager(ResourceManager):
     @wait_api_result
     def list_daemons(self,
                      service_name: Optional[str] = None,
+                     daemon_type: Optional[str] = None,
                      hostname: Optional[str] = None) -> List[DaemonDescription]:
-        return self.api.list_daemons(service_name, host=hostname)
+        return self.api.list_daemons(service_name=service_name,
+                                     daemon_type=daemon_type,
+                                     host=hostname)
 
     def reload(self, service_type, service_ids):
         if not isinstance(service_ids, list):
