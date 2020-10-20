@@ -6540,12 +6540,14 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         }
       }
     }
-    int object_lock_response = verify_object_lock(this, obj->get_attrs(), false, false);
-    if (object_lock_response != 0) {
-      send_partial_response(*iter, false, "", object_lock_response);
-      continue;
+
+    if (check_obj_lock) {
+      int object_lock_response = verify_object_lock(this, obj->get_attrs(), bypass_perm, bypass_governance_mode);
+      if (object_lock_response != 0) {
+        send_partial_response(*iter, false, "", object_lock_response);
+        continue;
+      }
     }
-    
     // make reservation for notification if needed
     const auto versioned_object = s->bucket->versioning_enabled();
     rgw::notify::reservation_t res(store, s, obj.get());
