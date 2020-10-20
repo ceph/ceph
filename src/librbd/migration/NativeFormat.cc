@@ -47,8 +47,8 @@ std::string NativeFormat<I>::build_source_spec(
 
 template <typename I>
 NativeFormat<I>::NativeFormat(
-    I* image_ctx, const MigrationInfo& migration_info)
-  : m_image_ctx(image_ctx), m_migration_info(migration_info) {
+    I* image_ctx, const json_spirit::mObject& json_object)
+  : m_image_ctx(image_ctx), m_json_object(json_object) {
 }
 
 template <typename I>
@@ -56,11 +56,43 @@ void NativeFormat<I>::open(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
+  auto& pool_id_val = m_json_object[POOL_ID_KEY];
+  if (pool_id_val.type() != json_spirit::int_type) {
+    lderr(cct) << "missing or invalid pool id" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+  m_pool_id = pool_id_val.get_int64();
+
+  auto& pool_namespace_val = m_json_object[POOL_NAMESPACE_KEY];
+  if (pool_namespace_val.type() != json_spirit::str_type) {
+    lderr(cct) << "missing or invalid pool namespace" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+  m_pool_namespace = pool_namespace_val.get_str();
+
+  auto& image_name_val = m_json_object[IMAGE_NAME_KEY];
+  if (image_name_val.type() != json_spirit::str_type) {
+    lderr(cct) << "missing or invalid image name" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+  m_image_name = image_name_val.get_str();
+
+  auto& image_id_val = m_json_object[IMAGE_ID_KEY];
+  if (image_id_val.type() == json_spirit::str_type) {
+    m_image_id = image_id_val.get_str();
+  } else if (image_id_val.type() != json_spirit::null_type) {
+    lderr(cct) << "invalid image id" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
   // TODO add support for external clusters
   librados::IoCtx io_ctx;
   int r = util::create_ioctx(m_image_ctx->md_ctx, "source image",
-                             m_migration_info.pool_id,
-                             m_migration_info.pool_namespace, &io_ctx);
+                             m_pool_id, m_pool_namespace, &io_ctx);
   if (r < 0) {
     on_finish->complete(r);
     return;
@@ -68,13 +100,13 @@ void NativeFormat<I>::open(Context* on_finish) {
 
   m_image_ctx->md_ctx.dup(io_ctx);
   m_image_ctx->data_ctx.dup(io_ctx);
+  m_image_ctx->name = m_image_name;
 
   uint64_t flags = 0;
-  if (m_migration_info.image_id.empty()) {
-    m_image_ctx->name = m_migration_info.image_name;
+  if (m_image_id.empty()) {
     flags |= OPEN_FLAG_OLD_FORMAT;
   } else {
-    m_image_ctx->id = m_migration_info.image_id;
+    m_image_ctx->id = m_image_id;
   }
 
   // set rados flags for reading the parent image
