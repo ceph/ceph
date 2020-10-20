@@ -838,7 +838,7 @@ endif(WITH_RBD)
 add_executable(unittest_ipaddr
   test_ipaddr.cc)
 add_ceph_unittest(unittest_ipaddr)
-target_link_libraries(unittest_ipaddr global)
+target_link_libraries(unittest_ipaddr global GTest::Main)
 
 # unittest_utime
 add_executable(unittest_utime
