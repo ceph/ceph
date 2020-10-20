@@ -463,6 +463,7 @@ cref_t<MClientRequest> MDRequestImpl::release_client_request()
   msg_lock.lock();
   cref_t<MClientRequest> req;
   req.swap(client_request);
+  client_request = req;
   msg_lock.unlock();
   return req;
 }
