@@ -45,3 +45,4 @@ sensible.
     Insights module <insights>
     Orchestrator module <orchestrator>
     Rook module <rook>
+    MDS Autoscaler module <mds_autoscaler>
