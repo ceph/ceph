@@ -13,8 +13,7 @@ except ImportError:
 
 from ..controllers import ApiController, BaseController, Controller, Proxy, RESTController
 from ..services.exception import handle_rados_error
-from ..tools import RequestLoggingTool, dict_contains_path, dict_get, \
-    json_str_to_object, partial_dict
+from ..tools import dict_contains_path, dict_get, json_str_to_object, partial_dict
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
@@ -150,10 +149,7 @@ class RESTControllerTest(ControllerTestCase):
 
 class RequestLoggingToolTest(ControllerTestCase):
 
-    def __init__(self, *args, **kwargs):
-        cherrypy.tools.request_logging = RequestLoggingTool()
-        cherrypy.config.update({'tools.request_logging.on': True})
-        super(RequestLoggingToolTest, self).__init__(*args, **kwargs)
+    _request_logging = True
 
     @classmethod
     def setup_server(cls):
