@@ -105,5 +105,6 @@ private:
   bool budget_available() const final;
   void backfilled() final;
   friend crimson::osd::BackfillState::PGFacade;
+  friend crimson::osd::PG;
   // backfill end
 };
