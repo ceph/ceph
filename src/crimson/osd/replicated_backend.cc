@@ -107,6 +107,7 @@ void ReplicatedBackend::on_actingset_changed(peering_info_t pi)
   for (auto& [tid, pending_txn] : pending_trans) {
     pending_txn.all_committed.set_exception(e_actingset_changed);
   }
+  pending_trans.clear();
 }
 
 void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
