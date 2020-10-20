@@ -1008,4 +1008,33 @@ bool PG::can_discard_op(const MOSDOp& m) const {
       < peering_state.get_info().history.same_primary_since, false);
 }
 
+bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
+  /* The conditions below may clear (on_local_recover, before we queue
+   * the transaction) before we actually requeue the degraded waiters
+   * in on_global_recover after the transaction completes.
+   */
+  if (peering_state.get_pg_log().get_missing().get_items().count(soid))
+    return true;
+  ceph_assert(!get_acting_recovery_backfill().empty());
+  for (auto& peer : get_acting_recovery_backfill()) {
+    if (peer == get_primary()) continue;
+    auto peer_missing_entry = peering_state.get_peer_missing().find(peer);
+    // If an object is missing on an async_recovery_target, return false.
+    // This will not block the op and the object is async recovered later.
+    if (peer_missing_entry != peering_state.get_peer_missing().end() &&
+	peer_missing_entry->second.get_items().count(soid)) {
+	return true;
+    }
+    // Object is degraded if after last_backfill AND
+    // we are backfilling it
+    if (is_backfill_target(peer) &&
+        peering_state.get_peer_info(peer).last_backfill <= soid &&
+	recovery_handler->backfill_state->get_last_backfill_started() >= soid &&
+	recovery_backend->is_recovering(soid)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }
