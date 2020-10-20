@@ -59,7 +59,7 @@ int RGWServices_Def::init(CephContext *cct,
   //    BILog as well?
   //    Liekly we would need to introduce use `bilog_rados->init()`
   //    as `datalog_rados` does with its `start()`. 
-  bilog_rados = std::make_unique<RGWSI_BILog_RADOS_InIndex>(cct);
+  bilog_rados = std::make_unique<RGWSI_BILog_RADOS_BackendDispatcher>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
