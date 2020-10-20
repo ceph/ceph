@@ -15,6 +15,7 @@ SERVICE_TYPE = 'tcmu-runner'
 
 class TcmuService(object):
     # pylint: disable=too-many-nested-blocks
+    # pylint: disable=too-many-branches
     @staticmethod
     def get_iscsi_info():
         daemons = {}  # type: Dict[str, dict]
