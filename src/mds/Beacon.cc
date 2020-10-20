@@ -364,14 +364,16 @@ void Beacon::notify_health(MDSRank const *mds)
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
 
+    const auto min_caps_working_set = g_conf().get_val<uint64_t>("mds_min_caps_working_set");
     const auto recall_warning_threshold = g_conf().get_val<Option::size_t>("mds_recall_warning_threshold");
     const auto max_completed_requests = g_conf()->mds_max_completed_requests;
     const auto max_completed_flushes = g_conf()->mds_max_completed_flushes;
     std::vector<MDSHealthMetric> late_recall_metrics;
     std::vector<MDSHealthMetric> large_completed_requests_metrics;
     for (auto& session : sessions) {
+      const uint64_t num_caps = session->get_num_caps();
       const uint64_t recall_caps = session->get_recall_caps();
-      if (recall_caps > recall_warning_threshold) {
+      if (recall_caps > recall_warning_threshold && num_caps > min_caps_working_set) {
         dout(2) << "Session " << *session <<
              " is not releasing caps fast enough. Recalled caps at " << recall_caps
           << " > " << recall_warning_threshold << " (mds_recall_warning_threshold)." << dendl;
