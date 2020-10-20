@@ -37,7 +37,8 @@ public:
 private:
   CephContext* m_cct;
   ImageCtx* m_src_image_ctx;
-  librados::IoCtx &m_dst_io_ctx;
+  ImageCtx* m_dst_image_ctx;
+  librados::IoCtx m_dst_io_ctx;
   std::string m_dst_image_name;
   std::string m_dst_image_id;
   std::string m_dst_header_oid;
@@ -50,12 +51,9 @@ private:
   cls::rbd::MigrationSpec m_src_migration_spec;
   cls::rbd::MigrationSpec m_dst_migration_spec;
 
-  Migration(ImageCtx* src_image_ctx, librados::IoCtx& dest_io_ctx,
-            const std::string &dest_image_name, const std::string &dst_image_id,
-            ImageOptions& opts, bool flatten, bool mirroring,
-            cls::rbd::MirrorImageMode mirror_image_mode,
-            cls::rbd::MigrationState state, const std::string &state_desc,
-            ProgressContext *prog_ctx);
+  Migration(ImageCtx* src_image_ctx, ImageCtx* dst_image_ctx,
+            const cls::rbd::MigrationSpec& dst_migration_spec,
+            ImageOptions& opts, ProgressContext *prog_ctx);
 
   int prepare();
   int execute();
@@ -75,7 +73,7 @@ private:
   int set_src_migration(ImageCtxT* image_ctx);
   int unlink_src_image(ImageCtxT* image_ctx);
   int relink_src_image(ImageCtxT* image_ctx);
-  int create_dst_image();
+  int create_dst_image(ImageCtxT** image_ctx);
   int remove_group(ImageCtxT* image_ctx, group_info_t *group_info);
   int add_group(ImageCtxT* image_ctx, group_info_t &group_info);
   int update_group(ImageCtxT *from_image_ctx, ImageCtxT *to_image_ctx);
