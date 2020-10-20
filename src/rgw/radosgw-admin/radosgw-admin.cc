@@ -10947,7 +10947,7 @@ next:
     {
     std::map<int, rgw_bucket_dir_header> headers;
     ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bi_rados->get_dir_headers(dpp(), bucket->get_info(),
-                                                                                       log_layout,
+                                                                                       log_layout.current_index,
                                                                                        &headers, shard_id,
                                                                                        null_yield);
     if (ret < 0) {

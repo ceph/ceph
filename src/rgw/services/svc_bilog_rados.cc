@@ -597,3 +597,28 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
   auto& max_marker = (*max_markers)[0];
   return log_get_max_marker(dpp, bucket_info, headers, shard_id, &max_marker, y);
 }
+
+void RGWSI_BILog_RADOS_BackendDispatcher::init(
+  RGWSI_BucketIndex_RADOS* const bi_rados_svc)
+{
+  backend_inindex.init(bi_rados_svc);
+  backend_fifo.init(bi_rados_svc);
+}
+
+RGWSI_BILog_RADOS_BackendDispatcher::RGWSI_BILog_RADOS_BackendDispatcher(
+  CephContext* cct)
+  : RGWSI_BILog_RADOS(cct),
+    backend_inindex(cct),
+    backend_fifo(cct) {
+}
+
+RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(
+  const RGWBucketInfo& bucket_info)
+{
+  // TODO: teach this method about bilog layout
+  if constexpr(true) {
+    return backend_inindex;
+  } else {
+    return backend_fifo;
+  }
+}
