@@ -151,14 +151,6 @@ int clip_request(I *image_ctx, Extents *image_extents) {
   return 0;
 }
 
-uint64_t extents_length(Extents &extents) {
-  uint64_t total_bytes = 0;
-  for (auto& image_extent : extents) {
-    total_bytes += image_extent.second;
-  }
-  return total_bytes;
-}
-
 void unsparsify(CephContext* cct, ceph::bufferlist* bl,
                 const Extents& extent_map, uint64_t bl_off,
                 uint64_t out_bl_len) {
