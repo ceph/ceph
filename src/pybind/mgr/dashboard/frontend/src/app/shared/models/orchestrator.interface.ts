@@ -1,6 +1,6 @@
 export interface OrchestratorStatus {
   available: boolean;
-  description: string;
+  message: string;
   features: {
     [feature: string]: {
       available: boolean;
