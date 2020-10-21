@@ -11,13 +11,11 @@ In former mode, cephfs-shell opens a shell session and after the given command
 is finished, it prints the prompt string and waits indefinitely. When the
 shell session is finished, cephfs-shell quits with the return value of last
 executed command. In non-interactive mode, cephfs-shell issues a command and
-exits right after the command's execution is complete with the command's return
-value.
+exits right after the command's execution is complete with the command's
+return value.
 
-Behaviour of CephFS Shell can be tweaked using cephfs-shell.conf. CephFS Shell
-looks for it by default at the path provided in environment variable
-`CEPHFS_SHELL_CONF` and then in user's home directory
-(`~/.cephfs-shell.conf`).
+Behaviour of CephFS Shell can be tweaked using ``cephfs-shell.conf``. Refer to
+`CephFS Shell Configuration File`_ for details.
 
 Usage :
 
@@ -507,6 +505,34 @@ Options :
   --max_bytes MAX_BYTES    Set max cumulative size of the data under this directory
 
   --max_files MAX_FILES    Set total number of files under this directory tree
+
+CephFS Shell Configuration File
+===============================
+By default, CephFS Shell looks for ``cephfs-shell.conf`` in the path provided
+by the environment variable ``CEPHFS_SHELL_CONF`` and then in user's home
+directory (``~/.cephfs-shell.conf``).
+
+Right now, CephFS Shell inherits all its options from its dependency ``cmd2``.
+Therefore, these options might vary with the version of ``cmd2`` installed on
+your system. Refer to ``cmd2`` docs for a description of these options.
+
+Following is a sample ``cephfs-shell.conf``::
+
+    [cephfs-shell]
+    prompt = CephFS:~/>>>
+    continuation_prompt = >
+
+    quiet = False
+    timing = False
+    colors = True
+    debug = False
+
+    abbrev = False
+    autorun_on_edit = False
+    echo = False
+    editor = vim
+    feedback_to_output = False
+    locals_in_py = True
 
 Exit Code
 =========
