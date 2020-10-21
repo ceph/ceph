@@ -107,33 +107,7 @@ public:
     mtime(_mtime), exclusive(_exclusive), pattrs(_pattrs), y(_y), dpp(dpp)
   {}
 
-  // Creation time
-  auto generate_ctime() {
-    real_clock::time_point t = real_clock::now();
-
-    struct timeval tv;
-    real_clock::to_timeval(t, tv);
-
-    char buf[30];
-    struct tm result;
-    gmtime_r(&tv.tv_sec, &result);
-    strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-    sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
-    return std::string(std::begin(buf), std::end(buf));
-  }
-
-
-  void populate_info(rgw::sal::RGWRole& info) {
-    uuid_d new_role_id;
-    new_role_id.generate_random();
-
-    info.set_id(new_role_id.to_string());
-    info.set_arn(role_arn_prefix + info.get_tenant() + ":role" + info.get_path() + info.get_name());
-    info.set_creation_date(generate_ctime());
-  }
-
   int prepare() {
-
     if (exclusive) {
       // TODO replace this with a stat call instead we don't really need to read
       // the values here
@@ -152,7 +126,7 @@ public:
       }
     }
 
-    populate_info(info);
+
     return 0;
   }
 
