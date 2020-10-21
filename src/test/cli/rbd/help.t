@@ -727,7 +727,7 @@
   rbd help feature disable
   usage: rbd feature disable [--pool <pool>] [--namespace <namespace>] 
                              [--image <image>] 
-                             <image-spec> <features> [<features> ...]
+                             <image-spec> <features> [<features> ...] 
   
   Disable the specified image feature.
   
@@ -748,7 +748,7 @@
                             [--journal-splay-width <journal-splay-width>] 
                             [--journal-object-size <journal-object-size>] 
                             [--journal-pool <journal-pool>] 
-                            <image-spec> <features> [<features> ...]
+                            <image-spec> <features> [<features> ...] 
   
   Enable the specified image feature.
   
