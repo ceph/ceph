@@ -126,8 +126,6 @@ class RGWRole
   RGWRoleInfo info;
 
   int store_info(bool exclusive, optional_yield y = null_yield);
-  int store_name(bool exclusive, optional_yield y = null_yield);
-  int store_path(bool exclusive, optional_yield y = null_yield);
   int read_id(const string& role_name, const string& tenant, string& role_id);
   int read_name();
   int read_info();
@@ -341,14 +339,18 @@ public:
     }
   };
 
-  int store_info(const RGWRoleInfo& role,
-		 optional_yield y,
-		 const PutParams& params = {});
 
   int create(RGWRoleInfo& role,
 	     optional_yield y,
 	     const PutParams& params = {});
 
+  int store_info(const RGWRoleInfo& role,
+		 optional_yield y,
+		 const PutParams& params = {});
+
+  // The methods for store name & store path are currently unused and only
+  // useful for a potential rename name/path functionality in the future as
+  // create role would automatically create these for most uses
   int store_name(const std::string& role_id,
 		 const std::string& name,
 		 const std::string& tenant,
@@ -370,7 +372,7 @@ public:
 				   optional_yield y,
 				   const GetParams& params = {});
 
-  int delete_info(const RGWRoleInfo& info,
+  int delete_info(const std::string& role_id,
 		  optional_yield y,
 		  const RemoveParams& params = {});
 

@@ -41,31 +41,6 @@ int RGWRole::store_info(bool exclusive, optional_yield y)
 			      set_objv_tracker(&objv_tracker));
 }
 
-int RGWRole::store_name(bool exclusive, optional_yield y)
-{
-  RGWObjVersionTracker objv_tracker;
-  return role_ctl->store_name(info.id,
-			      info.name,
-			      info.tenant,
-			      y,
-			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive).
-			      set_objv_tracker(&objv_tracker)
-			      );
-}
-
-int RGWRole::store_path(bool exclusive, optional_yield y)
-{
-  RGWObjVersionTracker objv_tracker;
-  return role_ctl->store_path(info.id,
-			      info.path,
-			      info.tenant,
-			      y,
-			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive).
-			      set_objv_tracker(&objv_tracker));
-}
-
 // Creation time
 auto generate_ctime() {
   real_clock::time_point t = real_clock::now();
@@ -518,13 +493,13 @@ RGWRoleCtl::read_name(const std::string& name,
   return make_pair(ret, role_id);
 }
 
-int RGWRoleCtl::delete_info(const RGWRoleInfo& info,
+int RGWRoleCtl::delete_info(const std::string& role_id,
 			    optional_yield y,
 			    const RemoveParams& params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.role->delete_info(op->ctx(),
-				 info,
+				 role_id,
 				 params.objv_tracker,
 				 y);
   });
@@ -630,7 +605,14 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                       RGWObjVersionTracker& objv_tracker,
                                       optional_yield y)
 {
-  return svc.role->delete_info(op->ctx(), entry, &objv_tracker, y);
+  RGWRoleInfo info;
+  real_time _mtime;
+  int ret = svc.role->read_info(op->ctx(), entry, &info, &objv_tracker,
+				&_mtime, nullptr, y);
+  if (ret < 0) {
+    return ret == -ENOENT ? 0 : ret;
+  }
+  return svc.role->delete_role(op->ctx(), info, &objv_tracker, y);
 }
 
 class RGWMetadataHandlerPut_Role : public RGWMetadataHandlerPut_SObj
