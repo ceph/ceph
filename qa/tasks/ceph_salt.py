@@ -287,7 +287,7 @@ class CephSalt(Task):
                               .format(ceph_salt_ctx['container_image']))
         self.ctx.ceph[self.cluster].image = ceph_salt_ctx['container_image']
         self.master_remote.sh("sudo ceph-salt "
-                              "config /time_server/server_hostname set {}"
+                              "config /time_server/servers add {}"
                               .format(self.master_remote.hostname))
         self.master_remote.sh("sudo ceph-salt config "
                               "/time_server/external_servers add"
