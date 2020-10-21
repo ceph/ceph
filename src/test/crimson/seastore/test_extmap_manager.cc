@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "test/crimson/gtest_seastar.h"
+#include "test/crimson/seastore/transaction_manager_test_state.h"
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
@@ -21,48 +22,26 @@ namespace {
 }
 
 
-struct extentmap_manager_test_t : public seastar_test_suite_t {
-  std::unique_ptr<SegmentManager> segment_manager;
-  SegmentCleaner segment_cleaner;
-  Journal journal;
-  Cache cache;
-  LBAManagerRef lba_manager;
-  TransactionManager tm;
+struct extentmap_manager_test_t :
+  public seastar_test_suite_t,
+  TMTestState {
+
   ExtentMapManagerRef extmap_manager;
 
-  extentmap_manager_test_t()
-    : segment_manager(create_ephemeral(segment_manager::DEFAULT_TEST_EPHEMERAL)),
-      segment_cleaner(SegmentCleaner::config_t::default_from_segment_manager(
-			*segment_manager)),
-      journal(*segment_manager),
-      cache(*segment_manager),
-      lba_manager(
-	lba_manager::create_lba_manager(*segment_manager, cache)),
-      tm(*segment_manager, segment_cleaner, journal, cache, *lba_manager),
-      extmap_manager(
-        extentmap_manager::create_extentmap_manager(tm)) {
-    journal.set_segment_provider(&segment_cleaner);
-    segment_cleaner.set_extent_callback(&tm);
-  }
+  extentmap_manager_test_t() {}
 
   seastar::future<> set_up_fut() final {
-    return segment_manager->init().safe_then([this] {
-      return tm.mkfs();
-    }).safe_then([this] {
-      return tm.mount();
-    }).handle_error(
-      crimson::ct_error::all_same_way([] {
-	ASSERT_FALSE("Unable to mount");
-      })
-    );
+    return tm_setup().then([this] {
+      extmap_manager = extentmap_manager::create_extentmap_manager(*tm);
+      return seastar::now();
+    });
   }
 
   seastar::future<> tear_down_fut() final {
-    return tm.close().handle_error(
-      crimson::ct_error::all_same_way([] {
-	ASSERT_FALSE("Unable to close");
-      })
-    );
+    return tm_teardown().then([this] {
+      extmap_manager.reset();
+      return seastar::now();
+    });
   }
 
   using test_extmap_t = std::map<uint32_t, lext_map_val_t>;
@@ -124,7 +103,7 @@ struct extentmap_manager_test_t : public seastar_test_suite_t {
   }
 
   void check_mappings(extmap_root_t &extmap_root) {
-    auto t = tm.create_transaction();
+    auto t = tm->create_transaction();
     check_mappings(extmap_root, *t);
   }
 
@@ -135,33 +114,33 @@ TEST_F(extentmap_manager_test_t, basic)
   run_async([this] {
     extmap_root_t extmap_root(0, L_ADDR_NULL);
     {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       extmap_root = extmap_manager->initialize_extmap(*t).unsafe_get0();
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
     }
 
     uint32_t len = 4096;
     uint32_t lo = 0x1 * len;
     {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       logger().debug("first transaction");
       [[maybe_unused]] auto addref = insert_extent(extmap_root, *t, lo, {lo, len});
       [[maybe_unused]] auto seekref = find_extent(extmap_root, *t, lo, len);
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
     }
     {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       logger().debug("second transaction");
       auto seekref = find_extent(extmap_root, *t, lo, len);
       rm_extent(extmap_root, *t, lo, {seekref.front().laddr, len});
       [[maybe_unused]] auto seekref2 = findno_extent(extmap_root, *t, lo, len);
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
     }
     {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       logger().debug("third transaction");
       [[maybe_unused]] auto seekref = findno_extent(extmap_root, *t, lo, len);
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
     }
   });
 }
@@ -171,14 +150,14 @@ TEST_F(extentmap_manager_test_t, force_split)
   run_async([this] {
     extmap_root_t extmap_root(0, L_ADDR_NULL);
     {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       extmap_root = extmap_manager->initialize_extmap(*t).unsafe_get0();
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
     }
     uint32_t len = 4096;
     uint32_t lo = 0;
     for (unsigned i = 0; i < 40; i++) {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 10; ++j) {
         [[maybe_unused]] auto addref = insert_extent(extmap_root, *t, lo, {lo, len});
@@ -188,7 +167,7 @@ TEST_F(extentmap_manager_test_t, force_split)
         }
       }
       logger().debug("force split submit transaction i = {}", i);
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
       check_mappings(extmap_root);
     }
   });
@@ -200,14 +179,14 @@ TEST_F(extentmap_manager_test_t, force_split_merge)
   run_async([this] {
     extmap_root_t extmap_root(0, L_ADDR_NULL);
     {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       extmap_root = extmap_manager->initialize_extmap(*t).unsafe_get0();
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
     }
     uint32_t len = 4096;
     uint32_t lo = 0;
     for (unsigned i = 0; i < 80; i++) {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       logger().debug("opened split_merge transaction");
       for (unsigned j = 0; j < 5; ++j) {
         [[maybe_unused]] auto addref = insert_extent(extmap_root, *t, lo, {lo, len});
@@ -217,12 +196,12 @@ TEST_F(extentmap_manager_test_t, force_split_merge)
 	}
       }
       logger().debug("submitting transaction");
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
       if (i % 50 == 0) {
 	check_mappings(extmap_root);
       }
     }
-    auto t = tm.create_transaction();
+    auto t = tm->create_transaction();
     int i = 0;
     for (const auto& [lo, ext]: test_ext_mappings) {
       if (i % 3 != 0) {
@@ -231,8 +210,8 @@ TEST_F(extentmap_manager_test_t, force_split_merge)
 
       if (i % 10 == 0) {
         logger().debug("submitting transaction i= {}", i);
-	tm.submit_transaction(std::move(t)).unsafe_get();
-	t = tm.create_transaction();
+	tm->submit_transaction(std::move(t)).unsafe_get();
+	t = tm->create_transaction();
       }
       if (i % 100 == 0) {
         logger().debug("check_mappings  i= {}", i);
@@ -242,7 +221,7 @@ TEST_F(extentmap_manager_test_t, force_split_merge)
       i++;
     }
     logger().debug("finally submitting transaction ");
-    tm.submit_transaction(std::move(t)).unsafe_get();
+    tm->submit_transaction(std::move(t)).unsafe_get();
   });
 }
 
@@ -251,14 +230,14 @@ TEST_F(extentmap_manager_test_t, force_split_balanced)
   run_async([this] {
     extmap_root_t extmap_root(0, L_ADDR_NULL);
     {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       extmap_root = extmap_manager->initialize_extmap(*t).unsafe_get0();
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
     }
     uint32_t len = 4096;
     uint32_t lo = 0;
     for (unsigned i = 0; i < 50; i++) {
-      auto t = tm.create_transaction();
+      auto t = tm->create_transaction();
       logger().debug("opened split_merge transaction");
       for (unsigned j = 0; j < 5; ++j) {
         [[maybe_unused]] auto addref = insert_extent(extmap_root, *t, lo, {lo, len});
@@ -268,12 +247,12 @@ TEST_F(extentmap_manager_test_t, force_split_balanced)
         }
       }
       logger().debug("submitting transaction");
-      tm.submit_transaction(std::move(t)).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
       if (i % 50 == 0) {
         check_mappings(extmap_root);
       }
     }
-    auto t = tm.create_transaction();
+    auto t = tm->create_transaction();
     int i = 0;
     for (const auto& [lo, ext]: test_ext_mappings) {
       if (i < 100) {
@@ -282,8 +261,8 @@ TEST_F(extentmap_manager_test_t, force_split_balanced)
 
       if (i % 10 == 0) {
 	logger().debug("submitting transaction i= {}", i);
-        tm.submit_transaction(std::move(t)).unsafe_get();
-        t = tm.create_transaction();
+        tm->submit_transaction(std::move(t)).unsafe_get();
+        t = tm->create_transaction();
       }
       if (i % 50 == 0) {
         logger().debug("check_mappings  i= {}", i);
@@ -295,7 +274,7 @@ TEST_F(extentmap_manager_test_t, force_split_balanced)
 	break;
     }
     logger().debug("finally submitting transaction ");
-    tm.submit_transaction(std::move(t)).unsafe_get();
+    tm->submit_transaction(std::move(t)).unsafe_get();
     check_mappings(extmap_root);
   });
 }

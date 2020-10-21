@@ -278,10 +278,23 @@ enum class extent_types_t : uint8_t {
   NONE = 0xFF
 };
 
+inline bool is_logical_type(extent_types_t type) {
+  switch (type) {
+  case extent_types_t::ROOT:
+  case extent_types_t::LADDR_INTERNAL:
+  case extent_types_t::LADDR_LEAF:
+    return false;
+  default:
+    return true;
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
 /* description of a new physical extent */
 struct extent_t {
+  extent_types_t type;  ///< type of extent
+  laddr_t addr;         ///< laddr of extent (L_ADDR_NULL for non-logical)
   ceph::bufferlist bl;  ///< payload, bl.length() == length, aligned
 };
 

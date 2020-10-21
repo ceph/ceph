@@ -67,7 +67,8 @@ BtreeLBAManager::get_mapping(
     t).safe_then([this, &t, offset, length](auto extent) {
       return extent->lookup_range(
 	get_context(t),
-	offset, length);
+	offset, length
+      ).safe_then([extent](auto ret) { return ret; });
     }).safe_then([](auto &&e) {
       logger().debug("BtreeLBAManager::get_mapping: got mapping {}", e);
       return get_mapping_ret(
@@ -159,10 +160,15 @@ BtreeLBAManager::set_extent(
     });
 }
 
+static bool is_lba_node(extent_types_t type)
+{
+  return type == extent_types_t::LADDR_INTERNAL ||
+    type == extent_types_t::LADDR_LEAF;
+}
+
 static bool is_lba_node(const CachedExtent &e)
 {
-  return e.get_type() == extent_types_t::LADDR_INTERNAL ||
-    e.get_type() == extent_types_t::LADDR_LEAF;
+  return is_lba_node(e.get_type());
 }
 
 btree_range_pin_t &BtreeLBAManager::get_pin(CachedExtent &e)
@@ -293,6 +299,46 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
     });
 }
 
+BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
+  Transaction &t,
+  laddr_t begin,
+  laddr_t end,
+  scan_mappings_func_t &&f)
+{
+  return seastar::do_with(
+    std::move(f),
+    LBANodeRef(),
+    [=, &t](auto &f, auto &lbarootref) {
+      return get_root(t).safe_then(
+	[=, &t, &f](LBANodeRef lbaroot) mutable {
+	  lbarootref = lbaroot;
+	  return lbaroot->scan_mappings(
+	    get_context(t),
+	    begin,
+	    end,
+	    f);
+	});
+    });
+}
+
+BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
+    Transaction &t,
+    scan_mapped_space_func_t &&f)
+{
+  return seastar::do_with(
+    std::move(f),
+    LBANodeRef(),
+    [=, &t](auto &f, auto &lbarootref) {
+      return get_root(t).safe_then(
+	[=, &t, &f](LBANodeRef lbaroot) mutable {
+	  lbarootref = lbaroot;
+	  return lbaroot->scan_mapped_space(
+	    get_context(t),
+	    f);
+	});
+    });
+}
+
 BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
@@ -367,6 +413,43 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   } else {
     return rewrite_extent_ertr::now();
   }
+}
+
+BtreeLBAManager::get_physical_extent_if_live_ret
+BtreeLBAManager::get_physical_extent_if_live(
+  Transaction &t,
+  extent_types_t type,
+  paddr_t addr,
+  laddr_t laddr,
+  segment_off_t len)
+{
+  ceph_assert(is_lba_node(type));
+  return cache.get_extent_by_type(
+    t,
+    type,
+    addr,
+    laddr,
+    len
+  ).safe_then([=, &t](CachedExtentRef extent) {
+    return get_root(t).safe_then([=, &t](LBANodeRef root) {
+      auto lba_node = extent->cast<LBANode>();
+      return root->lookup(
+	op_context_t{cache, pin_set, t},
+	lba_node->get_node_meta().begin,
+	lba_node->get_node_meta().depth).safe_then([=, &t](LBANodeRef c) {
+	  if (c->get_paddr() == lba_node->get_paddr()) {
+	    return get_physical_extent_if_live_ret(
+	      get_physical_extent_if_live_ertr::ready_future_marker{},
+	      lba_node);
+	  } else {
+	    cache.drop_from_cache(lba_node);
+	    return get_physical_extent_if_live_ret(
+	      get_physical_extent_if_live_ertr::ready_future_marker{},
+	      CachedExtentRef());
+	  }
+	});
+    });
+  });
 }
 
 BtreeLBAManager::BtreeLBAManager(
