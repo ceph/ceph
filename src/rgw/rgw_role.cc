@@ -199,7 +199,7 @@ int RGWRole::delete_policy(const DoutPrefixProvider* dpp, const string& policy_n
   } else {
     perm_policy_map.erase(it);
   }
-    return 0;
+  return 0;
 }
 
 void RGWRole::dump(Formatter *f) const
