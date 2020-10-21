@@ -102,26 +102,15 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
     return -ERR_DELETE_CONFLICT;
   }
 
-  // Delete id
-  ret = role_ctl->delete_info(id, y, dpp);
+  RGWObjVersionTracker ot;
+  ret = role_ctl->delete_role(*this, y, dpp,
+			      RGWRoleCtl::RemoveParams().
+			      set_objv_tracker(&ot));
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting role id: "
-                  << id << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: deleting role: "<< id
+		  << cpp_strerror(-ret) << dendl;
   }
 
-  // Delete name
-  ret = role_ctl->delete_name(name, tenant, y, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting role: "
-                  << name << ":" << cpp_strerror(-ret) << dendl;
-  }
-
-  // Delete path
-  ret = role_ctl->delete_path(id, path, tenant, y, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting role path:"
-                  << path << ": " << cpp_strerror(-ret) << dendl;
-  }
   return ret;
 }
 
@@ -480,6 +469,20 @@ RGWRoleCtl::read_name(const std::string& name,
 			       y, dpp);
   });
   return make_pair(ret, role_id);
+}
+
+int RGWRoleCtl::delete_role(const rgw::sal::RGWRole& info,
+			    optional_yield y,
+          const DoutPrefixProvider *dpp,
+			    const RemoveParams& params)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.role->delete_role(op->ctx(),
+				 info,
+				 params.objv_tracker,
+				 y, dpp);
+  });
+  return 0;
 }
 
 int RGWRoleCtl::delete_info(const std::string& role_id,
