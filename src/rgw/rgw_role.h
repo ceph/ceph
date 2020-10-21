@@ -30,6 +30,8 @@ struct RGWRoleInfo
   string tenant;
   uint64_t max_session_duration;
 
+  string err_msg;
+
   void extract_name_tenant(std::string_view str);
   void set_perm_policy(const std::string& policy_name,
 		       const std::string& perm_policy);
@@ -74,6 +76,11 @@ struct RGWRoleInfo
 
   RGWRoleInfo(std::string _id) :
     id(std::move(_id)) {}
+
+  void set_err_msg(string msg) {
+    err_msg.clear();
+    err_msg = std::move(msg);
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);

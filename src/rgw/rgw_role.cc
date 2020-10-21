@@ -62,7 +62,7 @@ auto generate_ctime() {
 int RGWRole::create(bool exclusive, optional_yield y)
 {
   if (! info.validate_input()) {
-    ldout(cct, 0) << "ERROR: invalid input " << dendl;
+    ldout(cct, 0) << "ERROR: invalid input: " << info.err_msg << dendl;
     return -EINVAL;
   }
 
@@ -178,7 +178,6 @@ int RGWRoleInfo::get_role_policy(const string& policy_name, string& perm_policy)
 {
   const auto it = perm_policy_map.find(policy_name);
   if (it == perm_policy_map.end()) {
-    //ldout(cct, 0) << "ERROR: Policy name: " << policy_name << " not found" << dendl;
     return -ENOENT;
   } else {
     perm_policy = it->second;
@@ -190,12 +189,11 @@ int RGWRoleInfo::delete_policy(const string& policy_name)
 {
   const auto& it = perm_policy_map.find(policy_name);
   if (it == perm_policy_map.end()) {
-    //ldout(cct, 0) << "ERROR: Policy name: " << policy_name << " not found" << dendl;
     return -ENOENT;
   } else {
     perm_policy_map.erase(it);
   }
-    return 0;
+  return 0;
 }
 
 void RGWRoleInfo::dump(Formatter *f) const
@@ -272,30 +270,30 @@ int RGWRole::read_name()
 bool RGWRoleInfo::validate_input()
 {
   if (name.length() > MAX_ROLE_NAME_LEN) {
-    //ldout(cct, 0) << "ERROR: Invalid name length " << dendl;
+    set_err_msg("Invalid name length");
     return false;
   }
 
   if (path.length() > MAX_PATH_NAME_LEN) {
-    //ldout(cct, 0) << "ERROR: Invalid path length " << dendl;
+    set_err_msg("Invalid path length");
     return false;
   }
 
   std::regex regex_name("[A-Za-z0-9:=,.@-]+");
   if (! std::regex_match(name, regex_name)) {
-    //ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
+    set_err_msg("Invalid chars in name");
     return false;
   }
 
   std::regex regex_path("(/[!-~]+/)|(/)");
   if (! std::regex_match(path,regex_path)) {
-    //ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
+    set_err_msg("Invalid chars in path");
     return false;
   }
 
   if (max_session_duration < SESSION_DURATION_MIN ||
           max_session_duration > SESSION_DURATION_MAX) {
-    //ldout(cct, 0) << "ERROR: Invalid session duration, should be between 3600 and 43200 seconds " << dendl;
+    set_err_msg("Invalid session duration, should be between 3600 and 43200 seconds");
     return false;
   }
   return true;
