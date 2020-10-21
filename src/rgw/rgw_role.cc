@@ -74,87 +74,15 @@ int RGWRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_
 
 int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
-  int ret;
-
-  if (! validate_input(dpp)) {
+  if (!validate_input(dpp)) {
+    ldpp_dout(dpp, 0) << "ERROR: invalid input " << dendl;
     return -EINVAL;
   }
-
-  /* check to see the name is not used */
-  ret = read_id(dpp, name, tenant, id, y);
-  if (exclusive && ret == 0) {
-    ldpp_dout(dpp, 0) << "ERROR: name " << name << " already in use for role id "
-                    << id << dendl;
-    return -EEXIST;
-  } else if ( ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading role id  " << id << ": "
-                  << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  /* create unique id */
-  uuid_d new_uuid;
-  char uuid_str[37];
-  new_uuid.generate_random();
-  new_uuid.print(uuid_str);
-  id = uuid_str;
-
-  //arn
-  arn = role_arn_prefix + tenant + ":role" + path + name;
-
-  // Creation time
-  real_clock::time_point t = real_clock::now();
-
-  struct timeval tv;
-  real_clock::to_timeval(t, tv);
-
-  char buf[30];
-  struct tm result;
-  gmtime_r(&tv.tv_sec, &result);
-  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
-  creation_date.assign(buf, strlen(buf));
-
-  ret = store_info(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR:  storing role info "
-                  << id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  ret = store_name(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: storing role name"
-                  << name << ": " << cpp_strerror(-ret) << dendl;
-
-    //Delete the role info that was stored in the previous call
-    int info_ret = role_ctl->delete_info(id, y, dpp);
-    if (info_ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id"
-                  << id << ": " << cpp_strerror(-info_ret) << dendl;
-    }
-    return ret;
-  }
-
-  ret = store_path(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: storing role path"
-                  << path << ": " << cpp_strerror(-ret) << dendl;
-    //Delete the role info that was stored in the previous call
-    int info_ret = role_ctl->delete_info(id, y, dpp);
-    if (info_ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id"
-		    << id << ": " << cpp_strerror(-info_ret) << dendl;
-    }
-    //Delete role name that was stored in previous call
-    int name_ret = role_ctl->delete_name(name, tenant, y, dpp);
-    if (name_ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cleanup of role name"
-		    << name << ": " << cpp_strerror(-name_ret) << dendl;
-    }
-    return ret;
-  }
-  return 0;
+  RGWObjVersionTracker objv_tracker;
+  return role_ctl->create(*this, y, dpp,
+			  RGWRoleCtl::PutParams().
+			  set_exclusive(exclusive).
+			  set_objv_tracker(&objv_tracker));
 }
 
 int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
@@ -444,6 +372,23 @@ const string& RGWRole::get_path_oid_prefix()
 }
 } } // namespace rgw::sal
 
+int RGWRoleCtl::create(rgw::sal::RGWRole& role,
+		       optional_yield y,
+           const DoutPrefixProvider *dpp,
+		       const PutParams& params)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.role->create(op->ctx(),
+			    role,
+			    params.objv_tracker,
+			    params.mtime,
+			    params.exclusive,
+			    params.attrs,
+			    y,
+          dpp);
+  });
+}
+
 int RGWRoleCtl::store_info(const rgw::sal::RGWRole* role,
 			   optional_yield y,
          const DoutPrefixProvider *dpp,
@@ -537,17 +482,18 @@ RGWRoleCtl::read_name(const std::string& name,
   return make_pair(ret, role_id);
 }
 
-int RGWRoleCtl::delete_info(const std::string& role_id,
+int RGWRoleCtl::delete_info(const rgw::sal::RGWRole& info,
 			    optional_yield y,
           const DoutPrefixProvider *dpp,
 			    const RemoveParams& params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.role->delete_info(op->ctx(),
-				 role_id,
+				 info,
 				 params.objv_tracker,
 				 y, dpp);
   });
+  return 0;
 }
 
 int RGWRoleCtl::delete_name(const std::string& name,
@@ -680,14 +626,14 @@ public:
     auto mtime = mdo->get_mtime();
     map<std::string, bufferlist> *pattrs = rci.has_attrs ? &rci.attrs : nullptr;
 
-    int ret = rhandler->svc.role->store_info(op->ctx(),
-                                           rci.info,
-                                           &objv_tracker,
-                                           mtime,
-                                           false,
-                                           pattrs,
-                                           y,
-                                           dpp);
+    int ret = rhandler->svc.role->create(op->ctx(),
+					 rci.info,
+					 &objv_tracker,
+					 mtime,
+					 false,
+					 pattrs,
+					 y,
+           dpp);
 
     return ret < 0 ? ret : STATUS_APPLIED;
   }
