@@ -516,7 +516,7 @@ int RGWRoleCtl::delete_info(const rgw::sal::RGWRole& info,
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.role->delete_info(op->ctx(),
-				 info,
+				 info.get_id(),
 				 params.objv_tracker,
 				 y, dpp);
   });
