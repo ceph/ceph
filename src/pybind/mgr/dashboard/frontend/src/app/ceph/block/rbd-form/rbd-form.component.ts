@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -60,10 +60,10 @@ export class RbdFormComponent extends CdForm implements OnInit {
   allDataPools: Array<Pool> = [];
   features: { [key: string]: RbdImageFeature };
   featuresList: RbdImageFeature[] = [];
-  initializeConfigData = new EventEmitter<{
+  initializeConfigData = new ReplaySubject<{
     initialData: RbdConfigurationEntry[];
     sourceType: RbdConfigurationSourceField;
-  }>();
+  }>(1);
 
   pool: string;
 
@@ -559,7 +559,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
       .setValue(this.dimlessBinaryPipe.transform(response.stripe_unit));
     this.rbdForm.get('stripingCount').setValue(response.stripe_count);
     /* Configuration */
-    this.initializeConfigData.emit({
+    this.initializeConfigData.next({
       initialData: this.response.configuration,
       sourceType: RbdConfigurationSourceField.image
     });

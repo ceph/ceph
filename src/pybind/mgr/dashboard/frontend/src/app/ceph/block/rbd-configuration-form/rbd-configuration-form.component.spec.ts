@@ -1,7 +1,8 @@
-import { EventEmitter } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
+
+import { ReplaySubject } from 'rxjs';
 
 import { DirectivesModule } from '~/app/shared/directives/directives.module';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -66,7 +67,7 @@ describe('RbdConfigurationFormComponent', () => {
 
   describe('test loading of initial data for editing', () => {
     beforeEach(() => {
-      component.initializeData = new EventEmitter<any>();
+      component.initializeData = new ReplaySubject<any>(1);
       fixture.detectChanges();
       component.ngOnInit();
     });
@@ -85,7 +86,7 @@ describe('RbdConfigurationFormComponent', () => {
     });
 
     it('should load initial data into forms', () => {
-      component.initializeData.emit({
+      component.initializeData.next({
         initialData: [
           {
             name: 'rbd_qos_bps_limit',
@@ -100,7 +101,7 @@ describe('RbdConfigurationFormComponent', () => {
     });
 
     it('should not load initial data if the source is not the pool itself', () => {
-      component.initializeData.emit({
+      component.initializeData.next({
         initialData: [
           {
             name: 'rbd_qos_bps_limit',
@@ -121,7 +122,7 @@ describe('RbdConfigurationFormComponent', () => {
     });
 
     it('should not load initial data if the source is not the image itself', () => {
-      component.initializeData.emit({
+      component.initializeData.next({
         initialData: [
           {
             name: 'rbd_qos_bps_limit',
@@ -142,7 +143,7 @@ describe('RbdConfigurationFormComponent', () => {
     });
 
     it('should always have formatted results', () => {
-      component.initializeData.emit({
+      component.initializeData.next({
         initialData: [
           {
             name: 'rbd_qos_bps_limit',
@@ -204,7 +205,7 @@ describe('RbdConfigurationFormComponent', () => {
     let data: any;
 
     beforeEach(() => {
-      component.initializeData = new EventEmitter<any>();
+      component.initializeData = new ReplaySubject<any>(1);
       fixture.detectChanges();
       component.ngOnInit();
       data = {
@@ -247,7 +248,7 @@ describe('RbdConfigurationFormComponent', () => {
         ],
         sourceType: RbdConfigurationSourceField.image
       };
-      component.initializeData.emit(data);
+      component.initializeData.next(data);
     });
 
     it('should return an empty object', () => {
