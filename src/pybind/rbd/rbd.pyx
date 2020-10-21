@@ -603,6 +603,9 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_demote(rbd_image_t image)
     int rbd_mirror_image_resync(rbd_image_t image)
     int rbd_mirror_image_create_snapshot(rbd_image_t image, uint64_t *snap_id)
+    int rbd_aio_mirror_image_create_snapshot(rbd_image_t image, uint32_t flags,
+                                             uint64_t *snap_id,
+                                             rbd_completion_t c)
     int rbd_mirror_image_get_info(rbd_image_t image,
                                   rbd_mirror_image_info_t *mirror_image_info,
                                   size_t info_size)
@@ -4831,8 +4834,6 @@ written." % (self.name, ret, length))
         """
         Create mirror snapshot.
 
-        :param force: ignore mirror snapshot limit
-        :type force: bool
         :returns: int - the snapshot Id
         """
         cdef:
@@ -4843,6 +4844,54 @@ written." % (self.name, ret, length))
             raise make_ex(ret, 'error creating mirror snapshot for image %s' %
                           self.name)
         return snap_id
+
+    @requires_not_closed
+    def aio_mirror_image_create_snapshot(self, flags, oncomplete):
+        """
+        Asynchronously create mirror snapshot.
+
+        Raises :class:`InvalidArgument` if the image is not in mirror
+        snapshot mode.
+
+        oncomplete will be called with the created snap ID as
+        well as the completion:
+
+        oncomplete(completion, snap_id)
+
+        :param flags: create snapshot flags
+        :type flags: int
+        :param oncomplete: what to do when the read is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        :raises: :class:`InvalidArgument`
+        """
+        cdef:
+            uint32_t _flags = flags
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            snap_id = <object>(<uint64_t *>_completion_v.buf)[0] \
+                if return_value >= 0 else None
+            return oncomplete(_completion_v, snap_id)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(NULL, sizeof(uint64_t))
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_image_create_snapshot(self.image, _flags,
+                                                           <uint64_t *>completion.buf,
+                                                           completion.rbd_comp)
+            if ret < 0:
+                raise make_ex(ret, 'error creating mirror snapshot for image %s' %
+                              self.name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
 
     @requires_not_closed
     def mirror_image_get_info(self):

@@ -2161,6 +2161,39 @@ class TestMirroring(object):
         self.rbd.mirror_peer_remove(ioctx, peer2_uuid)
         self.image.mirror_image_promote(False)
 
+    def test_aio_mirror_image_create_snapshot(self):
+        peer_uuid = self.rbd.mirror_peer_add(ioctx, "cluster", "client")
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        self.image.mirror_image_disable(False)
+        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+
+        snaps = list(self.image.list_snaps())
+        eq(1, len(snaps))
+        snap = snaps[0]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+
+        # this is a list so that the local cb() can modify it
+        snap_id = [None]
+        def cb(_, _snap_id):
+            snap_id[0] = _snap_id
+
+        comp = self.image.aio_mirror_image_create_snapshot(0, cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(snap_id[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+
+        snaps = list(self.image.list_snaps())
+        eq(2, len(snaps))
+        snap = snaps[1]
+        eq(snap['id'], snap_id[0])
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+        eq([peer_uuid], snap['mirror']['mirror_peer_uuids'])
+
+        self.rbd.mirror_peer_remove(ioctx, peer_uuid)
+
 class TestTrash(object):
 
     def setUp(self):
