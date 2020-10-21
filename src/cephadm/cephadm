@@ -6016,10 +6016,6 @@ def _get_parser():
         '--allow-ptrace',
         action='store_true',
         help='Allow SYS_PTRACE on daemon container')
-    parser_deploy.add_argument(
-        '--container-init',
-        action='store_true',
-        help='Run podman/docker with `--init`')
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
