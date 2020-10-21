@@ -31,6 +31,14 @@ class RGWSI_Role: public RGWServiceInstance
   static std::string get_role_name_meta_key(const std::string& role_name, const std::string& tenant);
   static std::string get_role_path_meta_key(const std::string& path, const std::string& role_id, const std::string& tenant);
 
+  virtual int create(RGWSI_MetaBackend::Context *ctx,
+		     RGWRoleInfo& role,
+		     RGWObjVersionTracker * const objv_tracker,
+		     const real_time& pmtime,
+		     bool exclusive,
+		     map<std::string, bufferlist> * pattrs,
+		     optional_yield y) = 0;
+
   virtual int store_info(RGWSI_MetaBackend::Context *ctx,
 			 const RGWRoleInfo& role,
 			 RGWObjVersionTracker * const objv_tracker,
@@ -80,7 +88,7 @@ class RGWSI_Role: public RGWServiceInstance
 			optional_yield y) = 0;
 
   virtual int delete_info(RGWSI_MetaBackend::Context *ctx,
-			  const std::string& name,
+			  const RGWRoleInfo& info,
 			  RGWObjVersionTracker * const objv_tracker,
 			  optional_yield y) = 0;
 
