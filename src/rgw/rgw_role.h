@@ -333,6 +333,11 @@ public:
            const DoutPrefixProvider *dpp,
 				   const GetParams& params = {});
 
+  int delete_role(const rgw::sal::RGWRole& role,
+		  optional_yield y,
+      const DoutPrefixProvider *dpp,
+		  const RemoveParams& params = {});
+
   int delete_info(const std::string& role_id,
 		  optional_yield y,
       const DoutPrefixProvider *dpp,
