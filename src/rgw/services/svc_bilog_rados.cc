@@ -3,6 +3,7 @@
 
 #include "svc_bilog_rados.h"
 #include "svc_bi_rados.h"
+#include "svc_rados.h"
 
 #include "common/errno.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -273,14 +274,14 @@ int RGWSI_BILog_RADOS_FIFO::log_stop(const RGWBucketInfo& bucket_info,
 }
 
 std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::_open_fifo(const RGWBucketInfo& bucket_info)
+RGWSI_BILog_RADOS_FIFO::open_fifo(const RGWBucketInfo& bucket_info,
+                                  RGWSI_BucketIndex_RADOS& bi_rados)
 {
   RGWSI_RADOS::Pool index_pool;
   std::string bucket_oid;
-  ceph_assert(svc.bi);
-  if (const int ret = svc.bi->open_bucket_index(bucket_info,
-                                                &index_pool,
-                                                &bucket_oid);
+  if (const int ret = bi_rados.open_bucket_index(bucket_info,
+                                                 &index_pool,
+                                                 &bucket_oid);
       ret < 0) {
     return nullptr;
   }
@@ -292,6 +293,13 @@ RGWSI_BILog_RADOS_FIFO::_open_fifo(const RGWBucketInfo& bucket_info)
                                &ret_fifo,
                                null_yield /* FIXME */);
   return ret_fifo;
+}
+
+std::unique_ptr<rgw::cls::fifo::FIFO>
+RGWSI_BILog_RADOS_FIFO::_open_fifo(const RGWBucketInfo& bucket_info)
+{
+  ceph_assert(svc.bi);
+  return open_fifo(bucket_info, *svc.bi);
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_list(const RGWBucketInfo& bucket_info,
