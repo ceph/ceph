@@ -75,6 +75,10 @@ export class RbdService {
     return this.http.get('api/block/image/default_features');
   }
 
+  cloneFormatVersion() {
+    return this.http.get<number>('api/block/image/clone_format_version');
+  }
+
   createSnapshot(imageSpec: ImageSpec, @cdEncodeNot snapshotName: string) {
     const request = {
       snapshot_name: snapshotName

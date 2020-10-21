@@ -9,7 +9,7 @@ from .helper import DashboardTestCase, JObj, JLeaf, JList
 
 
 class RbdTest(DashboardTestCase):
-    AUTH_ROLES = ['pool-manager', 'block-manager']
+    AUTH_ROLES = ['pool-manager', 'block-manager', 'cluster-manager']
 
     @classmethod
     def create_pool(cls, name, pg_num, pool_type, application='rbd'):
@@ -753,6 +753,57 @@ class RbdTest(DashboardTestCase):
         default_features = self._get('/api/block/image/default_features')
         self.assertEqual(default_features, [
             'deep-flatten', 'exclusive-lock', 'fast-diff', 'layering', 'object-map'])
+
+    def test_clone_format_version(self):
+        config_name = 'rbd_default_clone_format'
+        def _get_config_by_name(conf_name):
+            data = self._get('/api/cluster_conf/{}'.format(conf_name))
+            if 'value' in data:
+                return data['value']
+            return None
+
+        # with rbd_default_clone_format = auto
+        clone_format_version = self._get('/api/block/image/clone_format_version')
+        self.assertEqual(clone_format_version, 1)
+        self.assertStatus(200)
+
+        # with rbd_default_clone_format = 1
+        value = [{'section': "global", 'value': "1"}]
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': value
+        })
+        self.wait_until_equal(
+                    lambda: _get_config_by_name(config_name),
+                    value,
+                    timeout=60)
+        clone_format_version = self._get('/api/block/image/clone_format_version')
+        self.assertEqual(clone_format_version, 1)
+        self.assertStatus(200)
+
+        # with rbd_default_clone_format = 2
+        value = [{'section': "global", 'value': "2"}]
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': value
+        })
+        self.wait_until_equal(
+                    lambda: _get_config_by_name(config_name),
+                    value,
+                    timeout=60)
+        clone_format_version = self._get('/api/block/image/clone_format_version')
+        self.assertEqual(clone_format_version, 2)
+        self.assertStatus(200)
+
+        value = []
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': value
+        })
+        self.wait_until_equal(
+                    lambda: _get_config_by_name(config_name),
+                    None,
+                    timeout=60)
 
     def test_image_with_namespace(self):
         self.create_namespace('rbd', 'ns')
