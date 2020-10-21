@@ -54,6 +54,8 @@ public:
                   Context* on_finish) override;
 
 private:
+  struct OpenRequest;
+
   ImageCtxT* m_image_ctx;
   json_spirit::mObject m_json_object;
   const SourceSpecBuilder<ImageCtxT>* m_source_spec_builder;
