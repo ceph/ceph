@@ -102,11 +102,17 @@ class RGWSI_Role_RADOS: public RGWSI_Role
 		optional_yield y,
 		const DoutPrefixProvider *dpp) override { return 0; } // TODO impl me
 
-  int delete_info(RGWSI_MetaBackend::Context *ctx,
+  int delete_role(RGWSI_MetaBackend::Context *ctx,
 		  const rgw::sal::RGWRole& info,
 		  RGWObjVersionTracker * const objv_tracker,
 		  optional_yield y,
 		  const DoutPrefixProvider *dpp) override;
+
+  int delete_info(RGWSI_MetaBackend::Context *ctx,
+		   const std::string& role_id,
+		   RGWObjVersionTracker * const objv_tracker,
+		   optional_yield y,
+		   const DoutPrefixProvider *dpp) override;
 
   int delete_name(RGWSI_MetaBackend::Context *ctx,
 		  const std::string& name,
