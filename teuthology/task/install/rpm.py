@@ -416,14 +416,14 @@ def _upgrade_packages(ctx, config, remote, pkgs):
     # Actually upgrade the project packages
     if builder.dist_release in ['opensuse', 'sle']:
         pkg_mng_opts = '-n'
-        pkg_mng_subcommand_opts = '--capability'
-        pkg_mng_install_opts = '--no-recommends'
+        pkg_mng_subcommand = 'install'
+        pkg_mng_subcommand_opts = ['--capability', '--no-recommends']
     else:
         pkg_mng_opts = '-y'
-        pkg_mng_subcommand_opts = ''
-        pkg_mng_install_opts = ''
-    args = ['sudo', pkg_mng_cmd, pkg_mng_opts,
-            'install', pkg_mng_subcommand_opts,
-            pkg_mng_install_opts]
+        pkg_mng_subcommand = 'upgrade'
+        pkg_mng_subcommand_opts = []
+    args = ['sudo', pkg_mng_cmd, pkg_mng_opts, pkg_mng_subcommand]
+    if pkg_mng_subcommand_opts:
+        args += pkg_mng_subcommand_opts
     args += pkgs
     remote.run(args=args)
