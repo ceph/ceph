@@ -800,22 +800,31 @@ int Migration<I>::execute() {
     return r;
   }
 
-  while (true) {
-    MigrationProgressContext prog_ctx(m_src_image_ctx->md_ctx,
-                                      m_src_image_ctx->header_oid,
-                                      cls::rbd::MIGRATION_STATE_EXECUTING,
-                                      m_prog_ctx);
-    r = m_dst_image_ctx->operations->migrate(prog_ctx);
-    if (r == -EROFS) {
-      std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
-      if (m_dst_image_ctx->exclusive_lock != nullptr &&
-          !m_dst_image_ctx->exclusive_lock->accept_ops()) {
-        ldout(m_cct, 5) << "lost exclusive lock, retrying remote" << dendl;
-        continue;
-      }
+  {
+    MigrationProgressContext dst_prog_ctx(
+      m_dst_image_ctx->md_ctx, m_dst_image_ctx->header_oid,
+      cls::rbd::MIGRATION_STATE_EXECUTING, m_prog_ctx);
+    std::optional<MigrationProgressContext> src_prog_ctx;
+    if (m_src_image_ctx != nullptr) {
+      src_prog_ctx.emplace(m_src_image_ctx->md_ctx, m_src_image_ctx->header_oid,
+                           cls::rbd::MIGRATION_STATE_EXECUTING, &dst_prog_ctx);
     }
-    break;
+
+    while (true) {
+      r = m_dst_image_ctx->operations->migrate(
+        *(src_prog_ctx ? &src_prog_ctx.value() : &dst_prog_ctx));
+      if (r == -EROFS) {
+        std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
+        if (m_dst_image_ctx->exclusive_lock != nullptr &&
+          !m_dst_image_ctx->exclusive_lock->accept_ops()) {
+          ldout(m_cct, 5) << "lost exclusive lock, retrying remote" << dendl;
+          continue;
+        }
+      }
+      break;
+    }
   }
+
   if (r < 0) {
     lderr(m_cct) << "migration failed: " << cpp_strerror(r) << dendl;
     return r;
