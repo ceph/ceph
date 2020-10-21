@@ -66,12 +66,39 @@ int RGWRole::store_path(bool exclusive, optional_yield y)
 			      set_objv_tracker(&objv_tracker));
 }
 
+// Creation time
+auto generate_ctime() {
+  real_clock::time_point t = real_clock::now();
+
+  struct timeval tv;
+  real_clock::to_timeval(t, tv);
+
+  char buf[30];
+  struct tm result;
+  gmtime_r(&tv.tv_sec, &result);
+  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
+  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
+  string ct;
+  ct.assign(buf, strlen(buf));
+  return ct;
+}
+
+
 int RGWRole::create(bool exclusive, optional_yield y)
 {
   if (! info.validate_input()) {
     ldout(cct, 0) << "ERROR: invalid input " << dendl;
     return -EINVAL;
   }
+
+  uuid_d new_role_id;
+  new_role_id.generate_random();
+
+  info.id = new_role_id.to_string();
+  info.arn = role_arn_prefix + info.tenant + ":role" + info.path + info.name;
+  info.creation_date = generate_ctime();
+
+
   RGWObjVersionTracker objv_tracker;
   return role_ctl->create(info, y,
 			  RGWRoleCtl::PutParams().
