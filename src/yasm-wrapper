@@ -12,15 +12,28 @@ while [ -n "$*" ]; do
 	    new="$new -f $1"
 	    shift
 	    ;;
-	-g* | -f* | -W* | -MD | -MP | -c | -D* | -E | --param* | -O* | -m* | -pipe | -pthread )
+	-c | --param* | -m* | -pipe | -thread )
+	    # unknown options under both yasm & nasm
 	    shift
 	    ;;
-	-I | -isystem )
+	-D* )
+	    # ignore define Macro option
 	    shift
-	    new="$new -i $1"
+	    ;;
+	-g* )
+	    # ignore debug format
+	    shift
+	    ;;
+	-W* )
+	    # Warning/error option
+	    shift
+	    ;;
+	-MD | -MP | -E | -O* )
+	    # ignore option: nasm support, yasm not support
 	    shift
 	    ;;
 	-MT )
+	    # ignore option: nasm support, yasm not support
 	    shift
 	    shift
 	    ;;
@@ -29,7 +42,16 @@ while [ -n "$*" ]; do
 	    touch="$1"
 	    shift
 	    ;;
+	-f* )
+	    shift
+	    ;;
+	-I | -isystem )
+	    shift
+	    new="$new -i $1"
+	    shift
+	    ;;
 	* )
+	    # Keep other options
 	    new="$new $1"
 	    shift
 	    ;;
