@@ -1484,8 +1484,11 @@
     --no-progress        disable progress output
   
   rbd help migration prepare
-  usage: rbd migration prepare [--pool <pool>] [--namespace <namespace>] 
-                               [--image <image>] [--dest-pool <dest-pool>] 
+  usage: rbd migration prepare [--import-only] 
+                               [--source-spec-path <source-spec-path>] 
+                               [--source-spec <source-spec>] [--pool <pool>] 
+                               [--namespace <namespace>] [--image <image>] 
+                               [--dest-pool <dest-pool>] 
                                [--dest-namespace <dest-namespace>] 
                                [--dest <dest>] [--image-format <image-format>] 
                                [--new-format] [--order <order>] 
@@ -1509,6 +1512,9 @@
                               (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
+    --import-only             only import data from source
+    --source-spec-path arg    source-spec file (or '-' for stdin)
+    --source-spec arg         source-spec
     -p [ --pool ] arg         source pool name
     --namespace arg           source namespace name
     --image arg               source image name
