@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_CACHE_RWL_REQUEST_H 
 
 #include "include/Context.h"
-#include "librbd/cache/ImageCache.h"
 #include "librbd/cache/pwl/Types.h"
 #include "librbd/cache/pwl/LogOperation.h"
 

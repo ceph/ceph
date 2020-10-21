@@ -7,7 +7,6 @@
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncOpTracker.h"
-#include "librbd/cache/ImageCache.h"
 #include "librbd/cache/ImageWriteback.h"
 #include "librbd/Utils.h"
 #include "librbd/BlockGuard.h"
