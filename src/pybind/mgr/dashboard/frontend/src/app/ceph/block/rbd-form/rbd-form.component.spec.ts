@@ -11,18 +11,40 @@ import { delay } from 'rxjs/operators';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ImageSpec } from '../../../shared/models/image-spec';
 import { SharedModule } from '../../../shared/shared.module';
+import { Pool } from '../../pool/pool';
 import { RbdConfigurationFormComponent } from '../rbd-configuration-form/rbd-configuration-form.component';
 import { RbdImageFeature } from './rbd-feature.interface';
 import { RbdFormMode } from './rbd-form-mode.enum';
+import { RbdFormResponseModel } from './rbd-form-response.model';
 import { RbdFormComponent } from './rbd-form.component';
 
 describe('RbdFormComponent', () => {
+  const urlPrefix = {
+    create: '/block/rbd/create',
+    edit: '/block/rbd/edit',
+    clone: '/block/rbd/clone',
+    copy: '/block/rbd/copy'
+  };
   let component: RbdFormComponent;
   let fixture: ComponentFixture<RbdFormComponent>;
   let activatedRoute: ActivatedRouteStub;
+  const mock: { rbd: RbdFormResponseModel; pools: Pool[]; defaultFeatures: string[] } = {
+    rbd: {} as RbdFormResponseModel,
+    pools: [],
+    defaultFeatures: []
+  };
+
+  const setRouterUrl = (
+    action: 'create' | 'edit' | 'clone' | 'copy',
+    poolName?: string,
+    imageName?: string
+  ) => {
+    component['routerUrl'] = [urlPrefix[action], poolName, imageName].filter((x) => x).join('/');
+  };
 
   const queryNativeElement = (cssSelector: string) =>
     fixture.debugElement.query(By.css(cssSelector)).nativeElement;
@@ -67,6 +89,19 @@ describe('RbdFormComponent', () => {
 
     const DELAY = 100;
 
+    const getPool = (
+      pool_name: string,
+      type: 'replicated' | 'erasure',
+      flags_names: string,
+      application_metadata: string[]
+    ): Pool =>
+      ({
+        pool_name,
+        flags_names,
+        application_metadata,
+        type
+      } as Pool);
+
     beforeEach(() => {
       createAction = spyOn(component, 'createAction').and.returnValue(of(null));
       editAction = spyOn(component, 'editAction');
@@ -75,8 +110,17 @@ describe('RbdFormComponent', () => {
       copyAction = spyOn(component, 'copyAction').and.returnValue(of(null));
       spyOn(component, 'setResponse').and.stub();
       routerNavigate = spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      mock.pools = [
+        getPool('one', 'replicated', '', []),
+        getPool('two', 'replicated', '', ['rbd']),
+        getPool('three', 'replicated', '', ['rbd']),
+        getPool('four', 'erasure', '', ['rbd']),
+        getPool('four', 'erasure', 'ec_overwrites', ['rbd'])
+      ];
+      spyOn(TestBed.inject(PoolService), 'list').and.callFake(() => of(mock.pools));
       rbdServiceGetSpy = spyOn(TestBed.inject(RbdService), 'get');
-      rbdServiceGetSpy.and.returnValue(of({ pool_name: 'foo', pool_image: 'bar' }));
+      mock.rbd = ({ pool_name: 'foo', pool_image: 'bar' } as any) as RbdFormResponseModel;
+      rbdServiceGetSpy.and.returnValue(of(mock.rbd));
       component.mode = undefined;
     });
 
@@ -92,13 +136,13 @@ describe('RbdFormComponent', () => {
     });
 
     it('should unsubscribe right after image data is received', () => {
-      component.mode = RbdFormMode.editing;
-      rbdServiceGetSpy.and.returnValue(of({ pool_name: 'foo', pool_image: 'bar' }));
+      setRouterUrl('edit', 'foo', 'bar');
+      rbdServiceGetSpy.and.returnValue(of(mock.rbd));
       editAction.and.returnValue(NEVER);
-      component.ngOnInit();
-      component.submit();
-
       expect(component['rbdImage'].observers.length).toEqual(0);
+      component.ngOnInit(); // Subscribes to image once during init
+      component.submit();
+      expect(component['rbdImage'].observers.length).toEqual(1);
       expect(createAction).toHaveBeenCalledTimes(0);
       expect(editAction).toHaveBeenCalledTimes(1);
       expect(cloneAction).toHaveBeenCalledTimes(0);
@@ -107,10 +151,8 @@ describe('RbdFormComponent', () => {
     });
 
     it('should not edit image if no image data is received', fakeAsync(() => {
-      component.mode = RbdFormMode.editing;
-      rbdServiceGetSpy.and.returnValue(
-        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(DELAY))
-      );
+      setRouterUrl('edit', 'foo', 'bar');
+      rbdServiceGetSpy.and.returnValue(of(mock.rbd).pipe(delay(DELAY)));
       component.ngOnInit();
       component.submit();
 
@@ -123,8 +165,38 @@ describe('RbdFormComponent', () => {
       tick(DELAY);
     }));
 
+    describe('disable data pools', () => {
+      beforeEach(() => {
+        component.ngOnInit();
+      });
+
+      it('should be enabled with more than 1 pool', () => {
+        component['handleExternalData'](mock);
+        expect(component.allDataPools.length).toBe(3);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(false);
+
+        mock.pools.pop();
+        component['handleExternalData'](mock);
+        expect(component.allDataPools.length).toBe(2);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(false);
+      });
+
+      it('should be disabled with 1 pool', () => {
+        mock.pools = [mock.pools[0]];
+        component['handleExternalData'](mock);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(true);
+      });
+
+      // Reason for 2 tests - useDataPool is not re-enabled anywhere else
+      it('should be disabled without any pool', () => {
+        mock.pools = [];
+        component['handleExternalData'](mock);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(true);
+      });
+    });
+
     it('should edit image after image data is received', () => {
-      component.mode = RbdFormMode.editing;
+      setRouterUrl('edit', 'foo', 'bar');
       component.ngOnInit();
       component.submit();
 
@@ -136,10 +208,8 @@ describe('RbdFormComponent', () => {
     });
 
     it('should not clone image if no image data is received', fakeAsync(() => {
-      component.mode = RbdFormMode.cloning;
-      rbdServiceGetSpy.and.returnValue(
-        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(DELAY))
-      );
+      setRouterUrl('clone', 'foo', 'bar');
+      rbdServiceGetSpy.and.returnValue(of(mock.rbd).pipe(delay(DELAY)));
       component.ngOnInit();
       component.submit();
 
@@ -153,7 +223,7 @@ describe('RbdFormComponent', () => {
     }));
 
     it('should clone image after image data is received', () => {
-      component.mode = RbdFormMode.cloning;
+      setRouterUrl('clone', 'foo', 'bar');
       component.ngOnInit();
       component.submit();
 
@@ -165,10 +235,8 @@ describe('RbdFormComponent', () => {
     });
 
     it('should not copy image if no image data is received', fakeAsync(() => {
-      component.mode = RbdFormMode.copying;
-      rbdServiceGetSpy.and.returnValue(
-        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(DELAY))
-      );
+      setRouterUrl('copy', 'foo', 'bar');
+      rbdServiceGetSpy.and.returnValue(of(mock.rbd).pipe(delay(DELAY)));
       component.ngOnInit();
       component.submit();
 
@@ -182,7 +250,7 @@ describe('RbdFormComponent', () => {
     }));
 
     it('should copy image after image data is received', () => {
-      component.mode = RbdFormMode.copying;
+      setRouterUrl('copy', 'foo', 'bar');
       component.ngOnInit();
       component.submit();
 
@@ -289,7 +357,7 @@ describe('RbdFormComponent', () => {
           })
         );
         spyOn(rbdService, 'defaultFeatures').and.returnValue(of(defaultFeatures));
-        component.router = { url: `/block/rbd/edit/${pool}/${image}` } as Router;
+        setRouterUrl('edit', pool, image);
         fixture.detectChanges();
         [
           deepFlatten,
@@ -339,7 +407,7 @@ describe('RbdFormComponent', () => {
       beforeEach(() => {
         const rbdService = TestBed.inject(RbdService);
         spyOn(rbdService, 'defaultFeatures').and.returnValue(of(defaultFeatures));
-        component.router = { url: '/block/rbd/create' } as Router;
+        setRouterUrl('create');
         fixture.detectChanges();
         [
           deepFlatten,

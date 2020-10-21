@@ -33,6 +33,12 @@ import { RbdFormEditRequestModel } from './rbd-form-edit-request.model';
 import { RbdFormMode } from './rbd-form-mode.enum';
 import { RbdFormResponseModel } from './rbd-form-response.model';
 
+class ExternalData {
+  rbd: RbdFormResponseModel;
+  defaultFeatures: string[];
+  pools: Pool[];
+}
+
 @Component({
   selector: 'cd-rbd-form',
   templateUrl: './rbd-form.component.html',
@@ -50,8 +56,8 @@ export class RbdFormComponent extends CdForm implements OnInit {
   namespacesByPoolCache = {};
   pools: Array<Pool> = null;
   allPools: Array<Pool> = null;
-  dataPools: Array<string> = null;
-  allDataPools: Array<string> = null;
+  dataPools: Array<Pool> = null;
+  allDataPools: Array<Pool> = [];
   features: { [key: string]: RbdImageFeature };
   featuresList: RbdImageFeature[] = [];
   initializeConfigData = new EventEmitter<{
@@ -90,6 +96,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   private rbdImage = new ReplaySubject(1);
+  private routerUrl: string;
 
   icons = Icons;
 
@@ -102,9 +109,10 @@ export class RbdFormComponent extends CdForm implements OnInit {
     private taskWrapper: TaskWrapperService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     public actionLabels: ActionLabelsI18n,
-    public router: Router
+    private router: Router
   ) {
     super();
+    this.routerUrl = this.router.url;
     this.poolPermission = this.authStorageService.getPermissions().pool;
     this.resource = $localize`RBD`;
     this.features = {
@@ -220,92 +228,27 @@ export class RbdFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    if (this.router.url.startsWith('/block/rbd/edit')) {
+    this.prepareFormForAction();
+    this.gatherNeededData().subscribe(this.handleExternalData.bind(this));
+  }
+
+  private prepareFormForAction() {
+    const url = this.routerUrl;
+    if (url.startsWith('/block/rbd/edit')) {
       this.mode = this.rbdFormMode.editing;
       this.action = this.actionLabels.EDIT;
       this.disableForEdit();
-    } else if (this.router.url.startsWith('/block/rbd/clone')) {
+    } else if (url.startsWith('/block/rbd/clone')) {
       this.mode = this.rbdFormMode.cloning;
       this.disableForClone();
       this.action = this.actionLabels.CLONE;
-    } else if (this.router.url.startsWith('/block/rbd/copy')) {
+    } else if (url.startsWith('/block/rbd/copy')) {
       this.mode = this.rbdFormMode.copying;
       this.action = this.actionLabels.COPY;
       this.disableForCopy();
     } else {
       this.action = this.actionLabels.CREATE;
     }
-    enum Promisse {
-      RbdServiceGet = 'rbdService.get',
-      PoolServiceList = 'poolService.list'
-    }
-    const promisses = {};
-    if (
-      this.mode === this.rbdFormMode.editing ||
-      this.mode === this.rbdFormMode.cloning ||
-      this.mode === this.rbdFormMode.copying
-    ) {
-      this.route.params.subscribe((params: { image_spec: string; snap: string }) => {
-        const imageSpec = ImageSpec.fromString(decodeURIComponent(params.image_spec));
-        if (params.snap) {
-          this.snapName = decodeURIComponent(params.snap);
-        }
-        promisses[Promisse.RbdServiceGet] = this.rbdService.get(imageSpec);
-      });
-    } else {
-      // New image
-      this.rbdService.defaultFeatures().subscribe((defaultFeatures: Array<string>) => {
-        this.setFeatures(defaultFeatures);
-      });
-    }
-    if (this.mode !== this.rbdFormMode.editing && this.poolPermission.read) {
-      promisses[Promisse.PoolServiceList] = this.poolService.list([
-        'pool_name',
-        'type',
-        'flags_names',
-        'application_metadata'
-      ]);
-    }
-
-    forkJoin(promisses).subscribe((data: object) => {
-      // poolService.list
-      if (data[Promisse.PoolServiceList]) {
-        const pools: Pool[] = [];
-        const dataPools = [];
-        for (const pool of data[Promisse.PoolServiceList]) {
-          if (this.rbdService.isRBDPool(pool)) {
-            if (pool.type === 'replicated') {
-              pools.push(pool);
-              dataPools.push(pool);
-            } else if (
-              pool.type === 'erasure' &&
-              pool.flags_names.indexOf('ec_overwrites') !== -1
-            ) {
-              dataPools.push(pool);
-            }
-          }
-        }
-        this.pools = pools;
-        this.allPools = pools;
-        this.dataPools = dataPools;
-        this.allDataPools = dataPools;
-        if (this.pools.length === 1) {
-          const poolName = this.pools[0].pool_name;
-          this.rbdForm.get('pool').setValue(poolName);
-          this.onPoolChange(poolName);
-        }
-      }
-
-      // rbdService.get
-      if (data[Promisse.RbdServiceGet]) {
-        const resp: RbdFormResponseModel = data[Promisse.RbdServiceGet];
-        this.setResponse(resp, this.snapName);
-        this.rbdImage.next(resp);
-      }
-
-      this.loadingReady();
-    });
-
     _.each(this.features, (feature) => {
       this.rbdForm
         .get('features')
@@ -314,16 +257,91 @@ export class RbdFormComponent extends CdForm implements OnInit {
     });
   }
 
+  private gatherNeededData(): Observable<object> {
+    const promises = {};
+    if (this.mode) {
+      // Mode is not set for creation
+      this.route.params.subscribe((params: { image_spec: string; snap: string }) => {
+        const imageSpec = ImageSpec.fromString(decodeURIComponent(params.image_spec));
+        if (params.snap) {
+          this.snapName = decodeURIComponent(params.snap);
+        }
+        promises['rbd'] = this.rbdService.get(imageSpec);
+      });
+    } else {
+      // New image
+      promises['defaultFeatures'] = this.rbdService.defaultFeatures();
+    }
+    if (this.mode !== this.rbdFormMode.editing && this.poolPermission.read) {
+      promises['pools'] = this.poolService.list([
+        'pool_name',
+        'type',
+        'flags_names',
+        'application_metadata'
+      ]);
+    }
+    return forkJoin(promises);
+  }
+
+  private handleExternalData(data: ExternalData) {
+    this.handlePoolData(data.pools);
+
+    if (data.defaultFeatures) {
+      // Fetched only during creation
+      this.setFeatures(data.defaultFeatures);
+    }
+
+    if (data.rbd) {
+      // Not fetched for creation
+      const resp = data.rbd;
+      this.setResponse(resp, this.snapName);
+      this.rbdImage.next(resp);
+    }
+
+    this.loadingReady();
+  }
+
+  private handlePoolData(data: Pool[]) {
+    if (!data) {
+      // Not fetched while editing
+      return;
+    }
+    const pools: Pool[] = [];
+    const dataPools = [];
+    for (const pool of data) {
+      if (this.rbdService.isRBDPool(pool)) {
+        if (pool.type === 'replicated') {
+          pools.push(pool);
+          dataPools.push(pool);
+        } else if (pool.type === 'erasure' && pool.flags_names.indexOf('ec_overwrites') !== -1) {
+          dataPools.push(pool);
+        }
+      }
+    }
+    this.pools = pools;
+    this.allPools = pools;
+    this.dataPools = dataPools;
+    this.allDataPools = dataPools;
+    if (this.pools.length === 1) {
+      const poolName = this.pools[0].pool_name;
+      this.rbdForm.get('pool').setValue(poolName);
+      this.onPoolChange(poolName);
+    }
+    if (this.allDataPools.length <= 1) {
+      this.rbdForm.get('useDataPool').disable();
+    }
+  }
+
   onPoolChange(selectedPoolName: string) {
-    const newDataPools = this.allDataPools
+    const dataPoolControl = this.rbdForm.get('dataPool');
+    if (dataPoolControl.value === selectedPoolName) {
+      dataPoolControl.setValue(null);
+    }
+    this.dataPools = this.allDataPools
       ? this.allDataPools.filter((dataPool: any) => {
           return dataPool.pool_name !== selectedPoolName;
         })
       : [];
-    if (this.rbdForm.getValue('dataPool') === selectedPoolName) {
-      this.rbdForm.get('dataPool').setValue(null);
-    }
-    this.dataPools = newDataPools;
     this.namespaces = null;
     if (selectedPoolName in this.namespacesByPoolCache) {
       this.namespaces = this.namespacesByPoolCache[selectedPoolName];
@@ -406,12 +424,8 @@ export class RbdFormComponent extends CdForm implements OnInit {
     };
   }
 
-  protected getDependendChildFeatures(featureKey: string) {
-    return _.filter(this.features, (f) => f.requires === featureKey) || [];
-  }
-
   deepBoxCheck(key: string, checked: boolean) {
-    const childFeatures = this.getDependendChildFeatures(key);
+    const childFeatures = this.getDependentChildFeatures(key);
     childFeatures.forEach((feature) => {
       const featureControl = this.rbdForm.get(feature.key);
       if (checked) {
@@ -434,6 +448,10 @@ export class RbdFormComponent extends CdForm implements OnInit {
         }
       }
     });
+  }
+
+  protected getDependentChildFeatures(featureKey: string) {
+    return _.filter(this.features, (f) => f.requires === featureKey) || [];
   }
 
   interlockCheck(key: string, checked: boolean) {
@@ -540,7 +558,6 @@ export class RbdFormComponent extends CdForm implements OnInit {
       .get('stripingUnit')
       .setValue(this.dimlessBinaryPipe.transform(response.stripe_unit));
     this.rbdForm.get('stripingCount').setValue(response.stripe_count);
-
     /* Configuration */
     this.initializeConfigData.emit({
       initialData: this.response.configuration,
@@ -554,6 +571,14 @@ export class RbdFormComponent extends CdForm implements OnInit {
     request.namespace = this.rbdForm.getValue('namespace');
     request.name = this.rbdForm.getValue('name');
     request.size = this.formatter.toBytes(this.rbdForm.getValue('size'));
+    this.addObjectSizeAndStripingToRequest(request);
+    request.configuration = this.getDirtyConfigurationValues();
+    return request;
+  }
+
+  private addObjectSizeAndStripingToRequest(
+    request: RbdFormCreateRequestModel | RbdFormCloneRequestModel | RbdFormCopyRequestModel
+  ) {
     request.obj_size = this.formatter.toBytes(this.rbdForm.getValue('obj_size'));
     _.forIn(this.features, (feature) => {
       if (this.rbdForm.getValue(feature.key)) {
@@ -565,11 +590,6 @@ export class RbdFormComponent extends CdForm implements OnInit {
     request.stripe_unit = this.formatter.toBytes(this.rbdForm.getValue('stripingUnit'));
     request.stripe_count = this.rbdForm.getValue('stripingCount');
     request.data_pool = this.rbdForm.getValue('dataPool');
-
-    /* Configuration */
-    request.configuration = this.getDirtyConfigurationValues();
-
-    return request;
   }
 
   createAction(): Observable<any> {
@@ -593,9 +613,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
         request.features.push(feature.key);
       }
     });
-
     request.configuration = this.getDirtyConfigurationValues();
-
     return request;
   }
 
@@ -604,24 +622,11 @@ export class RbdFormComponent extends CdForm implements OnInit {
     request.child_pool_name = this.rbdForm.getValue('pool');
     request.child_namespace = this.rbdForm.getValue('namespace');
     request.child_image_name = this.rbdForm.getValue('name');
-    request.obj_size = this.formatter.toBytes(this.rbdForm.getValue('obj_size'));
-    _.forIn(this.features, (feature) => {
-      if (this.rbdForm.getValue(feature.key)) {
-        request.features.push(feature.key);
-      }
-    });
-
-    /* Striping */
-    request.stripe_unit = this.formatter.toBytes(this.rbdForm.getValue('stripingUnit'));
-    request.stripe_count = this.rbdForm.getValue('stripingCount');
-    request.data_pool = this.rbdForm.getValue('dataPool');
-
-    /* Configuration */
+    this.addObjectSizeAndStripingToRequest(request);
     request.configuration = this.getDirtyConfigurationValues(
       true,
       RbdConfigurationSourceField.image
     );
-
     return request;
   }
 
@@ -666,24 +671,11 @@ export class RbdFormComponent extends CdForm implements OnInit {
     request.dest_pool_name = this.rbdForm.getValue('pool');
     request.dest_namespace = this.rbdForm.getValue('namespace');
     request.dest_image_name = this.rbdForm.getValue('name');
-    request.obj_size = this.formatter.toBytes(this.rbdForm.getValue('obj_size'));
-    _.forIn(this.features, (feature) => {
-      if (this.rbdForm.getValue(feature.key)) {
-        request.features.push(feature.key);
-      }
-    });
-
-    /* Striping */
-    request.stripe_unit = this.formatter.toBytes(this.rbdForm.getValue('stripingUnit'));
-    request.stripe_count = this.rbdForm.getValue('stripingCount');
-    request.data_pool = this.rbdForm.getValue('dataPool');
-
-    /* Configuration */
+    this.addObjectSizeAndStripingToRequest(request);
     request.configuration = this.getDirtyConfigurationValues(
       true,
       RbdConfigurationSourceField.image
     );
-
     return request;
   }
 
