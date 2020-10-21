@@ -524,13 +524,14 @@ uint64_t Striper::StripedReadResult::assemble_result(
     bufferlist *bl)
 {
   ldout(cct, 10) << "assemble_result(" << this << ")" << dendl;
+  uint64_t off = 0;
   for (auto& p : partial) {
-    uint64_t off = p.first;
     uint64_t len = p.second.first.length();
     if (len > 0) {
       (*extent_map)[off] = len;
       bl->claim_append(p.second.first);
     }
+    off += len;
   }
   partial.clear();
   return total_intended_len;

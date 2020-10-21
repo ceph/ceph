@@ -124,7 +124,6 @@ private:
 
   CephContext *m_cct;
   uint64_t m_clone_format = 2;
-  bool m_use_p_features;
   uint64_t m_features;
   bufferlist m_out_bl;
   uint64_t m_size;

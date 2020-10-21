@@ -65,6 +65,7 @@ bool WriteLogImageDispatch<I>::read(
   aio_comp->read_result = std::move(read_result);
   uint64_t length = io::util::extents_length(image_extents);
   aio_comp->read_result.set_clip_length(length);
+  aio_comp->read_result.set_image_extents(image_extents);
 
   auto *req_comp = new io::ReadResult::C_ImageReadRequest(
     aio_comp, image_extents);

@@ -55,8 +55,7 @@ CloneRequest<I>::CloneRequest(
     m_id(c_id), m_opts(c_options), m_mirror_image_mode(mirror_image_mode),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
-    m_op_work_queue(op_work_queue), m_on_finish(on_finish),
-    m_use_p_features(true) {
+    m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
 
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
@@ -99,7 +98,6 @@ void CloneRequest<I>::validate_options() {
       complete(-ENOSYS);
       return;
     }
-    m_use_p_features = false;
   }
 
   if (m_opts.get(RBD_IMAGE_OPTION_CLONE_FORMAT, &m_clone_format) < 0) {
@@ -213,9 +211,7 @@ void CloneRequest<I>::validate_parent() {
     close_parent();
     return;
   }
-  if (m_use_p_features) {
-    m_features = (p_features & ~RBD_FEATURES_IMPLICIT_ENABLE);
-  }
+  m_features = (p_features & ~RBD_FEATURES_IMPLICIT_ENABLE);
 
   if (r < 0) {
     lderr(m_cct) << "unable to locate parent's snapshot" << dendl;
