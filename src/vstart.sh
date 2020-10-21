@@ -3,7 +3,7 @@
 # vim: softtabstop=4 shiftwidth=4 expandtab
 
 # abort on failure
-set -e
+set -e -x
 
 quoted_print() {
     for s in "$@"; do
