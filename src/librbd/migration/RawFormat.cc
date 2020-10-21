@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/migration/FileStream.h"
@@ -18,6 +19,87 @@
 
 namespace librbd {
 namespace migration {
+
+#define dout_subsys ceph_subsys_rbd
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::migration::RawFormat::OpenRequest " \
+                           << this << " " << __func__ << ": "
+
+template <typename I>
+struct RawFormat<I>::OpenRequest {
+  RawFormat* raw_format;
+  Context* on_finish;
+
+  uint64_t image_size = 0;
+
+  OpenRequest(RawFormat* raw_format, Context* on_finish)
+    : raw_format(raw_format), on_finish(on_finish) {
+  }
+
+  void send() {
+    open_stream();
+  }
+
+  void open_stream() {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << dendl;
+
+    auto ctx = util::create_context_callback<
+      OpenRequest, &OpenRequest::handle_open_stream>(this);
+    raw_format->m_stream->open(ctx);
+  }
+
+  void handle_open_stream(int r) {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << "r=" << r << dendl;
+
+    if (r < 0) {
+      lderr(cct) << "failed to open stream: " << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+
+    get_image_size();
+  }
+
+  void get_image_size() {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << dendl;
+
+    auto ctx = util::create_context_callback<
+      OpenRequest, &OpenRequest::handle_get_image_size>(this);
+    raw_format->get_image_size(CEPH_NOSNAP, &image_size, ctx);
+  }
+
+  void handle_get_image_size(int r) {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << "r=" << r << dendl;
+
+    if (r < 0) {
+      lderr(cct) << "failed to open stream: " << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+
+    raw_format->m_image_ctx->image_lock.lock();
+    raw_format->m_image_ctx->size = image_size;
+    raw_format->m_image_ctx->image_lock.unlock();
+
+    finish(0);
+  }
+
+  void finish(int r) {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << "r=" << r << dendl;
+
+    on_finish->complete(r);
+    delete this;
+  }
+};
+
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::migration::RawFormat: " << this \
+                           << " " << __func__ << ": "
 
 template <typename I>
 RawFormat<I>::RawFormat(
@@ -40,7 +122,8 @@ void RawFormat<I>::open(Context* on_finish) {
     return;
   }
 
-  m_stream->open(on_finish);
+  auto req = new OpenRequest(this, on_finish);
+  req->send();
 }
 
 template <typename I>
