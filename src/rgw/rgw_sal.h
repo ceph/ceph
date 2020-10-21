@@ -154,7 +154,7 @@ class RGWBucket {
       RGWAccessListFilter *filter{nullptr};
       bool list_versions{false};
       bool allow_unordered{false};
-      int shard_id{0};
+      int shard_id{-1};
     };
     struct ListResults {
       vector<rgw_bucket_dir_entry> objs;
