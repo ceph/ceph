@@ -23,6 +23,10 @@ public:
   static int prepare(librados::IoCtx& io_ctx, const std::string &image_name,
                      librados::IoCtx& dest_io_ctx,
                      const std::string &dest_image_name, ImageOptions& opts);
+  static int prepare_import(const std::string& source_spec,
+                            librados::IoCtx& dest_io_ctx,
+                            const std::string &dest_image_name,
+                            ImageOptions& opts);
   static int execute(librados::IoCtx& io_ctx, const std::string &image_name,
                      ProgressContext &prog_ctx);
   static int abort(librados::IoCtx& io_ctx, const std::string &image_name,
@@ -56,11 +60,15 @@ private:
             ImageOptions& opts, ProgressContext *prog_ctx);
 
   int prepare();
+  int prepare_import();
   int execute();
   int abort();
   int commit();
   int status(image_migration_status_t *status);
 
+  int set_state(ImageCtxT* image_ctx, const std::string& image_description,
+                cls::rbd::MigrationState state,
+                const std::string &description);
   int set_state(cls::rbd::MigrationState state, const std::string &description);
 
   int list_src_snaps(ImageCtxT* image_ctx,
