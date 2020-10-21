@@ -107,11 +107,6 @@ if(WITH_RADOSGW)
   target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_RADOSGW)
 
-if(WITH_RADOSGW)
-  add_executable(test_build_librgw_admin_user buildtest_skeleton.cc)
-  target_link_libraries(test_build_librgw_admin_user pthread ${CRYPTO_LIBS} ${EXTRALIBS})
-endif(WITH_RADOSGW)
-
 if(WITH_LIBCEPHFS)
   # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
   add_executable(test_build_libcephfs buildtest_skeleton.cc)
@@ -281,6 +276,7 @@ target_link_libraries(ceph_test_librgw_file_gp
 add_executable(ceph_test_librgw_file_nfsns
   librgw_file_nfsns.cc
   )
+target_include_directories(ceph_test_librgw_file_nfsns SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 if(WITH_RADOSGW_FCGI_FRONTEND)
 target_include_directories(ceph_test_librgw_file_nfsns SYSTEM PRIVATE ${FCGI_INCLUDE_DIR})
 endif(WITH_RADOSGW_FCGI_FRONTEND)
@@ -312,6 +308,7 @@ target_link_libraries(ceph_test_librgw_file_aw
 add_executable(ceph_test_librgw_file_marker
   librgw_file_marker.cc
   )
+target_include_directories(ceph_test_librgw_file_marker SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_librgw_file_marker
   rgw
   librados
@@ -345,18 +342,6 @@ target_link_libraries(test_rgw_ldap
   ${OPENLDAP_LIBRARIES}
   ${UNITTEST_LIBS}
   )
-
-# unittest_librgw_admin_user
-add_executable(ceph_test_librgw_admin_user test_librgw_admin_user.cc)
-target_link_libraries(ceph_test_librgw_admin_user
-  rgw_admin_user
-  cls_otp_client
-  librados
-  ceph-common
-  ${UNITTEST_LIBS}
-  ${EXTRALIBS}
-   )
-
 endif(${WITH_RADOSGW})
 
 # ceph_multi_stress_watch

@@ -154,8 +154,12 @@ rgw_http_errors rgw_http_sts_errors({
 });
 
 rgw_http_errors rgw_http_iam_errors({
+    { EINVAL, {400, "InvalidInput" }},
+    { ENOENT, {404, "NoSuchEntity"}},
     { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
     { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
+    { EEXIST, {409, "EntityAlreadyExists"}},
+    { ERR_INTERNAL_ERROR, {500, "ServiceFailure" }},
 });
 
 using namespace ceph::crypto;
@@ -1259,11 +1263,22 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 int verify_bucket_owner_or_policy(struct req_state* const s,
 				  const uint64_t op)
 {
+  auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket));
+  if (usr_policy_res == Effect::Deny) {
+    return -EACCES;
+  }
+
   auto e = eval_or_pass(s->iam_policy,
 			s->env, *s->auth.identity,
 			op, ARN(s->bucket));
+  if (e == Effect::Deny) {
+    return -EACCES;
+  }
+
   if (e == Effect::Allow ||
+      usr_policy_res == Effect::Allow ||
       (e == Effect::Pass &&
+       usr_policy_res == Effect::Pass &&
        s->auth.identity->is_owner_of(s->bucket_owner.get_id()))) {
     return 0;
   } else {
@@ -1590,6 +1605,27 @@ std::string url_encode(const std::string& src, bool encode_slash)
   return dst;
 }
 
+std::string url_remove_prefix(const std::string& url)
+{
+  std::string dst = url;
+  auto pos = dst.find("http://");
+  if (pos == std::string::npos) {
+    pos = dst.find("https://");
+    if (pos != std::string::npos) {
+      dst.erase(pos, 8);
+    } else {
+      pos = dst.find("www.");
+      if (pos != std::string::npos) {
+        dst.erase(pos, 4);
+      }
+    }
+  } else {
+    dst.erase(pos, 7);
+  }
+
+  return dst;
+}
+
 string rgw_trim_whitespace(const string& src)
 {
   if (src.empty()) {
@@ -1842,7 +1878,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "datalog",
                                     "roles",
                                     "user-policy",
-                                    "amz-cache"};
+                                    "amz-cache",
+                                    "oidc-provider"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {

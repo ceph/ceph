@@ -40,7 +40,6 @@ class RGWRole
   int read_id(const string& role_name, const string& tenant, string& role_id);
   int read_name();
   int read_info();
-  void set_id(const string& id) { this->id = id; }
   bool validate_input();
   void extract_name_tenant(const std::string& str);
 
@@ -129,10 +128,13 @@ public:
 
   const string& get_id() const { return id; }
   const string& get_name() const { return name; }
+  const string& get_tenant() const { return tenant; }
   const string& get_path() const { return path; }
   const string& get_create_date() const { return creation_date; }
   const string& get_assume_role_policy() const { return trust_policy;}
   const uint64_t& get_max_session_duration() const { return max_session_duration; }
+
+  void set_id(const string& id) { this->id = id; }
 
   int create(bool exclusive);
   int delete_obj();
