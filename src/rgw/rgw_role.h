@@ -298,6 +298,11 @@ public:
      const DoutPrefixProvider *dpp,
 		 const PutParams& params = {});
 
+  int create(rgw::sal::RGWRole& role,
+	     optional_yield y,
+       const DoutPrefixProvider *dpp,
+	     const PutParams& params = {});
+
   int store_name(const std::string& role_id,
 		 const std::string& name,
 		 const std::string& tenant,
@@ -324,7 +329,7 @@ public:
            const DoutPrefixProvider *dpp,
 				   const GetParams& params = {});
 
-  int delete_info(const std::string& role_id,
+  int delete_info(const rgw::sal::RGWRole& info,
 		  optional_yield y,
       const DoutPrefixProvider *dpp,
 		  const RemoveParams& params = {});
