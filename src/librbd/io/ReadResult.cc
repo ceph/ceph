@@ -5,6 +5,7 @@
 #include "include/buffer.h"
 #include "common/dout.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/Utils.h"
 #include <boost/variant/apply_visitor.hpp>
 #include <boost/variant/static_visitor.hpp>
 
@@ -16,27 +17,18 @@
 namespace librbd {
 namespace io {
 
-struct ReadResult::SetClipLengthVisitor : public boost::static_visitor<void> {
-  size_t length;
-
-  explicit SetClipLengthVisitor(size_t length) : length(length) {
-  }
-
-  void operator()(Linear &linear) const {
-    ceph_assert(length <= linear.buf_len);
-    linear.buf_len = length;
-  }
-
-  template <typename T>
-  void operator()(T &t) const {
-  }
-};
-
 struct ReadResult::SetImageExtentsVisitor : public boost::static_visitor<void> {
   Extents image_extents;
 
   explicit SetImageExtentsVisitor(const Extents& image_extents)
     : image_extents(image_extents) {
+  }
+
+  void operator()(Linear &linear) const {
+    uint64_t length = util::get_extents_length(image_extents);
+
+    ceph_assert(length <= linear.buf_len);
+    linear.buf_len = length;
   }
 
   void operator()(SparseBufferlist &sbl) const {
@@ -251,10 +243,6 @@ ReadResult::ReadResult(ceph::bufferlist *bl)
 
 ReadResult::ReadResult(Extents* extent_map, ceph::bufferlist* bl)
   : m_buffer(SparseBufferlist(extent_map, bl)) {
-}
-
-void ReadResult::set_clip_length(size_t length) {
-  boost::apply_visitor(SetClipLengthVisitor(length), m_buffer);
 }
 
 void ReadResult::set_image_extents(const Extents& image_extents) {
