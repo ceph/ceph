@@ -167,6 +167,28 @@ public:
   }
 
   /**
+   * get_extent_if_cached
+   *
+   * Returns extent at offset if in cache
+   */
+  Transaction::get_extent_ret get_extent_if_cached(
+    Transaction &t,
+    paddr_t offset,
+    CachedExtentRef *out) {
+    auto result = t.get_extent(offset, out);
+    if (result != Transaction::get_extent_ret::ABSENT) {
+      return result;
+    } else if (auto iter = extents.find_offset(offset);
+	       iter != extents.end()) {
+      if (out)
+	*out = &*iter;
+      return Transaction::get_extent_ret::PRESENT;
+    } else {
+      return Transaction::get_extent_ret::ABSENT;
+    }
+  }
+
+  /**
    * get_extent
    *
    * returns ref to extent at offset~length of type T either from
@@ -195,6 +217,41 @@ public:
 	  return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	    std::move(ref));
 	});
+    }
+  }
+
+  /**
+   * get_extent_by_type
+   *
+   * Based on type, instantiate the correct concrete type
+   * and read in the extent at location offset~length.
+   */
+  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
+    extent_types_t type,  ///< [in] type tag
+    paddr_t offset,       ///< [in] starting addr
+    laddr_t laddr,        ///< [in] logical address if logical
+    segment_off_t length  ///< [in] length
+  );
+
+  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t offset,
+    laddr_t laddr,
+    segment_off_t length) {
+    CachedExtentRef ret;
+    auto status = get_extent_if_cached(t, offset, &ret);
+    if (status == Transaction::get_extent_ret::RETIRED) {
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    } else if (status == Transaction::get_extent_ret::PRESENT) {
+      return get_extent_ertr::make_ready_future<CachedExtentRef>(ret);
+    } else {
+      return get_extent_by_type(type, offset, laddr, length
+      ).safe_then([=, &t](CachedExtentRef ret) {
+	t.add_to_read_set(ret);
+	return get_extent_ertr::make_ready_future<CachedExtentRef>(
+	  std::move(ret));
+      });
     }
   }
 
@@ -295,7 +352,8 @@ public:
   void complete_commit(
     Transaction &t,            ///< [in, out] current transaction
     paddr_t final_block_start, ///< [in] offset of initial block
-    journal_seq_t seq          ///< [in] journal commit seq
+    journal_seq_t seq,         ///< [in] journal commit seq
+    SegmentCleaner *cleaner=nullptr ///< [out] optional segment stat listener
   );
 
   /**
@@ -442,19 +500,6 @@ private:
 
   /// Replace prev with next
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
-
-  /**
-   * get_extent_by_type
-   *
-   * Based on type, instantiate the correct concrete type
-   * and read in the extent at location offset~length.
-   */
-  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
-    extent_types_t type,  ///< [in] type tag
-    paddr_t offset,       ///< [in] starting addr
-    laddr_t laddr,        ///< [in] logical address if logical
-    segment_off_t length  ///< [in] length
-  );
 };
 
 }

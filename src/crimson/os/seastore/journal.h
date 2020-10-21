@@ -41,6 +41,7 @@ struct segment_header_t {
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
 
 struct record_header_t {
   // Fixed portion
@@ -61,6 +62,24 @@ struct record_header_t {
   }
 };
 
+struct extent_info_t {
+  extent_types_t type = extent_types_t::NONE;
+  laddr_t addr = L_ADDR_NULL;
+  extent_len_t len = 0;
+
+  extent_info_t() = default;
+  extent_info_t(const extent_t &et)
+    : type(et.type), addr(et.addr), len(et.bl.length()) {}
+
+  DENC(extent_info_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.type, p);
+    denc(v.addr, p);
+    denc(v.len, p);
+    DENC_FINISH(p);
+  }
+};
+
 /**
  * Callback interface for managing available segments
  */
@@ -71,11 +90,19 @@ public:
   using get_segment_ret = get_segment_ertr::future<segment_id_t>;
   virtual get_segment_ret get_segment() = 0;
 
-  /* TODO: we'll want to use this to propogate information about segment contents */
-  virtual void put_segment(segment_id_t segment) = 0;
+  virtual void close_segment(segment_id_t) {}
+
+  virtual void set_journal_segment(
+    segment_id_t segment,
+    segment_seq_t seq) {}
 
   virtual journal_seq_t get_journal_tail_target() const = 0;
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
+
+  virtual void init_mark_segment_closed(
+    segment_id_t segment, segment_seq_t seq) {}
+
+  virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
 
   virtual ~JournalSegmentProvider() {}
 };
@@ -144,9 +171,9 @@ public:
     return roll.safe_then(
       [this, rsize, record=std::move(record)]() mutable {
 	return write_record(rsize, std::move(record)
-	).safe_then([this](auto addr) {
+	).safe_then([this, rsize](auto addr) {
 	  return std::make_pair(
-	    addr.add_offset(block_size),
+	    addr.add_offset(rsize.mdlength),
 	    get_journal_seq(addr));
 	});
       });
@@ -166,6 +193,28 @@ public:
 	       const delta_info_t&)>;
   replay_ret replay(delta_handler_t &&delta_handler);
 
+  /**
+   * scan_extents
+   *
+   * Scans records beginning at addr until the first record boundary after
+   * addr + bytes_to_read.
+   *
+   * Returns <next_addr, list<extent, extent_info>>
+   * next_addr will be P_ADDR_NULL if no further extents exist in segment.
+   * If addr.offset == 0, scan will adjust to first record in segment.
+   */
+  using scan_extents_ertr = SegmentManager::read_ertr;
+  using scan_extents_ret_bare = std::pair<
+    paddr_t,
+    std::list<std::pair<paddr_t, extent_info_t>>
+    >;
+  using scan_extents_ret = scan_extents_ertr::future<scan_extents_ret_bare>;
+  scan_extents_ret scan_extents(
+    paddr_t addr,
+    extent_len_t bytes_to_read
+  );
+
+
 private:
   const extent_len_t block_size;
   const extent_len_t max_record_length;
@@ -173,15 +222,13 @@ private:
   JournalSegmentProvider *segment_provider = nullptr;
   SegmentManager &segment_manager;
 
-  segment_seq_t current_journal_segment_seq = 0;
+  segment_seq_t next_journal_segment_seq = 0;
 
   SegmentRef current_journal_segment;
   segment_off_t written_to = 0;
 
-  segment_id_t next_journal_segment_seq = NULL_SEG_ID;
-
   journal_seq_t get_journal_seq(paddr_t addr) {
-    return journal_seq_t{current_journal_segment_seq, addr};
+    return journal_seq_t{next_journal_segment_seq-1, addr};
   }
 
   /// prepare segment for writes, writes out segment header
@@ -249,14 +296,47 @@ private:
     record_header_t header,
     bufferlist &bl);
 
+  /// attempts to decode extent infos from bl, return nullopt if unsuccessful
+  std::optional<std::vector<extent_info_t>> try_decode_extent_infos(
+    record_header_t header,
+    bufferlist &bl);
+
+  /**
+   * scan_segment
+   *
+   * Scans bytes_to_read forward from addr to the first record after
+   * addr+bytes_to_read invoking delta_handler and extent_info_handler
+   * on deltas and extent_infos respectively.  deltas, extent_infos
+   * will only be decoded if the corresponding handler is included.
+   *
+   * @return next address to read from, P_ADDR_NULL if segment complete
+   */
+  using scan_segment_ertr = SegmentManager::read_ertr;
+  using scan_segment_ret = scan_segment_ertr::future<paddr_t>;
+  using delta_scan_handler_t = std::function<
+    replay_ret(paddr_t record_start,
+	       paddr_t record_block_base,
+	       const delta_info_t&)>;
+  using extent_handler_t = std::function<
+    scan_segment_ertr::future<>(paddr_t addr,
+				const extent_info_t &info)>;
+  scan_segment_ret scan_segment(
+    paddr_t addr,
+    extent_len_t bytes_to_read,
+    delta_scan_handler_t *delta_handler,
+    extent_handler_t *extent_info_handler
+  );
+
   /// replays records starting at start through end of segment
   replay_ertr::future<>
   replay_segment(
-    journal_seq_t start,           ///< [in] starting addr, seq
-    delta_handler_t &delta_handler ///< [in] processes deltas in order
+    journal_seq_t start,             ///< [in] starting addr, seq
+    delta_handler_t &delta_handler   ///< [in] processes deltas in order
   );
+
 };
 
 }
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
