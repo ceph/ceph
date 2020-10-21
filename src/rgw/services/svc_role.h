@@ -94,6 +94,13 @@ class RGWSI_Role: public RGWServiceInstance
             const DoutPrefixProvider *dpp) = 0;
 
   virtual int delete_info(RGWSI_MetaBackend::Context *ctx,
+			   const std::string& id,
+			  RGWObjVersionTracker * const objv_tracker,
+			  optional_yield y,
+			  const DoutPrefixProvider *dpp) = 0;
+
+  // deletes a role from the system and the supporting objects
+  virtual int delete_role(RGWSI_MetaBackend::Context *ctx,
 			  const rgw::sal::RGWRole& info,
 			  RGWObjVersionTracker * const objv_tracker,
 			  optional_yield y,

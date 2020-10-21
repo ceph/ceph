@@ -149,7 +149,7 @@ public:
     }
 
     if (r < 0) {
-      svc_role->delete_info(ctx, info, objv_tracker, y, dpp);
+      svc_role->delete_info(ctx, info.get_id(), objv_tracker, y, dpp);
       svc_role->delete_name(ctx, info.get_name(), info.get_tenant(), objv_tracker, y, dpp);
     }
 
@@ -340,17 +340,38 @@ static int delete_oid(RGWSI_Role_RADOS::Svc svc,
   return 0;
 }
 
-int RGWSI_Role_RADOS::delete_info(RGWSI_MetaBackend::Context *ctx,
+int RGWSI_Role_RADOS::delete_role(RGWSI_MetaBackend::Context *ctx,
                                   const rgw::sal::RGWRole& info,
                                   RGWObjVersionTracker * const objv_tracker,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp)
 {
+  //deletes in the reverse order of creates, first delete the path, then the
+  //name and finally the info object
+  int r = delete_path(ctx, info.get_id(), info.get_path(), info.get_tenant(), objv_tracker, y, dpp);
+  if (r < 0) {
+    return r;
+  }
+
+  r = delete_name(ctx, info.get_name(), info.get_tenant(), objv_tracker, y, dpp);
+  if (r < 0) {
+    return r;
+  }
+
+  return delete_info(ctx, info.get_id(), objv_tracker, y, dpp);
+}
+
+int RGWSI_Role_RADOS::delete_info(RGWSI_MetaBackend::Context *ctx,
+                                  const std::string& role_id,
+                                  RGWObjVersionTracker * const objv_tracker,
+                                  optional_yield y,
+                                  const DoutPrefixProvider *dpp)
+{
   RGWSI_MBSObj_RemoveParams params;
-  int r = svc.meta_be->remove(ctx, info.get_id(), params, objv_tracker, y, dpp);
+  int r = svc.meta_be->remove(ctx, role_id, params, objv_tracker, y, dpp);
   if (r < 0 && r != -ENOENT && r != -ECANCELED) {
-    ldout(svc.meta_be->ctx(),0) << "ERROR: RGWSI_Role: could not remove oid = "
-                            << info.get_id() << " r = "<< r << dendl;
+    ldout(svc.meta_be->ctx(),0) << "ERROR: RGWSI_Role: could not remove role_id = "
+                                << role_id << " r = "<< r << dendl;
   }
 
   return r;
