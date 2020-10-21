@@ -923,6 +923,13 @@ namespace librbd {
     return r;
   }
 
+  int RBD::migration_prepare_import(const char *source_spec, IoCtx& dest_io_ctx,
+                                    const char *dest_image_name,
+                                    ImageOptions& opts) {
+    return librbd::api::Migration<>::prepare_import(source_spec, dest_io_ctx,
+                                                    dest_image_name, opts);
+  }
+
   int RBD::migration_execute(IoCtx& io_ctx, const char *image_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -4368,6 +4375,16 @@ extern "C" int rbd_migration_prepare(rados_ioctx_t p, const char *image_name,
                                             dest_image_name, opts);
   tracepoint(librbd, migration_prepare_exit, r);
   return r;
+}
+
+extern "C" int rbd_migration_prepare_import(
+    const char *source_spec, rados_ioctx_t dest_p,
+    const char *dest_image_name, rbd_image_options_t opts_) {
+  librados::IoCtx dest_io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(dest_p, dest_io_ctx);
+  librbd::ImageOptions opts(opts_);
+  return librbd::api::Migration<>::prepare_import(source_spec, dest_io_ctx,
+                                                  dest_image_name, opts);
 }
 
 extern "C" int rbd_migration_execute(rados_ioctx_t p, const char *image_name)

@@ -34,7 +34,9 @@
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/image/Types.h"
 #include "librbd/internal.h"
+#include "librbd/migration/FormatInterface.h"
 #include "librbd/migration/NativeFormat.h"
+#include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 
@@ -464,8 +466,7 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
     lderr(cct) << "librbd does not support requested features" << dendl;
     return -ENOSYS;
   }
-  features &= ~RBD_FEATURES_INTERNAL;
-  features &= ~RBD_FEATURE_DIRTY_CACHE;
+  features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
   features |= RBD_FEATURE_MIGRATING;
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
@@ -497,11 +498,15 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
   auto dst_image_ctx = I::create(
     dest_image_name, util::generate_image_id(dest_io_ctx), nullptr,
     dest_io_ctx, false);
+  src_image_ctx->image_lock.lock_shared();
   cls::rbd::MigrationSpec dst_migration_spec{
-    cls::rbd::MIGRATION_HEADER_TYPE_DST, dest_io_ctx.get_id(),
-    dest_io_ctx.get_namespace(), "", "", "", {}, 0,
-    false, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, flatten > 0,
+    cls::rbd::MIGRATION_HEADER_TYPE_DST,
+    src_image_ctx->md_ctx.get_id(), src_image_ctx->md_ctx.get_namespace(),
+    src_image_ctx->name, src_image_ctx->id, "", {}, 0, false,
+    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, flatten > 0,
     cls::rbd::MIGRATION_STATE_PREPARING, ""};
+  src_image_ctx->image_lock.unlock_shared();
+
   Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
                       opts, nullptr);
   r = migration.prepare();
@@ -510,6 +515,88 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
   return r;
+}
+
+template <typename I>
+int Migration<I>::prepare_import(
+    const std::string& source_spec, librados::IoCtx& dest_io_ctx,
+    const std::string &dest_image_name, ImageOptions& opts) {
+  if (source_spec.empty() || !dest_io_ctx.is_valid() ||
+      dest_image_name.empty()) {
+    return -EINVAL;
+  }
+
+  auto cct = reinterpret_cast<CephContext *>(dest_io_ctx.cct());
+  ldout(cct, 10) << source_spec << " -> "
+                 << dest_io_ctx.get_pool_name() << "/"
+                 << dest_image_name << ", opts=" << opts << dendl;
+
+  auto src_image_ctx = I::create("", "", nullptr, dest_io_ctx, true);
+  BOOST_SCOPE_EXIT_TPL(src_image_ctx) {
+    src_image_ctx->state->close();
+  } BOOST_SCOPE_EXIT_END;
+
+  migration::SourceSpecBuilder<I> source_spec_builder(src_image_ctx);
+
+  json_spirit::mObject source_spec_object;
+  int r = source_spec_builder.parse_source_spec(source_spec,
+                                                &source_spec_object);
+  if (r < 0) {
+    lderr(cct) << "failed to parse source spec: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  std::unique_ptr<migration::FormatInterface> format;
+  r = source_spec_builder.build_format(source_spec_object, &format);
+  if (r < 0) {
+    lderr(cct) << "failed to build migration format handler: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  C_SaferCond open_ctx;
+  format->open(&open_ctx);
+  r = open_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to open migration source: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  uint64_t image_format = 2;
+  if (opts.get(RBD_IMAGE_OPTION_FORMAT, &image_format) != 0) {
+    opts.set(RBD_IMAGE_OPTION_FORMAT, image_format);
+  }
+  if (image_format != 2) {
+    lderr(cct) << "unsupported destination image format: " << image_format
+               << dendl;
+    return -EINVAL;
+  }
+
+  uint64_t features_set = 0;
+  opts.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
+  opts.set(RBD_IMAGE_OPTION_FEATURES_SET, features_set | RBD_FEATURE_MIGRATING);
+
+  ldout(cct, 20) << "updated opts=" << opts << dendl;
+
+  auto dst_image_ctx = I::create(
+    dest_image_name, util::generate_image_id(dest_io_ctx), nullptr,
+    dest_io_ctx, false);
+  cls::rbd::MigrationSpec dst_migration_spec{
+    cls::rbd::MIGRATION_HEADER_TYPE_DST, -1, "", "", "",
+    json_spirit::write(source_spec_object), {},
+    0, false, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, true,
+    cls::rbd::MIGRATION_STATE_PREPARING, ""};
+
+  Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
+                      opts, nullptr);
+  return migration.prepare_import();
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
 }
 
 template <typename I>
@@ -552,10 +639,15 @@ int Migration<I>::execute(librados::IoCtx& io_ctx,
     return -EINVAL;
   }
 
-  ldout(cct, 5) << "migrating " << src_image_ctx->md_ctx.get_pool_name() << "/"
-                << src_image_ctx->name << " -> "
-                << dst_image_ctx->md_ctx.get_pool_name()
-                << "/" << dst_image_ctx->name << dendl;
+  ldout(cct, 5) << "migrating ";
+  if (!dst_migration_spec.source_spec.empty()) {
+    *_dout << dst_migration_spec.source_spec;
+  } else {
+    *_dout << src_image_ctx->md_ctx.get_pool_name() << "/"
+           << src_image_ctx->name;
+  }
+  *_dout << " -> " << dst_image_ctx->md_ctx.get_pool_name() << "/"
+         << dst_image_ctx->name << dendl;
 
   ImageOptions opts;
   Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
@@ -585,18 +677,24 @@ int Migration<I>::abort(librados::IoCtx& io_ctx, const std::string &image_name,
     return r;
   }
 
-  ldout(cct, 5) << "canceling incomplete migration "
-                << src_image_ctx->md_ctx.get_pool_name() << "/"
-                << src_image_ctx->name
-                << " -> " << dst_image_ctx->md_ctx.get_pool_name() << "/"
-                << dst_image_ctx->name << dendl;
+  ldout(cct, 5) << "canceling incomplete migration ";
+  if (!dst_migration_spec.source_spec.empty()) {
+    *_dout << dst_migration_spec.source_spec;
+  } else {
+    *_dout << src_image_ctx->md_ctx.get_pool_name() << "/"
+           << src_image_ctx->name;
+  }
+  *_dout << " -> " << dst_image_ctx->md_ctx.get_pool_name() << "/"
+         << dst_image_ctx->name << dendl;
 
   ImageOptions opts;
   Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
                       opts, &prog_ctx);
   r = migration.abort();
 
-  src_image_ctx->state->close();
+  if (src_image_ctx != nullptr) {
+    src_image_ctx->state->close();
+  }
 
   if (r < 0) {
     return r;
@@ -642,10 +740,15 @@ int Migration<I>::commit(librados::IoCtx& io_ctx,
     return r;
   }
 
-  ldout(cct, 5) << "migrating " << src_image_ctx->md_ctx.get_pool_name() << "/"
-                << src_image_ctx->name << " -> "
-                << dst_image_ctx->md_ctx.get_pool_name()
-                << "/" << dst_image_ctx->name << dendl;
+  ldout(cct, 5) << "migrating ";
+  if (!dst_migration_spec.source_spec.empty()) {
+    *_dout << dst_migration_spec.source_spec;
+  } else {
+    *_dout << src_image_ctx->md_ctx.get_pool_name() << "/"
+           << src_image_ctx->name;
+  }
+  *_dout << " -> " << dst_image_ctx->md_ctx.get_pool_name() << "/"
+         << dst_image_ctx->name << dendl;
 
   ImageOptions opts;
   Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
@@ -678,10 +781,15 @@ int Migration<I>::status(librados::IoCtx& io_ctx,
     return r;
   }
 
-  ldout(cct, 5) << "migrating " << src_image_ctx->md_ctx.get_pool_name() << "/"
-                << src_image_ctx->name << " -> "
-                << dst_image_ctx->md_ctx.get_pool_name()
-                << "/" << dst_image_ctx->name << dendl;
+  ldout(cct, 5) << "migrating ";
+  if (!dst_migration_spec.source_spec.empty()) {
+    *_dout << dst_migration_spec.source_spec;
+  } else {
+    *_dout << src_image_ctx->md_ctx.get_pool_name() << "/"
+           << src_image_ctx->name;
+  }
+  *_dout << " -> " << dst_image_ctx->md_ctx.get_pool_name() << "/"
+         << dst_image_ctx->name << dendl;
 
   ImageOptions opts;
   Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
@@ -792,6 +900,25 @@ int Migration<I>::prepare() {
 }
 
 template <typename I>
+int Migration<I>::prepare_import() {
+  ldout(m_cct, 10) << dendl;
+
+  BOOST_SCOPE_EXIT_TPL(&m_dst_image_ctx) {
+    if (m_dst_image_ctx != nullptr) {
+      m_dst_image_ctx->state->close();
+    }
+  } BOOST_SCOPE_EXIT_END;
+
+  int r = create_dst_image(&m_dst_image_ctx);
+  if (r < 0) {
+    abort();
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
 int Migration<I>::execute() {
   ldout(m_cct, 10) << dendl;
 
@@ -847,21 +974,22 @@ int Migration<I>::abort() {
   ldout(m_cct, 10) << dendl;
 
   int r;
-
-  m_src_image_ctx->owner_lock.lock_shared();
-  if (m_src_image_ctx->exclusive_lock != nullptr &&
-      !m_src_image_ctx->exclusive_lock->is_lock_owner()) {
-    C_SaferCond ctx;
-    m_src_image_ctx->exclusive_lock->acquire_lock(&ctx);
-    m_src_image_ctx->owner_lock.unlock_shared();
-    r = ctx.wait();
-    if (r < 0) {
-      lderr(m_cct) << "error acquiring exclusive lock: " << cpp_strerror(r)
-                   << dendl;
-      return r;
+  if (m_src_image_ctx != nullptr) {
+    m_src_image_ctx->owner_lock.lock_shared();
+    if (m_src_image_ctx->exclusive_lock != nullptr &&
+        !m_src_image_ctx->exclusive_lock->is_lock_owner()) {
+      C_SaferCond ctx;
+      m_src_image_ctx->exclusive_lock->acquire_lock(&ctx);
+      m_src_image_ctx->owner_lock.unlock_shared();
+      r = ctx.wait();
+      if (r < 0) {
+        lderr(m_cct) << "error acquiring exclusive lock: " << cpp_strerror(r)
+                     << dendl;
+        return r;
+      }
+    } else {
+      m_src_image_ctx->owner_lock.unlock_shared();
     }
-  } else {
-    m_src_image_ctx->owner_lock.unlock_shared();
   }
 
   group_info_t group_info;
@@ -902,19 +1030,21 @@ int Migration<I>::abort() {
       return r;
     }
 
-    // copy dst HEAD -> src HEAD
-    SteppedProgressContext progress_ctx(m_prog_ctx, 2);
-    revert_data(m_dst_image_ctx, m_src_image_ctx, &progress_ctx);
-    progress_ctx.next_step();
+    SteppedProgressContext progress_ctx(
+      m_prog_ctx, (m_src_image_ctx != nullptr ? 2 : 1));
+    if (m_src_image_ctx != nullptr) {
+      // copy dst HEAD -> src HEAD
+      revert_data(m_dst_image_ctx, m_src_image_ctx, &progress_ctx);
+      progress_ctx.next_step();
 
-    ldout(m_cct, 10) << "relinking children" << dendl;
-    r = relink_children(m_dst_image_ctx, m_src_image_ctx);
-    if (r < 0) {
-      return r;
+      ldout(m_cct, 10) << "relinking children" << dendl;
+      r = relink_children(m_dst_image_ctx, m_src_image_ctx);
+      if (r < 0) {
+        return r;
+      }
     }
 
     ldout(m_cct, 10) << "removing dst image snapshots" << dendl;
-
     std::vector<librbd::snap_info_t> snaps;
     r = Snapshot<I>::list(m_dst_image_ctx, snaps);
     if (r < 0) {
@@ -966,24 +1096,26 @@ int Migration<I>::abort() {
     }
   }
 
-  r = relink_src_image(m_src_image_ctx);
-  if (r < 0) {
-    return r;
-  }
+  if (m_src_image_ctx != nullptr) {
+    r = relink_src_image(m_src_image_ctx);
+    if (r < 0) {
+      return r;
+    }
 
-  r = add_group(m_src_image_ctx, group_info);
-  if (r < 0) {
-    return r;
-  }
+    r = add_group(m_src_image_ctx, group_info);
+    if (r < 0) {
+      return r;
+    }
 
-  r = remove_migration(m_src_image_ctx);
-  if (r < 0) {
-    return r;
-  }
+    r = remove_migration(m_src_image_ctx);
+    if (r < 0) {
+      return r;
+    }
 
-  r = enable_mirroring(m_src_image_ctx, m_mirroring, m_mirror_image_mode);
-  if (r < 0) {
-    return r;
+    r = enable_mirroring(m_src_image_ctx, m_mirroring, m_mirror_image_mode);
+    if (r < 0) {
+      return r;
+    }
   }
 
   ldout(m_cct, 10) << "succeeded" << dendl;
@@ -1007,9 +1139,11 @@ int Migration<I>::commit() {
     return r;
   }
 
-  r = remove_src_image(&m_src_image_ctx);
-  if (r < 0) {
-    return r;
+  if (m_src_image_ctx != nullptr) {
+    r = remove_src_image(&m_src_image_ctx);
+    if (r < 0) {
+      return r;
+    }
   }
 
   r = enable_mirroring(m_dst_image_ctx, m_mirroring, m_mirror_image_mode);
@@ -1062,25 +1196,33 @@ int Migration<I>::status(image_migration_status_t *status) {
 }
 
 template <typename I>
+int Migration<I>::set_state(I* image_ctx, const std::string& image_description,
+                            cls::rbd::MigrationState state,
+                            const std::string &description) {
+  int r = cls_client::migration_set_state(&image_ctx->md_ctx,
+                                          image_ctx->header_oid,
+                                          state, description);
+  if (r < 0) {
+    lderr(m_cct) << "failed to set " << image_description << " "
+                 << "migration header: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
+}
+
+template <typename I>
 int Migration<I>::set_state(cls::rbd::MigrationState state,
                             const std::string &description) {
   int r;
   if (m_src_image_ctx != nullptr) {
-    r = cls_client::migration_set_state(&m_src_image_ctx->md_ctx,
-                                        m_src_image_ctx->header_oid,
-                                        state, description);
+    r = set_state(m_src_image_ctx, "source", state, description);
     if (r < 0) {
-      lderr(m_cct) << "failed to set source migration header: "
-                   << cpp_strerror(r) << dendl;
       return r;
     }
   }
 
-  r = cls_client::migration_set_state(&m_dst_io_ctx, m_dst_header_oid, state,
-                                      description);
+  r = set_state(m_dst_image_ctx, "destination", state, description);
   if (r < 0) {
-    lderr(m_cct) << "failed to set destination migration header: "
-                 << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1348,7 +1490,7 @@ int Migration<I>::create_dst_image(I** image_ctx) {
       m_src_image_ctx->op_work_queue, &on_create);
     req->send();
   } else {
-    r = util::create_ioctx(m_src_image_ctx->md_ctx, "destination image",
+    r = util::create_ioctx(m_src_image_ctx->md_ctx, "parent image",
                            parent_spec.pool_id, parent_spec.pool_namespace,
                            &parent_io_ctx);
     if (r < 0) {
@@ -1410,25 +1552,23 @@ int Migration<I>::create_dst_image(I** image_ctx) {
     return r;
   }
 
-  C_SaferCond on_metadata_copy;
-  auto metadata_copy_req = librbd::deep_copy::MetadataCopyRequest<I>::create(
-      m_src_image_ctx, dst_image_ctx, &on_metadata_copy);
-  metadata_copy_req->send();
-  r = on_metadata_copy.wait();
-  if (r < 0) {
-    lderr(m_cct) << "failed to copy metadata: " << cpp_strerror(r) << dendl;
-    return r;
+  if (!m_src_image_ctx->header_oid.empty()) {
+    C_SaferCond on_metadata_copy;
+    auto metadata_copy_req = librbd::deep_copy::MetadataCopyRequest<I>::create(
+        m_src_image_ctx, dst_image_ctx, &on_metadata_copy);
+    metadata_copy_req->send();
+    r = on_metadata_copy.wait();
+    if (r < 0) {
+      lderr(m_cct) << "failed to copy metadata: " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
-  m_src_image_ctx->image_lock.lock_shared();
-  m_dst_migration_spec = {cls::rbd::MIGRATION_HEADER_TYPE_DST,
-                          m_src_image_ctx->md_ctx.get_id(),
-                          m_src_image_ctx->md_ctx.get_namespace(),
-                          m_src_image_ctx->name, m_src_image_ctx->id,
-                          "", snap_seqs, size, m_mirroring, m_mirror_image_mode,
-                          m_flatten, cls::rbd::MIGRATION_STATE_PREPARING, ""};
-  m_src_image_ctx->image_lock.unlock_shared();
-
+  m_dst_migration_spec.snap_seqs = snap_seqs;
+  m_dst_migration_spec.overlap = size;
+  m_dst_migration_spec.mirroring = m_mirroring;
+  m_dst_migration_spec.mirror_image_mode = m_mirror_image_mode;
+  m_dst_migration_spec.flatten = m_flatten;
   r = cls_client::migration_set(&m_dst_io_ctx, m_dst_header_oid,
                                 m_dst_migration_spec);
   if (r < 0) {
@@ -1437,26 +1577,37 @@ int Migration<I>::create_dst_image(I** image_ctx) {
     return r;
   }
 
-  r = update_group(m_src_image_ctx, dst_image_ctx);
+  if (m_dst_migration_spec.source_spec.empty()) {
+    r = update_group(m_src_image_ctx, dst_image_ctx);
+    if (r < 0) {
+      return r;
+    }
+
+    r = set_state(m_src_image_ctx, "source",
+                  cls::rbd::MIGRATION_STATE_PREPARED, "");
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  r = set_state(dst_image_ctx, "destination",
+                cls::rbd::MIGRATION_STATE_PREPARED, "");
   if (r < 0) {
     return r;
   }
 
-  r = set_state(cls::rbd::MIGRATION_STATE_PREPARED, "");
-  if (r < 0) {
-    return r;
-  }
+  if (m_dst_migration_spec.source_spec.empty()) {
+    r = dst_image_ctx->state->refresh();
+    if (r < 0) {
+      lderr(m_cct) << "failed to refresh destination image: " << cpp_strerror(r)
+                   << dendl;
+      return r;
+    }
 
-  r = dst_image_ctx->state->refresh();
-  if (r < 0) {
-    lderr(m_cct) << "failed to refresh destination image: " << cpp_strerror(r)
-                 << dendl;
-    return r;
-  }
-
-  r = relink_children(m_src_image_ctx, dst_image_ctx);
-  if (r < 0) {
-    return r;
+    r = relink_children(m_src_image_ctx, dst_image_ctx);
+    if (r < 0) {
+      return r;
+    }
   }
 
   return 0;
