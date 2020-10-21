@@ -136,12 +136,16 @@ public:
   }
 
   int complete() {
+    // This creates the ancillary objects for roles, role_names & path
+    // objv_tracker is set to null for sysobj calls as these aren't tracked via
+    // the mdlog. A failure in name/path creation means we delete all the
+    // created objects in the transaction
     int r = svc_role->store_name(ctx, info.get_id(), info.get_name(), info.get_tenant(),
-                                 objv_tracker, mtime, exclusive, y, dpp);
+                                 nullptr, mtime, exclusive, y, dpp);
 
     if (r == 0) {
       r = svc_role->store_path(ctx, info.get_id(), info.get_path(), info.get_tenant(),
-                               objv_tracker, mtime, exclusive, y, dpp);
+                               nullptr, mtime, exclusive, y, dpp);
     }
 
     if (r < 0) {
@@ -168,15 +172,21 @@ int RGWSI_Role_RADOS::create(RGWSI_MetaBackend::Context *ctx,
 
   int r = Op.prepare();
   if (r < 0) {
+    ldout(svc.meta_be->ctx(),0) << __func__ << "ERROR: prepare role failed" << dendl;
     return r;
   }
 
   r = Op.put();
   if (r < 0) {
+    ldout(svc.meta_be->ctx(),0) << __func__ << "ERROR: put role failed" << dendl;
     return r;
   }
 
-  return Op.complete();
+  r = Op.complete();
+  if (r < 0) {
+    ldout(svc.meta_be->ctx(),0) << __func__ << "ERROR: completing PutRole failed" << dendl;
+  }
+  return r;
 }
 
 int RGWSI_Role_RADOS::store_info(RGWSI_MetaBackend::Context *ctx,
@@ -212,7 +222,8 @@ int RGWSI_Role_RADOS::store_name(RGWSI_MetaBackend::Context *ctx,
   encode(nameToId, data_bl);
 
   RGWSI_MetaBackend_SObj::Context_SObj *sys_ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(ctx);
-  return rgw_put_system_obj(dpp, *sys_ctx->obj_ctx,
+  auto& obj_ctx = *sys_ctx->obj_ctx;
+  return rgw_put_system_obj(dpp, obj_ctx,
                             svc.zone->get_zone_params().roles_pool,
                             get_role_name_meta_key(name, tenant),
                             data_bl,
@@ -235,7 +246,8 @@ int RGWSI_Role_RADOS::store_path(RGWSI_MetaBackend::Context *ctx,
 {
   bufferlist bl;
   RGWSI_MetaBackend_SObj::Context_SObj *sys_ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(ctx);
-  return rgw_put_system_obj(dpp, *sys_ctx->obj_ctx,
+  auto& obj_ctx = *sys_ctx->obj_ctx;
+  return rgw_put_system_obj(dpp, obj_ctx,
                             svc.zone->get_zone_params().roles_pool,
                             get_role_path_meta_key(path, role_id, tenant),
                             bl,
