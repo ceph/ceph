@@ -16,7 +16,7 @@ from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
 
 STATUS_SCHEMA = {
     "available": (bool, "Orchestrator status"),
-    "description": (str, "Description")
+    "message": (str, "Error message")
 }
 
 
