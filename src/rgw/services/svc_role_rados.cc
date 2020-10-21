@@ -145,7 +145,7 @@ public:
     }
 
     if (r < 0) {
-      svc_role->delete_info(ctx, info, objv_tracker, y);
+      svc_role->delete_info(ctx, info.id, objv_tracker, y);
       svc_role->delete_name(ctx, info.name, info.tenant, objv_tracker, y);
     }
 
@@ -329,16 +329,36 @@ static int delete_oid(RGWSI_Role_RADOS::Svc svc,
   return 0;
 }
 
+int RGWSI_Role_RADOS::delete_role(RGWSI_MetaBackend::Context *ctx,
+                                  const RGWRoleInfo& info,
+                                  RGWObjVersionTracker * const objv_tracker,
+                                  optional_yield y)
+{
+  //deletes in the reverse order of creates, first delete the path, then the
+  //name and finally the info object
+  int r = delete_path(ctx, info.id, info.path, info.tenant, objv_tracker, y);
+  if (r < 0) {
+    return r;
+  }
+
+  r = delete_name(ctx, info.name, info.tenant, objv_tracker, y);
+  if (r < 0) {
+    return r;
+  }
+
+  return delete_info(ctx, info.id, objv_tracker, y);
+}
+
 int RGWSI_Role_RADOS::delete_info(RGWSI_MetaBackend::Context *ctx,
-                                   const RGWRoleInfo& info,
-                                   RGWObjVersionTracker * const objv_tracker,
-                                   optional_yield y)
+                                  const std::string& role_id,
+                                  RGWObjVersionTracker * const objv_tracker,
+                                  optional_yield y)
 {
   RGWSI_MBSObj_RemoveParams params;
-  int r = svc.meta_be->remove(ctx, info.id, params, objv_tracker, y);
+  int r = svc.meta_be->remove(ctx, role_id, params, objv_tracker, y);
   if (r < 0 && r != -ENOENT && r != -ECANCELED) {
-    ldout(svc.meta_be->ctx(),0) << "ERROR: RGWSI_Role: could not remove oid = "
-                            << info.id << " r = "<< r << dendl;
+    ldout(svc.meta_be->ctx(),0) << "ERROR: RGWSI_Role: could not remove role_id = "
+                                << role_id << " r = "<< r << dendl;
   }
 
   return r;

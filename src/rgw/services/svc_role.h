@@ -87,8 +87,15 @@ class RGWSI_Role: public RGWServiceInstance
 			real_time * const pmtime,
 			optional_yield y) = 0;
 
-  virtual int delete_info(RGWSI_MetaBackend::Context *ctx,
+  // deletes a role from the system and the supporting objects
+  virtual int delete_role(RGWSI_MetaBackend::Context *ctx,
 			  const RGWRoleInfo& info,
+			  RGWObjVersionTracker * const objv_tracker,
+			  optional_yield y) = 0;
+
+
+  virtual int delete_info(RGWSI_MetaBackend::Context *ctx,
+			  const std::string& id,
 			  RGWObjVersionTracker * const objv_tracker,
 			  optional_yield y) = 0;
 
