@@ -379,6 +379,7 @@ public:
 		 << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
+    entries.reserve(std::size(entries) + std::size(log_entries));
     for (const auto& entry : log_entries) {
       rgw_data_change_log_entry log_entry;
       log_entry.log_id = entry.marker;
