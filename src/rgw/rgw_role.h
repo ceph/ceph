@@ -379,6 +379,10 @@ public:
 				   optional_yield y,
 				   const GetParams& params = {});
 
+  int delete_role(const RGWRoleInfo& role,
+		  optional_yield y,
+		  const RemoveParams& params = {});
+
   int delete_info(const std::string& role_id,
 		  optional_yield y,
 		  const RemoveParams& params = {});
