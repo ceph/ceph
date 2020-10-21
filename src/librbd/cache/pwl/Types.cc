@@ -30,7 +30,7 @@ void DeferredContexts::add(Context* ctx) {
  *
  * An Extent ("image extent") identifies a range by start and length.
  *
- * The ImageCache interface is defined in terms of image extents, and
+ * The ImageDispatch interface is defined in terms of image extents, and
  * requires no alignment of the beginning or end of the extent. We
  * convert between image and block extents here using a "block size"
  * of 1.
