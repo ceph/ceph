@@ -49,8 +49,8 @@ protected:
 
 public:
   virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) { return 0; }
+  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) { return 0; }
   virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y);
   virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y);
   virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y);
@@ -293,16 +293,20 @@ public:
     }
   };
 
-  int store_info(const rgw::sal::RGWRole* role,
-		 optional_yield y,
-     const DoutPrefixProvider *dpp,
-		 const PutParams& params = {});
 
   int create(rgw::sal::RGWRole& role,
 	     optional_yield y,
        const DoutPrefixProvider *dpp,
 	     const PutParams& params = {});
 
+  int store_info(const rgw::sal::RGWRole& role,
+		 optional_yield y,
+     const DoutPrefixProvider *dpp,
+		 const PutParams& params = {});
+
+  // The methods for store name & store path are currently unused and only
+  // useful for a potential rename name/path functionality in the future as
+  // create role would automatically create these for most uses
   int store_name(const std::string& role_id,
 		 const std::string& name,
 		 const std::string& tenant,
@@ -329,7 +333,7 @@ public:
            const DoutPrefixProvider *dpp,
 				   const GetParams& params = {});
 
-  int delete_info(const rgw::sal::RGWRole& info,
+  int delete_info(const std::string& role_id,
 		  optional_yield y,
       const DoutPrefixProvider *dpp,
 		  const RemoveParams& params = {});

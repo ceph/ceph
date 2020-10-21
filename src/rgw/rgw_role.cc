@@ -37,34 +37,7 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 int RGWRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   RGWObjVersionTracker objv_tracker;
-  return role_ctl->store_info(this,
-			      y,
-            dpp,
-			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive).
-			      set_objv_tracker(&objv_tracker));
-}
-
-int RGWRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  RGWObjVersionTracker objv_tracker;
-  return role_ctl->store_name(id,
-			      name,
-			      tenant,
-			      y,
-            dpp,
-			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive).
-			      set_objv_tracker(&objv_tracker)
-			      );
-}
-
-int RGWRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  RGWObjVersionTracker objv_tracker;
-  return role_ctl->store_path(id,
-			      path,
-			      tenant,
+  return role_ctl->store_info(*this,
 			      y,
             dpp,
 			      RGWRoleCtl::PutParams().
@@ -416,14 +389,14 @@ int RGWRoleCtl::create(rgw::sal::RGWRole& role,
   });
 }
 
-int RGWRoleCtl::store_info(const rgw::sal::RGWRole* role,
+int RGWRoleCtl::store_info(const rgw::sal::RGWRole& role,
 			   optional_yield y,
          const DoutPrefixProvider *dpp,
 			   const PutParams& params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.role->store_info(op->ctx(),
-				*role,
+				role,
 				params.objv_tracker,
 				params.mtime,
 				params.exclusive,
@@ -509,14 +482,14 @@ RGWRoleCtl::read_name(const std::string& name,
   return make_pair(ret, role_id);
 }
 
-int RGWRoleCtl::delete_info(const rgw::sal::RGWRole& info,
+int RGWRoleCtl::delete_info(const std::string& role_id,
 			    optional_yield y,
           const DoutPrefixProvider *dpp,
 			    const RemoveParams& params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.role->delete_info(op->ctx(),
-				 info.get_id(),
+				 role_id,
 				 params.objv_tracker,
 				 y, dpp);
   });
@@ -627,7 +600,14 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                       optional_yield y,
                                       const DoutPrefixProvider *dpp)
 {
-  return svc.role->delete_info(op->ctx(), entry, &objv_tracker, y, dpp);
+  rgw::sal::RGWRole info;
+  real_time _mtime;
+  int ret = svc.role->read_info(op->ctx(), entry, &info, &objv_tracker,
+				&_mtime, nullptr, y, dpp);
+  if (ret < 0) {
+    return ret == -ENOENT ? 0 : ret;
+  }
+  return svc.role->delete_role(op->ctx(), info, &objv_tracker, y, dpp);
 }
 
 class RGWMetadataHandlerPut_Role : public RGWMetadataHandlerPut_SObj
