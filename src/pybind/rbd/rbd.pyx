@@ -370,6 +370,10 @@ cdef extern from "rbd/librbd.h" nogil:
                               rados_ioctx_t dest_io_ctx,
                               const char *dest_image_name,
                               rbd_image_options_t opts)
+    int rbd_migration_prepare_import(const char *source_spec,
+                                    rados_ioctx_t dest_io_ctx,
+                                    const char *dest_image_name,
+                                    rbd_image_options_t opts)
     int rbd_migration_execute_with_progress(rados_ioctx_t io_ctx,
                                             const char *image_name,
                                             librbd_progress_fn_t cb,
@@ -1687,6 +1691,67 @@ class RBD(object):
             rbd_image_options_destroy(opts)
         if ret < 0:
             raise make_ex(ret, 'error migrating image %s' % (image_name))
+
+    def migration_prepare_import(self, source_spec, dest_ioctx, dest_image_name,
+                          features=None, order=None, stripe_unit=None,
+                          stripe_count=None, data_pool=None):
+        """
+        Prepare an RBD image migration.
+
+        :param source_spec: JSON-encoded source-spec
+        :type source_spec: str
+        :param dest_ioctx: determines which pool to migration into
+        :type dest_ioctx: :class:`rados.Ioctx`
+        :param dest_image_name: the name of the destination image (may be the same image)
+        :type dest_image_name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
+        """
+        source_spec = cstr(source_spec, 'source_spec')
+        dest_image_name = cstr(dest_image_name, 'dest_image_name')
+        cdef:
+            char *_source_spec = source_spec
+            rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
+            char *_dest_image_name = dest_image_name
+            rbd_image_options_t opts
+
+        rbd_image_options_create(&opts)
+        try:
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
+            with nogil:
+                ret = rbd_migration_prepare_import(_source_spec, _dest_ioctx,
+                                                   _dest_image_name, opts)
+        finally:
+            rbd_image_options_destroy(opts)
+        if ret < 0:
+            raise make_ex(ret, 'error migrating image %s' % (source_spec))
 
     def migration_execute(self, ioctx, image_name, on_progress=None):
         """
