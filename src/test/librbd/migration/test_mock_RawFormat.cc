@@ -118,6 +118,7 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
   expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
   expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
   expect_stream_close(*mock_stream_interface, 0);
 
@@ -143,6 +144,7 @@ TEST_F(TestMockMigrationRawFormat, GetSnapshots) {
   expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
   expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
   expect_stream_close(*mock_stream_interface, 0);
 
@@ -174,6 +176,7 @@ TEST_F(TestMockMigrationRawFormat, GetImageSize) {
   expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
   expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
   expect_stream_get_size(*mock_stream_interface, 123, 0);
 
@@ -207,6 +210,7 @@ TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshot) {
   expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
   expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
   expect_stream_close(*mock_stream_interface, 0);
 
@@ -237,6 +241,7 @@ TEST_F(TestMockMigrationRawFormat, Read) {
   expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
   expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
   bufferlist expect_bl;
   expect_bl.append(std::string(123, '1'));
@@ -276,6 +281,7 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
   expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
   expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
   expect_stream_close(*mock_stream_interface, 0);
 
