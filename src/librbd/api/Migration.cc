@@ -633,7 +633,8 @@ int Migration<I>::execute(librados::IoCtx& io_ctx,
     }
   } BOOST_SCOPE_EXIT_END;
 
-  if (dst_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED) {
+  if (dst_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
+      dst_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING) {
     lderr(cct) << "current migration state is '" << dst_migration_spec.state
                << "' (should be 'prepared')" << dendl;
     return -EINVAL;
