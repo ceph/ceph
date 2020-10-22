@@ -460,10 +460,9 @@ void MonMap::_add_ambiguous_addr(const string& name,
   }
 }
 
-int
-MonMap::init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
-                        bool for_mkfs,
-                        std::string_view prefix)
+void MonMap::init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
+                             bool for_mkfs,
+                             std::string_view prefix)
 {
   char id = 'a';
   for (auto& addr : addrs) {
@@ -477,7 +476,6 @@ MonMap::init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
       add(name, addr, 0);
     }
   }
-  return 0;
 }
 
 int MonMap::init_with_ips(const std::string& ips,
@@ -492,7 +490,8 @@ int MonMap::init_with_ips(const std::string& ips,
   }
   if (addrs.empty())
     return -ENOENT;
-  return init_with_addrs(addrs, for_mkfs, prefix);
+  init_with_addrs(addrs, for_mkfs, prefix);
+  return 0;
 }
 
 int MonMap::init_with_hosts(const std::string& hostlist,
@@ -513,9 +512,7 @@ int MonMap::init_with_hosts(const std::string& hostlist,
     return -EINVAL;
   if (addrs.empty())
     return -ENOENT;
-  if (!init_with_addrs(addrs, for_mkfs, prefix)) {
-    return -EINVAL;
-  }
+  init_with_addrs(addrs, for_mkfs, prefix);
   calc_legacy_ranks();
   return 0;
 }
@@ -838,7 +835,8 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
   // cct?
   auto addrs = cct->get_mon_addrs();
   if (addrs != nullptr && (addrs->size() > 0)) {
-    return init_with_addrs(*addrs, for_mkfs, "noname-");
+    init_with_addrs(*addrs, for_mkfs, "noname-");
+    return 0;
   }
 
   // file?
