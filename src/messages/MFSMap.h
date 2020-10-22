@@ -23,7 +23,6 @@
 class MFSMap : public Message {
 public:
   epoch_t epoch;
-  ceph::buffer::list encoded;
 
   version_t get_epoch() const { return epoch; }
   const FSMap& get_fsmap() const {return fsmap;}
