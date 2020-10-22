@@ -5,6 +5,21 @@ Ceph Dashboard Developer Documentation
 
 .. contents:: Table of Contents
 
+Feature Design
+--------------
+
+To promote colloaboration on new Ceph Dashboard features, the first step is
+the definition of a design document. These documents then form the basis of
+implementation scope and permit wider participation in the evolution of the 
+Ceph Dashboard UI.
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Design Documents:
+
+    UI Design Goals <../dashboard/ui_goals>
+
+
 Preliminary Steps
 -----------------
 
