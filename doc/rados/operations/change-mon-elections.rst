@@ -4,9 +4,8 @@
 Configure Monitor Election Strategies
 =====================================
 
-By default, the monitors will use the classic option it has always used. We
-recommend you stay in this mode unless you require features in the other
-modes.
+By default, the monitors will use the ``classic`` mode. We
+recommend that you stay in this mode unless you have a very specific reason.
 
 If you want to switch modes BEFORE constructing the cluster, change
 the ``mon election default strategy`` option. This option is an integer value:
@@ -48,8 +47,9 @@ The connectivity Mode
 =====================
 This mode evaluates connection scores provided by each monitor for its
 peers and elects the monitor with the highest score. This mode is designed
-to handle netsplits, which may happen if your cluster is stretched across
-multiple data centers or otherwise susceptible.
+to handle network partitioning or *net-splits*, which may happen if your cluster
+is stretched across multiple data centers or otherwise has a non-uniform
+or unbalanced network topology.
 
 This mode also supports disallowing monitors from being the leader
 using the same commands as above in disallow.

@@ -9,7 +9,7 @@ Stretch Clusters
 ================
 Ceph generally expects all parts of its network and overall cluster to be
 equally reliable, with failures randomly distributed across the CRUSH map.
-So you may lose a switch that knocks out a big segment of OSDs, but we expect
+So you may lose a switch that knocks out a number of OSDs, but we expect
 the remaining OSDs and monitors to route around that.
 
 This is usually a good choice, but may not work well in some
