@@ -88,7 +88,7 @@ export class MgrModuleListComponent extends ListWithDetails {
         name: $localize`Disable`,
         permission: 'update',
         click: () => this.updateModuleState(),
-        disable: () => () => this.getTableActionDisabledDesc(),
+        disable: () => this.getTableActionDisabledDesc(),
         icon: Icons.stop
       }
     ];
@@ -139,7 +139,7 @@ export class MgrModuleListComponent extends ListWithDetails {
   }
 
   getTableActionDisabledDesc(): string | boolean {
-    if (this.selection.first().always_on) {
+    if (this.selection.first()?.always_on) {
       return $localize`This Manager module is always on.`;
     }
 

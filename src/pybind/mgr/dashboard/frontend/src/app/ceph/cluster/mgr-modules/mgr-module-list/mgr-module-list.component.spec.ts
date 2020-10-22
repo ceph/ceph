@@ -129,23 +129,27 @@ describe('MgrModuleListComponent', () => {
       expect(component.table.refreshBtn).toHaveBeenCalled();
     }));
 
-    it('should not disable module (1)', () => {
+    it.only('should not disable module without selecting one', () => {
+      expect(component.getTableActionDisabledDesc()).toBeTruthy();
+    });
+
+    it('should not disable dashboard module', () => {
       component.selection.selected = [
         {
           name: 'dashboard'
         }
       ];
-      expect(component.isTableActionDisabled('enabled')).toBeTruthy();
+      expect(component.getTableActionDisabledDesc()).toBeTruthy();
     });
 
-    it('should not disable module (2)', () => {
+    it('should not disable an always-on module', () => {
       component.selection.selected = [
         {
           name: 'bar',
           always_on: true
         }
       ];
-      expect(component.isTableActionDisabled('enabled')).toBeTruthy();
+      expect(component.getTableActionDisabledDesc()).toBe('This Manager module is always on.');
     });
   });
 });
