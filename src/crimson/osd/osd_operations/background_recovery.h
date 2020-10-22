@@ -26,24 +26,32 @@ public:
     crimson::osd::scheduler::scheduler_class_t scheduler_class);
 
   virtual void print(std::ostream &) const;
-  virtual void dump_detail(Formatter *f) const;
   seastar::future<> start();
+
 protected:
   Ref<PG> pg;
-  ShardServices &ss;
-  epoch_t epoch_started;
-  crimson::osd::scheduler::scheduler_class_t scheduler_class;
-  auto get_scheduler_params(crimson::osd::scheduler::cost_t cost = 1,
-			    crimson::osd::scheduler::client_t owner = 0) const {
-    return crimson::osd::scheduler::params_t{
-      cost, // cost
-      owner, // owner
+  const epoch_t epoch_started;
+
+private:
+  virtual void dump_detail(Formatter *f) const;
+  crimson::osd::scheduler::params_t get_scheduler_params() const {
+    return {
+      1, // cost
+      0, // owner
       scheduler_class
     };
   }
   virtual seastar::future<bool> do_recovery() = 0;
+  ShardServices &ss;
+  const crimson::osd::scheduler::scheduler_class_t scheduler_class;
 };
 
+/// represent a recovery initiated for serving a client request
+///
+/// unlike @c PglogBasedRecovery and @c BackfillRecovery,
+/// @c UrgentRecovery is not throttled by the scheduler. and it
+/// utilizes @c RecoveryBackend directly to recover the unreadable
+/// object.
 class UrgentRecovery final : public BackgroundRecovery {
 public:
   UrgentRecovery(
@@ -52,31 +60,30 @@ public:
     Ref<PG> pg,
     ShardServices& ss,
     epoch_t epoch_started)
-  : BackgroundRecovery{pg, ss, epoch_started, crimson::osd::scheduler::scheduler_class_t::immediate},
+  : BackgroundRecovery{pg, ss, epoch_started,
+                       crimson::osd::scheduler::scheduler_class_t::immediate},
     soid{soid}, need(need) {}
   void print(std::ostream&) const final;
-  void dump_detail(Formatter* f) const final;
+
 private:
+  void dump_detail(Formatter* f) const final;
+  seastar::future<bool> do_recovery() override;
   const hobject_t soid;
   const eversion_t need;
-  seastar::future<bool> do_recovery() override;
 };
 
 class PglogBasedRecovery final : public BackgroundRecovery {
-  seastar::future<bool> do_recovery() override;
-
 public:
   PglogBasedRecovery(
     Ref<PG> pg,
     ShardServices &ss,
     epoch_t epoch_started);
+
+private:
+  seastar::future<bool> do_recovery() override;
 };
 
 class BackfillRecovery final : public BackgroundRecovery {
-  boost::intrusive_ptr<const boost::statechart::event_base> evt;
-  OrderedPipelinePhase::Handle handle;
-  seastar::future<bool> do_recovery() override;
-
 public:
   class BackfillRecoveryPipeline {
     OrderedPipelinePhase process = {
@@ -94,6 +101,11 @@ public:
     const EventT& evt);
 
   static BackfillRecoveryPipeline &bp(PG &pg);
+
+private:
+  boost::intrusive_ptr<const boost::statechart::event_base> evt;
+  OrderedPipelinePhase::Handle handle;
+  seastar::future<bool> do_recovery() override;
 };
 
 template <class EventT>
