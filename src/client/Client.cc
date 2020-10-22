@@ -12054,6 +12054,32 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	return -EOPNOTSUPP;
       if (vxattr->name.compare(0, 10, "ceph.quota") == 0 && value)
 	check_realm = true;
+
+      if ((vxattr->name.compare(0, 20, "ceph.quota.max_bytes") == 0)  && value) {
+        uint64_t i_value = 0;
+        string tmp((const char*)value, size);
+        try {
+          i_value = boost::lexical_cast<uint64_t>(tmp);
+        } catch (boost::bad_lexical_cast& e) {
+          ldout(cct, 8) << "ceph.quota.max_bytes cast i_value error " << "i_value:" << i_value  << ", tmp = "<< tmp << dendl;
+          return -EINVAL;
+        }
+        if((i_value != 0) && (in->rstat.rbytes > i_value))
+      return -EDQUOT;
+      }
+
+      if ((vxattr->name.compare(0, 20, "ceph.quota.max_files") == 0)  && value){
+        uint64_t i_value = 0;
+        string tmp((const char*)value, size);
+        try {
+          i_value = boost::lexical_cast<uint64_t>(tmp);
+        } catch (boost::bad_lexical_cast& e) {
+          ldout(cct, 8) << "ceph.quota.files cast i_value error " << "i_value:" << i_value  << ", tmp = "<< tmp << dendl;
+          return -EINVAL;
+        }
+        if((i_value != 0) && (in->rstat.rsize() > i_value))
+      return -EDQUOT;
+      }
     }
   }
 
