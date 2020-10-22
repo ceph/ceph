@@ -229,6 +229,12 @@ struct btree_lba_manager_test :
     }
   }
 
+  auto incref_mapping(
+    test_transaction_t &t,
+    laddr_t addr) {
+    return incref_mapping(t, t.mappings.find(addr));
+  }
+
   void incref_mapping(
     test_transaction_t &t,
     test_lba_mapping_t::iterator target) {
@@ -337,6 +343,8 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	  check_mappings(t);
 	  check_mappings();
 	}
+	incref_mapping(t, ret->get_laddr());
+	decref_mapping(t, ret->get_laddr());
       }
       logger().debug("submitting transaction");
       submit_test_transaction(std::move(t));
@@ -344,23 +352,39 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	check_mappings();
       }
     }
-    auto addresses = get_mapped_addresses();
-    auto t = create_transaction();
-    for (unsigned i = 0; i != addresses.size(); ++i) {
-      if (i % 2 == 0) {
+    {
+      auto addresses = get_mapped_addresses();
+      auto t = create_transaction();
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	if (i % 2 == 0) {
+	  incref_mapping(t, addresses[i]);
+	  decref_mapping(t, addresses[i]);
+	  decref_mapping(t, addresses[i]);
+	}
+	logger().debug("submitting transaction");
+	if (i % 7 == 0) {
+	  submit_test_transaction(std::move(t));
+	  t = create_transaction();
+	}
+	if (i % 13 == 0) {
+	  check_mappings();
+	  check_mappings(t);
+	}
+      }
+      submit_test_transaction(std::move(t));
+    }
+    {
+      auto addresses = get_mapped_addresses();
+      auto t = create_transaction();
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	incref_mapping(t, addresses[i]);
+	decref_mapping(t, addresses[i]);
 	decref_mapping(t, addresses[i]);
       }
-      logger().debug("submitting transaction");
-      if (i % 7 == 0) {
-	submit_test_transaction(std::move(t));
-	t = create_transaction();
-      }
-      if (i % 13 == 0) {
-	check_mappings();
-	check_mappings(t);
-      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+      check_mappings();
     }
-    submit_test_transaction(std::move(t));
   });
 }
 
