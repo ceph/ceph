@@ -4,10 +4,10 @@
 #ifndef CEPH_MDS_METRICS_H
 #define CEPH_MDS_METRICS_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 #include "mds/MDSPerfMetricTypes.h"
 
-class MMDSMetrics : public SafeMessage {
+class MMDSMetrics : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -16,10 +16,10 @@ public:
   metrics_message_t metrics_message;
 
 protected:
-  MMDSMetrics() : SafeMessage(MSG_MDS_METRICS, HEAD_VERSION, COMPAT_VERSION) {
+  MMDSMetrics() : MMDSOp(MSG_MDS_METRICS, HEAD_VERSION, COMPAT_VERSION) {
   }
   MMDSMetrics(metrics_message_t metrics_message)
-    : SafeMessage(MSG_MDS_METRICS, HEAD_VERSION, COMPAT_VERSION),
+    : MMDSOp(MSG_MDS_METRICS, HEAD_VERSION, COMPAT_VERSION),
       metrics_message(metrics_message) {
   }
   ~MMDSMetrics() { }

@@ -78,10 +78,14 @@ void MetricAggregator::ms_fast_dispatch2(const ref_t<Message> &m) {
 }
 
 bool MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
-  if (m->get_type() == MSG_MDS_METRICS) {
-    if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {
-      handle_mds_metrics(ref_cast<MMDSMetrics>(m));
-    }
+  if (m->get_type() == MSG_MDS_METRICS &&
+      m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {
+    const Message *msg = m.get();
+    const MMDSOp *op = dynamic_cast<const MMDSOp*>(msg);
+    if (!op)
+      dout(0) << typeid(*msg).name() << " is not an MMDSOp type" << dendl;
+    ceph_assert(op);
+    handle_mds_metrics(ref_cast<MMDSMetrics>(m));
     return true;
   }
   return false;
