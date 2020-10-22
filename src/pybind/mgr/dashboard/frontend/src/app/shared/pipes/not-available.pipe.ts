@@ -1,12 +1,14 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
+import _ from 'lodash';
+
 @Pipe({
   name: 'notAvailable'
 })
 export class NotAvailablePipe implements PipeTransform {
-  transform(value: any): any {
+  transform(value: any, text?: string): any {
     if (value === '') {
-      return $localize`n/a`;
+      return _.defaultTo(text, $localize`n/a`);
     }
     return value;
   }
