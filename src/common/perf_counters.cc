@@ -190,7 +190,17 @@ void PerfCounters::dec(int idx, uint64_t amt)
   ceph_assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
   if (!(data.type & PERFCOUNTER_U64))
     return;
-  data.u64 -= amt;
+  if (amt > data.u64) {  // would wrap
+    // We should be able to uncomment this assert once there are no warnings
+    // generated from the lderr line below.
+    // assert(data.u64 >= amt); // Assert in debug builds.
+    lderr(m_cct) << "WARNING: " << __func__ << " " << data.u64 << " - " << amt
+                 << " for counter " << idx << " would wrap. Setting to 0"
+                 << dendl;
+    data.u64 = 0;
+  } else {
+    data.u64 -= amt;
+  }
 }
 
 void PerfCounters::set(int idx, uint64_t amt)
