@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+#include "common/pretty_binary.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_rocksdb
@@ -331,6 +332,7 @@ rocksdb::Cache::Handle* BinnedLRUCacheShard::Lookup(const rocksdb::Slice& key, u
     } else {
       lookup_hits_low++;
     }
+    e->touch = ceph::mono_clock::now();
   }
   return reinterpret_cast<rocksdb::Cache::Handle*>(e);
 }
@@ -412,7 +414,7 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
   e->SetInCache(true);
   e->SetPriority(priority);
   std::copy_n(key.data(), e->key_length, e->key_data);
-
+  e->touch = ceph::mono_clock::now();
   {
     std::lock_guard<std::mutex> l(mutex_);
     // Free the space following strict LRU policy until enough space
@@ -546,7 +548,14 @@ BinnedLRUCache::BinnedLRUCache(CephContext *c,
     int r = admin_socket->register_command(
       "rocksdb cache stat name=cache,req=false,type=CephString name=shard,req=false,type=CephString",
       this,
-      "dump stats of rocksdb cache",
+      "<cache name> [<shard>]. Dump stats for specific shard. If not set, sum up for entire cache.",
+      "cache",
+      name);
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "rocksdb cache list name=cache,req=false,type=CephString name=shard,req=false,type=CephString",
+      this,
+      "<cache name> [<shard>]. List cached elements for specific shard, or all if not set.",
       "cache",
       name);
     ceph_assert(r == 0);
@@ -595,7 +604,7 @@ int BinnedLRUCache::call(std::string_view command, const cmdmap_t& cmdmap,
     } else {
       std::string err;
       shard_id = strict_strtol(shardstr.c_str(), 0, &err);
-      if (err.empty()) {
+      if (err.empty() && shard_id >= 0 && shard_id < num_shards_) {
 	shards_[shard_id].add_stats(capacity, high_pri_pool_usage, usage, lru_usage,
 				    inserts_low, inserts_high, lookups, lookup_hits_low,
 				    lookup_hits_high, erases, erases_low, erases_high,
@@ -628,6 +637,52 @@ int BinnedLRUCache::call(std::string_view command, const cmdmap_t& cmdmap,
       f->dump_unsigned("erases_high", erases_high);
       f->dump_unsigned("evicts_low", evicts_low);
       f->dump_unsigned("evicts_high", evicts_high);
+      f->close_section();
+    }
+  } else if (command == "rocksdb cache list") {
+    std::string shardstr;
+    int shard_id = 0;
+    int shard_from = 0;
+    int shard_to = num_shards_;
+    if (ceph::common::cmd_getval(cmdmap, "shard", shardstr)) {
+      std::string err;
+      shard_id = strict_strtol(shardstr.c_str(), 0, &err);
+      if (err.empty() && shard_id >= 0 && shard_id < num_shards_) {
+	shard_from = shard_id;
+	shard_to = shard_id + 1;
+      } else {
+	ss << "invalid shard (" << shardstr << "); valid range 0-" << to_string(num_shards_ - 1);
+	r = -EINVAL;
+      }
+    }
+    if (r == 0) {
+      ceph::mono_clock::time_point now = ceph::mono_clock::now();
+      f->open_object_section("lru_lists");
+      for (int i = shard_from; i < shard_to; i++) {
+	f->open_object_section("shard");
+	f->dump_unsigned("id", i);
+	std::lock_guard<std::mutex> l(shards_[i].mutex_);
+	BinnedLRUHandle* start = &shards_[i].lru_;;
+	BinnedLRUHandle* e = start->prev;
+	bool in_low = false;
+	while (e != start) {
+	  if (e == shards_[i].lru_low_pri_) {
+	    in_low = true;
+	  }
+	  if (in_low) {
+	    f->open_object_section("low");
+	  } else {
+	    f->open_object_section("high");
+	  }
+	  f->dump_string("key", pretty_binary_string(std::string(e->key_data, e->key_length)));
+	  f->dump_unsigned("charge", e->charge);
+	  f->dump_unsigned("refs", e->refs);
+	  f->dump_float("age", ceph::to_seconds<double>(now - e->touch));
+	  f->close_section();
+	  e = e->prev;
+	}
+	f->close_section();
+      }
       f->close_section();
     }
   } else {

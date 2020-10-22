@@ -76,6 +76,7 @@ struct BinnedLRUHandle {
   uint32_t hash;     // Hash of key(); used for fast sharding and comparisons
 
   char* key_data = nullptr;  // Beginning of key
+  ceph::mono_clock::time_point touch; // timestamp of creation/access
 
   rocksdb::Slice key() const {
     // For cheaper lookups, we allow a temporary Handle object
@@ -172,6 +173,7 @@ class BinnedLRUHandleTable {
 
 // A single shard of sharded cache.
 class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
+  friend class BinnedLRUCache;
  public:
   BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
                 double high_pri_pool_ratio);
