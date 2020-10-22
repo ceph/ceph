@@ -1,9 +1,10 @@
 #include "include/ipaddr.h"
 #include "common/pick_address.h"
-#include "global/global_context.h"
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "common/ceph_context.h"
+
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 #if defined(__FreeBSD__)
 #include <sys/types.h>
@@ -624,9 +625,11 @@ TEST(pick_address, find_ip_in_subnet_list)
   ipv4(&a_two, "10.2.1.123");
   ipv6(&a_three, "2001:1234:5678:90ab::cdef");
 
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+
   // match by network
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct.get(),
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.1.0.0/16",
@@ -634,7 +637,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct.get(),
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.2.0.0/16",
@@ -643,7 +646,7 @@ TEST(pick_address, find_ip_in_subnet_list)
 
   // match by eth name
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct.get(),
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
@@ -651,7 +654,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   ASSERT_EQ((struct sockaddr*)&a_one, result);
 
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct.get(),
     &one,
     CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
@@ -659,7 +662,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   ASSERT_EQ((struct sockaddr*)&a_two, result);
 
   result = find_ip_in_subnet_list(
-    g_ceph_context,
+    cct.get(),
     &one,
     CEPH_PICK_ADDRESS_IPV6,
     "2001::/16",
@@ -690,7 +693,7 @@ TEST(pick_address, filtering)
   ipv4(&a_two, "10.2.1.123");
   ipv6(&a_three, "2001:1234:5678:90ab::cdef");
 
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_MON);
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_MON);
   cct->_conf._clear_safe_to_start_threads();  // so we can set configs
 
   cct->_conf.set_val("public_addr", "");
@@ -702,7 +705,7 @@ TEST(pick_address, filtering)
 
   entity_addrvec_t av;
   {
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_MSGR1,
@@ -713,7 +716,7 @@ TEST(pick_address, filtering)
     ASSERT_EQ(string("v1:0.0.0.0:0/0"), stringify(av.v[0]));
   }
   {
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV6 |
 			   CEPH_PICK_ADDRESS_MSGR1,
@@ -725,7 +728,7 @@ TEST(pick_address, filtering)
   }
   {
     cct->_conf.set_val("public_network", "10.2.0.0/16");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_MSGR1,
@@ -739,7 +742,7 @@ TEST(pick_address, filtering)
   {
     cct->_conf.set_val("public_network", "10.0.0.0/8");
     cct->_conf.set_val("public_network_interface", "eth1");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_MSGR2,
@@ -754,7 +757,7 @@ TEST(pick_address, filtering)
   {
     cct->_conf.set_val("public_network", "10.2.0.0/16");
     cct->_conf.set_val("cluster_network", "10.1.0.0/16");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_MSGR2,
@@ -769,7 +772,7 @@ TEST(pick_address, filtering)
   {
     cct->_conf.set_val("public_network", "10.2.0.0/16");
     cct->_conf.set_val("cluster_network", "10.1.0.0/16");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_CLUSTER |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_MSGR1,
@@ -784,7 +787,7 @@ TEST(pick_address, filtering)
 
   {
     cct->_conf.set_val("public_network", "2001::/16");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV6 |
 			   CEPH_PICK_ADDRESS_MSGR2,
@@ -798,7 +801,7 @@ TEST(pick_address, filtering)
   {
     cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
     cct->_conf.set_val("public_network_interface", "eth1");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_IPV6 |
@@ -815,7 +818,7 @@ TEST(pick_address, filtering)
   {
     cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
     cct->_conf.set_val("public_network_interface", "eth1");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_IPV6 |
@@ -833,7 +836,7 @@ TEST(pick_address, filtering)
 
   {
     cct->_conf.set_val("public_network", "2001::/16");
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV6 |
 			   CEPH_PICK_ADDRESS_MSGR1 |
@@ -848,7 +851,7 @@ TEST(pick_address, filtering)
   }
 
   {
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
 			   CEPH_PICK_ADDRESS_MSGR1 |
@@ -864,26 +867,20 @@ TEST(pick_address, filtering)
 
 TEST(pick_address, ipv4_ipv6_enabled)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one;
   struct sockaddr_in a_one;
-  struct sockaddr_in6 a_two;
 
-  one.ifa_next = &two;
+  one.ifa_next = NULL;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
 
-  two.ifa_next = NULL;
-  two.ifa_addr = (struct sockaddr*)&a_two;
-  two.ifa_name = eth0;
-
   ipv4(&a_one, "10.1.1.2");
-  ipv6(&a_two, "2001:1234:5678:90ab::cdef");
 
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
   cct->_conf._clear_safe_to_start_threads();  // so we can set configs
 
   cct->_conf.set_val("public_addr", "");
-  cct->_conf.set_val("public_network", "10.1.1.0/24, 2001::/16");
+  cct->_conf.set_val("public_network", "10.1.1.0/24");
   cct->_conf.set_val("public_network_interface", "");
   cct->_conf.set_val("cluster_addr", "");
   cct->_conf.set_val("cluster_network", "");
@@ -892,20 +889,16 @@ TEST(pick_address, ipv4_ipv6_enabled)
 
   entity_addrvec_t av;
   {
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_MSGR1,
 			   &one, &av);
     cout << av << std::endl;
-    ASSERT_EQ(0, r);
-    // Got 2 address
-    ASSERT_EQ(2u, av.v.size());
-    ASSERT_EQ(string("v1:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
-    ASSERT_EQ(string("v1:10.1.1.2:0/0"), stringify(av.v[1]));
+    ASSERT_EQ(-1, r);
   }
 }
 
-TEST(pick_address, only_ipv6_enabled)
+TEST(pick_address, ipv4_ipv6_enabled2)
 {
   struct ifaddrs one;
   struct sockaddr_in6 a_one;
@@ -916,7 +909,7 @@ TEST(pick_address, only_ipv6_enabled)
 
   ipv6(&a_one, "2001:1234:5678:90ab::cdef");
 
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
   cct->_conf._clear_safe_to_start_threads();  // so we can set configs
 
   cct->_conf.set_val("public_addr", "");
@@ -926,110 +919,15 @@ TEST(pick_address, only_ipv6_enabled)
   cct->_conf.set_val("cluster_network", "");
   cct->_conf.set_val("cluster_network_interface", "");
   cct->_conf.set_val("ms_bind_ipv6", "true");
-  cct->_conf.set_val("ms_bind_ipv4", "false");
 
   entity_addrvec_t av;
   {
-    int r = pick_addresses(cct,
-			   CEPH_PICK_ADDRESS_PUBLIC |
-			   CEPH_PICK_ADDRESS_MSGR1,
-			   &one, &av);
-    cout << av << std::endl;
-    ASSERT_EQ(0, r);
-    ASSERT_EQ(1u, av.v.size());
-    ASSERT_EQ(string("v1:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
-  }
-}
-
-TEST(pick_address, only_ipv4_enabled)
-{
-  struct ifaddrs one;
-  struct sockaddr_in a_one;
-
-  one.ifa_next = NULL;
-  one.ifa_addr = (struct sockaddr*)&a_one;
-  one.ifa_name = eth0;
-
-  ipv4(&a_one, "10.1.1.2");
-
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
-  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
-
-  cct->_conf.set_val("public_addr", "");
-  cct->_conf.set_val("public_network", "10.1.1.0/24");
-  cct->_conf.set_val("public_network_interface", "");
-  cct->_conf.set_val("cluster_addr", "");
-  cct->_conf.set_val("cluster_network", "");
-  cct->_conf.set_val("cluster_network_interface", "");
-  
-  entity_addrvec_t av;
-  {
-    int r = pick_addresses(cct,
-			   CEPH_PICK_ADDRESS_PUBLIC |
-			   CEPH_PICK_ADDRESS_MSGR1,
-			   &one, &av);
-    cout << av << std::endl;
-    ASSERT_EQ(0, r);
-    ASSERT_EQ(1u, av.v.size());
-    ASSERT_EQ(string("v1:10.1.1.2:0/0"), stringify(av.v[0]));
-  }
-}
-
-TEST(pick_address, ipv4_ipv6_enabled_not_enough_networks)
-{
-  struct ifaddrs one;
-  struct sockaddr_in a_one;
-
-  one.ifa_next = NULL;
-  one.ifa_addr = (struct sockaddr*)&a_one;
-  one.ifa_name = eth0;
-
-  ipv4(&a_one, "10.1.1.2");
-
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
-  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
-
-  cct->_conf.set_val("public_addr", "");
-  cct->_conf.set_val("public_network", "10.1.1.0/24");
-  cct->_conf.set_val("public_network_interface", "");
-  cct->_conf.set_val("cluster_addr", "");
-  cct->_conf.set_val("cluster_network", "");
-  cct->_conf.set_val("cluster_network_interface", "");
-  cct->_conf.set_val("ms_bind_ipv6", "true");
-
-  entity_addrvec_t av;
-  {
-    int r = pick_addresses(cct,
+    int r = pick_addresses(cct.get(),
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_MSGR1,
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(-1, r);
-    ASSERT_EQ(1u, av.v.size());
-    ASSERT_EQ(string("v2:10.1.1.2:0/0"), stringify(av.v[0]));
   }
 }
 
-TEST(networks_address_family_coverage, just_ipv4)
-{
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
-  std::string networks = "10.0.0.0/24";
-  unsigned r = networks_address_family_coverage(cct, networks);
-  ASSERT_EQ(CEPH_PICK_ADDRESS_IPV4, r);
-}
-
-TEST(networks_address_family_coverage, just_ipv6)
-{
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
-  std::string networks = "2001::/16";
-  unsigned r = networks_address_family_coverage(cct, networks);
-  ASSERT_EQ(CEPH_PICK_ADDRESS_IPV6, r);
-}
-
-TEST(networks_address_family_coverage, ipv6_and_ipv4)
-{
-  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
-  std::string networks = "2001::/16, 10.0.0.0/16";
-  unsigned r = networks_address_family_coverage(cct, networks);
-  ASSERT_EQ(CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6, r);
-}
