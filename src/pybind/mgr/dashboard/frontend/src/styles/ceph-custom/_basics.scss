@@ -73,3 +73,15 @@ option {
 .text-pre {
   white-space: pre;
 }
+
+.border-danger {
+  border-left: 4px solid vv.$danger;
+}
+
+.border-info {
+  border-left: 4px solid vv.$info;
+}
+
+.border-success {
+  border-left: 4px solid vv.$success;
+}

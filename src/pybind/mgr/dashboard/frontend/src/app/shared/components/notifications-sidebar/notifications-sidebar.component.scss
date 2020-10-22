@@ -23,7 +23,9 @@
 }
 
 .card-body {
-  padding-left: 5px;
+  padding-left: 0;
+  padding-right: 5px;
+  padding-top: 3px;
 }
 
 ngx-simplebar {
@@ -37,6 +39,10 @@ ngx-simplebar {
   padding: 5px 12px;
 }
 
+.btn-block {
+  width: 98%;
+}
+
 .btn-link .fa-trash-o {
   color: vv.$black;
 }
@@ -48,8 +54,11 @@ table {
 .row {
   margin-left: 0;
   margin-right: 0;
+  padding-bottom: 1rem;
+  padding-top: 1rem;
 }
 
-.fa-times {
-  margin-right: 10px;
+hr {
+  margin-bottom: 2px;
+  margin-top: 2px;
 }
