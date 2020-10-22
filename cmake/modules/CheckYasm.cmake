@@ -2,7 +2,8 @@ macro(check_yasm_support _object_format _good_result _better_result)
   execute_process(
     COMMAND yasm -f "${_object_format}" ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
     RESULT_VARIABLE no_yasm
-    OUTPUT_QUIET)
+    OUTPUT_QUIET
+    ERROR_QUIET)
   if(NOT no_yasm)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
       set(save_quiet ${CMAKE_REQUIRED_QUIET})
@@ -22,7 +23,8 @@ macro(check_yasm_support _object_format _good_result _better_result)
           ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
           -o /dev/null
           RESULT_VARIABLE rc
-          OUTPUT_QUIET)
+          OUTPUT_QUIET
+          ERROR_QUIET)
         if(NOT rc)
           set(${_better_result} TRUE)
         endif(NOT rc)
