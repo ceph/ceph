@@ -368,6 +368,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_DISTEPHEMERALPIN       = (1<<20);
   static const int STATE_RANDEPHEMERALPIN       = (1<<21);
   static const int STATE_CLIENTWRITEABLE	= (1<<22);
+  static const int STATE_UNCONNECTED		= (1<<23);
 
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
@@ -661,6 +662,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_dir() const     { return get_inode()->is_dir(); }
 
   bool is_head() const { return last == CEPH_NOSNAP; }
+
+  bool is_unconnected() const { return state_test(STATE_UNCONNECTED); }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() const {

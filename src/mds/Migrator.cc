@@ -1908,13 +1908,6 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   EExport *le = new EExport(it->first, it->second.bound_vec, it->second.peer, it->second.tid);
   mds->mdlog->start_entry(le);
 
-  le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
-  le->metablob.add_dir(dir, false);
-  for (auto& bd : it->second.bounds) {
-    le->metablob.add_dir_context(bd);
-    le->metablob.add_dir(bd, false);
-  }
-
   // list us second, them first.
   // this keeps authority().first in sync with subtree auth state in the journal.
   mdcache->adjust_subtree_auth(dir, it->second.peer, mds->get_nodeid());
@@ -2699,8 +2692,6 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
   C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, oldauth);
   EImportStart *le = new EImportStart(dir->dirfrag(), m->bounds, oldauth, m->get_tid());
   mds->mdlog->start_entry(le);
-
-  le->metablob.add_dir_context(dir);
   
   // adjust auth (list us _first_)
   mdcache->adjust_subtree_auth(dir, mds->get_nodeid(), oldauth);
@@ -2718,6 +2709,8 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
   encode(client_map, le->client_map, mds->mdsmap->get_up_features());
   encode(client_metadata_map, le->client_map);
 
+  le->metablob.add_dir_context(dir);
+
   auto blp = m->export_data.cbegin();
   int num_imported_inodes = 0;
   while (!blp.end()) {
@@ -2732,9 +2725,11 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
   }
   dout(10) << " " << m->bounds.size() << " imported bounds" << dendl;
 
+  /*
   // include bounds in EImportStart
   for (auto& bd : it->second.bounds)
     le->metablob.add_dir(bd, false);  // note that parent metadata is already in the event
+  */
 
   // adjust popularity
   mds->balancer->add_import(dir);
@@ -2770,10 +2765,8 @@ void Migrator::import_remove_pins(CDir *dir, import_state_t& stat)
   // bounding inodes
   set<inodeno_t> did;
   for (auto bd : stat.bounds) {
-    if (did.count(bd->ino()))
-      continue;
-    did.insert(bd->ino());
-    bd->inode->put_stickydirs();
+    if (did.insert(bd->ino()).second)
+      bd->inode->put_stickydirs();
   }
 
   if (stat.state == IMPORT_PREPPING) {
@@ -2817,13 +2810,11 @@ void Migrator::import_reverse(CDir *dir, import_state_iterator it, bool notify)
   // log our failure
   mds->mdlog->start_submit_entry(new EImportFinish(dir->dirfrag(), stat.peer, stat.tid, false));
 
-  import_remove_pins(dir, stat);
-
   if (mds->is_resolve()) {
     ceph_assert(stat.state == IMPORT_REPLAYEDSTART);
 
     mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
-    mdcache->try_trim_non_auth_subtree(dir);
+    mdcache->trim_non_auth_subtree(dir);
 
     import_state.erase(it);
 
@@ -2833,10 +2824,10 @@ void Migrator::import_reverse(CDir *dir, import_state_iterator it, bool notify)
   }
 
   stat.state = IMPORT_ABORTING;
+  import_remove_pins(dir, stat);
 
-  // update auth, with possible subtree merge.
   ceph_assert(dir->is_subtree_root());
-
+  // update auth, with possible subtree merge.
   mdcache->adjust_subtree_auth(dir, stat.peer);
 
   auto fin = new C_MDC_QueueContexts(this);
@@ -3097,8 +3088,15 @@ void Migrator::import_finish(CDir *dir, import_state_t& stat, bool last)
 {
   dout(7) << *dir << dendl;
 
-  if (mds->is_resolve())
+  if (mds->is_resolve()) {
     ceph_assert(stat.state == IMPORT_REPLAYEDSTART);
+    stat.state = IMPORT_LOGGINGFINISH;
+    mds->mdlog->start_submit_entry(new EImportFinish(dir->dirfrag(), stat.peer, stat.tid, true),
+				   new C_MDS_ImportDirLoggedFinish(this, dir->dirfrag()));
+    mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+    mdcache->try_subtree_merge(dir);
+    return;
+  }
 
   // log finish
   ceph_assert(g_conf()->mds_kill_import_at != 9);
@@ -3143,12 +3141,6 @@ void Migrator::import_finish(CDir *dir, import_state_t& stat, bool last)
 				 new C_MDS_ImportDirLoggedFinish(this, dir->dirfrag()));
 
   import_remove_pins(dir, stat);
-
-  if (mds->is_resolve()) {
-    mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
-    mdcache->try_subtree_merge(dir);
-    return;
-  }
 
   // process delayed expires
   mdcache->process_delayed_expire(dir);
@@ -3777,19 +3769,19 @@ void Migrator::replay_export_dir(dirfrag_t base, const vector<dirfrag_t>& bound_
 				 mds_rank_t target, uint64_t tid, LogSegment *ls)
 {
   CDir *dir = mdcache->get_dirfrag(base);
-  ceph_assert(dir);
+  if (dir) {
+    set<CDir*> bounds;
+    for (auto& df : bound_vec) {
+      CDir *bd = mdcache->get_dirfrag(df);
+      if (!bd)
+	continue;
+      bounds.insert(bd);
+    }
 
-  set<CDir*> bounds;
-  for (auto& df : bound_vec) {
-    CDir *bd = mdcache->get_dirfrag(df);
-    ceph_assert(bd);
-    bounds.insert(bd);
+    // adjust auth away
+    mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
+    mdcache->trim_non_auth_subtree(dir);
   }
-
-  // adjust auth away
-  mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
-
-  mdcache->try_trim_non_auth_subtree(dir);
 
   ceph_assert(export_state.count(base) == 0);
   export_state_t& stat = export_state[base];
@@ -3826,9 +3818,6 @@ void Migrator::replay_import_start(dirfrag_t base, const vector<dirfrag_t>& boun
   CDir *dir = mdcache->get_dirfrag(base);
   ceph_assert(dir);
 
-  dir->get(CDir::PIN_IMPORTING);
-  dir->state_set(CDir::STATE_IMPORTING);
-
   ceph_assert(import_state.count(base) == 0);
   import_state_t& stat = import_state[base];
   stat.state = IMPORT_REPLAYEDSTART;
@@ -3836,25 +3825,15 @@ void Migrator::replay_import_start(dirfrag_t base, const vector<dirfrag_t>& boun
   stat.tid = tid;
   stat.bound_vec = bound_vec;
 
-  set<inodeno_t> did;
+  std::set<CDir*> bounds;
   for (auto& df : bound_vec) {
     CDir *bd = mdcache->get_dirfrag(df);
-    ceph_assert(bd);
-
-    stat.bounds.insert(bd);
-    if (!did.count(bd->ino())) {
-      did.insert(bd->ino());
-      bd->inode->get_stickydirs();
-    }
-
-    bd->get(CDir::PIN_IMPORTBOUND);
-    bd->state_set(CDir::STATE_IMPORTBOUND);
-
-    if (!bd->is_subtree_root())
-      bd->state_clear(CDir::STATE_AUTH);
+    if (!bd)
+      continue;
+    bounds.insert(bd);
   }
 
-  mdcache->adjust_bounded_subtree_auth(dir, stat.bounds, mds_authority_t(mds->get_nodeid(), from));
+  mdcache->adjust_bounded_subtree_auth(dir, bounds, mds_authority_t(mds->get_nodeid(), from));
 }
 
 void Migrator::replay_import_finish(dirfrag_t base, uint64_t tid, bool success)
@@ -3868,14 +3847,13 @@ void Migrator::replay_import_finish(dirfrag_t base, uint64_t tid, bool success)
 
   CDir *dir = mdcache->get_dirfrag(base);
   ceph_assert(dir);
-  import_remove_pins(dir, it->second);
 
   if (success) {
     mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
     mdcache->try_subtree_merge(dir);
   } else {
     mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
-    mdcache->try_trim_non_auth_subtree(dir);
+    mdcache->trim_non_auth_subtree(dir);
   }
 
   import_state.erase(it);

@@ -533,26 +533,24 @@ private:
 		       in->get_old_inodes());
   }
   
-  dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
-		   dirty, complete);
-  }
   dirlump& add_new_dir(CDir *dir) {
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
-		   true, true, true); // dirty AND complete AND new
+    return add_dir(dir, true, true, true); // dirty AND complete AND new
   }
   dirlump& add_import_dir(CDir *dir) {
     // dirty=false would be okay in some cases
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
-		   dir->is_dirty(), dir->is_complete(), false, true, dir->is_dirty_dft());
+    return add_dir(dir, dir->is_dirty(), dir->is_complete(), false, true, dir->is_dirty_dft());
   }
   dirlump& add_fragmented_dir(CDir *dir, bool dirty, bool dirtydft) {
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
-		   dirty, false, false, false, dirtydft);
+    return add_dir(dir, dirty, false, false, false, dirtydft);
   }
-  dirlump& add_dir(dirfrag_t df, const CDir::fnode_const_ptr& pf, bool dirty,
+  dirlump& add_dir(CDir *dir, bool dirty,
 		   bool complete=false, bool isnew=false,
 		   bool importing=false, bool dirty_dft=false) {
+
+    ceph_assert(dir->is_auth());
+    auto df = dir->dirfrag();
+    auto& pf = dir->get_projected_fnode();
+
     if (lump_map.count(df) == 0)
       lump_order.push_back(df);
 
@@ -566,10 +564,7 @@ private:
     return l;
   }
   
-  static const int TO_AUTH_SUBTREE_ROOT = 0;  // default.
-  static const int TO_ROOT = 1;
-  
-  void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT);
+  void add_dir_context(CDir *dir);
 
   bool empty() {
     return roots.empty() && lump_order.empty() && table_tids.empty() &&

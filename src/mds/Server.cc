@@ -7547,15 +7547,6 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CD
   return true;
 }
 
-struct C_MDS_PeerRmdirPrep : public ServerLogContext {
-  CDentry *dn, *straydn;
-  C_MDS_PeerRmdirPrep(Server *s, MDRequestRef& r, CDentry *d, CDentry *st)
-    : ServerLogContext(s, r), dn(d), straydn(st) {}
-  void finish(int r) override {
-    server->_logged_peer_rmdir(mdr, dn, straydn);
-  }
-};
-
 struct C_MDS_PeerRmdirCommit : public ServerContext {
   MDRequestRef mdr;
   CDentry *straydn;
@@ -7625,32 +7616,7 @@ void Server::handle_peer_rmdir_prep(MDRequestRef& mdr)
   ceph_assert(straydn->first >= in->first);
   in->first = straydn->first;
 
-  if (!in->has_subtree_root_dirfrag(mds->get_nodeid())) {
-    dout(10) << " no auth subtree in " << *in << ", skipping journal" << dendl;
-    _logged_peer_rmdir(mdr, dn, straydn);
-    return;
-  }
-
-  mdr->ls = mdlog->get_current_segment();
-  EPeerUpdate *le =  new EPeerUpdate(mdlog, "peer_rmdir", mdr->reqid, mdr->peer_to_mds,
-				       EPeerUpdate::OP_PREPARE, EPeerUpdate::RMDIR);
-  mdlog->start_entry(le);
-  le->rollback = mdr->more()->rollback_bl;
-
-  le->commit.add_dir_context(straydn->get_dir());
-  le->commit.add_primary_dentry(straydn, in, true);
-  // peer: no need to journal original dentry
-
-  dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
-  le->commit.renamed_dirino = in->ino();
-
-  mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
-  mdcache->add_uncommitted_peer(mdr->reqid, mdr->ls, mdr->peer_to_mds);
-
-  mdr->more()->peer_update_journaled = true;
-  submit_mdlog_entry(le, new C_MDS_PeerRmdirPrep(this, mdr, dn, straydn),
-                     mdr, __func__);
-  mdlog->flush();
+  _logged_peer_rmdir(mdr, dn, straydn);
 }
 
 void Server::_logged_peer_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
@@ -7676,21 +7642,15 @@ void Server::_logged_peer_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *straydn
   mdcache->adjust_subtree_after_rename(in, dn->get_dir());
 
   if (new_realm)
-      mdcache->do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
+    mdcache->do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
 
   // done.
   mdr->reset_peer_request();
   mdr->straydn = 0;
 
-  if (!mdr->aborted) {
-    auto reply = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, MMDSPeerRequest::OP_RMDIRPREPACK);
-    if (!mdr->more()->peer_update_journaled)
-      reply->mark_not_journaled();
-    mds->send_message_mds(reply, mdr->peer_to_mds);
-  } else {
-    dout(10) << " abort flag set, finishing" << dendl;
-    mdcache->request_finish(mdr);
-  }
+  auto reply = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, MMDSPeerRequest::OP_RMDIRPREPACK);
+  reply->mark_not_journaled();
+  mds->send_message_mds(reply, mdr->peer_to_mds);
 }
 
 void Server::handle_peer_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack)
@@ -7727,34 +7687,12 @@ void Server::_commit_peer_rmdir(MDRequestRef& mdr, int r, CDentry *straydn)
     }
 
     mdr->cleanup();
-
-    if (mdr->more()->peer_update_journaled) {
-      // write a commit to the journal
-      EPeerUpdate *le = new EPeerUpdate(mdlog, "peer_rmdir_commit", mdr->reqid,
-					  mdr->peer_to_mds, EPeerUpdate::OP_COMMIT,
-					  EPeerUpdate::RMDIR);
-      mdlog->start_entry(le);
-      submit_mdlog_entry(le, new C_MDS_CommittedPeer(this, mdr), mdr, __func__);
-      mdlog->flush();
-    } else {
-      _committed_peer(mdr);
-    }
+    _committed_peer(mdr);
   } else {
     // abort
     do_rmdir_rollback(mdr->more()->rollback_bl, mdr->peer_to_mds, mdr);
   }
 }
-
-struct C_MDS_LoggedRmdirRollback : public ServerLogContext {
-  metareqid_t reqid;
-  CDentry *dn;
-  CDentry *straydn;
-  C_MDS_LoggedRmdirRollback(Server *s, MDRequestRef& m, metareqid_t mr, CDentry *d, CDentry *st)
-    : ServerLogContext(s, m), reqid(mr), dn(d), straydn(st) {}
-  void finish(int r) override {
-    server->_rmdir_rollback_finish(mdr, reqid, dn, straydn);
-  }
-};
 
 void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr)
 {
@@ -7799,32 +7737,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef&
     }
   }
 
-  if (mdr && !mdr->more()->peer_update_journaled) {
-    ceph_assert(!in->has_subtree_root_dirfrag(mds->get_nodeid()));
-
-    _rmdir_rollback_finish(mdr, rollback.reqid, dn, straydn);
-    return;
-  }
-
-
-  EPeerUpdate *le = new EPeerUpdate(mdlog, "peer_rmdir_rollback", rollback.reqid, leader,
-				      EPeerUpdate::OP_ROLLBACK, EPeerUpdate::RMDIR);
-  mdlog->start_entry(le);
-  
-  le->commit.add_dir_context(dn->get_dir());
-  le->commit.add_primary_dentry(dn, in, true);
-  // peer: no need to journal straydn
-  
-  dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
-  le->commit.renamed_dirino = in->ino();
-
-  mdcache->project_subtree_rename(in, straydn->get_dir(), dn->get_dir());
-
-  submit_mdlog_entry(le,
-                     new C_MDS_LoggedRmdirRollback(this, mdr,rollback.reqid,
-                                                   dn, straydn),
-                     mdr, __func__);
-  mdlog->flush();
+  _rmdir_rollback_finish(mdr, rollback.reqid, dn, straydn);
 }
 
 void Server::_rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn)
@@ -7838,14 +7751,7 @@ void Server::_rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentr
   CInode *in = dn->get_linkage()->get_inode();
   mdcache->adjust_subtree_after_rename(in, straydn->get_dir());
 
-  if (mds->is_resolve()) {
-    CDir *root = mdcache->get_subtree_root(straydn->get_dir());
-    mdcache->try_trim_non_auth_subtree(root);
-  }
-
-  if (mdr)
-    mdcache->request_finish(mdr);
-
+  mdcache->request_finish(mdr);
   mdcache->finish_rollback(reqid, mdr);
 }
 
@@ -8505,45 +8411,6 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
   return oldpv;
 }
 
-bool Server::_need_force_journal(CInode *diri, bool empty)
-{
-  auto&& dirs = diri->get_dirfrags();
-
-  bool force_journal = false;
-  if (empty) {
-    for (const auto& dir : dirs) {
-      if (dir->is_subtree_root() && dir->get_dir_auth().first == mds->get_nodeid()) {
-	dout(10) << " frag " << dir->get_frag() << " is auth subtree dirfrag, will force journal" << dendl;
-	force_journal = true;
-	break;
-      } else
-	dout(20) << " frag " << dir->get_frag() << " is not auth subtree dirfrag" << dendl;
-    }
-  } else {
-    // see if any children of our frags are auth subtrees.
-    std::vector<CDir*> subtrees;
-    mdcache->get_subtrees(subtrees);
-    dout(10) << " subtrees " << subtrees << " frags " << dirs << dendl;
-    for (const auto& dir : dirs) {
-      for (const auto& subtree : subtrees) {
-	if (dir->contains(subtree)) {
-	  if (subtree->get_dir_auth().first == mds->get_nodeid()) {
-	    dout(10) << " frag " << dir->get_frag() << " contains (maybe) auth subtree, will force journal "
-		     << *subtree << dendl;
-	    force_journal = true;
-	    break;
-	  } else
-	    dout(20) << " frag " << dir->get_frag() << " contains but isn't auth for " << *subtree << dendl;
-	} else
-	  dout(20) << " frag " << dir->get_frag() << " does not contain " << *subtree << dendl;
-      }
-      if (force_journal)
-	break;
-    }
-  }
-  return force_journal;
-}
-
 void Server::_rename_prepare(MDRequestRef& mdr,
 			     EMetaBlob *metablob, bufferlist *client_map_bl,
 			     CDentry *srcdn, CDentry *destdn, std::string_view alternate_name,
@@ -8564,36 +8431,14 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     ceph_assert(srcdnl->is_primary() && destdnl->is_remote());
   bool silent = srcdn->get_dir()->inode->is_stray();
 
-  bool force_journal_dest = false;
-  if (srci->is_dir() && !destdn->is_auth()) {
-    if (srci->is_auth()) {
-      // if we are auth for srci and exporting it, force journal because journal replay needs
-      // the source inode to create auth subtrees.
-      dout(10) << " we are exporting srci, will force journal destdn" << dendl;
-      force_journal_dest = true;
-    } else
-      force_journal_dest = _need_force_journal(srci, false);
-  }
-
-  bool force_journal_stray = false;
-  if (oldin && oldin->is_dir() && straydn && !straydn->is_auth())
-    force_journal_stray = _need_force_journal(oldin, true);
-
   if (linkmerge)
     dout(10) << " merging remote and primary links to the same inode" << dendl;
   if (silent)
     dout(10) << " reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
-  if (force_journal_dest)
-    dout(10) << " forcing journal destdn because we (will) have auth subtrees nested beneath it" << dendl;
-  if (force_journal_stray)
-    dout(10) << " forcing journal straydn because we (will) have auth subtrees nested beneath it" << dendl;
 
-  if (srci->is_dir() && (destdn->is_auth() || force_journal_dest)) {
+  if (srci->is_dir() && (srcdn->is_auth() || destdn->is_auth())) {
     dout(10) << " noting renamed dir ino " << srci->ino() << " in metablob" << dendl;
     metablob->renamed_dirino = srci->ino();
-  } else if (oldin && oldin->is_dir() && force_journal_stray) {
-    dout(10) << " noting rename target dir " << oldin->ino() << " in metablob" << dendl;
-    metablob->renamed_dirino = oldin->ino();
   }
 
   // prepare
@@ -8654,17 +8499,6 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	oldpv = srci->get_projected_version();
       else {
 	oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
-
-	// note which dirfrags have child subtrees in the journal
-	// event, so that we can open those (as bounds) during replay.
-	if (srci->is_dir()) {
-	  auto&& ls = srci->get_dirfrags();
-	  for (const auto& dir : ls) {
-	    if (!dir->is_auth())
-	      metablob->renamed_dir_frags.push_back(dir->get_frag());
-	  }
-	  dout(10) << " noting renamed dir open frags " << metablob->renamed_dir_frags << dendl;
-	}
       }
       auto pi = srci->project_inode(mdr); // project snaprealm if srcdnl->is_primary
                                                  // & srcdnl->snaprealm
@@ -8764,10 +8598,6 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	}
 	straydn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 	metablob->add_primary_dentry(straydn, oldin, true, true);
-      } else if (force_journal_stray) {
-	dout(10) << " forced journaling straydn " << *straydn << dendl;
-	metablob->add_dir_context(straydn->get_dir());
-	metablob->add_primary_dentry(straydn, oldin, true);
       }
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
@@ -8834,24 +8664,11 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
-
-    destdn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+    else
+      destdn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, srci, true, true);
-    else if (force_journal_dest) {
-      dout(10) << " forced journaling destdn " << *destdn << dendl;
-      metablob->add_dir_context(destdn->get_dir());
-      metablob->add_primary_dentry(destdn, srci, true);
-      if (srcdn->is_auth() && srci->is_dir()) {
-	// journal new subtrees root dirfrags
-	auto&& ls = srci->get_dirfrags();
-	for (const auto& dir : ls) {
-	  if (dir->is_auth())
-	    metablob->add_dir(dir, true);
-	}
-      }
-    }
   }
     
   // src
@@ -8861,7 +8678,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     // also journal the inode in case we need do peer rename rollback. It is Ok to add
     // both primary and NULL dentries. Because during journal replay, null dentry is
     // processed after primary dentry.
-    if (srcdnl->is_primary() && !srci->is_dir() && !destdn->is_auth())
+    if (srcdnl->is_primary() && !destdn->is_auth())
       metablob->add_primary_dentry(srcdn, srci, true);
     metablob->add_null_dentry(srcdn, true);
   } else
@@ -9628,11 +9445,9 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
     dout(10) << " destdir not found" << dendl;
 
   CInode *in = NULL;
-  if (rollback.orig_src.ino) {
+  if (rollback.orig_src.ino)
     in = mdcache->get_inode(rollback.orig_src.ino);
-    if (in && in->is_dir())
-      ceph_assert(srcdn && destdn);
-  } else
+  else
     in = mdcache->get_inode(rollback.orig_src.remote_ino);
 
   CDir *straydir = NULL;
@@ -9665,13 +9480,6 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
   ceph_assert(!destdn || destdn->authority().first != whoami);
   ceph_assert(!straydn || straydn->authority().first != whoami);
 
-  bool force_journal_src = false;
-  bool force_journal_dest = false;
-  if (in && in->is_dir() && srcdn->authority().first != whoami)
-    force_journal_src = _need_force_journal(in, false);
-  if (in && target && target->is_dir())
-    force_journal_dest = _need_force_journal(in, true);
-  
   version_t srcdnpv = 0;
   // repair src
   if (srcdn) {
@@ -9839,7 +9647,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
 				      EPeerUpdate::OP_ROLLBACK, EPeerUpdate::RENAME);
   mdlog->start_entry(le);
 
-  if (srcdn && (srcdn->authority().first == whoami || force_journal_src)) {
+  if (srcdn && srcdn->authority().first == whoami) {
     le->commit.add_dir_context(srcdir);
     if (rollback.orig_src.ino)
       le->commit.add_primary_dentry(srcdn, 0, true);
@@ -9853,34 +9661,16 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
     le->commit.add_primary_dentry(in->get_projected_parent_dn(), in, true);
   }
 
-  if (force_journal_dest) {
-    ceph_assert(rollback.orig_dest.ino);
-    le->commit.add_dir_context(destdir);
-    le->commit.add_primary_dentry(destdn, 0, true);
-  }
-
   // peer: no need to journal straydn
-
   if (target && target != in && target->authority().first == whoami) {
     ceph_assert(rollback.orig_dest.remote_ino);
     le->commit.add_dir_context(target->get_projected_parent_dir());
     le->commit.add_primary_dentry(target->get_projected_parent_dn(), target, true);
   }
 
-  if (in && in->is_dir() && (srcdn->authority().first == whoami || force_journal_src)) {
+  if (in && in->is_dir() && srcdn->authority().first == whoami) {
     dout(10) << " noting renamed dir ino " << in->ino() << " in metablob" << dendl;
     le->commit.renamed_dirino = in->ino();
-    if (srcdn->authority().first == whoami) {
-      auto&& ls = in->get_dirfrags();
-      for (const auto& dir : ls) {
-	if (!dir->is_auth())
-	  le->commit.renamed_dir_frags.push_back(dir->get_frag());
-      }
-      dout(10) << " noting renamed dir open frags " << le->commit.renamed_dir_frags << dendl;
-    }
-  } else if (force_journal_dest) {
-    dout(10) << " noting rename target ino " << target->ino() << " in metablob" << dendl;
-    le->commit.renamed_dirino = target->ino();
   }
 
   if (mdr && !mdr->more()->peer_update_journaled) {
@@ -9927,10 +9717,8 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
 
   if (srcdn && srcdn->get_linkage()->is_primary()) {
     CInode *in = srcdn->get_linkage()->get_inode();
-    if (in && in->is_dir()) {
-      ceph_assert(destdn);
+    if (in && in->is_dir() && destdn)
       mdcache->adjust_subtree_after_rename(in, destdn->get_dir());
-    }
   }
 
   if (destdn) {
@@ -9942,15 +9730,7 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
     }
   }
 
-  if (mds->is_resolve()) {
-    CDir *root = NULL;
-    if (straydn)
-      root = mdcache->get_subtree_root(straydn->get_dir());
-    else if (destdn)
-      root = mdcache->get_subtree_root(destdn->get_dir());
-    if (root)
-      mdcache->try_trim_non_auth_subtree(root);
-  } else {
+  if (!mds->is_resolve()) {
     mdcache->send_snaps(splits[1]);
     mdcache->send_snaps(splits[0]);
   }

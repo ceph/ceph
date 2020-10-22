@@ -577,7 +577,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
   ceph_assert(get_num_any() == items.size());
 }
 
-void CDir::link_inode_work( CDentry *dn, CInode *in)
+void CDir::link_inode_work(CDentry *dn, CInode *in)
 {
   ceph_assert(dn->get_linkage()->get_inode() == in);
   in->set_primary_parent(dn);
@@ -608,6 +608,12 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
     in->snaprealm->adjust_parent();
   else if (in->is_any_caps())
     in->move_to_realm(inode->find_snaprealm());
+
+  if (in->is_unconnected()) {
+    mdcache->remove_unconnected_inode(in);
+    if (is_auth())
+      in->state_set(CInode::STATE_AUTH);
+  }
 }
 
 void CDir::unlink_inode(CDentry *dn, bool adjust_lru)

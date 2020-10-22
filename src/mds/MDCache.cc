@@ -380,6 +380,37 @@ void MDCache::remove_inode(CInode *o)
   delete o; 
 }
 
+CInode* MDCache::create_unconnected_inode(inodeno_t ino, int mode)
+{
+  CInode *in = new CInode(this, false);
+  in->_get_inode()->ino = ino;
+  in->_get_inode()->mode = mode;
+  if (in->is_dir())
+    in->_get_inode()->dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
+  add_inode(in);
+  add_unconnected_inode(in);
+  return in;
+}
+
+void MDCache::add_unconnected_inode(CInode *in)
+{
+  in->inode_auth = CDIR_AUTH_UNDEF;
+  in->state_set(CInode::STATE_UNCONNECTED);
+  in->state_clear(CInode::STATE_AUTH);
+  if (in->is_dirty())
+    in->mark_clean();
+  if (in->is_dirty_parent())
+    in->clear_dirty_parent();
+  unconnected_inodes.insert(in);
+}
+
+void MDCache::remove_unconnected_inode(CInode *in)
+{
+  in->state_clear(CInode::STATE_UNCONNECTED);
+  in->inode_auth = CDIR_AUTH_DEFAULT;
+  unconnected_inodes.erase(in);
+}
+
 file_layout_t MDCache::gen_default_file_layout(const MDSMap &mdsmap)
 {
   file_layout_t result = file_layout_t::get_default();
@@ -453,6 +484,9 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 CInode *MDCache::create_root_inode()
 {
   CInode *in = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  if (mds->mdsmap->get_root() != mds->get_nodeid())
+    in->state_clear(CInode::STATE_AUTH);
+
   auto _inode = in->_get_inode();
   _inode->uid = g_conf()->mds_root_ino_uid;
   _inode->gid = g_conf()->mds_root_ino_gid;
@@ -929,7 +963,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
   show_subtrees();
 
   CDir *root;
-  if (dir->inode->is_base()) {
+  if (dir->inode->is_base() || dir->inode->is_unconnected()) {
     root = dir;  // bootstrap hack.
     if (subtrees.count(root) == 0) {
       subtrees[root];
@@ -1024,7 +1058,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust
 
   // merge with parent?
   CDir *parent = dir;  
-  if (!dir->inode->is_base())
+  if (!dir->inode->is_base() && !dir->inode->is_unconnected())
     parent = get_subtree_root(dir->get_parent_dir());
   
   if (parent != dir &&				// we have a parent,
@@ -1080,7 +1114,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const set<CDir*>& bounds, m
   show_subtrees();
 
   CDir *root;
-  if (dir->ino() == MDS_INO_ROOT) {
+  if (dir->inode->is_base() || dir->inode->is_unconnected()) {
     root = dir;  // bootstrap hack.
     if (subtrees.count(root) == 0) {
       subtrees[root];
@@ -2524,14 +2558,14 @@ ESubtreeMap *MDCache::create_subtree_map()
 
   if (myin) {
     CDir* mydir = myin->get_dirfrag(frag_t());
-    le->metablob.add_dir_context(mydir, EMetaBlob::TO_ROOT);
+    le->metablob.add_dir_context(mydir);
     le->metablob.add_dir(mydir, false);
     le->subtrees[mydir->dirfrag()].clear();
   }
 
   if (mds->mdsmap->get_root() == mds->get_nodeid()) {
     CDir *rootdir = root->get_dirfrag(frag_t());
-    le->metablob.add_dir_context(rootdir, EMetaBlob::TO_ROOT);
+    le->metablob.add_dir_context(rootdir);
     le->metablob.add_dir(rootdir, false);
     le->subtrees[rootdir->dirfrag()].clear();
   }
@@ -3214,7 +3248,6 @@ void MDCache::maybe_resolve_finish()
   if (resolve_done) {
     ceph_assert(mds->is_resolve());
     trim_unlinked_inodes();
-    recalc_auth_bits(false);
     resolve_done.release()->complete(0);
   } else {
     // I am survivor.
@@ -3285,9 +3318,6 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
       case EPeerUpdate::RENAME:
 	mds->server->do_rename_rollback(su->rollback, from, null_ref);
 	break;
-      case EPeerUpdate::RMDIR:
-	mds->server->do_rmdir_rollback(su->rollback, from, null_ref);
-	break;
       default:
 	ceph_abort();
       }
@@ -3325,8 +3355,6 @@ void MDCache::add_uncommitted_peer(metareqid_t reqid, LogSegment *ls, mds_rank_t
   if (su == nullptr) {
     return;
   }
-  for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p)
-    uncommitted_peer_rename_olddir[*p]++;
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p)
     uncommitted_peer_unlink[*p]++;
 }
@@ -3347,30 +3375,9 @@ void MDCache::finish_uncommitted_peer(metareqid_t reqid, bool assert_exist)
 
   uncommitted_peers.erase(it);
 
-  if (su == nullptr) {
+  if (su == nullptr)
     return;
-  }
-  // discard the non-auth subtree we renamed out of
-  for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p) {
-    CInode *diri = *p;
-    map<CInode*, int>::iterator it = uncommitted_peer_rename_olddir.find(diri);
-    ceph_assert(it != uncommitted_peer_rename_olddir.end());
-    it->second--;
-    if (it->second == 0) {
-      uncommitted_peer_rename_olddir.erase(it);
-      auto&& ls = diri->get_dirfrags();
-      for (const auto& dir : ls) {
-	CDir *root = get_subtree_root(dir);
-	if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
-	  try_trim_non_auth_subtree(root);
-	  if (dir != root)
-	    break;
-	}
-      }
-    } else
-      ceph_assert(it->second > 0);
-  }
-  // removed the inodes that were unlinked by peer update
+
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p) {
     CInode *in = *p;
     map<CInode*, int>::iterator it = uncommitted_peer_unlink.find(in);
@@ -3379,7 +3386,7 @@ void MDCache::finish_uncommitted_peer(metareqid_t reqid, bool assert_exist)
     if (it->second == 0) {
       uncommitted_peer_unlink.erase(it);
       if (!in->get_projected_parent_dn())
-	mds->mdcache->remove_inode_recursive(in);
+	remove_inode_recursive(in);
     } else
       ceph_assert(it->second > 0);
   }
@@ -3503,129 +3510,6 @@ void MDCache::trim_unlinked_inodes()
       mds->heartbeat_reset();
   }
 }
-
-/** recalc_auth_bits()
- * once subtree auth is disambiguated, we need to adjust all the 
- * auth and dirty bits in our cache before moving on.
- */
-void MDCache::recalc_auth_bits(bool replay)
-{
-  dout(7) << "recalc_auth_bits " << (replay ? "(replay)" : "") <<  dendl;
-
-  if (root) {
-    root->inode_auth.first = mds->mdsmap->get_root();
-    bool auth = mds->get_nodeid() == root->inode_auth.first;
-    if (auth) {
-      root->state_set(CInode::STATE_AUTH);
-    } else {
-      root->state_clear(CInode::STATE_AUTH);
-      if (!replay)
-	root->state_set(CInode::STATE_REJOINING);
-    }
-  }
-
-  set<CInode*> subtree_inodes;
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    if (p->first->dir_auth.first == mds->get_nodeid())
-      subtree_inodes.insert(p->first->inode);
-  }
-
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    if (p->first->inode->is_mdsdir()) {
-      CInode *in = p->first->inode;
-      bool auth = in->ino() == MDS_INO_MDSDIR(mds->get_nodeid());
-      if (auth) {
-	in->state_set(CInode::STATE_AUTH);
-      } else {
-	in->state_clear(CInode::STATE_AUTH);
-	if (!replay)
-	  in->state_set(CInode::STATE_REJOINING);
-      }
-    }
-
-    std::queue<CDir*> dfq;  // dirfrag queue
-    dfq.push(p->first);
-
-    bool auth = p->first->authority().first == mds->get_nodeid();
-    dout(10) << " subtree auth=" << auth << " for " << *p->first << dendl;
-
-    while (!dfq.empty()) {
-      CDir *dir = dfq.front();
-      dfq.pop();
-
-      // dir
-      if (auth) {
-	dir->state_set(CDir::STATE_AUTH);
-      } else {
-	dir->state_clear(CDir::STATE_AUTH);
-	if (!replay) {
-	  // close empty non-auth dirfrag
-	  if (!dir->is_subtree_root() && dir->get_num_any() == 0) {
-	    dir->inode->close_dirfrag(dir->get_frag());
-	    continue;
-	  }
-	  dir->state_set(CDir::STATE_REJOINING);
-	  dir->state_clear(CDir::STATE_COMPLETE);
-	  if (dir->is_dirty())
-	    dir->mark_clean();
-	}
-      }
-
-      // dentries in this dir
-      for (auto &p : dir->items) {
-	// dn
-	CDentry *dn = p.second;
-	CDentry::linkage_t *dnl = dn->get_linkage();
-	if (auth) {
-	  dn->state_set(CDentry::STATE_AUTH);
-	} else {
-	  dn->state_clear(CDentry::STATE_AUTH);
-	  if (!replay) {
-	    dn->state_set(CDentry::STATE_REJOINING);
-	    if (dn->is_dirty())
-	      dn->mark_clean();
-	  }
-	}
-
-	if (dnl->is_primary()) {
-	  // inode
-	  CInode *in = dnl->get_inode();
-	  if (auth) {
-	    in->state_set(CInode::STATE_AUTH);
-	  } else {
-	    in->state_clear(CInode::STATE_AUTH);
-	    if (!replay) {
-	      in->state_set(CInode::STATE_REJOINING);
-	      if (in->is_dirty())
-		in->mark_clean();
-	      if (in->is_dirty_parent())
-		in->clear_dirty_parent();
-	      // avoid touching scatterlocks for our subtree roots!
-	      if (subtree_inodes.count(in) == 0)
-		in->clear_scatter_dirty();
-	    }
-	  }
-	  // recurse?
-	  if (in->is_dir()) {
-	    auto&& dfv = in->get_nested_dirfrags();
-            for (const auto& dir : dfv) {
-              dfq.push(dir);
-            }
-          }
-	}
-      }
-    }
-  }
-  
-  show_subtrees();
-  show_cache();
-}
-
-
 
 // ===========================================================================
 // REJOIN
@@ -3791,14 +3675,15 @@ void MDCache::rejoin_send_rejoins()
       // weak
       if (p.first == 0 && root) {
 	p.second->add_weak_inode(root->vino());
+	root->state_set(CInode::STATE_REJOINING);
 	if (root->is_dirty_scattered()) {
 	  dout(10) << " sending scatterlock state on root " << *root << dendl;
 	  p.second->add_scatterlock_state(root);
 	}
       }
       if (CInode *in = get_inode(MDS_INO_MDSDIR(p.first))) { 
-	if (in)
-	  p.second->add_weak_inode(in->vino());
+	p.second->add_weak_inode(in->vino());
+	in->state_set(CInode::STATE_REJOINING);
       }
     } else {
       // strong
@@ -3938,6 +3823,7 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
   if (mds->is_rejoin()) {
     // WEAK
     rejoin->add_weak_dirfrag(dir->dirfrag());
+    dir->state_set(CDir::STATE_REJOINING);
     for (auto &p : dir->items) {
       CDentry *dn = p.second;
       ceph_assert(dn->last == CEPH_NOSNAP);
@@ -3947,6 +3833,8 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
       CInode *in = dnl->get_inode();
       ceph_assert(dnl->get_inode()->is_dir());
       rejoin->add_weak_primary_dentry(dir->ino(), dn->get_name(), dn->first, dn->last, in->ino());
+      dn->state_set(CDentry::STATE_REJOINING);
+      in->state_set(CInode::STATE_REJOINING);
       {
         auto&& dirs = in->get_nested_dirfrags();
         nested.insert(std::end(nested), std::begin(dirs), std::end(dirs));
@@ -4923,56 +4811,6 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
     // survivor.
     mds->queue_waiters(rejoin_waiters);
   }
-}
-
-/**
- * rejoin_trim_undef_inodes() -- remove REJOINUNDEF flagged inodes
- *
- * FIXME: wait, can this actually happen?  a survivor should generate cache trim
- * messages that clean these guys up...
- */
-void MDCache::rejoin_trim_undef_inodes()
-{
-  dout(10) << "rejoin_trim_undef_inodes" << dendl;
-
-  while (!rejoin_undef_inodes.empty()) {
-    set<CInode*>::iterator p = rejoin_undef_inodes.begin();
-    CInode *in = *p;
-    rejoin_undef_inodes.erase(p);
-
-    in->clear_replica_map();
-    
-    // close out dirfrags
-    if (in->is_dir()) {
-      const auto&& dfls = in->get_dirfrags();
-      for (const auto& dir : dfls) {
-	dir->clear_replica_map();
-
-	for (auto &p : dir->items) {
-	  CDentry *dn = p.second;
-	  dn->clear_replica_map();
-
-	  dout(10) << " trimming " << *dn << dendl;
-	  dir->remove_dentry(dn);
-	}
-
-	dout(10) << " trimming " << *dir << dendl;
-	in->close_dirfrag(dir->dirfrag().frag);
-      }
-    }
-    
-    CDentry *dn = in->get_parent_dn();
-    if (dn) {
-      dn->clear_replica_map();
-      dout(10) << " trimming " << *dn << dendl;
-      dn->dir->remove_dentry(dn);
-    } else {
-      dout(10) << " trimming " << *in << dendl;
-      remove_inode(in);
-    }
-  }
-
-  ceph_assert(rejoin_undef_inodes.empty());
 }
 
 void MDCache::rejoin_gather_finish() 
@@ -6903,17 +6741,17 @@ void MDCache::trim_non_auth()
  * Note that it doesn't clear the passed-in directory, since that's not
  * always safe.
  */
-bool MDCache::trim_non_auth_subtree(CDir *dir)
+void MDCache::trim_non_auth_subtree(CDir *dir, int depth)
 {
-  dout(10) << "trim_non_auth_subtree(" << dir << ") " << *dir << dendl;
+  dout(10) << "trim_non_auth_subtree " << *dir << dendl;
+  if (depth == 0) {
+    ceph_assert(dir->is_subtree_root());
+    ceph_assert(dir->get_dir_auth() == CDIR_AUTH_UNDEF);
+  }
 
-  bool keep_dir = !can_trim_non_auth_dirfrag(dir);
-
-  auto j = dir->begin();
-  auto i = j;
-  while (j != dir->end()) {
-    i = j++;
+  for (auto i = dir->begin(); i != dir->end(); ) {
     CDentry *dn = i->second;
+    ++i;
     dout(10) << "trim_non_auth_subtree(" << dir << ") Checking dentry " << dn << dendl;
     CDentry::linkage_t *dnl = dn->get_linkage();
     if (dnl->is_primary()) { // check for subdirectories, etc
@@ -6923,32 +6761,24 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         auto&& subdirs = in->get_dirfrags();
         for (const auto& subdir : subdirs) {
           if (subdir->is_subtree_root()) {
+	    ceph_assert(subdir->get_dir_auth().first == mds->get_nodeid());
             keep_inode = true;
             dout(10) << "trim_non_auth_subtree(" << dir << ") keeping " << *subdir << dendl;
           } else {
-            if (trim_non_auth_subtree(subdir))
-              keep_inode = true;
-            else {
-              in->close_dirfrag(subdir->get_frag());
-              dir->state_clear(CDir::STATE_COMPLETE);  // now incomplete!
-            }
+            trim_non_auth_subtree(subdir, depth + 1);
           }
         }
-
       }
-      if (!keep_inode) { // remove it!
-        dout(20) << "trim_non_auth_subtree(" << dir << ") removing inode " << in << " with dentry" << dn << dendl;
-        dir->unlink_inode(dn, false);
-        remove_inode(in);
-	ceph_assert(!dir->has_bloom());
-        dir->remove_dentry(dn);
+      dir->unlink_inode(dn, false);
+      dir->remove_dentry(dn);
+      ceph_assert(!dir->has_bloom());
+      if (keep_inode) {
+        dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << dendl;
+	add_unconnected_inode(in);
       } else {
-        dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
-	dn->state_clear(CDentry::STATE_AUTH);
-	in->state_clear(CInode::STATE_AUTH);
+        dout(20) << "trim_non_auth_subtree(" << dir << ") removing inode " << in << dendl;
+        remove_inode(in);
       }
-    } else if (keep_dir && dnl->is_null()) { // keep null dentry for peer rollback
-      dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
     } else { // just remove it
       dout(20) << "trim_non_auth_subtree(" << dir << ") removing dentry " << dn << dendl;
       if (dnl->is_remote())
@@ -6956,80 +6786,18 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
       dir->remove_dentry(dn);
     }
   }
-  dir->state_clear(CDir::STATE_AUTH);
-  /**
-   * We've now checked all our children and deleted those that need it.
-   * Now return to caller, and tell them if *we're* a keeper.
-   */
-  return keep_dir || dir->get_num_any();
-}
 
-/*
- * during replay, when we determine a subtree is no longer ours, we
- * try to trim it from our cache.  because subtrees must be connected
- * to the root, the fact that we can trim this tree may mean that our
- * children or parents can also be trimmed.
- */
-void MDCache::try_trim_non_auth_subtree(CDir *dir)
-{
-  dout(10) << "try_trim_nonauth_subtree " << *dir << dendl;
-
-  // can we now trim child subtrees?
-  set<CDir*> bounds;
-  get_subtree_bounds(dir, bounds);
-  for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p) {
-    CDir *bd = *p;
-    if (bd->get_dir_auth().first != mds->get_nodeid() &&  // we are not auth
-	bd->get_num_any() == 0 && // and empty
-	can_trim_non_auth_dirfrag(bd)) {
-      CInode *bi = bd->get_inode();
-      dout(10) << " closing empty non-auth child subtree " << *bd << dendl;
-      remove_subtree(bd);
-      bd->mark_clean();
-      bi->close_dirfrag(bd->get_frag());
+  CInode *diri = dir->get_inode();
+  if (depth == 0)
+    remove_subtree(dir);
+  dir->mark_clean();
+  diri->close_dirfrag(dir->get_frag());
+  if (depth == 0) {
+    if (diri->is_unconnected() && !diri->get_num_dirfrags()) {
+      remove_unconnected_inode(diri);
+      remove_inode_recursive(diri);
     }
   }
-
-  if (trim_non_auth_subtree(dir)) {
-    // keep
-    try_subtree_merge(dir);
-  } else {
-    // can we trim this subtree (and possibly our ancestors) too?
-    while (true) {
-      CInode *diri = dir->get_inode();
-      if (diri->is_base()) {
-	if (!diri->is_root() && diri->authority().first != mds->get_nodeid()) {
-	  dout(10) << " closing empty non-auth subtree " << *dir << dendl;
-	  remove_subtree(dir);
-	  dir->mark_clean();
-	  diri->close_dirfrag(dir->get_frag());
-
-	  dout(10) << " removing " << *diri << dendl;
-	  ceph_assert(!diri->get_parent_dn());
-	  ceph_assert(diri->get_num_ref() == 0);
-	  remove_inode(diri);
-	}
-	break;
-      }
-
-      CDir *psub = get_subtree_root(diri->get_parent_dir());
-      dout(10) << " parent subtree is " << *psub << dendl;
-      if (psub->get_dir_auth().first == mds->get_nodeid())
-	break;  // we are auth, keep.
-
-      dout(10) << " closing empty non-auth subtree " << *dir << dendl;
-      remove_subtree(dir);
-      dir->mark_clean();
-      diri->close_dirfrag(dir->get_frag());
-
-      dout(10) << " parent subtree also non-auth: " << *psub << dendl;
-      if (trim_non_auth_subtree(psub))
-	break;
-      dir = psub;
-    }
-  }
-
-  show_subtrees();
 }
 
 void MDCache::standby_trim_segment(LogSegment *ls)
@@ -12176,7 +11944,7 @@ void MDCache::show_subtrees(int dbl, bool force_print)
     dout(10) << "*** stray/lost entry in subtree map: " << *p->first << dendl;
     lost++;
   }
-  ceph_assert(lost == 0);
+  //ceph_assert(lost == 0);
 }
 
 void MDCache::show_cache()
