@@ -14,6 +14,7 @@ static const std::string RGW_SSE_KMS_BACKEND_VAULT = "vault";
 
 static const std::string RGW_SSE_KMS_VAULT_AUTH_TOKEN = "token";
 static const std::string RGW_SSE_KMS_VAULT_AUTH_AGENT = "agent";
+static const std::string RGW_SSE_KMS_VAULT_AUTH_K8S_SA = "service account";
 
 static const std::string RGW_SSE_KMS_VAULT_SE_TRANSIT = "transit";
 static const std::string RGW_SSE_KMS_VAULT_SE_KV = "kv";

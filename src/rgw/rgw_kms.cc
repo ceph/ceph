@@ -85,6 +85,67 @@ protected:
     return res;
   }
 
+  int load_token_from_serviceaccount(std::string *vault_token)
+  {
+    int res = 0;
+    bufferlist vault_bl;
+    std::string vault_url = cct->_conf->rgw_crypt_vault_addr;
+    if (vault_url.empty()) {
+      ldout(cct, 10) << "ERROR: Vault address not set in rgw_crypt_vault_addr" << dendl;
+      return -EINVAL;
+    }
+
+    //Reading jwt token for service account token file
+    char buf[2048];
+    res = safe_read_file("", "/var/run/secrets/kubernetes.io/serviceaccount/token", buf, sizeof(buf));
+    if (res < 0) {
+      if (-EACCES == res) {
+        ldout(cct, 10) << "ERROR: Permission denied reading Vault token file" << dendl;
+      } else {
+        ldout(cct, 10) << "ERROR: Failed to read Vault token file with error " << res << dendl;
+      }
+      return res;
+    }
+    // drop trailing newlines
+    while (res && isspace(buf[res-1])) {
+      --res;
+    }
+
+    //Fetching vault token using service account authentication
+    concat_url(vault_url, "/v1/auth/kubernetes/login");
+    RGWHTTPTransceiver vault_token_req(cct, "POST", vault_url, &vault_bl);
+    vault_token_req.append_header("Content-Type", "application/json");
+    JSONFormatter jf;
+    jf.open_object_section("");
+    jf.dump_string("jwt", buf);
+    jf.dump_string("role", cct->_conf->rgw_crypt_vault_role);
+    jf.close_section();
+
+    std::stringstream ss;
+    jf.flush(ss);
+    vault_token_req.set_post_data(ss.str());
+    vault_token_req.set_send_length(ss.str().length());
+
+    /* send request */
+    res = vault_token_req.process(null_yield);
+    if (res < 0) {
+      ldout(cct, 10) << "vault req process error:" << vault_bl.c_str() << dendl;
+      return res;
+    }
+
+    JSONParser parser;
+    if (!parser.parse(vault_bl.c_str(), vault_bl.length())) {
+      ldout(cct, 10) << "vault parse error: malformed json" << dendl;
+      return -EINVAL;
+    }
+
+    JSONObj* auth_field = parser.find_obj("auth");
+    JSONObj* client_token = auth_field->find_obj("client_token");
+    *vault_token = client_token->get_data();
+
+    return res;
+  }
+
   int send_request(std::string_view key_id, JSONParser* parser) override
   {
     bufferlist secret_bl;
@@ -93,6 +154,12 @@ protected:
     if (RGW_SSE_KMS_VAULT_AUTH_TOKEN == cct->_conf->rgw_crypt_vault_auth){
       ldout(cct, 0) << "Loading Vault Token from filesystem" << dendl;
       res = load_token_from_file(&vault_token);
+      if (res < 0){
+        return res;
+      }
+    } else if (RGW_SSE_KMS_VAULT_AUTH_K8S_SA == cct->_conf->rgw_crypt_vault_auth) {
+      ldout(cct, 10) << "Loading Vault Token from service account" << dendl;
+      res = load_token_from_serviceaccount(&vault_token);
       if (res < 0){
         return res;
       }

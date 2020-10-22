@@ -6909,7 +6909,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_crypt_vault_auth", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("token")
-    .set_enum_allowed({"token", "agent"})
+    .set_enum_allowed({"token", "agent", "service account"})
     .set_description(
         "Type of authentication method to be used with Vault. ")
     .add_see_also({
@@ -6958,6 +6958,16 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_crypt_vault_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Vault Namespace to be used to select your tenant")
+    .add_see_also({
+      "rgw_crypt_s3_kms_backend",
+      "rgw_crypt_vault_auth",
+      "rgw_crypt_vault_addr"}),
+
+    Option("rgw_crypt_vault_role", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description(
+        "If authentication method is 'service account', provide role attached, "
+        "which is created vault server and linked with SA.")
     .add_see_also({
       "rgw_crypt_s3_kms_backend",
       "rgw_crypt_vault_auth",
