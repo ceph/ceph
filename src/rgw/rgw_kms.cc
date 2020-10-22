@@ -291,7 +291,7 @@ KmipGetTheKey::get_uniqueid_for_keyname()
 {
 	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::LOCATE);
 
-	secret_req.name = (char *) work.c_str();	// XXX ugh constness
+	secret_req.name = work.data();
 	ret = secret_req.process(null_yield);
 	if (ret < 0) {
 		failed = true;
@@ -317,7 +317,7 @@ KmipGetTheKey::get_key_for_uniqueid(std::string& actual_key)
 {
 	if (failed) return ret;
 	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::GET);
-	secret_req.unique_id = (char *) work.c_str();	// XXX ugh constness.
+	secret_req.unique_id = work.data();
 	ret = secret_req.process(null_yield);
 	if (ret < 0) {
 		failed = true;
