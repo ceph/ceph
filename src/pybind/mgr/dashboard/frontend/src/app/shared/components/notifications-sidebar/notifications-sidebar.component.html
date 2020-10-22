@@ -83,7 +83,7 @@
                   <br>
                 </ng-container>
                 <small class="date"
-                       [title]="notification.timestamp | cdDate">{{ notification.timestamp | duration: true }}</small>
+                       [title]="notification.timestamp | cdDate">{{ notification.timestamp | relativeDate }}</small>
                 <i class="float-right custom-icon"
                    [ngClass]="[notification.applicationClass]"
                    [title]="notification.application"></i>

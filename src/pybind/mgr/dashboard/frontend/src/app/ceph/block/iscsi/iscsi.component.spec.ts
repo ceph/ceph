@@ -9,7 +9,6 @@ import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
-import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiComponent } from './iscsi.component';
@@ -36,7 +35,6 @@ describe('IscsiComponent', () => {
       CephShortVersionPipe,
       DimlessPipe,
       FormatterService,
-      RelativeDatePipe,
       IscsiBackstorePipe,
       { provide: IscsiService, useValue: fakeService }
     ]
