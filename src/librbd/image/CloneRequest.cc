@@ -214,8 +214,9 @@ void CloneRequest<I>::validate_parent() {
     return;
   }
   if (m_use_p_features) {
-    m_features = (p_features & ~RBD_FEATURES_IMPLICIT_ENABLE);
+    m_features = p_features;
   }
+  m_features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
 
   if (r < 0) {
     lderr(m_cct) << "unable to locate parent's snapshot" << dendl;
