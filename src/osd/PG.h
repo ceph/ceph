@@ -409,7 +409,7 @@ public:
 
   void on_info_history_change() override;
 
-  void scrub_requested(scrub_level_t is_deep, scrub_type_t is_repair) override;
+  void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
   uint64_t get_snap_trimq_size() const override {
     return snap_trimq.size();
@@ -536,11 +536,22 @@ public:
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const;
   /// the version that refers to flags_.priority
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const;
-  unsigned int scrub_requeue_priority(bool is_high_priority) const; ///< the legacy version of the previous method
-protected:
+private:
   // auxiliaries used by sched_scrub():
-  bool is_time_for_deep(bool allow_deep_scrub, bool allow_scrub, bool has_deep_errors);
-  bool sched_scrub_initial();
+  double next_deepscrub_interval() const;
+
+  bool is_time_for_deep(bool allow_deep_scrub,
+		        bool allow_scrub,
+		        bool has_deep_errors,
+		        const requested_scrub_t& planned) const;
+
+  std::optional<requested_scrub_t> verify_scrub_mode() const;
+
+  bool verify_periodic_scrub_mode(bool allow_deep_scrub,
+				  bool try_to_auto_repair,
+				  bool allow_regular_scrub,
+				  bool has_deep_errors,
+				  requested_scrub_t& planned) const;
 
 public:
   virtual void do_request(
@@ -1170,7 +1181,7 @@ protected:
 
 protected:
   void queue_recovery();
-  void queue_scrub_after_recovery();
+  void queue_scrub_after_repair();
   unsigned int get_scrub_priority();
 
   bool try_flush_or_schedule_async() override;

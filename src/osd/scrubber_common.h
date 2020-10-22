@@ -239,8 +239,8 @@ struct ScrubPgIF {
   virtual bool is_scrub_registered() const = 0;
   virtual void reg_next_scrub(requested_scrub_t& request_flags) = 0;
   virtual void unreg_next_scrub() = 0;
-  virtual void scrub_requested(scrub_level_t is_deep,
-			       scrub_type_t is_repair,
+  virtual void scrub_requested(scrub_level_t scrub_level,
+			       scrub_type_t scrub_type,
 			       requested_scrub_t& req_flags) = 0;
 
   // -------------------------------------------------------

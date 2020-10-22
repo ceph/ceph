@@ -348,7 +348,7 @@ bool PgScrubber::is_scrub_registered() const
 void PgScrubber::reg_next_scrub(requested_scrub_t& request_flags)
 {
   if (!is_primary()) {
-    dout(10) << __func__ << ": not a primary!" << dendl;
+    dout(15) << __func__ << ": not a primary!" << dendl;
     return;
   }
 
@@ -406,31 +406,33 @@ void PgScrubber::debug_dump_reservations(std::string_view header_txt)
   m_osds->dump_scrub_reservations(f);
   std::stringstream o;
   f->flush(o);
-  dout(9) << header_txt << o.str() << dendl;
+  dout(20) << header_txt << o.str() << dendl;
   delete f;
 }
 
-void PgScrubber::scrub_requested(scrub_level_t is_deep,
-				 scrub_type_t is_repair,
+void PgScrubber::scrub_requested(scrub_level_t scrub_level,
+				 scrub_type_t scrub_type,
 				 requested_scrub_t& req_flags)
 {
-  dout(9) << __func__ << (is_deep == scrub_level_t::deep ? " deep " : " shallow ")
-	  << (is_repair == scrub_type_t::do_repair ? " +rpr " : " -rpr ") << " existing-"
-	  << m_scrub_reg_stamp << " ## " << is_scrub_registered() << dendl;
+  dout(10) << __func__ << (scrub_level == scrub_level_t::deep ? " deep " : " shallow ")
+	   << (scrub_type == scrub_type_t::do_repair ? " repair-scrub " : " not-repair ")
+	   << " prev stamp: " << m_scrub_reg_stamp << " " << is_scrub_registered()
+	   << dendl;
 
-  debug_dump_reservations(" b4_unreg ");
+  debug_dump_reservations(" before_unreg ");
 
   unreg_next_scrub();
 
   req_flags.must_scrub = true;
-  req_flags.must_deep_scrub = bool(is_deep) || bool(is_repair);
-  req_flags.must_repair = bool(is_repair);
+  req_flags.must_deep_scrub =
+    (scrub_level == scrub_level_t::deep) || (scrub_type == scrub_type_t::do_repair);
+  req_flags.must_repair = (scrub_type == scrub_type_t::do_repair);
   // User might intervene, so clear this
   req_flags.need_auto = false;
   req_flags.req_scrub = true;
 
-  dout(9) << __func__ << " pg(" << m_pg_id << ") planned:" << req_flags << dendl;
-  debug_dump_reservations(" b4_reg ");
+  dout(20) << __func__ << " pg(" << m_pg_id << ") planned:" << req_flags << dendl;
+  debug_dump_reservations(" before_reg ");
 
   reg_next_scrub(req_flags);
 
@@ -439,28 +441,21 @@ void PgScrubber::scrub_requested(scrub_level_t is_deep,
 
 void PgScrubber::request_rescrubbing(requested_scrub_t& req_flags)
 {
-  dout(9) << __func__ << " existing-" << m_scrub_reg_stamp << " ## "
-	  << is_scrub_registered() << dendl;
-  debug_dump_reservations(" auto-scrub b4 ");
+  dout(10) << __func__ << " existing-" << m_scrub_reg_stamp << " ## "
+	   << is_scrub_registered() << dendl;
+  debug_dump_reservations(" auto-scrub before ");
+
   unreg_next_scrub();
-
   req_flags.need_auto = true;
-
-  //   req_flags.must_scrub = true;
-  //   req_flags.must_deep_scrub =
-  //   req_flags.must_deep_scrub = bool(is_deep) || bool(is_repair);
-  //   req_flags.must_repair = bool(is_repair);
-  //   req_flags.need_auto = false;
-  //   req_flags.req_scrub = true;
-
   reg_next_scrub(req_flags);
+
   debug_dump_reservations(" auto-scrub after ");
 }
 
 bool PgScrubber::reserve_local()
 {
   // try to create the reservation object (which translates into asking the
-  // OSD for the local scrub resource). If failing - just undo it immediately
+  // OSD for the local scrub resource). If failing - undo it immediately
 
   m_local_osd_resource.emplace(m_pg, m_osds);
   if (!m_local_osd_resource->is_reserved()) {
@@ -577,8 +572,8 @@ bool PgScrubber::select_range()
   if (m_end > m_max_end)
     m_max_end = m_end;
 
-  dout(8) << __func__ << " range selected: " << m_start << " //// " << m_end << " //// "
-	  << m_max_end << dendl;
+  dout(15) << __func__ << " range selected: " << m_start << " //// " << m_end << " //// "
+	   << m_max_end << dendl;
   return true;
 }
 
@@ -596,7 +591,7 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
   if (preemption_data.is_preemptable()) {
 
     if (!preemption_data.was_preempted()) {
-      dout(8) << __func__ << " " << soid << " preempted" << dendl;
+      dout(10) << __func__ << " " << soid << " preempted" << dendl;
 
       // signal the preemption
       preemption_data.do_preempt();
@@ -630,8 +625,8 @@ void PgScrubber::add_delayed_scheduling()
     dout(10) << __func__ << " sleep: " << scrub_sleep << dendl;
     sleep_time = milliseconds{long(scrub_sleep)};
   }
-  dout(7) << __func__ << " sleep: " << sleep_time.count() << " needed? " << m_needs_sleep
-	  << dendl;
+  dout(15) << __func__ << " sleep: " << sleep_time.count() << " needed? " << m_needs_sleep
+	   << dendl;
 
   if (sleep_time.count()) {
     // schedule a transition for some 'sleep_time' ms in the future
@@ -660,8 +655,7 @@ void PgScrubber::add_delayed_scheduling()
       pg->unlock();
     });
 
-    m_osds->sleep_timer.add_event_after(sleep_time.count() / 1000.0f,
-					callbk);  // RRR why 'float'?
+    m_osds->sleep_timer.add_event_after(sleep_time.count() / 1000.0f, callbk);
 
   } else {
     // just a requeue
@@ -696,14 +690,15 @@ eversion_t PgScrubber::search_log_for_updates() const
 }
 
 /**
- * \retval have we asked at least one replica?
+ * @returns have we asked at least one replica?
  * 'false' means we are configured with no replicas, and
  * should expect no maps to arrive.
  */
 bool PgScrubber::get_replicas_maps(bool replica_can_preempt)
 {
   dout(10) << __func__ << " epoch_start: " << m_epoch_start
-	   << " pg sis: " << m_pg->info.history.same_interval_since << dendl;
+	   << " pg same_interval_since: " << m_pg->info.history.same_interval_since
+	   << dendl;
 
   bool do_have_replicas = false;
 
@@ -731,7 +726,7 @@ bool PgScrubber::was_epoch_changed() const
   dout(10) << __func__ << " epoch_start: " << m_epoch_start
 	   << " from pg: " << m_pg->get_history().same_interval_since << dendl;
 
-  return m_epoch_start != m_pg->get_history().same_interval_since;
+  return m_epoch_start < m_pg->get_history().same_interval_since;
 }
 
 void PgScrubber::mark_local_map_ready()
@@ -757,10 +752,11 @@ void PgScrubber::_request_scrub_map(pg_shard_t replica,
 				    bool allow_preemption)
 {
   ceph_assert(replica != m_pg_whoami);
-  dout(10) << " scrubmap from osd." << replica << " deep " << (int)deep << dendl;
+  dout(10) << __func__ << " scrubmap from osd." << replica << " deep "
+	   << (deep ? " deep" : " shallow") << dendl;
 
-  dout(9) << __func__ << " rep: " << replica << " epos: " << m_pg->get_osdmap_epoch()
-	  << " / " << m_pg->get_last_peering_reset() << dendl;
+  dout(15) << __func__ << " rep: " << replica << " map e: " << m_pg->get_osdmap_epoch()
+	   << " last peering: " << m_pg->get_last_peering_reset() << dendl;
 
   // RRR do NOT use curmap_ epoch instead of m_pg->get_osdmap_epoch()
 
@@ -793,7 +789,6 @@ void PgScrubber::cleanup_store(ObjectStore::Transaction* t)
 void PgScrubber::on_init()
 {
   // going upwards from 'inactive'
-
   ceph_assert(!is_scrub_active());
 
   preemption_data.reset();
@@ -828,7 +823,7 @@ void PgScrubber::_scan_snaps(ScrubMap& smap)
 
   // Test qa/standalone/scrub/osd-scrub-snaps.sh uses this message to verify
   // caller using clean_meta_map(), and it works properly.
-  dout(20) << __func__ << " start" << dendl;
+  dout(10) << __func__ << " start" << dendl;
 
   for (auto i = smap.objects.rbegin(); i != smap.objects.rend(); ++i) {
 
@@ -1182,9 +1177,7 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
   state_set(PG_STATE_SCRUBBING);
 
   // will we be deep-scrubbing?
-  bool must_deep_scrub =
-    request.must_deep_scrub || request.need_auto || request.time_for_deep;
-  if (must_deep_scrub) {
+  if (request.must_deep_scrub || request.need_auto || request.time_for_deep) {
     state_set(PG_STATE_DEEP_SCRUB);
   }
 
@@ -1194,21 +1187,7 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
 
   // the publishing here seems to be required for tests synchronization
   m_pg->publish_stats_to_osd();
-
   m_flags.deep_scrub_on_error = request.deep_scrub_on_error;
-
-  dout(30) << __func__ << " output 1: " << m_flags << " priority: " << m_flags.priority
-	   << dendl;
-  dout(30) << __func__
-	   << " output 2: " << (state_test(PG_STATE_DEEP_SCRUB) ? "deep" : "shallow")
-	   << dendl;
-  dout(30) << __func__
-	   << " output 3: " << (m_flags.deep_scrub_on_error ? "+deepOnE" : "-deepOnE")
-	   << dendl;
-  dout(30) << __func__
-	   << " output 4: " << (state_test(PG_STATE_REPAIR) ? "repair" : "-no-rep-")
-	   << dendl;
-
   request = requested_scrub_t{};
 }
 
@@ -1365,8 +1344,6 @@ void PgScrubber::map_from_replica(OpRequestRef op)
     return;
   }
 
-  op->mark_started();
-
   auto p = const_cast<bufferlist&>(m->get_data()).cbegin();
 
   m_received_maps[m->from].decode(p, m_pg->info.pgid.pool());
@@ -1484,7 +1461,7 @@ void PgScrubber::message_all_replicas(int32_t opcode, std::string_view op_text)
     if (p == m_pg_whoami)
       continue;
 
-    dout(10) << "scrub requesting " << op_text << " from osd." << p << " ep: " << epch
+    dout(10) << "scrub requesting " << op_text << " from osd." << p << " Epoch: " << epch
 	     << dendl;
     Message* m = new MOSDScrubReserve(spg_t(m_pg->info.pgid.pgid, p.shard), epch, opcode,
 				      m_pg_whoami);
@@ -1504,13 +1481,13 @@ void PgScrubber::unreserve_replicas()
 
 [[nodiscard]] bool PgScrubber::scrub_process_inconsistent()
 {
-  dout(7) << __func__ << ": checking authoritative" << dendl;
+  dout(10) << __func__ << ": checking authoritative" << dendl;
 
   bool repair = state_test(PG_STATE_REPAIR);
   const bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char* mode = (repair ? "repair" : (deep_scrub ? "deep-scrub" : "scrub"));
-  dout(8) << __func__ << " sdeep: " << deep_scrub << " is_d: " << m_is_deep
-	  << " repair: " << repair << dendl;
+  dout(20) << __func__ << " deep_scrub: " << deep_scrub << " m_is_deep: " << m_is_deep
+	   << " repair: " << repair << dendl;
 
   // authoritative only store objects which are missing or inconsistent.
   if (!m_authoritative.empty()) {
@@ -1548,14 +1525,8 @@ void PgScrubber::unreserve_replicas()
  */
 void PgScrubber::scrub_finish()
 {
-  dout(10) << __func__ << " flags b4: " << m_flags
-	   << " dsonerr: " << m_flags.deep_scrub_on_error << dendl;
-  dout(20) << __func__ << " deep: state " << state_test(PG_STATE_DEEP_SCRUB) << dendl;
-  dout(20) << __func__ << " deep: var " << m_is_deep << dendl;
-  dout(20) << __func__
-	   << " repair in p.na/p.ar/flags: " << m_pg->m_planned_scrub.auto_repair
-	   << m_pg->m_planned_scrub.need_auto << m_flags.auto_repair << dendl;
-  dout(20) << __func__ << " auth sz " << m_authoritative.size() << dendl;
+  dout(10) << __func__ << " before flags: " << m_flags
+	   << " deep_scrub_on_error: " << m_flags.deep_scrub_on_error << dendl;
 
   ceph_assert(m_pg->is_locked());
 
@@ -1566,7 +1537,7 @@ void PgScrubber::scrub_finish()
   if (repair && m_flags.auto_repair &&
       m_authoritative.size() > m_pg->cct->_conf->osd_scrub_auto_repair_num_errors) {
 
-    dout(7) << __func__ << " undoing the repair" << dendl;
+    dout(10) << __func__ << " undoing the repair" << dendl;
     state_clear(PG_STATE_REPAIR);
     repair = false;
   }
@@ -1578,17 +1549,10 @@ void PgScrubber::scrub_finish()
   // if a regular scrub had errors within the limit, do a deep scrub to auto repair
   if (m_flags.deep_scrub_on_error && m_authoritative.size() &&
       m_authoritative.size() <= m_pg->cct->_conf->osd_scrub_auto_repair_num_errors) {
-    ceph_assert(!deep_scrub);  // RRR what guarantees that?
+    ceph_assert(!deep_scrub);
     do_auto_scrub = true;
-    dout(8 /*20*/) << __func__ << " Try to auto repair after scrub errors" << dendl;
+    dout(15) << __func__ << " Try to auto repair after scrub errors" << dendl;
   }
-
-  // also - if we have a fake (unit-testing related) request:
-  // for UT: if (/*m_flags.deep_scrub_on_error &&*/ m_pg->pg_id.pgid.m_seed == 4 &&
-  // for UT:     (--fake_count == 0)) {
-  // for UT:  dout(7) << __func__ << " faking errors RRRR" << dendl;
-  // for UT:  // for qa tests, 28/7/20: do_auto_scrub = true;
-  // for UT: }
 
   m_flags.deep_scrub_on_error = false;
 
@@ -1615,9 +1579,6 @@ void PgScrubber::scrub_finish()
     else
       m_osds->clog->debug(oss);
   }
-
-  // dout(7) << __func__ << ": status: " << (has_error ? " he " : "-")
-  //	  << (repair ? " rp " : "-") << dendl;
 
   // Since we don't know which errors were fixed, we can only clear them
   // when every one has been fixed.
@@ -1724,7 +1685,8 @@ void PgScrubber::scrub_finish()
 Scrub::FsmNext PgScrubber::on_digest_updates()
 {
   dout(7) << __func__ << " #pending: " << num_digest_updates_pending << " are we done? "
-	  << num_digest_updates_pending << (m_end.is_max() ? " <L> " : " <nl> ") << dendl;
+	  << num_digest_updates_pending
+	  << (m_end.is_max() ? " <last chunk> " : " <mid chunk> ") << dendl;
 
   if (num_digest_updates_pending == 0) {
 
@@ -2086,13 +2048,12 @@ ReplicaReservations::~ReplicaReservations()
 }
 
 /**
- *  \ATTN we would not reach here if the ReplicaReservation object managed by the
+ *  @ATTN we would not reach here if the ReplicaReservation object managed by the
  * scrubber was reset.
  */
 void ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
 {
-  dout(7) << __func__ << " <ReplicaReservations> granted-> " << from << dendl;
-  dout(7) << __func__ << " " << *op->get_req() << dendl;
+  dout(10) << __func__ << " <ReplicaReservations> granted-> " << from << dendl;
   op->mark_started();
 
   {

@@ -263,7 +263,7 @@ public:
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
     /// Notify that a scrub has been requested
-    virtual void scrub_requested(scrub_level_t is_deep, scrub_type_t is_repair) = 0;
+    virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 
     /// Return current snap_trimq size
     virtual uint64_t get_snap_trimq_size() const = 0;
@@ -501,12 +501,12 @@ public:
   };
 
   struct RequestScrub : boost::statechart::event<RequestScrub> {
-    bool deep;
-    bool repair;
-    explicit RequestScrub(bool d, bool r) : deep(d), repair(r) {}
+    scrub_level_t deep;
+    scrub_type_t repair;
+    explicit RequestScrub(bool d, bool r) : deep(scrub_level_t(d)), repair(scrub_type_t(r)) {}
     void print(std::ostream *out) const {
-      *out << "RequestScrub(" << (deep ? "deep" : "shallow")
-	   << (repair ? " repair" : "");
+      *out << "RequestScrub(" << ((deep==scrub_level_t::deep) ? "deep" : "shallow")
+	   << ((repair==scrub_type_t::do_repair) ? " repair)" : ")");
     }
   };
 

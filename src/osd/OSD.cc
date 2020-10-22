@@ -1741,7 +1741,9 @@ void OSDService::queue_for_snap_trim(PG *pg)
       pg->get_osdmap_epoch()));
 }
 
-/// queue a scrub-related message for a PG
+/**
+ *  queue a scrub-related message for a PG
+ */
 template <class MSG_TYPE>
 void OSDService::queue_scrub_event_msg(PG* pg,
 				       Scrub::scrub_prio_t with_priority,
@@ -1749,21 +1751,23 @@ void OSDService::queue_scrub_event_msg(PG* pg,
 {
   const auto epoch = pg->get_osdmap_epoch();
   auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
-  dout(7) << " qu scrub event (" << *msg << ") for " << *pg << ". Ep: " << epoch << dendl;
+  dout(10) << "queue a scrub event (" << *msg << ") for " << *pg << ". Epoch: " << epoch << dendl;
 
   enqueue_back(OpSchedulerItem(
     unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
     pg->scrub_requeue_priority(with_priority, qu_priority), ceph_clock_now(), 0, epoch));
 }
 
-/// and if the queuing priority should be provided by the executing scrub
-/// (pgscrubber::flags_):
+/**
+ * An alternative version of queue_scrub_event_msg(), in which the queuing priority is
+ * provided by the executing scrub (i.e. taken from pgscrubber::flags_)
+ */
 template <class MSG_TYPE>
 void OSDService::queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   const auto epoch = pg->get_osdmap_epoch();
   auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
-  dout(7) << " qu scrub event (" << *msg << ") for " << *pg << ". Ep: " << epoch << dendl;
+  dout(10) << "queue a scrub event (" << *msg << ") for " << *pg << ". Epoch: " << epoch << dendl;
 
   enqueue_back(OpSchedulerItem(
     unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
@@ -1775,7 +1779,7 @@ void OSDService::queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority)
   queue_scrub_event_msg<PGScrub>(pg, with_priority);
 }
 
-void OSDService::queue_scrub_after_recovery(PG* pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // what qu_priority should we use here?  RRR
   queue_scrub_event_msg<PGScrubAfterRec>(pg, with_priority);
@@ -7603,11 +7607,11 @@ bool OSD::scrub_load_below_threshold()
 
 void OSD::sched_scrub()
 {
-  dout(20) << "sched_scrub starts" << dendl;
+  dout(10) << __func__ << "sched_scrub starts" << dendl;
 
   // if not permitted, fail fast
   if (!service.can_inc_scrubs()) {
-    dout(10) << __func__ << "(): OSD cannot inc scrubs" << dendl;
+    dout(10) << __func__ << ": OSD cannot inc scrubs" << dendl;
     return;
   }
   bool allow_requested_repair_only = false;
@@ -7630,7 +7634,7 @@ void OSD::sched_scrub()
   OSDService::ScrubJob scrub_job;
   if (service.first_scrub_stamp(&scrub_job)) {
     do {
-      dout(20) << "sched_scrub examine (~" << scrub_job.pgid << "~) at " << scrub_job.sched_time << dendl;
+      dout(20) << "sched_scrub examine (" << scrub_job.pgid << ") at " << scrub_job.sched_time << dendl;
 
       if (scrub_job.sched_time > now) {
 	// save ourselves some effort
@@ -7647,7 +7651,7 @@ void OSD::sched_scrub()
 
       PGRef pg = _lookup_lock_pg(scrub_job.pgid);
       if (!pg) {
-	dout(8) << __func__ << " can't lock PG(:" << scrub_job.pgid << dendl;
+	dout(20) << __func__ << " pg  " << scrub_job.pgid << " not found" << dendl;
 	continue;
       }
 
@@ -7670,7 +7674,7 @@ void OSD::sched_scrub()
       }
 
       // If it is reserving, let it resolve before going to the next scrub job
-      if (pg->m_scrubber->is_reserving() && !pg->m_scrubber->is_scrub_active()) {
+      if (pg->m_scrubber->is_reserving()) {
 	pg->unlock();
 	dout(10) << __func__ << ": reserve in progress pgid " << scrub_job.pgid << dendl;
 	break;

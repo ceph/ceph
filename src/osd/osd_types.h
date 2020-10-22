@@ -1106,6 +1106,24 @@ public:
     return true;
   }
 
+  template<typename T>
+  T value_or(key_t key, const T& default_value) const {
+    auto i = opts.find(key);
+    if (i == opts.end()) {
+      return default_value;
+    }
+    return boost::get<T>(i->second);
+  }
+
+  template<typename T>
+  T value_or(key_t key, T&& default_value) const {
+    auto i = opts.find(key);
+    if (i == opts.end()) {
+      return std::move(default_value);
+    }
+    return boost::get<T>(i->second);
+  }
+
   const value_t& get(key_t key) const;
 
   bool unset(key_t key);

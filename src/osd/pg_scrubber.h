@@ -239,8 +239,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void unreg_next_scrub() final;
 
-  void scrub_requested(scrub_level_t is_deep,
-		       scrub_type_t is_repair,
+  void scrub_requested(scrub_level_t scrub_level,
+		       scrub_type_t scrub_type,
 		       requested_scrub_t& req_flags) final;
 
   /**
@@ -303,6 +303,12 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
     ceph_assert(false);
   }
 
+  /**
+   * finalize the parameters of the initiated scrubbing session:
+   *
+   * The "current scrub" flags (m_flags) are set from the 'planned_scrub' flag-set;
+   * PG_STATE_SCRUBBING, and possibly PG_STATE_DEEP_SCRUB & PG_STATE_REPAIR are set.
+   */
   void set_op_parameters(requested_scrub_t& request) final;
 
   void cleanup_store(ObjectStore::Transaction* t) final;

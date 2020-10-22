@@ -579,7 +579,7 @@ public:
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_scrub_after_recovery(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_after_repair(PG *pg, Scrub::scrub_prio_t with_priority);
 
   /// queue the message (-> event) that all replicas reserved scrub resources for us
   void queue_for_scrub_granted(PG *pg, Scrub::scrub_prio_t with_priority);
