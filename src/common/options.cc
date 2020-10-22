@@ -8789,6 +8789,19 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_default("random")
     .set_description("policy for choosing directories to mirror snapshots")
     .set_long_description("policy used by cephfs-mirror daemon to choose directories for snapshot mirroring"),
+
+    Option("cephfs_mirror_mirror_action_update_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_min(1)
+    .set_description("")
+    .set_long_description(""),
+
+    Option("cephfs_mirror_restart_mirror_on_blocklist_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_min(0)
+    .set_description("")
+    .set_long_description(""),
+
     });
 }
 

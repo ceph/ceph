@@ -26,10 +26,10 @@ public:
     }
 
     virtual void handle_mirroring_enabled(const FilesystemSpec &spec) = 0;
-    virtual void handle_mirroring_disabled(const std::string &fs_name) = 0;
+    virtual void handle_mirroring_disabled(const Filesystem &filesystem) = 0;
 
-    virtual void handle_peers_added(const std::string &fs_name, const Peer &peer) = 0;
-    virtual void handle_peers_removed(const std::string &fs_name, const Peer &peer) = 0;
+    virtual void handle_peers_added(const Filesystem &filesystem, const Peer &peer) = 0;
+    virtual void handle_peers_removed(const Filesystem &filesystem, const Peer &peer) = 0;
   };
 
   ClusterWatcher(CephContext *cct, MonClient *monc, Listener &listener);
@@ -57,18 +57,11 @@ public:
   void shutdown();
 
 private:
-  struct StringCmp {
-    using is_transparent = void;
-    bool operator()(std::string_view a, std::string_view b) const {
-      return a < b;
-    }
-  };
-
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::cluster_watcher");
   MonClient *m_monc;
   Listener &m_listener;
 
-  std::map<std::string, Peers, StringCmp> m_filesystem_peers;
+  std::map<Filesystem, Peers> m_filesystem_peers;
 
   void handle_fsmap(const cref_t<MFSMap> &m);
 };

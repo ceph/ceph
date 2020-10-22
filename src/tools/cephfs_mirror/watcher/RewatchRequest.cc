@@ -53,8 +53,8 @@ void RewatchRequest::unwatch() {
 void RewatchRequest::handle_unwatch(int r) {
   dout(20) << ": r=" << r << dendl;
 
-  if (r == -EBLACKLISTED) {
-    derr << ": client blacklisted" << dendl;
+  if (r == -EBLOCKLISTED) {
+    derr << ": client blocklisted" << dendl;
     finish(r);
     return;
   } else if (r < 0) {
