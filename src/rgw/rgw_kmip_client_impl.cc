@@ -138,7 +138,7 @@ public:
 static int
 kmip_write_an_error_helper(const char *s, size_t l, void *u) {
   CephContext *cct = (CephContext *)u;
-  std::string es(s, l);
+  std::string_view es(s, l);
   lderr(cct) << es << dendl;
   return l;
 }
