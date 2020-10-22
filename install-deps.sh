@@ -222,6 +222,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/gmake \
         devel/cmake \
         devel/yasm \
+        devel/nasm \
         devel/boost-all \
         devel/boost-python-libs \
         devel/valgrind \
