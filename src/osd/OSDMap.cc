@@ -3898,7 +3898,7 @@ void OSDMap::print(ostream& out) const
   for (const auto& pg : *pg_temp)
     out << "pg_temp " << pg.first << " " << pg.second << "\n";
 
-  for (const auto pg : *primary_temp)
+  for (const auto& pg : *primary_temp)
     out << "primary_temp " << pg.first << " " << pg.second << "\n";
 
   for (const auto &addr : blocklist)
