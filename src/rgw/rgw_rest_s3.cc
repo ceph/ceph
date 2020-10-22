@@ -3112,6 +3112,7 @@ done:
   dump_errno(s);
   if (op_ret >= 0) {
     dump_content_length(s, s->formatter->get_len());
+    dump_header_if_nonempty(s, "ETag", etag);
   }
   end_header(s, this);
   if (op_ret != STATUS_CREATED)
