@@ -61,7 +61,6 @@ Aio::OpFunc aio_abstract(Op&& op) {
     };
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 struct Handler {
   Aio* throttle = nullptr;
   AioResult& r;
@@ -93,19 +92,16 @@ Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
                               bind_executor(ex, Handler{aio, r}));
     };
 }
-#endif // HAVE_BOOST_CONTEXT
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, optional_yield y) {
   static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
   static_assert(!std::is_lvalue_reference_v<Op>);
   static_assert(!std::is_const_v<Op>);
-#ifdef HAVE_BOOST_CONTEXT
   if (y) {
     return aio_abstract(std::forward<Op>(op), y.get_io_context(),
                         y.get_yield_context());
   }
-#endif
   return aio_abstract(std::forward<Op>(op));
 }
 

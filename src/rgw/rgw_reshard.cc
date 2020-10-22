@@ -938,7 +938,6 @@ int RGWReshardWait::wait(optional_yield y)
     return -ECANCELED;
   }
 
-#ifdef HAVE_BOOST_CONTEXT
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
@@ -956,7 +955,6 @@ int RGWReshardWait::wait(optional_yield y)
     waiters.erase(waiters.iterator_to(waiter));
     return -ec.value();
   }
-#endif
 
   cond.wait_for(lock, duration);
 

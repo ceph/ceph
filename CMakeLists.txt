@@ -357,11 +357,6 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
-option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
-if(WITH_BOOST_CONTEXT)
-  set(HAVE_BOOST_CONTEXT ON)
-endif()
-
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF)
@@ -374,10 +369,6 @@ if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
   if(WITH_RADOSGW_FCGI_FRONTEND)
     find_package(fcgi REQUIRED)
-  endif()
-  if(WITH_RADOSGW_BEAST_FRONTEND AND NOT WITH_BOOST_CONTEXT)
-    message(WARNING "disabling WITH_RADOSGW_BEAST_FRONTEND, which depends on WITH_BOOST_CONTEXT")
-    set(WITH_RADOSGW_BEAST_FRONTEND OFF)
   endif()
   find_package(OATH REQUIRED)
 
@@ -568,15 +559,12 @@ option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
   atomic chrono thread system regex random program_options date_time
-  iostreams)
+  iostreams context coroutine)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
   list(APPEND BOOST_COMPONENTS
     python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR})
-endif()
-if(WITH_BOOST_CONTEXT)
-  list(APPEND BOOST_COMPONENTS context coroutine)
 endif()
 if(WITH_SEASTAR)
   list(APPEND BOOST_COMPONENTS filesystem timer)
