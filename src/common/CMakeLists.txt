@@ -170,11 +170,11 @@ set(crc32_srcs
 if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
-  if(HAVE_GOOD_YASM_ELF64)
+  if(HAVE_YASM_X64)
     list(APPEND crc32_srcs
       crc32c_intel_fast_asm.s
       crc32c_intel_fast_zero_asm.s)
-  endif(HAVE_GOOD_YASM_ELF64)
+  endif(HAVE_YASM_X64)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
     crc32c_ppc.c)

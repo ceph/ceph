@@ -151,8 +151,8 @@ if(HAVE_INTEL)
     # might not work in this case (especially when targeting Windows).
     include(CheckYasm)
     check_yasm_support(${object_format}
-      HAVE_GOOD_YASM_ELF64
-      HAVE_BETTER_YASM_ELF64)
+      HAVE_YASM_X64
+      HAVE_YASM_X64_AVX2)
   endif()
 endif()
 
