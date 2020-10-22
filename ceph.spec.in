@@ -478,11 +478,9 @@ Recommends:	python%{_python_buildid}-influxdb
 %endif
 %if 0%{?rhel} == 7
 Requires:       pyOpenSSL
+Requires:       python-enum34
 %else
 Requires:       python%{_python_buildid}-pyOpenSSL
-%endif
-%if 0%{?rhel} < 8 || 0%{?suse_version}
-Requires:       python-enum34
 %endif
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
