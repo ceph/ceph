@@ -20,18 +20,7 @@
 
 #include "acconfig.h"
 
-#ifndef HAVE_BOOST_CONTEXT
-
-// hide the dependency on boost::context
-namespace spawn {
-struct yield_context;
-}
-
-#else // HAVE_BOOST_CONTEXT
 #include <spawn/spawn.hpp>
-
-#endif // HAVE_BOOST_CONTEXT
-
 
 /// optional-like wrapper for a spawn::yield_context and its associated
 /// boost::asio::io_context. operations that take an optional_yield argument

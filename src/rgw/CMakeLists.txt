@@ -177,10 +177,8 @@ target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/lua/src")
 target_include_directories(rgw_common PRIVATE "${CMAKE_BINARY_DIR}/src/lua")
 
 
-if(WITH_BOOST_CONTEXT)
-  target_include_directories(rgw_common PRIVATE
-    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
-endif()
+target_include_directories(rgw_common PRIVATE
+  $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -259,10 +257,7 @@ if(WITH_CURL_OPENSSL)
 endif()
 
 target_link_libraries(rgw_a PRIVATE liblua)
-
-if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_a PUBLIC spawn)
-endif()
+target_link_libraries(rgw_a PUBLIC spawn)
 
 set(rgw_libs rgw_a)
 if(WITH_RADOSGW_AMQP_ENDPOINT)
