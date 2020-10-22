@@ -2577,6 +2577,7 @@ options:
   enum_values:
   - token
   - agent
+  - service account
   with_legacy: true
 - name: rgw_crypt_vault_token_file
   type: str
@@ -2732,6 +2733,20 @@ options:
   level: advanced
   desc: sse-s3; kmip key template
   default: $keyid
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_crypt_vault_service_account_role
+  type: str
+  level: advanced
+  desc: kubernetes service account for vault authentication
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_crypt_vault_service_account_token_file
+  type: str
+  level: advanced
+  desc: If authentication method is 'service account', provide a path to the corresponding token file.
   services:
   - rgw
   with_legacy: true
