@@ -492,7 +492,6 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
       std::move(f));
   }
 
-  ceph_assert(!at_min_capacity());
   auto mutation_pt = find(laddr);
   if (mutation_pt == end()) {
     return crimson::ct_error::enoent::make();
