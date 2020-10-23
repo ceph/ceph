@@ -4,12 +4,11 @@ Deploy and configure PyKMIP for Teuthology
 import argparse
 import contextlib
 import logging
-import httplib
+import time
 import tempfile
-from urlparse import urlparse
 import json
 import os
-from cStringIO import StringIO
+from io import BytesIO
 from teuthology.orchestra.remote import Remote
 import pprint
 
@@ -19,7 +18,7 @@ from teuthology.orchestra import run
 from teuthology.packaging import install_package
 from teuthology.packaging import remove_package
 from teuthology.exceptions import ConfigError
-from util import get_remote_for_role
+from tasks.util import get_remote_for_role
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ def run_in_pykmip_dir(ctx, client, args, **kwargs):
 
 def run_in_pykmip_venv(ctx, client, args, **kwargs):
     return run_in_pykmip_dir(ctx, client,
-        args = ['.', '.pykmipenv/bin/activate'.format(get_pykmip_dir(ctx)),
+        args = ['.', '.pykmipenv/bin/activate',
                          run.Raw('&&')
                         ] + args, **kwargs)
 
@@ -113,7 +112,7 @@ def install_packages(ctx, config):
         # use bindep to read which dependencies we need from temp/bindep.txt
         fd, local_temp_path = tempfile.mkstemp(suffix='.txt',
                                                prefix='bindep-')
-        os.write(fd, _bindep_txt)
+        os.write(fd, _bindep_txt.encode())
         os.close(fd)
         fd, remote_temp_path = tempfile.mkstemp(suffix='.txt',
                                                prefix='bindep-')
@@ -123,9 +122,9 @@ def install_packages(ctx, config):
         run_in_pykmip_venv(ctx, remote, ['pip', 'install', 'bindep'])
         r = run_in_pykmip_venv(ctx, remote,
                 ['bindep', '--brief', '--file', remote_temp_path],
-                stdout=StringIO(),
+                stdout=BytesIO(),
                 check_status=False) # returns 1 on success?
-        packages[client] = r.stdout.getvalue().splitlines()
+        packages[client] = r.stdout.getvalue().decode().splitlines()
         for dep in packages[client]:
             install_package(dep, remote)
     try:
@@ -223,16 +222,16 @@ def create_pykmip_conf(ctx, cclient, cconfig):
     pykmipdir = get_pykmip_dir(ctx)
     kmip_conf = _pykmip_configuration.format(
         ipaddr=pykmip_ipaddr,
-	port=pykmip_port,
-	confdir=pykmipdir,
-	hostname=pykmip_hostname,
-	clientca=clientca,
-	serverkey=serverkey,
-	servercert=servercert
+        port=pykmip_port,
+        confdir=pykmipdir,
+        hostname=pykmip_hostname,
+        clientca=clientca,
+        serverkey=serverkey,
+        servercert=servercert
     )
     fd, local_temp_path = tempfile.mkstemp(suffix='.conf',
                                            prefix='pykmip')
-    os.write(fd, kmip_conf)
+    os.write(fd, kmip_conf.encode())
     os.close(fd)
     remote.put_file(local_temp_path, pykmipdir+'/pykmip.conf')
     os.remove(local_temp_path)
@@ -243,7 +242,7 @@ def configure_pykmip(ctx, config):
     Configure pykmip paste-api and pykmip-api.
     """
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     copy_policy_json(ctx, cclient, cconfig)
     create_pykmip_conf(ctx, cclient, cconfig)
@@ -311,7 +310,7 @@ def create_secrets(ctx, config):
     finally:
         return
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     rgw_user = cconfig['rgw_user']
 
