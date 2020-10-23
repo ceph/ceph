@@ -48,12 +48,8 @@ public:
   }
 
   Peers get_peers() {
-    Peers peers;
     std::scoped_lock locker(m_lock);
-    for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
-      peers.emplace(peer);
-    }
-    return peers;
+    return m_all_peers;
   }
 
   // admin socket helpers
@@ -125,6 +121,7 @@ private:
   ceph::condition_variable m_cond;
   SnapListener m_snap_listener;
   std::set<std::string, std::less<>> m_directories;
+  Peers m_all_peers;
   std::map<Peer, PeerReplayer> m_peer_replayers;
 
   RadosRef m_cluster;

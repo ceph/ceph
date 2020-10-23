@@ -399,6 +399,7 @@ void FSMirror::add_peer(const Peer &peer) {
   dout(10) << ": peer=" << peer << dendl;
 
   std::scoped_lock locker(m_lock);
+  m_all_peers.emplace(peer);
   auto p = m_peer_replayers.emplace(peer, PeerReplayer());
   ceph_assert(m_peer_replayers.size() == 1); // support only a single peer
   if (p.second) {
@@ -410,6 +411,7 @@ void FSMirror::remove_peer(const Peer &peer) {
   dout(10) << ": peer=" << peer << dendl;
 
   std::unique_lock locker(m_lock);
+  m_all_peers.erase(peer);
   auto it = m_peer_replayers.find(peer);
   if (it != m_peer_replayers.end()) {
     dout(5) << ": shutting down replayers for peer=" << peer << dendl;
