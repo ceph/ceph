@@ -52,7 +52,11 @@ if(HAVE_NASM_X64_AVX2)
     ${isal_src_dir}/erasure_code/gf_3vect_mad_avx512.asm
     ${isal_src_dir}/erasure_code/gf_4vect_dot_prod_avx512.asm
     ${isal_src_dir}/erasure_code/gf_4vect_mad_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_mad_avx512.asm
     ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_dot_prod_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_dot_prod_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_mad_avx512.asm
     ${isal_src_dir}/erasure_code/gf_vect_mad_avx512.asm
     ErasureCodeIsa.cc
     ErasureCodeIsaTableCache.cc
