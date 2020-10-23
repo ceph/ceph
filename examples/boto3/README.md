@@ -14,11 +14,20 @@ The standard [AWS CLI](https://docs.aws.amazon.com/cli/latest/) may also be used
 aws --endpoint-url http://localhost:8000 s3api list-objects --bucket=mybucket --allow-unordered
 ```
 - Bucket notifications with filtering extensions:
+  Note that sns = signature_version = s3
 ```
 aws --region=default --endpoint-url http://localhost:8000 s3api put-bucket-notification-configuration --bucket mybucket --notification-configuration='{"TopicConfigurations": [{"Id": "notif1", "TopicArn": "arn:aws:sns:default::mytopic",  
 "Events": ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"],  
 "Filter": {"Metadata": {"FilterRules": [{"Name": "x-amz-meta-foo", "Value": "bar"}, {"Name": "x-amz-meta-hello", "Value": "world"}]}, "Key": {"FilterRules": [{"Name": "regex", "Value": "([a-z]+)"}]}}}]}'
  ```
+- How to fetch Attributes of a specific Topic
+```
+myattributes = {nvp[0] : nvp[1] for nvp in urlparse.parse_qsl(endpoint_args, keep_blank_values=True)}
+```
+- Topic creation with endpoint:
+```
+aws --endpoint-url http://localhost:8000 s3api create-topic --name=myname --attributes=myattributes
+```
 - Get configuration of a specific notification of a bucket:
 ```
 aws --endpoint-url http://localhost:8000 s3api get-bucket-notification-configuration --bucket=mybucket --notification=notif1
