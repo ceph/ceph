@@ -322,6 +322,40 @@ def test_open_by_id():
                 eq(image.get_name(), image_name)
             RBD().remove(ioctx, image_name)
 
+def test_aio_open():
+    with Rados(conffile='') as cluster:
+        with cluster.open_ioctx(pool_name) as ioctx:
+            image_name = get_temp_image_name()
+            order = 20
+            RBD().create(ioctx, image_name, IMG_SIZE, order)
+
+            # this is a list so that the open_cb() can modify it
+            image = [None]
+            def open_cb(_, image_):
+                image[0] = image_
+
+            comp = RBD().aio_open_image(open_cb, ioctx, image_name)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), 2)
+            assert_not_equal(image[0], None)
+
+            image = image[0]
+            eq(image.get_name(), image_name)
+            check_stat(image.stat(), IMG_SIZE, order)
+
+            closed = [False]
+            def close_cb(_):
+                closed[0] = True
+
+            comp = image.aio_close(close_cb)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), 2)
+            eq(closed[0], True)
+
+            RBD().remove(ioctx, image_name)
+
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
 
