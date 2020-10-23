@@ -1,7 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { FormArray, FormControl, NgForm, Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { NfsService } from '../../../shared/api/nfs.service';

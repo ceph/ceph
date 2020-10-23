@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { ValidatorFn } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { Icons } from '../../../shared/enum/icons.enum';
 import { SelectMessages } from '../select/select-messages.model';

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { BooleanTextPipe } from './boolean-text.pipe';
 

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 import * as BrowserDetect from 'detect-browser';
 import { ToastrService } from 'ngx-toastr';
 

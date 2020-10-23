@@ -1,6 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';

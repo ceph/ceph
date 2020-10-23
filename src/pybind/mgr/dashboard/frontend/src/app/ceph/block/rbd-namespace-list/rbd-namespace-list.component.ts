@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import * as _ from 'lodash';

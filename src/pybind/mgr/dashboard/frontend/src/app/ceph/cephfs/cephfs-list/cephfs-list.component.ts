@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';

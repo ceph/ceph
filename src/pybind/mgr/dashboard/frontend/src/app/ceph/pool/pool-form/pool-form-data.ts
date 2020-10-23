@@ -1,6 +1,6 @@
 import { Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { Pool } from '../pool';

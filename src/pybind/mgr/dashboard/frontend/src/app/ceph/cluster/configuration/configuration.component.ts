@@ -1,6 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';

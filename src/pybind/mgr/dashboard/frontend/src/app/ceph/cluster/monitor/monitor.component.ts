@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { MonitorService } from '../../../shared/api/monitor.service';

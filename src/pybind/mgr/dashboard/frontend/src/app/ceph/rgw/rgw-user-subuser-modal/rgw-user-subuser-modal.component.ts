@@ -4,7 +4,7 @@ import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@ang
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';

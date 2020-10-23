@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 import {
   AlertmanagerSilenceMatcher,
   AlertmanagerSilenceMatcherMatch

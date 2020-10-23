@@ -1,6 +1,6 @@
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';

@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';

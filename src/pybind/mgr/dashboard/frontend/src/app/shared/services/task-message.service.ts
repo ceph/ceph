@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { I18n } from '@tspmelo/i18n-polyfill';
 
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
