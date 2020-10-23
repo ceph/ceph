@@ -3,7 +3,7 @@ Host Maintenance
 ================
 
 All hosts that support Ceph daemons need to support maintenance activity, whether the host
-is physical or virtual(vm or cloud). This means that management workflows should provide
+is physical or virtual. This means that management workflows should provide
 a simple and consistent way to support this operational requirement. This document defines
 the maintenance strategy that could be implemented in cephadm and mgr/cephadm.
 
@@ -96,5 +96,9 @@ Ideas for Future Work
 #. When a host is placed into maintenance, the time of the event could be persisted. This
    would allow the orchestrator layer to establish a maintenance window for the task and 
    alert if the maintenance window has been exceeded.
-
-
+#. The maintenance process could support plugins to allow other integration tasks to be
+   initiated as part of the transition to and from maintenance. This plugin capability could
+   support actions like; 
+   
+   * alert suppression to 3rd party monitoring framework(s)
+   * service level reporting, to record outage windows
