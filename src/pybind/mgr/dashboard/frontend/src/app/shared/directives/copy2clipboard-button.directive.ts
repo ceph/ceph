@@ -9,6 +9,8 @@ import { ToastrService } from 'ngx-toastr';
 export class Copy2ClipboardButtonDirective implements OnInit {
   @Input()
   private cdCopy2ClipboardButton: string;
+  @Input()
+  byId = true;
 
   constructor(
     private elementRef: ElementRef,
@@ -33,7 +35,7 @@ export class Copy2ClipboardButtonDirective implements OnInit {
   onClick() {
     try {
       const browser = detect();
-      const text = this.getText();
+      const text = this.byId ? this.getText() : this.cdCopy2ClipboardButton;
       const toastrFn = () => {
         this.toastr.success('Copied text to the clipboard successfully.');
       };

@@ -6,6 +6,7 @@ import { RouterModule } from '@angular/router';
 import { TreeModule } from '@circlon/angular-tree-component';
 import {
   NgbDatepickerModule,
+  NgbDropdownModule,
   NgbNavModule,
   NgbPopoverModule,
   NgbTimepickerModule,
@@ -68,7 +69,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     TreeModule,
     CephSharedModule,
     NgbDatepickerModule,
-    NgbPopoverModule
+    NgbPopoverModule,
+    NgbDropdownModule
   ],
   declarations: [
     HostsComponent,

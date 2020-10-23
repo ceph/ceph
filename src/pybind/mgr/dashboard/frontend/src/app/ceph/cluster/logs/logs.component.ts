@@ -16,6 +16,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   clog: Array<any>;
   audit_log: Array<any>;
   icons = Icons;
+  logText: string;
 
   interval: number;
   priorities: Array<{ name: string; value: string }> = [
@@ -135,5 +136,19 @@ export class LogsComponent implements OnInit, OnDestroy {
     this.filterLogs();
 
     return false;
+  }
+
+  logToText(log: object) {
+    this.logText = '';
+    for (const line of Object.keys(log)) {
+      this.logText =
+        this.logText +
+        this.datePipe.transform(log[line].stamp, 'medium') +
+        '\t' +
+        log[line].priority +
+        '\t' +
+        log[line].message +
+        '\n';
+    }
   }
 }
