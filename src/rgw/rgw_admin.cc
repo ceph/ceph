@@ -300,6 +300,7 @@ void usage()
   cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>     user's display name\n";
+  cout << "   --key-file=<file>	        manually specify a key file\n";
   cout << "   --max-buckets             max number of buckets for a user\n";
   cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
@@ -3019,7 +3020,7 @@ int main(int argc, const char **argv)
   string tenant;
   string user_ns;
   rgw_user new_user_id;
-  std::string access_key, secret_key, user_email, display_name;
+  std::string access_key, secret_key, user_email, display_name, key_file;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
   std::string date, subuser, access, format;
@@ -3240,7 +3241,10 @@ int main(int argc, const char **argv)
       user_op.user_email_specified=true;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
       display_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-k", "--key-file", (char*)NULL)) {
+      key_file = val;
+    }
+      else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
       bucket_name = val;
       opt_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
@@ -5425,6 +5429,9 @@ int main(int argc, const char **argv)
 
   if (!display_name.empty())
     user_op.set_display_name(display_name);
+
+  if (!key_file.empty())
+    user_op.set_key_file(key_file);
 
   if (!user_email.empty())
     user_op.set_user_email(user_email);
