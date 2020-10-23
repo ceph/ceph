@@ -534,7 +534,8 @@ Context* OpenRequest<I>::send_parent_cache(int *result) {
   bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
     "rbd_parent_cache_enabled");
 
-  if (m_image_ctx->child == nullptr || !parent_cache_enabled) {
+  if (m_image_ctx->child == nullptr || !parent_cache_enabled ||
+      !m_image_ctx->data_ctx.is_valid()) {
     return send_init_cache(result);
   }
 
@@ -563,8 +564,8 @@ Context* OpenRequest<I>::handle_parent_cache(int* result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_init_cache(int *result) {
-  // cache is disabled or parent image context
-  if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
+  if (!m_image_ctx->cache || m_image_ctx->child != nullptr ||
+      !m_image_ctx->data_ctx.is_valid()) {
     return send_register_watch(result);
   }
 
