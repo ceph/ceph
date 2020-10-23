@@ -14,7 +14,6 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TelemetryNotificationService } from '../../../shared/services/telemetry-notification.service';
-import { TextToDownloadService } from '../../../shared/services/text-to-download.service';
 
 @Component({
   selector: 'cd-telemetry',
@@ -49,7 +48,6 @@ export class TelemetryComponent extends CdForm implements OnInit {
     private notificationService: NotificationService,
     private router: Router,
     private telemetryService: TelemetryService,
-    private textToDownloadService: TextToDownloadService,
     private telemetryNotificationService: TelemetryNotificationService
   ) {
     super();
@@ -162,10 +160,6 @@ export class TelemetryComponent extends CdForm implements OnInit {
         this.configForm.setErrors({ cdSubmitButton: true });
       }
     );
-  }
-
-  download(report: object, fileName: string) {
-    this.textToDownloadService.download(JSON.stringify(report, null, 2), fileName);
   }
 
   disableModule(message: string = null, followUpFunc: Function = null) {
