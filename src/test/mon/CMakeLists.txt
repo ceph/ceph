@@ -25,6 +25,13 @@ add_executable(unittest_mon_moncap
 add_ceph_unittest(unittest_mon_moncap)
 target_link_libraries(unittest_mon_moncap mon global)
 
+# unittest_mon_map
+add_executable(unittest_mon_monmap
+  MonMap.cc
+  )
+add_ceph_unittest(unittest_mon_monmap)
+target_link_libraries(unittest_mon_monmap mon global)
+
 # unittest_mon_pgmap
 add_executable(unittest_mon_pgmap
   PGMap.cc
