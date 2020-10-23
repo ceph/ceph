@@ -2348,6 +2348,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   ceph_assert(!log_t.empty());
 
   // allocate some more space (before we run out)?
+  // BTW: this triggers `flush()` in the `page_aligned_appender` of `log_writer`.
   int64_t runway = log_writer->file->fnode.get_allocated() -
     log_writer->get_effective_write_pos();
   bool just_expanded_log = false;
@@ -2462,6 +2463,48 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   return 0;
 }
 
+ceph::bufferlist BlueFS::FileWriter::flush_buffer(
+  CephContext* const cct,
+  const bool partial,
+  const unsigned length,
+  const bluefs_super_t& super)
+{
+  ceph::bufferlist bl;
+  if (partial) {
+    tail_block.splice(0, tail_block.length(), &bl);
+  }
+  const auto remaining_len = length - bl.length();
+  buffer.splice(0, remaining_len, &bl);
+  if (buffer.length()) {
+    dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
+             << " unflushed" << dendl;
+  }
+  if (const unsigned tail = bl.length() & ~super.block_mask(); tail) {
+    const auto padding_len = super.block_size - tail;
+    dout(20) << __func__ << " caching tail of 0x"
+             << std::hex << tail
+             << " and padding block with 0x" << padding_len
+             << " buffer.length() " << buffer.length()
+             << std::dec << dendl;
+    // We need to go through the `buffer_appender` to get a chance to
+    // preserve in-memory contiguity and not mess with the alignment.
+    // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
+    buffer_appender.append_zero(padding_len);
+    buffer.splice(buffer.length() - padding_len, padding_len, &bl);
+    // Deep copy the tail here. This allows to avoid costlier copy on
+    // bufferlist rebuild in e.g. `KernelDevice` and minimizes number
+    // of memory allocations.
+    // The alternative approach would be to place the entire tail and
+    // padding on a dedicated, 4 KB long memory chunk. This shouldn't
+    // trigger the rebuild while still being less expensive.
+    buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
+    buffer.splice(buffer.length() - tail, tail, &tail_block);
+  } else {
+    tail_block.clear();
+  }
+  return bl;
+}
+
 int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " " << h << " pos 0x" << std::hex << h->pos
@@ -2469,8 +2512,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " to " << h->file->fnode << dendl;
   ceph_assert(!h->file->deleted);
   ceph_assert(h->file->num_readers.load() == 0);
-
-  h->buffer_appender.flush();
 
   bool buffered;
   if (h->file->fnode.ino == 1)
@@ -2553,12 +2594,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
            << std::hex << x_off << std::dec << dendl;
 
   unsigned partial = x_off & ~super.block_mask();
-  bufferlist bl;
   if (partial) {
     dout(20) << __func__ << " using partial tail 0x"
              << std::hex << partial << std::dec << dendl;
-    ceph_assert(h->tail_block.length() == partial);
-    bl.claim_append_piecewise(h->tail_block);
     x_off -= partial;
     offset -= partial;
     length += partial;
@@ -2569,35 +2607,11 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       }
     }
   }
-  if (length == partial + h->buffer.length()) {
-    /* in case of inital allocation and need to zero, limited flush is unacceptable */
-    bl.claim_append_piecewise(h->buffer);
-  } else {
-    bufferlist t;
-    h->buffer.splice(0, length, &t);
-    bl.claim_append_piecewise(t);
-    t.substr_of(h->buffer, length, h->buffer.length() - length);
-    h->buffer.swap(t);
-    dout(20) << " leaving 0x" << std::hex << h->buffer.length() << std::dec
-             << " unflushed" << dendl;
-  }
-  ceph_assert(bl.length() == length);
 
+  auto bl = h->flush_buffer(cct, partial, length, super);
+  ceph_assert(bl.length() >= length);
   h->pos = offset + length;
-
-  unsigned tail = bl.length() & ~super.block_mask();
-  if (tail) {
-    dout(20) << __func__ << " caching tail of 0x"
-             << std::hex << tail
-             << " and padding block with 0x" << (super.block_size - tail)
-             << std::dec << dendl;
-    h->tail_block.substr_of(bl, bl.length() - tail, tail);
-    bl.append_zero(super.block_size - tail);
-    length += super.block_size - tail;
-  } else {
-    h->tail_block.clear();
-  }
-  ceph_assert(bl.length() == length);
+  length = bl.length();
 
   switch (h->writer_type) {
   case WRITER_WAL:
@@ -2691,8 +2705,7 @@ int BlueFS::_flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l)
 
 int BlueFS::_flush(FileWriter *h, bool force, bool *flushed)
 {
-  h->buffer_appender.flush();
-  uint64_t length = h->buffer.length();
+  uint64_t length = h->get_buffer_length();
   uint64_t offset = h->pos;
   if (flushed) {
     *flushed = false;
@@ -2732,19 +2745,14 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
   // we never truncate internal log files
   ceph_assert(h->file->fnode.ino > 1);
 
-  h->buffer_appender.flush();
-
   // truncate off unflushed data?
   if (h->pos < offset &&
-      h->pos + h->buffer.length() > offset) {
-    bufferlist t;
+      h->pos + h->get_buffer_length() > offset) {
     dout(20) << __func__ << " tossing out last " << offset - h->pos
 	     << " unflushed bytes" << dendl;
-    t.substr_of(h->buffer, 0, offset - h->pos);
-    h->buffer.swap(t);
     ceph_abort_msg("actually this shouldn't happen");
   }
-  if (h->buffer.length()) {
+  if (h->get_buffer_length()) {
     int r = _flush(h, true);
     if (r < 0)
       return r;
@@ -3089,7 +3097,7 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 void BlueFS::_close_writer(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " type " << h->writer_type << dendl;
-  h->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
+  //h->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
   for (unsigned i=0; i<MAX_BDEV; ++i) {
     if (bdev[i]) {
       if (h->iocv[i]) {
