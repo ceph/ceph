@@ -1,5 +1,5 @@
 ===================================
-cephadm developer documentation
+CEPHADM Developer Documentation
 ===================================
 
 .. rubric:: Contents
