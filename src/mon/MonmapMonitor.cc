@@ -1174,9 +1174,11 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     ceph_assert(!commit);
     return;
   }
-  pending_map.disallowed_leaders.insert(tiebreaker_mon);
-  pending_map.tiebreaker_mon = tiebreaker_mon;
-  pending_map.stretch_mode_enabled = true;
+  if (commit) {
+    pending_map.disallowed_leaders.insert(tiebreaker_mon);
+    pending_map.tiebreaker_mon = tiebreaker_mon;
+    pending_map.stretch_mode_enabled = true;
+  }
   *okay = true;
 }
 
