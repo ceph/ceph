@@ -163,9 +163,20 @@ public:
 
     FileRef file;
     uint64_t pos = 0;       ///< start offset for buffer
+  private:
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
     ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
+  public:
+    unsigned get_buffer_length() const {
+      return buffer.length();
+    }
+    ceph::bufferlist flush_buffer(
+      CephContext* cct,
+      const bool partial,
+      const unsigned length,
+      const bluefs_super_t& super);
     ceph::buffer::list::page_aligned_appender buffer_appender;  //< for const char* only
+  public:
     int writer_type = 0;    ///< WRITER_*
     int write_hint = WRITE_LIFE_NOT_SET;
 
@@ -175,8 +186,8 @@ public:
 
     FileWriter(FileRef f)
       : file(std::move(f)),
-	buffer_appender(buffer.get_page_aligned_appender(
-			  g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
+       buffer_appender(buffer.get_page_aligned_appender(
+                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -201,8 +212,11 @@ public:
       buffer.claim_append(bl);
     }
 
+    void append_zero(size_t len) {
+      buffer_appender.append_zero(len);
+    }
+
     uint64_t get_effective_write_pos() {
-      buffer_appender.flush();
       return pos + buffer.length();
     }
   };
@@ -547,8 +561,7 @@ public:
     ceph_assert(r == 0);
   }
   void try_flush(FileWriter *h) {
-    h->buffer_appender.flush();
-    if (h->buffer.length() >= cct->_conf->bluefs_min_flush_size) {
+    if (h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size) {
       flush(h, true);
     }
   }
