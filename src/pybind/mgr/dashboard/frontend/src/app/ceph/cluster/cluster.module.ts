@@ -12,7 +12,6 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -66,7 +65,6 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     NgbTypeaheadModule,
     NgbTimepickerModule,
     TreeModule,
-    NgBootstrapFormValidationModule,
     CephSharedModule,
     NgbDatepickerModule,
     NgbPopoverModule
