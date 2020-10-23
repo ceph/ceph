@@ -287,6 +287,18 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
       }
       return make_tuple(ret, this->role);
     } else {
+      auto path_pos = r_arn->resource.find('/');
+      string path;
+      if (path_pos == pos) {
+        path = "/";
+      } else {
+        path = r_arn->resource.substr(path_pos, ((pos - path_pos) + 1));
+      }
+      string r_path = role.get_path();
+      if (path != r_path) {
+        ldout(cct, 0) << "Invalid Role ARN: Path in ARN does not match with the role path: " << path << " " << r_path << dendl;
+        return make_tuple(-EACCES, this->role);
+      }
       this->role = std::move(role);
       return make_tuple(0, this->role);
     }
