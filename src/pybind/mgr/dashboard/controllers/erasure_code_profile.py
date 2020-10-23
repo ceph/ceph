@@ -58,8 +58,8 @@ class ErasureCodeProfileUi(ErasureCodeProfile):
         """
         config = mgr.get('config')
         return {
-            # Because 'shec' is experimental it's not included
-            'plugins': config['osd_erasure_code_plugins'].split() + ['shec'],
+            # Because 'shec' and 'clay' are experimental they're not included
+            'plugins': config['osd_erasure_code_plugins'].split() + ['shec', 'clay'],
             'directory': config['erasure_code_dir'],
             'nodes': mgr.get('osd_map_tree')['nodes'],
             'names': [name for name, _ in
