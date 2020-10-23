@@ -34,13 +34,6 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   extraopts += -DBOOST_J=$(NUMJOBS)
 endif
 
-ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
-  # libboost_context only support the archs above
-  extraopts += -DWITH_BOOST_CONTEXT=ON
-else
-  extraopts += -DWITH_BOOST_CONTEXT=OFF
-endif
-
 %:
 	dh $@ --buildsystem=cmake --with javahelper,python3,systemd --parallel
 
