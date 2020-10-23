@@ -467,14 +467,14 @@ void RGWOp_BILog_Info::execute() {
     return;
   }
 
-  int shard_id;
-  string bn;
-  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
-  if (op_ret < 0) {
-    return;
-  }
-
+  int shard_id = RGW_NO_SHARD;
   if (!bucket_instance.empty()) {
+    string bn;
+    op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
+    if (op_ret < 0) {
+      ldpp_dout(s, 5) << "ERROR: cannot parse bucket_instance" << dendl;
+      return;
+    }
     rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
     op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
     if (op_ret < 0) {
@@ -587,13 +587,8 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   }
-<<<<<<< 9ea481137d25fc7fcd143d2287ffcbd80d675548
-  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
+  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, marker);
   if (op_ret < 0) {
-=======
-  http_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, marker);
-  if (http_ret < 0) {
->>>>>>> rgw: drop start-marker from bilog trim.
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
   return;
