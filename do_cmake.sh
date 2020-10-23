@@ -17,8 +17,10 @@ if [ -r /etc/os-release ]; then
   case "$ID" in
       fedora)
           PYBUILD="3.7"
-          if [ "$VERSION_ID" -ge "32" ] ; then
+          if [ "$VERSION_ID" -eq "32" ] ; then
               PYBUILD="3.8"
+          elif [ "$VERSION_ID" -ge "33" ] ; then
+              PYBUILD="3.9"
           fi
           ;;
       rhel|centos)
