@@ -106,6 +106,7 @@ export class ActionLabelsI18n {
   UNPROTECT: string;
   UNSET: string;
   UPDATE: string;
+  FLAGS: string;
 
   constructor() {
     /* Create a new item */
@@ -149,6 +150,7 @@ export class ActionLabelsI18n {
     this.TRASH = $localize`Move to Trash`;
     this.UNPROTECT = $localize`Unprotect`;
     this.CHANGE = $localize`Change`;
+    this.FLAGS = $localize`Flags`;
 
     /* Prometheus wording */
     this.RECREATE = $localize`Recreate`;

@@ -74,6 +74,14 @@
   <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
 
+<ng-template #flagsTpl
+             let-row="row">
+  <span *ngFor="let flag of row.cdClusterFlags;"
+        class="badge badge-hdd mr-1">{{ flag }}</span>
+  <span *ngFor="let flag of row.cdIndivFlags;"
+        class="badge badge-info mr-1">{{ flag }}</span>
+</ng-template>
+
 <ng-template #osdUsageTpl
              let-row="row">
   <cd-usage-bar [total]="row.stats.stat_bytes"

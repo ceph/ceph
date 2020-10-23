@@ -234,36 +234,139 @@ class OsdTest(DashboardTestCase):
 class OsdFlagsTest(DashboardTestCase):
     def __init__(self, *args, **kwargs):
         super(OsdFlagsTest, self).__init__(*args, **kwargs)
-        self._initial_flags = sorted(  # These flags cannot be unset
-            ['sortbitwise', 'recovery_deletes', 'purged_snapdirs',
-             'pglog_hardlimit'])
+        self._initial_flags = ['sortbitwise', 'recovery_deletes', 'purged_snapdirs',
+                               'pglog_hardlimit']  # These flags cannot be unset
 
     @classmethod
-    def _get_cluster_osd_flags(cls):
-        return sorted(
-            json.loads(cls._ceph_cmd(['osd', 'dump',
-                                      '--format=json']))['flags_set'])
+    def _put_flags(cls, flags, ids=None):
+        url = '/api/osd/flags'
+        data = {'flags': flags}
 
-    @classmethod
-    def _put_flags(cls, flags):
-        cls._put('/api/osd/flags', data={'flags': flags})
-        return sorted(cls._resp.json())
+        if ids:
+            url = url + '/individual'
+            data['ids'] = ids
+
+        cls._put(url, data=data)
+        return cls._resp.json()
 
     def test_list_osd_flags(self):
         flags = self._get('/api/osd/flags')
         self.assertStatus(200)
         self.assertEqual(len(flags), 4)
-        self.assertEqual(sorted(flags), self._initial_flags)
+        self.assertCountEqual(flags, self._initial_flags)
 
     def test_add_osd_flag(self):
         flags = self._put_flags([
             'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
             'pause', 'pglog_hardlimit'
         ])
-        self.assertEqual(flags, sorted([
+        self.assertCountEqual(flags, [
             'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
             'pause', 'pglog_hardlimit'
-        ]))
+        ])
 
         # Restore flags
         self._put_flags(self._initial_flags)
+
+    def test_get_indiv_flag(self):
+        initial = self._get('/api/osd/flags/individual')
+        self.assertStatus(200)
+        self.assertSchema(initial, JList(JObj({
+            'osd': int,
+            'flags': JList(str)
+        })))
+
+        self._ceph_cmd(['osd', 'set-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
+        flags_added = self._get('/api/osd/flags/individual')
+        self.assertStatus(200)
+        for osd in flags_added:
+            if osd['osd'] in [0, 1, 2]:
+                self.assertIn('noout', osd['flags'])
+                self.assertIn('noin', osd['flags'])
+                for osd_initial in initial:
+                    if osd['osd'] == osd_initial['osd']:
+                        self.assertGreater(len(osd['flags']), len(osd_initial['flags']))
+
+        self._ceph_cmd(['osd', 'unset-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
+        flags_removed = self._get('/api/osd/flags/individual')
+        self.assertStatus(200)
+        for osd in flags_removed:
+            if osd['osd'] in [0, 1, 2]:
+                self.assertNotIn('noout', osd['flags'])
+                self.assertNotIn('noin', osd['flags'])
+
+    def test_add_indiv_flag(self):
+        flags_update = {'noup': None, 'nodown': None, 'noin': None, 'noout': True}
+        svc_id = 0
+
+        resp = self._put_flags(flags_update, [svc_id])
+        self._check_indiv_flags_resp(resp, [svc_id], ['noout'], [], ['noup', 'nodown', 'noin'])
+        self._check_indiv_flags_osd([svc_id], ['noout'], ['noup', 'nodown', 'noin'])
+
+        self._ceph_cmd(['osd', 'unset-group', 'noout', 'osd.{}'.format(svc_id)])
+
+    def test_add_multiple_indiv_flags(self):
+        flags_update = {'noup': None, 'nodown': None, 'noin': True, 'noout': True}
+        svc_id = 0
+
+        resp = self._put_flags(flags_update, [svc_id])
+        self._check_indiv_flags_resp(resp, [svc_id], ['noout', 'noin'], [], ['noup', 'nodown'])
+        self._check_indiv_flags_osd([svc_id], ['noout', 'noin'], ['noup', 'nodown'])
+
+        self._ceph_cmd(['osd', 'unset-group', 'noout,noin', 'osd.{}'.format(svc_id)])
+
+    def test_add_multiple_indiv_flags_multiple_osds(self):
+        flags_update = {'noup': None, 'nodown': None, 'noin': True, 'noout': True}
+        svc_id = [0, 1, 2]
+
+        resp = self._put_flags(flags_update, svc_id)
+        self._check_indiv_flags_resp(resp, svc_id, ['noout', 'noin'], [], ['noup', 'nodown'])
+        self._check_indiv_flags_osd([svc_id], ['noout', 'noin'], ['noup', 'nodown'])
+
+        self._ceph_cmd(['osd', 'unset-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
+
+    def test_remove_indiv_flag(self):
+        flags_update = {'noup': None, 'nodown': None, 'noin': None, 'noout': False}
+        svc_id = 0
+        self._ceph_cmd(['osd', 'set-group', 'noout', 'osd.{}'.format(svc_id)])
+
+        resp = self._put_flags(flags_update, [svc_id])
+        self._check_indiv_flags_resp(resp, [svc_id], [], ['noout'], ['noup', 'nodown', 'noin'])
+        self._check_indiv_flags_osd([svc_id], [], ['noup', 'nodown', 'noin', 'noout'])
+
+    def test_remove_multiple_indiv_flags(self):
+        flags_update = {'noup': None, 'nodown': None, 'noin': False, 'noout': False}
+        svc_id = 0
+        self._ceph_cmd(['osd', 'set-group', 'noout,noin', 'osd.{}'.format(svc_id)])
+
+        resp = self._put_flags(flags_update, [svc_id])
+        self._check_indiv_flags_resp(resp, [svc_id], [], ['noout', 'noin'], ['noup', 'nodown'])
+        self._check_indiv_flags_osd([svc_id], [], ['noout', 'noin', 'noup', 'nodown'])
+
+    def test_remove_multiple_indiv_flags_multiple_osds(self):
+        flags_update = {'noup': None, 'nodown': None, 'noin': False, 'noout': False}
+        svc_id = [0, 1, 2]
+        self._ceph_cmd(['osd', 'unset-group', 'noout,noin', 'osd.0', 'osd.1', 'osd.2'])
+
+        resp = self._put_flags(flags_update, svc_id)
+        self._check_indiv_flags_resp(resp, svc_id, [], ['noout', 'noin'], ['noup', 'nodown'])
+        self._check_indiv_flags_osd([svc_id], [], ['noout', 'noin', 'noup', 'nodown'])
+
+    def _check_indiv_flags_resp(self, resp, ids, added, removed, ignored):
+        self.assertStatus(200)
+        self.assertCountEqual(resp['ids'], ids)
+        self.assertCountEqual(resp['added'], added)
+        self.assertCountEqual(resp['removed'], removed)
+
+        for flag in ignored:
+            self.assertNotIn(flag, resp['added'])
+            self.assertNotIn(flag, resp['removed'])
+
+    def _check_indiv_flags_osd(self, ids, activated_flags, deactivated_flags):
+        osds = json.loads(self._ceph_cmd(['osd', 'dump', '--format=json']))['osds']
+        for osd in osds:
+            if osd['osd'] in ids:
+                for flag in activated_flags:
+                    self.assertIn(flag, osd['state'])
+                for flag in deactivated_flags:
+                    self.assertNotIn(flag, osd['state'])
