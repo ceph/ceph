@@ -102,6 +102,10 @@ export class OsdService {
     return this.http.put(`${this.path}/flags`, { flags: flags });
   }
 
+  updateIndividualFlags(flags: { [flag: string]: boolean }, ids: number[]) {
+    return this.http.put(`${this.path}/flags/individual`, { flags: flags, ids: ids });
+  }
+
   markOut(id: number) {
     return this.http.put(`${this.path}/${id}/mark`, { action: 'out' });
   }

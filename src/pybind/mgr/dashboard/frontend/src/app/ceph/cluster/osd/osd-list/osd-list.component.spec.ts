@@ -139,6 +139,7 @@ describe('OsdListComponent', () => {
 
   describe('getOsdList', () => {
     let osds: any[];
+    let flagsSpy: jasmine.Spy;
 
     const createOsd = (n: number) =>
       <Record<string, any>>{
@@ -169,6 +170,7 @@ describe('OsdListComponent', () => {
 
     beforeEach(() => {
       spyOn(osdService, 'getList').and.callFake(() => of(osds));
+      flagsSpy = spyOn(osdService, 'getFlags').and.callFake(() => of([]));
       osds = [createOsd(1), createOsd(2), createOsd(3)];
       component.getOsdList();
     });
@@ -217,6 +219,42 @@ describe('OsdListComponent', () => {
     it('should have custom attribute "cdIsBinary" to be true', () => {
       expectAttributeOnEveryOsd('cdIsBinary');
       expect(component.osds[0].cdIsBinary).toBe(true);
+    });
+
+    it('should return valid individual flags only', () => {
+      const osd1 = createOsd(1);
+      const osd2 = createOsd(2);
+      osd1.state = ['noup', 'exists', 'up'];
+      osd2.state = ['noup', 'exists', 'up', 'noin'];
+      osds = [osd1, osd2];
+      component.getOsdList();
+
+      expect(component.osds[0].cdIndivFlags).toStrictEqual(['noup']);
+      expect(component.osds[1].cdIndivFlags).toStrictEqual(['noup', 'noin']);
+    });
+
+    it('should not fail on empty individual flags list', () => {
+      expect(component.osds[0].cdIndivFlags).toStrictEqual([]);
+    });
+
+    it('should not return disabled cluster-wide flags', () => {
+      flagsSpy.and.callFake(() => of(['noout', 'nodown', 'sortbitwise']));
+      component.getOsdList();
+      expect(component.osds[0].cdClusterFlags).toStrictEqual(['noout', 'nodown']);
+
+      flagsSpy.and.callFake(() => of(['noout', 'purged_snapdirs', 'nodown']));
+      component.getOsdList();
+      expect(component.osds[0].cdClusterFlags).toStrictEqual(['noout', 'nodown']);
+
+      flagsSpy.and.callFake(() => of(['recovery_deletes', 'noout', 'pglog_hardlimit', 'nodown']));
+      component.getOsdList();
+      expect(component.osds[0].cdClusterFlags).toStrictEqual(['noout', 'nodown']);
+    });
+
+    it('should not fail on empty cluster-wide flags list', () => {
+      flagsSpy.and.callFake(() => of([]));
+      component.getOsdList();
+      expect(component.osds[0].cdClusterFlags).toStrictEqual([]);
     });
   });
 
@@ -274,6 +312,7 @@ describe('OsdListComponent', () => {
         actions: [
           'Create',
           'Edit',
+          'Flags',
           'Scrub',
           'Deep Scrub',
           'Reweight',
@@ -291,6 +330,7 @@ describe('OsdListComponent', () => {
         actions: [
           'Create',
           'Edit',
+          'Flags',
           'Scrub',
           'Deep Scrub',
           'Reweight',
@@ -316,6 +356,7 @@ describe('OsdListComponent', () => {
       'update,delete': {
         actions: [
           'Edit',
+          'Flags',
           'Scrub',
           'Deep Scrub',
           'Reweight',
@@ -330,7 +371,16 @@ describe('OsdListComponent', () => {
         primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       update: {
-        actions: ['Edit', 'Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        actions: [
+          'Edit',
+          'Flags',
+          'Scrub',
+          'Deep Scrub',
+          'Reweight',
+          'Mark Out',
+          'Mark In',
+          'Mark Down'
+        ],
         primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       delete: {

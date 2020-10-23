@@ -35,6 +35,17 @@ EXPORT_FLAGS_SCHEMA = {
     "list_of_flags": ([str], "")
 }
 
+EXPORT_INDIV_FLAGS_SCHEMA = {
+    "added": ([str], "List of added flags"),
+    "removed": ([str], "List of removed flags"),
+    "ids": ([int], "List of updated OSDs")
+}
+
+EXPORT_INDIV_FLAGS_GET_SCHEMA = {
+    "osd": (int, "OSD ID"),
+    "flags": ([str], "List of active flags")
+}
+
 
 def osd_task(name, metadata, wait_for=2.0):
     return Task("osd/{}".format(name), metadata, wait_for)
@@ -381,11 +392,29 @@ class OsdFlagsController(RESTController):
                 set(enabled_flags) - {'pauserd', 'pausewr'} | {'pause'})
         return sorted(enabled_flags)
 
+    @staticmethod
+    def _update_flags(action, flags, ids=None):
+        if ids:
+            if flags:
+                ids = list(map(str, ids))
+                CephService.send_command('mon', 'osd ' + action, who=ids,
+                                         flags=','.join(flags))
+        else:
+            for flag in flags:
+                CephService.send_command('mon', 'osd ' + action, '', key=flag)
+
     @EndpointDoc("Display OSD Flags",
                  responses={200: EXPORT_FLAGS_SCHEMA})
     def list(self):
         return self._osd_flags()
 
+    @EndpointDoc('Sets OSD flags for the entire cluster.',
+                 parameters={
+                     'flags': ([str], 'List of flags to set. The flags `recovery_deletes`, '
+                                      '`sortbitwise` and `pglog_hardlimit` cannot be unset. '
+                                      'Additionally `purged_snapshots` cannot even be set.')
+                 },
+                 responses={200: EXPORT_FLAGS_SCHEMA})
     def bulk_set(self, flags):
         """
         The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit` flags cannot be unset.
@@ -398,10 +427,71 @@ class OsdFlagsController(RESTController):
         data = set(flags)
         added = data - enabled_flags
         removed = enabled_flags - data
-        for flag in added:
-            CephService.send_command('mon', 'osd set', '', key=flag)
-        for flag in removed:
-            CephService.send_command('mon', 'osd unset', '', key=flag)
+
+        self._update_flags('set', added)
+        self._update_flags('unset', removed)
+
         logger.info('Changed OSD flags: added=%s removed=%s', added, removed)
 
         return sorted(enabled_flags - removed | added)
+
+    @Endpoint('PUT', 'individual')
+    @UpdatePermission
+    @EndpointDoc('Sets OSD flags for a subset of individual OSDs.',
+                 parameters={
+                     'flags': ({'noout': (bool, 'Sets/unsets `noout`', True, None),
+                                'noin': (bool, 'Sets/unsets `noin`', True, None),
+                                'noup': (bool, 'Sets/unsets `noup`', True, None),
+                                'nodown': (bool, 'Sets/unsets `nodown`', True, None)},
+                               'Directory of flags to set or unset. The flags '
+                               '`noin`, `noout`, `noup` and `nodown` are going to '
+                               'be considered only.'),
+                     'ids': ([int], 'List of OSD ids the flags should be applied '
+                                    'to.')
+                 },
+                 responses={200: EXPORT_INDIV_FLAGS_SCHEMA})
+    def set_individual(self, flags, ids):
+        """
+        Updates flags (`noout`, `noin`, `nodown`, `noup`) for an individual
+        subset of OSDs.
+        """
+        assert isinstance(flags, dict)
+        assert isinstance(ids, list)
+        assert all(isinstance(id, int) for id in ids)
+
+        # These are to only flags that can be applied to an OSD individually.
+        all_flags = {'noin', 'noout', 'nodown', 'noup'}
+        added = set()
+        removed = set()
+        for flag, activated in flags.items():
+            if flag in all_flags:
+                if activated is not None:
+                    if activated:
+                        added.add(flag)
+                    else:
+                        removed.add(flag)
+
+        self._update_flags('set-group', added, ids)
+        self._update_flags('unset-group', removed, ids)
+
+        logger.error('Changed individual OSD flags: added=%s removed=%s for ids=%s',
+                     added, removed, ids)
+
+        return {'added': sorted(added),
+                'removed': sorted(removed),
+                'ids': ids}
+
+    @Endpoint('GET', 'individual')
+    @ReadPermission
+    @EndpointDoc('Displays individual OSD flags',
+                 responses={200: EXPORT_INDIV_FLAGS_GET_SCHEMA})
+    def get_individual(self):
+        osd_map = mgr.get('osd_map')['osds']
+        resp = []
+
+        for osd in osd_map:
+            resp.append({
+                'osd': osd['osd'],
+                'flags': osd['state']
+            })
+        return resp
