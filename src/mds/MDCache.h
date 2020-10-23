@@ -330,8 +330,7 @@ class MDCache {
   void verify_subtree_bounds(CDir *root, const set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
 
-  void project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir);
-  void adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop);
+  void adjust_subtree_after_rename(CInode *diri, CDir *olddir);
 
   auto get_auth_subtrees() {
     std::vector<CDir*> c;
@@ -477,8 +476,6 @@ class MDCache {
       send_subtree_resolves();
   }
   
-  void _move_subtree_map_bound(dirfrag_t df, dirfrag_t oldparent, dirfrag_t newparent,
-			       map<dirfrag_t,vector<dirfrag_t> >& subtrees);
   ESubtreeMap *create_subtree_map();
 
   void clean_open_file_lists();
@@ -1122,7 +1119,6 @@ class MDCache {
 
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
   map<CDir*,set<CDir*> > subtrees;
-  map<CInode*,list<pair<CDir*,CDir*> > > projected_subtree_renames;  // renamed ino -> target dir
 
   // -- requests --
   ceph::unordered_map<metareqid_t, MDRequestRef> active_requests;

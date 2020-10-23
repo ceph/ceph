@@ -1397,30 +1397,11 @@ void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
   ceph_assert(failed == 0);
 }
 
-void MDCache::project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir)
-{
-  dout(10) << "project_subtree_rename " << *diri << " from " << *olddir
-	   << " to " << *newdir << dendl;
-  projected_subtree_renames[diri].push_back(pair<CDir*,CDir*>(olddir, newdir));
-}
-
-void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
+void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << dendl;
 
   CDir *newdir = diri->get_parent_dir();
-
-  if (pop) {
-    map<CInode*,list<pair<CDir*,CDir*> > >::iterator p = projected_subtree_renames.find(diri);
-    ceph_assert(p != projected_subtree_renames.end());
-    ceph_assert(!p->second.empty());
-    ceph_assert(p->second.front().first == olddir);
-    ceph_assert(p->second.front().second == newdir);
-    p->second.pop_front();
-    if (p->second.empty())
-      projected_subtree_renames.erase(p);
-  }
-
   // adjust total auth pin of freezing subtree
   if (olddir != newdir) {
     auto&& dfls = diri->get_nested_dirfrags();
@@ -2534,166 +2515,41 @@ void MDCache::_logged_peer_commit(mds_rank_t from, metareqid_t reqid)
 // ====================================================================
 // import map, recovery
 
-void MDCache::_move_subtree_map_bound(dirfrag_t df, dirfrag_t oldparent, dirfrag_t newparent,
-				      map<dirfrag_t,vector<dirfrag_t> >& subtrees)
-{
-  if (subtrees.count(oldparent)) {
-      vector<dirfrag_t>& v = subtrees[oldparent];
-      dout(10) << " removing " << df << " from " << oldparent << " bounds " << v << dendl;
-      for (vector<dirfrag_t>::iterator it = v.begin(); it != v.end(); ++it)
-	if (*it == df) {
-	  v.erase(it);
-	  break;
-	}
-    }
-  if (subtrees.count(newparent)) {
-    vector<dirfrag_t>& v = subtrees[newparent];
-    dout(10) << " adding " << df << " to " << newparent << " bounds " << v << dendl;
-    v.push_back(df);
-  }
-}
-
 ESubtreeMap *MDCache::create_subtree_map() 
 {
-  dout(10) << "create_subtree_map " << num_subtrees() << " subtrees, " 
-	   << num_subtrees_fullauth() << " fullauth"
-	   << dendl;
-
   show_subtrees();
 
   ESubtreeMap *le = new ESubtreeMap();
   mds->mdlog->_start_entry(le);
-  
-  map<dirfrag_t, CDir*> dirs_to_add;
 
   if (myin) {
     CDir* mydir = myin->get_dirfrag(frag_t());
-    dirs_to_add[mydir->dirfrag()] = mydir;
+    le->metablob.add_dir_context(mydir, EMetaBlob::TO_ROOT);
+    le->metablob.add_dir(mydir, false);
+    le->subtrees[mydir->dirfrag()].clear();
   }
 
-  // include all auth subtrees, and their bounds.
-  // and a spanning tree to tie it to the root.
-  for (auto& [dir, bounds] : subtrees) {
-    // journal subtree as "ours" if we are
-    //   me, -2
-    //   me, me
-    //   me, !me (may be importing and ambiguous!)
-
-    // so not
-    //   !me, *
-    if (dir->get_dir_auth().first != mds->get_nodeid())
-      continue;
-
-    dirs_to_add[dir->dirfrag()] = dir;
-    le->subtrees[dir->dirfrag()].clear();
-
-    // bounds
-    size_t nbounds = bounds.size();
-    if (nbounds > 3) {
-      dout(15) << "  subtree has " << nbounds << " bounds" << dendl;
-    }
-    for (auto& bound : bounds) {
-      if (nbounds <= 3) {
-        dout(15) << "  subtree bound " << *bound << dendl;
-      }
-      dirs_to_add[bound->dirfrag()] = bound;
-      le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
-    }
+  if (mds->mdsmap->get_root() == mds->get_nodeid()) {
+    CDir *rootdir = root->get_dirfrag(frag_t());
+    le->metablob.add_dir_context(rootdir, EMetaBlob::TO_ROOT);
+    le->metablob.add_dir(rootdir, false);
+    le->subtrees[rootdir->dirfrag()].clear();
   }
 
   migrator->add_ambiguous_subtrees(le);
 
-  // apply projected renames
-  for (const auto& [diri, renames] : projected_subtree_renames) {
-    for (const auto& [olddir, newdir] : renames) {
-      dout(15) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
-
-      auto&& dfls = diri->get_dirfrags();
-      for (const auto& dir : dfls) {
-	dout(15) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
-	CDir *oldparent = get_projected_subtree_root(olddir);
-	dout(15) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
-	CDir *newparent = get_projected_subtree_root(newdir);
-	dout(15) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
-
-	if (oldparent == newparent) {
-	  dout(15) << "parent unchanged for " << dir->dirfrag() << " at "
-		   << oldparent->dirfrag() << dendl;
-	  continue;
-	}
-
-	if (dir->is_subtree_root()) {
-	  if (le->subtrees.count(newparent->dirfrag()) &&
-	      oldparent->get_dir_auth() != newparent->get_dir_auth())
-	    dirs_to_add[dir->dirfrag()] = dir;
-	  // children are fine.  change parent.
-	  _move_subtree_map_bound(dir->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
-				  le->subtrees);
-	} else {
-	  // mid-subtree.
-
-	  if (oldparent->get_dir_auth() != newparent->get_dir_auth()) {
-	    dout(10) << " creating subtree for " << dir->dirfrag() << dendl;
-	    // if oldparent is auth, subtree is mine; include it.
-	    if (le->subtrees.count(oldparent->dirfrag())) {
-	      dirs_to_add[dir->dirfrag()] = dir;
-	      le->subtrees[dir->dirfrag()].clear();
-	    }
-	    // if newparent is auth, subtree is a new bound
-	    if (le->subtrees.count(newparent->dirfrag())) {
-	      dirs_to_add[dir->dirfrag()] = dir;
-	      le->subtrees[newparent->dirfrag()].push_back(dir->dirfrag());  // newparent is auth; new bound
-	    }
-	    newparent = dir;
-	  }
-	  
-	  // see if any old bounds move to the new parent.
-	  for (auto& bound : subtrees.at(oldparent)) {
-	    if (dir->contains(bound->get_parent_dir()))
-	      _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
-				      le->subtrees);
-	  }
-	}
-      }
-    }
-  }
-
-  // simplify the journaled map.  our in memory map may have more
-  // subtrees than needed due to migrations that are just getting
-  // started or just completing.  but on replay, the "live" map will
-  // be simple and we can do a straight comparison.
-  for (auto& [frag, bfrags] : le->subtrees) {
-    if (le->ambiguous_subtrees.count(frag))
-      continue;
-    unsigned i = 0;
-    while (i < bfrags.size()) {
-      dirfrag_t b = bfrags[i];
-      if (le->subtrees.count(b) &&
-	  le->ambiguous_subtrees.count(b) == 0) {
-	auto& bb = le->subtrees.at(b);
-	dout(10) << "simplify: " << frag << " swallowing " << b << " with bounds " << bb << dendl;
-	for (auto& r : bb) {
-	  bfrags.push_back(r);
-        }
-	dirs_to_add.erase(b);
-	le->subtrees.erase(b);
-	bfrags.erase(bfrags.begin() + i);
-      } else {
-	++i;
-      }
-    }
-  }
-
-  for (auto &p : dirs_to_add) {
-    CDir *dir = p.second;
-    le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
+  for (auto& [df, ambig_import] : le->ambiguous_subtrees) {
+    CDir *dir = get_dirfrag(df);
+    ceph_assert(dir);
+    le->metablob.add_dir_context(dir);
     le->metablob.add_dir(dir, false);
   }
 
-  dout(15) << " subtrees " << le->subtrees << dendl;
-
   //le->metablob.print(cout);
   le->expire_pos = mds->mdlog->journaler->get_expire_pos();
+
+  dout(10) << "create_subtree_map " << le->ambiguous_subtrees.size()
+	   << " ambiguous_subtrees" << dendl;
   return le;
 }
 
@@ -10929,7 +10785,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 
 	// update subtree map?
 	if (in->is_dir()) 
-	  adjust_subtree_after_rename(in, dir, false);
+	  adjust_subtree_after_rename(in, dir);
 
 	if (m->snapbl.length()) {
 	  bool hadrealm = (in->snaprealm ? true : false);
