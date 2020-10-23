@@ -580,6 +580,8 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
                                                                 &max_marker,
                                                                 &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(s, 5) << "ERROR: get_bucket_stats_and_bilog_meta returned "
+                    << ret << dendl;
     op_ret = ret;
     return;
   }
