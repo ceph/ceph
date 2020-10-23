@@ -90,10 +90,10 @@ DaemonHealthMetricCollector::create(daemon_metric m)
 {
   switch (m) {
   case daemon_metric::SLOW_OPS:
-    return unique_ptr<DaemonHealthMetricCollector>{new SlowOps};
+    return std::make_unique<SlowOps>();
   case daemon_metric::PENDING_CREATING_PGS:
-    return unique_ptr<DaemonHealthMetricCollector>{new PendingPGs};
+    return std::make_unique<PendingPGs>();
   default:
-    return unique_ptr<DaemonHealthMetricCollector>{};
+    return {};
   }
 }
