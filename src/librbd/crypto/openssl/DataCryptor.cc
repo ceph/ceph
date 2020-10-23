@@ -3,7 +3,7 @@
 
 #include "librbd/crypto/openssl/DataCryptor.h"
 #include <openssl/err.h>
-#include <string.h>
+#include <bsd/string.h>
 #include "include/ceph_assert.h"
 
 namespace librbd {
