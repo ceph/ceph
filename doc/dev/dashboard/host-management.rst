@@ -46,8 +46,11 @@ selected is daemons, since this is the most common interaction point with a host
 .. image:: mockups/hostdaemons.png
 
 The intent is that the admin is able to manage the cluster daemons directly from the UI, so the default
-display focuses on systemd information over container image id's. Image information is still available
-but not visible by default.
+display should focus on imformation that is relevant to the current orchestrator. For example, the default
+table columns for a cluster managed by cephadm would centre around systemd related metadata, whereas with 
+the rook orchestrator the columns would describe the attributes pertinent to the kubernetes platform. The
+intent her is sensible defaults - all the columns will be available, so the user could change their view
+as they can today with the table layout 'button'.
 
 Daemon Management
 =================
@@ -76,20 +79,19 @@ allow the UI to provide a quick appreciation for load without relying on Prometh
 Adding a Host
 =============
 The process of adding a host to the cluster has changed to support a 'bulk' add option which utilises host
-mask syntax, and also includes pre-flight checks performed in the UI to filter out common misconfiguration
+mask syntax, and also includes preliminary checks performed in the UI to filter out common misconfiguration
 issues.
 The mockup below shows the result of trying to add 3 hosts to the cluster, and illustrates;
 
-* pre-flight check results
+* preliminary check results
 * the ability to edit host entries before attempting to add to the cluster
 * a holistic view of the hosts prior to adding to the cluster, allowing the admin to visually inspect
   the desired hosts before selecting "Add to Cluster"
 
 .. image:: mockups/hostadd.png
 
-You'll also note that within the action menu, there is an item called **Explain**. This option would only
-be visibile when pre-flight checks fail for the host, and would show a modal dialog to explain the reason
-for the failure, when selected.
+In the event of a preliminary check failing for a host, the status column will indicate the error. A more 
+detailed error message would be shown via a tooltip, when the user hovers over the 'info' icon.
 
 Add Host Modal
 ______________
@@ -108,8 +110,8 @@ When the admin selects New Host(s), the New Host modal is displayed
   supported via the Other textbox. This field would support a comma separated list of labels.
 
 
-Pre-flight checks
-_________________
+Preliminary (aka "pre-flight") checks
+_____________________________________
 In order to avoid cluster expansion issues, the pre-flight process performs the following checks;
 
 * hostname is resolvable
