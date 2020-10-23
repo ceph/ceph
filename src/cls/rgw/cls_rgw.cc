@@ -1071,7 +1071,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     cancel = true;
   }
 
-  bufferlist op_bl;
   if (cancel) {
     if (op.op_tag.size()) {
       bufferlist new_key_bl;
