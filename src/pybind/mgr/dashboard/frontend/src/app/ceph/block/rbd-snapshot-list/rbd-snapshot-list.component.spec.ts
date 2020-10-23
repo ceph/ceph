@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
@@ -65,8 +64,7 @@ describe('RbdSnapshotListComponent', () => {
         RouterTestingModule,
         NgbNavModule,
         ToastrModule.forRoot(),
-        NgbModalModule,
-        NgBootstrapFormValidationModule.forRoot()
+        NgbModalModule
       ],
       providers: [
         { provide: AuthStorageService, useValue: fakeAuthStorageService },

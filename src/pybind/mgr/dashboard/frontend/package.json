@@ -97,7 +97,6 @@
     "lodash": "4.17.20",
     "moment": "2.29.1",
     "ng-block-ui": "3.0.2",
-    "ng-bootstrap-form-validation": "5.0.0",
     "ng-click-outside": "7.0.0",
     "ng2-charts": "2.3.0",
     "ngx-toastr": "13.1.0",

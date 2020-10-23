@@ -13,7 +13,6 @@ import {
   NgbNavModule
 } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -144,7 +143,6 @@ describe('PoolFormComponent', () => {
         ToastrModule.forRoot(),
         NgbNavModule,
         PoolModule,
-        NgBootstrapFormValidationModule.forRoot(),
         NgbModalModule
       ],
       providers: [
