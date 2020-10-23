@@ -290,7 +290,7 @@ class Zap(object):
 
     @decorators.needs_root
     def zap_osd(self):
-        if self.args.osd_id:
+        if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error("OSD ID %s is running, stop it with:" % self.args.osd_id)
@@ -382,6 +382,13 @@ class Zap(object):
         parser.add_argument(
             '--osd-fsid',
             help='Specify an OSD FSID to detect associated devices for zapping',
+        )
+
+        parser.add_argument(
+            '--no-systemd',
+            dest='no_systemd',
+            action='store_true',
+            help='Skip systemd unit checks',
         )
 
         if len(self.argv) == 0:
