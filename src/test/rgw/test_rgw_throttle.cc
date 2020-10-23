@@ -12,14 +12,15 @@
  *
  */
 
-#include "rgw/rgw_aio_throttle.h"
-
 #include <optional>
 #include <thread>
 #include "include/scope_guard.h"
 
 #include <spawn/spawn.hpp>
 #include <gtest/gtest.h>
+
+#include "rgw/rgw_aio_throttle.h"
+
 
 struct RadosEnv : public ::testing::Environment {
  public:

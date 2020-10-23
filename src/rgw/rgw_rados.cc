@@ -17,6 +17,7 @@
 
 #include "common/ceph_json.h"
 
+#include "common/async/blocked_completion.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/Throttle.h"
@@ -51,8 +52,6 @@
 #undef fork // fails to compile RGWPeriod::fork() below
 
 #include "common/Clock.h"
-
-using namespace librados;
 
 #include <string>
 #include <iostream>
@@ -98,6 +97,13 @@ using namespace librados;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+namespace ba = boost::asio;
+namespace bc = boost::container;
+namespace bs = boost::system;
+namespace ca = ceph::async;
+
+using namespace librados;
 
 
 static string shadow_ns = "shadow";
@@ -1121,6 +1127,16 @@ int RGWRados::init_rados()
   }
 
   cr_registry = crs.release();
+
+  bs::error_code ec;
+  nr = nr::RADOS::make_with_cct(cct, ctxpool.get_io_context(),
+				null_yield[ec]);
+  if (ec) {
+    ldout(cct, 0) << "ERROR: Unable to initialize neorados: " << ec.message()
+		  << dendl;
+    ret = ceph::from_error_code(ec);
+  }
+
   return ret;
 }
 
@@ -1349,13 +1365,17 @@ int RGWRados::init_ctl(const DoutPrefixProvider *dpp)
   return ctl.init(&svc, dpp);
 }
 
-/** 
+/**
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
 int RGWRados::initialize(const DoutPrefixProvider *dpp)
 {
   int ret;
+
+  ret = init_rados();
+  if (ret < 0)
+    return ret;
 
   inject_notify_timeout_probability =
     cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
@@ -1374,10 +1394,6 @@ int RGWRados::initialize(const DoutPrefixProvider *dpp)
   }
 
   host_id = svc.zone_utils->gen_host_id();
-
-  ret = init_rados();
-  if (ret < 0)
-    return ret;
 
   return init_complete(dpp);
 }

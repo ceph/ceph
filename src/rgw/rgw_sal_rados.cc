@@ -1307,14 +1307,14 @@ rgw::sal::RGWRadosStore *RGWStoreManager::init_raw_storage_provider(const DoutPr
 
   rados->set_context(cct);
 
-  int ret = rados->init_svc(true, dpp);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
+  if (rados->init_rados() < 0) {
     delete store;
     return nullptr;
   }
 
-  if (rados->init_rados() < 0) {
+  int ret = rados->init_svc(true, dpp);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     delete store;
     return nullptr;
   }
