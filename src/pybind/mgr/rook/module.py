@@ -415,6 +415,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def add_nfs(self, spec):
         # type: (NFSServiceSpec) -> RookCompletion
+        if spec.placement.count == None:
+            spec.placement.count = 1
         return self._service_add_decorate("NFS", spec,
                                           self.rook_cluster.add_nfsgw)
 
