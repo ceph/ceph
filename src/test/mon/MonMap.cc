@@ -218,3 +218,22 @@ TEST_F(MonMapTest, DISABLED_build_initial_config_from_dns_with_domain) {
   ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
 }
 
+TEST(MonMapBuildInitial, build_initial_mon_host_from_dns) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_MON))->get();
+  cct->_conf.set_val("mon_host", "ceph.io");
+  MonMap monmap;
+  int r = monmap.build_initial(cct, false, std::cerr);
+  ASSERT_EQ(r, 0);
+  ASSERT_GE(monmap.mon_info.size(), 1u);
+  for (const auto& [name, info] : monmap.mon_info) {
+    std::cerr << info << std::endl;
+  }
+}
+
+TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_MON))->get();
+  cct->_conf.set_val("mon_host", "ceph.noname");
+  MonMap monmap;
+  int r = monmap.build_initial(cct, false, std::cerr);
+  ASSERT_EQ(r, -EINVAL);
+}
