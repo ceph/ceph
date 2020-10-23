@@ -416,8 +416,8 @@ void FSMirror::remove_peer(const Peer &peer) {
   if (it != m_peer_replayers.end()) {
     dout(5) << ": shutting down replayers for peer=" << peer << dendl;
     shutdown_replayers(&it->second, locker);
+    m_peer_replayers.erase(it);
   }
-  m_peer_replayers.erase(it);
 }
 
 void FSMirror::mirror_status(Formatter *f) {
