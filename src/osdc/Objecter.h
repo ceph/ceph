@@ -835,8 +835,9 @@ struct ObjectOperation {
       out_rval.back() = prval;
     }
   }
+  template<typename KVs>
   void getxattrs(boost::system::error_code* ec,
-		 boost::container::flat_map<std::string, ceph::buffer::list> *pattrs) {
+		 KVs* pattrs) {
     add_op(CEPH_OSD_OP_GETXATTRS);
     set_handler(CB_ObjectOperation_decodevals(0, pattrs, nullptr, nullptr, ec));
     out_ec.back() = ec;
@@ -906,10 +907,11 @@ struct ObjectOperation {
       out_rval.back() = prval;
     }
   }
+  template<typename Keys>
   void omap_get_keys(std::optional<std::string_view> start_after,
 		     uint64_t max_to_get,
 		     boost::system::error_code* ec,
-		     boost::container::flat_set<std::string> *out_set,
+		     Keys* out_set,
 		     bool *ptruncated) {
     OSDOp& op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
     ceph::buffer::list bl;
@@ -946,11 +948,12 @@ struct ObjectOperation {
     }
   }
 
+  template<typename KVs>
   void omap_get_vals(std::optional<std::string_view> start_after,
 		     std::optional<std::string_view> filter_prefix,
 		     uint64_t max_to_get,
 		     boost::system::error_code* ec,
-		     boost::container::flat_map<std::string, ceph::buffer::list> *out_set,
+		     KVs* out_set,
 		     bool *ptruncated) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
     ceph::buffer::list bl;
@@ -981,10 +984,11 @@ struct ObjectOperation {
     }
   }
 
+  template<typename Keys, typename KVs>
   void omap_get_vals_by_keys(
-    const boost::container::flat_set<std::string>& to_get,
+    const Keys& to_get,
     boost::system::error_code* ec,
-    boost::container::flat_map<std::string, ceph::buffer::list> *out_set) {
+    KVs* out_set) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSBYKEYS);
     ceph::buffer::list bl;
     encode(to_get, bl);

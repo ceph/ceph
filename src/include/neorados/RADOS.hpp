@@ -19,6 +19,8 @@
 #include <cstddef>
 #include <memory>
 #include <tuple>
+#include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -234,6 +236,9 @@ public:
   void cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val);
   void assert_version(uint64_t ver);
   void assert_exists();
+  void cmp_omap(const std::map<
+		  std::string,
+		  std::pair<ceph::buffer::list, int>>& assertions);
   void cmp_omap(const boost::container::flat_map<
 		  std::string,
 		  std::pair<ceph::buffer::list, int>>& assertions);
@@ -311,15 +316,28 @@ public:
 
   void get_omap_keys(std::optional<std::string_view> start_after,
 		     std::uint64_t max_return,
+		     std::set<std::string>* keys,
+		     bool* truncated,
+		     boost::system::error_code* ec = nullptr);
+  void get_omap_keys(std::optional<std::string_view> start_after,
+		     std::uint64_t max_return,
 		     boost::container::flat_set<std::string>* keys,
 		     bool* truncated,
 		     boost::system::error_code* ec = nullptr);
 
 
+  void get_xattrs(std::map<std::string, ceph::buffer::list>* kv,
+		  boost::system::error_code* ec = nullptr);
   void get_xattrs(boost::container::flat_map<std::string,
 		                             ceph::buffer::list>* kv,
 		     boost::system::error_code* ec = nullptr);
 
+  void get_omap_vals(std::optional<std::string_view> start_after,
+		     std::optional<std::string_view> filter_prefix,
+		     uint64_t max_return,
+		     std::map<std::string, ceph::buffer::list>* kv,
+		     bool* truncated,
+		     boost::system::error_code* ec = nullptr);
   void get_omap_vals(std::optional<std::string_view> start_after,
 		     std::optional<std::string_view> filter_prefix,
 		     uint64_t max_return,
@@ -329,6 +347,9 @@ public:
 		     boost::system::error_code* ec = nullptr);
 
 
+  void get_omap_vals_by_keys(const std::set<std::string>& keys,
+			     std::map<std::string, ceph::buffer::list>* kv,
+			     boost::system::error_code* ec = nullptr);
   void get_omap_vals_by_keys(const boost::container::flat_set<std::string>& keys,
 			     boost::container::flat_map<std::string,
 			                                ceph::buffer::list>* kv,
@@ -366,10 +387,12 @@ public:
   void setxattr(std::string_view name,
 		ceph::buffer::list&& bl);
   void rollback(uint64_t snapid);
+  void set_omap(const std::map<std::string, ceph::buffer::list>& map);
   void set_omap(const boost::container::flat_map<std::string,
 		                                 ceph::buffer::list>& map);
   void set_omap_header(ceph::buffer::list&& bl);
   void clear_omap();
+  void rm_omap_keys(const std::set<std::string>& to_rm);
   void rm_omap_keys(const boost::container::flat_set<std::string>& to_rm);
   void set_alloc_hint(uint64_t expected_object_size,
 		      uint64_t expected_write_size,
