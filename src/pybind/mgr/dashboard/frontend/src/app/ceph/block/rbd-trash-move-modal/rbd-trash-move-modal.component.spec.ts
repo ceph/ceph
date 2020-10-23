@@ -89,7 +89,7 @@ describe('RbdTrashMoveModalComponent', () => {
       component.moveImage();
       const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
-      expect(req.request.body.delay).toBeGreaterThan(86390);
+      expect(req.request.body.delay).toBeGreaterThan(76390);
     });
   });
 });
