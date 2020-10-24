@@ -306,6 +306,7 @@ add_library(radosgw SHARED ${radosgw_srcs} ${rgw_a_srcs} rgw_main.cc
 add_dependencies(radosgw civetweb_h)
 
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
+target_compile_definitions(rgw_common PUBLIC "-DCLS_CLIENT_HIDE_IOCTX") 
 target_include_directories(radosgw PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
