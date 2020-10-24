@@ -300,6 +300,7 @@ void usage()
   cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>     user's display name\n";
+  cout << "    -k		        manually specify a key file\n";
   cout << "   --max-buckets             max number of buckets for a user\n";
   cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
