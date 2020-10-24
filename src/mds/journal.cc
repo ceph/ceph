@@ -86,7 +86,7 @@ struct BatchCommitBacktrace : public Context {
     MDSGatherBuilder gather(g_ceph_context);
 
     for (auto &op : ops_vec) {
-      op.in->_commit_ops(r, op.version, gather.new_sub(), op.ops_vec, &op.bt);
+      op.in->_commit_ops(r, gather.new_sub(), op.ops_vec, &op.bt);
     }
     if (gather.has_subs()) {
       gather.set_finisher(new BatchStoredBacktrace(con, mds));

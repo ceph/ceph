@@ -1328,11 +1328,11 @@ struct C_IO_Inode_CommitBacktrace : public Context {
   C_IO_Inode_CommitBacktrace(CInode *i, version_t v, MDSContext *f) :
     in(i), version(v), fin(f) { }
   void finish(int r) override {
-    in->_commit_ops(r, version, fin, ops_vec, &bt);
+    in->_commit_ops(r, fin, ops_vec, &bt);
   }
 };
 
-void CInode::_commit_ops(int r, version_t version, MDSContext *fin,
+void CInode::_commit_ops(int r, Context *fin,
                          std::vector<CInodeCommitOperation> &ops_vec,
                          inode_backtrace_t *bt)
 {
@@ -1343,11 +1343,7 @@ void CInode::_commit_ops(int r, version_t version, MDSContext *fin,
     return;
   }
 
-  C_GatherBuilder gather(g_ceph_context,
-                         new C_OnFinisher(new C_IO_Inode_StoredBacktrace(this,
-                                                                         version,
-                                                                         fin),
-                         mdcache->mds->finisher));
+  C_GatherBuilder gather(g_ceph_context, fin);
 
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");

@@ -791,7 +791,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void fetch(MDSContext *fin);
   void _fetched(ceph::buffer::list& bl, ceph::buffer::list& bl2, Context *fin);  
 
-  void _commit_ops(int r, version_t version, MDSContext *fin,
+  void _commit_ops(int r, Context *fin,
                    std::vector<CInodeCommitOperation> &ops_vec,
                    inode_backtrace_t *bt);
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
