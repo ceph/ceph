@@ -70,6 +70,10 @@ void StoreTestFixture::TearDown()
   // config settings. Hence setting it to 'unsafe' here as test case is closing.
   g_conf()._clear_safe_to_start_threads();
   PopSettings(0);
+  if (!orig_death_test_style.empty()) {
+    ::testing::FLAGS_gtest_death_test_style = orig_death_test_style;
+    orig_death_test_style.clear();
+  }
   if (store) {
     int r = store->umount();
     EXPECT_EQ(0, r);
