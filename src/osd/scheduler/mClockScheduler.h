@@ -110,7 +110,7 @@ public:
   void enqueue_front(OpSchedulerItem &&item) final;
 
   // Return an op to be dispatch
-  OpSchedulerItem dequeue() final;
+  WorkItem dequeue() final;
 
   // Returns if the queue is empty
   bool empty() const final {

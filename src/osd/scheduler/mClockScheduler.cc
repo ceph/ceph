@@ -35,7 +35,7 @@ mClockScheduler::mClockScheduler(CephContext *cct) :
     std::bind(&mClockScheduler::ClientRegistry::get_info,
 	      &client_registry,
 	      _1),
-    dmc::AtLimit::Allow,
+    dmc::AtLimit::Wait,
     cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
 {
   cct->_conf.add_observer(this);
@@ -114,18 +114,16 @@ void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
   // putting the item back in the queue
 }
 
-OpSchedulerItem mClockScheduler::dequeue()
+WorkItem mClockScheduler::dequeue()
 {
   if (!immediate.empty()) {
     auto ret = std::move(immediate.back());
     immediate.pop_back();
-    return ret;
+    return std::move(ret);
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
     if (result.is_future()) {
-      ceph_assert(
-	0 == "Not implemented, user would have to be able to be woken up");
-      return std::move(*(OpSchedulerItem*)nullptr);
+      return result.getTime();
     } else if (result.is_none()) {
       ceph_assert(
 	0 == "Impossible, must have checked empty() first");
