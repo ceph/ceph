@@ -11,7 +11,7 @@ import re
 import os
 
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
+from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.packaging import get_package_version
@@ -263,12 +263,7 @@ class TestClientRecovery(CephFSTestCase):
                                 cap_waited, session_timeout
                             ))
 
-            cap_holder.stdin.close()
-            try:
-                cap_holder.wait()
-            except (CommandFailedError, ConnectionLostError):
-                # We killed it (and possibly its node), so it raises an error
-                pass
+            self.mount_a._kill_background(cap_holder)
         finally:
             # teardown() doesn't quite handle this case cleanly, so help it out
             self.mount_a.resume_netns()
@@ -322,12 +317,7 @@ class TestClientRecovery(CephFSTestCase):
                                 cap_waited, session_timeout / 2.0
                             ))
 
-            cap_holder.stdin.close()
-            try:
-                cap_holder.wait()
-            except (CommandFailedError, ConnectionLostError):
-                # We killed it (and possibly its node), so it raises an error
-                pass
+            self.mount_a._kill_background(cap_holder)
         finally:
             self.mount_a.resume_netns()
 
@@ -396,12 +386,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.check_filelock(do_flock=flockable)
 
         # Tear down the background process
-        lock_holder.stdin.close()
-        try:
-            lock_holder.wait()
-        except (CommandFailedError, ConnectionLostError):
-            # We killed it, so it raises an error
-            pass
+        self.mount_a._kill_background(lock_holder)
 
     def test_filelock_eviction(self):
         """
@@ -429,6 +414,9 @@ class TestClientRecovery(CephFSTestCase):
             # succeed
             self.wait_until_true(lambda: lock_taker.finished, timeout=10)
         finally:
+            # Tear down the background process
+            self.mount_a._kill_background(lock_holder)
+
             # teardown() doesn't quite handle this case cleanly, so help it out
             self.mount_a.kill()
             self.mount_a.kill_cleanup()
