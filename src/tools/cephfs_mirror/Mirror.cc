@@ -526,7 +526,8 @@ void Mirror::run() {
   for (auto &[filesystem, mirror_action] : m_mirror_actions) {
     dout(10) << ": trying to shutdown filesystem=" << filesystem << dendl;
     // wait for in-progress action and shutdown
-    m_cond.wait(locker, [this, &mirror_action] {return !mirror_action.action_in_progress;});
+    m_cond.wait(locker, [&mirror_action=mirror_action] 
+                {return !mirror_action.action_in_progress;});
     if (mirror_action.fs_mirror &&
         !mirror_action.fs_mirror->is_stopping() &&
         !mirror_action.fs_mirror->is_failed()) {
