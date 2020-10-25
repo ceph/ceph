@@ -6606,9 +6606,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
       int r = make_request(req, perms, &tmptarget, NULL, rand() % mdsmap->get_num_in_mds());
 
       if (r == 0) {
-	Inode *tempino = tmptarget.get();
-	_ll_get(tempino);
-	*target = tempino;
+	*target = std::move(tmptarget);
 	ldout(cct, 8) << __func__ << " found target " << (*target)->ino << dendl;
       } else {
 	*target = dir;
