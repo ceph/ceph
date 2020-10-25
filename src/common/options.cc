@@ -8910,7 +8910,18 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_description("interval to restart blocklisted instances")
     .set_long_description("Interval in seconds to restart blocklisted mirror instances. Setting to zero (0) disables restarting blocklisted instances."),
 
-    });
+    Option("cephfs_mirror_max_snapshot_sync_per_cycle", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min(1)
+    .set_description("number of snapshots to mirror in one cycle")
+    .set_long_description("maximum number of snapshots to mirror when a directory is picked up for mirroring by worker threads."),
+
+    Option("cephfs_mirror_directory_scan_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_min(1)
+    .set_description("interval to scan directories to mirror snapshots")
+    .set_long_description("interval in seconds to scan configured directories for snapshot mirroring."),
+   });
 }
 
 static std::vector<Option> build_options()
