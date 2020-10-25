@@ -66,9 +66,9 @@ class KernelMount(CephFSMount):
         self.mounted = True
 
     def _run_mount_cmd(self, mntopts, check_status):
-        opts = 'norequire_active_mds,'
+        opts = 'norequire_active_mds'
         if self.client_id:
-            opts += 'name=' + self.client_id
+            opts += ',name=' + self.client_id
         if self.client_keyring_path and self.client_id:
             opts += ',secret=' + self.get_key_from_keyfile()
         if self.config_path:
