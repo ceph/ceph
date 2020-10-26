@@ -130,7 +130,6 @@ class RGWSI_Role: public RGWServiceInstance
 
 };
 
-const std::string role_name_oid_prefix = "role_names.";
-const std::string role_oid_prefix = "roles.";
-const std::string role_path_oid_prefix = "role_paths.";
-const std::string role_arn_prefix = "arn:aws:iam::";
+static const std::string role_name_oid_prefix = "role_names.";
+static const std::string role_oid_prefix = "roles.";
+static const std::string role_path_oid_prefix = "role_paths.";
