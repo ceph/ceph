@@ -129,6 +129,12 @@ class RGWSI_Role_RADOS: public RGWSI_Role
 		 optional_yield y,
 		 const DoutPrefixProvider *dpp) override;
 
+  int list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
+                                const std::string& path,
+                                const std::string& tenant,
+                                std::vector<rgw::sal::RGWRole>& roles,
+                                optional_yield y,
+								const DoutPrefixProvider *dpp) override;
 
 private:
   RGWSI_MetaBackend_Handler *be_handler;
