@@ -95,7 +95,7 @@ void RawFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
 }
 
 template <typename I>
-void RawFormat<I>::read(
+bool RawFormat<I>::read(
     io::AioCompletion* aio_comp, uint64_t snap_id, io::Extents&& image_extents,
     io::ReadResult&& read_result, int op_flags, int read_flags,
     const ZTracer::Trace &parent_trace) {
@@ -104,7 +104,7 @@ void RawFormat<I>::read(
 
   if (snap_id != CEPH_NOSNAP) {
     aio_comp->fail(-EINVAL);
-    return;
+    return true;
   }
 
   aio_comp->read_result = std::move(read_result);
@@ -116,6 +116,7 @@ void RawFormat<I>::read(
 
   // raw directly maps the image-extent IO down to a byte IO extent
   m_stream->read(std::move(image_extents), &ctx->bl, ctx);
+  return true;
 }
 
 template <typename I>

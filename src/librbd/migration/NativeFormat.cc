@@ -116,27 +116,6 @@ void NativeFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
 }
 
 template <typename I>
-void NativeFormat<I>::read(
-    io::AioCompletion* aio_comp, uint64_t snap_id, io::Extents&& image_extents,
-    io::ReadResult&& read_result, int op_flags, int read_flags,
-    const ZTracer::Trace &parent_trace) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "snap_id=" << snap_id << ", "
-                 << "image_extents=" << image_extents << dendl;
-
-  auto io_context = m_image_ctx->duplicate_data_io_context();
-  if (snap_id != CEPH_NOSNAP) {
-    io_context->read_snap(snap_id);
-  }
-
-  auto req = io::ImageDispatchSpec::create_read(
-    *m_image_ctx, io::IMAGE_DISPATCH_LAYER_MIGRATION, aio_comp,
-    std::move(image_extents), std::move(read_result), io_context, op_flags,
-    read_flags, {});
-  req->send();
-}
-
-template <typename I>
 void NativeFormat<I>::list_snaps(io::Extents&& image_extents,
                                  io::SnapIds&& snap_ids, int list_snaps_flags,
                                  io::SnapshotDelta* snapshot_delta,
