@@ -1063,7 +1063,7 @@ static void show_role_info(RGWRole& role, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
+static void show_roles_info(vector<RGWRoleInfo>& roles, Formatter* formatter)
 {
   formatter->open_array_section("Roles");
   for (const auto& it : roles) {
@@ -5814,11 +5814,8 @@ int main(int argc, const char **argv)
     }
   case OPT::ROLE_LIST:
     {
-      vector<RGWRole> result;
-      ret = RGWRole::get_roles_by_path_prefix(store->getRados(), g_ceph_context, path_prefix, tenant, result);
-      if (ret < 0) {
-        return -ret;
-      }
+      vector<RGWRoleInfo> result;
+      ret = store->ctl()->role->list_roles_by_path_prefix(path_prefix, tenant, result, null_yield);
       show_roles_info(result, formatter.get());
       return 0;
     }

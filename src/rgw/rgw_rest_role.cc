@@ -321,8 +321,11 @@ void RGWListRoles::execute()
   if (op_ret < 0) {
     return;
   }
-  vector<RGWRole> result;
-  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->get_tenant(), result);
+  vector<RGWRoleInfo> result;
+  op_ret = store->ctl()->role->list_roles_by_path_prefix(path_prefix,
+                                                         s->user->get_tenant(),
+                                                         result,
+                                                         s->yield);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
@@ -333,7 +336,7 @@ void RGWListRoles::execute()
     s->formatter->open_object_section("Roles");
     for (const auto& it : result) {
       s->formatter->open_object_section("member");
-      it.get_info().dump(s->formatter);
+      it.dump(s->formatter);
       s->formatter->close_section();
     }
     s->formatter->close_section();

@@ -123,9 +123,6 @@ class RGWRoleCtl;
 class RGWRole
 {
   using string = std::string;
-  static const string role_name_oid_prefix;
-  static const string role_oid_prefix;
-  static const string role_path_oid_prefix;
   static const string role_arn_prefix;
 
   CephContext *cct;
@@ -190,15 +187,6 @@ public:
   int delete_policy(const string& policy_name) {
     return info.delete_policy(policy_name);
   }
-
-  static const string& get_names_oid_prefix();
-  static const string& get_info_oid_prefix();
-  static const string& get_path_oid_prefix();
-  static int get_roles_by_path_prefix(RGWRados *store,
-                                      CephContext *cct,
-                                      const string& path_prefix,
-                                      const string& tenant,
-                                      vector<RGWRole>& roles);
 
   void dump(Formatter *f) const {
     info.dump(f);
@@ -397,6 +385,11 @@ public:
 		  const std::string& tenant,
 		  optional_yield y,
 		  const RemoveParams& params = {});
+
+  int list_roles_by_path_prefix(const std::string& path_prefix,
+                                const std::string& tenant,
+                                vector<RGWRoleInfo>& roles,
+                                optional_yield y);
 };
 
 #endif /* CEPH_RGW_ROLE_H */

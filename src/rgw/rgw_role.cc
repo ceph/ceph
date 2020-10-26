@@ -26,9 +26,6 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-const string RGWRole::role_name_oid_prefix = "role_names.";
-const string RGWRole::role_oid_prefix = "roles.";
-const string RGWRole::role_path_oid_prefix = "role_paths.";
 const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
 int RGWRole::store_info(bool exclusive, optional_yield y)
@@ -301,82 +298,6 @@ void RGWRole::update_trust_policy(string& trust_policy)
   this->info.trust_policy = trust_policy;
 }
 
-int RGWRole::get_roles_by_path_prefix(RGWRados *store,
-                                      CephContext *cct,
-                                      const string& path_prefix,
-                                      const string& tenant,
-                                      vector<RGWRole>& roles)
-{
-  auto pool = store->svc.zone->get_zone_params().roles_pool;
-  string prefix;
-
-  // List all roles if path prefix is empty
-  if (! path_prefix.empty()) {
-    prefix = tenant + role_path_oid_prefix + path_prefix;
-  } else {
-    prefix = tenant + role_path_oid_prefix;
-  }
-
-  //Get the filtered objects
-  list<string> result;
-  bool is_truncated;
-  RGWListRawObjsCtx ctx;
-  do {
-    list<string> oids;
-    int r = store->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
-                  << prefix << ": " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    for (const auto& iter : oids) {
-      result.push_back(iter.substr(role_path_oid_prefix.size()));
-    }
-  } while (is_truncated);
-
-  for (const auto& it : result) {
-    //Find the role oid prefix from the end
-    size_t pos = it.rfind(role_oid_prefix);
-    if (pos == string::npos) {
-        continue;
-    }
-    // Split the result into path and info_oid + id
-    string path = it.substr(0, pos);
-
-    /*Make sure that prefix is part of path (False results could've been returned)
-      because of the role info oid + id appended to the path)*/
-    if(path_prefix.empty() || path.find(path_prefix) != string::npos) {
-      //Get id from info oid prefix + id
-      string id = it.substr(pos + role_oid_prefix.length());
-
-      RGWRole role(cct, store->ctl.role);
-      role.set_id(id);
-      int ret = role.read_info();
-      if (ret < 0) {
-        return ret;
-      }
-      roles.push_back(std::move(role));
-    }
-  }
-
-  return 0;
-}
-
-const string& RGWRole::get_names_oid_prefix()
-{
-  return role_name_oid_prefix;
-}
-
-const string& RGWRole::get_info_oid_prefix()
-{
-  return role_oid_prefix;
-}
-
-const string& RGWRole::get_path_oid_prefix()
-{
-  return role_path_oid_prefix;
-}
-
 int RGWRoleCtl::create(RGWRoleInfo& role,
 		       optional_yield y,
 		       const PutParams& params)
@@ -533,6 +454,20 @@ int RGWRoleCtl::delete_path(const std::string& role_id,
 				 tenant,
 				 params.objv_tracker,
 				 y);
+  });
+}
+
+int RGWRoleCtl::list_roles_by_path_prefix(const std::string& path_prefix,
+					  const std::string& tenant,
+					  vector<RGWRoleInfo>& roles,
+					  optional_yield y)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.role->list_roles_by_path_prefix(op->ctx(),
+					       path_prefix,
+					       tenant,
+					       roles,
+					       y);
   });
 }
 
