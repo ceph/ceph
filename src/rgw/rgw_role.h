@@ -355,5 +355,11 @@ public:
 		  optional_yield y,
       const DoutPrefixProvider *dpp,
 		  const RemoveParams& params = {});
+
+  int list_roles_by_path_prefix(const std::string& path_prefix,
+                                const std::string& tenant,
+                                std::vector<rgw::sal::RGWRole>& roles,
+                                optional_yield y,
+                                const DoutPrefixProvider *dpp);
 };
 #endif /* CEPH_RGW_ROLE_H */
