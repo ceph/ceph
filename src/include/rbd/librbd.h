@@ -1241,6 +1241,9 @@ CEPH_RBD_API int rbd_aio_mirror_image_get_info(rbd_image_t image,
                                                rbd_mirror_image_info_t *mirror_image_info,
                                                size_t info_size,
                                                rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_mirror_image_get_mode(rbd_image_t image,
+                                               rbd_mirror_image_mode_t *mode,
+                                               rbd_completion_t c);
 
 CEPH_RBD_API int rbd_aio_mirror_image_get_global_status(
     rbd_image_t image,
