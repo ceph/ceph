@@ -42,10 +42,12 @@ public:
   void get_image_size(uint64_t snap_id, uint64_t* size,
                       Context* on_finish) override;
 
-  void read(io::AioCompletion* aio_comp, uint64_t snap_id,
+  bool read(io::AioCompletion* aio_comp, uint64_t snap_id,
             io::Extents&& image_extents, io::ReadResult&& read_result,
             int op_flags, int read_flags,
-            const ZTracer::Trace &parent_trace) override;
+            const ZTracer::Trace &parent_trace) override {
+    return false;
+  }
 
   void list_snaps(io::Extents&& image_extents, io::SnapIds&& snap_ids,
                   int list_snaps_flags, io::SnapshotDelta* snapshot_delta,

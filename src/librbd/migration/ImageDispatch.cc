@@ -44,10 +44,9 @@ bool ImageDispatch<I>::read(
   ldout(cct, 20) << dendl;
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  m_format->read(aio_comp, io_context->read_snap().value_or(CEPH_NOSNAP),
-                 std::move(image_extents), std::move(read_result), op_flags,
-                 read_flags, parent_trace);
-  return true;
+  return m_format->read(aio_comp, io_context->read_snap().value_or(CEPH_NOSNAP),
+                        std::move(image_extents), std::move(read_result),
+                        op_flags, read_flags, parent_trace);
 }
 
 template <typename I>
