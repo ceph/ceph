@@ -584,6 +584,14 @@ int rgw_tools_init(CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
   ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
+
+  // Complain if we block in a thread that shouldn't block.
+  optional_yield::set_checker([cct]() {
+    if (is_asio_thread) {
+      ldout(cct, 20) << "WARNING: blocking librados call" << dendl;
+    }
+  });
+
   // ignore errors; missing mime.types is not fatal
   return 0;
 }
