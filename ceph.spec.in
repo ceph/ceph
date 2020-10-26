@@ -462,7 +462,9 @@ Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?fedora} || 0%{?is_opensuse}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
+%endif
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{python3_pkgversion}-influxdb
@@ -504,6 +506,7 @@ to monitor and manage many aspects of a Ceph cluster and related components.
 See the Dashboard documentation at http://docs.ceph.com/ for details and a
 detailed feature overview.
 
+%if 0%{?fedora} || 0%{?is_opensuse}
 %package mgr-diskprediction-local
 Summary:        Ceph Manager module for predicting disk failures
 BuildArch:      noarch
@@ -512,13 +515,12 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-numpy
-%if 0%{?fedora} || 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-scikit-learn
-%endif
 Requires:       python3-scipy
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
 disk failures using local algorithms and machine-learning databases.
+%endif
 
 %package mgr-modules-core
 Summary:        Ceph Manager modules which are always enabled
@@ -1602,6 +1604,7 @@ if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
 
+%if 0%{?fedora} || 0%{?is_opensuse}
 %files mgr-diskprediction-local
 %{_datadir}/ceph/mgr/diskprediction_local
 
@@ -1614,6 +1617,7 @@ fi
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
+%endif
 
 %files mgr-modules-core
 %dir %{_datadir}/ceph/mgr
