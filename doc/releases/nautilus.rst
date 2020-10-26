@@ -281,7 +281,7 @@ Notable Changes
     ceph osd pool set <pool-name> pg_autoscale_mode warn
 
 * The behaviour of the ``-o`` argument to the rados tool has been reverted to
-  its orignal behaviour of indicating an output file. This reverts it to a more
+  its original behaviour of indicating an output file. This reverts it to a more
   consistent behaviour when compared to other tools. Specifying object size is now
   accomplished by using an upper case O ``-O``.
 
