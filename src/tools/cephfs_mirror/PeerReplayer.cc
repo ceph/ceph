@@ -134,6 +134,9 @@ PeerReplayer::~PeerReplayer() {
 
 int PeerReplayer::init() {
   dout(20) << ": initial dir list=[" << m_directories << "]" << dendl;
+  for (auto &dir_path : m_directories) {
+    m_snap_sync_stats.emplace(dir_path, SnapSyncStat());
+  }
 
   auto &remote_client = m_peer.remote.client_name;
   auto &remote_cluster = m_peer.remote.cluster_name;
@@ -193,16 +196,21 @@ void PeerReplayer::add_directory(string_view dir_path) {
 
   std::scoped_lock locker(m_lock);
   m_directories.emplace_back(dir_path);
+  m_snap_sync_stats.emplace(dir_path, SnapSyncStat());
   m_cond.notify_all();
 }
 
 void PeerReplayer::remove_directory(string_view dir_path) {
   dout(20) << ": dir_path=" << dir_path << dendl;
+  auto _dir_path = std::string(dir_path);
 
   std::scoped_lock locker(m_lock);
-  auto it = std::find(m_directories.begin(), m_directories.end(), dir_path);
+  auto it = std::find(m_directories.begin(), m_directories.end(), _dir_path);
   if (it != m_directories.end()) {
     m_directories.erase(it);
+  }
+  if (m_registered.find(_dir_path) == m_registered.end()) {
+    m_snap_sync_stats.erase(_dir_path);
   }
   m_cond.notify_all();
 }
@@ -247,6 +255,9 @@ void PeerReplayer::unregister_directory(const std::string &dir_path) {
 
   unlock_directory(it->first, it->second);
   m_registered.erase(it);
+  if (std::find(m_directories.begin(), m_directories.end(), dir_path) == m_directories.end()) {
+    m_snap_sync_stats.erase(dir_path);
+  }
 }
 
 int PeerReplayer::try_lock_directory(const std::string &dir_path,
@@ -418,6 +429,7 @@ int PeerReplayer::propagate_snap_deletes(const std::string &dir_path,
            << ", snapshot=" << snaps << ": " << cpp_strerror(r) << dendl;
       return r;
     }
+    inc_deleted_snap(dir_path);
   }
 
   return 0;
@@ -440,6 +452,7 @@ int PeerReplayer::propagate_snap_renames(
            << cpp_strerror(r) << dendl;
       return r;
     }
+    inc_renamed_snap(dir_path);
   }
 
   return 0;
@@ -925,7 +938,9 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_path) {
   // start mirroring snapshots from the last snap-id synchronized
   uint64_t last_snap_id = 0;
   if (!remote_snap_map.empty()) {
-    last_snap_id = remote_snap_map.rbegin()->first;
+    auto last = remote_snap_map.rbegin();
+    last_snap_id = last->first;
+    set_last_synced_snap(dir_path, last_snap_id, last->second);
   }
 
   dout(5) << ": last snap-id transferred=" << last_snap_id << dendl;
@@ -940,12 +955,17 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_path) {
 
   dout(10) << ": synzhronizing from snap-id=" << it->first << dendl;
   for (; it != local_snap_map.end(); ++it) {
+    set_current_syncing_snap(dir_path, it->first, it->second);
+    auto start = clock::now();
     r = synchronize(dir_path, it->first, it->second);
     if (r < 0) {
       derr << ": failed to synchronize dir_path=" << dir_path
            << ", snapshot=" << it->second << dendl;
+      clear_current_syncing_snap(dir_path);
       return r;
     }
+    std::chrono::duration<double> duration = clock::now() - start;
+    set_last_synced_stat(dir_path, it->first, it->second, duration.count());
     if (--snaps_per_cycle == 0) {
       break;
     }
@@ -1010,6 +1030,35 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
 }
 
 void PeerReplayer::peer_status(Formatter *f) {
+  std::scoped_lock locker(m_lock);
+  f->open_object_section("stats");
+  for (auto &[dir_path, sync_stat] : m_snap_sync_stats) {
+    f->open_object_section(dir_path);
+    if (!sync_stat.current_syncing_snap) {
+      f->dump_string("state", "idle");
+    } else {
+      f->dump_string("state", "syncing");
+      f->open_object_section("current_sycning_snap");
+      f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
+      f->dump_string("name", (*sync_stat.current_syncing_snap).second);
+      f->close_section();
+    }
+    if (sync_stat.last_synced_snap) {
+      f->open_object_section("last_synced_snap");
+      f->dump_unsigned("id", (*sync_stat.last_synced_snap).first);
+      f->dump_string("name", (*sync_stat.last_synced_snap).second);
+      if (sync_stat.last_sync_duration) {
+        f->dump_float("sync_duration", *sync_stat.last_sync_duration);
+        f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
+      }
+      f->close_section();
+    }
+    f->dump_unsigned("snaps_synced", sync_stat.synced_snap_count);
+    f->dump_unsigned("snaps_deleted", sync_stat.deleted_snap_count);
+    f->dump_unsigned("snaps_renamed", sync_stat.renamed_snap_count);
+    f->close_section(); // dir_path
+  }
+  f->close_section(); // stats
 }
 
 } // namespace mirror
