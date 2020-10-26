@@ -70,7 +70,7 @@ class RGWSI_Role: public RGWServiceInstance
 
   virtual int read_info(RGWSI_MetaBackend::Context *ctx,
 			const std::string& role_id,
-			rgw::sal::RGWRole *role,
+			rgw::sal::RGWRole *role,  // out param
 			RGWObjVersionTracker * const objv_tracker,
 			real_time * const pmtime,
 			std::map<std::string, bufferlist> * pattrs,
@@ -122,10 +122,10 @@ class RGWSI_Role: public RGWServiceInstance
 			  const DoutPrefixProvider *dpp) = 0;
 
   virtual int list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
-                                const std::string& path,
-                                const std::string& tenant,
-                                std::vector<rgw::sal::RGWRole>& roles,
-                                optional_yield y,
+								const std::string& path,
+								const std::string& tenant,
+								std::vector<rgw::sal::RGWRole>& roles,  // out param
+								optional_yield y,
 								const DoutPrefixProvider *dpp) = 0;
 
 };

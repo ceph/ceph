@@ -216,6 +216,12 @@ public:
        bool from_remote_zone) override;
 };
 
+/// Defines control classes that call the low level service layer that handles
+/// storage, svc classes implement the low level object operations. Ctl classes
+/// can span over multiple service classes, for eg. User Ctl classes need to
+/// update the user indices when buckets are added/removed RoleCtl classes may
+/// need to update the RGW Account class that a role has been added deleted
+/// under an account.
 class RGWRoleCtl {
   struct Svc {
     RGWSI_Role *role {nullptr};
