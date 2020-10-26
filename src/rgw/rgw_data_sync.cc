@@ -613,6 +613,27 @@ public:
         }
         yield;
       }
+
+      /* init remote status markers */
+      yield {
+        for (uint32_t i = 0; i < num_shards; i++) {
+          auto& info = shards_info[i];
+          spawn(dsi.inc->update_marker_cr(i, { sync_env->svc->zone->get_zone().id,
+                                               info.marker,
+                                               info.timestamp,
+                                               false }), true);
+        }
+      }
+      while (collect(&ret, NULL)) {
+        if (ret < 0) {
+          tn->log(0, SSTR("WARNING: failed to update remote sync status markers"));
+
+          /* not erroring out, should we? */
+        }
+        yield;
+      }
+
+      /* init local status */
       yield {
         for (uint32_t i = 0; i < num_shards; i++) {
           auto& info = shards_info[i];
@@ -3962,11 +3983,18 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
 
   rgw_bucket_shard_sync_info& status;
   rgw_bucket_index_marker_info info;
+
+  string target_id;
+
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWBucketSyncCtx *_bsc,
                                         rgw_bucket_shard_sync_info& _status)
     : RGWCoroutine(_bsc->cct), bsc(_bsc), status(_status)
-  {}
+  {
+    auto target_location_key = bsc->sync_pair.dest_bs.bucket.get_key();
+    auto& zone_id = bsc->env->svc->zone->get_zone();
+    target_id = zone_id.id + ":" + target_location_key;
+  }
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
@@ -3976,6 +4004,17 @@ public:
         ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
         return set_cr_error(retcode);
       }
+      /* init remote status markers */
+      yield call(bsc->hsi.inc->update_marker_cr({ target_id,
+                                                  info.pos.marker,
+                                                  info.pos.timestamp,
+                                                  false }));
+      if (retcode < 0) {
+        ldout(cct, 0) << "WARNING: failed to update remote sync status markers" << dendl;
+
+        /* not erroring out, should we? */
+      }
+
       yield {
         const bool stopped = status.state == rgw_bucket_shard_sync_info::StateStopped;
         bool write_status = false;
