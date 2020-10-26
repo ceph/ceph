@@ -622,8 +622,14 @@ cdef extern from "rbd/librbd.h" nogil:
                                   size_t info_size)
     void rbd_mirror_image_get_info_cleanup(
         rbd_mirror_image_info_t *mirror_image_info)
+    int rbd_aio_mirror_image_get_info(
+        rbd_image_t image, rbd_mirror_image_info_t *mirror_image_info,
+        size_t info_size, rbd_completion_t c)
     int rbd_mirror_image_get_mode(rbd_image_t image,
                                   rbd_mirror_image_mode_t *mode)
+    int rbd_aio_mirror_image_get_mode(rbd_image_t image,
+                                      rbd_mirror_image_mode_t *mode,
+                                      rbd_completion_t c)
     int rbd_mirror_image_get_global_status(
         rbd_image_t image,
         rbd_mirror_image_global_status_t *mirror_image_global_status,
@@ -5041,6 +5047,53 @@ written." % (self.name, ret, length))
         return info
 
     @requires_not_closed
+    def aio_mirror_image_get_info(self,  oncomplete):
+        """
+         Asynchronously get mirror info for the image.
+
+        oncomplete will be called with the returned info as
+        well as the completion:
+
+        oncomplete(completion, info)
+
+        :param oncomplete: what to do when get info is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        """
+        cdef:
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef:
+                Completion _completion_v = completion_v
+                rbd_mirror_image_info_t *c_info = <rbd_mirror_image_info_t *>_completion_v.buf
+            info = {
+                'global_id' : decode_cstr(c_info[0].global_id),
+                'state'     : int(c_info[0].state),
+                'primary'   : c_info[0].primary,
+            }
+            rbd_mirror_image_get_info_cleanup(c_info)
+            return oncomplete(_completion_v, info)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(
+            NULL, sizeof(rbd_mirror_image_info_t))
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_image_get_info(
+                    self.image, <rbd_mirror_image_info_t *>completion.buf,
+                    sizeof(rbd_mirror_image_info_t), completion.rbd_comp)
+            if ret != 0:
+                raise make_ex(
+                    ret, 'error getting mirror info for image %s' % self.name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
+
+    @requires_not_closed
     def mirror_image_get_mode(self):
         """
         Get mirror mode for the image.
@@ -5053,6 +5106,48 @@ written." % (self.name, ret, length))
         if ret != 0:
             raise make_ex(ret, 'error getting mirror mode for image %s' % self.name)
         return int(c_mode)
+
+    @requires_not_closed
+    def aio_mirror_image_get_mode(self,  oncomplete):
+        """
+         Asynchronously get mirror mode for the image.
+
+        oncomplete will be called with the returned mode as
+        well as the completion:
+
+        oncomplete(completion, mode)
+
+        :param oncomplete: what to do when get info is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        """
+        cdef:
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            mode = int((<rbd_mirror_image_mode_t *>_completion_v.buf)[0]) \
+                if return_value >= 0 else None
+            return oncomplete(_completion_v, mode)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(
+            NULL, sizeof(rbd_mirror_image_mode_t))
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_image_get_mode(
+                    self.image, <rbd_mirror_image_mode_t *>completion.buf,
+                    completion.rbd_comp)
+            if ret != 0:
+                raise make_ex(
+                    ret, 'error getting mirror mode for image %s' % self.name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
 
     @requires_not_closed
     def mirror_image_get_status(self):

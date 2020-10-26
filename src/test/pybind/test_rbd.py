@@ -2208,6 +2208,29 @@ class TestMirroring(object):
         eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
 
         # this is a list so that the local cb() can modify it
+        info = [None]
+        def cb(_, _info):
+            info[0] = _info
+
+        comp = self.image.aio_mirror_image_get_info(cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(info[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        info = info[0]
+        global_id = info['global_id']
+        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+        mode = [None]
+        def cb(_, _mode):
+            mode[0] = _mode
+
+        comp = self.image.aio_mirror_image_get_mode(cb)
+        comp.wait_for_complete_and_cb()
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        eq(mode[0], RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+
         snap_id = [None]
         def cb(_, _snap_id):
             snap_id[0] = _snap_id
