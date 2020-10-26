@@ -1189,6 +1189,27 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command(
+        'orch apply ha_rgw',
+        'Create a High Availability service for existing RGW daemons')
+    def _apply_ha_rgw(self,
+                       inbuf: Optional[str] = None) -> HandleCommandResult:
+
+        usage = """Usage:
+  ceph orch apply ha_rgw -i <yaml spec>
+        """
+        if inbuf:
+            s = yaml.safe_load(inbuf)
+            spec = json_to_generic_spec(s)
+        else:
+            raise OrchestratorValidationError(usage)
+
+        completion = self.apply_ha_rgw(spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        out = completion.result_str()
+        return HandleCommandResult(stdout=out)
+
+    @_cli_write_command(
         'orch apply nfs',
         'name=svc_id,type=CephString '
         'name=pool,type=CephString '
