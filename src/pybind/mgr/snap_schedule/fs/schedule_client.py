@@ -175,8 +175,8 @@ class SnapSchedClient(CephfsClient):
             sched = Schedule.get_db_schedules(path,
                                               db,
                                               fs_name,
-                                              repeat,
-                                              start)[0]
+                                              repeat=repeat,
+                                              start=start)[0]
             time = datetime.now(timezone.utc)
             with open_filesystem(self, fs_name) as fs_handle:
                 snap_ts = time.strftime(SNAPSHOT_TS_FORMAT)
@@ -244,9 +244,9 @@ class SnapSchedClient(CephfsClient):
         self.store_schedule_db(sched.fs)
 
     @updates_schedule_db
-    def rm_snap_schedule(self, fs, path, repeat, start):
+    def rm_snap_schedule(self, fs, path, schedule, start):
         db = self.get_schedule_db(fs)
-        Schedule.rm_schedule(db, path, repeat, start)
+        Schedule.rm_schedule(db, path, schedule, start)
 
     @updates_schedule_db
     def add_retention_spec(self,
@@ -273,13 +273,17 @@ class SnapSchedClient(CephfsClient):
         Schedule.rm_retention(db, path, retention_spec)
 
     @updates_schedule_db
-    def activate_snap_schedule(self, fs, path, repeat, start):
+    def activate_snap_schedule(self, fs, path, schedule, start):
         db = self.get_schedule_db(fs)
-        schedules = Schedule.get_db_schedules(path, db, fs, repeat, start)
+        schedules = Schedule.get_db_schedules(path, db, fs,
+                                              schedule=schedule,
+                                              start=start)
         [s.set_active(db) for s in schedules]
 
     @updates_schedule_db
-    def deactivate_snap_schedule(self, fs, path, repeat, start):
+    def deactivate_snap_schedule(self, fs, path, schedule, start):
         db = self.get_schedule_db(fs)
-        schedules = Schedule.get_db_schedules(path, db, fs, repeat, start)
+        schedules = Schedule.get_db_schedules(path, db, fs,
+                                              schedule=schedule,
+                                              start=start)
         [s.set_inactive(db) for s in schedules]
