@@ -67,7 +67,7 @@ class RGWSI_Role: public RGWServiceInstance
 
   virtual int read_info(RGWSI_MetaBackend::Context *ctx,
 			const std::string& role_id,
-			RGWRoleInfo *role,
+			RGWRoleInfo *role,  // out param
 			RGWObjVersionTracker * const objv_tracker,
 			real_time * const pmtime,
 			map<std::string, bufferlist> * pattrs,
@@ -93,7 +93,6 @@ class RGWSI_Role: public RGWServiceInstance
 			  RGWObjVersionTracker * const objv_tracker,
 			  optional_yield y) = 0;
 
-
   virtual int delete_info(RGWSI_MetaBackend::Context *ctx,
 			  const std::string& id,
 			  RGWObjVersionTracker * const objv_tracker,
@@ -113,10 +112,10 @@ class RGWSI_Role: public RGWServiceInstance
 			  optional_yield y) = 0;
 
   virtual int list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
-                                const std::string& path,
-                                const std::string& tenant,
-                                vector<RGWRoleInfo>& roles,
-                                optional_yield y) = 0;
+                                        const std::string& path,
+                                        const std::string& tenant,
+                                        vector<RGWRoleInfo>& roles,  // out param
+                                        optional_yield y) = 0;
 
 };
 
