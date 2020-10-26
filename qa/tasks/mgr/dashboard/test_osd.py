@@ -4,7 +4,8 @@ from __future__ import absolute_import
 
 import json
 
-from .helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
+from .helper import (DashboardTestCase, JAny, JLeaf, JList, JObj, JTuple,
+                     devices_schema)
 
 
 class OsdTest(DashboardTestCase):
@@ -55,7 +56,7 @@ class OsdTest(DashboardTestCase):
         data = self._get('/api/osd/0/histogram')
         self.assertStatus(200)
         self.assert_in_and_not_none(data['osd'], ['op_w_latency_in_bytes_histogram',
-                                                               'op_r_latency_out_bytes_histogram'])    
+                                                  'op_r_latency_out_bytes_histogram'])
 
     def test_scrub(self):
         self._post('/api/osd/0/scrub?deep=False')
@@ -68,9 +69,9 @@ class OsdTest(DashboardTestCase):
         data = self._get('/api/osd/safe_to_delete?svc_ids=0')
         self.assertStatus(200)
         self.assertSchema(data, JObj({
-             'is_safe_to_delete': JAny(none=True),
-             'message': str
-             }))
+            'is_safe_to_delete': JAny(none=True),
+            'message': str
+        }))
         self.assertTrue(data['is_safe_to_delete'])
 
     def test_osd_smart(self):
@@ -97,6 +98,7 @@ class OsdTest(DashboardTestCase):
             response = self.jsonBody()
             if 'osd_map' in response and 'weight' in response['osd_map']:
                 return round(response['osd_map']['weight'], 1)
+            return None
         self.wait_until_equal(get_reweight_value, 0.4, 10)
         self.assertStatus(200)
 
@@ -104,13 +106,15 @@ class OsdTest(DashboardTestCase):
         self._post('/api/osd/0/reweight', {'weight': 1})
 
     def test_create_lost_destroy_remove(self):
+        sample_data = {
+            'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
+            'svc_id': 5
+        }
+
         # Create
         self._task_post('/api/osd', {
             'method': 'bare',
-            'data': {
-                'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
-                'svc_id': 5
-            },
+            'data': sample_data,
             'tracking_id': 'bare-5'
         })
         self.assertStatus(201)
@@ -220,15 +224,7 @@ class OsdTest(DashboardTestCase):
     def test_osd_devices(self):
         data = self._get('/api/osd/0/devices')
         self.assertStatus(200)
-        self.assertSchema(data, JList(JObj({
-            'daemons': JList(str),
-            'devid': str,
-            'location': JList(JObj({
-                'host': str,
-                'dev': str,
-                'path': str
-            }))
-        })))
+        self.assertSchema(data, devices_schema)
 
 
 class OsdFlagsTest(DashboardTestCase):
