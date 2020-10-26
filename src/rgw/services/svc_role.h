@@ -120,7 +120,6 @@ class RGWSI_Role: public RGWServiceInstance
 
 };
 
-const string role_name_oid_prefix = "role_names.";
-const string role_oid_prefix = "roles.";
-const string role_path_oid_prefix = "role_paths.";
-const string role_arn_prefix = "arn:aws:iam::";
+static const string role_name_oid_prefix = "role_names.";
+static const string role_oid_prefix = "roles.";
+static const string role_path_oid_prefix = "role_paths.";
