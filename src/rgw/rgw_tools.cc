@@ -250,7 +250,6 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
                       optional_yield y, int flags)
 {
-#ifdef HAVE_BOOST_CONTEXT
   // given a yield_context, call async_operate() to yield the coroutine instead
   // of blocking
   if (y) {
@@ -268,7 +267,6 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   if (is_asio_thread) {
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
-#endif
   return ioctx.operate(oid, op, nullptr, flags);
 }
 
@@ -276,7 +274,6 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
 		      int flags)
 {
-#ifdef HAVE_BOOST_CONTEXT
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
@@ -287,7 +284,6 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   if (is_asio_thread) {
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
-#endif
   return ioctx.operate(oid, op, flags);
 }
 
@@ -295,7 +291,6 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y)
 {
-#ifdef HAVE_BOOST_CONTEXT
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
@@ -310,7 +305,6 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
   if (is_asio_thread) {
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
-#endif
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
 

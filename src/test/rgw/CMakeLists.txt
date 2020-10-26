@@ -164,10 +164,8 @@ add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TA
 add_ceph_unittest(unittest_rgw_dmclock_scheduler)
 
 target_link_libraries(unittest_rgw_dmclock_scheduler rgw_schedulers global ${UNITTEST_LIBS})
-if(WITH_BOOST_CONTEXT)
-  target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
-  target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
-endif()
+target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   add_executable(unittest_rgw_amqp test_rgw_amqp.cc)
