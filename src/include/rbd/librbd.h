@@ -726,6 +726,10 @@ CEPH_RBD_API int rbd_get_parent(rbd_image_t image,
                                 rbd_linked_image_spec_t *parent_image,
                                 rbd_snap_spec_t *parent_snap);
 
+CEPH_RBD_API int rbd_get_migration_source_spec(rbd_image_t image,
+                                               char* source_spec,
+                                               size_t* max_len);
+
 CEPH_RBD_API int rbd_get_flags(rbd_image_t image, uint64_t *flags);
 CEPH_RBD_API int rbd_get_group(rbd_image_t image, rbd_group_info_t *group_info,
                                size_t group_info_size);
