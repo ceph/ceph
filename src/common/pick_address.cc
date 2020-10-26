@@ -405,7 +405,7 @@ int pick_addresses(
                                      networks, interfaces, addrs,
                                      preferred_numa_node);
       }
-      if (found_ipv != 0 && (found_ipv & ipv != ipv)) {
+      if (found_ipv != 0 && ((found_ipv & ipv) != ipv)) {
         lderr(cct) << "An IP address was found, but not enough networks to cover both address families. "
                    << "An IPv4 and IPv6 network is required for dual stack. Continuing with one stack" << dendl;
         break;
