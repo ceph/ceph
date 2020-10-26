@@ -454,20 +454,6 @@ between all the RGW daemons available.
 
     net.ipv4.ip_forward = 1
 
-<<<<<<< HEAD
- Load balancing in HAProxy and Keepalived at the same time also requires the
- ability to bind to an IP address that are nonlocal, meaning that it is not
- assigned to a device on the local system. This allows a running load balancer
- instance to bind to an IP that is not local for failover.
- So it will be needed to set this system option::
-
-    net.ipv4.ip_nonlocal_bind = 1
-
- Be sure to set properly this two options in the file ``/etc/sysctl.conf`` in
- order to persist this values even if the hosts are restarted.
- This configuration changes must be applied in all the hosts where the HAProxy for
- RGW service is going to be deployed.
-=======
   Load balancing in HAProxy and Keepalived at the same time also requires the
   ability to bind to an IP address that are nonlocal, meaning that it is not
   assigned to a device on the local system. This allows a running load balancer
@@ -480,7 +466,7 @@ between all the RGW daemons available.
   order to persist this values even if the hosts are restarted.
   These configuration changes must be applied in all the hosts where the HAProxy for
   RGW service is going to be deployed.
->>>>>>> wip: cephadm: HA for RGW service
+
 
 **Deploy of the high availability service for RGW**
 
@@ -554,11 +540,7 @@ where the properties of this service specification are:
 
 * Good to have at least 3 RGW daemons
 * Use at least 3 hosts for the HAProxy for RGW service
-<<<<<<< HEAD
-* In each host it will be deployed an HAProxy and a Keepalived daemon. These
-=======
 * In each host an HAProxy and a Keepalived daemon will be deployed. These
->>>>>>> wip: cephadm: HA for RGW service
   daemons can be managed as systemd services
 
 
