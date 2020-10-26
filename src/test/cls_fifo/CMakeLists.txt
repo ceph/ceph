@@ -1,4 +1,3 @@
-if(WITH_BOOST_CONTEXT)
 add_executable(ceph_test_cls_fifo
   test_cls_fifo.cc
   )
@@ -37,4 +36,3 @@ target_link_libraries(ceph_bench_cls_fifo
 install(TARGETS
   ceph_test_cls_fifo
   DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()

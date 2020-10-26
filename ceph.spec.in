@@ -1173,11 +1173,6 @@ ${CMAKE} .. \
 %if 0%{with ocf}
     -DWITH_OCF=ON \
 %endif
-%ifarch aarch64 armv7hl mips mipsel ppc ppc64 ppc64le %{ix86} x86_64 s390x
-    -DWITH_BOOST_CONTEXT=ON \
-%else
-    -DWITH_BOOST_CONTEXT=OFF \
-%endif
 %if 0%{with cephfs_shell}
     -DWITH_CEPHFS_SHELL=ON \
 %endif
