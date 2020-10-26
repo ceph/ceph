@@ -121,6 +121,13 @@ class RGWSI_Role: public RGWServiceInstance
 			  optional_yield y,
 			  const DoutPrefixProvider *dpp) = 0;
 
+  virtual int list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
+                                const std::string& path,
+                                const std::string& tenant,
+                                std::vector<rgw::sal::RGWRole>& roles,
+                                optional_yield y,
+								const DoutPrefixProvider *dpp) = 0;
+
 };
 
 const std::string role_name_oid_prefix = "role_names.";
