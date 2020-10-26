@@ -91,6 +91,61 @@ private:
     }
   };
 
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
+  struct SnapSyncStat {
+    boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
+    boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
+    uint64_t synced_snap_count = 0;
+    uint64_t deleted_snap_count = 0;
+    uint64_t renamed_snap_count = 0;
+    time last_synced = clock::zero();
+    boost::optional<double> last_sync_duration;
+  };
+
+  void _set_last_synced_snap(const std::string &dir_path, uint64_t snap_id,
+                            const std::string &snap_name) {
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    sync_stat.last_synced_snap = std::make_pair(snap_id, snap_name);
+    sync_stat.current_syncing_snap = boost::none;
+  }
+  void set_last_synced_snap(const std::string &dir_path, uint64_t snap_id,
+                            const std::string &snap_name) {
+    std::scoped_lock locker(m_lock);
+    _set_last_synced_snap(dir_path, snap_id, snap_name);
+  }
+  void set_current_syncing_snap(const std::string &dir_path, uint64_t snap_id,
+                                const std::string &snap_name) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    sync_stat.current_syncing_snap = std::make_pair(snap_id, snap_name);
+  }
+  void clear_current_syncing_snap(const std::string &dir_path) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    sync_stat.current_syncing_snap = boost::none;
+  }
+  void inc_deleted_snap(const std::string &dir_path) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    ++sync_stat.deleted_snap_count;
+  }
+  void inc_renamed_snap(const std::string &dir_path) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    ++sync_stat.renamed_snap_count;
+  }
+  void set_last_synced_stat(const std::string &dir_path, uint64_t snap_id,
+                            const std::string &snap_name, double duration) {
+    std::scoped_lock locker(m_lock);
+    _set_last_synced_snap(dir_path, snap_id, snap_name);
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    sync_stat.last_synced = clock::now();
+    sync_stat.last_sync_duration = duration;
+    ++sync_stat.synced_snap_count;
+  }
+
   typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
 
   CephContext *m_cct;
@@ -99,6 +154,7 @@ private:
   // probably need to be encapsulated when supporting cancelations
   std::map<std::string, DirRegistry> m_registered;
   std::vector<std::string> m_directories;
+  std::map<std::string, SnapSyncStat> m_snap_sync_stats;
   MountRef m_local_mount;
   PeerReplayerAdminSocketHook *m_asok_hook = nullptr;
 
