@@ -1,0 +1,32 @@
+# {{ cephadm_managed }}
+vrrp_script check_haproxy {
+    script "curl http://localhost:{{ spec.ha_proxy_port }}/haproxy_test"
+    weight -20
+    interval 2
+    rise 2
+    fall 2
+}
+
+vrrp_instance VI_0 {
+  state {{ state }}
+  priority 100
+  interface {{ spec.virtual_ip_interface }}
+  virtual_router_id 51
+  advert_int 1
+  authentication {
+      auth_type PASS
+      auth_pass {{ spec.keepalived_password }}
+  }
+  unicast_src_ip {{ host_ip }}
+  unicast_peer {
+    {% for ip in other_ips  %}
+    {{ ip }}
+    {% endfor %}
+  }
+  virtual_ipaddress {
+    {{ spec.virtual_ip_address }} dev {{ spec.virtual_ip_interface }}
+  }
+  track_script {
+      check_haproxy
+  }
+}
