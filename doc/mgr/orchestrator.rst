@@ -175,7 +175,7 @@ Example::
 
 When the parameter ``all-available-devices`` or a DriveGroup specification is used, a cephadm service is created.
 This service guarantees that all available devices or devices included in the DriveGroup will be used for OSDs.
-Note that the effect of ``--all-available-devices`` is persistent; that is, drives which are added to the system 
+Note that the effect of ``--all-available-devices`` is persistent; that is, drives which are added to the system
 or become available (say, by zapping) after the command is complete will be automatically found and added to the cluster.
 
 That is, after using::
@@ -310,7 +310,7 @@ error if it doesn't know how to do this transition.
 Update the number of monitor hosts::
 
     ceph orch apply mon --placement=<placement> [--dry-run]
-    
+
 Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 Each host can optionally specify a network for the monitor to listen on.
@@ -318,7 +318,7 @@ Each host can optionally specify a network for the monitor to listen on.
 Update the number of manager hosts::
 
     ceph orch apply mgr --placement=<placement> [--dry-run]
-    
+
 Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 ..
@@ -410,6 +410,138 @@ e.g., ``ceph orch apply mds myfs --placement="3 host1 host2 host3"``
 Service Commands::
 
     ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
+
+
+.. _orchestrator-haproxy-service-spec:
+
+High availability service for RGW
+=================================
+
+This service allows the user to create a high avalilability RGW service
+providing a mimimun set of configuration options.
+
+The orchestrator will deploy and configure automatically several HAProxy and
+Keepalived containers to assure the continuity of the RGW service while the
+Ceph cluster will have at least 1 RGW daemon running.
+
+The next image explains graphically how this service works:
+
+.. image:: ../images/HAProxy_for_RGW.svg
+
+There are N hosts where the HA RGW service is deployed. This means that we have
+an HAProxy and a keeplived daemon running in each of this hosts.
+Keepalived is used to provide a "virtual IP" binded to the hosts. All RGW
+clients use this  "virtual IP"  to connect with the RGW Service.
+
+Each keeplived daemon is checking each few seconds what is the status of the
+HAProxy daemon running in the same host. Also it is aware that the "master" keepalived
+daemon will be running without problems.
+
+If the "master" keepalived daemon or the Active HAproxy is not responding, one
+of the keeplived daemons running in backup mode will be elected as master, and
+the "virtual ip" will be moved to that node.
+
+The active HAProxy also acts like a load balancer, distributing all RGW requests
+between all the RGW daemons available.
+
+**Prerequisites:**
+
+* At least two RGW daemons running in the Ceph cluster
+* Operating system prerequisites:
+  In order for the Keepalived service to forward network packets properly to the
+  real servers, each router node must have IP forwarding turned on in the kernel.
+  So it will be needed to set this system option::
+
+    net.ipv4.ip_forward = 1
+
+ Load balancing in HAProxy and Keepalived at the same time also requires the
+ ability to bind to an IP address that are nonlocal, meaning that it is not
+ assigned to a device on the local system. This allows a running load balancer
+ instance to bind to an IP that is not local for failover.
+ So it will be needed to set this system option::
+
+    net.ipv4.ip_nonlocal_bind = 1
+
+ Be sure to set properly this two options in the file ``/etc/sysctl.conf`` in
+ order to persist this values even if the hosts are restarted.
+ This configuration changes must be applied in all the hosts where the HAProxy for
+ RGW service is going to be deployed.
+
+**Deploy of the high availability service for RGW**
+
+Use the command::
+
+    ceph orch apply ha_rgw -i <service_spec_file>
+
+**Service specification file:**
+
+It is a yaml format file with the following properties:
+
+.. code-block:: yaml
+
+    service_type: HA_RGW
+    service_id: haproxy_for_rgw
+    placement:
+      hosts:
+        - host1
+        - host2
+        - host3
+    spec:
+      virtual_ip_interface: <string> # ex: eth0
+      virtual_ip_address: <string>/<string> # ex: 192.168.20.1/24
+      frontend_port: <integer>  # ex: 8080
+      ha_proxy_port: <integer> # ex: 1967
+      ha_proxy_stats_enabled: <boolean> # ex: true
+      ha_proxy_stats_user: <string> # ex: admin
+      ha_proxy_stats_password: <string> # ex: true
+      ha_proxy_enable_prometheus_exporter: <boolean> # ex: true
+      ha_proxy_monitor_uri: <string> # ex: /haproxy_health
+      keepalived_user: <string> # ex: admin
+      keepalived_password: <string> # ex: admin
+
+where the properties of this service specification are:
+
+* ``service_type``
+    Mandatory and set to _HARGW_.
+* ``service_id``
+    The name of the service.
+* ``placement hosts``
+    The hosts where it is desired to run the HA daemons. An HAProxy and a
+    Keepalived containers will be deployed in these hosts.
+    The RGW daemons can run in other different hosts or not.
+* ``virtual_ip_interface``
+    The physical network interface where the virtual ip will be binded
+* ``virtual_ip_address``
+    The virtual IP ( and network ) where the HA RGW service will be available.
+    All your RGW clients must point to this IP in order to use the HA RGW
+    service .
+* ``frontend_port``
+    The port used to access the HA RGW service
+* ``ha_proxy_port``
+    The port used by HAProxy containers
+* ``ha_proxy_stats_enabled``
+    If it is desired to enable the statistics URL in HAProxy daemons
+* ``ha_proxy_stats_user``
+    User needed to access the HAProxy statistics URL
+* ``ha_proxy_stats_password``
+    The password needed to access the HAProxy statistics URL
+* ``ha_proxy_enable_prometheus_exporter``
+    If it is desired to enable the Promethes exporter in HAProxy. This will
+    allow to consume RGW Service metrics from Grafana.
+* ``ha_proxy_monitor_uri``:
+    To set the API endpoint where the health of HAProxy daemon is provided
+* ``keepalived_user``
+    User needed to access keepalived daemons
+* ``keepalived_password``:
+    The password needed to access keepalived daemons
+
+**Useful hints for the RGW Service:**
+
+* Good to have at least 3 RGW daemons
+* Use at least 3 hosts for the HAProxy for RGW service
+* In each host it will be deployed an HAProxy and a Keepalived daemon. These
+  daemons can be managed as systemd services
+
 
 Deploying custom containers
 ===========================
