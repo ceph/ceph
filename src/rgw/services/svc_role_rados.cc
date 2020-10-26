@@ -401,3 +401,38 @@ int RGWSI_Role_RADOS::delete_path(RGWSI_MetaBackend::Context *ctx,
                     objv_tracker, y, dpp);
 
 }
+
+int RGWSI_Role_RADOS::list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
+                                                const std::string& path_prefix,
+                                                const std::string& tenant,
+                                                std::vector<rgw::sal::RGWRole>& roles,
+                                                optional_yield y,
+                                                const DoutPrefixProvider *dpp)
+{
+  std::string prefix;
+  // List all roles if path prefix is empty
+  if (! path_prefix.empty()) {
+    prefix = tenant + role_path_oid_prefix + path_prefix;
+  } else {
+    prefix = tenant + role_path_oid_prefix;
+  }
+
+  auto syspool = svc.sysobj->get_pool(svc.zone->get_zone_params().roles_pool);
+
+  syspool.list_prefixed_objs(dpp, prefix, [&](const std::string& oid) {
+    if (auto pos = oid.rfind(role_oid_prefix);
+        pos != std::string::npos) {
+      auto path = oid.substr(0, pos);
+      if (path_prefix.empty() || path.find(path_prefix) != std::string::npos) {
+        auto role_id = oid.substr(pos + role_oid_prefix.length());
+        rgw::sal::RGWRole role;
+        RGWObjVersionTracker ot;
+        int r = read_info(ctx, role_id, &role, &ot, nullptr, nullptr, y, dpp);
+        if (r == 0) {
+          roles.emplace_back(role);
+        }
+      }
+    }
+  });
+  return 0; // meta_be function calls have to return an int
+}
