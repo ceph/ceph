@@ -118,6 +118,11 @@ class RGWSI_Role_RADOS: public RGWSI_Role
   		 RGWObjVersionTracker * const objv_tracker,
   		 optional_yield y) override;
 
+  int list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
+                                const std::string& path,
+                                const std::string& tenant,
+                                vector<RGWRoleInfo>& roles,
+                                optional_yield y) override;
 
 private:
   RGWSI_MetaBackend_Handler *be_handler;

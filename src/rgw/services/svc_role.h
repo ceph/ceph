@@ -112,6 +112,12 @@ class RGWSI_Role: public RGWServiceInstance
 			  RGWObjVersionTracker * const objv_tracker,
 			  optional_yield y) = 0;
 
+  virtual int list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
+                                const std::string& path,
+                                const std::string& tenant,
+                                vector<RGWRoleInfo>& roles,
+                                optional_yield y) = 0;
+
 };
 
 const string role_name_oid_prefix = "role_names.";
