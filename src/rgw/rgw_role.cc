@@ -531,6 +531,22 @@ int RGWRoleCtl::delete_path(const std::string& role_id,
   });
 }
 
+int RGWRoleCtl::list_roles_by_path_prefix(const std::string& path_prefix,
+					  const std::string& tenant,
+					  std::vector<rgw::sal::RGWRole>& roles,
+					  optional_yield y,
+            const DoutPrefixProvider *dpp)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.role->list_roles_by_path_prefix(op->ctx(),
+					       path_prefix,
+					       tenant,
+					       roles,
+					       y,
+                 dpp);
+  });
+}
+
 RGWRoleMetadataHandler::RGWRoleMetadataHandler(RGWSI_Role *role_svc)
 {
   base_init(role_svc->ctx(), role_svc->get_be_handler());
