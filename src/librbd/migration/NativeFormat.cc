@@ -109,11 +109,13 @@ void NativeFormat<I>::open(Context* on_finish) {
     m_image_ctx->id = m_image_id;
   }
 
-  // set rados flags for reading the parent image
-  if (m_image_ctx->child->config.template get_val<bool>("rbd_balance_parent_reads")) {
-    m_image_ctx->set_read_flag(librados::OPERATION_BALANCE_READS);
-  } else if (m_image_ctx->child->config.template get_val<bool>("rbd_localize_parent_reads")) {
-    m_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
+  if (m_image_ctx->child != nullptr) {
+    // set rados flags for reading the parent image
+    if (m_image_ctx->child->config.template get_val<bool>("rbd_balance_parent_reads")) {
+      m_image_ctx->set_read_flag(librados::OPERATION_BALANCE_READS);
+    } else if (m_image_ctx->child->config.template get_val<bool>("rbd_localize_parent_reads")) {
+      m_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
+    }
   }
 
   // open the source RBD image
