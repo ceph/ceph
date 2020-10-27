@@ -43,7 +43,16 @@ void OpenSourceImageRequest<I>::open_source() {
   // note that all source image ctx properties are placeholders
   *m_src_image_ctx = I::create("", "", m_src_snap_id, m_dst_image_ctx->md_ctx,
                                true);
-  (*m_src_image_ctx)->child = m_dst_image_ctx;
+  auto src_image_ctx = *m_src_image_ctx;
+  src_image_ctx->child = m_dst_image_ctx;
+
+  // use default layout values (can be overridden by source layers later)
+  src_image_ctx->order = 22;
+  src_image_ctx->layout = file_layout_t();
+  src_image_ctx->layout.stripe_count = 1;
+  src_image_ctx->layout.stripe_unit = 1ULL << src_image_ctx->order;
+  src_image_ctx->layout.object_size = 1Ull << src_image_ctx->order;
+  src_image_ctx->layout.pool_id = -1;
 
   auto source_spec = m_migration_info.source_spec;
   if (source_spec.empty()) {
@@ -53,7 +62,7 @@ void OpenSourceImageRequest<I>::open_source() {
       m_migration_info.image_name, m_migration_info.image_id);
   }
 
-  SourceSpecBuilder<I> source_spec_builder{*m_src_image_ctx};
+  SourceSpecBuilder<I> source_spec_builder{src_image_ctx};
   json_spirit::mObject source_spec_object;
   int r = source_spec_builder.parse_source_spec(source_spec,
                                                 &source_spec_object);
