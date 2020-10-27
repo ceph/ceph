@@ -81,6 +81,7 @@ struct ExtMapNode : LogicalCachedExtent {
 
   virtual bool at_max_capacity() const = 0;
   virtual bool at_min_capacity() const = 0;
+  virtual unsigned get_node_size() const = 0;
   virtual ~ExtMapNode() = default;
 
   using alloc_ertr = TransactionManager::alloc_extent_ertr;

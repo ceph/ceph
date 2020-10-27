@@ -73,7 +73,7 @@ ExtMapInnerNode::rm_lextent(ext_context_t ec, objaddr_t lo, lext_map_val_t val)
   auto rm_pt = get_containing_child(lo);
   return extmap_load_extent(ec, rm_pt->get_val(),  get_meta().depth - 1).safe_then(
     [this, ec, rm_pt, lo, val=std::move(val)](auto extent) mutable {
-    if (extent->at_min_capacity()) {
+    if (extent->at_min_capacity() && get_node_size() > 1) {
       return merge_entry(ec, lo, rm_pt, extent);
     } else {
       return merge_entry_ertr::make_ready_future<ExtMapNodeRef>(std::move(extent));
