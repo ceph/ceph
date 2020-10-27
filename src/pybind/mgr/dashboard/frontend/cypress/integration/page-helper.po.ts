@@ -227,7 +227,7 @@ export abstract class PageHelper {
   }
 
   setPageSize(size: string) {
-    cy.get('cd-table .dataTables_paginate input').first().clear().type(size);
+    cy.get('cd-table .dataTables_paginate input').first().clear({ force: true }).type(size);
   }
 
   seachTable(text: string) {
