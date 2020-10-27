@@ -6604,7 +6604,8 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
   env.init(dpp, store->ctx(), store, store->svc(), store->svc()->rados->get_async_processor(),
-           &http_manager, nullptr, nullptr, module, nullptr);
+           &http_manager, nullptr, store->getRados()->get_sync_tracer(),
+           module, nullptr);
 
   RGWDataSyncCtx sc;
   auto conns = store->ctl()->remote->zone_conns(*pipe.source.zone);
