@@ -2307,7 +2307,8 @@ void RGWListBuckets::execute()
     goto send_end;
   }
 
-  if (supports_account_metadata()) {
+  if (supports_account_metadata() &&
+      s->user->get_id().id.compare("anonymous") != 0) {
     op_ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &attrs, s->yield);
     if (op_ret < 0) {
       goto send_end;
