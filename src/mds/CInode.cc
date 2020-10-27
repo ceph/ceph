@@ -52,14 +52,14 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << ino() << ") "
 
-void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t *bt) {
+void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
   using ceph::encode;
 
   op.priority = priority;
   op.create(false);
 
   bufferlist parent_bl;
-  encode(*bt, parent_bl);
+  encode(bt, parent_bl);
   op.setxattr("parent", parent_bl);
 
   // for the old pool there is no need to update the layout
@@ -1318,23 +1318,10 @@ struct C_IO_Inode_StoredBacktrace : public CInodeIOContext {
   }
 };
 
-struct C_IO_Inode_CommitBacktrace : public Context {
-  CInode *in;
-  version_t version;
-  MDSContext *fin;
-  std::vector<CInodeCommitOperation> ops_vec;
-  inode_backtrace_t bt;
 
-  C_IO_Inode_CommitBacktrace(CInode *i, version_t v, MDSContext *f) :
-    in(i), version(v), fin(f) { }
-  void finish(int r) override {
-    in->_commit_ops(r, version, fin, ops_vec, &bt);
-  }
-};
-
-void CInode::_commit_ops(int r, version_t version, MDSContext *fin,
+void CInode::_commit_ops(int r, C_GatherBuilder &gather_bld,
                          std::vector<CInodeCommitOperation> &ops_vec,
-                         inode_backtrace_t *bt)
+                         inode_backtrace_t &bt)
 {
   dout(10) << __func__ << dendl;
 
@@ -1342,12 +1329,6 @@ void CInode::_commit_ops(int r, version_t version, MDSContext *fin,
     mdcache->mds->handle_write_error_with_lock(r);
     return;
   }
-
-  C_GatherBuilder gather(g_ceph_context,
-                         new C_OnFinisher(new C_IO_Inode_StoredBacktrace(this,
-                                                                         version,
-                                                                         fin),
-                         mdcache->mds->finisher));
 
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
@@ -1358,9 +1339,8 @@ void CInode::_commit_ops(int r, version_t version, MDSContext *fin,
     op.update(obj_op, bt);
     mdcache->mds->objecter->mutate(oid, oloc, obj_op, snapc,
                                    ceph::real_clock::now(),
-                                   0, gather.new_sub());
+                                   0, gather_bld.new_sub());
   }
-  gather.activate();
 }
 
 void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
@@ -1401,11 +1381,18 @@ void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
 void CInode::store_backtrace(MDSContext *fin, int op_prio)
 {
   std::vector<CInodeCommitOperation> ops_vec;
+  inode_backtrace_t bt;
   auto version = get_inode()->backtrace_version;
 
-  auto c = new C_IO_Inode_CommitBacktrace(this, version, fin);
-  _store_backtrace(c->ops_vec, c->bt, op_prio);
-  mdcache->mds->finisher->queue(c);
+  _store_backtrace(ops_vec, bt, op_prio);
+
+  C_GatherBuilder gather(g_ceph_context,
+			 new C_OnFinisher(
+			   new C_IO_Inode_StoredBacktrace(this, version, fin),
+			   mdcache->mds->finisher));
+  _commit_ops(0, gather, ops_vec, bt);
+  ceph_assert(gather.has_subs());
+  gather.activate();
 }
 
 void CInode::store_backtrace(CInodeCommitOperations &op, int op_prio)
