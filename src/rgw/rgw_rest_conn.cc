@@ -230,6 +230,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req
   params.info = info;
   params.mod_ptr = mod_ptr;
   params.mod_pg_ver = mod_pg_ver;
+  params.mod_zone_id = mod_zone_id;
   params.prepend_metadata = prepend_metadata;
   params.get_op = get_op;
   params.rgwx_stat = rgwx_stat;
