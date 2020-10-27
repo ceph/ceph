@@ -187,7 +187,8 @@ namespace rgw {
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
             rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
             rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
-	    if (ux_key && ux_attrs) {
+	    if (!(flags & RGWFileHandle::FLAG_IN_CB) &&
+		ux_key && ux_attrs) {
               DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
               if (get<0>(dar) || get<1>(dar)) {
                 update_fh(rgw_fh);
@@ -223,7 +224,8 @@ namespace rgw {
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
             rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
             rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
-	    if (ux_key && ux_attrs) {
+	    if (!(flags & RGWFileHandle::FLAG_IN_CB) &&
+		ux_key && ux_attrs) {
               DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
               if (get<0>(dar) || get<1>(dar)) {
                 update_fh(rgw_fh);
@@ -2033,7 +2035,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 
       uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
 	? RGWFileHandle::FLAG_NONE
-	: RGWFileHandle::FLAG_EXACT_MATCH;
+	: RGWFileHandle::FLAG_EXACT_MATCH | RGWFileHandle::FLAG_IN_CB;
 
       bool fast_attrs= fs->get_context()->_conf->rgw_nfs_s3_fast_attrs;
 
