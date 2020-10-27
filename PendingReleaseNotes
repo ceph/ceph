@@ -1,25 +1,6 @@
->= 14.2.12
-----------
+14.2.13
+-------
 
-* ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
-  a number of bugs and improves usability in terms of size specification and
-  calculation, as well as idempotency behaviour and disk replacement process.
-  Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
-  more detailed information.
-
-* The ``ceph df`` command now lists the number of pgs in each pool.
-
-* Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
-  If any OSD has repaired more than this many I/O errors in stored data a
-  ``OSD_TOO_MANY_REPAIRS`` health warning is generated.  In order to allow
-  clearing of the warning, a new command ``ceph tell osd.# clear_shards_repaired [count]``
-  has been added.  By default it will set the repair count to 0.  If you wanted
-  to be warned again if additional repairs are performed you can provide a value
-  to the command and specify the value of ``mon_osd_warn_num_repaired``.
-  This command will be replaced in future releases by the health mute/unmute feature.
-
-* It is now possible to specify the initial monitor to contact for Ceph tools
-  and daemons using the ``mon_host_override`` config option or
-  ``--mon-host-override <ip>`` command-line switch. This generally should only
-  be used for debugging and only affects initial communication with Ceph's
-  monitor cluster.
+* This release fixes a regression introduced in 14.2.12 which broke deployments
+  that referred to MON hosts using DNS names instead of IP addresses in the
+  ``mon_host`` parameter in ``/etc/ceph/ceph.conf``.
