@@ -78,7 +78,7 @@ build_dashboard_frontend() {
   cd src/pybind/mgr/dashboard/frontend
 
   . $TEMP_DIR/bin/activate
-  timeout 1h npm ci
+  NG_CLI_ANALYTICS=false timeout 1h npm ci
   echo "Building ceph-dashboard frontend with build:localize script";
   # we need to use "--" because so that "--prod" survives accross all
   # scripts redirections inside package.json
