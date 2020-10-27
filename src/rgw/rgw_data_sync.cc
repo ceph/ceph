@@ -544,6 +544,10 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   vector<sip_data_inc_pos> shards_info;
 
   RGWSyncTraceNodeRef tn;
+
+  int i;
+  RGWCoroutine *cr;
+
 public:
   RGWInitDataSyncStatusCoroutine(RGWDataSyncCtx *_sc,
                                  uint64_t instance_id,
@@ -557,7 +561,9 @@ public:
     lock_name = "sync_lock";
 
     status->sync_info.instance_id = instance_id;
-    status->sync_info.num_shards = sc->dsi.inc->num_shards();
+
+    num_shards = sc->dsi.inc->num_shards();
+    status->sync_info.num_shards = num_shards;
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -599,39 +605,49 @@ public:
 
       tn->log(10, "took lease");
 
+#define DATA_INIT_SPAWN_WINDOW 16
       /* fetch current position in logs */
-      yield {
-        shards_info.resize(num_shards);
-        for (uint32_t i = 0; i < num_shards; i++) {
-          spawn(dsi.inc->get_pos_cr(i, &shards_info[i]), true);
-        }
+      shards_info.resize(num_shards);
+      for (i = 0; i < (int)num_shards; i++) {
+        yield_spawn_window(dsi.inc->get_pos_cr(i, &shards_info[i]),
+                           DATA_INIT_SPAWN_WINDOW,
+                           [&](uint64_t stack_id, int ret) {
+                           if (ret < 0) {
+                             tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
+                             return ret;
+                           }
+                           return 0;
+                         });
+
       }
-      while (collect(&ret, NULL)) {
-        if (ret < 0) {
-          tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
-          return set_state(RGWCoroutine_Error);
-        }
-        yield;
-      }
+
+      drain_all();
 
       /* init remote status markers */
-      yield {
-        for (uint32_t i = 0; i < num_shards; i++) {
+      for (i = 0; i < (int)num_shards; i++) {
+
+        {
           auto& info = shards_info[i];
-          spawn(dsi.inc->update_marker_cr(i, { sync_env->svc->zone->get_zone().id,
+          cr = dsi.inc->update_marker_cr(i, { sync_env->svc->zone->get_zone().id,
                                                info.marker,
                                                info.timestamp,
-                                               false }), true);
+                                               false });
         }
-      }
-      while (collect(&ret, NULL)) {
-        if (ret < 0) {
-          tn->log(0, SSTR("WARNING: failed to update remote sync status markers"));
 
-          /* not erroring out, should we? */
-        }
-        yield;
+        yield_spawn_window(cr,
+                           DATA_INIT_SPAWN_WINDOW,
+                           [&](uint64_t stack_id, int ret) {
+                             if (ret < 0) {
+                               tn->log(0, SSTR("WARNING: failed to update remote sync status markers"));
+
+                               /* not erroring out, should we? */
+                             }
+                             return 0;
+                           });
+
       }
+
+      drain_all();
 
       /* init local status */
       yield {
