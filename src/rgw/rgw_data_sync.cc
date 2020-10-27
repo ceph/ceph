@@ -1979,6 +1979,7 @@ public:
 class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
+  std::shared_ptr<RGWDataSyncInfoCRHandler> sip;
   int shard_id;
   rgw::bucket_sync::Handle state; // cached bucket-shard state
   rgw_data_sync_obligation obligation; // input obligation
@@ -1995,7 +1996,9 @@ class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   ceph::real_time progress;
   int sync_status = 0;
 public:
-  RGWDataSyncSingleEntryCR(RGWDataSyncCtx *_sc, int _shard_id,
+  RGWDataSyncSingleEntryCR(RGWDataSyncCtx *_sc,
+                           std::shared_ptr<RGWDataSyncInfoCRHandler>& _sip,
+                           int _shard_id,
                            rgw::bucket_sync::Handle state,
                            rgw_data_sync_obligation obligation,
                            RGWDataSyncShardMarkerTrack *_marker_tracker,
@@ -2003,7 +2006,7 @@ public:
                            boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
                            const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      shard_id(_shard_id),
+      sip(_sip), shard_id(_shard_id),
       state(std::move(state)), obligation(std::move(obligation)),
       marker_tracker(_marker_tracker), error_repo(error_repo),
       lease_cr(std::move(lease_cr)) {
@@ -2105,11 +2108,11 @@ public:
       if (sync_status < 0) {
         return set_cr_error(sync_status);
       }
-      if (has_lowerbound_marker) {
-        yield call(sc->dsi.inc->update_marker_cr(shard_id, { sc->env->svc->zone->get_zone().id,
-                                                             lowerbound_marker.marker,
-                                                             lowerbound_marker.timestamp,
-                                                             false }));
+      if (sip && has_lowerbound_marker) {
+        yield call(sip->update_marker_cr(shard_id, { sc->env->svc->zone->get_zone().id,
+                                                     lowerbound_marker.marker,
+                                                     lowerbound_marker.timestamp,
+                                                     false }));
       }
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: failed to update source with minimu marker: retcode=" << retcode));
@@ -2438,7 +2441,8 @@ public:
             continue;
           }
           tn->log(20, SSTR("received async update notification: " << *modified_iter));
-          spawn(sync_single_entry(source_bs, *modified_iter, string(),
+          spawn(sync_single_entry(sc->dsi.inc,
+                                  source_bs, *modified_iter, string(),
                                   ceph::real_time{}, false), false);
         }
 
@@ -2461,7 +2465,8 @@ public:
               continue;
             }
             tn->log(20, SSTR("handle error entry key=" << error_marker << " timestamp=" << entry_timestamp));
-            spawn(sync_single_entry(source_bs, error_marker, "",
+            spawn(sync_single_entry(sc->dsi.inc,
+                                    source_bs, error_marker, "",
                                     entry_timestamp, true), false);
           }
           if (!omapvals->more) {
@@ -2500,7 +2505,8 @@ public:
             tn->log(0, SSTR("ERROR: cannot start syncing " << fetch_iter->entry_id << ". Duplicate entry?"));
           } else {
             source_bs = rgw_bucket_shard{fetch_iter->bucket, fetch_iter->shard_id};
-            spawn(sync_single_entry(source_bs, fetch_iter->key, fetch_iter->entry_id,
+            spawn(sync_single_entry(sc->dsi.inc,
+                                    source_bs, fetch_iter->key, fetch_iter->entry_id,
                                     fetch_iter->timestamp, false), false);
           }
 
