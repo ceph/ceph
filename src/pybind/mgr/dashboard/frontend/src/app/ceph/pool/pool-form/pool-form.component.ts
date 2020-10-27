@@ -6,6 +6,7 @@ import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Observable, ReplaySubject, Subscription } from 'rxjs';
 
+import { DashboardNotFoundError } from '~/app/core/error/error';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
@@ -112,7 +113,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       (!this.permission.update && this.editing) ||
       (!this.permission.create && !this.editing)
     ) {
-      this.router.navigate(['/404']);
+      throw new DashboardNotFoundError();
     }
   }
 

@@ -5,6 +5,8 @@ import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@
 import { of as observableOf } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
+import { Icons } from '../enum/icons.enum';
+
 /**
  * This service checks if a route can be activated by executing a
  * REST API call to '/api/<apiPath>/status'. If the returned response
@@ -55,7 +57,15 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
     return this.http.get(`api/${config.apiPath}/status`).pipe(
       map((resp: any) => {
         if (!resp.available) {
-          this.router.navigate([config.redirectTo, resp.message || '']);
+          this.router.navigate([config.redirectTo || ''], {
+            state: {
+              header: config.header,
+              message: resp.message,
+              section: config.section,
+              section_info: config.section_info,
+              icon: Icons.wrench
+            }
+          });
         }
         return resp.available;
       }),

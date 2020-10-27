@@ -13,7 +13,6 @@ import { LoginComponent } from './login/login.component';
 import { RoleDetailsComponent } from './role-details/role-details.component';
 import { RoleFormComponent } from './role-form/role-form.component';
 import { RoleListComponent } from './role-list/role-list.component';
-import { SsoNotFoundComponent } from './sso/sso-not-found/sso-not-found.component';
 import { UserFormComponent } from './user-form/user-form.component';
 import { UserListComponent } from './user-list/user-list.component';
 import { UserPasswordFormComponent } from './user-password-form/user-password-form.component';
@@ -36,7 +35,6 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     RoleDetailsComponent,
     RoleFormComponent,
     RoleListComponent,
-    SsoNotFoundComponent,
     UserTabsComponent,
     UserListComponent,
     UserFormComponent,
