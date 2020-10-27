@@ -13,7 +13,7 @@
 #include "librbd/api/Io.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/CopyupRequest.h"
-#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 
@@ -100,25 +100,6 @@ struct AbstractObjectWriteRequest<librbd::MockTestImageCtx> {
   MOCK_METHOD1(add_copyup_ops, void(neorados::WriteOp*));
 };
 
-template <>
-struct ImageRequest<librbd::MockTestImageCtx> {
-  static ImageRequest *s_instance;
-  static void aio_read(librbd::MockImageCtx *ictx, AioCompletion *c,
-                       Extents &&image_extents, ReadResult &&read_result,
-                       IOContext io_context, int op_flags, int read_flags,
-                       const ZTracer::Trace &parent_trace) {
-    s_instance->aio_read(c, image_extents, &read_result);
-  }
-
-  MOCK_METHOD3(aio_read, void(AioCompletion *, const Extents&, ReadResult*));
-
-  ImageRequest() {
-    s_instance = this;
-  }
-};
-
-ImageRequest<librbd::MockTestImageCtx>* ImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-
 } // namespace io
 } // namespace librbd
 
@@ -128,6 +109,11 @@ static bool operator==(const SnapContext& rhs, const SnapContext& lhs) {
 
 #include "librbd/AsyncObjectThrottle.cc"
 #include "librbd/io/CopyupRequest.cc"
+
+MATCHER_P(IsRead, image_extents, "") {
+  auto req = boost::get<librbd::io::ImageDispatchSpec::Read>(&arg->request);
+  return (req != nullptr && image_extents == arg->image_extents);
+}
 
 namespace librbd {
 namespace io {
@@ -143,7 +129,6 @@ using ::testing::WithoutArgs;
 
 struct TestMockIoCopyupRequest : public TestMockFixture {
   typedef CopyupRequest<librbd::MockTestImageCtx> MockCopyupRequest;
-  typedef ImageRequest<librbd::MockTestImageCtx> MockImageRequest;
   typedef ObjectRequest<librbd::MockTestImageCtx> MockObjectRequest;
   typedef AbstractObjectWriteRequest<librbd::MockTestImageCtx> MockAbstractObjectWriteRequest;
   typedef deep_copy::ObjectCopyRequest<librbd::MockTestImageCtx> MockObjectCopyRequest;
@@ -191,22 +176,33 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
                             })));
   }
 
-  void expect_read_parent(MockTestImageCtx& mock_image_ctx,
-                          MockImageRequest& mock_image_request,
+  void expect_read_parent(librbd::MockTestImageCtx& mock_image_ctx,
                           const Extents& image_extents,
                           const std::string& data, int r) {
-    EXPECT_CALL(mock_image_request, aio_read(_, image_extents, _))
-      .WillOnce(WithArgs<0, 2>(Invoke(
-        [&mock_image_ctx, image_extents, data, r](
-            AioCompletion* aio_comp, ReadResult* read_result) {
-          aio_comp->read_result = std::move(*read_result);
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher,
+                send(IsRead(image_extents)))
+      .WillOnce(Invoke(
+        [&mock_image_ctx, image_extents, data, r](io::ImageDispatchSpec* spec) {
+          auto req = boost::get<librbd::io::ImageDispatchSpec::Read>(
+            &spec->request);
+          ASSERT_TRUE(req != nullptr);
+
+          if (r < 0) {
+            spec->fail(r);
+            return;
+          }
+
+          spec->dispatch_result = DISPATCH_RESULT_COMPLETE;
+
+          auto aio_comp = spec->aio_comp;
+          aio_comp->read_result = std::move(req->read_result);
           aio_comp->read_result.set_image_extents(image_extents);
           aio_comp->set_request_count(1);
           auto ctx = new ReadResult::C_ImageReadRequest(aio_comp,
                                                         image_extents);
           ctx->bl.append(data);
           mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
-        })));
+        }));
   }
 
   void expect_copyup(MockTestImageCtx& mock_image_ctx, uint64_t snap_id,
@@ -388,10 +384,8 @@ TEST_F(TestMockIoCopyupRequest, Standard) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   MockAbstractObjectWriteRequest mock_write_request;
@@ -445,10 +439,8 @@ TEST_F(TestMockIoCopyupRequest, StandardWithSnaps) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   MockAbstractObjectWriteRequest mock_write_request;
@@ -494,10 +486,8 @@ TEST_F(TestMockIoCopyupRequest, CopyOnRead) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   expect_object_map_at(mock_image_ctx, 0, OBJECT_NONEXISTENT);
@@ -541,10 +531,8 @@ TEST_F(TestMockIoCopyupRequest, CopyOnReadWithSnaps) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   expect_object_map_at(mock_image_ctx, 0, OBJECT_NONEXISTENT);
@@ -849,10 +837,8 @@ TEST_F(TestMockIoCopyupRequest, ZeroedCopyOnRead) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '\0');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   expect_object_map_at(mock_image_ctx, 0, OBJECT_NONEXISTENT);
@@ -889,9 +875,7 @@ TEST_F(TestMockIoCopyupRequest, NoOpCopyup) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     "", -ENOENT);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, "", -ENOENT);
 
   expect_prepare_copyup(mock_image_ctx);
 
@@ -927,10 +911,8 @@ TEST_F(TestMockIoCopyupRequest, RestartWrite) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   MockAbstractObjectWriteRequest mock_write_request1;
@@ -983,9 +965,7 @@ TEST_F(TestMockIoCopyupRequest, ReadFromParentError) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     "", -EPERM);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, "", -EPERM);
 
   auto req = new MockCopyupRequest(&mock_image_ctx, 0,
                                    {{0, 4096}}, {});
@@ -1055,10 +1035,8 @@ TEST_F(TestMockIoCopyupRequest, UpdateObjectMapError) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   MockAbstractObjectWriteRequest mock_write_request;
@@ -1104,10 +1082,8 @@ TEST_F(TestMockIoCopyupRequest, CopyupError) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   MockAbstractObjectWriteRequest mock_write_request;
@@ -1154,10 +1130,8 @@ TEST_F(TestMockIoCopyupRequest, SparseCopyupNotSupported) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
   expect_prepare_copyup(mock_image_ctx);
 
   MockAbstractObjectWriteRequest mock_write_request;
@@ -1199,10 +1173,8 @@ TEST_F(TestMockIoCopyupRequest, ProcessCopyup) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
 
   bufferlist in_prepare_bl;
   in_prepare_bl.append(std::string(3072, '1'));
@@ -1263,10 +1235,8 @@ TEST_F(TestMockIoCopyupRequest, ProcessCopyupOverwrite) {
 
   InSequence seq;
 
-  MockImageRequest mock_image_request;
   std::string data(4096, '1');
-  expect_read_parent(mock_parent_image_ctx, mock_image_request, {{0, 4096}},
-                     data, 0);
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
 
   bufferlist in_prepare_bl;
   in_prepare_bl.append(data);
