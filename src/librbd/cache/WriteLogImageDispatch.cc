@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/dout.h"
+#include "include/neorados/RADOS.hpp"
 #include "librbd/cache/pwl/AbstractWriteLog.h"
 #include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/cache/WriteLogImageDispatch.h"
@@ -53,6 +54,10 @@ bool WriteLogImageDispatch<I>::read(
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
+
+  if (io_context->read_snap().value_or(CEPH_NOSNAP) != CEPH_NOSNAP) {
+    return false;
+  }
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   if (preprocess_length(aio_comp, image_extents)) {
