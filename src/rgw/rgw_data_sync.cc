@@ -821,11 +821,16 @@ int RGWRemoteDataLog::init_sync_status(const DoutPrefixProvider *dpp)
   }
   RGWDataSyncEnv sync_env_local = sync_env;
   sync_env_local.http_manager = &http_manager;
+
   auto instance_id = ceph::util::generate_random_number<uint64_t>();
+
   RGWDataSyncCtx sc_local = sc;
-  sc_local.env = &sync_env_local;
+  sc_local.reset_env(&sync_env_local);
+
   ret = crs.run(dpp, new RGWInitDataSyncStatusCoroutine(&sc_local, instance_id, tn, &sync_status));
+
   http_manager.stop();
+
   return ret;
 }
 
@@ -1182,6 +1187,12 @@ protected:
 
   string sip_name;
 
+  void copy_state(RGWSyncInfoCRHandler_SIP *dest) {
+    dest->info = info;
+    dest->sid = sid;
+    dest->stage_info = stage_info;
+  }
+
   class InitCR : public RGWCoroutine {
     RGWSyncInfoCRHandler_SIP *siph;
 
@@ -1311,6 +1322,8 @@ class RGWDataSyncInfoCRHandler_SIP_Base : public RGWSyncInfoCRHandler_SIP<sip_da
   SIProvider::TypeHandlerProviderRef type_provider;
 
 protected:
+  virtual RGWDataSyncInfoCRHandler_SIP_Base *alloc(RGWDataSyncCtx *sc) = 0;
+
   int handle_fetched_entry(const SIProvider::stage_id_t& sid, SIProvider::Entry& fetched_entry, sip_data_list_result::entry *pe) override {
     sip_data_list_result::entry& e = *pe;
 
@@ -1372,9 +1385,25 @@ public:
 
     return -ENOTSUP;
   }
+
+  /* create a clone object with new data sync ctx,
+   * needed so that caller could use a private http manager
+   * and propagate it to our sip manager
+   */
+  RGWDataSyncInfoCRHandler_SIP_Base *clone(RGWDataSyncCtx *new_sc) {
+    auto myclone = alloc(new_sc);
+    copy_state(myclone);
+    return myclone;
+  }
 };
 
 class RGWDataFullSyncInfoCRHandler_SIP : public RGWDataSyncInfoCRHandler_SIP_Base {
+
+protected:
+  RGWDataSyncInfoCRHandler_SIP_Base *alloc(RGWDataSyncCtx *new_sc) override {
+    return new RGWDataFullSyncInfoCRHandler_SIP(new_sc);
+  }
+
 public:
   RGWDataFullSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, "data.full") {
   }
@@ -1384,9 +1413,16 @@ public:
     pos->timestamp = ceph::real_time();
     return nullptr;
   }
+
 };
 
 class RGWDataIncSyncInfoCRHandler_SIP : public RGWDataSyncInfoCRHandler_SIP_Base {
+
+protected:
+  RGWDataSyncInfoCRHandler_SIP_Base *alloc(RGWDataSyncCtx *new_sc) override {
+    return new RGWDataIncSyncInfoCRHandler_SIP(new_sc);
+  }
+
 public:
   RGWDataIncSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, "data.inc") {
   }
@@ -2098,6 +2134,18 @@ void RGWDataSyncCtx::init(RGWDataSyncEnv *_env,
   dsi.inc.reset(new RGWDataIncSyncInfoCRHandler_SIP(this));
 }
 
+void RGWDataSyncCtx::reset_env(RGWDataSyncEnv *new_env)
+{
+  env = new_env;
+  cct = new_env->cct;
+
+  auto dsi_full = static_cast<RGWDataFullSyncInfoCRHandler_SIP *>(dsi.full.get());
+  auto dsi_inc = static_cast<RGWDataIncSyncInfoCRHandler_SIP *>(dsi.inc.get());
+
+  dsi.full.reset(dsi_full->clone(this));
+  dsi.inc.reset(dsi_inc->clone(this));
+}
+
 #define BUCKET_SHARD_SYNC_SPAWN_WINDOW 20
 #define DATA_SYNC_MAX_ERR_ENTRIES 10
 
@@ -2166,13 +2214,14 @@ class RGWDataSyncShardCR : public RGWCoroutine {
     return rgw_bucket_parse_bucket_key(sync_env->cct, key,
                                        &bs.bucket, &bs.shard_id);
   }
-  RGWCoroutine* sync_single_entry(const rgw_bucket_shard& src,
+  RGWCoroutine* sync_single_entry(std::shared_ptr<RGWDataSyncInfoCRHandler>& sip,
+                                  const rgw_bucket_shard& src,
                                   const std::string& key,
                                   const std::string& marker,
                                   ceph::real_time timestamp, bool retry) {
     auto state = bucket_shard_cache->get(src);
     auto obligation = rgw_data_sync_obligation{key, marker, timestamp, retry};
-    return new RGWDataSyncSingleEntryCR(sc, shard_id, std::move(state), std::move(obligation),
+    return new RGWDataSyncSingleEntryCR(sc, sip, shard_id, std::move(state), std::move(obligation),
                                         &*marker_tracker, error_repo,
                                         lease_cr.get(), tn);
   }
@@ -2297,7 +2346,9 @@ public:
             tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
-            spawn(sync_single_entry(source_bs, iter->first, iter->first,
+            std::shared_ptr<RGWDataSyncInfoCRHandler> no_sip; /* nullptr */
+            spawn(sync_single_entry(no_sip,
+                                    source_bs, iter->first, iter->first,
                                     entry_timestamp, false), false);
           }
           sync_marker.marker = iter->first;

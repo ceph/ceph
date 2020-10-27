@@ -353,6 +353,8 @@ struct RGWDataSyncCtx {
   void init(RGWDataSyncEnv *_env,
             const RGWRemoteCtl::Conns& _conns,
             const rgw_zone_id& _source_zone);
+
+  void reset_env(RGWDataSyncEnv *new_env);
 };
 
 class RGWRados;
