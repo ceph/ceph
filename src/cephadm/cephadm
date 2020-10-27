@@ -2933,7 +2933,8 @@ def command_bootstrap():
                         ssh_key = '/etc/ceph/ceph.pub'
                         if args.ssh_public_key:
                             ssh_key = args.ssh_public_key.name
-                        out, err, code = call_throws(['ssh-copy-id', '-f', '-i', ssh_key, '%s@%s' % (args.ssh_user, split[1])])
+                        if args.no_ssh_copy_id:
+                            out, err, code = call_throws(['ssh-copy-id', '-f', '-i', ssh_key, '%s@%s' % (args.ssh_user, split[1])])
 
         mounts = {}
         mounts[pathify(args.apply_spec)] = '/tmp/spec.yml:z'
@@ -4941,7 +4942,9 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
-
+    parser_bootstrap.add_argument(
+        '--no-ssh-copy-id',
+        help='Do not copy ssh keys when applying cluster spec')
     parser_bootstrap.add_argument(
         '--shared_ceph_folder',
         metavar='CEPH_SOURCE_FOLDER',
