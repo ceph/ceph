@@ -2853,7 +2853,6 @@ class CephManager:
         """
         out = self.raw_cluster_cmd('quorum_status')
         j = json.loads(out)
-        self.log('quorum_status is %s' % out)
         return j['quorum']
 
     def wait_for_mon_quorum_size(self, size, timeout=300):
