@@ -9,7 +9,9 @@ import tempfile
 import json
 import os
 from io import BytesIO
+from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
+
 import pprint
 
 from teuthology import misc as teuthology
@@ -179,7 +181,7 @@ key_path={serverkey}
 ca_path={clientca}
 auth_suite=TLS1.2
 policy_path={confdir}
-enable_tls_client_auth=True
+enable_tls_client_auth=False
 tls_cipher_suites=
     TLS_RSA_WITH_AES_128_CBC_SHA256
     TLS_RSA_WITH_AES_256_CBC_SHA256
@@ -251,14 +253,29 @@ def configure_pykmip(ctx, config):
     finally:
         pass
 
+def has_ceph_task(tasks):
+    for task in tasks:
+        for name, conf in task.items():
+            if name == 'ceph':
+                return True
+    return False
+
 @contextlib.contextmanager
 def run_pykmip(ctx, config):
-    try:
-        yield
-    finally:
-        return
     assert isinstance(config, dict)
+    if hasattr(ctx, 'daemons'):
+        pass
+    elif has_ceph_task(ctx.config['tasks']):
+        log.info('Delay start pykmip so ceph can do once-only daemon logic')
+        try:
+            yield
+        finally:
+            pass
+    else:
+        ctx.daemons = DaemonGroup()
     log.info('Running pykmip...')
+
+    pykmipdir = get_pykmip_dir(ctx)
 
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
@@ -267,17 +284,11 @@ def run_pykmip(ctx, config):
         # start the public endpoint
         client_public_with_id = 'pykmip.public' + '.' + client_id
 
-        run_cmd = ['cd', get_pykmip_dir(ctx), run.Raw('&&'),
-                   '.', '.pykmipenv/bin/activate', run.Raw('&&'),
-                   'HOME={}'.format(get_pykmip_dir(ctx)), run.Raw('&&'),
-                   'bin/pykmip-api',
-                   run.Raw('& { read; kill %1; }')]
-                   #run.Raw('1>/dev/null')
-
-        run_cmd = 'cd ' + get_pykmip_dir(ctx) + ' && ' + \
+        run_cmd = 'cd ' + pykmipdir + ' && ' + \
                   '. .pykmipenv/bin/activate && ' + \
-                  'HOME={}'.format(get_pykmip_dir(ctx)) + ' && ' + \
-                  'exec bin/pykmip-api & { read; kill %1; }'
+                  'HOME={}'.format(pykmipdir) + ' && ' + \
+                  'exec pykmip-server -f pykmip.conf -l ' + \
+                  pykmipdir + '/pykmip.log & { read; kill %1; }'
 
         ctx.daemons.add_daemon(
             remote, 'pykmip', client_public_with_id,
@@ -285,13 +296,13 @@ def run_pykmip(ctx, config):
             args=['bash', '-c', run_cmd],
             logger=log.getChild(client),
             stdin=run.PIPE,
-            cwd=get_pykmip_dir(ctx),
+            cwd=pykmipdir,
             wait=False,
             check_status=False,
         )
 
         # sleep driven synchronization
-        run_in_pykmip_dir(ctx, client, ['sleep', '15'])
+        time.sleep(10)
     try:
         yield
     finally:
