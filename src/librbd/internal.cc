@@ -45,7 +45,7 @@
 #include "librbd/image/GetMetadataRequest.h"
 #include "librbd/image/Types.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ObjectRequest.h"
@@ -1295,7 +1295,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       trace.init("copy", &src->trace_endpoint);
     }
 
-    std::shared_lock owner_lock{src->owner_lock};
     SimpleThrottle throttle(src->config.get_val<uint64_t>("rbd_concurrent_management_ops"), false);
     uint64_t period = src->get_stripe_period();
     unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
@@ -1330,13 +1329,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       auto ctx = new C_CopyRead(&throttle, dest, offset, bl, sparse_size);
       auto comp = io::AioCompletion::create_and_start<Context>(
 	ctx, src, io::AIO_TYPE_READ);
+      auto req = io::ImageDispatchSpec::create_read(
+        *src, io::IMAGE_DISPATCH_LAYER_NONE, comp,
+        {{offset, len}}, io::ReadResult{bl},
+        src->get_data_io_context(), fadvise_flags, 0, trace);
 
-      io::ImageReadRequest<> req(*src, comp, {{offset, len}},
-				 io::ReadResult{bl}, src->get_data_io_context(),
-                                 fadvise_flags, 0, std::move(trace));
-      ctx->read_trace = req.get_trace();
+      ctx->read_trace = trace;
+      req->send();
 
-      req.send();
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -1542,10 +1542,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       C_SaferCond ctx;
       auto c = io::AioCompletion::create_and_start(&ctx, ictx,
                                                    io::AIO_TYPE_READ);
-      io::ImageRequest<>::aio_read(ictx, c, {{off, read_len}},
-                                   io::ReadResult{&bl},
-                                   ictx->get_data_io_context(), 0, 0,
-                                   std::move(trace));
+      auto req = io::ImageDispatchSpec::create_read(
+        *ictx, io::IMAGE_DISPATCH_LAYER_NONE, c,
+        {{off, read_len}}, io::ReadResult{&bl},
+        ictx->get_data_io_context(), 0, 0, trace);
+      req->send();
 
       int ret = ctx.wait();
       if (ret < 0) {

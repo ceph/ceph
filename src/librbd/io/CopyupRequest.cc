@@ -17,7 +17,7 @@
 #include "librbd/asio/Utils.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
@@ -180,10 +180,12 @@ void CopyupRequest<I>::read_from_parent() {
   ldout(cct, 20) << "completion=" << comp << ", "
                  << "extents=" << m_image_extents
                  << dendl;
-  ImageRequest<I>::aio_read(
-    m_image_ctx->parent, comp, std::move(m_image_extents),
+  auto req = io::ImageDispatchSpec::create_read(
+    *m_image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
+    std::move(m_image_extents),
     ReadResult{&m_copyup_extent_map, &m_copyup_data},
     m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
+  req->send();
 }
 
 template <typename I>

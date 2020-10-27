@@ -9,7 +9,7 @@
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "osd/osd_types.h"
 #include "osdc/Striper.h"
 
@@ -128,11 +128,11 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* extents,
                                               AIO_TYPE_READ);
   ldout(cct, 20) << "completion " << comp << ", extents " << parent_extents
                  << dendl;
-
-  ImageRequest<I>::aio_read(
-    image_ctx->parent, comp, std::move(parent_extents),
-    ReadResult{parent_read_bl},
+  auto req = io::ImageDispatchSpec::create_read(
+    *image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
+    std::move(parent_extents), ReadResult{parent_read_bl},
     image_ctx->parent->get_data_io_context(), 0, 0, trace);
+  req->send();
 }
 
 template <typename I>
