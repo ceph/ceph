@@ -610,7 +610,6 @@ class HAproxy(object):
 
 ##################################
 
-
 class Keepalived(object):
     """Defines an Keepalived container"""
     daemon_type = 'keepalived'
@@ -700,159 +699,6 @@ class Keepalived(object):
         return mounts
 
 ##################################
-
-
-class CustomContainer(object):
-    """Defines a custom container"""
-    daemon_type = 'container'
-
-    def __init__(self, fsid: str, daemon_id: Union[int, str],
-                 config_json: Dict, image: str) -> None:
-        self.fsid = fsid
-        self.daemon_id = daemon_id
-        self.image = image
-
-        # config-json options
-        self.entrypoint = dict_get(config_json, 'entrypoint')
-        self.uid = dict_get(config_json, 'uid', 65534)  # nobody
-        self.gid = dict_get(config_json, 'gid', 65534)  # nobody
-        self.volume_mounts = dict_get(config_json, 'volume_mounts', {})
-        self.args = dict_get(config_json, 'args', [])
-        self.envs = dict_get(config_json, 'envs', [])
-        self.privileged = dict_get(config_json, 'privileged', False)
-        self.bind_mounts = dict_get(config_json, 'bind_mounts', [])
-        self.ports = dict_get(config_json, 'ports', [])
-        self.dirs = dict_get(config_json, 'dirs', [])
-        self.files = dict_get(config_json, 'files', {})
-
-    @classmethod
-    def init(cls, fsid: str, daemon_id: Union[int, str]) -> 'CustomContainer':
-        return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
-
-    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
-        """
-        Create dirs/files below the container data directory.
-        """
-        logger.info('Creating custom container configuration '
-                    'dirs/files in {} ...'.format(data_dir))
-
-        if not os.path.isdir(data_dir):
-            raise OSError('data_dir is not a directory: %s' % data_dir)
-
-        for dir_path in self.dirs:
-            logger.info('Creating directory: {}'.format(dir_path))
-            dir_path = os.path.join(data_dir, dir_path.strip('/'))
-            makedirs(dir_path, uid, gid, 0o755)
-
-        for file_path in self.files:
-            logger.info('Creating file: {}'.format(file_path))
-            content = dict_get_join(self.files, file_path)
-            file_path = os.path.join(data_dir, file_path.strip('/'))
-            with open(file_path, 'w', encoding='utf-8') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
-                f.write(content)
-
-    def get_daemon_args(self) -> List[str]:
-        return []
-
-    def get_container_args(self) -> List[str]:
-        return self.args
-
-    def get_container_envs(self) -> List[str]:
-        return self.envs
-
-    def get_container_mounts(self, data_dir: str) -> Dict[str, str]:
-        """
-        Get the volume mounts. Relative source paths will be located below
-        `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
-
-        Example:
-        {
-            /foo/conf: /conf
-            foo/conf: /conf
-        }
-        becomes
-        {
-            /foo/conf: /conf
-            /var/lib/ceph/<cluster-fsid>/<daemon-name>/foo/conf: /conf
-        }
-        """
-        mounts = {}
-        for source, destination in self.volume_mounts.items():
-            source = os.path.join(data_dir, source)
-            mounts[source] = destination
-        return mounts
-
-    def get_container_binds(self, data_dir: str) -> List[List[str]]:
-        """
-        Get the bind mounts. Relative `source=...` paths will be located below
-        `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
-
-        Example:
-        [
-            'type=bind',
-            'source=lib/modules',
-            'destination=/lib/modules',
-            'ro=true'
-        ]
-        becomes
-        [
-            ...
-            'source=/var/lib/ceph/<cluster-fsid>/<daemon-name>/lib/modules',
-            ...
-        ]
-        """
-        binds = self.bind_mounts.copy()
-        for bind in binds:
-            for index, value in enumerate(bind):
-                match = re.match(r'^source=(.+)$', value)
-                if match:
-                    bind[index] = 'source={}'.format(os.path.join(
-                        data_dir, match.group(1)))
-        return binds
-
-##################################
-
-
-def dict_get(d: Dict, key: str, default: Any = None, require: bool = False) -> Any:
-    """
-    Helper function to get a key from a dictionary.
-    :param d: The dictionary to process.
-    :param key: The name of the key to get.
-    :param default: The default value in case the key does not
-        exist. Default is `None`.
-    :param require: Set to `True` if the key is required. An
-        exception will be raised if the key does not exist in
-        the given dictionary.
-    :return: Returns the value of the given key.
-    :raises: :exc:`self.Error` if the given key does not exist
-        and `require` is set to `True`.
-    """
-    if require and key not in d.keys():
-        raise Error('{} missing from dict'.format(key))
-    return d.get(key, default)
-
-##################################
-
-
-def dict_get_join(d: Dict, key: str) -> Any:
-    """
-    Helper function to get the value of a given key from a dictionary.
-    `List` values will be converted to a string by joining them with a
-    line break.
-    :param d: The dictionary to process.
-    :param key: The name of the key to get.
-    :return: Returns the value of the given key. If it was a `list`, it
-        will be joining with a line break.
-    """
-    value = d.get(key)
-    if isinstance(value, list):
-        value = '\n'.join(map(str, value))
-    return value
-
-##################################
-
 
 class CustomContainer(object):
     """Defines a custom container"""
@@ -1016,6 +862,7 @@ def get_supported_daemons():
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
     supported_daemons.append(CephadmDaemon.daemon_type)
+    supported_daemons.append(HAproxy.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
