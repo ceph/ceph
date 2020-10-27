@@ -313,7 +313,7 @@ class MDCache {
   }
   void map_dirfrag_set(const vector<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
-  void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval, bool adjust_pop=true);
+  bool try_subtree_merge_at(CDir *root, set<CInode*> *to_eval, bool adjust_pop=true);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
   CDir *get_projected_subtree_root(CDir *dir);
@@ -539,6 +539,14 @@ class MDCache {
     reconnected_snaprealms[ino][client] = seq;
   }
 
+  void rejoin_reconnect_subtrees();
+  void rejoin_reconnect_inode_finish(inodeno_t ino, int r);
+  mds_rank_t rejoin_get_dirfrag_auth(inodeno_t ino, frag_t fg);
+  bool rejoin_is_dirfrag_auth(inodeno_t ino, frag_t fg);
+  bool is_subtrees_connected() const {
+    return subtrees_connected;
+  }
+
   void rejoin_open_ino_finish(inodeno_t ino, int ret);
   void rejoin_prefetch_ino_finish(inodeno_t ino, int ret);
   void rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& session_map);
@@ -685,6 +693,7 @@ class MDCache {
   CInode* create_unconnected_inode(inodeno_t ino, int mode);
   void add_unconnected_inode(CInode *in);
   void remove_unconnected_inode(CInode *in);
+  void mark_inode_reconnected(CInode *in);
 
   void touch_dentry(CDentry *dn) {
     if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
@@ -999,8 +1008,8 @@ class MDCache {
     mds_rank_t checking = MDS_RANK_NONE;
     mds_rank_t auth_hint = MDS_RANK_NONE;
     bool check_peers = true;
+    bool trace_from_peer = false;
     bool fetch_backtrace = true;
-    bool discover = false;
     bool want_replica = false;
     bool want_xlocked = false;
     version_t tid = 0;
@@ -1027,7 +1036,6 @@ class MDCache {
   void process_delayed_resolve();
   void discard_delayed_resolve(mds_rank_t who);
   void maybe_resolve_finish();
-  void trim_unlinked_inodes();
 
   void send_peer_resolves();
   void send_subtree_resolves();
@@ -1036,10 +1044,11 @@ class MDCache {
   void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin);
   void handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m);
   void handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &m);
-  CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
-  CDir* rejoin_invent_dirfrag(dirfrag_t df);
+  CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last, int mode);
+  CDir* rejoin_invent_dirfrag(CInode *diri, frag_t fg);
   void handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &m);
   void rejoin_scour_survivor_replicas(mds_rank_t from, const cref_t<MMDSCacheRejoin> &ack,
+				      set<dirfrag_t>& acked_dirfrags,
 				      set<vinodeno_t>& acked_inodes,
 				      set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &m);
@@ -1061,7 +1070,7 @@ class MDCache {
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
   void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
-  void _open_ino_parent_opened(inodeno_t ino, int ret);
+  void _open_ino_parent_opened(inodeno_t ino, inodeno_t parent, int ret);
   void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
   void _open_ino_fetch_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m, CDir *dir, bool parent);
   int open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
@@ -1147,12 +1156,23 @@ class MDCache {
   map<metareqid_t, mds_rank_t> resolve_need_rollback;  // rollbacks i'm writing to the journal
   map<mds_rank_t, cref_t<MMDSResolve>> delayed_resolve;
 
+  struct subtree_info_t {
+    mds_rank_t inode_auth = CDIR_AUTH_UNKNOWN;
+    map<mds_rank_t, fragset_t> rank_frags;
+  };
+  map<inodeno_t, subtree_info_t> resolve_learned_subtrees;
+
   // [rejoin]
   bool rejoins_pending = false;
   set<mds_rank_t> rejoin_gather;      // nodes from whom i need a rejoin
   set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+
+  map<dirfrag_t, mds_rank_t> rejoin_subtree_auth_map;
+  std::set<CInode*> rejoin_implicitly_imported_inodes;
+  int rejoin_inodes_num_reconnecting = 0;
+
   map<mds_rank_t,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
   map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_peer_exports;
 
@@ -1290,8 +1310,10 @@ class MDCache {
   set<inodeno_t> shutdown_exporting_strays;
   pair<dirfrag_t, string> shutdown_export_next;
 
-  bool opening_root = false, open = false;
+  bool open = false;
   MDSContext::vec waiting_for_open;
+
+  bool subtrees_connected = false;
 
   // -- snaprealms --
   SnapRealm *global_snaprealm = nullptr;

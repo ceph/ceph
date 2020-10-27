@@ -89,12 +89,12 @@ public:
     std::string alternate_name;
     inodeno_t ino = 0;
     inodeno_t remote_ino = 0;
-    unsigned char remote_d_type = 0;
+    unsigned char d_type = 0;
     uint32_t nonce = 0;
     int32_t lock = 0;
     dn_strong() = default;
-    dn_strong(snapid_t f, std::string_view altn, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int l) :
-      first(f), alternate_name(altn), ino(pi), remote_ino(ri), remote_d_type(rdt), nonce(n), lock(l) {}
+    dn_strong(snapid_t f, std::string_view altn, inodeno_t pi, inodeno_t ri, unsigned char dt, int n, int l) :
+      first(f), alternate_name(altn), ino(pi), remote_ino(ri), d_type(dt), nonce(n), lock(l) {}
     bool is_primary() const { return ino > 0; }
     bool is_remote() const { return remote_ino > 0; }
     bool is_null() const { return ino == 0 && remote_ino == 0; }
@@ -103,7 +103,7 @@ public:
       encode(first, bl);
       encode(ino, bl);
       encode(remote_ino, bl);
-      encode(remote_d_type, bl);
+      encode(d_type, bl);
       encode(nonce, bl);
       encode(lock, bl);
       encode(alternate_name, bl);
@@ -113,7 +113,7 @@ public:
       decode(first, bl);
       decode(ino, bl);
       decode(remote_ino, bl);
-      decode(remote_d_type, bl);
+      decode(d_type, bl);
       decode(nonce, bl);
       decode(lock, bl);
       decode(alternate_name, bl);
@@ -226,7 +226,10 @@ public:
 
   // dirfrags
   void add_strong_dirfrag(dirfrag_t df, int n, int dr) {
-    strong_dirfrags[df] = dirfrag_strong(n, dr);
+    strong_dirfrags.emplace_back(df, dirfrag_strong(n, dr));
+  }
+  void add_strong_bound(dirfrag_t df) {
+    strong_bounds.insert(df);
   }
   void add_dirfrag_base(CDir *dir) {
     ceph::buffer::list& bl = dirfrag_bases[dir->dirfrag()];
@@ -243,9 +246,9 @@ public:
   void add_weak_primary_dentry(inodeno_t dirino, std::string_view dname, snapid_t first, snapid_t last, inodeno_t ino) {
     weak[dirino][string_snap_t(dname, last)] = dn_weak(first, ino);
   }
-  void add_strong_dentry(dirfrag_t df, std::string_view dname, std::string_view altn, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+  void add_strong_dentry(dirfrag_t df, std::string_view dname, std::string_view altn, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char dt, int n, int ls) {
     auto& m = strong_dentries[df];
-    m.insert_or_assign(string_snap_t(dname, last), dn_strong(first, altn, pi, ri, rdt, n, ls));
+    m.insert_or_assign(string_snap_t(dname, last), dn_strong(first, altn, pi, ri, dt, n, ls));
   }
   void add_dentry_authpin(dirfrag_t df, std::string_view dname, snapid_t last,
 			  const metareqid_t& ri, __u32 attempt) {
@@ -280,6 +283,7 @@ public:
     encode(authpinned_dentries, payload);
     encode(xlocked_dentries, payload);
     encode(client_metadata_map, payload);
+    encode(strong_bounds, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -306,6 +310,8 @@ public:
     decode(xlocked_dentries, p);
     if (header.version >= 2)
       decode(client_metadata_map, p);
+    if (header.version >= 3)
+      decode(strong_bounds, p);
   }
 
   // -- data --
@@ -318,8 +324,9 @@ public:
   std::map<inodeno_t, lock_bls> inode_scatterlocks;
 
   // strong
-  std::map<dirfrag_t, dirfrag_strong> strong_dirfrags;
+  std::vector<std::pair<dirfrag_t, dirfrag_strong> >strong_dirfrags; // keep order
   std::map<dirfrag_t, std::map<string_snap_t, dn_strong> > strong_dentries;
+  std::set<dirfrag_t> strong_bounds;
   std::map<vinodeno_t, inode_strong> strong_inodes;
 
   // open
@@ -344,7 +351,7 @@ private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
   MMDSCacheRejoin(int o) : MMDSCacheRejoin() { op = o; }

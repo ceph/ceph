@@ -557,14 +557,14 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
   dn->get_linkage()->inode = in;
 
-  link_inode_work(dn, in);
-
   if (dn->state_test(CDentry::STATE_BOTTOMLRU) &&
       (is_auth() || !inode->is_stray())) {
     mdcache->bottom_lru.lru_remove(dn);
     mdcache->lru.lru_insert_mid(dn);
     dn->state_clear(CDentry::STATE_BOTTOMLRU);
   }
+
+  link_inode_work(dn, in);
   
   if (dn->last == CEPH_NOSNAP) {
     num_head_items++;
@@ -609,11 +609,8 @@ void CDir::link_inode_work(CDentry *dn, CInode *in)
   else if (in->is_any_caps())
     in->move_to_realm(inode->find_snaprealm());
 
-  if (in->is_unconnected()) {
-    mdcache->remove_unconnected_inode(in);
-    if (is_auth())
-      in->state_set(CInode::STATE_AUTH);
-  }
+  if (in->is_unconnected())
+    mdcache->mark_inode_reconnected(in);
 }
 
 void CDir::unlink_inode(CDentry *dn, bool adjust_lru)
@@ -1547,8 +1544,8 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
   }
 
   // unlinked directory inode shouldn't have any entry
-  if (!inode->is_base() && get_parent_dir()->inode->is_stray() &&
-      !inode->snaprealm) {
+  if (CDir *pdir = get_parent_dir();
+      pdir && pdir->inode->is_stray() && !inode->snaprealm) {
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
     if (get_version() == 0) {
       ceph_assert(inode->is_auth());
@@ -1889,44 +1886,46 @@ CDentry *CDir::_load_dentry(
     if (!dn || undef_inode) {
       // add inode
       CInode *in = mdcache->get_inode(inode_data.inode->ino, last);
-      if (!in || undef_inode) {
-        if (undef_inode && in)
-          in->first = first;
-        else
-          in = new CInode(mdcache, true, first, last);
-        
-        in->reset_inode(std::move(inode_data.inode));
-        in->reset_xattrs(std::move(inode_data.xattrs));
-        // symlink?
-        if (in->is_symlink()) 
-          in->symlink = inode_data.symlink;
-        
-        in->dirfragtree.swap(inode_data.dirfragtree);
-        in->reset_old_inodes(std::move(inode_data.old_inodes));
-        if (in->is_any_old_inodes()) {
+      if (!in || in->is_unconnected() || undef_inode) {
+	if (in)
+	  in->first = first;
+	else
+	  in = new CInode(mdcache, true, first, last);
+
+	in->reset_inode(std::move(inode_data.inode));
+	in->reset_xattrs(std::move(inode_data.xattrs));
+	// symlink?
+	if (in->is_symlink())
+	  in->symlink = inode_data.symlink;
+
+	in->dirfragtree.swap(inode_data.dirfragtree);
+	in->reset_old_inodes(std::move(inode_data.old_inodes));
+	if (in->is_any_old_inodes()) {
 	  snapid_t min_first = in->get_old_inodes()->rbegin()->first + 1;
 	  if (min_first > in->first)
 	    in->first = min_first;
 	}
 
-        in->oldest_snap = inode_data.oldest_snap;
-        in->decode_snap_blob(inode_data.snap_blob);
-        if (snaps && !in->snaprealm)
-          in->purge_stale_snap_data(*snaps);
+	in->oldest_snap = inode_data.oldest_snap;
+	in->decode_snap_blob(inode_data.snap_blob);
+	if (snaps && !in->snaprealm)
+	  in->purge_stale_snap_data(*snaps);
 
-        if (!undef_inode) {
-          mdcache->add_inode(in); // add
+	if (in->is_unconnected()) {
+	  dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last);
+	} else if (!undef_inode) {
+	  mdcache->add_inode(in);
           dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last); // link
-        }
-        dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
+	}
 
-        if (in->get_inode()->is_dirty_rstat())
-          in->mark_dirty_rstat();
+	if (in->get_inode()->is_dirty_rstat())
+	  in->mark_dirty_rstat();
 
-        in->maybe_ephemeral_rand(rand_threshold);
-        //in->hack_accessed = false;
-        //in->hack_load_stamp = ceph_clock_now();
-        //num_new_inodes_loaded++;
+	in->maybe_ephemeral_rand(rand_threshold);
+	dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
+	//in->hack_accessed = false;
+	//in->hack_load_stamp = ceph_clock_now();
+	//num_new_inodes_loaded++;
       } else if (g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata")) {
 	dout(20) << "hack: adding duplicate dentry for " << *in << dendl;
 	dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last);

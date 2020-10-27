@@ -784,12 +784,16 @@ CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
 {
   ceph_assert(is_dir());
 
+  // safety check
+  if (mdcache->mds->is_rejoin() && !mdcache->rejoin_is_dirfrag_auth(ino(), fg))
+    return nullptr;
+
   // have it?
   CDir *dir = get_dirfrag(fg);
   if (!dir) {
     // create it.
-    ceph_assert(is_auth() || mdcache->mds->is_any_replay());
-    dir = new CDir(this, fg, mdcache, is_auth());
+    ceph_assert(is_auth() || !mdcache->is_subtrees_connected());
+    dir = new CDir(this, fg, mdcache, true);
     add_dirfrag(dir);
   }
   return dir;

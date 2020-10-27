@@ -30,7 +30,9 @@ public:
   bool is_op_peer() const { return op == OP_PEER; }
   bool is_op_subtree() const { return op == OP_SUBTREE; }
 
-  std::map<dirfrag_t, std::vector<dirfrag_t>> subtrees;
+  std::vector<dirfrag_t> subtrees;
+  std::vector<std::pair<dirfrag_t, mds_rank_t> > other_subtrees;
+  std::vector<std::pair<inodeno_t, mds_rank_t> > subtree_inos;
 
   struct peer_inode_cap {
     inodeno_t ino;
@@ -120,16 +122,15 @@ public:
   std::string_view get_type_name() const override { return "mds_resolve"; }
 
   void print(std::ostream& out) const override {
-    out << "mds_resolve(" << subtrees.size()
-	<< "+" << ambiguous_imports.size()
-	<< " subtrees +" << peer_requests.size() << " peer requests)";
-  }
-  
-  void add_subtree(dirfrag_t im) {
-    subtrees[im].clear();
-  }
-  void add_subtree_bound(dirfrag_t im, dirfrag_t ex) {
-    subtrees[im].push_back(ex);
+    if (is_op_peer()) {
+      out << "mds_peer_resolve(" << ambiguous_imports.size()
+	  << " ambiguous imports + " << peer_requests.size() << " peer requests)";
+    } else if (is_op_subtree()) {
+      out << "mds_subtree_resolve(" << subtrees.size() << " my subtrees + "
+	  << other_subtrees.size() << " other subtrees)";
+    } else {
+      ceph_assert(0);
+    }
   }
 
   void add_ambiguous_import(dirfrag_t im, uint64_t tid, bool finishing) {
@@ -160,6 +161,8 @@ public:
     using ceph::encode;
     encode(op, payload);
     encode(subtrees, payload);
+    encode(other_subtrees, payload);
+    encode(subtree_inos, payload);
     encode(ambiguous_imports, payload);
     encode(peer_requests, payload);
     encode(table_clients, payload);
@@ -169,6 +172,8 @@ public:
     auto p = payload.cbegin();
     decode(op, p);
     decode(subtrees, p);
+    decode(other_subtrees, p);
+    decode(subtree_inos, p);
     decode(ambiguous_imports, p);
     decode(peer_requests, p);
     decode(table_clients, p);
