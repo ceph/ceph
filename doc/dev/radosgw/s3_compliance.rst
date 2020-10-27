@@ -284,7 +284,13 @@ S3 Documentation reference : http://docs.aws.amazon.com/AmazonS3/latest/API/REST
 +---------+---------------------------+------------+---------------------------------------------------------------------------------------------------------+-------------+
 | POST    | Object restore            | ?          |                                                                                                         |             |
 +---------+---------------------------+------------+---------------------------------------------------------------------------------------------------------+-------------+
-| PUT     | Object                    | Yes        |                                                                                                         |             |
+| PUT     | Object                    | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L481  |
+|         |                           |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L493  |
+|         |                           |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L507  |
+|         |                           |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1786 |
+|         |                           |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1119      |
+|         |                           |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1217      |
+|         |                           |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1222      |                             |             |
 +---------+---------------------------+------------+---------------------------------------------------------------------------------------------------------+-------------+
 | PUT     | Object acl                | Yes        |                                                                                                         |             |
 +---------+---------------------------+------------+---------------------------------------------------------------------------------------------------------+-------------+
