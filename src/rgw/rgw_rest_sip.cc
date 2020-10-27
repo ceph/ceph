@@ -193,12 +193,6 @@ void RGWOp_SIP_SetMarkerInfo::execute() {
     return;
   }
 
-  if (params.marker.empty()) {
-    ldout(s->cct,  5) << "ERROR: missing or empty marker field" << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
-
   if (params.target_id.empty()) {
     ldout(s->cct,  5) << "ERROR: missing or empty target_id field" << dendl;
     op_ret = -EINVAL;
