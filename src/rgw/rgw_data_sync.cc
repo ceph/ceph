@@ -655,6 +655,7 @@ public:
           auto& info = shards_info[i];
           auto& marker = status->sync_markers[i];
           marker.next_step_marker = info.marker;
+          marker.next_sip_name = dsi.inc->get_sip_name();
           marker.timestamp = info.timestamp;
           const auto& oid = RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, i);
           using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_data_sync_marker>;
@@ -2364,7 +2365,8 @@ public:
         sync_marker.marker = sync_marker.next_step_marker;
         sync_marker.sip_name = sync_marker.next_sip_name;
         sync_marker.next_step_marker.clear();
-        call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->dpp, sync_env->async_rados, sync_env->svc->sysobj,
+        sync_marker.next_sip_name.clear();
+        call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                                              rgw_raw_obj(pool, status_oid),
                                                              sync_marker));
       }
@@ -2513,6 +2515,7 @@ public:
         } else if (!fetch_result.entries.empty()) {
           sync_marker.marker = fetch_result.entries.back().entry_id;
         }
+        sync_marker.sip_name = sc->dsi.inc->get_sip_name();
         if (!fetch_result.truncated) {
           // we reached the end, wait a while before checking for more
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
