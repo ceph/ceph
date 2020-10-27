@@ -62,37 +62,45 @@
 // -----------------------
 // LogSegment
 
-struct BatchStoredBacktrace : public MDSContext {
+struct BatchStoredBacktrace : public MDSIOContext {
   MDSContext *fin;
-  MDSRank *mds;
+  std::vector<CInodeCommitOperations> ops_vec;
 
-  BatchStoredBacktrace(MDSContext *f, MDSRank *m) : fin(f), mds(m) {}
+  BatchStoredBacktrace(MDSRank *m, MDSContext *f,
+		       std::vector<CInodeCommitOperations>&& ops) :
+    MDSIOContext(m), fin(f), ops_vec(std::move(ops)) {}
   void finish(int r) override {
+    for (auto& op : ops_vec) {
+      op.in->_stored_backtrace(r, op.version, nullptr);
+    }
     fin->complete(r);
   }
-  MDSRank *get_mds() override { return mds; };
+  void print(ostream& out) const override {
+    out << "batch backtrace_store";
+  }
 };
 
 struct BatchCommitBacktrace : public Context {
-  std::vector<CInodeCommitOperations> ops_vec;
-  MDSContext *con;
   MDSRank *mds;
+  MDSContext *fin;
+  std::vector<CInodeCommitOperations> ops_vec;
 
-  BatchCommitBacktrace(std::vector<CInodeCommitOperations> &ops, MDSContext *c,
-                       MDSRank *m) : con(c), mds(m) {
-    ops_vec.swap(ops);
-  }
+  BatchCommitBacktrace(MDSRank *m, MDSContext *f,
+		       std::vector<CInodeCommitOperations>&& ops) :
+    mds(m), fin(f), ops_vec(std::move(ops)) {}
   void finish(int r) override {
-    MDSGatherBuilder gather(g_ceph_context);
+    C_GatherBuilder gather(g_ceph_context);
 
     for (auto &op : ops_vec) {
-      op.in->_commit_ops(r, op.version, gather.new_sub(), op.ops_vec, &op.bt);
+      op.in->_commit_ops(r, gather, op.ops_vec, op.bt);
+      op.ops_vec.clear();
+      op.bt.clear();
     }
-    if (gather.has_subs()) {
-      gather.set_finisher(new BatchStoredBacktrace(con, mds));
-      std::scoped_lock l(mds->mds_lock);
-      gather.activate();
-    }
+    ceph_assert(gather.has_subs());
+    gather.set_finisher(new C_OnFinisher(
+			  new BatchStoredBacktrace(mds, fin, std::move(ops_vec)),
+			  mds->finisher));
+    gather.activate();
   }
 };
 
@@ -241,7 +249,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
   if (!ops_vec.empty())
-    mds->finisher->queue(new BatchCommitBacktrace(ops_vec, gather_bld.new_sub(), mds));
+    mds->finisher->queue(new BatchCommitBacktrace(mds, gather_bld.new_sub(), std::move(ops_vec)));
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
 
