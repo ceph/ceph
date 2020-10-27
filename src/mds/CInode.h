@@ -70,7 +70,7 @@ public:
       update_layout = true;
   }
 
-  void update(ObjectOperation &op, inode_backtrace_t *bt);
+  void update(ObjectOperation &op, inode_backtrace_t &bt);
   int64_t get_pool() { return pool; }
 
 private:
@@ -791,9 +791,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void fetch(MDSContext *fin);
   void _fetched(ceph::buffer::list& bl, ceph::buffer::list& bl2, Context *fin);  
 
-  void _commit_ops(int r, version_t version, MDSContext *fin,
+  void _commit_ops(int r, C_GatherBuilder &gather_bld,
                    std::vector<CInodeCommitOperation> &ops_vec,
-                   inode_backtrace_t *bt);
+                   inode_backtrace_t &bt);
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void _store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
                         inode_backtrace_t &bt, int op_prio);

@@ -73,6 +73,11 @@ struct inode_backtrace_t {
   int compare(const inode_backtrace_t& other,
                bool *equivalent, bool *divergent) const;
 
+  void clear() {
+    ancestors.clear();
+    old_pools.clear();
+  }
+
   inodeno_t ino;       // my ino
   std::vector<inode_backpointer_t> ancestors;
   int64_t pool = -1;
