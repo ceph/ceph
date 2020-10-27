@@ -239,7 +239,8 @@ class PhysicalConsole(RemoteConsole):
         if self.check_power('on'):
             log.info('Power on for {s} completed'.format(s=self.shortname))
         else:
-            log.error('Failed to power on {s}'.format(s=self.shortname))
+            err_msg = 'Failed to power on {s}'.format(s=self.shortname)
+            raise RuntimeError(err_msg)
 
     def power_off(self):
         """
