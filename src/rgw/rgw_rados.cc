@@ -1894,6 +1894,14 @@ int RGWRados::Bucket::List::list_objects_ordered(
 	next_marker = index_key;
       }
 
+      if (cur_marker.instance.empty()) {
+        if (cur_marker.name == index_key.name) continue;
+      } else {
+        if (cur_marker.name == index_key.name &&
+            cur_marker.instance == index_key.instance)
+          continue;
+      }
+
       if (params.filter &&
 	  ! params.filter->filter(obj.name, index_key.name)) {
         continue;
