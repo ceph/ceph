@@ -1,5 +1,5 @@
->=15.2.6
---------
+15.2.6
+------
 
 * ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
   a number of bugs and improves usability in terms of size specification and
@@ -10,22 +10,6 @@
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
 * The ``bluefs_preextend_wal_files`` option has been removed.
-
->=15.2.5
---------
-
-* CephFS: Automatic static subtree partitioning policies may now be configured
-  using the new distributed and random ephemeral pinning extended attributes on
-  directories. See the documentation for more information:
-  https://docs.ceph.com/docs/master/cephfs/multimds/
-
-* Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
-  If any OSD has repaired more than this many I/O errors in stored data a
- ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
-
-* Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
-  scheduled scrubs of the type disabled will be aborted. All user initiated
-  scrubs are NOT interrupted.
 
 * It is now possible to specify the initial monitor to contact for Ceph tools
   and daemons using the ``mon_host_override`` config option or
