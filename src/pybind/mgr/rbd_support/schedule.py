@@ -343,7 +343,7 @@ class Schedules:
 
     def load(self, namespace_validator=None, image_validator=None):
 
-        schedule_cfg = self.handler.module.get_localized_module_option(
+        schedule_cfg = self.handler.module.get_module_option(
             self.handler.MODULE_OPTION_NAME, '')
         if schedule_cfg:
             try:
@@ -420,8 +420,8 @@ class Schedules:
 
     def save(self, level_spec, schedule):
         if level_spec.is_global():
-            schedule_cfg = schedule and schedule.to_json() or ''
-            self.handler.module.set_localized_module_option(
+            schedule_cfg = schedule and schedule.to_json() or None
+            self.handler.module.set_module_option(
                 self.handler.MODULE_OPTION_NAME, schedule_cfg)
             return
 
