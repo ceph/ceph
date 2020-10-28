@@ -155,16 +155,6 @@ if(HAVE_INTEL)
       HAVE_NASM_X64_AVX2
       HAVE_NASM_X64_AVX512)
   endif()
-  set(CMAKE_ASM_COMPILER ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-  if(NOT WIN32)
-    # The native tools might be located even when cross compiling, which
-    # might not work in this case (especially when targeting Windows).
-    include(CheckYasm)
-    check_yasm_support(${object_format}
-      HAVE_YASM_X64
-      HAVE_YASM_X64_AVX2
-      HAVE_YASM_X64_AVX512)
-  endif()
 endif()
 
 # require c++17

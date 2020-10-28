@@ -1,5 +1,4 @@
 set(isal_dir ${CMAKE_SOURCE_DIR}/src/crypto/isa-l/isa-l_crypto)
-set(CMAKE_ASM_COMPILER ${PROJECT_SOURCE_DIR}/src/nasm-wrapper)
 set(CMAKE_ASM_FLAGS "-i ${isal_dir}/aes/ -i ${isal_dir}/include/ ${CMAKE_ASM_FLAGS}")
 
 set(isal_crypto_plugin_srcs

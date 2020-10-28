@@ -96,7 +96,6 @@ Build-Depends: cmake (>= 3.10.2),
                xfslibs-dev,
 # Make-Check   xfsprogs,
 # Make-Check   xmlstarlet,
-               yasm [amd64],
                nasm [amd64],
                zlib1g-dev,
 Standards-Version: 4.4.0

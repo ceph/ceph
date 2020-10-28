@@ -170,7 +170,6 @@ if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
   if(HAVE_NASM_X64)
-    set(CMAKE_ASM_COMPILER ${PROJECT_SOURCE_DIR}/src/nasm-wrapper)
     set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_00.asm
