@@ -257,10 +257,10 @@ public:
   }
 
   static void set_last_deep_scrub_stamp(
-    utime_t t, pg_history_t &history, pg_stat_t &stats) ;/*{
+    utime_t t, pg_history_t &history, pg_stat_t &stats) {
     stats.last_deep_scrub_stamp = t;
     history.last_deep_scrub_stamp = t;
-  }*/
+  }
 
   void set_last_deep_scrub_stamp(utime_t t) {
     recovery_state.update_stats(
@@ -378,6 +378,11 @@ public:
 			  ObjectStore::Transaction &t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  /**
+   *  a special version of PG::scrub(), which:
+   *  - is initiated after repair, and
+   *  - is not required to allocate local/remote OSD scrub resources
+   */
   void recovery_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
   void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
   void replica_scrub_resched(epoch_t queued, ThreadPool::TPHandle &handle);
@@ -540,11 +545,18 @@ private:
   // auxiliaries used by sched_scrub():
   double next_deepscrub_interval() const;
 
+  /// should we perform deep scrub?
   bool is_time_for_deep(bool allow_deep_scrub,
 		        bool allow_scrub,
 		        bool has_deep_errors,
 		        const requested_scrub_t& planned) const;
 
+  /**
+   * Verify the various 'next scrub' flags in m_planned_scrub against configuration
+   * and scrub-related timestamps.
+   *
+   * @returns an updated copy of the m_planned_flags (or nothing if no scrubbing)
+   */
   std::optional<requested_scrub_t> verify_scrub_mode() const;
 
   bool verify_periodic_scrub_mode(bool allow_deep_scrub,
@@ -966,7 +978,7 @@ protected:
       pg->get_pgbackend()->trim(entry, t);
     }
   };
-  
+
   void update_object_snap_mapping(
     ObjectStore::Transaction *t, const hobject_t &soid,
     const std::set<snapid_t> &snaps);
@@ -1063,9 +1075,11 @@ protected:
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) = 0;
 
-  void replica_scrub(
-    OpRequestRef op,
-    ThreadPool::TPHandle &handle);
+  /**
+   * Initiate the process that will create our scrub map for the Primary.
+   * (triggered by MSG_OSD_REP_SCRUB)
+   */
+  void replica_scrub(OpRequestRef op, ThreadPool::TPHandle &handle);
 
   // -- recovery state --
 

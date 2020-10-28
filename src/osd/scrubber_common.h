@@ -132,7 +132,7 @@ struct ScrubPgIF {
 
   virtual void send_start_scrub() = 0;
 
-  virtual void send_start_after_rec() = 0;
+  virtual void send_start_after_repair() = 0;
 
   virtual void send_scrub_resched() = 0;
 
@@ -248,8 +248,8 @@ struct ScrubPgIF {
   virtual bool is_chunky_scrub_active() const = 0;
 
   /// add to scrub statistics, but only if the soid is below the scrub start
-  virtual void add_stats_if_lower(const object_stat_sum_t& delta_stats,
-				  const hobject_t& soid) = 0;
+  virtual void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
+					const hobject_t& soid) = 0;
 
   /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
   /// (thus can be called from FSM reactions)

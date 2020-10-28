@@ -46,8 +46,8 @@ class PrimaryLogScrub : public PgScrubber {
   [[nodiscard]] bool should_requeue_blocked_ops(
     eversion_t last_recovery_applied) const final;
 
-  void add_stats_if_lower(const object_stat_sum_t& delta_stats,
-			  const hobject_t& soid) final;
+  void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
+				const hobject_t& soid) final;
 
  private:
   // we know our PG is actually a PrimaryLogPG. Let's alias the pointer to that object:

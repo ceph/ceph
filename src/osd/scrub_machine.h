@@ -62,9 +62,9 @@ MEV(RemotesReserved)	 ///< all replicas have granted our reserve request
 MEV(ReservationFailure)	 ///< a reservation request has failed
 MEV(EpochChanged)	 ///< ... from what it was when this chunk started
 MEV(StartScrub)	 ///< initiate a new scrubbing session (relevant if we are a Primary)
-MEV(AfterRecoveryScrub)	 ///< initiate a new scrubbing session. Only triggered at Recovery
-			 ///< completion.
-MEV(Unblocked)	///< triggered when the PG unblocked an object that was marked for
+MEV(AfterRepairScrub)  ///< initiate a new scrubbing session. Only triggered at Recovery
+		       ///< completion.
+MEV(Unblocked)	       ///< triggered when the PG unblocked an object that was marked for
 		///< scrubbing. Via the PGScrubUnblocked op
 MEV(InternalSchedScrub)
 MEV(SelectedChunkFree)
@@ -132,7 +132,7 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
  *  - (standard scenario for a Primary): 'StartScrub'. Initiates the OSDs resources
  *    reservation process. Will be issued by PG::scrub(), following a
  *    queued "PGScrub" op.
- *  - a special end-of-recovery Primary scrub event ('AfterRecoveryScrub') that is
+ *  - a special end-of-recovery Primary scrub event ('AfterRepairScrub') that is
  *    not required to reserve resources.
  *  - (for a replica) 'StartReplica', triggered by an incoming MOSDRepScrub msg.
  */
@@ -143,7 +143,7 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, state_logger_t {
 			      sc::transition<StartScrub, ReservingReplicas>,
 			      // a scrubbing that was initiated at recovery completion,
 			      // and requires no resource reservations:
-			      sc::transition<AfterRecoveryScrub, ActiveScrubbing>,
+			      sc::transition<AfterRepairScrub, ActiveScrubbing>,
 			      sc::transition<StartReplica, ReplicaWaitUpdates>,
 			      sc::custom_reaction<sc::event_base>>;
 

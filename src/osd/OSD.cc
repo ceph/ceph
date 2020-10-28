@@ -1741,9 +1741,6 @@ void OSDService::queue_for_snap_trim(PG *pg)
       pg->get_osdmap_epoch()));
 }
 
-/**
- *  queue a scrub-related message for a PG
- */
 template <class MSG_TYPE>
 void OSDService::queue_scrub_event_msg(PG* pg,
 				       Scrub::scrub_prio_t with_priority,
@@ -1758,10 +1755,6 @@ void OSDService::queue_scrub_event_msg(PG* pg,
     pg->scrub_requeue_priority(with_priority, qu_priority), ceph_clock_now(), 0, epoch));
 }
 
-/**
- * An alternative version of queue_scrub_event_msg(), in which the queuing priority is
- * provided by the executing scrub (i.e. taken from pgscrubber::flags_)
- */
 template <class MSG_TYPE>
 void OSDService::queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority)
 {
@@ -1781,8 +1774,7 @@ void OSDService::queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority)
 
 void OSDService::queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority)
 {
-  // what qu_priority should we use here?  RRR
-  queue_scrub_event_msg<PGScrubAfterRec>(pg, with_priority);
+  queue_scrub_event_msg<PGScrubAfterRepair>(pg, with_priority);
 }
 
 void OSDService::queue_for_rep_scrub(PG* pg,
@@ -1796,88 +1788,59 @@ void OSDService::queue_for_rep_scrub_resched(PG* pg,
 					     Scrub::scrub_prio_t with_priority,
 					     unsigned int qu_priority)
 {
+  // Resulting scrub event: 'SchedReplica'
   queue_scrub_event_msg<PGRepScrubResched>(pg, with_priority, qu_priority);
 }
 
-/// queue the message (-> event) that all replicas reserved scrub resources for us
 void OSDService::queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'RemotesReserved'
   queue_scrub_event_msg<PGScrubResourcesOK>(pg, with_priority);
 }
 
-/// queue the message (-> event) that some replicas denied our scrub resources request
 void OSDService::queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'ReservationFailure'
   queue_scrub_event_msg<PGScrubDenied>(pg, with_priority);
 }
 
-/**
- *  Queue a PGScrubResched message, that will translate into a InternalSchedScrub event
- *  in the scrub state machine.
- *
- *  Used to signal (a) the end of a sleep period, or (b) a recheck of the availability of
- *  the primary map being created by the backend.
- */
 void OSDService::queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   queue_scrub_event_msg<PGScrubResched>(pg, with_priority);
 }
 
-/**
- *  Queue a PGScrubPushesUpdate message, that will translate into a ActivePushesUpd event
- *  in the scrub state machine.
- *
- *  Signals a change in the number of in-flight recovery writes.
- */
-void OSDService::queue_scrub_pushes_update(PG *pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_pushes_update(PG* pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'ActivePushesUpd'
   queue_scrub_event_msg<PGScrubPushesUpdate>(pg, with_priority);
 }
 
-/**
- *  Sends an UpdatesApplied event to the scrubber state-machine.
- *  Used when all pending updates were applied.
- */
-void OSDService::queue_scrub_applied_update(PG *pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_applied_update(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   queue_scrub_event_msg<PGScrubAppliedUpdate>(pg, with_priority);
 }
 
-/**
- *  The block-range that was locked and prevented the scrubbing - is freed. 
- *  Sends an 'Unblocked' event to the scrubber state-machine. 
- */
-void OSDService::queue_scrub_unblocking(PG *pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_unblocking(PG* pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'Unblocked'
   queue_scrub_event_msg<PGScrubUnblocked>(pg, with_priority);
 }
 
-/**
- *  Sends a DigestUpdate event to the scrubber state-machine.
- *  Signals that all write OPs are done.
- */
-void OSDService::queue_scrub_digest_update(PG *pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_digest_update(PG* pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'DigestUpdate'
   queue_scrub_event_msg<PGScrubDigestUpdate>(pg, with_priority);
 }
 
-/**
- *  Sends a GotReplicas event to the scrubber state-machine.
- *  Signals that we (the Primary) got all waited-for scrub-maps from our replica.
- */
-void OSDService::queue_scrub_got_repl_maps(PG *pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_got_repl_maps(PG* pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'GotReplicas'
   queue_scrub_event_msg<PGScrubGotReplMaps>(pg, with_priority);
 }
 
-/**
- *  Queue a PGScrubReplicaPushes message, that will translate into a ReplicaPushesUpd event
- *  in the scrub state machine.
- *
- *  Signals a change in the number of in-flight recovery writes.
- */
 void OSDService::queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'ReplicaPushesUpd'
   queue_scrub_event_msg<PGScrubReplicaPushes>(pg, with_priority);
 }
 
@@ -7607,20 +7570,20 @@ bool OSD::scrub_load_below_threshold()
 
 void OSD::sched_scrub()
 {
-  dout(10) << __func__ << "sched_scrub starts" << dendl;
+  dout(20) << __func__ << " sched_scrub starts" << dendl;
 
   // if not permitted, fail fast
   if (!service.can_inc_scrubs()) {
-    dout(10) << __func__ << ": OSD cannot inc scrubs" << dendl;
+    dout(20) << __func__ << ": OSD cannot inc scrubs" << dendl;
     return;
   }
   bool allow_requested_repair_only = false;
   if (service.is_recovery_active() && !cct->_conf->osd_scrub_during_recovery) {
     if (!cct->_conf->osd_repair_during_recovery) {
-      dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
+      dout(15) << __func__ << ": not scheduling scrubs due to active recovery" << dendl;
       return;
     }
-    dout(10) << __func__
+    dout(15) << __func__
              << " will only schedule explicitly requested repair due to active recovery"
              << dendl;
     allow_requested_repair_only = true;
@@ -7644,7 +7607,7 @@ void OSD::sched_scrub()
       }
 
       if ((scrub_job.deadline.is_zero() || scrub_job.deadline >= now) && !(time_permit && load_is_low)) {
-        dout(10) << __func__ << " not scheduling scrub for " << scrub_job.pgid << " due to "
+        dout(15) << __func__ << " not scheduling scrub for " << scrub_job.pgid << " due to "
                  << (!time_permit ? "time not permit" : "high load") << dendl;
         continue;
       }
@@ -7655,13 +7618,10 @@ void OSD::sched_scrub()
 	continue;
       }
 
-      dout(9) << __func__  << " pg(" << scrub_job.pgid << " " << pg->m_scrubber->is_scrub_active() << " now: " <<
-              now << " must repair: " << pg->m_planned_scrub.must_repair << dendl;
-
       // This has already started, so go on to the next scrub job
       if (pg->m_scrubber->is_scrub_active()) {
 	pg->unlock();
-	dout(7/*30*/) << __func__ << ": already in progress pgid " << scrub_job.pgid << dendl;
+	dout(20) << __func__ << ": already in progress pgid " << scrub_job.pgid << dendl;
 	continue;
       }
       // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
@@ -7679,7 +7639,7 @@ void OSD::sched_scrub()
 	dout(10) << __func__ << ": reserve in progress pgid " << scrub_job.pgid << dendl;
 	break;
       }
-      dout(10) << "sched_scrub scrubbing " << scrub_job.pgid << " at " << scrub_job.sched_time
+      dout(15) << "sched_scrub scrubbing " << scrub_job.pgid << " at " << scrub_job.sched_time
 	       << (pg->get_must_scrub() ? ", explicitly requested" :
 		   (load_is_low ? ", load_is_low" : " deadline < now"))
 	       << dendl;
@@ -7706,13 +7666,13 @@ void OSD::resched_all_scrubs()
       if (!pg)
 	continue;
       if (!pg->m_planned_scrub.must_scrub && !pg->m_planned_scrub.need_auto) {
-        dout(20) << __func__ << ": reschedule " << scrub_job.pgid << dendl;
+        dout(15) << __func__ << ": reschedule " << scrub_job.pgid << dendl;
         pg->on_info_history_change();
       }
       pg->unlock();
     } while (service.next_scrub_stamp(scrub_job, &scrub_job));
   }
-  dout(10) << __func__ << ": done" << dendl;
+  dout(20) << __func__ << ": done" << dendl;
 }
 
 MPGStats* OSD::collect_pg_stats()

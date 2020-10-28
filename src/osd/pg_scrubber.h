@@ -196,7 +196,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void send_start_scrub() final;
 
-  void send_start_after_rec() final;
+  void send_start_after_repair() final;
 
   void send_scrub_resched() final;
 
@@ -297,8 +297,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   /**
    *  add to scrub statistics, but only if the soid is below the scrub start
    */
-  virtual void add_stats_if_lower(const object_stat_sum_t& delta_stats,
-				  const hobject_t& soid) override
+  virtual void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
+					const hobject_t& soid) override
   {
     ceph_assert(false);
   }
@@ -672,5 +672,5 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   preemption_data_t preemption_data;
 
   // debug/development temporary code:
-  void debug_dump_reservations(std::string_view header_txt);
+  void debug_dump_reservations(std::string_view header_txt) const;
 };

@@ -52,7 +52,7 @@ void PGScrub::run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& ha
   pg->unlock();
 }
 
-void PGScrubAfterRec::run(OSD* osd,
+void PGScrubAfterRepair::run(OSD* osd,
 			  OSDShard* sdata,
 			  PGRef& pg,
 			  ThreadPool::TPHandle& handle)

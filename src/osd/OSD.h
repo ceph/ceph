@@ -582,20 +582,37 @@ public:
   void queue_scrub_after_repair(PG *pg, Scrub::scrub_prio_t with_priority);
 
   /// queue the message (-> event) that all replicas reserved scrub resources for us
-  void queue_for_scrub_granted(PG *pg, Scrub::scrub_prio_t with_priority);
-  /// queue the message (-> event) that some replicas denied our scrub resources request
-  void queue_for_scrub_denied(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority);
 
-  void queue_for_scrub_resched(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_scrub_pushes_update(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_scrub_applied_update(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_scrub_unblocking(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_scrub_digest_update(PG *pg, Scrub::scrub_prio_t with_priority);
-  void queue_scrub_got_repl_maps(PG *pg, Scrub::scrub_prio_t with_priority);
+  /// queue the message (-> event) that some replicas denied our scrub resources request
+  void queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// Signals either (a) the end of a sleep period, or (b) a recheck of the availability
+  /// of the primary map being created by the backend.
+  void queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// Signals a change in the number of in-flight recovery writes
+  void queue_scrub_pushes_update(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// Signals that all pending updates were applied
+  void queue_scrub_applied_update(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// The block-range that was locked and prevented the scrubbing - is freed
+  void queue_scrub_unblocking(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// Signals that all write OPs are done
+  void queue_scrub_digest_update(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// Signals that we (the Primary) got all waited-for scrub-maps from our replicas
+  void queue_scrub_got_repl_maps(PG* pg, Scrub::scrub_prio_t with_priority);
+
   void queue_for_rep_scrub(PG* pg,
 			   Scrub::scrub_prio_t with_high_priority,
 			   unsigned int qu_priority);
+
+  /// Signals a change in the number of in-flight recovery writes
   void queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority);
+
   void queue_for_rep_scrub_resched(PG* pg,
 				   Scrub::scrub_prio_t with_high_priority,
 				   unsigned int qu_priority);
@@ -607,8 +624,12 @@ private:
   ceph::mutex recovery_lock = ceph::make_mutex("OSDService::recovery_lock");
   std::list<std::pair<epoch_t, PGRef> > awaiting_throttle;
 
+  /// queue a scrub-related message for a PG
   template<class MSG_TYPE>
   void queue_scrub_event_msg(PG *pg, Scrub::scrub_prio_t with_priority, unsigned int qu_priority);
+
+  /// An alternative version of queue_scrub_event_msg(), in which the queuing priority is
+  /// provided by the executing scrub (i.e. taken from PgScrubber::m_flags)
   template<class MSG_TYPE>
   void queue_scrub_event_msg(PG *pg, Scrub::scrub_prio_t with_priority);
 

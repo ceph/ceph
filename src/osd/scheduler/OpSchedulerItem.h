@@ -375,13 +375,13 @@ class PGScrubDenied : public PGScrubItem {
 };
 
 /**
- *  called when a recovery process completes, to initiate scrubbing. No local/remote
+ *  called when a repair process completes, to initiate scrubbing. No local/remote
  *  resources are allocated.
  */
-class PGScrubAfterRec : public PGScrubItem {
+class PGScrubAfterRepair : public PGScrubItem {
  public:
-  PGScrubAfterRec(spg_t pg, epoch_t epoch_queued)
-      : PGScrubItem{pg, epoch_queued, "PGScrubAfterRec"}
+  PGScrubAfterRepair(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubAfterRepair"}
   {}
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };

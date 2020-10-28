@@ -40,7 +40,7 @@ void PrimaryLogScrub::_scrub_finish()
 {
   auto& info = m_pg->info;  ///< a temporary alias
 
-  dout(11) << __func__ << " info stats invalid? "
+  dout(10) << __func__ << " info stats invalid? "
 	   << (info.stats.stats_invalid ? "inv" : "vld") << dendl;
 
   bool repair = state_test(PG_STATE_REPAIR);
@@ -578,12 +578,15 @@ void PrimaryLogScrub::_scrub_clear_state()
   m_scrub_cstat = object_stat_collection_t();
 }
 
-void PrimaryLogScrub::add_stats_if_lower(const object_stat_sum_t& delta_stats,
-					 const hobject_t& soid)
+void PrimaryLogScrub::stats_of_handled_objects(const object_stat_sum_t& delta_stats,
+					       const hobject_t& soid)
 {
-  /// RRR \todo ask: not sure I understand the idea (the '<') here...
-
-  dout(15) << __func__ << " " << soid << " a? " << is_scrub_active() << dendl;
+  // We scrub objects in hobject_t order, so objects before m_start have already been
+  // scrubbed and their stats have already been added to the scrubber. Objects after that
+  // point haven't been included in the scrubber's stats accounting yet, so they will be
+  // included when the scrubber gets to that object.
+  dout(15) << __func__ << " soid: " << soid << " scrub is active? " << is_scrub_active()
+	   << dendl;
   if (is_primary() && is_scrub_active()) {
     if (soid < m_start) {
       dout(20) << __func__ << " " << soid << " < [" << m_start << "," << m_end << ")"
