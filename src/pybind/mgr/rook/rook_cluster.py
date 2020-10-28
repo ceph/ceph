@@ -389,8 +389,8 @@ class RookCluster(object):
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
-        def _update_fs(current, new):
-            # type: (cfs.CephFilesystem, cfs.CephFilesystem) -> cfs.CephFilesystem
+        def _update_fs(new):
+            # type: (cfs.CephFilesystem) -> cfs.CephFilesystem
             new.spec.metadataServer.activeCount = spec.placement.count or 1
             return new
 
@@ -447,7 +447,7 @@ class RookCluster(object):
                 )
             )
 
-        def _update_zone(current, new):
+        def _update_zone(new):
             new.spec.gateway.instances = spec.placement.count or 1
             return new
 
@@ -625,10 +625,9 @@ class RookCluster(object):
                 raise
 
         if current_json:
-            current = crd.from_json(current_json)
             new = crd.from_json(current_json)  # no deepcopy.
 
-            new = update_func(current, new)
+            new = update_func(new)
 
             patch = list(jsonpatch.make_patch(current_json, new.to_json()))
 
