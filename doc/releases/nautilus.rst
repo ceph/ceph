@@ -1,3 +1,19 @@
+v14.2.13 Nautilus
+=================
+
+This is the 13th backport release in the Nautilus series. This release fixes a
+regression introduced in v14.2.12, that referred to ceph-mon hosts using dns
+names instead of ip addresses in the `mon_host` param in `ceph.conf`. We
+recommend users to update to this release.
+
+Changelog
+---------
+
+* mon/MonMap: fix unconditional failure for init_with_hosts (`pr#37816
+  <https://github.com/ceph/ceph/pull/37816>`_, `issue#47951
+  <https://tracker.ceph.com/issues/47951>`_, Patrick Donelly)
+
+
 v14.2.12 Nautilus
 =================
 
