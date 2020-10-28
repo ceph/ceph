@@ -737,6 +737,7 @@ public:
   void renew_caps();
   void renew_caps(MetaSession *session);
   void flush_cap_releases();
+  void renew_and_flush_cap_releases();
   void tick();
 
   void inc_dentry_nr() {
