@@ -1953,6 +1953,7 @@ To check that the host is reachable:
                 'mgr': PlacementSpec(count=2),
                 'mds': PlacementSpec(count=2),
                 'rgw': PlacementSpec(count=2),
+                'ha_rgw': PlacementSpec(count=2),
                 'iscsi': PlacementSpec(count=1),
                 'rbd-mirror': PlacementSpec(count=2),
                 'nfs': PlacementSpec(count=1),
@@ -2007,6 +2008,10 @@ To check that the host is reachable:
 
     @trivial_completion
     def apply_rgw(self, spec) -> str:
+        return self._apply(spec)
+
+    @trivial_completion
+    def apply_ha_rgw(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
