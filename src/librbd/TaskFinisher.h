@@ -119,10 +119,10 @@ public:
     if (it != m_task_contexts.end()) {
       if (it->second.second != NULL &&
           m_safe_timer->cancel_event(it->second.second)) {
-        delete it->second.first;
+        it->second.first->complete(-ECANCELED);
       } else {
         // task already scheduled on the finisher
-        delete ctx;
+        ctx->complete(-ECANCELED);
         return false;
       }
     }
