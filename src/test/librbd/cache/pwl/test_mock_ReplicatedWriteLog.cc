@@ -12,7 +12,6 @@
 #include "librbd/cache/pwl/Types.h"
 #include "librbd/cache/ImageWriteback.h"
 
-
 namespace librbd {
 namespace {
 

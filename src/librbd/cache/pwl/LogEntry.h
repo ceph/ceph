@@ -168,8 +168,11 @@ public:
   ~WriteLogEntry() override {};
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
-  void init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
+  void init(bool has_data,
             uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush);
+  #ifdef WITH_RBD_RWL
+  void init_pmem_buffer(std::vector<WriteBufferAllocation>::iterator allocation);
+  #endif
   BlockExtent block_extent();
   unsigned int reader_count() const;
   /* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */

@@ -210,6 +210,9 @@ CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
 CMAKE_DEPENDENT_OPTION(WITH_RBD_RWL "Enable librbd persistent write back cache" OFF
   "WITH_RBD" OFF)
 
+CMAKE_DEPENDENT_OPTION(WITH_RBD_SSD_CACHE "Enable librbd persistent write back cache for SSDs" OFF
+    "WITH_RBD" OFF)
+
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
   "WITH_RBD_RWL OR WITH_BLUESTORE_PMEM" OFF)
 

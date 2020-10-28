@@ -139,7 +139,8 @@ public:
   uint32_t get_free_log_entries() {
     return m_free_log_entries;
   }
-  void add_into_log_map(pwl::GenericWriteLogEntries &log_entries);
+  void add_into_log_map(pwl::GenericWriteLogEntries &log_entries,
+                        C_BlockIORequestT *req);
 
 private:
  typedef std::list<pwl::C_WriteRequest<This> *> C_WriteRequests;
@@ -236,7 +237,6 @@ protected:
 
   std::atomic<bool> m_shutting_down = {false};
   std::atomic<bool> m_invalidating = {false};
-  const char* m_pwl_pool_layout_name;
 
   ImageCtxT &m_image_ctx;
 
@@ -342,6 +342,7 @@ protected:
   virtual void alloc_op_log_entries(pwl::GenericLogOperations &ops) {}
   virtual bool retire_entries(const unsigned long int frees_per_tx) {return false;}
   virtual void schedule_flush_and_append(pwl::GenericLogOperationsVector &ops) {}
+  virtual void copy_pmem(C_BlockIORequestT *req) {}
   virtual void persist_last_flushed_sync_gen() {}
   virtual void reserve_pmem(C_BlockIORequestT *req, bool &alloc_succeeds, bool &no_space) {}
   virtual Context *construct_flush_entry_ctx(

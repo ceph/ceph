@@ -1,4 +1,4 @@
-if(WITH_BLUESTORE OR WITH_RBD_RWL)
+if(WITH_BLUESTORE OR  WITH_RBD_SSD_CACHE)
 list(APPEND libblk_srcs
   BlockDevice.cc)
 endif()

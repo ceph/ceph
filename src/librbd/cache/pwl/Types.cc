@@ -10,11 +10,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::pwl::Types: " << this << " " \
                            <<  __func__ << ": "
+using ceph::Formatter;
 
 namespace librbd {
-
 namespace cache {
-
 namespace pwl {
 
 DeferredContexts::~DeferredContexts() {
@@ -52,6 +51,65 @@ uint64_t WriteLogPmemEntry::get_offset_bytes() {
 uint64_t WriteLogPmemEntry::get_write_bytes() {
   return write_bytes;
 }
+
+#ifdef WITH_RBD_SSD_CACHE
+void WriteLogPmemEntry::dump(Formatter *f) const {
+  f->dump_unsigned("sync_gen_number", sync_gen_number);
+  f->dump_unsigned("write_sequence_number", write_sequence_number);
+  f->dump_unsigned("image_offset_bytes", image_offset_bytes);
+  f->dump_unsigned("write_bytes", write_bytes);
+  f->dump_unsigned("write_data_pos", write_data_pos);
+  f->dump_unsigned("entry_valid", entry_valid);
+  f->dump_unsigned("sync_point", sync_point);
+  f->dump_unsigned("sequenced", sequenced);
+  f->dump_unsigned("has_data", has_data);
+  f->dump_unsigned("discard", discard);
+  f->dump_unsigned("writesame", writesame);
+  f->dump_unsigned("ws_datalen", ws_datalen);
+  f->dump_unsigned("entry_index", entry_index);
+}
+
+void WriteLogPmemEntry::generate_test_instances(list<WriteLogPmemEntry*>& ls) {
+  ls.push_back(new WriteLogPmemEntry);
+  ls.push_back(new WriteLogPmemEntry);
+  ls.back()->sync_gen_number = 1;
+  ls.back()->write_sequence_number = 1;
+  ls.back()->image_offset_bytes = 1;
+  ls.back()->write_bytes = 1;
+  ls.back()->write_data_pos = 1;
+  ls.back()->entry_valid = 1;
+  ls.back()->sync_point = 1;
+  ls.back()->sequenced = 1;
+  ls.back()->has_data = 1;
+  ls.back()->discard = 1;
+  ls.back()->writesame = 1;
+  ls.back()->ws_datalen = 1;
+  ls.back()->entry_index = 1;
+}
+
+void WriteLogPoolRoot::dump(Formatter *f) const {
+  f->dump_unsigned("layout_version", layout_version);
+  f->dump_unsigned("cur_sync_gen", cur_sync_gen);
+  f->dump_unsigned("pool_size", pool_size);
+  f->dump_unsigned("flushed_sync_gen", flushed_sync_gen);
+  f->dump_unsigned("block_size", block_size);
+  f->dump_unsigned("num_log_entries", num_log_entries);
+  f->dump_unsigned("first_free_entry", first_free_entry);
+  f->dump_unsigned("first_valid_entry", first_valid_entry); }
+
+void WriteLogPoolRoot::generate_test_instances(list<WriteLogPoolRoot*>& ls) {
+  ls.push_back(new WriteLogPoolRoot);
+  ls.push_back(new WriteLogPoolRoot);
+  ls.back()->layout_version = 2;
+  ls.back()->cur_sync_gen = 1;
+  ls.back()->pool_size = 1024;
+  ls.back()->flushed_sync_gen = 1;
+  ls.back()->block_size = 4096;
+  ls.back()->num_log_entries = 10000000;
+  ls.back()->first_free_entry = 1;
+  ls.back()->first_valid_entry = 0;
+}
+#endif
 
 std::ostream& operator<<(std::ostream& os,
                          const WriteLogPmemEntry &entry) {
