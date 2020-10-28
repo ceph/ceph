@@ -247,6 +247,9 @@
 /* yasm can also build the isa-l:avx2 */
 #cmakedefine HAVE_YASM_X64_AVX2
 
+/* yasm can also build the isa-l:avx512 */
+#cmakedefine HAVE_YASM_X64_AVX512
+
 /* Define if isa-l is compiled for arm64 */
 #cmakedefine HAVE_ARMV8_SIMD
 

@@ -152,7 +152,8 @@ if(HAVE_INTEL)
     include(CheckYasm)
     check_yasm_support(${object_format}
       HAVE_YASM_X64
-      HAVE_YASM_X64_AVX2)
+      HAVE_YASM_X64_AVX2
+      HAVE_YASM_X64_AVX512)
   endif()
 endif()
 
