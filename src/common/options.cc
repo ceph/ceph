@@ -2708,7 +2708,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jerasure lrc"
-  #if defined(HAVE_YASM_X64_AVX2) || defined(HAVE_ARMV8_SIMD)
+  #if defined(HAVE_NASM_X64_AVX2) || defined(HAVE_ARMV8_SIMD)
          " isa"
   #endif
         )
