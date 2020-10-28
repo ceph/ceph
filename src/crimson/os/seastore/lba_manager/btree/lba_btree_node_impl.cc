@@ -258,7 +258,8 @@ LBAInternalNode::scan_mapped_space_ret LBAInternalNode::scan_mapped_space(
 }
 
 
-void LBAInternalNode::resolve_relative_addrs(paddr_t base) {
+void LBAInternalNode::resolve_relative_addrs(paddr_t base)
+{
   for (auto i: *this) {
     if (i->get_val().is_relative()) {
       auto updated = base.add_relative(i->get_val());
@@ -577,7 +578,8 @@ LBALeafNode::scan_mapped_space_ret LBALeafNode::scan_mapped_space(
 }
 
 
-void LBALeafNode::resolve_relative_addrs(paddr_t base) {
+void LBALeafNode::resolve_relative_addrs(paddr_t base)
+{
   for (auto i: *this) {
     if (i->get_val().paddr.is_relative()) {
       auto val = i->get_val();
@@ -601,7 +603,8 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
   op_context_t c,
   depth_t depth,
   paddr_t offset,
-  paddr_t base) {
+  paddr_t base)
+{
   offset = offset.maybe_relative_to(base);
   ceph_assert(depth > 0);
   if (depth > 1) {
