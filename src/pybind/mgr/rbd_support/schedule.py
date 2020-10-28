@@ -345,6 +345,18 @@ class Schedules:
 
         schedule_cfg = self.handler.module.get_module_option(
             self.handler.MODULE_OPTION_NAME, '')
+
+        # Previous versions incorrectly stored the global config in
+        # the localized module option. Check the config is here and fix it.
+        if not schedule_cfg:
+            schedule_cfg = self.handler.module.get_localized_module_option(
+                self.handler.MODULE_OPTION_NAME, '')
+            if schedule_cfg:
+                self.handler.module.set_module_option(
+                    self.handler.MODULE_OPTION_NAME, schedule_cfg)
+        self.handler.module.set_localized_module_option(
+            self.handler.MODULE_OPTION_NAME, None)
+
         if schedule_cfg:
             try:
                 level_spec = LevelSpec.make_global()
