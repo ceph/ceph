@@ -8,7 +8,6 @@ tasks:
       client:
         debug client: 20
         debug ms: 1
-        fuse default permissions: false
         fuse set user groups: true
 - ceph-fuse:
 - workunit:
