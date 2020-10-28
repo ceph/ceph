@@ -2438,12 +2438,15 @@ int RGWRados::Bucket::List::list_objects_ordered(
 
   // use a local marker; either the marker will have a previous entry
   // or it will be empty; either way it's OK to copy
-  rgw_obj_key marker_obj(params.marker.name, params.marker.instance, params.marker.ns);
+  rgw_obj_key marker_obj(params.marker.name,
+			 params.marker.instance,
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
-  rgw_obj_key end_marker_obj(params.end_marker.name, params.end_marker.instance,
-                             params.end_marker.ns);
+  rgw_obj_key end_marker_obj(params.end_marker.name,
+			     params.end_marker.instance,
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
@@ -2668,13 +2671,13 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
   // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.marker.ns);
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-			     params.end_marker.ns);
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
