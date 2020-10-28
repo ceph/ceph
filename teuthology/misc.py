@@ -37,7 +37,7 @@ stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
 is_arm = lambda x: x.startswith('tala') or x.startswith(
     'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
 
-hostname_expr_templ = '(?P<user>.*@)?(?P<shortname>.*)\.{lab_domain}'
+hostname_expr_templ = '(?P<user>.*@)?(?P<shortname>.*){lab_domain}'
 
 def host_shortname(hostname):
     if _is_ipv4(hostname) or _is_ipv6(hostname):
@@ -63,18 +63,22 @@ def canonicalize_hostname(hostname, user='ubuntu'):
         user_ = user
 
     user_at = user_.strip('@') + '@' if user_ else ''
-
-    ret = '{user_at}{short}.{lab_domain}'.format(
+    domain = config.lab_domain
+    if domain and not shortname.endswith('.'):
+        domain = '.' + domain
+    ret = '{user_at}{short}{domain}'.format(
         user_at=user_at,
         short=shortname,
-        lab_domain=config.lab_domain,
+        domain=domain,
     )
     return ret
 
 
 def decanonicalize_hostname(hostname):
-    hostname_expr = hostname_expr_templ.format(
-        lab_domain=config.lab_domain.replace('.', '\.'))
+    lab_domain = ''
+    if config.lab_domain:
+        lab_domain='\.' + config.lab_domain.replace('.', '\.')
+    hostname_expr = hostname_expr_templ.format(lab_domain=lab_domain)
     match = re.match(hostname_expr, hostname)
     if match:
         hostname = match.groupdict()['shortname']

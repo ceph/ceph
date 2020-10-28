@@ -292,6 +292,29 @@ class TestHostnames(object):
         result = misc.decanonicalize_hostname(host)
         assert result == 'box1'
 
+    def test_canonicalize_hostname_nodomain(self):
+        config.lab_domain = ''
+        host = 'box2'
+        result = misc.canonicalize_hostname(host)
+        assert result == 'ubuntu@' + host
+
+    def test_decanonicalize_hostname_nodomain(self):
+        config.lab_domain = ''
+        host = 'ubuntu@box2'
+        result = misc.decanonicalize_hostname(host)
+        assert result == 'box2'
+
+    def test_canonicalize_hostname_full_other_user(self):
+        config.lab_domain = 'example.com'
+        host = 'user1@box1.example.come'
+        result = misc.canonicalize_hostname(host)
+        assert result == 'user1@box1.example.com'
+
+    def test_decanonicalize_hostname_full_other_user(self):
+        config.lab_domain = 'example.com'
+        host = 'user1@box1.example.come'
+        result = misc.decanonicalize_hostname(host)
+        assert result == 'box1'
 
 class TestMergeConfigs(object):
     """ Tests merge_config and deep_merge in teuthology.misc """
