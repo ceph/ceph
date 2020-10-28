@@ -2393,6 +2393,31 @@ int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj
   return 0;
 }
 
+tl::expected<neo_obj_ref, bs::error_code>
+RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info,
+			   const rgw_obj& obj, optional_yield y)
+{
+  rgw_pool pool;
+  if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
+    ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj
+		  << ", probably misconfiguration" << dendl;
+    return tl::unexpected(bs::error_code(EIO, bs::generic_category()));
+  }
+  auto ioc = acquire_pool(pool, false, y);
+  if (!ioc)
+    return tl::unexpected(ioc.error());
+
+  neo_obj_ref ref;
+  ref.r = &neorados();
+  ref.ioc = std::move(*ioc);
+  string oid, key;
+  get_obj_bucket_and_oid_loc(obj, oid, key);
+  ref.oid = string(std::move(oid));
+  ref.ioc.key(std::move(key));
+
+  return ref;
+}
+
 int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref)
 {
   get_obj_bucket_and_oid_loc(obj, ref->obj.oid, ref->obj.loc);
@@ -5575,7 +5600,7 @@ int RGWRados::Object::Read::get_attr(const DoutPrefixProvider *dpp, const char *
   return 0;
 }
 
-int RGWRados::Object::Stat::stat_async()
+bs::error_code RGWRados::Object::Stat::stat_async()
 {
   RGWObjectCtx& ctx = source->get_ctx();
   rgw_obj& obj = source->get_obj();
@@ -5584,74 +5609,63 @@ int RGWRados::Object::Stat::stat_async()
   RGWObjState *s = ctx.get_state(obj); /* calling this one directly because otherwise a sync request will be sent */
   result.obj = obj;
   if (s->has_attrs) {
-    state.ret = 0;
     result.size = s->size;
-    result.mtime = ceph::real_clock::to_timespec(s->mtime);
+    result.mtime = s->mtime;
     result.attrs = s->attrset;
     result.manifest = s->manifest;
-    return 0;
+    return {};
   }
 
-  string oid;
-  string loc;
-  get_obj_bucket_and_oid_loc(obj, oid, loc);
-
-  int r = store->get_obj_head_ioctx(source->get_bucket_info(), obj, &state.io_ctx);
-  if (r < 0) {
-    return r;
+  auto ref = store->get_obj_head_ref(source->get_bucket_info(), obj,
+				     null_yield);
+  if (!ref) {
+    return ref.error();
   }
 
-  librados::ObjectReadOperation op;
-  op.stat2(&result.size, &result.mtime, NULL);
-  op.getxattrs(&result.attrs, NULL);
-  state.completion = librados::Rados::aio_create_completion(nullptr, nullptr);
-  state.io_ctx.locator_set_key(loc);
-  r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
-  if (r < 0) {
-    ldout(store->ctx(), 5) << __func__
-						   << ": ERROR: aio_operate() returned ret=" << r
-						   << dendl;
-    return r;
-  }
-
-  return 0;
+  nr::ReadOp op;
+  op.stat(&result.size, &result.mtime);
+  op.get_xattrs(&result.attrs);
+  state.completion = ref->operate(std::move(op), nullptr, ba::use_future);
+  return {};
 }
 
 
-int RGWRados::Object::Stat::wait()
+bs::error_code RGWRados::Object::Stat::wait()
 {
-  if (!state.completion) {
+  if (!state.completion.valid()) {
     return state.ret;
   }
 
-  state.completion->wait_for_complete();
-  state.ret = state.completion->get_return_value();
-  state.completion->release();
-
-  if (state.ret != 0) {
+  // It sure would be nice if the authors of std::future had provided
+  // a way to query exceptional status and get the exception without
+  // having to catch it!
+  try {
+    state.completion.wait();
+  } catch (const bs::system_error& e) {
+    state.ret = e.code();
     return state.ret;
   }
 
   return finish();
 }
 
-int RGWRados::Object::Stat::finish()
+bs::error_code RGWRados::Object::Stat::finish()
 {
-  map<string, bufferlist>::iterator iter = result.attrs.find(RGW_ATTR_MANIFEST);
+  auto iter = result.attrs.find(RGW_ATTR_MANIFEST);
   if (iter != result.attrs.end()) {
     bufferlist& bl = iter->second;
     auto biter = bl.cbegin();
     try {
       result.manifest.emplace();
       decode(*result.manifest, biter);
-    } catch (buffer::error& err) {
+    } catch (ceph::buffer::error& e) {
       RGWRados *store = source->get_store();
       ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode manifest"  << dendl;
-      return -EIO;
+      return e.code();
     }
   }
 
-  return 0;
+  return {};
 }
 
 int RGWRados::append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,

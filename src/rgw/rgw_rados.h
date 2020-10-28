@@ -38,6 +38,7 @@
 
 namespace nr = neorados;
 namespace bs = boost::system;
+namespace ca = ceph::async;
 
 class RGWWatcher;
 class SafeTimer;
@@ -66,7 +67,7 @@ class RGWSysObjectCtx;
 #define RGW_OBJ_NS_MULTIPART "multipart"
 #define RGW_OBJ_NS_SHADOW    "shadow"
 
-static inline void prepend_bucket_marker(const rgw_bucket& bucket, const string& orig_oid, string& oid)
+inline void prepend_bucket_marker(const rgw_bucket& bucket, const string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
     oid = orig_oid;
@@ -471,6 +472,9 @@ class RGWRados
   // This field represents the number of bucket index object shards
   uint32_t bucket_index_max_shards;
 
+  tl::expected<neo_obj_ref, bs::error_code>
+  get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+		   optional_yield y);
   int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
   uint64_t max_bucket_id;
@@ -717,7 +721,7 @@ public:
   };
 
   class Object {
-    RGWRados *store;
+    RGWRados* store;
     RGWBucketInfo bucket_info;
     RGWObjectCtx& ctx;
     rgw_obj obj;
@@ -739,19 +743,19 @@ public:
     int complete_atomic_modification();
 
   public:
-    Object(RGWRados *_store, const RGWBucketInfo& _bucket_info,
+    Object(RGWRados* _store, const RGWBucketInfo& _bucket_info,
 	   RGWObjectCtx& _ctx, const rgw_obj& _obj)
       : store(_store), bucket_info(_bucket_info), ctx(_ctx), obj(_obj),
 	bs(store), state(NULL), versioning_disabled(false),
 	bs_initialized(false) {}
 
-    RGWRados *get_store() { return store; }
+    RGWRados* get_store() { return store; }
     rgw_obj& get_obj() { return obj; }
     RGWObjectCtx& get_ctx() { return ctx; }
     RGWBucketInfo& get_bucket_info() { return bucket_info; }
     int get_manifest(const DoutPrefixProvider *dpp, RGWObjManifest **pmanifest, optional_yield y);
 
-    int get_bucket_shard(BucketShard **pbs, const DoutPrefixProvider *dpp) {
+    int get_bucket_shard(BucketShard** pbs, const DoutPrefixProvider *dpp) {
       if (!bs_initialized) {
         int r =
 	  bs.init(bucket_info.bucket, obj, nullptr /* no RGWBucketInfo */, dpp);
@@ -773,7 +777,7 @@ public:
     }
 
     struct Read {
-      RGWRados::Object *source;
+      RGWRados::Object* source;
 
       struct GetObjState {
         map<rgw_pool, librados::IoCtx> io_ctxs;
@@ -905,32 +909,31 @@ public:
     };
 
     struct Stat {
-      RGWRados::Object *source;
+      RGWRados::Object* source;
 
       struct Result {
         rgw_obj obj;
         std::optional<RGWObjManifest> manifest;
         uint64_t size{0};
-	struct timespec mtime {};
-        map<string, bufferlist> attrs;
+	ceph::real_time mtime;
+	std::map<string, bufferlist> attrs;
       } result;
 
       struct State {
-        librados::IoCtx io_ctx;
-        librados::AioCompletion *completion;
-        int ret;
-
-        State() : completion(NULL), ret(0) {}
+	// Since ca::waiter is immovable and uncopyable and our caller
+	// makes a deque of us. Probably not worth trying to use an
+	// intrusive list since we'd have to allocate in either case.
+	std::future<void> completion;
+	bs::error_code ret;
       } state;
 
+      explicit Stat(RGWRados::Object* source) : source(source) {}
 
-      explicit Stat(RGWRados::Object *_source) : source(_source) {}
-
-      int stat_async();
-      int wait();
-      int stat();
+      bs::error_code stat_async();
+      bs::error_code wait();
+      bs::error_code stat();
     private:
-      int finish();
+      bs::error_code finish();
     };
   };
 
