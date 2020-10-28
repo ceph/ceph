@@ -8,11 +8,16 @@
 #include "common/errno.h"
 #include "librbd/asio/ContextWQ.h"
 
-#if defined(WITH_RBD_RWL)
+#if defined(WITH_RBD_RWL) || defined(WITH_RBD_SSD_CACHE)
 #include "librbd/cache/pwl/ImageCacheState.h"
-#include "librbd/cache/pwl/ReplicatedWriteLog.h"
 #include "librbd/cache/WriteLogImageDispatch.h"
-#endif // WITH_RBD_RWL
+#endif // WITH_RBD_RWL || WITH_RBD_SSD_CACHE
+#ifdef WITH_RBD_RWL
+#include "librbd/cache/pwl/ReplicatedWriteLog.h"
+#endif
+#ifdef WITH_RBD_SSD_CACHE
+#include "librbd/cache/pwl/SSDWriteLog.h"
+#endif
 
 #include "librbd/cache/Utils.h"
 #include "librbd/ImageCtx.h"
@@ -44,14 +49,14 @@ InitRequest<I>::InitRequest(I &image_ctx, Context *on_finish)
 
 template <typename I>
 void InitRequest<I>::send() {
-#if defined(WITH_RBD_RWL)
+#if defined(WITH_RBD_RWL) || defined(WITH_RBD_SSD_CACHE)
   get_image_cache_state();
 #else
   finish();
 #endif // WITH_RBD_RWL
 }
 
-#if defined(WITH_RBD_RWL)
+#if defined(WITH_RBD_RWL) || defined(WITH_RBD_SSD_CACHE)
 template <typename I>
 void InitRequest<I>::get_image_cache_state() {
   CephContext *cct = m_image_ctx.cct;
@@ -76,11 +81,20 @@ void InitRequest<I>::get_image_cache_state() {
 
   auto cache_type = cache_state->get_image_cache_type();
   switch(cache_type) {
+    #ifdef WITH_RBD_RWL
     case cache::IMAGE_CACHE_TYPE_RWL:
       m_image_cache =
         new librbd::cache::pwl::ReplicatedWriteLog<I>(m_image_ctx,
                                                       cache_state);
       break;
+    #endif
+    #ifdef WITH_RBD_SSD_CACHE
+    case cache::IMAGE_CACHE_TYPE_SSD:
+      m_image_cache =
+        new librbd::cache::pwl::SSDWriteLog<I>(m_image_ctx,
+                                            cache_state);
+      break;
+    #endif
     default:
       delete cache_state;
       cache_state = nullptr;

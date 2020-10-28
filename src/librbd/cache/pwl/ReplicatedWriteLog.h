@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 #define CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 
+#include <libpmemobj.h>
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncOpTracker.h"
@@ -48,6 +49,7 @@ private:
   using C_CompAndWriteRequestT = pwl::C_CompAndWriteRequest<This>;
 
   PMEMobjpool *m_log_pool = nullptr;
+  const char* m_pwl_pool_layout_name;
 
   void remove_pool_file();
   void load_existing_entries(pwl::DeferredContexts &later);
@@ -70,6 +72,7 @@ protected:
   using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
 
   void process_work() override;
+  void copy_pmem(C_BlockIORequestT *req) override;
   void schedule_append_ops(pwl::GenericLogOperations &ops) override;
   void append_scheduled_ops(void) override;
   void reserve_pmem(C_BlockIORequestT *req, bool &alloc_succeeds, bool &no_space) override;
