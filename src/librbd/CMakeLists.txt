@@ -201,6 +201,13 @@ if(WITH_EVENTTRACE)
   list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
 endif()
 
+if(LINUX AND HAVE_LIBCRYPTSETUP)
+  list(APPEND librbd_internal_srcs
+          crypto/luks/Header.cc
+          crypto/luks/FormatRequest.cc
+          crypto/luks/LoadRequest.cc)
+endif()
+
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   set(librbd_internal_srcs
     ${librbd_internal_srcs}
@@ -242,6 +249,10 @@ target_link_libraries(rbd_internal PRIVATE
   osdc rbd_types
   OpenSSL::SSL)
 target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
+if(LINUX AND HAVE_LIBCRYPTSETUP)
+  target_include_directories(rbd_internal PRIVATE ${LIBCRYPTSETUP_INCLUDE_DIR})
+  target_link_libraries(rbd_internal PRIVATE ${LIBCRYPTSETUP_LIBRARIES})
+endif()
 
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   target_link_libraries(rbd_internal

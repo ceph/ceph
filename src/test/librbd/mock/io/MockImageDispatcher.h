@@ -22,6 +22,7 @@ public:
   MOCK_METHOD1(shut_down, void(Context*));
 
   MOCK_METHOD1(register_dispatch, void(ImageDispatchInterface*));
+  MOCK_METHOD1(exists, bool(ImageDispatchLayer));
   MOCK_METHOD2(shut_down_dispatch, void(ImageDispatchLayer, Context*));
   MOCK_METHOD1(invalidate_cache, void(Context *));
 
