@@ -118,6 +118,12 @@ public:
   unsigned int interval_zero_refs_check;
   static std::shared_ptr<S3Mirror> instance;
 
+  static void shutdown()
+  {
+    Aws::SDKOptions options;
+    Aws::ShutdownAPI(options);
+  }
+
   static void init(CephContext *cxt, rgw::sal::RGWRadosStore *store, string _endpoint,
                     string _access_key, string _access_secret, string _bucket_to_listen)
   {
