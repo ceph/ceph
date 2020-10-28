@@ -178,7 +178,6 @@ BuildRequires:	which
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
-BuildRequires:	yasm
 BuildRequires:	nasm
 %if 0%{with amqp_endpoint}
 BuildRequires:  librabbitmq-devel
