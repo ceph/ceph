@@ -759,10 +759,10 @@ This is an overview of the current implementation status of the orchestrators.
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
  iscsi add                           ⚪     ✔
- mds add                             ✔      ✔
+ mds add                             ⚪      ✔
  nfs add                             ✔      ✔
  rbd-mirror add                      ⚪      ✔
- rgw add                             ✔      ✔
+ rgw add                             ⚪     ✔
  ps                                  ✔      ✔
 =================================== ====== =========
 
