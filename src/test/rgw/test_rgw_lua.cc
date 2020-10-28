@@ -138,9 +138,8 @@ TEST(TestRGWLua, RGWDebugNil)
 TEST(TestRGWLua, URI)
 {
   const std::string script = R"(
-    msg = "URI is: " .. Request.DecodedURI
-    RGWDebugLog(msg)
-    print(msg)
+    RGWDebugLog(Request.DecodedURI)
+    assert(Request.DecodedURI == "http://hello.world/")
   )";
 
   DEFINE_REQ_STATE;
@@ -153,10 +152,10 @@ TEST(TestRGWLua, URI)
 TEST(TestRGWLua, Response)
 {
   const std::string script = R"(
-    print(Request.Response.Message)
-    print(Request.Response.HTTPStatus)
-    print(Request.Response.RGWCode)
-    print(Request.Response.HTTPStatusCode)
+    assert(Request.Response.Message == "This is a bad request")
+    assert(Request.Response.HTTPStatus == "Bad Request")
+    assert(Request.Response.RGWCode == 4000)
+    assert(Request.Response.HTTPStatusCode == 400)
   )";
 
   DEFINE_REQ_STATE;
@@ -172,9 +171,9 @@ TEST(TestRGWLua, Response)
 TEST(TestRGWLua, SetResponse)
 {
   const std::string script = R"(
-    print(Request.Response.Message)
+    assert(Request.Response.Message == "this is a bad request")
     Request.Response.Message = "this is a good request"
-    print(Request.Response.Message)
+    assert(Request.Response.Message == "this is a good request")
   )";
 
   DEFINE_REQ_STATE;
@@ -187,9 +186,8 @@ TEST(TestRGWLua, SetResponse)
 TEST(TestRGWLua, SetRGWId)
 {
   const std::string script = R"(
-    print(Request.RGWId)
+    assert(Request.RGWId == "foo")
     Request.RGWId = "bar"
-    print(Request.RGWId)
   )";
 
   DEFINE_REQ_STATE;
@@ -227,27 +225,22 @@ TEST(TestRGWLua, InvalidSubField)
 TEST(TestRGWLua, Bucket)
 {
   const std::string script = R"(
-    if Request.Bucket then
-      msg = "Bucket Id: " .. Request.Bucket.Id
-      RGWDebugLog(msg)
-      print(msg)
-      print("Bucket Marker: " .. Request.Bucket.Marker)
-      print("Bucket Name: " .. Request.Bucket.Name)
-      print("Bucket Tenant: " .. Request.Bucket.Tenant)
-      print("Bucket Count: " .. Request.Bucket.Count)
-      print("Bucket Size: " .. Request.Bucket.Size)
-      print("Bucket ZoneGroupId: " .. Request.Bucket.ZoneGroupId)
-      print("Bucket Creation Time: " .. Request.Bucket.CreationTime)
-      print("Bucket MTime: " .. Request.Bucket.MTime)
-      print("Bucket Quota Max Size: " .. Request.Bucket.Quota.MaxSize)
-      print("Bucket Quota Max Objects: " .. Request.Bucket.Quota.MaxObjects)
-      print("Bucket Quota Enabled: " .. tostring(Request.Bucket.Quota.Enabled))
-      print("Bucket Quota Rounded: " .. tostring(Request.Bucket.Quota.Rounded))
-      print("Bucket User Id: " .. Request.Bucket.User.Id)
-      print("Bucket User Tenant: " .. Request.Bucket.User.Tenant)
-    else
-      print("No bucket")
-    end
+    assert(Request.Bucket)
+    RGWDebugLog("Bucket Id: " .. Request.Bucket.Id)
+    assert(Request.Bucket.Marker == "mymarker")
+    assert(Request.Bucket.Name == "myname")
+    assert(Request.Bucket.Tenant == "mytenant")
+    assert(Request.Bucket.Count == 0)
+    assert(Request.Bucket.Size == 0)
+    assert(Request.Bucket.ZoneGroupId)
+    assert(Request.Bucket.CreationTime)
+    assert(Request.Bucket.MTime)
+    assert(Request.Bucket.Quota.MaxSize == -1)
+    assert(Request.Bucket.Quota.MaxObjects == -1)
+    assert(tostring(Request.Bucket.Quota.Enabled))
+    assert(tostring(Request.Bucket.Quota.Rounded))
+    assert(Request.Bucket.User.Id)
+    assert(Request.Bucket.User.Tenant)
   )";
 
   DEFINE_REQ_STATE;
@@ -266,12 +259,13 @@ TEST(TestRGWLua, Bucket)
 TEST(TestRGWLua, GenericAttributes)
 {
   const std::string script = R"(
-    print("hello  = " .. (Request.GenericAttributes["hello"] or "nil"))
-    print("foo    = " .. (Request.GenericAttributes["foo"] or "nil"))
-    print("kaboom = " .. (Request.GenericAttributes["kaboom"] or "nil"))
-    print("number of attributes is: " .. #Request.GenericAttributes)
+    assert(Request.GenericAttributes["hello"] == "world")
+    assert(Request.GenericAttributes["foo"] == "bar")
+    assert(Request.GenericAttributes["kaboom"] == nil)
+    assert(#Request.GenericAttributes == 4)
     for k, v in pairs(Request.GenericAttributes) do
-      print("key=" .. k .. ", " .. "value=" .. v)
+      assert(k)
+      assert(v)
     end
   )";
 
@@ -288,10 +282,14 @@ TEST(TestRGWLua, GenericAttributes)
 TEST(TestRGWLua, Environment)
 {
   const std::string script = R"(
-    print("number of env entries is: " .. #Request.Environment)
-    for k, v in pairs(Request.Environment) do
-      print("key=" .. k .. ", " .. "value=" .. v)
-    end
+  assert(Request.Environment[""] == "bar")
+  assert(Request.Environment["goodbye"] == "cruel world")
+  assert(Request.Environment["ka"] == "boom")
+  assert(#Request.Environment == 3, #Request.Environment)
+  for k, v in pairs(Request.Environment) do
+    assert(k)
+    assert(v)
+  end
   )";
 
   DEFINE_REQ_STATE;
@@ -307,9 +305,11 @@ TEST(TestRGWLua, Environment)
 TEST(TestRGWLua, Tags)
 {
   const std::string script = R"(
-    print("number of tags is: " .. #Request.Tags)
+    assert(#Request.Tags == 4)
+    assert(Request.Tags["foo"] == "bar")
     for k, v in pairs(Request.Tags) do
-      print("key=" .. k .. ", " .. "value=" .. v)
+      assert(k)
+      assert(v)
     end
   )";
 
@@ -339,21 +339,18 @@ TEST(TestRGWLua, TagsNotWriteable)
 TEST(TestRGWLua, Metadata)
 {
   const std::string script = R"(
-    print("number of metadata entries is: " .. #Request.HTTP.Metadata)
+    assert(#Request.HTTP.Metadata == 3)
     for k, v in pairs(Request.HTTP.Metadata) do
-      print("key=" .. k .. ", " .. "value=" .. v)
+      assert(k)
+      assert(v)
     end
-    print("value of 'hello' is:")
-    print(Request.HTTP.Metadata["hello"])
-    print("value of 'kaboom' is:")
-    print(Request.HTTP.Metadata["kaboom"])
+    assert(Request.HTTP.Metadata["hello"] == "world")
+    assert(Request.HTTP.Metadata["kaboom"] == nil)
     Request.HTTP.Metadata["hello"] = "goodbye"
     Request.HTTP.Metadata["kaboom"] = "boom"
-    print("new number of metadata entries is: " .. #Request.HTTP.Metadata)
-    print("new value of 'hello' is:")
-    print(Request.HTTP.Metadata["hello"])
-    print("new value of 'kaboom' is:")
-    print(Request.HTTP.Metadata["kaboom"])
+    assert(#Request.HTTP.Metadata == 4)
+    assert(Request.HTTP.Metadata["hello"] == "goodbye")
+    assert(Request.HTTP.Metadata["kaboom"] == "boom")
   )";
 
   DEFINE_REQ_STATE;
@@ -369,36 +366,41 @@ TEST(TestRGWLua, Acl)
 {
   const std::string script = R"(
     function print_grant(g)
-      print("Type: " .. g.Type)
-      print("GroupType: " .. g.GroupType)
-      print("Permission: " .. g.Permission)
-      print("Referer: " .. g.Referer)
+      print("Grant Type: " .. g.Type)
+      print("Grant Group Type: " .. g.GroupType)
+      print("Grant Referer: " .. g.Referer)
       if (g.User) then
-        print("User.Tenant: " .. g.User.Tenant)
-        print("User.Id: " .. g.User.Id)
+        print("Grant User.Tenant: " .. g.User.Tenant)
+        print("Grant User.Id: " .. g.User.Id)
       end
     end
 
-    print(Request.UserAcl.Owner.DisplayName)
-    print(Request.UserAcl.Owner.User.Id)
-    print(Request.UserAcl.Owner.User.Tenant)
-    print("number of grants is: " .. #Request.UserAcl.Grants)
+    assert(Request.UserAcl.Owner.DisplayName == "jack black", Request.UserAcl.Owner.DisplayName)
+    assert(Request.UserAcl.Owner.User.Id == "black", Request.UserAcl.Owner.User.Id)
+    assert(Request.UserAcl.Owner.User.Tenant == "jack", Request.UserAcl.Owner.User.Tenant)
+    assert(#Request.UserAcl.Grants == 5)
+    print_grant(Request.UserAcl.Grants[""])
     for k, v in pairs(Request.UserAcl.Grants) do
-      print("grant key=" .. k)
-      print("grant values=")
       print_grant(v)
+      if k == "john$doe" then
+        assert(v.Permission == 4)
+      elseif k == "jane$doe" then
+        assert(v.Permission == 1)
+      else
+        assert(false)
+      end
     end
   )";
 
   DEFINE_REQ_STATE;
   ACLOwner owner;
-  owner.set_id(rgw_user("john", "doe"));
-  owner.set_name("john doe");
+  owner.set_id(rgw_user("jack", "black"));
+  owner.set_name("jack black");
   s.user_acl.reset(new RGWAccessControlPolicy(cct));
   s.user_acl->set_owner(owner);
   ACLGrant grant1, grant2, grant3, grant4, grant5;
   grant1.set_canon(rgw_user("jane", "doe"), "her grant", 1);
-  grant2.set_referer("http://localhost/ref1", 2);
+  grant2.set_group(ACL_GROUP_ALL_USERS ,2);
   grant3.set_referer("http://localhost/ref2", 3);
   grant4.set_canon(rgw_user("john", "doe"), "his grant", 4);
   grant5.set_group(ACL_GROUP_AUTHENTICATED_USERS, 5);
@@ -458,9 +460,11 @@ TEST(TestRGWLua, UseFunction)
 TEST(TestRGWLua, WithLib)
 {
   const std::string script = R"(
-    print("bucket name split:")
-    for i in string.gmatch(Request.Bucket.Name, "%a+") do
-      print("lua print: part: " .. i)
+    expected_result = {"my", "bucket", "name", "is", "fish"}
+    i = 1
+    for p in string.gmatch(Request.Bucket.Name, "%a+") do
+      assert(p == expected_result[i])
+      i = i + 1
     end
   )";
 
@@ -476,6 +480,8 @@ TEST(TestRGWLua, WithLib)
 
 #include <sys/socket.h>
 #include <stdlib.h>
+
+bool unix_socket_client_ended_ok = false;
 
 void unix_socket_client(const std::string& path) {
   int fd;
@@ -497,11 +503,11 @@ void unix_socket_client(const std::string& path) {
 		return;
  	}
 
-  std::cout << "unix socket connected to: " << path << std::endl;
   char buff[256];
 	int rc;
  	while((rc=read(fd, buff, sizeof(buff))) > 0) {
 		std::cout << std::string(buff, rc);
+    unix_socket_client_ended_ok = true;
   }
 }
 
@@ -514,15 +520,10 @@ TEST(TestRGWLua, OpsLog)
 
   const std::string script = R"(
 		if Request.Response.HTTPStatusCode == 200 then
-			print("request is good, just log to lua: " .. Request.Response.Message)
+			assert(Request.Response.Message == "Life is great")
 		else 
-			print("request is bad, use ops log:")
-      if Request.Bucket then
-    	  rc = Request.Log()
-    	  print("ops log return code: " .. rc)
-      else
-        print("no bucket, ops log wasn't called")
-      end
+      assert(Request.Bucket)
+    	assert(Request.Log() == 0)
 		end
   )";
 
@@ -558,7 +559,8 @@ TEST(TestRGWLua, OpsLog)
   EXPECT_EQ(rc, 0);
 
 	// give the socket client time to read
-	std::this_thread::sleep_for(std::chrono::seconds(2));
-	unix_socket_thread.detach();
+	std::this_thread::sleep_for(std::chrono::seconds(5));
+	unix_socket_thread.detach(); // read is stuck there, so we cannot join
+  EXPECT_TRUE(unix_socket_client_ended_ok);
 }
 
