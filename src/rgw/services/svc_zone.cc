@@ -22,12 +22,12 @@ RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
 }
 
 void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
-                      RGWSI_RADOS * _rados_svc,
+                      RGWRados* _rados,
                       RGWSI_SyncModules * _sync_modules_svc,
 		      RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
   sysobj_svc = _sysobj_svc;
-  rados_svc = _rados_svc;
+  rados = _rados;
   sync_modules_svc = _sync_modules_svc;
   bucket_sync_svc = _bucket_sync_svc;
 
@@ -72,11 +72,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   }
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
-
-  ret = rados_svc->start(y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
 
   ret = realm->init(cct, sysobj_svc, y);
   if (ret < 0 && ret != -ENOENT) {
@@ -1165,16 +1160,14 @@ read_omap:
   }
 
   if (ret < 0 || m.empty()) {
-    vector<rgw_pool> pools;
     string s = string("default.") + default_storage_pool_suffix;
-    pools.push_back(rgw_pool(s));
-    vector<int> retcodes;
     bufferlist bl;
-    ret = rados_svc->pool().create(pools, &retcodes);
-    if (ret < 0)
-      return ret;
-    ret = sysobj.omap().set(s, bl, y);
-    if (ret < 0)
+    auto res = rados->acquire_pool_id(rgw_pool(s).name, false, y,
+				      true);
+    if (!res)
+      return ceph::from_error_code(res.error());
+    ret = sysobj.omap().set(s, bl, null_yield);
+    if (ret)
       return ret;
     m[s] = bl;
   }
@@ -1231,9 +1224,9 @@ int RGWSI_Zone::update_placement_map(optional_yield y)
 
 int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool, optional_yield y)
 {
-  int ret = rados_svc->pool(new_pool).lookup();
-  if (ret < 0) { // DNE, or something
-    return ret;
+  auto pool = rados->acquire_pool(new_pool, false, null_yield);
+  if (!pool) {
+    return ceph::from_error_code(pool.error());
   }
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
@@ -1241,7 +1234,7 @@ int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool, optional_yield y)
   auto sysobj = obj_ctx.get_obj(obj);
 
   bufferlist empty_bl;
-  ret = sysobj.omap().set(new_pool.to_str(), empty_bl, y);
+  auto ret = sysobj.omap().set(new_pool.to_str(), empty_bl, y);
 
   // don't care about return value
   update_placement_map(y);
@@ -1306,4 +1299,3 @@ bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
 
   return true;
 }
-
