@@ -1,6 +1,5 @@
 tasks:
 - workunit:
-    timeout: 6h
     clients:
       all:
-        - suites/pjd.sh
+        - suites/iogen.sh
