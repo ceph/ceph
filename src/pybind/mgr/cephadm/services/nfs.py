@@ -149,7 +149,7 @@ class NFSService(CephService):
             'prefix': 'auth get-or-create',
             'entity': entity,
             'caps': ['mon', 'allow r',
-                     'osd', 'allow rwx'],
+                     'osd', 'allow rwx tag rgw *=*'],
         })
 
         return keyring
