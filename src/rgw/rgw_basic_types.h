@@ -227,6 +227,15 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_pool& p) {
   out << p.to_str();
   return out;
 }
+namespace std {
+template<>
+struct hash<rgw_pool> {
+  std::size_t operator()(const rgw_pool& p) const {
+    std::hash<std::string> h;
+    return h(p.name) ^ (h(p.ns) << 1);
+  }
+};
+}
 
 struct rgw_data_placement_target {
   rgw_pool data_pool;

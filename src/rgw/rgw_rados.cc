@@ -3613,7 +3613,7 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
     }
     break;
   case RGWRados::ATTRSMOD_MERGE:
-    for (map<string, bufferlist>::iterator it = src_attrs.begin(); it != src_attrs.end(); ++it) {
+    for (auto it = src_attrs.begin(); it != src_attrs.end(); ++it) {
       if (attrs.find(it->first) == attrs.end()) {
        attrs[it->first] = it->second;
       }
@@ -4214,7 +4214,8 @@ int RGWRados::copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
 
   auto rest_master_conn = svc.zone->get_master_conn();
 
-  int ret = rest_master_conn->put_obj_async(user_id, dest_obj, astate->size, src_attrs, true, &out_stream_req);
+  int ret = rest_master_conn->put_obj_async(user_id, dest_obj, astate->size,
+					    src_attrs, true, &out_stream_req);
   if (ret < 0) {
     return ret;
   }
@@ -4310,8 +4311,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                nullptr /* filter */);
   }
 
-  map<string, bufferlist> src_attrs;
-  RGWRados::Object src_op_target(this, src_bucket->get_info(), obj_ctx, src_obj->get_obj());
+  std::map<string, bufferlist> src_attrs;
+  RGWRados::Object src_op_target(this, src_bucket->get_info(), obj_ctx,
+				 src_obj->get_obj());
   RGWRados::Object::Read read_op(&src_op_target);
 
   read_op.conds.mod_ptr = mod_ptr;
@@ -4344,7 +4346,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
   attrs.erase(RGW_ATTR_SOURCE_ZONE);
-  map<string, bufferlist>::iterator cmp = src_attrs.find(RGW_ATTR_COMPRESSION);
+  auto cmp = src_attrs.find(RGW_ATTR_COMPRESSION);
   if (cmp != src_attrs.end())
     attrs[RGW_ATTR_COMPRESSION] = cmp->second;
 
@@ -5619,7 +5621,8 @@ int RGWRados::Object::get_manifest(const DoutPrefixProvider *dpp, RGWObjManifest
   return 0;
 }
 
-int RGWRados::Object::Read::get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& dest, optional_yield y)
+int RGWRados::Object::Read::get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& dest,
+				     optional_yield y)
 {
   RGWObjState *state;
   int r = source->get_state(dpp, &state, true, y);
@@ -5727,6 +5730,41 @@ int RGWRados::append_atomic_test(const RGWObjState* state,
     op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
   } else {
     ldout(cct, 20) << "state->obj_tag is empty, not appending atomic test" << dendl;
+  }
+  return 0;
+}
+
+int RGWRados::append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                                 const RGWBucketInfo& bucket_info,
+				 const rgw_obj& obj,
+                                 nr::Op& op, RGWObjState **pstate,
+				 optional_yield y)
+{
+  if (!rctx)
+    return 0;
+
+  int r = get_obj_state(dpp, rctx, bucket_info, obj, pstate, false, y);
+  if (r < 0)
+    return r;
+
+  return append_atomic_test(*pstate, op);
+}
+
+int RGWRados::append_atomic_test(const RGWObjState* state,
+                                 nr::Op& op)
+{
+  if (!state->is_atomic) {
+    ldout(cct, 20) << "state for obj=" << state->obj
+		   << " is not atomic, not appending atomic test" << dendl;
+    return 0;
+  }
+
+  // check for backward compatibility
+  if (state->obj_tag.length() > 0 && !state->fake_tag) {
+    op.cmpxattr(RGW_ATTR_ID_TAG, nr::cmpxattr_op::eq, state->obj_tag);
+  } else {
+    ldout(cct, 20) << "state->obj_tag is empty, not appending atomic test"
+		   << dendl;
   }
   return 0;
 }
@@ -5867,17 +5905,16 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
     obj.key.instance.clear();
   }
 
-  rgw_rados_ref ref;
-  int r = get_obj_head_ref(bucket_info, obj, &ref);
-  if (r < 0) {
-    return r;
+  auto ref = get_obj_head_ref(bucket_info, obj, y);
+  if (!ref) {
+    return ceph::from_error_code(ref.error());
   }
   RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
 
-  ObjectWriteOperation op;
+  nr::WriteOp op;
   RGWObjState *state = NULL;
 
-  r = append_atomic_test(dpp, rctx, bucket_info, obj, op, &state, y);
+  int r = append_atomic_test(dpp, rctx, bucket_info, obj, op, &state, y);
   if (r < 0)
     return r;
 
@@ -5886,24 +5923,23 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
     return -ENOENT;
   }
 
-  map<string, bufferlist>::iterator iter;
   if (rmattrs) {
-    for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
+    for (auto iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
       const string& name = iter->first;
-      op.rmxattr(name.c_str());
+      op.rmxattr(name);
     }
   }
 
   const rgw_bucket& bucket = obj.bucket;
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+  for (auto iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
     bufferlist& bl = iter->second;
 
     if (!bl.length())
       continue;
 
-    op.setxattr(name.c_str(), bl);
+    op.setxattr(name, bufferlist(bl));
 
     if (name.compare(RGW_ATTR_DELETE_AT) == 0) {
       real_time ts;
@@ -5939,17 +5975,17 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
       return r;
 
     bl.append(tag.c_str(), tag.size() + 1);
-    op.setxattr(RGW_ATTR_ID_TAG,  bl);
+    op.setxattr(RGW_ATTR_ID_TAG, bufferlist(bl));
   }
 
 
   real_time mtime = real_clock::now();
-  struct timespec mtime_ts = real_clock::to_timespec(mtime);
-  op.mtime2(&mtime_ts);
-  auto& ioctx = ref.pool.ioctx();
-  r = rgw_rados_operate(ioctx, ref.obj.oid, &op, null_yield);
+  op.set_mtime(mtime);
+  version_t last_v;
+  bs::error_code ec;
+  ref->operate(std::move(op), y[ec], &last_v);
   if (state) {
-    if (r >= 0) {
+    if (!ec) {
       bufferlist acl_bl = attrs[RGW_ATTR_ACL];
       bufferlist etag_bl = attrs[RGW_ATTR_ETAG];
       bufferlist content_type_bl = attrs[RGW_ATTR_CONTENT_TYPE];
@@ -5960,11 +5996,11 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
       if (iter != attrs.end()) {
         storage_class = rgw_bl_str(iter->second);
       }
-      uint64_t epoch = ioctx.get_last_version();
-      int64_t poolid = ioctx.get_id();
+      uint64_t epoch = last_v;
+      int64_t poolid = ref->ioc.pool();
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
-                            mtime, etag, content_type, storage_class, &acl_bl,
-                            RGWObjCategory::Main, NULL);
+			    mtime, etag, content_type, storage_class, &acl_bl,
+			    RGWObjCategory::Main, NULL);
     } else {
       int ret = index_op.cancel(dpp);
       if (ret < 0) {
@@ -5972,18 +6008,18 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
       }
     }
   }
-  if (r < 0)
-    return r;
+  if (ec)
+    return ceph::from_error_code(ec);
 
   if (state) {
     state->obj_tag.swap(bl);
     if (rmattrs) {
-      for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
+      for (auto iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
         state->attrset.erase(iter->first);
       }
     }
 
-    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    for (auto iter = attrs.begin(); iter != attrs.end(); ++iter) {
       state->attrset[iter->first] = iter->second;
     }
 
@@ -6003,8 +6039,6 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
 
   bufferlist etag;
 
-  map<string, bufferlist>::iterator iter;
-
   RGWObjState *astate;
   int r = source->get_state(dpp, &astate, true, y);
   if (r < 0)
@@ -6022,18 +6056,20 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   state.cur_pool = state.head_obj.pool;
   state.cur_ioctx = &state.io_ctxs[state.cur_pool];
 
-  r = store->get_obj_head_ioctx(bucket_info, state.obj, state.cur_ioctx);
-  if (r < 0) {
-    return r;
+  auto ref = store->get_obj_head_ref(bucket_info, state.obj, y);
+  if (!ref) {
+    return ceph::from_error_code(ref.error());
   }
+  *state.cur_ioctx = ref->ioc;
+
   if (params.target_obj) {
     *params.target_obj = state.obj;
   }
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-      for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
-        ldpp_dout(dpp, 20) << "Read xattr rgw_rados: " << iter->first << dendl;
+      for (auto iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
+        ldpp_dout(dpp, 20) << "Read xattr: " << iter->first << dendl;
       }
     }
   }
@@ -6296,7 +6332,8 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp)
   return ret;
 }
 
-int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl,
+				 optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
@@ -6305,7 +6342,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
   uint64_t read_ofs = ofs;
   uint64_t len, read_len;
   bool reading_from_head = true;
-  ObjectReadOperation op;
+  nr::ReadOp op;
 
   bool merge_bl = false;
   bufferlist *pbl = &bl;
@@ -6354,8 +6391,10 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
   read_len = len;
 
   if (reading_from_head) {
-    /* only when reading from the head object do we need to do the atomic test */
-    r = store->append_atomic_test(dpp, &source->get_ctx(), source->get_bucket_info(), state.obj, op, &astate, y);
+    /* only when reading from the head object do we need to do the
+       atomic test */
+    r = store->append_atomic_test(dpp, &source->get_ctx(), source->get_bucket_info(),
+				  state.obj, op, &astate, y);
     if (r < 0)
       return r;
 
@@ -6380,30 +6419,33 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
   }
 
   ldpp_dout(dpp, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
-  op.read(read_ofs, read_len, pbl, NULL);
+  op.read(read_ofs, read_len, pbl);
 
   if (state.cur_pool != read_obj.pool) {
     auto iter = state.io_ctxs.find(read_obj.pool);
     if (iter == state.io_ctxs.end()) {
       state.cur_ioctx = &state.io_ctxs[read_obj.pool];
-      r = store->open_pool_ctx(read_obj.pool, *state.cur_ioctx, false);
-      if (r < 0) {
-        ldout(cct, 20) << "ERROR: failed to open pool context for pool=" << read_obj.pool << " r=" << r << dendl;
-        return r;
+      auto ioc = store->acquire_pool(read_obj.pool, false, y);
+      if (!ioc) {
+        ldout(cct, 20) << "ERROR: failed to open pool context for pool="
+		       << read_obj.pool << " r=" << ioc.error().message() << dendl;
+        return ceph::from_error_code(ioc.error());
       }
+      *state.cur_ioctx = std::move(*ioc);
     } else {
       state.cur_ioctx = &iter->second;
     }
     state.cur_pool = read_obj.pool;
   }
 
-  state.cur_ioctx->locator_set_key(read_obj.loc);
+  state.cur_ioctx->key(read_obj.loc);
 
-  r = state.cur_ioctx->operate(read_obj.oid, &op, NULL);
-  ldpp_dout(dpp, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
-
-  if (r < 0) {
-    return r;
+  bs::error_code ec;
+  store->neorados().execute(read_obj.oid, *state.cur_ioctx,
+			    std::move(op), nullptr, y[ec]);
+  ldpp_dout(dpp, 20) << "neorados()->execute ec=" << ec.message() << " bl.length=" << bl.length() << dendl;
+  if (ec) {
+    return ceph::from_error_code(ec);
   }
 
   if (merge_bl) {
@@ -6416,19 +6458,19 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
 struct get_obj_data {
   RGWRados* store;
   RGWGetDataCB* client_cb;
-  rgw::Aio* aio;
+  neo::Aio* aio;
   uint64_t offset; // next offset to write to client
-  rgw::AioResultList completed; // completed read results, sorted by offset
+  neo::AioResultList completed; // completed read results, sorted by offset
   optional_yield yield;
 
-  get_obj_data(RGWRados* store, RGWGetDataCB* cb, rgw::Aio* aio,
+  get_obj_data(RGWRados* store, RGWGetDataCB* cb, neo::Aio* aio,
                uint64_t offset, optional_yield yield)
     : store(store), client_cb(cb), aio(aio), offset(offset), yield(yield) {}
 
-  int flush(rgw::AioResultList&& results) {
-    int r = rgw::check_for_errors(results);
-    if (r < 0) {
-      return r;
+  int flush(neo::AioResultList&& results) {
+    auto ec = neo::check_for_errors(results);
+    if (ec) {
+      return ceph::from_error_code(ec);
     }
 
     auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.id < rhs.id; };
@@ -6437,7 +6479,7 @@ struct get_obj_data {
 
     while (!completed.empty() && completed.front().id == offset) {
       auto bl = std::move(completed.front().data);
-      completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+      completed.pop_front_and_dispose(std::default_delete<neo::AioResultEntry>{});
 
       offset += bl.length();
       int r = client_cb->handle_data(bl, 0, bl.length());
@@ -6474,14 +6516,14 @@ static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   struct get_obj_data *d = (struct get_obj_data *)arg;
 
   return d->store->get_obj_iterate_cb(read_obj, obj_ofs, read_ofs, len,
-                                      is_head_obj, astate, arg);
+				      is_head_obj, astate, arg);
 }
 
 int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                  off_t read_ofs, off_t len, bool is_head_obj,
                                  RGWObjState *astate, void *arg)
 {
-  ObjectReadOperation op;
+  nr::ReadOp op;
   struct get_obj_data *d = (struct get_obj_data *)arg;
   string oid, key;
 
@@ -6508,20 +6550,23 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
     }
   }
 
-  auto obj = d->store->svc.rados->obj(read_obj);
-  int r = obj.open();
-  if (r < 0) {
+  auto ref = d->store->acquire_obj(read_obj, d->yield);
+  if (!ref) {
     ldout(cct, 4) << "failed to open rados context for " << read_obj << dendl;
-    return r;
+    return ceph::from_error_code(ref.error());
   }
 
-  ldout(cct, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+  ldout(cct, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid
+		 << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs
+		 << " len=" << len << dendl;
   op.read(read_ofs, len, nullptr, nullptr);
 
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-  auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
+  auto completed = d->aio->get(std::move(*ref),
+			       neo::Aio::rados_op(std::move(op), d->yield),
+			       cost, id);
 
   return d->flush(std::move(completed));
 }
@@ -6535,11 +6580,11 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
-  auto aio = rgw::make_throttle(window_size, y);
+  auto aio = neo::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
   int r = store->iterate_obj(dpp, obj_ctx, source->get_bucket_info(), state.obj,
-                             ofs, end, chunk_size, _get_obj_iterate_cb, &data, y);
+			     ofs, end, chunk_size, _get_obj_iterate_cb, &data);
   if (r < 0) {
     ldout(cct, 0) << "iterate_obj() failed with " << r << dendl;
     data.cancel(); // drain completions without writing back to client
@@ -6552,7 +6597,7 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
 int RGWRados::iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
                           const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                           off_t ofs, off_t end, uint64_t max_chunk_size,
-                          iterate_obj_cb cb, void *arg, optional_yield y)
+                          iterate_obj_cb cb, void *arg)
 {
   rgw_raw_obj head_obj;
   rgw_raw_obj read_obj;
@@ -6563,7 +6608,7 @@ int RGWRados::iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
 
   obj_to_raw(bucket_info.placement_rule, obj, &head_obj);
 
-  int r = get_obj_state(dpp, &obj_ctx, bucket_info, obj, &astate, false, y);
+  int r = get_obj_state(dpp, &obj_ctx, bucket_info, obj, &astate, false, null_yield);
   if (r < 0) {
     return r;
   }

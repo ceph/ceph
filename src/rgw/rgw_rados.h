@@ -486,6 +486,11 @@ class RGWRados
   int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state, optional_yield y);
   int append_atomic_test(const RGWObjState* astate, librados::ObjectOperation& op);
+  int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info,
+			 const rgw_obj& obj, nr::Op& op,RGWObjState **state,
+			 optional_yield y);
+  int append_atomic_test(const RGWObjState* astate, nr::Op& op);
+
 
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
@@ -500,6 +505,7 @@ protected:
 
   librados::Rados rados;
   std::optional<nr::RADOS> nr;
+protected:
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
@@ -783,44 +789,40 @@ public:
       RGWRados::Object* source;
 
       struct GetObjState {
-        map<rgw_pool, librados::IoCtx> io_ctxs;
+	std::unordered_map<rgw_pool, nr::IOContext> io_ctxs;
         rgw_pool cur_pool;
-        librados::IoCtx *cur_ioctx{nullptr};
+	nr::IOContext* cur_ioctx = nullptr;
         rgw_obj obj;
         rgw_raw_obj head_obj;
       } state;
 
       struct ConditionParams {
-        const ceph::real_time *mod_ptr;
-        const ceph::real_time *unmod_ptr;
-        bool high_precision_time;
-        uint32_t mod_zone_id;
-        uint64_t mod_pg_ver;
-        const char *if_match;
-        const char *if_nomatch;
+        const ceph::real_time *mod_ptr = nullptr;
+        const ceph::real_time *unmod_ptr = nullptr;
+        bool high_precision_time = false;
+        uint32_t mod_zone_id = 0;
+        uint64_t mod_pg_ver = 0;
+        const char *if_match = nullptr;
+        const char *if_nomatch = nullptr;
 
-        ConditionParams() :
-                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false),
-		 mod_zone_id(0), mod_pg_ver(0),
-                 if_match(NULL), if_nomatch(NULL) {}
+        ConditionParams() = default;
       } conds;
 
       struct Params {
-        ceph::real_time *lastmod;
-        uint64_t *obj_size;
-        map<string, bufferlist> *attrs;
-        rgw_obj *target_obj;
+        ceph::real_time* lastmod = nullptr;
+        uint64_t* obj_size = nullptr;
+	std::map<string, bufferlist> *attrs = nullptr;
+        rgw_obj* target_obj = nullptr;
 
-        Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
-		 target_obj(nullptr) {}
+        Params() = default;
       } params;
 
-      explicit Read(RGWRados::Object *_source) : source(_source) {}
+      explicit Read(RGWRados::Object* source) : source(source) {}
 
       int prepare(optional_yield y, const DoutPrefixProvider *dpp);
-      static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
+      static int range_to_ofs(uint64_t obj_size, int64_t& ofs, int64_t& end);
       int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider *dpp);
-      int iterate(const DoutPrefixProvider *dpp, int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
+      int iterate(const DoutPrefixProvider *dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y);
       int get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& dest, optional_yield y);
     };
 
@@ -1219,7 +1221,7 @@ public:
                rgw::sal::RGWObject* dest_obj,
 	       ceph::real_time *mtime,
 	       ceph::real_time set_mtime,
-               map<string, bufferlist>& attrs,
+	       std::map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                string *petag,
@@ -1295,8 +1297,7 @@ public:
 
   int iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& ctx, const RGWBucketInfo& bucket_info,
                   const rgw_obj& obj, off_t ofs, off_t end,
-                  uint64_t max_chunk_size, iterate_obj_cb cb, void *arg,
-                  optional_yield y);
+                  uint64_t max_chunk_size, iterate_obj_cb cb, void *arg);
 
   int get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                          off_t read_ofs, off_t len, bool is_head_obj,
