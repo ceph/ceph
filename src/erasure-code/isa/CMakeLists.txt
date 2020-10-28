@@ -1,7 +1,6 @@
 # ISA
 set(isal_src_dir ${CMAKE_SOURCE_DIR}/src/isa-l)
 include_directories(${isal_src_dir}/include)
-set(CMAKE_ASM_COMPILER ${PROJECT_SOURCE_DIR}/src/nasm-wrapper)
 
 if(HAVE_NASM_X64_AVX2)
   set(CMAKE_ASM_FLAGS "-i ${isal_src_dir}/include/ ${CMAKE_ASM_FLAGS}")

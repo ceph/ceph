@@ -241,15 +241,6 @@
 /* name_to_handle_at exists */
 #cmakedefine HAVE_NAME_TO_HANDLE_AT
 
-/* we have a recent yasm and are x86_64 */
-#cmakedefine HAVE_YASM_X64
-
-/* yasm can also build the isa-l:avx2 */
-#cmakedefine HAVE_YASM_X64_AVX2
-
-/* yasm can also build the isa-l:avx512 */
-#cmakedefine HAVE_YASM_X64_AVX512
-
 /* we have a recent nasm and are x86_64 */
 #cmakedefine HAVE_NASM_X64
 
