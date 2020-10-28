@@ -112,9 +112,11 @@ void ImageWatcher<I>::block_notifies(Context *on_finish) {
 template <typename I>
 void ImageWatcher<I>::schedule_async_progress(const AsyncRequestId &request,
 					      uint64_t offset, uint64_t total) {
-  auto ctx = new LambdaContext(
-    boost::bind(&ImageWatcher<I>::notify_async_progress, this, request, offset,
-                total));
+  auto ctx = new LambdaContext([this, request, offset, total](int r) {
+    if (r != -ECANCELED) {
+      notify_async_progress(request, offset, total);
+    }
+  });
   m_task_finisher->queue(Task(TASK_CODE_ASYNC_PROGRESS, request), ctx);
 }
 
@@ -133,8 +135,11 @@ template <typename I>
 void ImageWatcher<I>::schedule_async_complete(const AsyncRequestId &request,
                                               int r) {
   m_async_op_tracker.start_op();
-  auto ctx = new LambdaContext(
-    boost::bind(&ImageWatcher<I>::notify_async_complete, this, request, r));
+  auto ctx = new LambdaContext([this, request, ret_val=r](int r) {
+    if (r != -ECANCELED) {
+      notify_async_complete(request, ret_val);
+    }
+  });
   m_task_finisher->queue(ctx);
 }
 
@@ -463,8 +468,11 @@ void ImageWatcher<I>::notify_metadata_remove(const std::string &key,
 
 template <typename I>
 void ImageWatcher<I>::schedule_cancel_async_requests() {
-  auto ctx = new LambdaContext(
-    boost::bind(&ImageWatcher<I>::cancel_async_requests, this));
+  auto ctx = new LambdaContext([this](int r) {
+    if (r != -ECANCELED) {
+      cancel_async_requests();
+    }
+  });
   m_task_finisher->queue(TASK_CODE_CANCEL_ASYNC_REQUESTS, ctx);
 }
 
