@@ -23,10 +23,11 @@ MATCHER_P(CompareArrayToString, s, "") {
 
 struct TestMockBlockCrypto : public TestFixture {
     MockDataCryptor cryptor;
-    BlockCrypto<MockCryptoContext>* bc;
+    ceph::ref_t<BlockCrypto<MockCryptoContext>> bc;
     int cryptor_block_size = 2;
     int cryptor_iv_size = 16;
     int block_size = 4;
+    int data_offset = 0;
     ExpectationSet* expectation_set;
 
     void SetUp() override {
@@ -35,7 +36,7 @@ struct TestMockBlockCrypto : public TestFixture {
       cryptor.block_size = cryptor_block_size;
       bc = new BlockCrypto<MockCryptoContext>(
               reinterpret_cast<CephContext*>(m_ioctx.cct()), &cryptor,
-              block_size);
+              block_size, data_offset);
       expectation_set = new ExpectationSet();
     }
 
