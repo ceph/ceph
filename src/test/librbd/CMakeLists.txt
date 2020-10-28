@@ -132,6 +132,12 @@ if(WITH_RBD_RWL)
      cache/pwl/test_WriteLogMap.cc)
 endif(WITH_RBD_RWL)
 
+if(LINUX AND HAVE_LIBCRYPTSETUP)
+  list(APPEND unittest_librbd_srcs
+          crypto/luks/test_mock_FormatRequest.cc
+          crypto/luks/test_mock_LoadRequest.cc)
+endif()
+
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)

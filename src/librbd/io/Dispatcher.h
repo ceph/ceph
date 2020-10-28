@@ -68,6 +68,11 @@ public:
     ceph_assert(result.second);
   }
 
+  bool exists(DispatchLayer dispatch_layer) override {
+    std::unique_lock locker{m_lock};
+    return m_dispatches.find(dispatch_layer) != m_dispatches.end();
+  }
+
   void shut_down_dispatch(DispatchLayer dispatch_layer,
                           Context* on_finish) override {
     auto cct = m_image_ctx->cct;
