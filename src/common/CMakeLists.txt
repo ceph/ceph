@@ -169,12 +169,13 @@ set(crc32_srcs
 if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
-  if(HAVE_YASM_X64)
+  if(HAVE_NASM_X64)
+    set(CMAKE_ASM_COMPILER ${PROJECT_SOURCE_DIR}/src/nasm-wrapper)
     set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_00.asm
       crc32c_intel_fast_zero_asm.s)
-  endif(HAVE_YASM_X64)
+  endif(HAVE_NASM_X64)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
     crc32c_ppc.c)
