@@ -187,8 +187,13 @@ class GaneshaTest(DashboardTestCase):
         })))
 
     def test_ganesha_lsdir(self):
-        self._get('/ui-api/nfs-ganesha/lsdir')
-        self.assertStatus(500)
+        fss = self._get('/ui-api/nfs-ganesha/cephfs/filesystems')
+        self.assertStatus(200)
+        for fs in fss:
+            data = self._get('/ui-api/nfs-ganesha/lsdir/{}'.format(fs['name']))
+            self.assertStatus(200)
+            self.assertSchema(data, JObj({'paths': JList(str)}))
+            self.assertEqual(data['paths'][0], '/')
 
     def test_ganesha_buckets(self):
         data = self._get('/ui-api/nfs-ganesha/rgw/buckets')
