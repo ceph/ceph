@@ -2034,8 +2034,8 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
       enum rgw_fh_type fh_type = fh_type_of(flags);
 
       uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
-	? RGWFileHandle::FLAG_NONE
-	: RGWFileHandle::FLAG_EXACT_MATCH | RGWFileHandle::FLAG_IN_CB;
+	? RGWFileHandle::FLAG_IN_CB
+	: RGWFileHandle::FLAG_EXACT_MATCH;
 
       bool fast_attrs= fs->get_context()->_conf->rgw_nfs_s3_fast_attrs;
 
