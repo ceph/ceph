@@ -134,11 +134,12 @@ struct SessionToken {
   uint32_t acct_type;
   string role_session;
   std::vector<string> token_claims;
+  string issued_at;
 
   SessionToken() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(access_key_id, bl);
     encode(secret_access_key, bl);
     encode(expiration, bl);
@@ -151,11 +152,12 @@ struct SessionToken {
     encode(acct_type, bl);
     encode(role_session, bl);
     encode(token_claims, bl);
+    encode(issued_at, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(access_key_id, bl);
     decode(secret_access_key, bl);
     decode(expiration, bl);
@@ -171,6 +173,9 @@ struct SessionToken {
     }
     if (struct_v >= 3) {
       decode(token_claims, bl);
+    }
+    if (struct_v >= 4) {
+      decode(issued_at, bl);
     }
     DECODE_FINISH(bl);
   }

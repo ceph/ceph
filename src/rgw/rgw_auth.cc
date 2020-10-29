@@ -786,6 +786,8 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   string value = role.id + ":" + role_session_name;
   s->env.emplace(condition, value);
 
+  s->env.emplace("aws:TokenIssueTime", token_issued_at);
+
   s->token_claims.emplace_back("sts");
   for (auto& it : token_claims) {
     s->token_claims.emplace_back(it);
