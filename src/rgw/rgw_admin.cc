@@ -6044,10 +6044,17 @@ int main(int argc, const char **argv)
         return -ret;
       }
       formatter->open_array_section("entries");
-      bool truncated;
+
+      bool truncated = false;
       int count = 0;
-      if (max_entries < 0)
-        max_entries = 1000;
+
+      static constexpr int MAX_PAGINATE_SIZE = 10000;
+      static constexpr int DEFAULT_MAX_ENTRIES = 1000;
+
+      if (max_entries < 0) {
+	max_entries = DEFAULT_MAX_ENTRIES;
+      }
+      const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
 
       string prefix;
       string delim;
@@ -6067,7 +6074,10 @@ int main(int argc, const char **argv)
       list_op.params.allow_unordered = bool(allow_unordered);
 
       do {
-        ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated, null_yield);
+        const int remaining = max_entries - count;
+        ret = list_op.list_objects(std::min(remaining, paginate_size),
+				   &result, &common_prefixes, &truncated,
+				   null_yield);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -6075,8 +6085,7 @@ int main(int argc, const char **argv)
 
         count += result.size();
 
-        for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
-          rgw_bucket_dir_entry& entry = *iter;
+        for (const auto& entry : result) {
           encode_json("entry", entry, formatter);
         }
         formatter->flush(cout);
