@@ -7,8 +7,9 @@ tasks:
     clients:
       all:
         - fs/norstats
-
 overrides:
+  kclient:
+    rbytes: false
   ceph:
     conf:
       client:

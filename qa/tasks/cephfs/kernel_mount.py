@@ -19,11 +19,13 @@ UMOUNT_TIMEOUT = 300
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config=None):
         super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
+
+        self.rbytes = config.get('rbytes', False)
 
     def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
         self.update_attrs(**kwargs)
@@ -75,6 +77,10 @@ class KernelMount(CephFSMount):
             opts += ',conf=' + self.config_path
         if self.cephfs_name:
             opts += ",mds_namespace=" + self.cephfs_name
+        if self.rbytes:
+            opts += ",rbytes"
+        else:
+            opts += ",norbytes"
         if mntopts:
             opts += ',' + ','.join(mntopts)
 
