@@ -323,6 +323,8 @@ class Schedule(object):
             if not row:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
+            if not retention:
+                raise ValueError(f'Retention spec {retention_spec} is invalid')
             log.debug(f'db result is {tuple(row)}')
             current = row['retention']
             current_retention = json.loads(current)
