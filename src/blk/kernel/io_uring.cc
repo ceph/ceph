@@ -134,8 +134,8 @@ int ioring_queue_t::init(std::vector<int> &fds)
   if (ret < 0)
     return ret;
 
-  ret = io_uring_register(d->io_uring.ring_fd, IORING_REGISTER_FILES,
-			  &fds[0], fds.size());
+  ret = syscall(SYS_io_uring_register, d->io_uring.ring_fd, IORING_REGISTER_FILES,
+                &fds[0], fds.size());
   if (ret < 0) {
     ret = -errno;
     goto close_ring_fd;
@@ -214,7 +214,7 @@ bool ioring_queue_t::supported()
   struct io_uring_params p;
 
   memset(&p, 0, sizeof(p));
-  int fd = io_uring_setup(16, &p);
+  int fd = syscall(SYS_io_uring_setup, 16, &p);
   if (fd < 0)
     return false;
 
