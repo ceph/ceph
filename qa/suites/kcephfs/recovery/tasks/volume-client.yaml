@@ -1,9 +1,0 @@
-overrides:
-  ceph:
-    log-ignorelist:
-      - MON_DOWN
-tasks:
-  - cephfs_test_runner:
-      fail_on_skip: false
-      modules:
-        - tasks.cephfs.test_volume_client
