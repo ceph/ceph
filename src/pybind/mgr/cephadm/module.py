@@ -1092,7 +1092,7 @@ To check that the host is reachable:
                      command: str,
                      args: List[str],
                      addr: Optional[str] = "",
-                     stdin: Optional[str] = "",
+                     stdin: str = "",
                      no_fsid: Optional[bool] = False,
                      error_ok: Optional[bool] = False,
                      image: Optional[str] = "",
@@ -1103,7 +1103,6 @@ To check that the host is reachable:
 
         :env_vars: in format -> [KEY=VALUE, ..]
         """
-        assert isinstance(stdin, str)
 
         with self._remote_connection(host, addr) as tpl:
             conn, connr = tpl
@@ -1133,8 +1132,10 @@ To check that the host is reachable:
             if self.mode == 'root':
                 try:
                     python = connr.choose_python()
-                    cephadm_dest = '/var/lib/ceph/%s/cephadm/%s' % (
-                        self._cluster_fsid, self.get_mgr_id())
+
+                    mgrd = self.cache.get_daemon("mgr.%s" % self.get_mgr_id())
+                    cephadm_dest = '/var/lib/ceph/%s/cephadm/%s/%s/cephadm' % (
+                        self._cluster_fsid, self.get_mgr_id(), mgrd.container_image_id)
                     self._copy_cephadm(conn, cephadm_dest)
 
                     self.log.info("Tying to execute : %s" %

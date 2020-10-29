@@ -755,11 +755,13 @@ class TestCephadm(object):
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host1')  # verifies ok-to-stop
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host2')
 
+    @mock.patch("cephadm.inventory.HostCache.get_daemon")
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
-    def test_offline(self, _check, _get_connection, cephadm_module):
+    def test_offline(self, _check, _get_connection, _get_daemon, cephadm_module):
         _check.return_value = '{}', '', 0
         _get_connection.return_value = mock.Mock(), mock.Mock()
+
         with with_host(cephadm_module, 'test'):
             _get_connection.side_effect = HostNotFound
             code, out, err = cephadm_module.check_host('test')
@@ -820,9 +822,10 @@ class TestCephadm(object):
             conn_3, r = cephadm_module._get_connection("test")
             assert not(conn is conn_3)
 
+    @mock.patch("cephadm.inventory.HostCache.get_daemon")
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
-    def test_etc_ceph(self, _check, _get_connection, cephadm_module):
+    def test_etc_ceph(self, _check, _get_connection, _get_daemon, cephadm_module):
         _get_connection.return_value = mock.Mock(), mock.Mock()
         _check.return_value = '{}', '', 0
 
