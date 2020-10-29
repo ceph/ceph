@@ -54,9 +54,9 @@ struct ResponseMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "RGWCode") == 0) {
       lua_pushinteger(L, err->ret);
     } else if (strcasecmp(index, "HTTPStatus") == 0) {
-      lua_pushstring(L, err->err_code.c_str());
+      pushstring(L, err->err_code);
     } else if (strcasecmp(index, "Message") == 0) {
-      lua_pushstring(L, err->message.c_str());
+      pushstring(L, err->message);
     } else {
       throw_unknown_field(index, TableName());
     }
@@ -120,9 +120,9 @@ struct PlacementRuleMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "Name") == 0) {
-      lua_pushstring(L, rule->name.c_str());
+      pushstring(L, rule->name);
     } else if (strcasecmp(index, "StorageClass") == 0) {
-      lua_pushstring(L, rule->storage_class.c_str());
+      pushstring(L, rule->storage_class);
     } else {
       throw_unknown_field(index, TableName());
     }
@@ -141,9 +141,9 @@ struct UserMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "Tenant") == 0) {
-      lua_pushstring(L, user->tenant);
+      pushstring(L, user->tenant);
     } else if (strcasecmp(index, "Id") == 0) {
-      lua_pushstring(L, user->id);
+      pushstring(L, user->id);
     } else {
       throw_unknown_field(index, TableName());
     }
@@ -162,7 +162,7 @@ struct OwnerMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "DisplayName") == 0) {
-      lua_pushstring(L, owner->get_display_name());
+      pushstring(L, owner->get_display_name());
     } else if (strcasecmp(index, "User") == 0) {
       create_metatable<UserMetaTable>(L, false, &(owner->get_id()));
     } else {
@@ -185,23 +185,23 @@ struct BucketMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "Tenant") == 0) {
-      lua_pushstring(L, bucket->get_tenant());
+      pushstring(L, bucket->get_tenant());
     } else if (strcasecmp(index, "Name") == 0) {
-      lua_pushstring(L, bucket->get_name());
+      pushstring(L, bucket->get_name());
     } else if (strcasecmp(index, "Marker") == 0) {
-      lua_pushstring(L, bucket->get_marker());
+      pushstring(L, bucket->get_marker());
     } else if (strcasecmp(index, "Id") == 0) {
-      lua_pushstring(L, bucket->get_bucket_id());
+      pushstring(L, bucket->get_bucket_id());
     } else if (strcasecmp(index, "Count") == 0) {
       lua_pushinteger(L, bucket->get_count());
     } else if (strcasecmp(index, "Size") == 0) {
       lua_pushinteger(L, bucket->get_size());
     } else if (strcasecmp(index, "ZoneGroupId") == 0) {
-      lua_pushstring(L, bucket->get_info().zonegroup);
+      pushstring(L, bucket->get_info().zonegroup);
     } else if (strcasecmp(index, "CreationTime") == 0) {
-      lua_pushtime(L, bucket->get_creation_time());
+      pushtime(L, bucket->get_creation_time());
     } else if (strcasecmp(index, "MTime") == 0) {
-      lua_pushtime(L, bucket->get_modification_time());
+      pushtime(L, bucket->get_modification_time());
     } else if (strcasecmp(index, "Quota") == 0) {
       create_metatable<QuotaMetaTable>(L, false, &(bucket->get_info().quota));
     } else if (strcasecmp(index, "PlacementRule") == 0) {
@@ -228,15 +228,15 @@ struct ObjectMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "Name") == 0) {
-      lua_pushstring(L, obj->get_name().c_str());
+      pushstring(L, obj->get_name());
     } else if (strcasecmp(index, "Instance") == 0) {
-      lua_pushstring(L, obj->get_instance().c_str());
+      pushstring(L, obj->get_instance());
     } else if (strcasecmp(index, "Id") == 0) {
-      lua_pushstring(L, obj->get_oid());
+      pushstring(L, obj->get_oid());
     } else if (strcasecmp(index, "Size") == 0) {
       lua_pushinteger(L, obj->get_obj_size());
     } else if (strcasecmp(index, "MTime") == 0) {
-      lua_pushtime(L, obj->get_mtime());
+      pushtime(L, obj->get_mtime());
     } else {
       throw_unknown_field(index, TableName());
     }
@@ -260,7 +260,7 @@ struct StringMapMetaTable : public EmptyMetaTable {
     if (it == map->end()) {
       lua_pushnil(L);
     } else {
-      lua_pushstring(L, it->second);
+      pushstring(L, it->second);
     }
     return ONE_RETURNVAL;
   }
@@ -296,8 +296,8 @@ struct StringMapMetaTable : public EmptyMetaTable {
       lua_pushnil(L);
       // return nil, nil
     } else {
-      lua_pushstring(L, next_it->first);
-      lua_pushstring(L, next_it->second);
+      pushstring(L, next_it->first);
+      pushstring(L, next_it->second);
       // return key, value
     }
 
@@ -337,7 +337,7 @@ struct GrantMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "GroupType") == 0) {
       lua_pushinteger(L, grant->get_group());
     } else if (strcasecmp(index, "Referer") == 0) {
-      lua_pushstring(L, grant->get_referer());
+      pushstring(L, grant->get_referer());
     } else {
       throw_unknown_field(index, TableName());
     }
@@ -409,7 +409,7 @@ struct GrantsMetaTable : public EmptyMetaTable {
       }
     }
 
-    lua_pushstring(L, next_it->first);
+    pushstring(L, next_it->first);
     create_metatable<GrantMetaTable>(L, false, &(next_it->second));
     // return key, value
     
@@ -469,7 +469,7 @@ struct StatementsMetaTable : public EmptyMetaTable {
       lua_pushnil(L);
     } else {
       // TODO: policy language could be interpreted to lua and executed as such
-      lua_pushstring(L, statement_to_string((*statements)[index]));
+      pushstring(L, statement_to_string((*statements)[index]));
     }
     return ONE_RETURNVAL;
   }
@@ -503,7 +503,7 @@ struct StatementsMetaTable : public EmptyMetaTable {
       // return nil, nil
     } else {
       lua_pushinteger(L, next_it);
-      lua_pushstring(L, statement_to_string((*statements)[next_it]));
+      pushstring(L, statement_to_string((*statements)[next_it]));
       // return key, value
     }
 
@@ -530,13 +530,13 @@ struct PolicyMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "Text") == 0) {
-      lua_pushstring(L, policy->text);
+      pushstring(L, policy->text);
     } else if (strcasecmp(index, "Id") == 0) {
-      // TODO create lua_pushstring for std::unique_ptr
+      // TODO create pushstring for std::unique_ptr
       if (!policy->id) {
         lua_pushnil(L);
       } else {
-        lua_pushstring(L, policy->id.get());
+        pushstring(L, policy->id.get());
       }
     } else if (strcasecmp(index, "Statements") == 0) {
       create_metatable<StatementsMetaTable>(L, &(policy->statements));
@@ -630,15 +630,15 @@ struct HTTPMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Metadata") == 0) {
       create_metatable<StringMapMetaTable<meta_map_t>>(L, false, &(info->x_meta_map));
     } else if (strcasecmp(index, "Host") == 0) {
-      lua_pushstring(L, info->host);
+      pushstring(L, info->host);
     } else if (strcasecmp(index, "Method") == 0) {
-      lua_pushstring(L, info->method);
+      pushstring(L, info->method);
     } else if (strcasecmp(index, "URI") == 0) {
-      lua_pushstring(L, info->request_uri);
+      pushstring(L, info->request_uri);
     } else if (strcasecmp(index, "QueryString") == 0) {
-      lua_pushstring(L, info->request_params);
+      pushstring(L, info->request_params);
     } else if (strcasecmp(index, "Domain") == 0) {
-      lua_pushstring(L, info->domain);
+      pushstring(L, info->domain);
     } else {
       throw_unknown_field(index, TableName());
     }
@@ -657,9 +657,9 @@ struct CopyFromMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "Tenant") == 0) {
-      lua_pushstring(L, s->src_tenant_name);
+      pushstring(L, s->src_tenant_name);
     } else if (strcasecmp(index, "Bucket") == 0) {
-      lua_pushstring(L, s->src_bucket_name);
+      pushstring(L, s->src_bucket_name);
     } else if (strcasecmp(index, "Object") == 0) {
       create_metatable<ObjectMetaTable>(L, false, s->src_object);
     } else {
@@ -680,9 +680,9 @@ struct ZoneGroupMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "Name") == 0) {
-      lua_pushstring(L, s->zonegroup_name);
+      pushstring(L, s->zonegroup_name);
     } else if (strcasecmp(index, "Endpoint") == 0) {
-      lua_pushstring(L, s->zonegroup_endpoint);
+      pushstring(L, s->zonegroup_endpoint);
     } else {
       throw_unknown_field(index, TableName());
     }
@@ -703,9 +703,9 @@ struct RequestMetaTable : public EmptyMetaTable {
     const char* index = lua_tostring(L, -1);
 
     if (strcasecmp(index, "RGWOp") == 0) {
-      lua_pushstring(L, op_name);
+      pushstring(L, op_name);
     } else if (strcasecmp(index, "DecodedURI") == 0) {
-      lua_pushstring(L, s->decoded_uri);
+      pushstring(L, s->decoded_uri);
     } else if (strcasecmp(index, "ContentLength") == 0) {
       lua_pushinteger(L, s->content_length);
     } else if (strcasecmp(index, "GenericAttributes") == 0) {
@@ -714,7 +714,7 @@ struct RequestMetaTable : public EmptyMetaTable {
       create_metatable<ResponseMetaTable>(L, false, &(s->err));
     } else if (strcasecmp(index, "SwiftAccountName") == 0) {
       if (s->dialect == "swift") {
-        lua_pushstring(L, s->account_name);
+        pushstring(L, s->account_name);
       } else {
         lua_pushnil(L);
       }
@@ -750,17 +750,17 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "UserPolicies") == 0) {
         create_metatable<PoliciesMetaTable>(L, false, &(s->iam_user_policies));
     } else if (strcasecmp(index, "RGWId") == 0) {
-      lua_pushstring(L, s->host_id);
+      pushstring(L, s->host_id);
     } else if (strcasecmp(index, "HTTP") == 0) {
         create_metatable<HTTPMetaTable>(L, false, &(s->info));
     } else if (strcasecmp(index, "Time") == 0) {
-      lua_pushtime(L, s->time);
+      pushtime(L, s->time);
     } else if (strcasecmp(index, "Dialect") == 0) {
-      lua_pushstring(L, s->dialect);
+      pushstring(L, s->dialect);
     } else if (strcasecmp(index, "Id") == 0) {
-      lua_pushstring(L, s->req_id);
+      pushstring(L, s->req_id);
     } else if (strcasecmp(index, "TransactionId") == 0) {
-      lua_pushstring(L, s->trans_id);
+      pushstring(L, s->trans_id);
     } else if (strcasecmp(index, "Tags") == 0) {
       create_metatable<StringMapMetaTable<RGWObjTags::tag_map_t>>(L, false, &(s->tagset.get_tags()));
     } else {
@@ -790,7 +790,7 @@ int execute(
   // add the ops log action
   lua_getglobal(L, RequestMetaTable::TableName().c_str());
   ceph_assert(lua_istable(L, -1));
-  lua_pushstring(L, RequestLogAction);
+  pushstring(L, RequestLogAction);
   lua_pushlightuserdata(L, store);
   lua_pushlightuserdata(L, rest);
   lua_pushlightuserdata(L, olog);

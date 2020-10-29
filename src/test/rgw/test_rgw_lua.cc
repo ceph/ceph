@@ -111,6 +111,30 @@ TEST(TestRGWLua, Hello)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, RGWDebugLogNumber)
+{
+  const std::string script = R"(
+    RGWDebugLog(1234567890)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugNil)
+{
+  const std::string script = R"(
+    RGWDebugLog(nil)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
+  ASSERT_EQ(rc, -1);
+}
+
 TEST(TestRGWLua, URI)
 {
   const std::string script = R"(
