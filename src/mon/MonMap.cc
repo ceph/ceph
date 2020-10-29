@@ -41,7 +41,11 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   uint8_t v = 5;
   uint8_t min_v = 1;
   if (!crush_loc.empty()) {
-    min_v = 5;
+    // we added crush_loc in version 5, but need to let old clients decode it
+    // so just leave the min_v at version 4. Monitors are protected
+    // from misunderstandings about location because setting it is blocked
+    // on FEATURE_PINGING
+    min_v = 4;
   }
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 2;
@@ -197,7 +201,6 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  uint8_t new_compat_v = 0;
   ENCODE_START(9, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
@@ -215,10 +218,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
-  if (stretch_mode_enabled) {
-    new_compat_v = 9;
-  }
-  ENCODE_FINISH_NEW_COMPAT(blist, new_compat_v);
+  ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
