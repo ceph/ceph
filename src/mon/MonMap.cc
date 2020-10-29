@@ -369,6 +369,9 @@ void MonMap::print(ostream& out) const
   out << "min_mon_release " << (int)min_mon_release
       << " (" << ceph_release_name(min_mon_release) << ")\n";
   out << "election_strategy: " << strategy << "\n";
+  if (disallowed_leaders.size()) {
+    out << "disallowed_leaders" << disallowed_leaders << "\n";
+  }
   unsigned i = 0;
   for (vector<string>::const_iterator p = ranks.begin();
        p != ranks.end();
