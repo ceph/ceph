@@ -362,6 +362,10 @@ add_ceph_unittest(unittest_yield_context_completion)
 target_link_libraries(unittest_yield_context_completion ceph-common
   Boost::system spawn GTest::GTest)
 
+add_executable(unittest_expectify test_expectify.cc)
+add_ceph_unittest(unittest_expectify)
+target_link_libraries(unittest_expectify Boost::system spawn GTest::GTest)
+
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
 
