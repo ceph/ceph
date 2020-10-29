@@ -582,7 +582,7 @@ public:
   epoch_t get_epoch();
   int get_leader() const { return leader; }
   std::string get_leader_name() {
-    return quorum.empty() ? std::string() : monmap->get_name(*quorum.begin());
+    return quorum.empty() ? std::string() : monmap->get_name(leader);
   }
   const std::set<int>& get_quorum() const { return quorum; }
   std::list<std::string> get_quorum_names() {
