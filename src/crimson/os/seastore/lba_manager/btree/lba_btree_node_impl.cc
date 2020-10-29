@@ -259,8 +259,7 @@ LBAInternalNode::scan_mapped_space_ret LBAInternalNode::scan_mapped_space(
 {
   f(get_paddr(), get_length());
   return crimson::do_for_each(
-    std::move(begin()),
-    std::move(end()),
+    begin(), end(),
     [=, &f](auto &viter) {
       return get_lba_btree_extent(
 	c,
