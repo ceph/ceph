@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/ObjectRequest.h"
 #include "osd/osd_types.h"
 #include "osdc/Striper.h"
 
@@ -163,6 +164,22 @@ void unsparsify(CephContext* cct, ceph::bufferlist* bl,
   *bl = out_bl;
 }
 
+template <typename I>
+bool trigger_copyup(I* image_ctx, uint64_t object_no, IOContext io_context,
+                    Context* on_finish) {
+  bufferlist bl;
+  auto req = new ObjectWriteRequest<I>(
+          image_ctx, object_no, 0, std::move(bl), io_context, 0, 0,
+          std::nullopt, {}, on_finish);
+  if (!req->has_parent()) {
+    delete req;
+    return false;
+  }
+
+  req->send();
+  return true;
+}
+
 } // namespace util
 } // namespace io
 } // namespace librbd
@@ -172,3 +189,6 @@ template void librbd::io::util::read_parent(
     librados::snap_t snap_id, const ZTracer::Trace &trace, Context* on_finish);
 template int librbd::io::util::clip_request(
     librbd::ImageCtx *image_ctx, Extents *image_extents);
+template bool librbd::io::util::trigger_copyup(
+        librbd::ImageCtx *image_ctx, uint64_t object_no, IOContext io_context,
+        Context* on_finish);
