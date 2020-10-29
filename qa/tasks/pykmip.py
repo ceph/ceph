@@ -383,37 +383,52 @@ def create_secrets(ctx, config):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Deploy and configure Keystone
+    Deploy and configure PyKMIP
 
     Example of configuration:
 
     tasks:
-      - local_cluster:
-          cluster_path: /home/adam/ceph-1/build
-      - local_rgw:
-      - tox: [ client.0 ]
-      - pykmip:
-          client.0:
-            force-branch: master
-            config:
-              clientca: ca-ssl-cert
-              servercert: pykmkp-ssl-cert-and-key
-            secrets:
-              - name: my-key-1
-                base64: a2V5MS5GcWVxKzhzTGNLaGtzQkg5NGVpb1FKcFpGb2c=
-              - name: my-key-2
-                base64: a2V5Mi5yNUNNMGFzMVdIUVZxcCt5NGVmVGlQQ1k4YWg=
-      - s3tests:
-          client.0:
-            force-branch: master
-            kms_key: my-key-1
-      - rgw:
-          client.0:
-            use-pykmip-role: client.0
+    - install:
+    - ceph:
+       conf:
+        client:
+         rgw crypt s3 kms backend: kmip
+         rgw crypt kmip ca path: /home/ubuntu/cephtest/ca/kmiproot.crt
+         rgw crypt kmip client cert: /home/ubuntu/cephtest/ca/kmip-client.crt
+         rgw crypt kmip client key: /home/ubuntu/cephtest/ca/kmip-client.key
+         rgw crypt kmip kms key template: pykmip-$keyid
+    - openssl_keys:
+       kmiproot:
+         client: client.0
+         cn: kmiproot
+         key-type: rsa:4096
+    - openssl_keys:
+       kmip-server:
+         client: client.0
+         ca: kmiproot
+       kmip-client:
+         client: client.0
+         ca: kmiproot
+         cn: rgw-client
+    - pykmip:
+        client.0:
+          force-branch: master
+          clientca: kmiproot
+          servercert: kmip-server
+          clientcert: kmip-client
+          secrets:
+          - name: pykmip-key-1
+          - name: pykmip-key-2
+    - rgw:
+        client.0:
+          use-pykmip-role: client.0
+    - s3tests:
+        client.0:
+          force-branch: master
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
-        "task keystone only supports a list or dictionary for configuration"
+        "task pykmip only supports a list or dictionary for configuration"
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:
