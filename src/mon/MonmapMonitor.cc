@@ -575,6 +575,19 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     map<string, string> loc;
     cmd_getval(cmdmap, "location", locationvec);
     CrushWrapper::parse_loc_map(locationvec, &loc);
+    if (locationvec.size() &&
+	!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support adding monitors with a location; please upgrade first!";
+      goto reply;
+    }
+    if (locationvec.size() && !loc.size()) {
+      ss << "We could not parse your input location to anything real; " << locationvec
+	 << " turned into an empty map!";
+      err = -EINVAL;
+      goto reply;
+    }
 
     dout(10) << "mon add setting location for " << name << " to " << loc << dendl;
 
@@ -977,6 +990,12 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     err = 0;
     propose = true;
   } else if (prefix == "mon set_location") {
+    if (!mon->get_quorum_mon_features().contains_all(
+				        ceph::features::mon::FEATURE_PINGING)) {
+      err = -ENOTSUP;
+      ss << "Not all monitors support monitor locations; please upgrade first!";
+      goto reply;
+    }
     string name;
     if (!cmd_getval(cmdmap, "name", name)) {
       err = -EINVAL;
