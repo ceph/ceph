@@ -9,7 +9,7 @@ from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 
 report_template = """
-{dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
+{dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model:<20} {available_lvm!s:<13} {available_raw!s:<13}"""
 
 
 def encryption_status(abspath):
@@ -43,6 +43,8 @@ class Devices(object):
                 rot='rotates',
                 model='Model name',
                 available='available',
+                available_lvm='available_lvm',
+                available_raw='available_raw',
             )]
         for device in sorted(self.devices):
             output.append(device.report())
@@ -62,7 +64,11 @@ class Device(object):
 
     report_fields = [
         'rejected_reasons',
+        'rejected_reasons_lvm',
+        'rejected_reasons_raw',
         'available',
+        'available_lvm',
+        'available_raw',
         'path',
         'sys_api',
         'device_id',
@@ -223,6 +229,8 @@ class Device(object):
             size=self.size_human,
             rot=self.rotational,
             available=self.available,
+            available_lvm=self.available_lvm,
+            available_raw=self.available_raw,
             model=self.model,
         )
 
@@ -478,6 +486,7 @@ class Device(object):
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
             rejected.append('Has BlueStore device label')
+
         return rejected
 
     def _check_lvm_reject_reasons(self):
