@@ -44,7 +44,9 @@ list(APPEND crimson_alien_srcs
 add_library(crimson-alienstore STATIC ${crimson_alien_srcs}
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common_prioritycache_obj>)
-
+if(WITH_LTTNG)
+  add_dependencies(crimson-alienstore bluestore-tp)
+endif()
 target_compile_definitions(crimson-alienstore PRIVATE -DWITH_SEASTAR -DWITH_ALIEN)
 target_include_directories(crimson-alienstore PRIVATE
   $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
