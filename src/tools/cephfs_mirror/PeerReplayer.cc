@@ -209,8 +209,12 @@ void PeerReplayer::remove_directory(string_view dir_path) {
   if (it != m_directories.end()) {
     m_directories.erase(it);
   }
-  if (m_registered.find(_dir_path) == m_registered.end()) {
+
+  auto it1 = m_registered.find(_dir_path);
+  if (it1 == m_registered.end()) {
     m_snap_sync_stats.erase(_dir_path);
+  } else {
+    it1->second.replayer->cancel();
   }
   m_cond.notify_all();
 }
@@ -218,8 +222,19 @@ void PeerReplayer::remove_directory(string_view dir_path) {
 boost::optional<std::string> PeerReplayer::pick_directory() {
   dout(20) << dendl;
 
+  auto now = clock::now();
+  auto retry_timo = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_retry_failed_directories_interval");
+
   boost::optional<std::string> candidate;
   for (auto &dir_path : m_directories) {
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    if (sync_stat.failed) {
+      std::chrono::duration<double> d = now - *sync_stat.last_failed;
+      if (d.count() < retry_timo) {
+        continue;
+      }
+    }
     if (!m_registered.count(dir_path)) {
       candidate = dir_path;
       break;
@@ -492,11 +507,12 @@ int PeerReplayer::remote_mkdir(const std::string &local_path,
 
 #define NR_IOVECS 8 // # iovecs
 #define IOVEC_SIZE (8 * 1024 * 1024) // buffer size for each iovec
-int PeerReplayer::remote_copy(const std::string &local_path,
+int PeerReplayer::remote_copy(const std::string &dir_path,
+                              const std::string &local_path,
                               const std::string &remote_path,
                               const struct ceph_statx &stx) {
-  dout(10) << ": local_path=" << local_path << ", remote_path=" << remote_path
-           << dendl;
+  dout(10) << ": dir_path=" << dir_path << ", local_path=" << local_path
+           << ", remote_path=" << remote_path << dendl;
   int l_fd;
   int r_fd;
   void *ptr;
@@ -527,6 +543,11 @@ int PeerReplayer::remote_copy(const std::string &local_path,
   }
 
   while (true) {
+    if (should_backoff(dir_path, &r)) {
+      dout(0) << ": backing off r=" << r << dendl;
+      break;
+    }
+
     for (int i = 0; i < NR_IOVECS; ++i) {
       iov[i].iov_base = (char*)ptr + IOVEC_SIZE*i;
       iov[i].iov_len = IOVEC_SIZE;
@@ -584,15 +605,16 @@ close_local_fd:
   return r == 0 ? 0 : r;
 }
 
-int PeerReplayer::remote_file_op(const std::string &local_path,
+int PeerReplayer::remote_file_op(const std::string &dir_path,
+                                 const std::string &local_path,
                                  const std::string &remote_path,
                                  const struct ceph_statx &stx) {
-  dout(10) << ": local_path=" << local_path << ", remote_path=" << remote_path
-           << dendl;
+  dout(10) << ": dir_path=" << dir_path << ", local_path=" << local_path
+           << ", remote_path=" << remote_path << dendl;
 
   int r;
   if (S_ISREG(stx.stx_mode)) {
-    r = remote_copy(local_path, remote_path, stx);
+    r = remote_copy(dir_path, local_path, remote_path, stx);
     if (r < 0) {
       derr << ": failed to copy path=" << local_path << ": " << cpp_strerror(r)
            << dendl;
@@ -663,6 +685,11 @@ int PeerReplayer::cleanup_remote_dir(const std::string &dir_path) {
 
   rm_stack.emplace(SyncEntry(dir_path, tdirp, tstx));
   while (!rm_stack.empty()) {
+    if (should_backoff(dir_path, &r)) {
+      dout(0) << ": backing off r=" << r << dendl;
+      break;
+    }
+
     dout(20) << ": " << rm_stack.size() << " entries in stack" << dendl;
     std::string e_name;
     auto &entry = rm_stack.top();
@@ -776,6 +803,11 @@ int PeerReplayer::do_synchronize(const std::string &dir_path, const std::string 
 
   sync_stack.emplace(SyncEntry("/", tdirp, tstx));
   while (!sync_stack.empty()) {
+    if (should_backoff(dir_path, &r)) {
+      dout(0) << ": backing off r=" << r << dendl;
+      break;
+    }
+
     dout(20) << ": " << sync_stack.size() << " entries in stack" << dendl;
     std::string e_name;
     auto &entry = sync_stack.top();
@@ -837,7 +869,7 @@ int PeerReplayer::do_synchronize(const std::string &dir_path, const std::string 
     } else {
       auto l_path = entry_path(snap_path, entry.epath);
       auto r_path = entry_path(dir_path, entry.epath);
-      r = remote_file_op(l_path, r_path, entry.stx);
+      r = remote_file_op(dir_path, l_path, r_path, entry.stx);
       if (r < 0) {
         break;
       }
@@ -983,6 +1015,11 @@ void PeerReplayer::sync_snaps(const std::string &dir_path,
     derr << ": failed to sync snapshots for dir_path=" << dir_path << dendl;
   }
   locker.lock();
+  if (r < 0) {
+    _inc_failed_count(dir_path);
+  } else {
+    _reset_failed_count(dir_path);
+  }
 }
 
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {
@@ -1034,7 +1071,9 @@ void PeerReplayer::peer_status(Formatter *f) {
   f->open_object_section("stats");
   for (auto &[dir_path, sync_stat] : m_snap_sync_stats) {
     f->open_object_section(dir_path);
-    if (!sync_stat.current_syncing_snap) {
+    if (sync_stat.failed) {
+      f->dump_string("state", "failed");
+    } else if (!sync_stat.current_syncing_snap) {
       f->dump_string("state", "idle");
     } else {
       f->dump_string("state", "syncing");
