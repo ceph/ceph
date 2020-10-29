@@ -20,8 +20,6 @@ struct seastar_gtest_env_t {
   seastar::file_desc begin_fd;
   std::unique_ptr<seastar::readable_eventfd> on_end;
 
-  int argc = 0;
-  char **argv = nullptr;
   std::thread thread;
 
   seastar_gtest_env_t();
@@ -29,7 +27,7 @@ struct seastar_gtest_env_t {
 
   void init(int argc, char **argv);
   void stop();
-  void reactor();
+  void reactor(int argc, char **argv);
 
   template <typename Func>
   void run(Func &&func) {
