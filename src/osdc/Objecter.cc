@@ -167,11 +167,6 @@ enum {
 
 // config obs ----------------------------
 
-static const char *config_keys[] = {
-  "crush_location",
-  NULL
-};
-
 class Objecter::RequestStateHook : public AdminSocketHook {
   Objecter *m_objecter;
 public:
@@ -232,6 +227,12 @@ Objecter::OSDSession::unique_completion_lock Objecter::OSDSession::get_lock(
 
 const char** Objecter::get_tracked_conf_keys() const
 {
+  static const char *config_keys[] = {
+    "crush_location",
+    "rados_mon_op_timeout",
+    "rados_osd_op_timeout",
+    NULL
+  };
   return config_keys;
 }
 
@@ -241,6 +242,12 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
 {
   if (changed.count("crush_location")) {
     update_crush_location();
+  }
+  if (changed.count("rados_mon_op_timeout")) {
+    mon_timeout = conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  }
+  if (changed.count("rados_osd_op_timeout")) {
+    osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   }
 }
 
@@ -4962,20 +4969,19 @@ Objecter::OSDSession::~OSDSession()
 }
 
 Objecter::Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
-		   Finisher *fin,
-		   double mon_timeout,
-		   double osd_timeout) :
+		   Finisher *fin) :
   Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
   trace_endpoint("0.0.0.0", 0, "Objecter"),
   osdmap{std::make_unique<OSDMap>()},
   homeless_session(new OSDSession(cct, -1)),
-  mon_timeout(ceph::make_timespan(mon_timeout)),
-  osd_timeout(ceph::make_timespan(osd_timeout)),
   op_throttle_bytes(cct, "objecter_bytes",
 		    cct->_conf->objecter_inflight_op_bytes),
   op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
   retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-{}
+{
+  mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+}
 
 Objecter::~Objecter()
 {

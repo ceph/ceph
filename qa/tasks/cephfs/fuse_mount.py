@@ -54,7 +54,9 @@ class FuseMount(CephFSMount):
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
-        self.client_remote.run(args=['mkdir', '-p', self.mountpoint],
+        # Use 0000 mode to prevent undesired modifications to the mountpoint on
+        # the local file system.
+        self.client_remote.run(args=['mkdir', '-m', '0000', '-p', self.mountpoint],
                                timeout=(15*60), cwd=self.test_dir)
 
         run_cmd = [
@@ -203,15 +205,20 @@ class FuseMount(CephFSMount):
             proc.wait()
         except CommandFailedError:
             error = six.ensure_str(proc.stderr.getvalue())
-            if ("endpoint is not connected" in error
-            or "Software caused connection abort" in error):
-                # This happens is fuse is killed without unmount
-                log.warning("Found stale moutn point at {0}".format(self.mountpoint))
-                return True
-            else:
-                # This happens if the mount directory doesn't exist
-                log.info('mount point does not exist: %s', self.mountpoint)
-                return False
+            stale = [
+                'Connection timed out',
+                'Endpoint is not connected',
+                'Software caused connection abort',
+            ]
+            for s in stale:
+                if s.lower() in error.lower():
+                    # This happens is fuse is killed without unmount
+                    log.warning("Found stale moutn point at {0}".format(self.mountpoint))
+                    return True
+
+            # This happens if the mount directory doesn't exist
+            log.info('mount point does not exist: %s', self.mountpoint)
+            return False
 
         fstype = six.ensure_str(proc.stdout.getvalue()).rstrip('\n')
         if fstype == 'fuseblk':
@@ -366,7 +373,6 @@ class FuseMount(CephFSMount):
                 cwd=self.test_dir,
                 stderr=stderr,
                 timeout=(60*5),
-                check_status=False,
             )
         except CommandFailedError:
             if b"No such file or directory" in stderr.getvalue():
@@ -408,16 +414,7 @@ class FuseMount(CephFSMount):
             except CommandFailedError:
                 pass
 
-        # Indiscriminate, unlike the touchier cleanup()
-        self.client_remote.run(
-            args=[
-                'rm',
-                '-rf',
-                self.mountpoint,
-            ],
-            cwd=self.test_dir,
-            timeout=(60*5)
-        )
+        return self.cleanup()
 
     def _asok_path(self):
         return "/var/run/ceph/ceph-client.{0}.*.asok".format(self.client_id)
