@@ -384,18 +384,15 @@ class RookCluster(object):
             else:
                 raise
 
-    def apply_filesystem(self, spec):
-        # type: (ServiceSpec) -> None
+    def apply_filesystem(self, spec: ServiceSpec) -> None:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
-        def _update_fs(new):
-            # type: (cfs.CephFilesystem) -> cfs.CephFilesystem
+        def _update_fs(new: cfs.CephFilesystem) -> cfs.CephFilesystem:
             new.spec.metadataServer.activeCount = spec.placement.count or 1
             return new
 
-        def _create_fs():
-            # type: () -> cfs.CephFilesystem
+        def _create_fs() -> cfs.CephFilesystem:
             return cfs.CephFilesystem(
                 apiVersion=self.rook_env.api_name,
                 metadata=dict(
@@ -423,8 +420,7 @@ class RookCluster(object):
         assert spec.subcluster is None
         name = realm
 
-        def _create_zone():
-            # type: () -> cos.CephObjectStore
+        def _create_zone() -> cos.CephObjectStore:
             port = None
             secure_port = None
             if spec.ssl:
@@ -447,7 +443,7 @@ class RookCluster(object):
                 )
             )
 
-        def _update_zone(new):
+        def _update_zone(new: cos.CephObjectStore) -> cos.CephObjectStore:
             new.spec.gateway.instances = spec.placement.count or 1
             return new
 
