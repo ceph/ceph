@@ -59,8 +59,17 @@ private:
       return 0;
     }
 
+    void cancel() {
+      canceled = true;
+    }
+
+    bool is_canceled() const {
+      return canceled;
+    }
+
   private:
     PeerReplayer *m_peer_replayer;
+    bool canceled = false;
   };
 
   struct DirRegistry {
@@ -95,6 +104,9 @@ private:
   using time = ceph::coarse_mono_time;
 
   struct SnapSyncStat {
+    uint64_t nr_failures = 0; // number of consecutive failures
+    boost::optional<time> last_failed; // lat failed timestamp
+    bool failed = false; // hit upper cap for consecutive failures
     boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
     boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
     uint64_t synced_snap_count = 0;
@@ -103,6 +115,22 @@ private:
     time last_synced = clock::zero();
     boost::optional<double> last_sync_duration;
   };
+
+  void _inc_failed_count(const std::string &dir_path) {
+    auto max_failures = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_max_consecutive_failures_per_directory");
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    sync_stat.last_failed = clock::now();
+    if (++sync_stat.nr_failures >= max_failures) {
+      sync_stat.failed = true;
+    }
+  }
+  void _reset_failed_count(const std::string &dir_path) {
+    auto &sync_stat = m_snap_sync_stats.at(dir_path);
+    sync_stat.nr_failures = 0;
+    sync_stat.failed = false;
+    sync_stat.last_failed = boost::none;
+  }
 
   void _set_last_synced_snap(const std::string &dir_path, uint64_t snap_id,
                             const std::string &snap_name) {
@@ -146,6 +174,29 @@ private:
     ++sync_stat.synced_snap_count;
   }
 
+  bool should_backoff(const std::string &dir_path, int *retval) {
+    if (m_fs_mirror->is_blocklisted()) {
+      *retval = -EBLOCKLISTED;
+      return true;
+    }
+
+    std::scoped_lock locker(m_lock);
+    if (is_stopping()) {
+      // ceph defines EBLOCKLISTED to ESHUTDOWN (108). so use
+      // EINPROGRESS to identify shutdown.
+      *retval = -EINPROGRESS;
+      return true;
+    }
+    auto &dr = m_registered.at(dir_path);
+    if (dr.replayer->is_canceled()) {
+      *retval = -ECANCELED;
+      return true;
+    }
+
+    *retval = 0;
+    return false;
+  }
+
   typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
 
   CephContext *m_cct;
@@ -187,9 +238,12 @@ private:
   int cleanup_remote_dir(const std::string &dir_path);
   int remote_mkdir(const std::string &local_path, const std::string &remote_path,
                    const struct ceph_statx &stx);
-  int remote_file_op(const std::string &local_path, const std::string &remote_path,
-                     const struct ceph_statx &stx);
-  int remote_copy(const std::string &local_path,const std::string &remote_path,
+  int remote_file_op(const std::string &dir_path,
+                     const std::string &local_path,
+                     const std::string &remote_path, const struct ceph_statx &stx);
+  int remote_copy(const std::string &dir_path,
+                  const std::string &local_path,
+                  const std::string &remote_path,
                   const struct ceph_statx &local_stx);
 };
 

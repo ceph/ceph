@@ -8921,7 +8921,19 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_min(1)
     .set_description("interval to scan directories to mirror snapshots")
     .set_long_description("interval in seconds to scan configured directories for snapshot mirroring."),
-   });
+
+    Option("cephfs_mirror_max_consecutive_failures_per_directory", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_min(0)
+    .set_description("consecutive failed directory synchronization attempts before marking a directory as \"failed\"")
+    .set_long_description("number of consecutive snapshot synchronization failues to mark a directory as \"failed\". failed directories are retried for synchronization less frequently."),
+
+    Option("cephfs_mirror_retry_failed_directories_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_min(1)
+    .set_description("failed directory retry interval for synchronization")
+    .set_long_description("interval in seconds to retry synchronization for failed directories."),
+    });
 }
 
 static std::vector<Option> build_options()
