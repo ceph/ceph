@@ -209,12 +209,21 @@ def create_pykmip_conf(ctx, cclient, cconfig):
     log.info('#3 servercert {}'.format(servercert))
     servercert = ctx.ssl_certificates.get(servercert)
     log.info('#4 servercert {}'.format(servercert))
+    clientkey = None
+    clientcert = cconfig.get('clientcert', None)
+    log.info('#3 clientcert {}'.format(clientcert))
+    clientcert = ctx.ssl_certificates.get(clientcert)
+    log.info('#4 clientcert {}'.format(clientcert))
     clientca = ctx.ssl_certificates.get(clientca)
     log.info('#5 clientca {}'.format(clientca))
     if servercert != None:
       serverkey = servercert.key
       servercert = servercert.certificate
       log.info('#6 serverkey {} servercert {}'.format(serverkey, servercert))
+    if clientcert != None:
+      clientkey = clientcert.key
+      clientcert = clientcert.certificate
+      log.info('#6 clientkey {} clientcert {}'.format(clientkey, clientcert))
     if clientca != None:
       clientca = clientca.certificate
       log.info('#7 clientca {}'.format(clientca))
@@ -228,6 +237,8 @@ def create_pykmip_conf(ctx, cclient, cconfig):
         confdir=pykmipdir,
         hostname=pykmip_hostname,
         clientca=clientca,
+        clientkey=clientkey,
+        clientcert=clientcert,
         serverkey=serverkey,
         servercert=servercert
     )
@@ -310,156 +321,64 @@ def run_pykmip(ctx, config):
         ctx.daemons.get_daemon('pykmip', client_public_with_id,
                                cluster_name).stop()
 
+make_keys_template = """
+from kmip.pie import client
+from kmip import enums
+import ssl
+import sys
+import json
+from io import BytesIO
+
+c = client.ProxyKmipClient(config_file="{replace-with-config-file-path}")
+
+rl=[]
+for kwargs in {replace-with-secrets}:
+ with c:
+  key_id = c.create(
+   enums.CryptographicAlgorithm.AES,
+   256,
+   operation_policy_name='default',
+   cryptographic_usage_mask=[
+    enums.CryptographicUsageMask.ENCRYPT,
+    enums.CryptographicUsageMask.DECRYPT
+   ],
+   **kwargs
+  )
+  c.activate(key_id)
+  attrs = c.get_attributes(uid=key_id)
+  r = {}
+  for a in attrs[1]:
+   r[str(a.attribute_name)] = str(a.attribute_value)
+  rl.append(r)
+print(json.dumps(rl))
+"""
 
 @contextlib.contextmanager
 def create_secrets(ctx, config):
     """
-    Create a main and an alternate s3 user.
+    Create and activate any requested keys in kmip
     """
-    try:
-        yield
-    finally:
-        return
     assert isinstance(config, dict)
-    (cclient, cconfig) = next(iter(config.items()))
 
-    rgw_user = cconfig['rgw_user']
-
-    keystone_role = cconfig.get('use-keystone-role', None)
-    keystone_host, keystone_port = ctx.keystone.public_endpoints[keystone_role]
-    pykmip_ipaddr, pykmip_port, pykmip_hostname = ctx.pykmip.endpoints[cclient]
-    pykmip_url = 'http://{host}:{port}'.format(host=pykmip_hostname,
-                                                 port=pykmip_port)
-    log.info("pykmip_url=%s", pykmip_url)
-    #fetching user_id of user that gets secrets for radosgw
-    token_req = httplib.HTTPConnection(keystone_host, keystone_port, timeout=30)
-    token_req.request(
-        'POST',
-        '/v2.0/tokens',
-        headers={'Content-Type':'application/json'},
-        body=json.dumps(
-            {"auth":
-             {"passwordCredentials":
-              {"username": rgw_user["username"],
-               "password": rgw_user["password"]
-              },
-              "tenantName": rgw_user["tenantName"]
-             }
-            }
-        )
-    )
-    rgw_access_user_resp = token_req.getresponse()
-    if not (rgw_access_user_resp.status >= 200 and
-            rgw_access_user_resp.status < 300):
-        raise Exception("Cannot authenticate user "+rgw_user["username"]+" for secret creation")
-    #    baru_resp = json.loads(baru_req.data)
-    rgw_access_user_data = json.loads(rgw_access_user_resp.read())
-    rgw_user_id = rgw_access_user_data['access']['user']['id']
-
-    if 'secrets' in cconfig:
-        for secret in cconfig['secrets']:
-            if 'name' not in secret:
-                raise ConfigError('pykmip.secrets must have "name" field')
-            if 'base64' not in secret:
-                raise ConfigError('pykmip.secrets must have "base64" field')
-            if 'tenantName' not in secret:
-                raise ConfigError('pykmip.secrets must have "tenantName" field')
-            if 'username' not in secret:
-                raise ConfigError('pykmip.secrets must have "username" field')
-            if 'password' not in secret:
-                raise ConfigError('pykmip.secrets must have "password" field')
-
-            token_req = httplib.HTTPConnection(keystone_host, keystone_port, timeout=30)
-            token_req.request(
-                'POST',
-                '/v2.0/tokens',
-                headers={'Content-Type':'application/json'},
-                body=json.dumps(
-                    {
-                        "auth": {
-                            "passwordCredentials": {
-                                "username": secret["username"],
-                                "password": secret["password"]
-                            },
-                            "tenantName":secret["tenantName"]
-                        }
-                    }
-                )
-            )
-            token_resp = token_req.getresponse()
-            if not (token_resp.status >= 200 and
-                    token_resp.status < 300):
-                raise Exception("Cannot authenticate user "+secret["username"]+" for secret creation")
-
-            token_data = json.loads(token_resp.read())
-            token_id = token_data['access']['token']['id']
-
-            key1_json = json.dumps(
-                {
-                    "name": secret['name'],
-                    "expiration": "2020-12-31T19:14:44.180394",
-                    "algorithm": "aes",
-                    "bit_length": 256,
-                    "mode": "cbc",
-                    "payload": secret['base64'],
-                    "payload_content_type": "application/octet-stream",
-                    "payload_content_encoding": "base64"
-                })
-
-            sec_req = httplib.HTTPConnection(pykmip_hostname, pykmip_port, timeout=30)
-            try:
-                sec_req.request(
-                    'POST',
-                    '/v1/secrets',
-                    headers={'Content-Type': 'application/json',
-                             'Accept': '*/*',
-                             'X-Auth-Token': token_id},
-                    body=key1_json
-                )
-            except:
-                log.info("catched exception!")
-                run_in_pykmip_dir(ctx, cclient, ['sleep', '900'])
-
-            pykmip_sec_resp = sec_req.getresponse()
-            if not (pykmip_sec_resp.status >= 200 and
-                    pykmip_sec_resp.status < 300):
-                raise Exception("Cannot create secret")
-            pykmip_data = json.loads(pykmip_sec_resp.read())
-            if 'secret_ref' not in pykmip_data:
-                raise ValueError("Malformed secret creation response")
-            secret_ref = pykmip_data["secret_ref"]
-            log.info("secret_ref=%s", secret_ref)
-            secret_url_parsed = urlparse(secret_ref)
-            acl_json = json.dumps(
-                {
-                    "read": {
-                        "users": [rgw_user_id],
-                        "project-access": True
-                    }
-                })
-            acl_req = httplib.HTTPConnection(secret_url_parsed.netloc, timeout=30)
-            acl_req.request(
-                'PUT',
-                secret_url_parsed.path+'/acl',
-                headers={'Content-Type': 'application/json',
-                         'Accept': '*/*',
-                         'X-Auth-Token': token_id},
-                body=acl_json
-            )
-            pykmip_acl_resp = acl_req.getresponse()
-            if not (pykmip_acl_resp.status >= 200 and
-                    pykmip_acl_resp.status < 300):
-                raise Exception("Cannot set ACL for secret")
-
-            key = {'id': secret_ref.split('secrets/')[1], 'payload': secret['base64']}
-            ctx.pykmip.keys[secret['name']] = key
-
-    run_in_pykmip_dir(ctx, cclient, ['sleep', '3'])
+    pykmipdir = get_pykmip_dir(ctx)
+    pykmip_conf_path = pykmipdir + '/pykmip.conf'
+    my_output = BytesIO()
+    for (client,cconf) in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        secrets=cconf.get('secrets')
+        if secrets:
+            secrets_json = json.dumps(cconf['secrets'])
+            make_keys = make_keys_template \
+                .replace("{replace-with-secrets}",secrets_json) \
+                .replace("{replace-with-config-file-path}",pykmip_conf_path)
+            my_output.truncate()
+            remote.run(args=[run.Raw('. cephtest/pykmip/.pykmipenv/bin/activate;' \
+                + 'python')], stdin=make_keys, stdout = my_output)
+            ctx.pykmip.keys[client] = json.loads(my_output.getvalue().decode())
     try:
         yield
     finally:
         pass
-
 
 @contextlib.contextmanager
 def task(ctx, config):
