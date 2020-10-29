@@ -2351,7 +2351,7 @@ void CDir::_omap_commit(int op_prio)
 
   size_t count = 0;
   if (state_test(CDir::STATE_FRAGMENTING) && is_new()) {
-    count = get_num_head_items() && get_num_snap_items();
+    count = get_num_head_items() + get_num_snap_items();
   } else {
     for (elist<CDentry*>::iterator it = dirty_dentries.begin(); !it.end(); ++it)
       ++count;
