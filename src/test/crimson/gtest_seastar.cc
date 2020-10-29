@@ -9,13 +9,9 @@ seastar_gtest_env_t seastar_test_suite_t::seastar_env;
 seastar_gtest_env_t::seastar_gtest_env_t() :
   begin_fd{seastar::file_desc::eventfd(0, 0)} {}
 
-void seastar_gtest_env_t::init(int _argc, char **_argv)
+void seastar_gtest_env_t::init(int argc, char **argv)
 {
-  argc = _argc;
-  argv = new char *[argc];
-  for (int i = 0; i < argc; ++i) argv[i] = strdup(_argv[i]);
-
-  thread = std::thread([this] { reactor(); });
+  thread = std::thread([argc, argv, this] { reactor(argc, argv); });
   eventfd_t result = 0;
   if (int r = ::eventfd_read(begin_fd.get(), &result); r < 0) {
     std::cerr << "unable to eventfd_read():" << errno << std::endl;
@@ -33,13 +29,9 @@ void seastar_gtest_env_t::stop()
 }
 
 seastar_gtest_env_t::~seastar_gtest_env_t()
-{
-  ceph_assert(argv);
-  for (int i = 0; i < argc; ++i) free(argv[i]);
-  delete[] argv;
-}
+{}
 
-void seastar_gtest_env_t::reactor()
+void seastar_gtest_env_t::reactor(int argc, char** argv)
 {
   app.run(argc, argv, [this] {
     on_end.reset(new seastar::readable_eventfd);
