@@ -1,13 +1,13 @@
-
 # The task interferes with the network, so we need
 # to permit OSDs to complain about that.
 overrides:
   ceph:
     log-ignorelist:
+      - evicting unresponsive client
       - but it is still running
       - slow request
-      - evicting unresponsive client
-
+      - MDS_CLIENT_LATE_RELEASE
+      - t responding to mclientcaps
 tasks:
   - cephfs_test_runner:
       fail_on_skip: false

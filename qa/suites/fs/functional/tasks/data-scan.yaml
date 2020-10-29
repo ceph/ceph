@@ -1,4 +1,3 @@
-
 overrides:
   ceph:
     log-ignorelist:
@@ -7,12 +6,12 @@ overrides:
       - error reading table object
       - error reading sessionmap
       - unmatched fragstat
+      - unmatched rstat
       - was unreadable, recreating it now
       - Scrub error on inode
       - Metadata damage detected
       - inconsistent rstat on inode
       - Error recovering journal
-
 tasks:
   - cephfs_test_runner:
       modules:

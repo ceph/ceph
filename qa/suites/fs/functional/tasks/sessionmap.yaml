@@ -1,9 +1,7 @@
-
 overrides:
   ceph:
     log-ignorelist:
       - client session with non-allowable root
-
 tasks:
   - cephfs_test_runner:
       modules:
