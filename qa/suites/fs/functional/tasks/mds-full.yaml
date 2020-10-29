@@ -1,4 +1,3 @@
-
 overrides:
   ceph:
     cephfs_ec_profile:
@@ -30,7 +29,6 @@ overrides:
         debug client: 20
         debug objecter: 20
         debug objectcacher: 20
-
 tasks:
   - cephfs_test_runner:
       modules:

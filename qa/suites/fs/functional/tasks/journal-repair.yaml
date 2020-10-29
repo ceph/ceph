@@ -1,4 +1,3 @@
-
 overrides:
   ceph:
     log-ignorelist:
@@ -7,7 +6,6 @@ overrides:
       - Metadata damage detected
       - slow requests are blocked
       - Behind on trimming
-
 tasks:
   - cephfs_test_runner:
       modules:

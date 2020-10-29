@@ -5,8 +5,6 @@ overrides:
       - bad backtrace
       - MDS in read-only mode
       - \(MDS_READ_ONLY\)
-
-
 tasks:
   - cephfs_test_runner:
       modules:

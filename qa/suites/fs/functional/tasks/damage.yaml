@@ -1,4 +1,3 @@
-
 overrides:
   ceph:
     log-ignorelist:
@@ -19,7 +18,6 @@ overrides:
       - Metadata damage detected
       - MDS_READ_ONLY
       - force file system read-only
-
 tasks:
   - cephfs_test_runner:
       modules:
