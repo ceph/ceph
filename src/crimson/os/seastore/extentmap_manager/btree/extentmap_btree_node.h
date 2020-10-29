@@ -97,7 +97,7 @@ struct ExtMapNode : LogicalCachedExtent {
   alloc_ertr::future<std::pair<TCachedExtentRef<T>, TCachedExtentRef<T>>>
   extmap_alloc_2extents(ext_context_t ec, extent_len_t len) {
     return seastar::do_with(std::pair<TCachedExtentRef<T>, TCachedExtentRef<T>>(),
-      [this, ec, len] (auto &extents) {
+      [ec, len] (auto &extents) {
       return crimson::do_for_each(boost::make_counting_iterator(0),
                                   boost::make_counting_iterator(2),
                                   [ec, len, &extents] (auto i) {

@@ -308,7 +308,7 @@ SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
 	      addr,
 	      info.addr,
 	      info.len
-	    ).safe_then([=, &t](CachedExtentRef ext) {
+	    ).safe_then([addr=addr, &t, this](CachedExtentRef ext) {
 	      if (!ext) {
 		logger().debug(
 		  "SegmentCleaner::do_gc: addr {} dead, skipping",
@@ -324,7 +324,7 @@ SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
 		t,
 		ext);
 	    });
-	  }).safe_then([=, &t] {
+	  }).safe_then([next=next, &t, this] {
 	    auto old_pos = std::exchange(gc_current_pos, next);
 	    if (gc_current_pos == P_ADDR_NULL) {
 	      t.mark_segment_to_release(old_pos.segment);
