@@ -21,8 +21,6 @@ if(WITH_SPDK)
 endif()
 
 if(WITH_ZBD)
-  find_package(zbd REQUIRED)
-  set(HAVE_LIBZBD ${ZBD_FOUND})
   list(APPEND libblk_srcs
     zoned/HMSMRDevice.cc)
 endif()
