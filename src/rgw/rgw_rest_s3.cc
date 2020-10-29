@@ -1855,7 +1855,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextContinuationToken", next_marker.name);
   }
-  s->formatter->dump_int("KeyCount",objs.size());
+  s->formatter->dump_int("KeyCount", objs.size() + common_prefixes.size());
   if (start_after_exist) {
     s->formatter->dump_string("StartAfter", startAfter);
   }
