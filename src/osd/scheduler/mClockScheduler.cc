@@ -117,9 +117,9 @@ void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
 WorkItem mClockScheduler::dequeue()
 {
   if (!immediate.empty()) {
-    auto ret = std::move(immediate.back());
+    WorkItem work_item{std::move(immediate.back())};
     immediate.pop_back();
-    return std::move(ret);
+    return work_item;
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
     if (result.is_future()) {
@@ -127,7 +127,7 @@ WorkItem mClockScheduler::dequeue()
     } else if (result.is_none()) {
       ceph_assert(
 	0 == "Impossible, must have checked empty() first");
-      return std::move(*(OpSchedulerItem*)nullptr);
+      return {};
     } else {
       ceph_assert(result.is_retn());
 
