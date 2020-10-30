@@ -707,6 +707,23 @@ private:
   NBDServer *server;
 };
 
+static int get_device_size(int nbd_index, unsigned long& size,
+                           std::ostream *err_msg)
+{
+  std::string path = "/sys/block/nbd" + stringify(nbd_index) + "/size";
+  std::ifstream ifs;
+  ifs.open(path.c_str(), std::ifstream::in);
+  if (!ifs.is_open()) {
+    *err_msg << "rbd-nbd: failed to open " << path;
+    return -EINVAL;
+  }
+  ifs >> size;
+
+  size *= RBD_NBD_BLKSIZE;
+
+  return 0;
+}
+
 class NBDWatchCtx : public librbd::UpdateWatchCtx
 {
 private:
@@ -746,12 +763,29 @@ public:
           derr << "invalidate page cache failed: " << cpp_strerror(errno)
                << dendl;
         if (!use_ioctl) {
-	  ret = netlink_resize(nbd_index, new_size);
-	} else {
+          ret = netlink_resize(nbd_index, new_size);
+          if (ret == 0) {
+            /*
+             * For old kernels maybe the netlink resize is not supported
+             * yet, then the kernel will do nothing and just return success,
+             * so let's fall back to use ioctl method.
+             */
+            unsigned long _size = 0;
+            std::ostringstream err_msg;
+            int ret = get_device_size(nbd_index, _size, &err_msg);
+            if (ret < 0 || _size != new_size)
+              use_ioctl = true;
+            if (ret < 0) {
+              dout(10) << err_msg.str() << dendl;
+            }
+          }
+        }
+
+        if (use_ioctl) {
           ret = ioctl(fd, NBD_SET_SIZE, new_size);
           if (ret < 0)
             derr << "resize failed: " << cpp_strerror(errno) << dendl;
-	}
+        }
 
         if (!ret)
           size = new_size;
@@ -942,15 +976,12 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   // not affected.
 
   unsigned long size = 0;
-  std::string path = "/sys/block/nbd" + stringify(nbd_index) + "/size";
-  std::ifstream ifs;
-  ifs.open(path.c_str(), std::ifstream::in);
-  if (!ifs.is_open()) {
-    cerr << "rbd-nbd: failed to open " << path << std::endl;
-    return -EINVAL;
+  std::ostringstream err_msg;
+  int ret = get_device_size(nbd_index, size, &err_msg);
+  if (ret < 0) {
+    cerr << err_msg.str() << std::endl;
+    return ret;
   }
-  ifs >> size;
-  size *= RBD_NBD_BLKSIZE;
 
   if (size == 0) {
     // Newer kernel versions will report real size only after nbd
