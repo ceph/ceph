@@ -830,7 +830,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     };
   }
 
-  toggleExpandRow(row: any, isExpanded: boolean) {
+  toggleExpandRow(row: any, isExpanded: boolean, event: any) {
+    event.stopPropagation();
     if (!isExpanded) {
       // If current row isn't expanded, collapse others
       this.expanded = row;
