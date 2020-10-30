@@ -440,8 +440,8 @@ class TestDamage(CephFSTestCase):
             if isinstance(self.mount_a, FuseMount):
                 self.assertEqual(e.exitstatus, errno.EIO)
             else:
-                # Kernel client handles this case differently
-                self.assertEqual(e.exitstatus, errno.ENOENT)
+                # Old kernel client handles this case differently
+                self.assertIn(e.exitstatus, [errno.ENOENT, errno.EIO])
         else:
             raise AssertionError("Expected EIO")
 
