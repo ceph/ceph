@@ -237,7 +237,8 @@ class TestClientsWithoutAuth(TestMultiFS):
         #  laggy" to "permission denied".
         self.kernel_errmsgs = ('permission denied', 'no mds server is up or '
                                'the cluster is laggy', 'no such file or '
-                               'directory')
+                               'directory',
+                               'input/output error')
 
         # TODO: When MON and OSD caps are assigned for a Ceph FS to a
         # client but MDS caps are not, ceph-fuse prints "operation not
