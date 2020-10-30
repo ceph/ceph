@@ -46,7 +46,7 @@ LBAInternalNode::lookup_ret LBAInternalNode::lookup(
     iter->get_val(),
     get_paddr()).safe_then([c, addr, depth](auto child) {
       return child->lookup(c, addr, depth);
-    });
+    }).finally([ref=LBANodeRef(this)] {});
 }
 
 LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
