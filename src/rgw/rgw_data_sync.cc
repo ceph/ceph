@@ -621,7 +621,13 @@ public:
 
       }
 
-      drain_all();
+      drain_all_cb([&](uint64_t stack_id, int ret) {
+        if (ret < 0) {
+          tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
+          return ret;
+        }
+        return 0;
+      });
 
       /* init remote status markers */
       for (i = 0; i < (int)num_shards; i++) {
@@ -647,7 +653,14 @@ public:
 
       }
 
-      drain_all();
+      drain_all_cb([&](uint64_t stack_id, int ret) {
+        if (ret < 0) {
+          tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
+
+          /* not erroring out, should we? */
+        }
+        return 0;
+      });
 
       /* init local status */
       yield {
