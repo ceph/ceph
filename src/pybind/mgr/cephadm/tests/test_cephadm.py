@@ -645,11 +645,25 @@ class TestCephadm(object):
     def test_blink_device_light_custom(self, _run_cephadm, cephadm_module):
         _run_cephadm.return_value = '{}', '', 0
         with with_host(cephadm_module, 'test'):
-            cephadm_module.set_store('lsmcli_blink_lights_cmd', 'echo hello')
-            c = cephadm_module.blink_device_light('ident', True, [('test', '', 'dev')])
+            cephadm_module.set_store('blink_device_light_cmd', 'echo hello')
+            c = cephadm_module.blink_device_light('ident', True, [('test', '', '/dev/sda')])
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
             _run_cephadm.assert_called_with('test', 'osd', 'shell', [
                                             '--', 'echo', 'hello'], error_ok=True)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_blink_device_light_custom_per_host(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = '{}', '', 0
+        with with_host(cephadm_module, 'mgr0'):
+            cephadm_module.set_store('mgr0/blink_device_light_cmd',
+                                     'xyz --foo --{{ ident_fault }}={{\'on\' if on else \'off\'}} \'{{ path or dev }}\'')
+            c = cephadm_module.blink_device_light(
+                'fault', True, [('mgr0', 'SanDisk_X400_M.2_2280_512GB_162924424784', '')])
+            assert wait(cephadm_module, c) == [
+                'Set fault light for mgr0:SanDisk_X400_M.2_2280_512GB_162924424784 on']
+            _run_cephadm.assert_called_with('mgr0', 'osd', 'shell', [
+                '--', 'xyz', '--foo', '--fault=on', 'SanDisk_X400_M.2_2280_512GB_162924424784'
+            ], error_ok=True)
 
     @pytest.mark.parametrize(
         "spec, meth",

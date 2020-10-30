@@ -47,6 +47,23 @@ By default, the `identification` light is used.
 
      ceph orch status
 
+The command behind the scene to blink the drive LEDs is `lsmcli`. If you need
+to customize this command you can configure this via a Jinja2 template::
+
+   ceph config-key set mgr/cephadm/blink_device_light_cmd "<template>"
+   ceph config-key set mgr/cephadm/<host>/blink_device_light_cmd "lsmcli local-disk-{{ ident_fault }}-led-{{'on' if on else 'off'}} --path '{{ path or dev }}'"
+
+The Jinja2 template is rendered using the following arguments:
+
+* ``on``
+    A boolean value.
+* ``ident_fault``
+    A string containing `ident` or `fault`.
+* ``dev``
+    A string containing the device ID, e.g. `SanDisk_X400_M.2_2280_512GB_162924424784`.
+* ``path``
+    A string containing the device path, e.g. `/dev/sda`.
+
 .. _enabling-monitoring:
 
 Enabling monitoring
