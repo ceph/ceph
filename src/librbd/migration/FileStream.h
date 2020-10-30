@@ -35,13 +35,13 @@ public:
   FileStream(const FileStream&) = delete;
   FileStream& operator=(const FileStream&) = delete;
 
-  void open(Context* on_finish);
-  void close(Context* on_finish);
+  void open(Context* on_finish) override;
+  void close(Context* on_finish) override;
 
   void get_size(uint64_t* size, Context* on_finish) override;
 
   void read(io::Extents&& byte_extents, bufferlist* data,
-            Context* on_finish);
+            Context* on_finish) override;
 
 private:
   CephContext* m_cct;
