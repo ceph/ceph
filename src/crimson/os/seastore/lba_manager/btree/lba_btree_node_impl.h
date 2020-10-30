@@ -246,7 +246,7 @@ struct LBAInternalNode
   }
 
   bool at_min_capacity() const {
-    return get_size() == get_capacity() / 2;
+    return get_size() == (get_capacity() / 2);
   }
 
   /// returns iterators containing [l, r)
@@ -516,7 +516,7 @@ struct LBALeafNode
   }
 
   bool at_min_capacity() const final {
-    return get_size() == get_capacity();
+    return get_size() == (get_capacity() / 2);
   }
 
   /// returns iterators <lb, ub> containing addresses [l, r)
