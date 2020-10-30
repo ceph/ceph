@@ -18,7 +18,6 @@ import os
 import random
 import tempfile
 import multiprocessing.pool
-import shutil
 import subprocess
 
 from ceph.deployment import inventory
@@ -1566,30 +1565,30 @@ To check that the host is reachable:
 
         If you must, you can customize this via::
 
-          ceph config-key set mgr/cephadm/lsmcli_blink_lights_cmd '<my jinja2 template>'
+          ceph config-key set mgr/cephadm/blink_device_light_cmd '<my jinja2 template>'
+          ceph config-key set mgr/cephadm/<host>/blink_device_light_cmd '<my jinja2 template>'
 
-        See templates/lsmcli_blink_lights_cmd.j2
+        See templates/blink_device_light_cmd.j2
         """
         @forall_hosts
         def blink(host, dev, path):
-            j2_ctx = {
-                'on': on,
-                'ident_fault': ident_fault,
-                'dev': dev,
-                'path': path
-            }
-
-            lsmcli_blink_lights_cmd = self.template.render('lsmcli_blink_lights_cmd.j2', j2_ctx)
-
-            cmd = shlex.split(lsmcli_blink_lights_cmd)
+            cmd_line = self.template.render('blink_device_light_cmd.j2',
+                                            {
+                                                'on': on,
+                                                'ident_fault': ident_fault,
+                                                'dev': dev,
+                                                'path': path
+                                            },
+                                            host=host)
+            cmd_args = shlex.split(cmd_line)
 
             out, err, code = self._run_cephadm(
-                host, 'osd', 'shell', ['--'] + cmd,
+                host, 'osd', 'shell', ['--'] + cmd_args,
                 error_ok=True)
             if code:
                 raise OrchestratorError(
                     'Unable to affect %s light for %s:%s. Command: %s' % (
-                        ident_fault, host, dev, ' '.join(cmd)))
+                        ident_fault, host, dev, ' '.join(cmd_args)))
             self.log.info('Set %s light for %s:%s %s' % (
                 ident_fault, host, dev, 'on' if on else 'off'))
             return "Set %s light for %s:%s %s" % (
