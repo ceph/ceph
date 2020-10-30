@@ -321,6 +321,19 @@ RGWCoroutine *SIProviderCRMgr_Local::update_marker_cr(const SIProvider::stage_id
                                });
 }
 
+RGWCoroutine *SIProviderCRMgr_Local::get_marker_info_cr(RGWSI_SIP_Marker::HandlerRef& marker_handler,
+                                                        const SIProvider::stage_id_t& sid, int shard_id,
+                                                        RGWSI_SIP_Marker::stage_shard_info *info)
+{
+  auto mh = marker_handler;
+  return new RGWSafeRetAsyncCR<RGWSI_SIP_Marker::stage_shard_info>(cct,
+                               async_rados,
+                               info,
+                               [=](RGWSI_SIP_Marker::stage_shard_info *_info) {
+                                 return mh->get_info(sid, shard_id, _info);
+                               });
+}
+
 struct SIProviderRESTCRs {
   class GetStagesInfoCR : public RGWCoroutine {
     SIProviderCRMgr_REST *mgr;

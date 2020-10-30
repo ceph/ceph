@@ -74,6 +74,13 @@ public:
   RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
   RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
                                  const RGWSI_SIP_Marker::SetParams& params) override;
+
+  /* local only ops */
+
+  RGWCoroutine *get_marker_info_cr(RGWSI_SIP_Marker::HandlerRef& marker_handler,
+                                   const SIProvider::stage_id_t& sid, int shard_id,
+                                   RGWSI_SIP_Marker::stage_shard_info *info);
+
 };
 
 class RGWRESTConn;
