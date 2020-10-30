@@ -149,7 +149,7 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
         })
 
     def test_set(self):
-        self._put('/api/settings/GRAFANA_API_USERNAME', {'value': 'foo'},)
+        self._put('/api/settings/GRAFANA_API_USERNAME', {'value': 'foo'})
         self.assertStatus(200)
 
         self._get('/api/settings/GRAFANA_API_USERNAME')
