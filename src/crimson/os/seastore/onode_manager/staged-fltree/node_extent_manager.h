@@ -10,6 +10,7 @@
 #include "fwd.h"
 #include "super.h"
 #include "node_extent_mutable.h"
+#include "node_types.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -17,18 +18,25 @@ using crimson::os::seastore::LogicalCachedExtent;
 class NodeExtent : public LogicalCachedExtent {
  public:
   virtual ~NodeExtent() = default;
+  std::pair<node_type_t, field_type_t> get_types() const;
   const char* get_read() const {
     return get_bptr().c_str();
   }
-  auto get_mutable() {
+  NodeExtentMutable get_mutable() {
     assert(is_pending());
-    return NodeExtentMutable(*this);
+    return do_get_mutable();
   }
-  virtual NodeExtentRef mutate(context_t/* DeltaBuffer::Ref */) = 0;
+
+  virtual DeltaRecorder* get_recorder() const = 0;
+  virtual NodeExtentRef mutate(context_t, DeltaRecorderURef&&) = 0;
 
  protected:
   template <typename... T>
   NodeExtent(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
+
+  NodeExtentMutable do_get_mutable() {
+    return NodeExtentMutable(*this);
+  }
 
   /**
    * abstracted:

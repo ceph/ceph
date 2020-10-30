@@ -5,6 +5,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node_delta_recorder.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -35,7 +36,12 @@ class SeastoreNodeExtent final: public NodeExtent {
     : NodeExtent(other) {}
   ~SeastoreNodeExtent() override = default;
  protected:
-  NodeExtentRef mutate(context_t c) override;
+  NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override;
+
+  DeltaRecorder* get_recorder() const override {
+    return recorder.get();
+  }
+
   CachedExtentRef duplicate_for_write() override {
     return CachedExtentRef(new SeastoreNodeExtent(*this));
   }
@@ -43,18 +49,12 @@ class SeastoreNodeExtent final: public NodeExtent {
     return extent_types_t::ONODE_BLOCK_STAGED;
   }
   ceph::bufferlist get_delta() override {
-    //TODO
-    ceph_abort("not implemented");
+    assert(recorder);
+    return recorder->get_delta();
   }
-  void apply_delta(const ceph::bufferlist&) override {
-    //TODO
-    ceph_abort("not implemented");
-  }
+  void apply_delta(const ceph::bufferlist&) override;
  private:
-  static seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
-  }
-  //TODO: recorder
+  DeltaRecorderURef recorder;
 };
 
 class SeastoreNodeExtentManager final: public NodeExtentManager {
@@ -108,19 +108,5 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
   TransactionManager& tm;
   const laddr_t addr_min;
 };
-
-inline void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr) {
-  logger().info("OTree::Seastore: update root {:#x} ...", addr);
-  root_addr = addr;
-  auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
-  nm->get_tm().write_onode_root(c.t, addr);
-}
-
-inline NodeExtentRef SeastoreNodeExtent::mutate(context_t c) {
-  logger().debug("OTree::Seastore: mutate {:#x} ...", get_laddr());
-  auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
-  auto ret = nm->get_tm().get_mutable_extent(c.t, this);
-  return ret->cast<SeastoreNodeExtent>();
-}
 
 }
