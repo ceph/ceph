@@ -65,8 +65,7 @@ public:
       return false;
     }
     it->second.first->complete(-ECANCELED);
-    bool canceled = m_safe_timer->cancel_event(it->second.second);
-    ceph_assert(canceled);
+    m_safe_timer->cancel_event(it->second.second);
     m_task_contexts.erase(it);
     return true;
   }
@@ -75,8 +74,7 @@ public:
     std::lock_guard l{*m_lock};
     for (auto &[task, pair] : m_task_contexts) {
       pair.first->complete(-ECANCELED);
-      bool canceled = m_safe_timer->cancel_event(pair.second);
-      ceph_assert(canceled);
+      m_safe_timer->cancel_event(pair.second);
     }
     m_task_contexts.clear();
   }
@@ -102,7 +100,9 @@ public:
       return false;
     }
     bool canceled = m_safe_timer->cancel_event(it->second.second);
-    ceph_assert(canceled);
+    if (!canceled) {
+      return false;
+    }
     auto timer_ctx = new C_Task(this, task);
     it->second.second = timer_ctx;
     m_safe_timer->add_event_after(seconds, timer_ctx);
@@ -117,12 +117,12 @@ public:
     std::lock_guard l{*m_lock};
     typename TaskContexts::iterator it = m_task_contexts.find(task);
     if (it != m_task_contexts.end()) {
-      if (it->second.second != NULL) {
-        ceph_assert(m_safe_timer->cancel_event(it->second.second));
-        delete it->second.first;
+      if (it->second.second != NULL &&
+          m_safe_timer->cancel_event(it->second.second)) {
+        it->second.first->complete(-ECANCELED);
       } else {
         // task already scheduled on the finisher
-        delete ctx;
+        ctx->complete(-ECANCELED);
         return false;
       }
     }
