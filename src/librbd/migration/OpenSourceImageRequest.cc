@@ -54,12 +54,14 @@ void OpenSourceImageRequest<I>::open_source() {
   src_image_ctx->layout.object_size = 1Ull << src_image_ctx->order;
   src_image_ctx->layout.pool_id = -1;
 
+  bool import_only = true;
   auto source_spec = m_migration_info.source_spec;
   if (source_spec.empty()) {
     // implies legacy migration from RBD image in same cluster
     source_spec = NativeFormat<I>::build_source_spec(
       m_migration_info.pool_id, m_migration_info.pool_namespace,
       m_migration_info.image_name, m_migration_info.image_id);
+    import_only = false;
   }
 
   SourceSpecBuilder<I> source_spec_builder{src_image_ctx};
@@ -73,7 +75,8 @@ void OpenSourceImageRequest<I>::open_source() {
     return;
   }
 
-  r = source_spec_builder.build_format(source_spec_object, &m_format);
+  r = source_spec_builder.build_format(source_spec_object, import_only,
+                                       &m_format);
   if (r < 0) {
     lderr(cct) << "failed to build migration format handler: "
                << cpp_strerror(r) << dendl;

@@ -45,7 +45,7 @@ int SourceSpecBuilder<I>::parse_source_spec(
 
 template <typename I>
 int SourceSpecBuilder<I>::build_format(
-    const json_spirit::mObject& source_spec_object,
+    const json_spirit::mObject& source_spec_object, bool import_only,
     std::unique_ptr<FormatInterface>* format) const {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
@@ -59,7 +59,8 @@ int SourceSpecBuilder<I>::build_format(
 
   auto& type = type_value_it->second.get_str();
   if (type == "native") {
-    format->reset(NativeFormat<I>::create(m_image_ctx, source_spec_object));
+    format->reset(NativeFormat<I>::create(m_image_ctx, source_spec_object,
+                                          import_only));
   } else if (type == "raw") {
     format->reset(RawFormat<I>::create(m_image_ctx, source_spec_object, this));
   } else {
