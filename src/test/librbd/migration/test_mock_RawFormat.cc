@@ -105,6 +105,13 @@ public:
         })));
   }
 
+  void expect_close(MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.state, close(_))
+      .WillOnce(Invoke([this, r](Context* ctx) {
+                  ctx->complete(r);
+                }));
+  }
+
   json_spirit::mObject json_object;
 };
 
@@ -132,6 +139,27 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
   C_SaferCond ctx2;
   mock_raw_format.close(&ctx2);
   ASSERT_EQ(0, ctx2.wait());
+}
+
+TEST_F(TestMockMigrationRawFormat, OpenError) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
+  InSequence seq;
+  MockSourceSpecBuilder mock_source_spec_builder;
+
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+
+  expect_stream_open(*mock_stream_interface, -ENOENT);
+
+  expect_close(mock_image_ctx, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
+
+  C_SaferCond ctx;
+  mock_raw_format.open(&ctx);
+  ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
 TEST_F(TestMockMigrationRawFormat, GetSnapshots) {

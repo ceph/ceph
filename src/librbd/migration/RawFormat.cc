@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
@@ -92,7 +93,13 @@ struct RawFormat<I>::OpenRequest {
     auto cct = raw_format->m_image_ctx->cct;
     ldout(cct, 10) << "r=" << r << dendl;
 
-    on_finish->complete(r);
+    if (r < 0) {
+      raw_format->m_image_ctx->state->close(new LambdaContext(
+        [r, on_finish=on_finish](int _) { on_finish->complete(r); }));
+    } else {
+      on_finish->complete(0);
+    }
+
     delete this;
   }
 };
@@ -118,7 +125,8 @@ void RawFormat<I>::open(Context* on_finish) {
   if (r < 0) {
     lderr(cct) << "failed to build migration stream handler" << cpp_strerror(r)
                << dendl;
-    on_finish->complete(r);
+    m_image_ctx->state->close(
+      new LambdaContext([r, on_finish](int _) { on_finish->complete(r); }));
     return;
   }
 
