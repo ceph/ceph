@@ -456,6 +456,8 @@ class TestVolumes(CephFSTestCase):
         That the volume can only be removed when --yes-i-really-mean-it is used
         and verify that the deleted volume is not listed anymore.
         """
+        for m in self.mounts:
+            m.umount_wait()
         try:
             self._fs_cmd("volume", "rm", self.volname)
         except CommandFailedError as ce:
@@ -514,6 +516,8 @@ class TestVolumes(CephFSTestCase):
         That the arbitrary pool added to the volume out of band is removed
         successfully on volume removal.
         """
+        for m in self.mounts:
+            m.umount_wait()
         new_pool = "new_pool"
         # add arbitrary data pool
         self.fs.add_data_pool(new_pool)
@@ -534,6 +538,8 @@ class TestVolumes(CephFSTestCase):
         That the volume can only be removed when mon_allowd_pool_delete is set
         to true and verify that the pools are removed after volume deletion.
         """
+        for m in self.mounts:
+            m.umount_wait()
         self.config_set('mon', 'mon_allow_pool_delete', False)
         try:
             self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
