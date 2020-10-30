@@ -4589,13 +4589,14 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::RGWRadosStore *store,
   if (s->init_state.url_bucket.empty()) {
     // Save bucket to tide us over until token is parsed.
     s->init_state.url_bucket = first;
+    string encoded_obj_str;
     if (pos >= 0) {
-      string encoded_obj_str = req.substr(pos+1);
-      if (s->bucket) {
-	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
-      } else {
-	s->object = store->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
-      }
+      encoded_obj_str = req.substr(pos+1);
+    }
+    if (s->bucket) {
+      s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+    } else {
+      s->object = store->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
     }
   } else {
     if (s->bucket) {
