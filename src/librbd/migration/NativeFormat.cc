@@ -47,8 +47,9 @@ std::string NativeFormat<I>::build_source_spec(
 
 template <typename I>
 NativeFormat<I>::NativeFormat(
-    I* image_ctx, const json_spirit::mObject& json_object)
-  : m_image_ctx(image_ctx), m_json_object(json_object) {
+    I* image_ctx, const json_spirit::mObject& json_object, bool import_only)
+  : m_image_ctx(image_ctx), m_json_object(json_object),
+    m_import_only(import_only) {
 }
 
 template <typename I>
@@ -103,7 +104,7 @@ void NativeFormat<I>::open(Context* on_finish) {
   m_image_ctx->name = m_image_name;
 
   uint64_t flags = 0;
-  if (m_image_id.empty()) {
+  if (m_image_id.empty() && !m_import_only) {
     flags |= OPEN_FLAG_OLD_FORMAT;
   } else {
     m_image_ctx->id = m_image_id;

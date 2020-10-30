@@ -546,7 +546,7 @@ int Migration<I>::prepare_import(
   }
 
   std::unique_ptr<migration::FormatInterface> format;
-  r = source_spec_builder.build_format(source_spec_object, &format);
+  r = source_spec_builder.build_format(source_spec_object, true, &format);
   if (r < 0) {
     lderr(cct) << "failed to build migration format handler: "
                << cpp_strerror(r) << dendl;
