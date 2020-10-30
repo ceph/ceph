@@ -245,17 +245,12 @@ node_future<Ref<Node>> Node::load(
   // option3: length is totally flexible;
   return c.nm.read_extent(c.t, addr, NODE_BLOCK_SIZE
   ).safe_then([expect_is_level_tail](auto extent) {
-    const auto header = reinterpret_cast<const node_header_t*>(extent->get_read());
-    auto node_type = header->get_node_type();
-    auto field_type = header->get_field_type();
-    if (!field_type.has_value()) {
-      throw std::runtime_error("load failed: bad field type");
-    }
+    auto [node_type, field_type] = extent->get_types();
     if (node_type == node_type_t::LEAF) {
-      auto impl = LeafNodeImpl::load(extent, *field_type, expect_is_level_tail);
+      auto impl = LeafNodeImpl::load(extent, field_type, expect_is_level_tail);
       return Ref<Node>(new LeafNode(impl.get(), std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
-      auto impl = InternalNodeImpl::load(extent, *field_type, expect_is_level_tail);
+      auto impl = InternalNodeImpl::load(extent, field_type, expect_is_level_tail);
       return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
     } else {
       ceph_abort("impossible path");

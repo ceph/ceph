@@ -38,8 +38,10 @@ class DummyNodeExtent final: public NodeExtent {
   }
   ~DummyNodeExtent() override = default;
  protected:
-  NodeExtentRef mutate(context_t) override {
+  NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override {
     ceph_abort("impossible path"); }
+  DeltaRecorder* get_recorder() const override {
+    return nullptr; }
   CachedExtentRef duplicate_for_write() override {
     ceph_abort("impossible path"); }
   extent_types_t get_type() const override {

@@ -24,9 +24,11 @@ using crimson::os::seastore::L_ADDR_MIN;
 using crimson::os::seastore::L_ADDR_NULL;
 using crimson::os::seastore::extent_len_t;
 
+class DeltaRecorder;
 class NodeExtent;
 class NodeExtentManager;
 class RootNodeTracker;
+using DeltaRecorderURef = std::unique_ptr<DeltaRecorder>;
 using NodeExtentRef = crimson::os::seastore::TCachedExtentRef<NodeExtent>;
 using NodeExtentManagerURef = std::unique_ptr<NodeExtentManager>;
 using RootNodeTrackerURef = std::unique_ptr<RootNodeTracker>;
