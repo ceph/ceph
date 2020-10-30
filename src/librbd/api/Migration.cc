@@ -532,18 +532,16 @@ int Migration<I>::prepare_import(
                  << dest_image_name << ", opts=" << opts << dendl;
 
   auto src_image_ctx = I::create("", "", nullptr, dest_io_ctx, true);
-  BOOST_SCOPE_EXIT_TPL(src_image_ctx) {
-    src_image_ctx->state->close();
-  } BOOST_SCOPE_EXIT_END;
+  auto asio_engine = src_image_ctx->asio_engine;
 
   migration::SourceSpecBuilder<I> source_spec_builder(src_image_ctx);
-
   json_spirit::mObject source_spec_object;
   int r = source_spec_builder.parse_source_spec(source_spec,
                                                 &source_spec_object);
   if (r < 0) {
     lderr(cct) << "failed to parse source spec: " << cpp_strerror(r)
                << dendl;
+    src_image_ctx->state->close();
     return r;
   }
 
@@ -552,6 +550,7 @@ int Migration<I>::prepare_import(
   if (r < 0) {
     lderr(cct) << "failed to build migration format handler: "
                << cpp_strerror(r) << dendl;
+    src_image_ctx->state->close();
     return r;
   }
 
@@ -563,6 +562,10 @@ int Migration<I>::prepare_import(
                << dendl;
     return r;
   }
+
+  BOOST_SCOPE_EXIT_TPL(src_image_ctx) {
+    src_image_ctx->state->close();
+  } BOOST_SCOPE_EXIT_END;
 
   uint64_t image_format = 2;
   if (opts.get(RBD_IMAGE_OPTION_FORMAT, &image_format) != 0) {
