@@ -5479,7 +5479,7 @@ public:
     mut_ref(hoid, num);
   }
   void mut_ref(const hobject_t &hoid, int num) {
-    auto [iter, _] = ref_delta.try_emplace(hoid, 0);
+    [[maybe_unused]] auto [iter, _] = ref_delta.try_emplace(hoid, 0);
     iter->second += num;
     if (iter->second == 0)
       ref_delta.erase(iter);
