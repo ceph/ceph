@@ -13,6 +13,7 @@ import { Subject } from 'rxjs';
 import { Pool } from '~/app/ceph/pool/pool';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -39,6 +40,7 @@ export class RbdNamespaceFormModalComponent implements OnInit {
 
   constructor(
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private notificationService: NotificationService,
     private poolService: PoolService,

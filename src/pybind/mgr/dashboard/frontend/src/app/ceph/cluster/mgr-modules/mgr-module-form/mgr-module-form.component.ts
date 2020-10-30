@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -24,6 +25,7 @@ export class MgrModuleFormComponent extends CdForm implements OnInit {
   moduleOptions: any[] = [];
 
   constructor(
+    public actionLabels: ActionLabelsI18n,
     private route: ActivatedRoute,
     private router: Router,
     private formBuilder: CdFormBuilder,

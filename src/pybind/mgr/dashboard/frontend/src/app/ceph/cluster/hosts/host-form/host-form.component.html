@@ -34,12 +34,10 @@
       </div>
 
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button [form]="formDir"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            (submitAction)="submit()">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="hostForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

@@ -22,7 +22,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.get('#size').type(size);
 
     // Click the create button and wait for image to be made
-    cy.contains('button', 'Create RBD').click();
+    cy.get('[data-cy=submitBtn]').click();
     this.getFirstTableCell(name).should('exist');
   }
 
@@ -35,7 +35,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.get('#name').clear().type(newName);
     cy.get('#size').clear().type(newSize); // click the size box and send new size
 
-    cy.contains('button', 'Edit RBD').click();
+    cy.get('[data-cy=submitBtn]').click();
 
     this.getExpandCollapseElement(newName).click();
     cy.get('.table.table-striped.table-bordered').contains('td', newSize);
@@ -53,7 +53,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.get('.table-actions button.dropdown-toggle').first().click();
     cy.get('button.move-to-trash').click();
 
-    cy.contains('button', 'Move Image').should('be.visible').click();
+    cy.get('[data-cy=submitBtn]').should('be.visible').click();
 
     // Clicks trash tab
     cy.contains('.nav-link', 'Trash').click();
@@ -79,7 +79,7 @@ export class ImagesPageHelper extends PageHelper {
       cy.get('cd-modal #name').clear().type(newName);
     }
 
-    cy.contains('button', 'Restore Image').click();
+    cy.get('[data-cy=submitBtn]').click();
 
     // clicks images tab
     cy.contains('.nav-link', 'Images').click();
@@ -102,7 +102,7 @@ export class ImagesPageHelper extends PageHelper {
       this.selectOption('poolName', pool);
       cy.get('#poolName').should('have.class', 'ng-valid'); // check if pool is selected
     }
-    cy.get('#purgeFormButton').click();
+    cy.get('[data-cy=submitBtn]').click();
     // Wait for image to delete and check it is not present
 
     this.getFirstTableCell(name).should('not.exist');

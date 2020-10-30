@@ -4,6 +4,7 @@ import { Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { OsdService } from '~/app/shared/api/osd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
@@ -18,6 +19,7 @@ export class OsdReweightModalComponent implements OnInit {
   reweightForm: CdFormGroup;
 
   constructor(
+    public actionLabels: ActionLabelsI18n,
     public activeModal: NgbActiveModal,
     private osdService: OsdService,
     private fb: CdFormBuilder

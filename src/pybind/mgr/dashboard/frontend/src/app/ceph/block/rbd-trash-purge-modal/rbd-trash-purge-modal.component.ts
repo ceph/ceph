@@ -5,6 +5,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Pool } from '~/app/ceph/pool/pool';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -26,6 +27,7 @@ export class RbdTrashPurgeModalComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private rbdService: RbdService,
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private fb: CdFormBuilder,
     private poolService: PoolService,
     private taskWrapper: TaskWrapperService

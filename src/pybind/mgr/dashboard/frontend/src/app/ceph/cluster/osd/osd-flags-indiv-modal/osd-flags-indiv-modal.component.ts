@@ -5,6 +5,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { OsdService } from '~/app/shared/api/osd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Flag } from '~/app/shared/models/flag';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -59,6 +60,7 @@ export class OsdFlagsIndivModalComponent implements OnInit {
 
   constructor(
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private notificationService: NotificationService
