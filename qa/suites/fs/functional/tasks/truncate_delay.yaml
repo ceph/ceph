@@ -9,6 +9,6 @@ overrides:
 tasks:
 - exec:
     client.0:
-      - cd $TESTDIR/mnt.* && dd if=/dev/zero of=./foo count=100
+      - cd $TESTDIR/mnt.0 && dd if=/dev/zero of=./foo count=100
       - sleep 2
-      - cd $TESTDIR/mnt.* && truncate --size 0 ./foo
+      - cd $TESTDIR/mnt.0 && truncate --size 0 ./foo
