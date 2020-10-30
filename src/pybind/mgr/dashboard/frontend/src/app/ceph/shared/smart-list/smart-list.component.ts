@@ -145,10 +145,6 @@ smartmontools is required to successfully retrieve data.`;
     }
   }
 
-  isEmpty(value: any) {
-    return _.isEmpty(value);
-  }
-
   ngOnInit() {
     this.smartDataColumns = [
       { prop: 'id', name: $localize`ID` },

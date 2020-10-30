@@ -16,6 +16,7 @@ import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 import { IopsPipe } from './iops.pipe';
+import { IsEmptyPipe } from './is-empty.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { JoinPipe } from './join.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
@@ -58,7 +59,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     RbdConfigurationSourcePipe,
     DurationPipe,
     MapPipe,
-    TruncatePipe
+    TruncatePipe,
+    IsEmptyPipe
   ],
   exports: [
     ArrayPipe,
@@ -87,7 +89,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     RbdConfigurationSourcePipe,
     DurationPipe,
     MapPipe,
-    TruncatePipe
+    TruncatePipe,
+    IsEmptyPipe
   ],
   providers: [
     ArrayPipe,
@@ -112,7 +115,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     NotAvailablePipe,
     UpperFirstPipe,
     MapPipe,
-    TruncatePipe
+    TruncatePipe,
+    IsEmptyPipe
   ]
 })
 export class PipesModule {}
