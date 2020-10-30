@@ -1,4 +1,4 @@
-# pylint: disable=too-many-public-methods,too-many-lines
+# pylint: disable=too-many-public-methods, too-many-lines
 
 import copy
 import errno
@@ -599,10 +599,12 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
                              update_response, response):
         self._task_post('/api/iscsi/target', create_request)
         self.assertStatus(201)
-        self._task_put('/api/iscsi/target/{}'.format(create_request['target_iqn']), update_request)
+        self._task_put(
+            '/api/iscsi/target/{}'.format(create_request['target_iqn']), update_request)
         self.assertStatus(update_response_code)
         self.assertJsonBody(update_response)
-        self._get('/api/iscsi/target/{}'.format(update_request['new_target_iqn']))
+        self._get(
+            '/api/iscsi/target/{}'.format(update_request['new_target_iqn']))
         self.assertStatus(200)
         self.assertJsonBody(response)
 

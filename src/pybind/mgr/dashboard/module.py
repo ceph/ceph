@@ -133,6 +133,7 @@ class CherryPyConfig(object):
                 'text/html', 'text/plain',
                 # We also want JSON and JavaScript to be compressed
                 'application/json',
+                'application/*+json',
                 'application/javascript',
             ],
             'tools.json_in.on': True,
