@@ -40,6 +40,7 @@
 
 	mon cluster log file level = debug
 	debug asserts on shutdown = true
+	mon health detail to clog = false
 
 [osd]
         osd journal size = 100

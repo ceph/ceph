@@ -26,6 +26,10 @@
 >=15.0.0
 --------
 
+* MON: The cluster log now logs health detail every ``mon_health_to_clog_interval``,
+  which has been changed from 1hr to 10min. Logging of health detail will be
+  skipped if there is no change in health summary since last known.
+
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
 * Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
