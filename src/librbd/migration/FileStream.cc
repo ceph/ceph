@@ -213,6 +213,11 @@ void FileStream<I>::close(Context* on_finish) {
 }
 
 template <typename I>
+void FileStream<I>::get_size(uint64_t* size, Context* on_finish) {
+  on_finish->complete(-EIO);
+}
+
+template <typename I>
 void FileStream<I>::read(io::Extents&& byte_extents, bufferlist* data,
                          Context* on_finish) {
   on_finish->complete(-EIO);
