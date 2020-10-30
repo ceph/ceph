@@ -1941,7 +1941,7 @@ std::vector<Option> get_global_options() {
     .set_description("log monitor health to cluster log"),
 
     Option("mon_health_to_clog_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(1_hr)
+    .set_default(10_min)
     .add_service("mon")
     .set_description("frequency to log monitor health to cluster log")
     .add_see_also("mon_health_to_clog"),
@@ -1950,6 +1950,10 @@ std::vector<Option> get_global_options() {
     .set_default(60.0)
     .add_service("mon")
     .set_description(""),
+
+    Option("mon_health_detail_to_clog", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("log health detail to cluster log"),
 
     Option("mon_health_max_detail", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
