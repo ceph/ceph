@@ -28,11 +28,13 @@ public:
                                        const std::string& image_id);
 
   static NativeFormat* create(ImageCtxT* image_ctx,
-                              const json_spirit::mObject& json_object) {
-    return new NativeFormat(image_ctx, json_object);
+                              const json_spirit::mObject& json_object,
+                              bool import_only) {
+    return new NativeFormat(image_ctx, json_object, import_only);
   }
 
-  NativeFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object);
+  NativeFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+               bool import_only);
   NativeFormat(const NativeFormat&) = delete;
   NativeFormat& operator=(const NativeFormat&) = delete;
 
@@ -58,6 +60,7 @@ public:
 private:
   ImageCtxT* m_image_ctx;
   json_spirit::mObject m_json_object;
+  bool m_import_only;
 
   int64_t m_pool_id = -1;
   std::string m_pool_namespace;

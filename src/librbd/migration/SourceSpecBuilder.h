@@ -30,7 +30,7 @@ public:
   int parse_source_spec(const std::string& source_spec,
                         json_spirit::mObject* source_spec_object) const;
 
-  int build_format(const json_spirit::mObject& format_object,
+  int build_format(const json_spirit::mObject& format_object, bool import_only,
                    std::unique_ptr<FormatInterface>* format) const;
 
   int build_stream(const json_spirit::mObject& source_spec_object,
