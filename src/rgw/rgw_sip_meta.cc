@@ -135,9 +135,6 @@ int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fet
     }
     section = marker.substr(0, pos);
     m = marker.substr(pos + 1);
-    if (!m.empty()) {
-      m = rgw::from_base64(m);
-    }
   } else {
     int r = next_section(section, &section);
     if (r < 0) {
@@ -179,7 +176,7 @@ int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fet
       m = entries.back().marker;
 
       for (auto& k : entries) {
-        auto e = create_entry(section, k.key, rgw::to_base64(k.marker));
+        auto e = create_entry(section, k.key, k.marker);
         result->entries.push_back(e);
       }
     }

@@ -71,7 +71,7 @@ int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fet
   result->done = false;
   result->more = true;
 
-  auto m = rgw::from_base64(marker);
+  auto& m = marker;
 
   int ret = meta.mgr->list_keys_init(section, m, &handle);
   if (ret < 0) {
@@ -98,7 +98,7 @@ int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fet
       for (auto& k : entries) {
         SIProvider::Entry e;
         ret = siprovider_data_create_entry(cct, ctl.bucket, k.key, std::nullopt,
-                                           rgw::to_base64(k.marker), &e);
+                                           k.marker, &e);
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << k.key << " ret=" << ret << dendl;
           continue;
@@ -145,7 +145,7 @@ int SIProvider_DataInc::do_fetch(int shard_id, std::string marker, int max, fetc
     return -ERANGE;
   }
 
-  auto m = rgw::from_base64(marker);
+  auto& m = marker;
 
   utime_t start_time;
   utime_t end_time;
@@ -169,7 +169,7 @@ int SIProvider_DataInc::do_fetch(int shard_id, std::string marker, int max, fetc
     for (auto& entry : entries) {
       SIProvider::Entry e;
       ret = siprovider_data_create_entry(cct, ctl.bucket, entry.entry.key, entry.entry.timestamp,
-                                         rgw::to_base64(entry.log_id), &e);
+                                         entry.log_id, &e);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << entry.entry.key << " ret=" << ret << dendl;
         continue;
@@ -204,7 +204,7 @@ int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker, ceph
     lderr(cct) << "ERROR: data_log->get_info() returned ret=" << ret << dendl;
     return ret;
   }
-  *marker = rgw::to_base64(info.marker);
+  *marker = info.marker;
   *timestamp = info.last_update;
   return 0;
 }
