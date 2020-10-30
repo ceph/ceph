@@ -150,13 +150,10 @@
       </div>
       <!-- Footer -->
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button [form]="formDir"
-                            (submitAction)="submit()">
-            <span i18n>Save</span>
-          </cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="configForm"
+                              [submitText]="actionLabels.UPDATE"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>
