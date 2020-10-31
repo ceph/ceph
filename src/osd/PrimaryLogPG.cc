@@ -10012,9 +10012,7 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
   const object_info_t& oi = obc->obs.oi;
   const hobject_t& soid = oi.soid;
 
-  if (!obc->is_blocked()) {
-    return -EINVAL;
-  }
+  ceph_assert(obc->is_blocked());
 
   /*
    * The operations to make dedup chunks are tracked by a ManifestOp.
@@ -10184,6 +10182,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
       osd->reply_op_error(mop->op, -EINVAL);
     return;
   }
+  ceph_assert(obc->is_blocked());
   obc->stop_block();
   kick_object_context_blocked(obc);
   if (r < 0) {
@@ -10262,6 +10261,13 @@ int PrimaryLogPG::start_flush(
   } else {
     // NOTE: change this to a const ref when we remove this compat code
     snapset = obc->ssc->snapset;
+  }
+
+  if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked()) {
+    // current dedup tier only supports blocking operation
+    if (!blocking) {
+      return -EOPNOTSUPP;
+    }
   }
 
   // verify there are no (older) check for dirty clones
