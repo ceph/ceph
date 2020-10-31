@@ -10013,6 +10013,10 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
   const hobject_t& soid = oi.soid;
 
   ceph_assert(obc->is_blocked());
+  if (oi.size == 0) {
+    // evicted 
+    return 0;
+  }
 
   /*
    * The operations to make dedup chunks are tracked by a ManifestOp.
