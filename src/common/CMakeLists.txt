@@ -166,15 +166,15 @@ set(crc32_srcs
   crc32c.cc
   crc32c_intel_baseline.c
   sctp_crc32.c)
-
 if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
-  if(HAVE_GOOD_YASM_ELF64)
+  if(HAVE_NASM_X64)
+    set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
-      crc32c_intel_fast_asm.s
+      ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_00.asm
       crc32c_intel_fast_zero_asm.s)
-  endif(HAVE_GOOD_YASM_ELF64)
+  endif(HAVE_NASM_X64)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
     crc32c_ppc.c)
