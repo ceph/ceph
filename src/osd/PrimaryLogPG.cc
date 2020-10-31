@@ -1596,13 +1596,11 @@ int PrimaryLogPG::do_scrub_ls(const MOSDOp *m, OSDOp *osd_op)
   } else if (!scrubber.store) {
     r = -ENOENT;
   } else if (arg.get_snapsets) {
-    result.vals = scrubber.store->get_snap_errors(osd->store,
-						  get_pgid().pool(),
+    result.vals = scrubber.store->get_snap_errors(get_pgid().pool(),
 						  arg.start_after,
 						  arg.max_return);
   } else {
-    result.vals = scrubber.store->get_object_errors(osd->store,
-						    get_pgid().pool(),
+    result.vals = scrubber.store->get_object_errors(get_pgid().pool(),
 						    arg.start_after,
 						    arg.max_return);
   }
