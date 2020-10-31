@@ -9997,6 +9997,9 @@ struct C_SetDedupChunks : public Context {
     if (r == -ECANCELED)
       return;
     std::scoped_lock locker{*pg};
+    if (last_peering_reset != pg->get_last_peering_reset()) {
+      return;
+    }
     auto it = pg->manifest_ops.find(oid);
     if (it == pg->manifest_ops.end()) {
       // raced with cancel_manifest_ops
@@ -10018,8 +10021,6 @@ struct C_SetDedupChunks : public Context {
     } else {
       // if any failure occurs, put a mark on the results to recognize the failure
       it->second->results[0] = r;
-      if (last_peering_reset != pg->get_last_peering_reset()) 
-	it->second->results[0] = -EINVAL;
     }
     pg->manifest_ops.erase(it);
   }
