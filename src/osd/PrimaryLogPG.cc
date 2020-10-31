@@ -10079,6 +10079,9 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
     manifest_ops[soid]->op = op;
   } 
 
+  if (mop->tids.size() == 0) {
+    return 0;
+  }
   return -EINPROGRESS;
 }
 
