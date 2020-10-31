@@ -8662,6 +8662,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EINVAL;
       }
     } else if (var == "dedup_tier") {
+      if (interr.empty()) {
+	ss << "expecting value 'pool name'";
+	return -EINVAL;
+      }
       // Current base tier in dedup does not support ec pool 
       if (p.is_erasure()) {
 	ss << "pool '" << poolstr
@@ -8676,6 +8680,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       const pg_pool_t *tp = osdmap.get_pg_pool(lowtierpool_id);
       ceph_assert(tp);
       n = lowtierpool_id;
+      // The original input is string (pool name), but we convert it to int64_t.
+      // So, clear interr
       interr.clear();
     } else if (var == "dedup_chunk_algorithm") {
       if (!unset) {
