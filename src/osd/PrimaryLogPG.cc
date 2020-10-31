@@ -10227,18 +10227,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
       return;    
     }
 
-    // drop all references the current chunk_map has
     object_ref_delta_t refs;
-    for (auto p : obc->obs.oi.manifest.chunk_map) {
-      refs.dec_ref(p.second.oid);
-    }
-    if (!refs.is_empty()) {
-      ctx->register_on_commit(
-	[oid, this, refs](){
-	  dec_refcount(oid, refs);
-	});
-    }
-    
     ctx->at_version = get_next_version();
     ctx->new_obs = obc->obs;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
@@ -10248,6 +10237,14 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
       info.length = p.second.second;
       info.oid =  p.first;
       ctx->new_obs.oi.manifest.chunk_map[p.second.first] = info;
+      // drop all references issued before
+      refs.dec_ref(p.first);
+    }
+    if (!refs.is_empty()) {
+      ctx->register_on_commit(
+        [oid, this, refs](){
+          dec_refcount(oid, refs);
+        });
     }
   
     finish_ctx(ctx.get(), pg_log_entry_t::CLEAN);
