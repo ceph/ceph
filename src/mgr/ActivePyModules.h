@@ -138,7 +138,8 @@ public:
 
   void update_progress_event(const std::string& evid,
 			     const std::string& desc,
-			     float progress);
+			     float progress,
+			     bool add_to_ceph_s);
   void complete_progress_event(const std::string& evid);
   void clear_all_progress_events();
   void get_progress_events(std::map<std::string,ProgressEvent>* events);

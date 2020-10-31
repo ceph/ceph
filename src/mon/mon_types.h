@@ -629,22 +629,31 @@ inline std::ostream& operator<<(std::ostream& out, const mon_feature_t& f) {
 struct ProgressEvent {
   std::string message;                  ///< event description
   float progress;                  ///< [0..1]
-
+  bool add_to_ceph_s;
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(message, bl);
     encode(progress, bl);
+    encode(add_to_ceph_s, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     decode(message, p);
     decode(progress, p);
+    if (struct_v >= 2){
+	decode(add_to_ceph_s, p);
+    } else {
+      if (!message.empty()) {
+	add_to_ceph_s = true;
+      }
+    }
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_string("message", message);
     f->dump_float("progress", progress);
+    f->dump_bool("add_to_ceph_s", add_to_ceph_s);
   }
 };
 WRITE_CLASS_ENCODER(ProgressEvent)
