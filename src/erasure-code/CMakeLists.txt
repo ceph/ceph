@@ -22,7 +22,7 @@ add_subdirectory(lrc)
 add_subdirectory(shec)
 add_subdirectory(clay)
 
-if(HAVE_BETTER_YASM_ELF64 OR HAVE_ARMV8_SIMD)
+if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD)
   add_subdirectory(isa)
   set(EC_ISA_LIB ec_isa)
 endif()

@@ -139,20 +139,21 @@ endif()
 
 include(SIMDExt)
 if(HAVE_INTEL)
-  set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
   if(APPLE)
     set(object_format "macho64")
   else()
     set(object_format "elf64")
   endif()
   set(CMAKE_ASM_FLAGS "-f ${object_format}")
+  set(CMAKE_ASM_COMPILER ${PROJECT_SOURCE_DIR}/src/nasm-wrapper)
   if(NOT WIN32)
     # The native tools might be located even when cross compiling, which
     # might not work in this case (especially when targeting Windows).
-    include(CheckYasm)
-    check_yasm_support(${object_format}
-      HAVE_GOOD_YASM_ELF64
-      HAVE_BETTER_YASM_ELF64)
+    include(CheckNasm)
+    check_nasm_support(${object_format}
+      HAVE_NASM_X64
+      HAVE_NASM_X64_AVX2
+      HAVE_NASM_X64_AVX512)
   endif()
 endif()
 
