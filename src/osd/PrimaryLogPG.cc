@@ -10000,29 +10000,7 @@ struct C_SetDedupChunks : public Context {
     if (last_peering_reset != pg->get_last_peering_reset()) {
       return;
     }
-    auto it = pg->manifest_ops.find(oid);
-    if (it == pg->manifest_ops.end()) {
-      // raced with cancel_manifest_ops
-      return;
-    }
-    // check if the previous op returns fail
-    if (it->second->results[0] < 0) {
-      return;
-    }
-
-    it->second->results[offset] = r;
-    if (last_peering_reset == pg->get_last_peering_reset() &&
-	r >= 0) {
-      if (it->second->num_chunks != it->second->results.size()) {
-	// there are on-going works
-	return;
-      }
-      pg->finish_set_dedup(oid, r, tid);
-    } else {
-      // if any failure occurs, put a mark on the results to recognize the failure
-      it->second->results[0] = r;
-    }
-    pg->manifest_ops.erase(it);
+    pg->finish_set_dedup(oid, r, tid, offset);
   }
 };
 
@@ -10171,16 +10149,32 @@ hobject_t PrimaryLogPG::get_fpoid_from_chunk(const hobject_t soid, bufferlist& c
   return target;
 }
 
-void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid)
+void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
   map<hobject_t,ManifestOpRef>::iterator p = manifest_ops.find(oid);
   if (p == manifest_ops.end()) {
-    dout(10) << __func__ << " no flush_op found" << dendl;
+    dout(10) << __func__ << " no manifest_op found" << dendl;
     return;
   }
   ManifestOpRef mop = p->second;
+  mop->results[offset] = r;
+  if (r < 0) {
+    // if any failure occurs, put a mark on the results to recognize the failure
+    mop->results[0] = r;
+  }
+  if (mop->results[0] < 0) {
+    // check if the previous op returns fail
+    if (mop->num_chunks == mop->results.size()) {
+      manifest_ops.erase(oid);
+    }
+    return;
+  }
+  if (mop->num_chunks != mop->results.size()) {
+    // there are on-going works
+    return;
+  }
   ObjectContextRef obc = get_object_context(oid, false);
   if (!obc) {
     if (mop->op)
@@ -10238,6 +10232,8 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid)
   }
   if (mop->op)
     osd->reply_op_error(mop->op, r);
+
+  manifest_ops.erase(oid);
 }
 
 int PrimaryLogPG::start_flush(
