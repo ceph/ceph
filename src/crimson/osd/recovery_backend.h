@@ -143,6 +143,11 @@ protected:
     seastar::future<> wait_for_recovered() {
       return recovered.get_shared_future();
     }
+    crimson::osd::blocking_future<>
+    wait_for_recovered_blocking() {
+      return make_blocking_future(
+	  recovered.get_shared_future());
+    }
     seastar::future<> wait_for_pull() {
       return pulled.get_shared_future();
     }
