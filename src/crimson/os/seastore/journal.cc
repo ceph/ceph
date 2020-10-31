@@ -54,6 +54,15 @@ Journal::initialize_segment(Segment &segment)
     segment_provider->get_journal_tail_target()};
   ::encode(header, bl);
 
+  bufferptr bp(
+    ceph::buffer::create_page_aligned(
+      segment_manager.get_block_size()));
+  bp.zero();
+  auto iter = bl.cbegin();
+  iter.copy(bl.length(), bp.c_str());
+  bl.clear();
+  bl.append(bp);
+
   written_to = segment_manager.get_block_size();
   return segment.write(0, bl).safe_then(
     [=] {
