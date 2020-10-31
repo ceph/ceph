@@ -9991,7 +9991,7 @@ struct C_SetDedupChunks : public Context {
   
   C_SetDedupChunks(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0)
+      tid(0), offset(0)
   {}
   void finish(int r) override {
     if (r == -ECANCELED)
