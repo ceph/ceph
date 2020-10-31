@@ -240,8 +240,14 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	    segments.emplace_back(i, std::move(header));
 	    return find_replay_segments_ertr::now();
 	  }).handle_error(
+	    crimson::ct_error::enoent::handle([i](auto) {
+	      logger().debug(
+		"find_replay_segments: segment {} not available for read",
+		i);
+	      return find_replay_segments_ertr::now();
+	    }),
 	    find_replay_segments_ertr::pass_further{},
-	    crimson::ct_error::discard_all{}
+	    crimson::ct_error::assert_all{}
 	  );
 	}).safe_then([this, &segments]() mutable -> find_replay_segments_fut {
 	  logger().debug(
