@@ -675,13 +675,14 @@ ceph_update_progress_event(BaseMgrModule *self, PyObject *args)
   char *evid = nullptr;
   char *desc = nullptr;
   float progress = 0.0;
-  if (!PyArg_ParseTuple(args, "ssf:ceph_update_progress_event",
-			&evid, &desc, &progress)) {
+  bool add_to_ceph_s = false;
+  if (!PyArg_ParseTuple(args, "ssfb:ceph_update_progress_event",
+			&evid, &desc, &progress, &add_to_ceph_s)) {
     return nullptr;
   }
 
   PyThreadState *tstate = PyEval_SaveThread();
-  self->py_modules->update_progress_event(evid, desc, progress);
+  self->py_modules->update_progress_event(evid, desc, progress, add_to_ceph_s);
   PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;

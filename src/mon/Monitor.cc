@@ -3081,7 +3081,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
     if (!pem.empty()) {
       ss << "\n \n  progress:\n";
       for (auto& i : pem) {
+	if (i.second.add_to_ceph_s){
 	ss << "    " << i.second.message << "\n";
+	}
       }
     }
     ss << "\n ";
