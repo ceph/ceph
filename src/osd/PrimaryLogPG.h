@@ -1512,7 +1512,7 @@ protected:
   int do_cdc(const object_info_t& oi, bufferlist& bl, vector<pair<uint64_t, uint64_t>>& chunks);
   int start_dedup(OpRequestRef op, ObjectContextRef obc);
   hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
-  void finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid);
+  void finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
