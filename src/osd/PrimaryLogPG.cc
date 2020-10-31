@@ -6886,6 +6886,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EOPNOTSUPP;
 	  break;
 	}
+	if (pool.info.is_erasure()) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
 
 	for (auto &p : oi.manifest.chunk_map) {
 	  interval_set<uint64_t> chunk;

@@ -8662,6 +8662,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EINVAL;
       }
     } else if (var == "dedup_tier") {
+      // Current base tier in dedup does not support ec pool 
+      if (p.is_erasure()) {
+	ss << "pool '" << poolstr
+	   << "' is an ec pool, which cannot be a base tier";
+	return -ENOTSUP;
+      }
       int64_t lowtierpool_id = osdmap.lookup_pg_pool_name(val);
       if (lowtierpool_id < 0) {
 	ss << "unrecognized pool '" << val << "'";
@@ -8669,13 +8675,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       }
       const pg_pool_t *tp = osdmap.get_pg_pool(lowtierpool_id);
       ceph_assert(tp);
-      if (p.is_erasure()) {
-	ss << "pool '" << poolstr
-	   << "' is an ec pool, which cannot be a tier";
-	return -ENOTSUP;
-      }
       n = lowtierpool_id;
-      interr.clear(); 
+      interr.clear();
     } else if (var == "dedup_chunk_algorithm") {
       if (!unset) {
         auto alg = pg_pool_t::get_dedup_chunk_algorithm_from_str(val);

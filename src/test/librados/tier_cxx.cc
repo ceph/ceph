@@ -7827,6 +7827,15 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
   cluster.wait_for_latest_osdmap();
 }
 
+TEST_F(LibRadosTwoPoolsECPP, TrySetDedupTier) {
+  // note: require >= mimic
+  
+  bufferlist inbl;
+  ASSERT_EQ(-EOPNOTSUPP, cluster.mon_command(
+	set_pool_str(pool_name, "dedup_tier", cache_pool_name),
+	inbl, NULL, NULL));
+}
+
 TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
   // write object  to base tier
   bufferlist omap_bl;
