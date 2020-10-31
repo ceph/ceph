@@ -10017,7 +10017,7 @@ struct C_SetDedupChunks : public Context {
 	// there are on-going works
 	return;
       }
-      pg->finish_set_dedup(oid, it->second->chunks, r, tid);
+      pg->finish_set_dedup(oid, r, tid);
     } else {
       // if any failure occurs, put a mark on the results to recognize the failure
       it->second->results[0] = r;
@@ -10171,8 +10171,7 @@ hobject_t PrimaryLogPG::get_fpoid_from_chunk(const hobject_t soid, bufferlist& c
   return target;
 }
 
-void PrimaryLogPG::finish_set_dedup(hobject_t oid, map<hobject_t, pair<uint64_t, uint64_t>>& chunks,
-				    int r, ceph_tid_t tid)
+void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
@@ -10196,7 +10195,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, map<hobject_t, pair<uint64_t,
     return;
   }
 
-  if (chunks.size()) {
+  if (mop->chunks.size()) {
     OpContextUPtr ctx = simple_opc_create(obc);
     ceph_assert(ctx);
     if (ctx->lock_manager.get_lock_type(
@@ -10227,7 +10226,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, map<hobject_t, pair<uint64_t,
     ctx->at_version = get_next_version();
     ctx->new_obs = obc->obs;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
-    for (auto p : chunks) {
+    for (auto p : mop->chunks) {
       struct chunk_info_t info;
       info.offset = 0;
       info.length = p.second.second;
