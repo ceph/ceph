@@ -10045,6 +10045,22 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
 	break;
       }
 
+      // skip if the same content exits in prev snap at same offset
+      if (obc->ssc->snapset.clones.size()) {
+	ObjectContextRef cobc = get_prev_clone_obc(obc);
+	if (cobc) {
+	  auto c = cobc->obs.oi.manifest.chunk_map.find(p.first);
+	  if (c != cobc->obs.oi.manifest.chunk_map.end()) {
+	    auto t = oi.manifest.chunk_map.find(p.first);
+	    if (t != oi.manifest.chunk_map.end()) {
+	      if (t->second == c->second) {
+		continue;
+	      }
+	    }
+	  }
+	}
+      }
+	
       // make a create_or_get_ref op
       bufferlist t;
       ObjectOperation obj_op;
@@ -10222,7 +10238,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
 	  dec_refcount(oid, refs);
 	});
     }
-  
+    
     ctx->at_version = get_next_version();
     ctx->new_obs = obc->obs;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
@@ -10233,6 +10249,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
       info.oid =  p.first;
       ctx->new_obs.oi.manifest.chunk_map[p.second.first] = info;
     }
+  
     finish_ctx(ctx.get(), pg_log_entry_t::CLEAN);
     simple_opc_submit(std::move(ctx));
   }
