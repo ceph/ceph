@@ -80,7 +80,8 @@ def ceph_crash(ctx, config):
     """
 
     # Add logs directory to job's info log file
-    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+    if ctx.archive is not None:
+     with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
         if 'archive' not in info_yaml:
@@ -159,7 +160,8 @@ def ceph_log(ctx, config):
     )
 
     # Add logs directory to job's info log file
-    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+    if ctx.archive is not None:
+     with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
         if 'archive' not in info_yaml:
