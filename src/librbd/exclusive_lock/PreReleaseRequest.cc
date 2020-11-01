@@ -198,11 +198,10 @@ void PreReleaseRequest<I>::send_invalidate_cache() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  std::shared_lock owner_lock{m_image_ctx.owner_lock};
   Context *ctx = create_context_callback<
       PreReleaseRequest<I>,
       &PreReleaseRequest<I>::handle_invalidate_cache>(this);
-  m_image_ctx.io_object_dispatcher->invalidate_cache(ctx);
+  m_image_ctx.io_image_dispatcher->invalidate_cache(ctx);
 }
 
 template <typename I>

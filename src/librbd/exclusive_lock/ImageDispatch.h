@@ -99,6 +99,10 @@ public:
     return false;
   }
 
+  bool invalidate_cache(Context* on_finish) override {
+    return false;
+  }
+
 private:
   typedef std::list<Context*> Contexts;
   typedef std::unordered_set<uint64_t> Tids;

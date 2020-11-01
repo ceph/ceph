@@ -23,6 +23,7 @@ public:
 
   MOCK_METHOD1(register_dispatch, void(ImageDispatchInterface*));
   MOCK_METHOD2(shut_down_dispatch, void(ImageDispatchLayer, Context*));
+  MOCK_METHOD1(invalidate_cache, void(Context *));
 
   MOCK_METHOD1(send, void(ImageDispatchSpec*));
   MOCK_METHOD3(finish, void(int r, ImageDispatchLayer, uint64_t));

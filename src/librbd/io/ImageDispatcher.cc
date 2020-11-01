@@ -6,8 +6,6 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Utils.h"
-#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatch.h"
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -194,6 +192,17 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
 
   m_write_block_dispatch = new WriteBlockImageDispatch<I>(image_ctx);
   this->register_dispatch(m_write_block_dispatch);
+}
+
+template <typename I>
+void ImageDispatcher<I>::invalidate_cache(Context* on_finish) {
+  auto image_ctx = this->m_image_ctx;
+  auto cct = image_ctx->cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = new C_InvalidateCache(
+      this, IMAGE_DISPATCH_LAYER_NONE, on_finish);
+  ctx->complete(0);
 }
 
 template <typename I>
