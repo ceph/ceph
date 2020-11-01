@@ -11,6 +11,7 @@ from hashlib import md5
 from textwrap import dedent
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -557,7 +558,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
         self.assertNotEqual(default_pool, new_pool)
 
         # add data pool
-        self.fs.add_data_pool(new_pool)
+        newid = self.fs.add_data_pool(new_pool)
 
         # create group specifying the new data pool as its pool layout
         self._fs_cmd("subvolumegroup", "create", self.volname, group2,
@@ -565,7 +566,10 @@ class TestSubvolumeGroups(TestVolumesHelper):
         group2_path = self._get_subvolume_group_path(self.volname, group2)
 
         desired_pool = self.mount_a.getfattr(group2_path, "ceph.dir.layout.pool")
-        self.assertEqual(desired_pool, new_pool)
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         self._fs_cmd("subvolumegroup", "rm", self.volname, group1)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group2)
@@ -869,7 +873,7 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertNotEqual(default_pool, new_pool)
 
         # add data pool
-        self.fs.add_data_pool(new_pool)
+        newid = self.fs.add_data_pool(new_pool)
 
         # create subvolume specifying the new data pool as its pool layout
         self._fs_cmd("subvolume", "create", self.volname, subvol2, "--group_name", group,
@@ -877,7 +881,10 @@ class TestSubvolumes(TestVolumesHelper):
         subvol2_path = self._get_subvolume_path(self.volname, subvol2, group_name=group)
 
         desired_pool = self.mount_a.getfattr(subvol2_path, "ceph.dir.layout.pool")
-        self.assertEqual(desired_pool, new_pool)
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
         self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
@@ -3050,7 +3057,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # add data pool
         new_pool = "new_pool"
-        self.fs.add_data_pool(new_pool)
+        newid = self.fs.add_data_pool(new_pool)
 
         # create subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
@@ -3075,7 +3082,10 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         subvol_path = self._get_subvolume_path(self.volname, clone)
         desired_pool = self.mount_a.getfattr(subvol_path, "ceph.dir.layout.pool")
-        self.assertEqual(desired_pool, new_pool)
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
