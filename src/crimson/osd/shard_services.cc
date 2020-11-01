@@ -200,6 +200,8 @@ seastar::future<> ShardServices::send_pg_temp()
     }
     m->pg_temp.emplace(pgid, pg_temp.acting);
   }
+  pg_temp_pending.merge(pg_temp_wanted);
+  pg_temp_wanted.clear();
   return seastar::parallel_for_each(std::begin(ms), std::end(ms),
     [this](auto m) {
       if (m) {
@@ -207,9 +209,6 @@ seastar::future<> ShardServices::send_pg_temp()
       } else {
 	return seastar::now();
       }
-    }).then([this] {
-      pg_temp_pending.merge(pg_temp_wanted);
-      pg_temp_wanted.clear();
     });
 }
 
