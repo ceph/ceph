@@ -142,7 +142,6 @@ private:
   };
   map<pg_t, pg_temp_t> pg_temp_wanted;
   map<pg_t, pg_temp_t> pg_temp_pending;
-  void _sent_pg_temp();
   friend std::ostream& operator<<(std::ostream&, const pg_temp_t&);
 public:
   void queue_want_pg_temp(pg_t pgid, const vector<int>& want,

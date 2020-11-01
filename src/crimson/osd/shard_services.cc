@@ -161,17 +161,12 @@ void ShardServices::remove_want_pg_temp(pg_t pgid)
   pg_temp_pending.erase(pgid);
 }
 
-void ShardServices::_sent_pg_temp()
-{
-  pg_temp_pending.merge(pg_temp_wanted);
-}
-
 void ShardServices::requeue_pg_temp()
 {
   unsigned old_wanted = pg_temp_wanted.size();
   unsigned old_pending = pg_temp_pending.size();
-  _sent_pg_temp();
-  pg_temp_wanted.swap(pg_temp_pending);
+  pg_temp_wanted.merge(pg_temp_pending);
+  pg_temp_pending.clear();
   logger().debug(
     "{}: {} + {} -> {}",
     __func__ ,
@@ -213,7 +208,8 @@ seastar::future<> ShardServices::send_pg_temp()
 	return seastar::now();
       }
     }).then([this] {
-      _sent_pg_temp();
+      pg_temp_pending.merge(pg_temp_wanted);
+      pg_temp_wanted.clear();
     });
 }
 
