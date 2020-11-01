@@ -218,7 +218,6 @@ bool WriteLogImageDispatch<I>::list_snaps(
   return false;
 }
 
-
 template <typename I>
 bool WriteLogImageDispatch<I>::preprocess_length(
     io::AioCompletion* aio_comp, io::Extents &image_extents) const {
@@ -228,6 +227,12 @@ bool WriteLogImageDispatch<I>::preprocess_length(
     return true;
   }
   return false;
+}
+
+template <typename I>
+bool WriteLogImageDispatch<I>::invalidate_cache(Context* on_finish) {
+  m_image_cache->invalidate(on_finish);
+  return true;
 }
 
 } // namespace io

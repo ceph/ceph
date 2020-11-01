@@ -63,7 +63,7 @@ void InitRequest<I>::get_image_cache_state() {
   ldout(cct, 10) << dendl;
 
   int r;
-  auto cache_state = ImageCacheState<I>::get_image_cache_state(&m_image_ctx, r);
+  auto cache_state = ImageCacheState<I>::create_image_cache_state(&m_image_ctx, r);
 
   if (r < 0 || !cache_state) {
     save_result(r);

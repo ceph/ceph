@@ -4538,6 +4538,8 @@ TEST_F(TestLibRBD, TestPendingAio)
 				 false, features));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
 
+  ASSERT_EQ(0, rbd_invalidate_cache(image));
+
   char test_data[TEST_IO_SIZE];
   for (size_t i = 0; i < TEST_IO_SIZE; ++i) {
     test_data[i] = (char) (rand() % (126 - 33) + 33);
