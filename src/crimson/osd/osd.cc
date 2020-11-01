@@ -89,7 +89,10 @@ OSD::OSD(int id, uint32_t nonce,
     shard_services{*this, whoami, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
-    tick_timer{[this] { update_heartbeat_peers(); }},
+    tick_timer{[this] {
+      update_heartbeat_peers();
+      update_stats();
+    }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
@@ -721,6 +724,11 @@ void OSD::update_stats()
   osd_stat.up_from = get_up_epoch();
   osd_stat.hb_peers = heartbeat->get_peers();
   osd_stat.seq = (static_cast<uint64_t>(get_up_epoch()) << 32) | osd_stat_seq;
+  gate.dispatch_in_background("statfs", *this, [this] {
+    (void) store->stat().then([this](store_statfs_t&& st) {
+      osd_stat.statfs = st;
+    });
+  });
 }
 
 MessageRef OSD::get_stats() const

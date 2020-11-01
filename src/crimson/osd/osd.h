@@ -105,7 +105,7 @@ class OSD final : public crimson::net::Dispatcher,
   // pg statistics including osd ones
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
-  void update_stats() final;
+  void update_stats();
   MessageRef get_stats() const final;
 
   // AuthHandler methods
