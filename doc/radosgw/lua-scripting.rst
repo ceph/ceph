@@ -202,7 +202,7 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.HTTP.Resources``                         | table    | string to string resource map                                | yes      | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.HTTP.Metadata``                          | table    | string to string metadata map                                | yes      | no        | no       |
+| ``Request.HTTP.Metadata``                          | table    | string to string metadata map                                | yes      | yes       | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.HTTP.Host``                              | string   | host name                                                    | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -290,7 +290,6 @@ Lua Code Samples
 - Use of operations log only in case of errors:
 
 .. code-block:: lua
-
   
   if Request.Response.HTTPStatusCode ~= 200 then
     RGWDebugLog("request is bad, use ops log")
@@ -306,3 +305,22 @@ Lua Code Samples
     Request.Response.Message = "<Message> something bad happened :-( </Message>"
   end
 
+- Add metadata to objects that was not originally sent by the client:
+
+In the `preRequest` context we should add:
+
+.. code-block:: lua
+
+  if Request.RGWOp == 'put_obj' then
+    Request.HTTP.Metadata["x-amz-meta-mydata"] = "my value"
+  end
+
+In the `postRequest` context we look at the metadata:
+
+.. code-block:: lua
+
+  RGWDebugLog("number of metadata entries is: " .. #Request.HTTP.Metadata)
+  for k, v in pairs(Request.HTTP.Metadata) do
+    RGWDebugLog("key=" .. k .. ", " .. "value=" .. v)
+  end
+ 
