@@ -105,7 +105,7 @@ class OSD final : public crimson::net::Dispatcher,
   // pg statistics including osd ones
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
-  void update_stats() final;
+  void update_stats();
   MessageRef get_stats() const final;
 
   // AuthHandler methods
@@ -115,7 +115,7 @@ class OSD final : public crimson::net::Dispatcher,
   crimson::osd::ShardServices shard_services;
 
   std::unique_ptr<Heartbeat> heartbeat;
-  seastar::timer<seastar::lowres_clock> heartbeat_timer;
+  seastar::timer<seastar::lowres_clock> tick_timer;
 
   // admin-socket
   seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;

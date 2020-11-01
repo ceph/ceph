@@ -274,7 +274,13 @@ public:
     shard_services.remove_want_pg_temp(pgid.pgid);
   }
   void publish_stats_to_osd() final {
-    // Not needed yet
+    if (!is_primary())
+      return;
+
+    (void) peering_state.prepare_stats_for_publish(
+      false,
+      pg_stat_t(),
+      object_stat_collection_t());
   }
   void clear_publish_stats() final {
     // Not needed yet
@@ -602,6 +608,9 @@ public:
   const set<pg_shard_t> &get_acting_recovery_backfill() const {
     return peering_state.get_acting_recovery_backfill();
   }
+  bool is_backfill_target(pg_shard_t osd) const {
+    return peering_state.is_backfill_target(osd);
+  }
   void begin_peer_recover(pg_shard_t peer, const hobject_t oid) {
     peering_state.begin_peer_recover(peer, oid);
   }
@@ -684,6 +693,7 @@ private:
       !peering_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset(), v);
   }
+  bool is_degraded_or_backfilling_object(const hobject_t& soid) const;
   const set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();
   }
