@@ -163,13 +163,7 @@ void ShardServices::remove_want_pg_temp(pg_t pgid)
 
 void ShardServices::_sent_pg_temp()
 {
-#ifdef HAVE_STDLIB_MAP_SPLICING
   pg_temp_pending.merge(pg_temp_wanted);
-#else
-  pg_temp_pending.insert(make_move_iterator(begin(pg_temp_wanted)),
-			 make_move_iterator(end(pg_temp_wanted)));
-#endif
-  pg_temp_wanted.clear();
 }
 
 void ShardServices::requeue_pg_temp()
