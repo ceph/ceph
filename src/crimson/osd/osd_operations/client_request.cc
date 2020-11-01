@@ -125,10 +125,17 @@ seastar::future<> ClientRequest::process_op(
   ).then([this, &pg, pgref] {
     eversion_t ver;
     const hobject_t& soid = m->get_hobj();
-    if (pg.is_unreadable_object(soid, &ver)) {
-      auto [op, fut] = osd.get_shard_services().start_operation<UrgentRecovery>(
-			  soid, ver, pgref, osd.get_shard_services(), m->get_min_epoch());
-      return std::move(fut);
+    logger().debug("{} check for recovery, {}", *this, soid);
+    if (pg.is_unreadable_object(soid, &ver) ||
+	pg.is_degraded_or_backfilling_object(soid)) {
+      logger().debug("{} need to wait for recovery, {}", *this, soid);
+      if (pg.get_recovery_backend()->is_recovering(soid)) {
+	return pg.get_recovery_backend()->get_recovering(soid).wait_for_recovered();
+      } else {
+	auto [op, fut] = osd.get_shard_services().start_operation<UrgentRecovery>(
+			    soid, ver, pgref, osd.get_shard_services(), pg.get_osdmap_epoch());
+	return std::move(fut);
+      }
     }
     return seastar::now();
   }).then([this, &pg] {

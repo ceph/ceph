@@ -327,6 +327,7 @@ void PGRecovery::on_local_recover(
     if (!pg->is_unreadable_object(soid)) {
       pg->get_recovery_backend()->get_recovering(soid).set_readable();
     }
+    pg->publish_stats_to_osd();
   }
 }
 
@@ -337,6 +338,7 @@ void PGRecovery::on_global_recover (
 {
   logger().info("{} {}", __func__, soid);
   pg->get_peering_state().object_recovered(soid, stat_diff);
+  pg->publish_stats_to_osd();
   auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
   if (!is_delete)
     recovery_waiter.obc->drop_recovery_read();

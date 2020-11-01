@@ -233,7 +233,7 @@ seastar::future<> RecoveryBackend::handle_scan_digest(
 {
   logger().debug("{}", __func__);
   // Check that from is in backfill_targets vector
-  ceph_assert(pg.get_peering_state().is_backfill_target(m.from));
+  ceph_assert(pg.is_backfill_target(m.from));
 
   BackfillInterval bi;
   bi.begin = m.begin;
