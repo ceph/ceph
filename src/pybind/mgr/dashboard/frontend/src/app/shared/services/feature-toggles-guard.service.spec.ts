@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { FeatureTogglesGuardService } from './feature-toggles-guard.service';
 import { FeatureTogglesService } from './feature-toggles.service';
 

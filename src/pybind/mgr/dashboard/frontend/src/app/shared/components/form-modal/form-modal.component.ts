@@ -4,11 +4,11 @@ import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { CdFormBuilder } from '../../forms/cd-form-builder';
-import { CdFormGroup } from '../../forms/cd-form-group';
-import { CdFormModalFieldConfig } from '../../models/cd-form-modal-field-config';
-import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
-import { FormatterService } from '../../services/formatter.service';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdFormModalFieldConfig } from '~/app/shared/models/cd-form-modal-field-config';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 @Component({
   selector: 'cd-form-modal',

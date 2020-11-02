@@ -5,9 +5,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TreeModule } from '@circlon/angular-tree-component';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { HealthService } from '../../../shared/api/health.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
+import { HealthService } from '~/app/shared/api/health.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import { CrushmapComponent } from './crushmap.component';
 
 describe('CrushmapComponent', () => {

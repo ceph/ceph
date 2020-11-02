@@ -1,8 +1,8 @@
 import { Component } from '@angular/core';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-administration',

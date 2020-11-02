@@ -2,7 +2,7 @@ import { Validators } from '@angular/forms';
 
 import _ from 'lodash';
 
-import { CdValidators } from '../../forms/cd-validators';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { ConfigFormModel } from './config-option.model';
 
 export class ConfigOptionTypes {

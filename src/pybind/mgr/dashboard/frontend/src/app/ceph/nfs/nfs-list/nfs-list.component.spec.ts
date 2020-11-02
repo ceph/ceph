@@ -11,14 +11,14 @@ import {
   configureTestBed,
   expectItemTasks,
   PermissionHelper
-} from '../../../../testing/unit-test-helper';
-import { NfsService } from '../../../shared/api/nfs.service';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { Summary } from '../../../shared/models/summary.model';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { SharedModule } from '../../../shared/shared.module';
+} from '~/testing/unit-test-helper';
+import { NfsService } from '~/app/shared/api/nfs.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { Summary } from '~/app/shared/models/summary.model';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import { NfsDetailsComponent } from '../nfs-details/nfs-details.component';
 import { NfsListComponent } from './nfs-list.component';
 

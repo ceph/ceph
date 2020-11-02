@@ -4,11 +4,11 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { detect } from 'detect-browser';
 import { Subscription } from 'rxjs';
 
-import { UserService } from '../../../shared/api/user.service';
-import { AppConstants } from '../../../shared/constants/app.constants';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
+import { UserService } from '~/app/shared/api/user.service';
+import { AppConstants } from '~/app/shared/constants/app.constants';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({
   selector: 'cd-about',

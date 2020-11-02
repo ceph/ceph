@@ -14,15 +14,15 @@ import {
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
 
-import { CephServiceService } from '../../../../shared/api/ceph-service.service';
-import { HostService } from '../../../../shared/api/host.service';
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { TableComponent } from '../../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
-import { Daemon } from '../../../../shared/models/daemon.interface';
-import { RelativeDatePipe } from '../../../../shared/pipes/relative-date.pipe';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { Daemon } from '~/app/shared/models/daemon.interface';
+import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 
 @Component({
   selector: 'cd-service-daemon-list',

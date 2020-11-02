@@ -4,7 +4,7 @@ import { Injectable } from '@angular/core';
 import { Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
 
-import { UserFormModel } from '../../core/auth/user-form/user-form.model';
+import { UserFormModel } from '~/app/core/auth/user-form/user-form.model';
 
 @Injectable({
   providedIn: 'root'

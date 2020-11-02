@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
+import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
 @Component({
   selector: 'cd-rgw-bucket-details',
