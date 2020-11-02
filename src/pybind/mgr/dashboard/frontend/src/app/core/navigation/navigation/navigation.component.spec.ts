@@ -4,7 +4,6 @@ import { By } from '@angular/platform-browser';
 import { MockModule } from 'ng-mocks';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { Permission, Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
@@ -14,6 +13,7 @@ import {
 } from '~/app/shared/services/feature-toggles.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { NavigationModule } from '../navigation.module';
 import { NavigationComponent } from './navigation.component';
 

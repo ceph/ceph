@@ -9,7 +9,6 @@ import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RoleService } from '~/app/shared/api/role.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { UserService } from '~/app/shared/api/user.service';
@@ -19,8 +18,9 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { SharedModule } from '~/app/shared/shared.module';
 import { PasswordPolicyService } from '~/app/shared/services/password-policy.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { UserFormComponent } from './user-form.component';
 import { UserFormModel } from './user-form.model';
 

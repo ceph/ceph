@@ -6,10 +6,7 @@ import _ from 'lodash';
 import moment from 'moment';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import {
-  ActionLabelsI18n,
-  SucceededActionLabelsI18n
-} from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';

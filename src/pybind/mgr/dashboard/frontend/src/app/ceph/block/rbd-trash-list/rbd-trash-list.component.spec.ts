@@ -9,7 +9,6 @@ import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, expectItemTasks } from '~/testing/unit-test-helper';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
@@ -17,6 +16,7 @@ import { Summary } from '~/app/shared/models/summary.model';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, expectItemTasks } from '~/testing/unit-test-helper';
 import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdTrashListComponent } from './rbd-trash-list.component';
 

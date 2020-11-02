@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
-import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { DirectivesModule } from '~/app/shared/directives/directives.module';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { RbdConfigurationSourceField } from '~/app/shared/models/configuration';
@@ -11,6 +10,7 @@ import { DimlessBinaryPerSecondPipe } from '~/app/shared/pipes/dimless-binary-pe
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RbdConfigurationFormComponent } from './rbd-configuration-form.component';
 
 describe('RbdConfigurationFormComponent', () => {

@@ -6,10 +6,7 @@ import { Observable, Subscriber } from 'rxjs';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import {
-  ActionLabelsI18n,
-  SucceededActionLabelsI18n
-} from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';

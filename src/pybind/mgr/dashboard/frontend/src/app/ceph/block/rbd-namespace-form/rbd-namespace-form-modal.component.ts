@@ -10,6 +10,7 @@ import {
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Subject } from 'rxjs';
 
+import { Pool } from '~/app/ceph/pool/pool';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -18,7 +19,6 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { Pool } from '~/app/ceph/pool/pool';
 
 @Component({
   selector: 'cd-rbd-namespace-form-modal',

@@ -2,6 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
 
+import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -24,7 +25,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { Pool } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 

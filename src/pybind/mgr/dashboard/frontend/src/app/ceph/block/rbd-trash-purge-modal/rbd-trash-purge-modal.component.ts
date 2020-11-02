@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
+import { Pool } from '~/app/ceph/pool/pool';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -10,7 +11,6 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { Pool } from '~/app/ceph/pool/pool';
 
 @Component({
   selector: 'cd-rbd-trash-purge-modal',
