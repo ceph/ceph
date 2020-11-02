@@ -321,6 +321,10 @@ _sudo rbd-nbd detach ${POOL}/${IMAGE}
 expect_false get_pid
 _sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
 get_pid
+_sudo rbd-nbd detach ${DEV}
+expect_false get_pid
+_sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
+get_pid
 ls ${TEMPDIR}/mnt/
 dd if=${TEMPDIR}/mnt/test of=/dev/null bs=1M count=1
 _sudo dd if=${DATA} of=${TEMPDIR}/mnt/test1 bs=1M count=1 oflag=direct
