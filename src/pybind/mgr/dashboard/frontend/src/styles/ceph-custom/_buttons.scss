@@ -34,6 +34,11 @@
     background-color: vv.$gray-300;
     border-color: vv.$gray-600 !important;
   }
+
+  &:disabled {
+    background-color: vv.$gray-200;
+    border-color: vv.$gray-400 !important;
+  }
 }
 
 // We have some inputs that don't have a corresponding formControlName,
@@ -51,6 +56,11 @@
     &.focus {
       outline: 0;
     }
+  }
+
+  &.disabled {
+    border: 0;
+    box-shadow: none;
   }
 }
 
