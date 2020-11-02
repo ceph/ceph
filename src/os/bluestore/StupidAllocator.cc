@@ -17,6 +17,8 @@ StupidAllocator::StupidAllocator(CephContext* cct,
     block_size(_block_size),
     free(10)
 {
+  ceph_assert(cct != nullptr);
+  bdev_block_size = cct->_conf->bdev_block_size;
 }
 
 StupidAllocator::~StupidAllocator()
@@ -25,7 +27,8 @@ StupidAllocator::~StupidAllocator()
 
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
-  uint64_t len = orig_len / cct->_conf->bdev_block_size;
+  ceph_assert(bdev_block_size > 0);
+  uint64_t len = orig_len / bdev_block_size;
   int bin = std::min((int)cbits(len), (int)free.size() - 1);
   ldout(cct, 30) << __func__ << " len 0x" << std::hex << orig_len
 		 << std::dec << " -> " << bin << dendl;
