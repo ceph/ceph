@@ -8,7 +8,7 @@ Ceph Dashboard Developer Documentation
 Feature Design
 --------------
 
-To promote colloaboration on new Ceph Dashboard features, the first step is
+To promote collaboration on new Ceph Dashboard features, the first step is
 the definition of a design document. These documents then form the basis of
 implementation scope and permit wider participation in the evolution of the 
 Ceph Dashboard UI.
