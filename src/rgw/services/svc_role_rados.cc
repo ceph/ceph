@@ -84,6 +84,7 @@ int RGWSI_Role_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 class PutRole
 {
   RGWSI_Role_RADOS* svc_role;
+  RGWSI_Role_RADOS::Svc *svc;
   RGWSI_MetaBackend::Context *ctx;
   rgw::sal::RGWRole& info;
   RGWObjVersionTracker *objv_tracker;
@@ -94,7 +95,8 @@ class PutRole
   const DoutPrefixProvider *dpp;
 
 public:
-  PutRole(RGWSI_Role_RADOS* _svc,
+  PutRole(RGWSI_Role_RADOS* _svc_role,
+          RGWSI_Role_RADOS::Svc *_svc,
           RGWSI_MetaBackend::Context *_ctx,
           rgw::sal::RGWRole& _info,
           RGWObjVersionTracker *_ot,
@@ -103,21 +105,19 @@ public:
           std::map<std::string, bufferlist> *_pattrs,
           optional_yield _y,
           const DoutPrefixProvider *dpp) :
-    svc_role(_svc), ctx(_ctx), info(_info), objv_tracker(_ot),
+    svc_role(_svc_role), ctx(_ctx), info(_info), objv_tracker(_ot),
     mtime(_mtime), exclusive(_exclusive), pattrs(_pattrs), y(_y), dpp(dpp)
   {}
 
   int prepare() {
     if (exclusive) {
-      // TODO replace this with a stat call instead we don't really need to read
-      // the values here
-      real_time _mtime;
-      std::string name = info.get_name();
-      std::string tenant = info.get_tenant();
-      std::string id = info.get_id();
+      RGWSI_MetaBackend_SObj::Context_SObj *sys_ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(ctx);
+      auto& obj_ctx = *sys_ctx->obj_ctx;
 
-      int ret = svc_role->read_name(ctx, name, tenant, id,
-                                    objv_tracker, &_mtime, y, dpp);
+      int ret = rgw_stat_system_obj(dpp, obj_ctx,
+                                    svc->zone->get_zone_params().roles_pool,
+                                    svc_role->get_role_name_meta_key(info.get_name(), info.get_tenant()),
+                                    nullptr, nullptr, y);
       if (ret == 0) {
         ldout(svc_role->ctx(), 0) << "ERROR: name " << info.get_name()
                                   << " already in use for role id "
@@ -168,7 +168,7 @@ int RGWSI_Role_RADOS::create(RGWSI_MetaBackend::Context *ctx,
                              optional_yield y,
                              const DoutPrefixProvider *dpp)
 {
-  PutRole Op(this, ctx, info, objv_tracker, mtime, exclusive, pattrs, y, dpp);
+  PutRole Op(this, &svc, ctx, info, objv_tracker, mtime, exclusive, pattrs, y, dpp);
 
   int r = Op.prepare();
   if (r < 0) {
