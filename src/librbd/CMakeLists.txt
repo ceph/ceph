@@ -126,6 +126,7 @@ set(librbd_internal_srcs
   managed_lock/ReleaseRequest.cc
   managed_lock/Utils.cc
   migration/FileStream.cc
+  migration/HttpClient.cc
   migration/ImageDispatch.cc
   migration/NativeFormat.cc
   migration/OpenSourceImageRequest.cc
@@ -235,7 +236,8 @@ if(WITH_EVENTTRACE)
   add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE
-  osdc rbd_types)
+  osdc rbd_types
+  OpenSSL::SSL)
 target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
