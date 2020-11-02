@@ -118,6 +118,13 @@ public:
   virtual ~RGWSI_SIP_Marker() {}
 
   virtual HandlerRef get_handler(SIProviderRef& sip) = 0;
+
+  static std::string create_target_id(const rgw_zone_id& zid,
+                                      std::optional<std::string> bucket_id);
+  static void parse_target_id(const std::string& target_id,
+                              rgw_zone_id *zid,
+                              std::string *bucket_id);
+
 };
 WRITE_CLASS_ENCODER(RGWSI_SIP_Marker::target_marker_info)
 WRITE_CLASS_ENCODER(RGWSI_SIP_Marker::stage_shard_info)

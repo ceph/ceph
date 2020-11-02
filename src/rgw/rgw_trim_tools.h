@@ -16,6 +16,8 @@ namespace rgw { namespace sal {
   class RGWRadosStore;
 } }
 
+struct rgw_zone_id;
+
 
 class RGWTrimTools {
 public:
@@ -23,5 +25,6 @@ public:
                                                const std::string& sip_name,
                                                std::optional<std::string> sip_instance,
                                                std::vector<std::string> *min_shard_markers,
-                                               std::set<std::string> *sip_targets);
+                                               std::set<std::string> *sip_targets,
+                                               std::set<rgw_zone_id> *target_zones);
 };

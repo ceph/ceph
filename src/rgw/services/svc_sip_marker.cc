@@ -39,3 +39,32 @@ void RGWSI_SIP_Marker::SetParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("check_exists", check_exists, obj);
 }
 
+std::string RGWSI_SIP_Marker::create_target_id(const rgw_zone_id& zid,
+                                               std::optional<std::string> bucket_id)
+{
+  if (!bucket_id) {
+    return zid.id;
+  }
+
+  return zid.id + ":" + *bucket_id;
+}
+
+void RGWSI_SIP_Marker::parse_target_id(const std::string& target_id,
+                                       rgw_zone_id *zid,
+                                       std::string *bucket_id)
+{
+  auto pos = target_id.find(':');
+  if (pos == string::npos) {
+    if (zid) {
+      *zid = target_id;
+    }
+    return;
+  }
+
+  *zid = target_id.substr(0, pos);
+  if (!bucket_id) {
+    return;
+  }
+
+  *bucket_id = target_id.substr(pos + 1);
+}

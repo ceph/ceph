@@ -140,7 +140,8 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
                                             "data.inc",
                                             nullopt,
                                             &min_shard_markers,
-                                            &sip_targets));
+                                            &sip_targets,
+                                            nullptr));
     if (retcode < 0) {
       ldout(cct, 0) << "ERROR: failed to get sip targets info: ret=" << retcode << dendl;
       return set_cr_error(retcode);
