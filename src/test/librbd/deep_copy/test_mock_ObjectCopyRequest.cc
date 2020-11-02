@@ -15,6 +15,7 @@
 #include "librbd/api/Io.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/test_support.h"
@@ -39,6 +40,29 @@ inline ImageCtx* get_image_ctx(MockTestImageCtx* image_ctx) {
 }
 
 } // namespace util
+
+namespace io {
+namespace util {
+
+template <> void file_to_extents(
+        MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
+        uint64_t buffer_offset,
+        striper::LightweightObjectExtents* object_extents) {
+  Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
+                           0, buffer_offset, object_extents);
+}
+
+template <> void extent_to_file(
+        MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
+        uint64_t length,
+        std::vector<std::pair<uint64_t, uint64_t> >& extents) {
+  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
+                          offset, length, extents);
+}
+
+} // namespace util
+} // namespace io
+
 } // namespace librbd
 
 // template definitions

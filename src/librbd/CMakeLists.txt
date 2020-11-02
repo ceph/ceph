@@ -56,6 +56,7 @@ set(librbd_internal_srcs
   cache/WriteAroundObjectDispatch.cc
   crypto/BlockCrypto.cc
   crypto/CryptoContextPool.cc
+  crypto/CryptoImageDispatch.cc
   crypto/CryptoObjectDispatch.cc
   crypto/openssl/DataCryptor.cc
   deep_copy/ImageCopyRequest.cc
