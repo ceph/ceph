@@ -191,7 +191,7 @@ struct string_key_view_t {
   static void append_str(
       NodeExtentMutable&, std::string_view, char*& p_append);
 
-  static void append_str(std::string_view str, char*& p_append) {
+  static void test_append_str(std::string_view str, char*& p_append) {
     p_append -= sizeof(string_size_t);
     assert(str.length() < std::numeric_limits<string_size_t>::max());
     string_size_t len = str.length();
@@ -204,7 +204,7 @@ struct string_key_view_t {
   static void append_dedup(
       NodeExtentMutable&, const Type& dedup_type, char*& p_append);
 
-  static void append_dedup(const Type& dedup_type, char*& p_append) {
+  static void test_append_dedup(const Type& dedup_type, char*& p_append) {
     p_append -= sizeof(string_size_t);
     string_size_t len;
     if (dedup_type == Type::MIN) {
@@ -364,7 +364,7 @@ struct ns_oid_view_t {
   }
 
   template <KeyT KT>
-  static void append(const full_key_t<KT>& key, char*& p_append);
+  static void test_append(const full_key_t<KT>& key, char*& p_append);
 
   string_key_view_t nspace;
   string_key_view_t oid;
@@ -718,12 +718,12 @@ void ns_oid_view_t::append(
 }
 
 template <KeyT KT>
-void ns_oid_view_t::append(const full_key_t<KT>& key, char*& p_append) {
+void ns_oid_view_t::test_append(const full_key_t<KT>& key, char*& p_append) {
   if (key.dedup_type() == Type::STR) {
-    string_key_view_t::append_str(key.nspace(), p_append);
-    string_key_view_t::append_str(key.oid(), p_append);
+    string_key_view_t::test_append_str(key.nspace(), p_append);
+    string_key_view_t::test_append_str(key.oid(), p_append);
   } else {
-    string_key_view_t::append_dedup(key.dedup_type(), p_append);
+    string_key_view_t::test_append_dedup(key.dedup_type(), p_append);
   }
 }
 
