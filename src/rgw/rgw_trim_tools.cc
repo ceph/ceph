@@ -87,6 +87,10 @@ public:
                                     std::set<string> *sip_targets,
                                     std::set<rgw_zone_id> *target_zones) override;
 
+  RGWCoroutine *set_min_source_pos_cr(int shard_id, const string& pos) override {
+    return sip_cr->set_min_source_pos_cr(sid, shard_id, pos);
+  }
+
 };
 
 class RGWTrimGetSIPTargetsInfo : public RGWCoroutine

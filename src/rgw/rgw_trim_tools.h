@@ -26,6 +26,7 @@ public:
   virtual RGWCoroutine *get_targets_info_cr(std::vector<std::string> *min_shard_markers,
                                             std::set<std::string> *sip_targets,
                                             std::set<rgw_zone_id> *target_zones) = 0;
+  virtual RGWCoroutine *set_min_source_pos_cr(int shard_id, const std::string& pos) = 0;
 };
 
 

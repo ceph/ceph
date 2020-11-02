@@ -321,6 +321,28 @@ RGWCoroutine *SIProviderCRMgr_Local::update_marker_cr(const SIProvider::stage_id
                                });
 }
 
+RGWCoroutine *SIProviderCRMgr_Local::set_min_source_pos_cr(const SIProvider::stage_id_t& sid, int shard_id,
+                                                           const string& pos)
+{
+  auto pvd = provider; /* capture another reference */
+  return new RGWAsyncLambdaCR<void>(cct,
+                               async_rados,
+                               [=]() {
+                                 auto marker_handler = svc.sip_marker->get_handler(provider);
+                                 if (!marker_handler) {
+                                   ldout(cct, 0) << "ERROR: can't get sip marker handler" << dendl;
+                                   return -EIO;
+                                 }
+
+                                 int r = marker_handler->set_min_source_pos(sid, shard_id, pos);
+                                 if (r < 0) {
+                                   ldout(cct, 0) << "ERROR: failed to set marker min source pos info: r=" << r << dendl;
+                                   return r;
+                                 }
+                                 return 0;
+                               });
+}
+
 RGWCoroutine *SIProviderCRMgr_Local::get_marker_info_cr(RGWSI_SIP_Marker::HandlerRef& marker_handler,
                                                         const SIProvider::stage_id_t& sid, int shard_id,
                                                         RGWSI_SIP_Marker::stage_shard_info *info)

@@ -80,7 +80,8 @@ public:
   RGWCoroutine *get_marker_info_cr(RGWSI_SIP_Marker::HandlerRef& marker_handler,
                                    const SIProvider::stage_id_t& sid, int shard_id,
                                    RGWSI_SIP_Marker::stage_shard_info *info);
-
+  RGWCoroutine *set_min_source_pos_cr(const SIProvider::stage_id_t& sid, int shard_id,
+                                      const string& pos);
 };
 
 class RGWRESTConn;
