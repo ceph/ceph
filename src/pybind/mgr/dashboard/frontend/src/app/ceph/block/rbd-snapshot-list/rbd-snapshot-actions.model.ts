@@ -1,5 +1,4 @@
 import { RbdService } from '~/app/shared/api/rbd.service';
-
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';

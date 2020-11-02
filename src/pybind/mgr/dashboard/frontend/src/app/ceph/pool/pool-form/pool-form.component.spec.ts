@@ -16,13 +16,6 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  FormHelper,
-  Mocks,
-  modalServiceShow
-} from '~/testing/unit-test-helper';
 import { NotFoundComponent } from '~/app/core/not-found/not-found.component';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -36,6 +29,13 @@ import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import {
+  configureTestBed,
+  FixtureHelper,
+  FormHelper,
+  Mocks,
+  modalServiceShow
+} from '~/testing/unit-test-helper';
 import { Pool } from '../pool';
 import { PoolModule } from '../pool.module';
 import { PoolFormComponent } from './pool-form.component';

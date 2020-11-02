@@ -6,11 +6,11 @@ import _ from 'lodash';
 import { concat, forkJoin, Observable, Subscription } from 'rxjs';
 import { last } from 'rxjs/operators';
 
+import { Pool } from '~/app/ceph/pool/pool';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { Pool } from '~/app/ceph/pool/pool';
 
 @Component({
   selector: 'cd-bootstrap-import-modal',

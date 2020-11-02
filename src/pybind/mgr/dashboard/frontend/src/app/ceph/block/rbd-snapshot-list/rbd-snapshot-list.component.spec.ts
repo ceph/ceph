@@ -8,11 +8,6 @@ import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  PermissionHelper
-} from '~/testing/unit-test-helper';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -28,6 +23,7 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
+import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';

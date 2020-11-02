@@ -7,7 +7,6 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
@@ -15,6 +14,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
 import { SilenceListComponent } from './silence-list.component';
 

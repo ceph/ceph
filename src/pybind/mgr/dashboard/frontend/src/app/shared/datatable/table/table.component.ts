@@ -27,8 +27,8 @@ import _ from 'lodash';
 import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
 
 import { TableStatus } from '~/app/shared/classes/table-status';
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';

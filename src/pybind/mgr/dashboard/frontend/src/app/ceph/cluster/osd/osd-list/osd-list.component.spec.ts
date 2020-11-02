@@ -10,12 +10,8 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { EMPTY, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  OrchestratorHelper,
-  PermissionHelper,
-  TableActionHelper
-} from '~/testing/unit-test-helper';
+import { CephModule } from '~/app/ceph/ceph.module';
+import { PerformanceCounterModule } from '~/app/ceph/performance-counter/performance-counter.module';
 import { CoreModule } from '~/app/core/core.module';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -29,8 +25,12 @@ import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
-import { CephModule } from '~/app/ceph/ceph.module';
-import { PerformanceCounterModule } from '~/app/ceph/performance-counter/performance-counter.module';
+import {
+  configureTestBed,
+  OrchestratorHelper,
+  PermissionHelper,
+  TableActionHelper
+} from '~/testing/unit-test-helper';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdListComponent } from './osd-list.component';
 
