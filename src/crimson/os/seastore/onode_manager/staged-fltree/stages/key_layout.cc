@@ -8,12 +8,14 @@
 namespace crimson::os::seastore::onode {
 
 void string_key_view_t::append_str(
-    NodeExtentMutable& mut, const char* data, size_t len, char*& p_append) {
+    NodeExtentMutable& mut, std::string_view str, char*& p_append) {
   p_append -= sizeof(string_size_t);
-  assert(len < std::numeric_limits<string_size_t>::max());
-  mut.copy_in_absolute(p_append, (string_size_t)len);
+  assert(str.length() < std::numeric_limits<string_size_t>::max());
+  string_size_t len = str.length();
+  assert(len != 0);
+  mut.copy_in_absolute(p_append, len);
   p_append -= len;
-  mut.copy_in_absolute(p_append, data, len);
+  mut.copy_in_absolute(p_append, str.data(), len);
 }
 
 void string_key_view_t::append_dedup(

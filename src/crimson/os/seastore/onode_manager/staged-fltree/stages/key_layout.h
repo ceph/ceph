@@ -189,32 +189,16 @@ struct string_key_view_t {
   bool operator!=(const string_key_view_t& x) const { return !(*this == x); }
 
   static void append_str(
-      NodeExtentMutable&, const char* data, size_t len, char*& p_append);
+      NodeExtentMutable&, std::string_view, char*& p_append);
 
-  static void append_str(const char* data, size_t len, char*& p_append) {
+  static void append_str(std::string_view str, char*& p_append) {
     p_append -= sizeof(string_size_t);
-    assert(len < std::numeric_limits<string_size_t>::max());
-    string_size_t _len = len;
-    std::memcpy(p_append, &_len, sizeof(string_size_t));
+    assert(str.length() < std::numeric_limits<string_size_t>::max());
+    string_size_t len = str.length();
+    assert(len != 0);
+    std::memcpy(p_append, &len, sizeof(string_size_t));
     p_append -= len;
-    std::memcpy(p_append, data, len);
-  }
-
-  static void append_str(NodeExtentMutable& mut,
-                         const std::string& str,
-                         char*& p_append) {
-    append_str(mut, str.data(), str.length(), p_append);
-  }
-
-  static void append_str(NodeExtentMutable& mut,
-                         const string_key_view_t& view,
-                         char*& p_append) {
-    assert(view.type() == Type::STR);
-    append_str(mut, view.p_key, view.length, p_append);
-  }
-
-  static void append_str(const std::string& str, char*& p_append) {
-    append_str(str.data(), str.length(), p_append);
+    std::memcpy(p_append, str.data(), len);
   }
 
   static void append_dedup(
@@ -237,15 +221,55 @@ struct string_key_view_t {
   const char* p_length;
   // TODO: remove if p_length is aligned
   string_size_t length;
-
-  friend std::ostream& operator<<(std::ostream&, const string_key_view_t&);
 };
-inline MatchKindCMP compare_to(const string_key_view_t& l, const string_key_view_t& r) {
+
+class string_view_masked_t {
+ public:
   using Type = string_key_view_t::Type;
-  auto l_type = l.type();
-  auto r_type = r.type();
+  explicit string_view_masked_t(const string_key_view_t& index)
+      : type{index.type()} {
+    if (type == Type::STR) {
+      view = index.to_string_view();
+    }
+  }
+  explicit string_view_masked_t(std::string_view str)
+      : type{Type::STR}, view{str} {}
+
+  Type get_type() const { return type; }
+  std::string_view to_string_view() const {
+    assert(get_type() == Type::STR);
+    return view;
+  }
+  size_t size() const {
+    assert(get_type() == Type::STR);
+    return view.size();
+  }
+  bool operator==(const string_view_masked_t& x) const {
+    if (get_type() == x.get_type() && get_type() != Type::STR)
+      return true;
+    if (get_type() != x.get_type())
+      return false;
+    if (size() != x.size())
+      return false;
+    return (memcmp(view.data(), x.view.data(), size()) == 0);
+  }
+  bool operator!=(const string_view_masked_t& x) const { return !(*this == x); }
+  static auto min() { return string_view_masked_t{Type::MIN}; }
+  static auto max() { return string_view_masked_t{Type::MAX}; }
+
+ private:
+  explicit string_view_masked_t(Type type)
+      : type{type} {}
+  Type type;
+  std::string_view view;
+};
+inline MatchKindCMP compare_to(const string_view_masked_t& l, const string_view_masked_t& r) {
+  using Type = string_view_masked_t::Type;
+  auto l_type = l.get_type();
+  auto r_type = r.get_type();
   if (l_type == Type::STR && r_type == Type::STR) {
-    return toMatchKindCMP(l.p_key, l.length, r.p_key, r.length);
+    assert(l.size() && r.size());
+    return toMatchKindCMP(l.to_string_view(), r.to_string_view());
   } else if (l_type == r_type) {
     return MatchKindCMP::EQ;
   } else if (l_type == Type::MIN || r_type == Type::MAX) {
@@ -254,36 +278,37 @@ inline MatchKindCMP compare_to(const string_key_view_t& l, const string_key_view
     return MatchKindCMP::PO;
   }
 }
-inline MatchKindCMP compare_to(const std::string& key, const string_key_view_t& target) {
-  assert(key.length());
-  if (target.type() == string_key_view_t::Type::MIN) {
+inline MatchKindCMP compare_to(std::string_view l, const string_view_masked_t& r) {
+  using Type = string_view_masked_t::Type;
+  assert(l.length());
+  auto r_type = r.get_type();
+  if (r_type == Type::MIN) {
     return MatchKindCMP::PO;
-  } else if (target.type() == string_key_view_t::Type::MAX) {
+  } else if (r_type == Type::MAX) {
     return MatchKindCMP::NE;
-  } else {
-    return toMatchKindCMP(key, target.p_key, target.length);
+  } else { // r_type == Type::STR
+    assert(r.size());
+    return toMatchKindCMP(l, r.to_string_view());
   }
 }
-inline MatchKindCMP compare_to(const string_key_view_t& key, const std::string& target) {
-  return reverse(compare_to(target, key));
+inline MatchKindCMP compare_to(const string_view_masked_t& l, std::string_view r) {
+  return reverse(compare_to(r, l));
 }
-inline MatchKindCMP compare_to(const std::string& key, const std::string& target) {
-  return toMatchKindCMP(key, target);
-}
-
-inline std::ostream& operator<<(std::ostream& os, const string_key_view_t& view) {
-  auto type = view.type();
-  if (type == string_key_view_t::Type::MIN) {
+inline std::ostream& operator<<(std::ostream& os, const string_view_masked_t& masked) {
+  using Type = string_view_masked_t::Type;
+  auto type = masked.get_type();
+  if (type == Type::MIN) {
     return os << "MIN";
-  } else if (type == string_key_view_t::Type::MAX) {
+  } else if (type == Type::MAX) {
     return os << "MAX";
-  } else {
-    if (view.length <= 12) {
-      os << "\"" << std::string_view(view.p_key, view.length) << "\"";
+  } else { // type == Type::STR
+    auto view = masked.to_string_view();
+    if (view.length() <= 12) {
+      os << "\"" << view << "\"";
     } else {
-      os << "\"" << std::string_view(view.p_key, 4) << ".."
-         << std::string_view(view.p_key + view.length - 2, 2)
-         << "/" << view.length << "B\"";
+      os << "\"" << std::string_view(view.data(), 4) << ".."
+         << std::string_view(view.data() + view.length() - 2, 2)
+         << "/" << view.length() << "B\"";
     }
     return os;
   }
@@ -314,7 +339,8 @@ struct ns_oid_view_t {
     return nspace.size_overhead() + oid.size_overhead();
   }
   bool operator==(const ns_oid_view_t& x) const {
-    return (nspace == x.nspace && oid == x.oid);
+    return (string_view_masked_t{nspace} == string_view_masked_t{x.nspace} &&
+            string_view_masked_t{oid} == string_view_masked_t{x.oid});
   }
   bool operator!=(const ns_oid_view_t& x) const { return !(*this == x); }
 
@@ -330,8 +356,8 @@ struct ns_oid_view_t {
                      const ns_oid_view_t& view,
                      char*& p_append) {
     if (view.type() == Type::STR) {
-      string_key_view_t::append_str(mut, view.nspace, p_append);
-      string_key_view_t::append_str(mut, view.oid, p_append);
+      string_key_view_t::append_str(mut, view.nspace.to_string_view(), p_append);
+      string_key_view_t::append_str(mut, view.oid.to_string_view(), p_append);
     } else {
       string_key_view_t::append_dedup(mut, view.type(), p_append);
     }
@@ -344,13 +370,16 @@ struct ns_oid_view_t {
   string_key_view_t oid;
 };
 inline std::ostream& operator<<(std::ostream& os, const ns_oid_view_t& ns_oid) {
-  return os << ns_oid.nspace << "," << ns_oid.oid;
+  return os << string_view_masked_t{ns_oid.nspace} << ","
+            << string_view_masked_t{ns_oid.oid};
 }
 inline MatchKindCMP compare_to(const ns_oid_view_t& l, const ns_oid_view_t& r) {
-  auto ret = compare_to(l.nspace, r.nspace);
+  auto ret = compare_to(string_view_masked_t{l.nspace},
+                        string_view_masked_t{r.nspace});
   if (ret != MatchKindCMP::EQ)
     return ret;
-  return compare_to(l.oid, r.oid);
+  return compare_to(string_view_masked_t{l.oid},
+                    string_view_masked_t{r.oid});
 }
 
 class key_hobj_t {
@@ -369,10 +398,10 @@ class key_hobj_t {
   crush_hash_t crush() const {
     return ghobj.hobj.get_hash();
   }
-  const std::string& nspace() const {
+  std::string_view nspace() const {
     return ghobj.hobj.nspace;
   }
-  const std::string& oid() const {
+  std::string_view oid() const {
     return ghobj.hobj.oid.name;
   }
   ns_oid_view_t::Type dedup_type() const {
@@ -396,22 +425,10 @@ class key_hobj_t {
 
   std::ostream& dump(std::ostream& os) const {
     os << "key_hobj(" << (unsigned)shard() << ","
-       << pool() << "," << crush() << "; ";
-    if (nspace().size() <= 12) {
-      os << "\"" << nspace() << "\",";
-    } else {
-      os << "\"" << nspace().substr(0, 4) << ".."
-         << nspace().substr(nspace().size() - 2, 2)
-         << "/" << nspace().size() << "B\",";
-    }
-    if (oid().size() <= 12) {
-      os << "\"" << oid() << "\"; ";
-    } else {
-      os << "\"" << oid().substr(0, 4) << ".."
-         << oid().substr(oid().size() - 2, 2)
-         << "/" << oid().size() << "B\"; ";
-    }
-    os << snap() << "," << gen() << ")";
+       << pool() << "," << crush() << "; "
+       << string_view_masked_t{nspace()} << ","
+       << string_view_masked_t{oid()} << "; "
+       << snap() << "," << gen() << ")";
     return os;
   }
 
@@ -437,11 +454,11 @@ class key_view_t {
   crush_hash_t crush() const {
     return crush_packed().crush;
   }
-  const string_key_view_t& nspace() const {
-    return ns_oid_view().nspace;
+  std::string_view nspace() const {
+    return ns_oid_view().nspace.to_string_view();
   }
-  const string_key_view_t& oid() const {
-    return ns_oid_view().oid;
+  std::string_view oid() const {
+    return ns_oid_view().oid.to_string_view();
   }
   ns_oid_view_t::Type dedup_type() const {
     return ns_oid_view().type();
@@ -506,8 +523,8 @@ class key_view_t {
     ghobj.shard_id.id = shard();
     ghobj.hobj.pool = pool();
     ghobj.hobj.set_hash(crush());
-    ghobj.hobj.nspace = nspace().to_string_view();
-    ghobj.hobj.oid.name = oid().to_string_view();
+    ghobj.hobj.nspace = nspace();
+    ghobj.hobj.oid.name = oid();
     ghobj.hobj.snap = snap();
     ghobj.generation = gen();
     return ghobj;
@@ -548,7 +565,7 @@ class key_view_t {
       os << "X; ";
     }
     if (has_ns_oid()) {
-      os << nspace() << "," << oid() << "; ";
+      os << ns_oid_view() << "; ";
     } else {
       os << "X,X; ";
     }
@@ -567,6 +584,9 @@ class key_view_t {
   const snap_gen_t* p_snap_gen = nullptr;
 };
 
+inline MatchKindCMP compare_to(std::string_view l, std::string_view r) {
+  return toMatchKindCMP(l, r);
+}
 template <KeyT TypeL, KeyT TypeR>
 bool compare_full_key(const full_key_t<TypeL>& l, const full_key_t<TypeR>& r) {
   if (l.shard() != r.shard())
@@ -626,10 +646,10 @@ MatchKindCMP compare_to(const full_key_t<Type>& key, const shard_pool_crush_t& t
 
 template <KeyT Type>
 MatchKindCMP compare_to(const full_key_t<Type>& key, const ns_oid_view_t& target) {
-  auto ret = compare_to(key.nspace(), target.nspace);
+  auto ret = compare_to(key.nspace(), string_view_masked_t{target.nspace});
   if (ret != MatchKindCMP::EQ)
     return ret;
-  return compare_to(key.oid(), target.oid);
+  return compare_to(key.oid(), string_view_masked_t{target.oid});
 }
 
 template <KeyT Type>
