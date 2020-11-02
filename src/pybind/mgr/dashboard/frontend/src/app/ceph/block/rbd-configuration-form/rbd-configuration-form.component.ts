@@ -1,15 +1,15 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField,
   RbdConfigurationType
-} from '../../../shared/models/configuration';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { RbdConfigurationService } from '../../../shared/services/rbd-configuration.service';
+} from '~/app/shared/models/configuration';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration.service';
 
 @Component({
   selector: 'cd-rbd-configuration-form',

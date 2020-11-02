@@ -4,12 +4,12 @@ import { FormGroup } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { OsdService } from '../../../../shared/api/osd.service';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { Flag } from '../../../../shared/models/flag';
-import { Permissions } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { Flag } from '~/app/shared/models/flag';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-osd-flags-indiv-modal',

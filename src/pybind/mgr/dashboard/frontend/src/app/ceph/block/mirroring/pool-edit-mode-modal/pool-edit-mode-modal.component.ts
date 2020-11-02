@@ -4,10 +4,10 @@ import { AbstractControl, FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
 
-import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { FinishedTask } from '../../../../shared/models/finished-task';
-import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolEditModeResponseModel } from './pool-edit-mode-response.model';
 
 @Component({

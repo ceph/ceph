@@ -1,10 +1,10 @@
 import { Component, Inject, OnInit } from '@angular/core';
 
-import { PrometheusService } from '../../../../shared/api/prometheus.service';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { PrometheusRule } from '../../../../shared/models/prometheus-alerts';
-import { DurationPipe } from '../../../../shared/pipes/duration.pipe';
-import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { PrometheusRule } from '~/app/shared/models/prometheus-alerts';
+import { DurationPipe } from '~/app/shared/pipes/duration.pipe';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { PrometheusListHelper } from '../prometheus-list-helper';
 
 @Component({

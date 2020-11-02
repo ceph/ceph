@@ -2,22 +2,22 @@ import { Component, NgZone, ViewChild } from '@angular/core';
 
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { TableStatus } from '../../../shared/classes/table-status';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { URLBuilderService } from '../../../shared/services/url-builder.service';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { TableStatus } from '~/app/shared/classes/table-status';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 const BASE_URL = 'rgw/user';
 

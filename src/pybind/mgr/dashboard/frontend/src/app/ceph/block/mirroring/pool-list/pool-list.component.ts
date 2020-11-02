@@ -3,17 +3,17 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber, Subscription } from 'rxjs';
 
-import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
-import { TableStatusViewCache } from '../../../../shared/classes/table-status-view-cache';
-import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { FinishedTask } from '../../../../shared/models/finished-task';
-import { Permission } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolEditModeModalComponent } from '../pool-edit-mode-modal/pool-edit-mode-modal.component';
 import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-peer-modal.component';
 

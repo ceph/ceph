@@ -4,10 +4,10 @@ import { Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 
 @Component({

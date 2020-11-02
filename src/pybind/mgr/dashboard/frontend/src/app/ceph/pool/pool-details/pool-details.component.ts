@@ -2,11 +2,11 @@ import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/c
 
 import _ from 'lodash';
 
-import { PoolService } from '../../../shared/api/pool.service';
-import { CdHelperClass } from '../../../shared/classes/cd-helper.class';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { RbdConfigurationEntry } from '../../../shared/models/configuration';
-import { Permissions } from '../../../shared/models/permissions';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { RbdConfigurationEntry } from '~/app/shared/models/configuration';
+import { Permissions } from '~/app/shared/models/permissions';
 
 @Component({
   selector: 'cd-pool-details',

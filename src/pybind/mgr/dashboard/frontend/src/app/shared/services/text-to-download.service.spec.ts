@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TextToDownloadService } from './text-to-download.service';
 
 describe('TextToDownloadService', () => {

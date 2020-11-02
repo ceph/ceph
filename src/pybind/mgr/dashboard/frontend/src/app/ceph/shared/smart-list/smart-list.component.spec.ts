@@ -8,10 +8,10 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { OsdService } from '../../../shared/api/osd.service';
-import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '../../../shared/models/smart';
-import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '~/app/shared/models/smart';
+import { SharedModule } from '~/app/shared/shared.module';
 import { SmartListComponent } from './smart-list.component';
 
 describe('OsdSmartListComponent', () => {

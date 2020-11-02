@@ -4,8 +4,8 @@ import { FormsModule } from '@angular/forms';
 
 import { NgbDatepickerModule, NgbNavModule, NgbTimepickerModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
+import { SharedModule } from '~/app/shared/shared.module';
 import { LogsComponent } from './logs.component';
 
 describe('LogsComponent', () => {

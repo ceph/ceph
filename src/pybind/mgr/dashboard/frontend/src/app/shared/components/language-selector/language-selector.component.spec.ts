@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { LanguageSelectorComponent } from './language-selector.component';
 
 describe('LanguageSelectorComponent', () => {

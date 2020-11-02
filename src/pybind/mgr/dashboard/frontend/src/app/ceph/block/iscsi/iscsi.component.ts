@@ -1,9 +1,9 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
 
 @Component({
   selector: 'cd-iscsi',

@@ -4,7 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ToastrModule, ToastrService } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
-import { configureTestBed, PrometheusHelper } from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';

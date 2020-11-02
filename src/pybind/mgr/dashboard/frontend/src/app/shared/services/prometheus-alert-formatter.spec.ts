@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, PrometheusHelper } from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { PrometheusCustomAlert } from '../models/prometheus-alerts';

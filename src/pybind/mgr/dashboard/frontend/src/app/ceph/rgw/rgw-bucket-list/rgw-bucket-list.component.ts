@@ -10,23 +10,23 @@ import {
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
-import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { TableStatus } from '../../../shared/classes/table-status';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { URLBuilderService } from '../../../shared/services/url-builder.service';
+import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { TableStatus } from '~/app/shared/classes/table-status';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 const BASE_URL = 'rgw/bucket';
 

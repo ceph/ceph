@@ -4,13 +4,13 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 
-import { ConfigurationService } from '../../../../shared/api/configuration.service';
-import { ConfigFormModel } from '../../../../shared/components/config-option/config-option.model';
-import { ConfigOptionTypes } from '../../../../shared/components/config-option/config-option.types';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdForm } from '../../../../shared/forms/cd-form';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { ConfigFormModel } from '~/app/shared/components/config-option/config-option.model';
+import { ConfigOptionTypes } from '~/app/shared/components/config-option/config-option.types';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
 
 @Component({

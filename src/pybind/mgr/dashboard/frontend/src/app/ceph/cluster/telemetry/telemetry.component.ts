@@ -5,15 +5,15 @@ import { Router } from '@angular/router';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
-import { MgrModuleService } from '../../../shared/api/mgr-module.service';
-import { TelemetryService } from '../../../shared/api/telemetry.service';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { CdForm } from '../../../shared/forms/cd-form';
-import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { TelemetryNotificationService } from '../../../shared/services/telemetry-notification.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { TelemetryService } from '~/app/shared/api/telemetry.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
 
 @Component({
   selector: 'cd-telemetry',
