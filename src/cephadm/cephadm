@@ -4608,6 +4608,7 @@ class Apt(Packager):
                                   branch=branch, commit=commit)
         self.distro = self.DISTRO_NAMES[distro]
         self.distro_codename = distro_codename
+        self.distro_version = distro_version
 
     def repo_path(self):
         return '/etc/apt/sources.list.d/ceph.list'
@@ -4649,15 +4650,17 @@ class Apt(Packager):
             logger.info('Removing repo at %s...' % self.repo_path())
             os.unlink(self.repo_path())
 
+        if self.distro == 'ubuntu':
+            self.rm_kubic_repo()
+
     def install(self, ls):
         logger.info('Installing packages %s...' % ls)
         call_throws(['apt', 'install', '-y'] + ls)
 
     def install_podman(self):
         if self.distro == 'ubuntu':
-            logger.info('Setting up repo for pdoman...')
-            self.install(['software-properties-common'])
-            call_throws(['add-apt-repository', '-y', 'ppa:projectatomic/ppa'])
+            logger.info('Setting up repo for podman...')
+            self.add_kubic_repo()
             call_throws(['apt', 'update'])
 
         logger.info('Attempting podman install...')
@@ -4666,6 +4669,49 @@ class Apt(Packager):
         except Error as e:
             logger.info('Podman did not work.  Falling back to docker...')
             self.install(['docker.io'])
+
+    def kubic_repo_url(self):
+        return 'https://download.opensuse.org/repositories/devel:/kubic:/' \
+               'libcontainers:/stable/xUbuntu_%s/' % self.distro_version
+
+    def kubic_repo_path(self):
+        return '/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list'
+
+    def kubric_repo_gpgkey_url(self):
+        return '%s/Release.key' % self.kubic_repo_url()
+
+    def kubric_repo_gpgkey_path(self):
+        return '/etc/apt/trusted.gpg.d/kubic.release.gpg'
+
+    def add_kubic_repo(self):
+        url = self.kubric_repo_gpgkey_url()
+        logger.info('Installing repo GPG key from %s...' % url)
+        try:
+            response = urlopen(url)
+        except HTTPError as err:
+            logger.error('failed to fetch GPG repo key from %s: %s' % (
+                url, err))
+            raise Error('failed to fetch GPG key')
+        key = response.read().decode('utf-8')
+        tmp_key = write_tmp(key, 0, 0)
+        keyring = self.kubric_repo_gpgkey_path()
+        call_throws(['apt-key', '--keyring', keyring, 'add', tmp_key.name])
+
+        logger.info('Installing repo file at %s...' % self.kubic_repo_path())
+        content = 'deb %s /\n' % self.kubic_repo_url()
+        with open(self.kubic_repo_path(), 'w') as f:
+            f.write(content)
+
+    def rm_kubic_repo(self):
+        keyring = self.kubric_repo_gpgkey_path()
+        if os.path.exists(keyring):
+            logger.info('Removing repo GPG key %s...' % keyring)
+            os.unlink(keyring)
+
+        p = self.kubic_repo_path()
+        if os.path.exists(p):
+            logger.info('Removing repo at %s...' % p)
+            os.unlink(p)
 
 
 class YumDnf(Packager):
