@@ -103,10 +103,7 @@ class TestVolumesHelper(CephFSTestCase):
             self.assertEqual(sval, cval)
 
             # inode timestamps
-            sval = int(self.mount_a.run_shell(['stat', '-c' '%X', source_path]).stdout.getvalue().strip())
-            cval = int(self.mount_a.run_shell(['stat', '-c' '%X', sink_path]).stdout.getvalue().strip())
-            self.assertEqual(sval, cval)
-
+            # do not check access as kclient will generally not update this like ceph-fuse will.
             sval = int(self.mount_a.run_shell(['stat', '-c' '%Y', source_path]).stdout.getvalue().strip())
             cval = int(self.mount_a.run_shell(['stat', '-c' '%Y', sink_path]).stdout.getvalue().strip())
             self.assertEqual(sval, cval)
