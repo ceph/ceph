@@ -98,7 +98,7 @@
           },
           {
             "name": "relative dir",
-            "match": "^([.]|src/).*",
+            "match": "^(\\.|\\.\\.|~)/.*",
             "order": 3
           },
           {
