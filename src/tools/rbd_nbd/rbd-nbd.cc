@@ -34,6 +34,7 @@
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 
 #include "nbd-netlink.h"
 #include <libnl3/netlink/genl/genl.h>
@@ -1431,24 +1432,53 @@ static void run_server(Preforker& forker, NBDServer *server, bool netlink_used)
   shutdown_async_signal_handler();
 }
 
-// Eventually it should be replaced with glibc' pidfd_open
-// when it is widely available.
-static int
-pidfd_open(pid_t pid, unsigned int)
+// Eventually it should be removed when pidfd_open is widely supported.
+
+static int wait_for_terminate_legacy(int pid, int timeout)
 {
-  std::string path = "/proc/" + stringify(pid);
-  int fd = open(path.c_str(), O_RDONLY);
-  if (fd == -1 && errno == ENOENT) {
-    errno = ESRCH;
+  for (int i = 0; ; i++) {
+    if (kill(pid, 0) == -1) {
+      if (errno == ESRCH) {
+        return 0;
+      }
+      int r = -errno;
+      cerr << "rbd-nbd: kill(" << pid << ", 0) failed: "
+           << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (i >= timeout * 2) {
+      break;
+    }
+    usleep(500000);
   }
 
-  return fd;
+  cerr << "rbd-nbd: waiting for process exit timed out" << std::endl;
+  return -ETIMEDOUT;
 }
+
+// Eventually it should be replaced with glibc' pidfd_open
+// when it is widely available.
+
+#ifdef __NR_pidfd_open
+static int pidfd_open(pid_t pid, unsigned int flags)
+{
+  return syscall(__NR_pidfd_open, pid, flags);
+}
+#else
+static int pidfd_open(pid_t pid, unsigned int flags)
+{
+  errno = ENOSYS;
+  return -1;
+}
+#endif
 
 static int wait_for_terminate(int pid, int timeout)
 {
   int fd = pidfd_open(pid, 0);
   if (fd == -1) {
+    if (errno == ENOSYS) {
+      return wait_for_terminate_legacy(pid, timeout);
+    }
     if (errno == -ESRCH) {
       return 0;
     }
