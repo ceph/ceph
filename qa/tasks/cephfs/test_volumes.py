@@ -116,7 +116,9 @@ class TestVolumesHelper(CephFSTestCase):
 
         # verify quota is inherited from source snapshot
         src_quota = self.mount_a.getfattr(source_path, "ceph.quota.max_bytes")
-        self.assertEqual(clone_info["bytes_quota"], "infinite" if src_quota is None else int(src_quota))
+        # FIXME: kclient fails to get this quota value: https://tracker.ceph.com/issues/48075
+        if isinstance(self.mount_a, FuseMount):
+            self.assertEqual(clone_info["bytes_quota"], "infinite" if src_quota is None else int(src_quota))
 
         if clone_pool:
             # verify pool is set as per request
