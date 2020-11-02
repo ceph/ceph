@@ -201,7 +201,7 @@ if(WITH_ZBD)
   set(HAVE_LIBZBD ${ZBD_FOUND})
 endif()
 
-CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" OFF
+CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" ON
   "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
 set(HAVE_LIBURING ${WITH_LIBURING})
 
