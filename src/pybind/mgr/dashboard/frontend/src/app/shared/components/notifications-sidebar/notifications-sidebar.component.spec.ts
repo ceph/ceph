@@ -8,7 +8,6 @@ import { ClickOutsideModule } from 'ng-click-outside';
 import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
@@ -21,6 +20,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { PrometheusNotificationService } from '~/app/shared/services/prometheus-notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { NotificationsSidebarComponent } from './notifications-sidebar.component';
 
 describe('NotificationsSidebarComponent', () => {

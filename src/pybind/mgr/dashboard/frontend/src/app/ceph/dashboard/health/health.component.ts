@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
-import styles from '~/styles.scss';
+import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -15,7 +15,7 @@ import {
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
-import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
+import styles from '~/styles.scss';
 
 @Component({
   selector: 'cd-health',

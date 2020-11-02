@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
+import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -14,7 +14,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { CephModule } from '~/app/ceph/ceph.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ServicesComponent } from './services.component';
 
 describe('ServicesComponent', () => {

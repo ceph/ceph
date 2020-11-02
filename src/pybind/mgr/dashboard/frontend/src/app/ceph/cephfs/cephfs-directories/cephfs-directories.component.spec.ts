@@ -9,11 +9,6 @@ import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bo
 import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  modalServiceShow,
-  PermissionHelper
-} from '~/testing/unit-test-helper';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -30,6 +25,7 @@ import {
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, modalServiceShow, PermissionHelper } from '~/testing/unit-test-helper';
 import { CephfsDirectoriesComponent } from './cephfs-directories.component';
 
 describe('CephfsDirectoriesComponent', () => {

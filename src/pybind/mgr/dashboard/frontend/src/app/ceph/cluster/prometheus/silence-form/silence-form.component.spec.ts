@@ -10,12 +10,6 @@ import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  FormHelper,
-  PrometheusHelper
-} from '~/testing/unit-test-helper';
 import { NotFoundComponent } from '~/app/core/not-found/not-found.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -26,6 +20,12 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import {
+  configureTestBed,
+  FixtureHelper,
+  FormHelper,
+  PrometheusHelper
+} from '~/testing/unit-test-helper';
 import { SilenceFormComponent } from './silence-form.component';
 
 describe('SilenceFormComponent', () => {
