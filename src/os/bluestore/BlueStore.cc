@@ -7595,7 +7595,6 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       o->get_omap_header(&old_head);
       o->get_omap_tail(&old_tail);
       txn->rm_range_keys(old_omap_prefix, old_head, old_tail);
-      txn->rmkey(old_omap_prefix, old_tail);
       // set flag
       o->onode.set_flag(bluestore_onode_t::FLAG_PERPOOL_OMAP);
       _record_onode(o, txn);
@@ -7606,11 +7605,6 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
         o->get_omap_header(&new_head);
         txn->set(new_omap_prefix, new_head, h);
       }
-      // tail
-      string new_tail;
-      o->get_omap_tail(&new_tail);
-      bufferlist empty;
-      txn->set(new_omap_prefix, new_tail, empty);
       // values
       string final_key;
       o->get_omap_key(string(), &final_key);
@@ -14490,7 +14484,6 @@ void BlueStore::_do_omap_clear(TransContext *txc, OnodeRef& o)
   o->get_omap_header(&prefix);
   o->get_omap_tail(&tail);
   txc->t->rm_range_keys(omap_prefix, prefix, tail);
-  txc->t->rmkey(omap_prefix, tail);
   dout(20) << __func__ << " remove range start: "
            << pretty_binary_string(prefix) << " end: "
            << pretty_binary_string(tail) << dendl;
@@ -14528,12 +14521,6 @@ int BlueStore::_omap_setkeys(TransContext *txc,
       o->onode.set_omap_flags();
     }
     txc->write_onode(o);
-
-    const string& prefix = o->get_omap_prefix();
-    string key_tail;
-    bufferlist tail;
-    o->get_omap_tail(&key_tail);
-    txc->t->set(prefix, key_tail, tail);
   } else {
     txc->note_modified_object(o);
   }
@@ -14573,12 +14560,6 @@ int BlueStore::_omap_setheader(TransContext *txc,
       o->onode.set_omap_flags();
     }
     txc->write_onode(o);
-
-    const string& prefix = o->get_omap_prefix();
-    string key_tail;
-    bufferlist tail;
-    o->get_omap_tail(&key_tail);
-    txc->t->set(prefix, key_tail, tail);
   } else {
     txc->note_modified_object(o);
   }
@@ -14747,10 +14728,6 @@ int BlueStore::_clone(TransContext *txc,
       }
       it->next();
     }
-    string new_tail;
-    bufferlist new_tail_value;
-    newo->get_omap_tail(&new_tail);
-    txc->t->set(prefix, new_tail, new_tail_value);
   }
 
   txc->write_onode(newo);
