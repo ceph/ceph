@@ -10,6 +10,16 @@
 
 #include "services/svc_bucket_sync.h"
 
+class RGWSerialCR : public RGWCoroutine {
+  std::vector<RGWCoroutine *> crs;
+  std::vector<RGWCoroutine *>::iterator iter;
+public:
+  RGWSerialCR(CephContext *_cct,
+              std::vector<RGWCoroutine *> _crs) : RGWCoroutine(_cct),
+                                                  crs(std::move(_crs)) {}
+  int operate() override;
+};
+
 struct rgw_user_create_params {
   rgw_user user;
   std::string display_name;
