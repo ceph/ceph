@@ -44,7 +44,7 @@ namespace {
     key_view.set(*reinterpret_cast<const shard_pool_crush_t*>(p_fill));
 
     auto p_ns_oid = p_fill;
-    ns_oid_view_t::append<KeyT::HOBJ>(key_hobj, p_fill);
+    ns_oid_view_t::test_append<KeyT::HOBJ>(key_hobj, p_fill);
     ns_oid_view_t ns_oid_view(p_ns_oid);
     key_view.set(ns_oid_view);
 
