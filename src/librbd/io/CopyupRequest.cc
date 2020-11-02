@@ -21,6 +21,7 @@
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
@@ -118,10 +119,10 @@ CopyupRequest<I>::CopyupRequest(I *ictx, uint64_t objectno,
                                 Extents &&image_extents,
                                 const ZTracer::Trace &parent_trace)
   : m_image_ctx(ictx), m_object_no(objectno), m_image_extents(image_extents),
-    m_trace(util::create_trace(*m_image_ctx, "copy-up", parent_trace))
+    m_trace(librbd::util::create_trace(*m_image_ctx, "copy-up", parent_trace))
 {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
-  m_async_op.start_op(*util::get_image_ctx(m_image_ctx));
+  m_async_op.start_op(*librbd::util::get_image_ctx(m_image_ctx));
 }
 
 template <typename I>
@@ -175,7 +176,7 @@ void CopyupRequest<I>::read_from_parent() {
   auto comp = AioCompletion::create_and_start<
     CopyupRequest<I>,
     &CopyupRequest<I>::handle_read_from_parent>(
-      this, util::get_image_ctx(m_image_ctx->parent), AIO_TYPE_READ);
+      this, librbd::util::get_image_ctx(m_image_ctx->parent), AIO_TYPE_READ);
 
   ldout(cct, 20) << "completion=" << comp << ", "
                  << "extents=" << m_image_extents
@@ -248,7 +249,7 @@ void CopyupRequest<I>::deep_copy() {
 
   ldout(cct, 20) << "flatten=" << m_flatten << dendl;
 
-  auto ctx = util::create_context_callback<
+  auto ctx = librbd::util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_deep_copy>(this);
   auto req = deep_copy::ObjectCopyRequest<I>::create(
     m_image_ctx->parent, m_image_ctx, 0, 0,
@@ -354,7 +355,7 @@ void CopyupRequest<I>::update_object_maps() {
     boost::lambda::bind(boost::lambda::new_ptr<C_UpdateObjectMap<I>>(),
     boost::lambda::_1, m_image_ctx, m_object_no, head_object_map_state,
     &m_snap_ids, m_first_snap_is_clean, m_trace, boost::lambda::_2));
-  auto ctx = util::create_context_callback<
+  auto ctx = librbd::util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_update_object_maps>(this);
   auto throttle = new AsyncObjectThrottle<I>(
     nullptr, *m_image_ctx, context_factory, ctx, nullptr, 0, m_snap_ids.size());
@@ -643,10 +644,8 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
         return false;
       }
       std::vector<std::pair<uint64_t, uint64_t>> extents;
-      Striper::extent_to_file(cct, &m_image_ctx->layout,
-                              m_object_no, 0,
-                              m_image_ctx->layout.object_size,
-                              extents);
+      util::extent_to_file(m_image_ctx, m_object_no, 0,
+                               m_image_ctx->layout.object_size, extents);
       auto overlap = m_image_ctx->prune_parent_extents(
           extents, parent_overlap);
       return overlap > 0;
@@ -664,9 +663,8 @@ void CopyupRequest<I>::convert_copyup_extent_map() {
   // convert the image-extent extent map to object-extents
   for (auto [image_offset, image_length] : image_extent_map) {
     striper::LightweightObjectExtents object_extents;
-    Striper::file_to_extents(
-      cct, &m_image_ctx->layout, image_offset, image_length, 0, 0,
-      &object_extents);
+    util::file_to_extents(
+      m_image_ctx, image_offset, image_length, 0, &object_extents);
     for (auto& object_extent : object_extents) {
       m_copyup_extent_map.emplace_back(
         object_extent.offset, object_extent.length);

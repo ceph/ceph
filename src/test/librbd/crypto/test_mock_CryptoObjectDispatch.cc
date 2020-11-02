@@ -55,6 +55,12 @@ CopyupRequest<librbd::MockImageCtx>* CopyupRequest<
 
 namespace util {
 
+template <> uint64_t get_file_offset(
+        MockImageCtx *image_ctx, uint64_t object_no, uint64_t offset) {
+  return Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
+                                  object_no, offset);
+}
+
 namespace {
 
 struct Mock {

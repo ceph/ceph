@@ -80,6 +80,10 @@ struct ImageDispatchInterface {
       Context* on_dispatched) = 0;
 
   virtual bool invalidate_cache(Context* on_finish) = 0;
+  
+  virtual void remap_extents(Extents&& image_extents,
+                             ImageExtentsMapType type) {}
+
 };
 
 } // namespace io

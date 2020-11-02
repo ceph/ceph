@@ -24,6 +24,7 @@
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 
 #include "include/ceph_assert.h"
 
@@ -167,8 +168,8 @@ bool ObjectCacherWriteback::may_copy_on_write(const object_t& oid,
 
   // reverse map this object extent onto the parent
   vector<pair<uint64_t,uint64_t> > objectx;
-  Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-                          object_no, 0, m_ictx->layout.object_size, objectx);
+  io::util::extent_to_file(
+          m_ictx, object_no, 0, m_ictx->layout.object_size, objectx);
   uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
   bool may = object_overlap > 0;
   ldout(m_ictx->cct, 10) << "may_copy_on_write " << oid << " " << read_off
@@ -240,8 +241,7 @@ void ObjectCacherWriteback::overwrite_extent(const object_t& oid, uint64_t off,
   ceph_assert(original_journal_tid != 0 && m_ictx->journal != NULL);
 
   Extents file_extents;
-  Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, object_no, off,
-                          len, file_extents);
+  io::util::extent_to_file(m_ictx, object_no, off, len, file_extents);
   for (Extents::iterator it = file_extents.begin();
        it != file_extents.end(); ++it) {
     if (new_journal_tid != 0) {

@@ -10,6 +10,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/io/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -51,8 +52,8 @@ struct C_CommitIOEvent : public Context {
         (object_dispatch_flags &
            io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR) == 0) {
       io::Extents file_extents;
-      Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
-                              object_off, object_len, file_extents);
+      io::util::extent_to_file(image_ctx, object_no, object_off, object_len,
+                               file_extents);
       for (auto& extent : file_extents) {
         journal->commit_io_event_extent(journal_tid, extent.first,
                                         extent.second, r);
