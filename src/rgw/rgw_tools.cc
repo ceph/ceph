@@ -169,6 +169,21 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp,
   return ret;
 }
 
+int rgw_stat_system_obj(const DoutPrefixProvider *dpp,
+      RGWSysObjectCtx& obj_ctx, const rgw_pool& pool,
+			const std::string& key, RGWObjVersionTracker *objv_tracker,
+			real_time *pmtime, optional_yield y,
+			std::map<std::string, bufferlist> *pattrs)
+{
+  rgw_raw_obj obj(pool, key);
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.rop()
+               .set_attrs(pattrs)
+               .set_last_mod(pmtime)
+               .stat(y, dpp);
+}
+
+
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
