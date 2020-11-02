@@ -8547,8 +8547,8 @@ std::vector<Option> get_mds_client_options() {
     .set_default(300.0)
     .set_description("timeout for mounting CephFS (seconds)"),
 
-    Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
-    .set_default(1.0)
+    Option("client_tick_interval", Option::TYPE_SECS, Option::LEVEL_DEV)
+    .set_default(1)
     .set_description("seconds between client upkeep ticks"),
 
     Option("client_trace", Option::TYPE_STR, Option::LEVEL_DEV)
@@ -8637,7 +8637,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("client_debug_inject_tick_delay", Option::TYPE_INT, Option::LEVEL_DEV)
+    Option("client_debug_inject_tick_delay", Option::TYPE_SECS, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
