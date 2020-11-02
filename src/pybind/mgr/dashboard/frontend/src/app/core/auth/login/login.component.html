@@ -55,9 +55,16 @@
       </div>
     </div>
 
+    <p *ngIf="invalidAttemptsCount > 6 && validAttemptsCount > 0"
+       i18n><b>You have entered invalid credentials {{ invalidAttemptsCount }} times consecutively since your last successful login. You have {{ validAttemptsCount }} attempts left.</b></p>
+    <p *ngIf="disableUser"
+       i18n><b>Sorry your account has been locked due to multiple login failures. Please contact the administrator for further assistance.</b></p>
+    <p *ngIf="waitUser && invalidAttemptsCount < 10"
+       i18n><b>Please try again in some time.</b></p>
+
     <input type="submit"
            class="btn btn-accent px-5 py-2"
-           [disabled]="loginForm.invalid"
+           [disabled]="loginForm.invalid || disableUser || waitUser"
            value="Login"
            i18n-value>
   </form>

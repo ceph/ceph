@@ -17,6 +17,11 @@ export class LoginComponent implements OnInit {
   model = new Credentials();
   isLoginActive = false;
   returnUrl: string;
+  failedAttemptsLimit = 10;
+  invalidAttemptsCount = 0;
+  validAttemptsCount = 0;
+  waitUser = false;
+  disableUser = false;
 
   constructor(
     private authService: AuthService,
@@ -63,9 +68,28 @@ export class LoginComponent implements OnInit {
   }
 
   login() {
-    this.authService.login(this.model).subscribe(() => {
-      const url = _.get(this.route.snapshot.queryParams, 'returnUrl', '/');
-      this.router.navigate([url]);
-    });
+    this.authService.login(this.model).subscribe(
+      () => {
+        const url = _.get(this.route.snapshot.queryParams, 'returnUrl', '/');
+        this.router.navigate([url]);
+      },
+      (error) => {
+        // Need to move this logic to the backend and get these values calculated from there itself
+        // Doing this here for demo purpose
+        if (error.error['code'] === 'invalid_credentials') {
+          this.invalidAttemptsCount += 1;
+          this.validAttemptsCount = this.failedAttemptsLimit - this.invalidAttemptsCount;
+          if (this.invalidAttemptsCount > 6) {
+            this.waitUser = true;
+            setTimeout(() => {
+              this.waitUser = false;
+            }, 15000); // have to change the waiting time according to the number of failed attempts
+          }
+          if (this.invalidAttemptsCount === 10) {
+            this.disableUser = true;
+          }
+        }
+      }
+    );
   }
 }

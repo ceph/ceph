@@ -6,7 +6,7 @@ import logging
 import cherrypy
 
 from .. import mgr
-from ..exceptions import DashboardException
+from ..exceptions import DashboardException, UserDoesNotExist
 from ..services.auth import AuthManager, JwtManager
 from . import ApiController, ControllerDoc, EndpointDoc, RESTController, allow_empty_body
 
@@ -28,6 +28,18 @@ class Auth(RESTController):
     """
     Provide authenticates and returns JWT token.
     """
+
+    def disable_user_access(self, username):
+        try:
+            user = mgr.ACCESS_CTRL_DB.get_user(username)
+        except UserDoesNotExist:
+            raise cherrypy.HTTPError(404)
+
+        user.enabled = False
+        mgr.ACCESS_CTRL_DB.save()
+        #  raise DashboardException(msg='User Disabled',
+        #                         code='User Disabled',
+        #                         component='auth')
 
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
@@ -52,6 +64,10 @@ class Auth(RESTController):
             }
 
         logger.debug('Login failed')
+        #  Need to store the value of invalid login attempts for a particular username and
+        #  incrementing its value after each login failure and then fetch that value and if it
+        #  equals to 10 then calling the disable_user method
+        self.disable_user_access(username)
         raise DashboardException(msg='Invalid credentials',
                                  code='invalid_credentials',
                                  component='auth')
