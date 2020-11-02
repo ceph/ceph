@@ -2,16 +2,27 @@ v14.2.13 Nautilus
 =================
 
 This is the 13th backport release in the Nautilus series. This release fixes a
-regression introduced in v14.2.12, that referred to ceph-mon hosts using dns
-names instead of ip addresses in the `mon_host` param in `ceph.conf`. We
+regression introduced in v14.2.12, and a few ceph-volume & RGW fixes. We
 recommend users to update to this release.
+
+Notable Changes
+---------------
+
+* Fixed a regression that caused breakage in clusters that referred to ceph-mon
+  hosts using dns names instead of ip addresses in the ``mon_host`` param in
+  ``ceph.conf`` (`issue#47951 <https://tracker.ceph.com/issues/47951>`_)
+
+* ceph-volume: the ``lvm batch`` subcommand received a major rewrite
 
 Changelog
 ---------
 
-* mon/MonMap: fix unconditional failure for init_with_hosts (`pr#37816
-  <https://github.com/ceph/ceph/pull/37816>`_, `issue#47951
-  <https://tracker.ceph.com/issues/47951>`_, Patrick Donelly)
+* ceph-volume: major batch refactor (`pr#37522 <https://github.com/ceph/ceph/pull/37522>`_, Jan Fajerski)
+* mgr/dashboard: Proper format iSCSI target portals (`pr#37060 <https://github.com/ceph/ceph/pull/37060>`_, Volker Theile)
+* rpm: move python-enum34 into rhel 7 conditional (`pr#37747 <https://github.com/ceph/ceph/pull/37747>`_, Nathan Cutler)
+* mon/MonMap: fix unconditional failure for init_with_hosts (`pr#37816 <https://github.com/ceph/ceph/pull/37816>`_, Nathan Cutler, Patrick Donnelly)
+* rgw: allow rgw-orphan-list to note when rados objects are in namespace (`pr#37799 <https://github.com/ceph/ceph/pull/37799>`_, J. Eric Ivancich)
+* rgw: fix setting of namespace in ordered and unordered bucket listing (`pr#37798 <https://github.com/ceph/ceph/pull/37798>`_, J. Eric Ivancich)
 
 
 v14.2.12 Nautilus
