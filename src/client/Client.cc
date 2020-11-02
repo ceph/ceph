@@ -9464,7 +9464,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   int want, have = 0;
   bool movepos = false;
   std::unique_ptr<C_SaferCond> onuninline;
-  int64_t r = 0;
+  int64_t rc = 0;
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
   utime_t lat;
@@ -9482,8 +9482,9 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   loff_t start_pos = offset;
 
   if (in->inline_version == 0) {
-    r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
+    auto r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
     if (r < 0) {
+      rc = r;
       goto done;
     }
     ceph_assert(in->inline_version > 0);
@@ -9494,9 +9495,12 @@ retry:
     want = CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO;
   else
     want = CEPH_CAP_FILE_CACHE;
-  r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1);
-  if (r < 0) {
-    goto done;
+  {
+    auto r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1);
+    if (r < 0) {
+      rc = r;
+      goto done;
+    }
   }
   if (f->flags & O_DIRECT)
     have &= ~(CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO);
@@ -9518,12 +9522,12 @@ retry:
           bl->substr_of(in->inline_data, offset, len - offset);
           bl->append_zero(endoff - len);
         }
-        r = endoff - offset;
+        rc = endoff - offset;
       } else if ((uint64_t)offset < endoff) {
         bl->append_zero(endoff - offset);
-        r = endoff - offset;
+        rc = endoff - offset;
       } else {
-        r = 0;
+        rc = 0;
       }
       goto success;
     }
@@ -9536,27 +9540,31 @@ retry:
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
     }
-    r = _read_async(f, offset, size, bl);
-    if (r < 0)
+    rc = _read_async(f, offset, size, bl);
+    if (rc < 0)
       goto done;
   } else {
     if (f->flags & O_DIRECT)
       _flush_range(in, offset, size);
 
     bool checkeof = false;
-    r = _read_sync(f, offset, size, bl, &checkeof);
-    if (r < 0)
+    rc = _read_sync(f, offset, size, bl, &checkeof);
+    if (rc < 0)
       goto done;
     if (checkeof) {
-      offset += r;
-      size -= r;
+      offset += rc;
+      size -= rc;
 
       put_cap_ref(in, CEPH_CAP_FILE_RD);
       have = 0;
       // reverify size
-      r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
-      if (r < 0)
-	goto done;
+      {
+        auto r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+        if (r < 0) {
+          rc = r;
+          goto done;
+        }
+      }
 
       // eof?  short read.
       if ((uint64_t)offset < in->size)
@@ -9565,10 +9573,10 @@ retry:
   }
 
 success:
-  ceph_assert(r >= 0);
+  ceph_assert(rc >= 0);
   if (movepos) {
     // adjust fd pos
-    f->pos = start_pos + r;
+    f->pos = start_pos + rc;
   }
   
   lat = ceph_clock_now();
@@ -9588,7 +9596,7 @@ done:
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
       check_caps(in, 0);
     } else
-      r = ret;
+      rc = ret;
   }
   if (have) {
     put_cap_ref(in, CEPH_CAP_FILE_RD);
@@ -9596,7 +9604,7 @@ done:
   if (movepos) {
     unlock_fh_pos(f);
   }
-  return r;
+  return rc;
 }
 
 Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
