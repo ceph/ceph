@@ -437,6 +437,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   std::vector<StatusShards> peer_status; //< sync status for each peer
   std::vector<std::string> min_markers; //< min marker per shard
 
+  std::unique_ptr<RGWTrimSIPMgr> sip_mgr;
   std::set<rgw_zone_id> sip_target_zones;
 
  public:
@@ -489,10 +490,17 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
     min_markers.assign(std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards),
                        RGWSyncLogTrimCR::max_marker);
 
-    yield call(RGWTrimTools::get_sip_targets_info_cr(store,
-                                            "bucket.inc",
-                                            bucket_instance,
-                                            &min_markers,
+    sip_mgr.reset(RGWTrimTools::get_trim_sip_mgr(store,
+                                                 "bucket.inc",
+                                                 bucket_instance));
+
+    yield call(sip_mgr->init_cr());
+    if (retcode < 0) {
+      ldout(cct, 0) << "ERROR: failed to initialize trim sip manager for data.inc: retcode=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
+    yield call(sip_mgr->get_targets_info_cr(&min_markers,
                                             nullptr,
                                             &sip_target_zones));
     if (retcode < 0) {

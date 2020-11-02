@@ -113,6 +113,7 @@ class DataLogTrimCR : public RGWCoroutine {
 
   int i;
 
+  std::unique_ptr<RGWTrimSIPMgr> sip_mgr;
   std::set<string> sip_targets;
 
  public:
@@ -136,10 +137,17 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 10) << "fetching sync status for zone " << zone_id << dendl;
     set_status("fetching sync status");
 
-    yield call(RGWTrimTools::get_sip_targets_info_cr(store,
-                                            "data.inc",
-                                            nullopt,
-                                            &min_shard_markers,
+    sip_mgr.reset(RGWTrimTools::get_trim_sip_mgr(store,
+                                                 "data.inc",
+                                                 nullopt));
+
+    yield call(sip_mgr->init_cr());
+    if (retcode < 0) {
+      ldout(cct, 0) << "ERROR: failed to initialize trim sip manager for data.inc: retcode=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
+    yield call(sip_mgr->get_targets_info_cr(&min_shard_markers,
                                             &sip_targets,
                                             nullptr));
     if (retcode < 0) {

@@ -18,13 +18,20 @@ namespace rgw { namespace sal {
 
 struct rgw_zone_id;
 
+class RGWTrimSIPMgr {
+public:
+  virtual ~RGWTrimSIPMgr() {}
+
+  virtual RGWCoroutine *init_cr() = 0;
+  virtual RGWCoroutine *get_targets_info_cr(std::vector<std::string> *min_shard_markers,
+                                            std::set<std::string> *sip_targets,
+                                            std::set<rgw_zone_id> *target_zones) = 0;
+};
+
 
 class RGWTrimTools {
 public:
-  static RGWCoroutine* get_sip_targets_info_cr(rgw::sal::RGWRadosStore *store,
-                                               const std::string& sip_name,
-                                               std::optional<std::string> sip_instance,
-                                               std::vector<std::string> *min_shard_markers,
-                                               std::set<std::string> *sip_targets,
-                                               std::set<rgw_zone_id> *target_zones);
+  static RGWTrimSIPMgr *get_trim_sip_mgr(rgw::sal::RGWRadosStore *store,
+                                         const std::string& sip_name,
+                                         std::optional<std::string> sip_instance);
 };
