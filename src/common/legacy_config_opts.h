@@ -345,7 +345,6 @@ OPTION(client_cache_size, OPT_INT)
 OPTION(client_cache_mid, OPT_FLOAT)
 OPTION(client_use_random_mds, OPT_BOOL)
 OPTION(client_mount_timeout, OPT_DOUBLE)
-OPTION(client_tick_interval, OPT_DOUBLE)
 OPTION(client_trace, OPT_STR)
 OPTION(client_readahead_min, OPT_LONGLONG)  // readahead at _least_ this much.
 OPTION(client_readahead_max_bytes, OPT_LONGLONG)  // default unlimited
@@ -365,7 +364,6 @@ OPTION(client_oc_max_dirty_age, OPT_DOUBLE)      // max age in cache before writ
 OPTION(client_oc_max_objects, OPT_INT)      // max objects in cache
 OPTION(client_debug_getattr_caps, OPT_BOOL) // check if MDS reply contains wanted caps
 OPTION(client_debug_force_sync_read, OPT_BOOL)     // always read synchronously (go to osds)
-OPTION(client_debug_inject_tick_delay, OPT_INT) // delay the client tick for a number of seconds
 OPTION(client_max_inline_size, OPT_U64)
 OPTION(client_inject_release_failure, OPT_BOOL)  // synthetic client bug for testing
 OPTION(client_inject_fixed_oldest_tid, OPT_BOOL)  // synthetic client bug for testing

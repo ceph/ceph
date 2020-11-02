@@ -325,6 +325,9 @@ Client::~Client()
 {
   ceph_assert(ceph_mutex_is_not_locked(client_lock));
 
+  if (upkeeper.joinable())
+    upkeeper.join();
+
   // It is necessary to hold client_lock, because any inode destruction
   // may call into ObjectCacher, which asserts that it's lock (which is
   // client_lock) is held.
@@ -572,6 +575,14 @@ void Client::shutdown()
   // MDS commands, we may have sessions that need closing.
   {
     std::scoped_lock l{client_lock};
+
+    // To make sure the tick thread will be stoppped before
+    // destructing the Client, just in case like the _mount()
+    // failed but didn't not get a chance to stop the tick
+    // thread
+    tick_thread_stopped = true;
+    upkeep_cond.notify_one();
+
     _close_sessions();
   }
   cct->_conf.remove_observer(this);
@@ -6091,9 +6102,7 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
     return r;
   }
 
-  cl.unlock();
-  tick(); // start tick
-  cl.lock();
+  start_tick_thread(); // start tick thread
 
   if (require_mds) {
     while (1) {
@@ -6391,12 +6400,9 @@ void Client::_unmount(bool abort)
     traceout.close();
   }
 
-  {
-    std::scoped_lock l(timer_lock);
-    if (tick_event)
-      timer.cancel_event(tick_event);
-    tick_event = 0;
-  }
+  // stop the tick thread
+  tick_thread_stopped = true;
+  upkeep_cond.notify_one();
 
   _close_sessions();
 
@@ -6450,24 +6456,8 @@ void Client::tick()
 {
   ldout(cct, 20) << "tick" << dendl;
 
-  {
-    std::scoped_lock l(timer_lock);
-    tick_event = timer.add_event_after(
-      cct->_conf->client_tick_interval,
-      new LambdaContext([this](int) {
-          tick();
-      }));
-  }
-
-  if (cct->_conf->client_debug_inject_tick_delay > 0) {
-    sleep(cct->_conf->client_debug_inject_tick_delay);
-    ceph_assert(0 == cct->_conf.set_val("client_debug_inject_tick_delay", "0"));
-    cct->_conf.apply_changes(nullptr);
-  }
-
   utime_t now = ceph_clock_now();
 
-  std::scoped_lock cl(client_lock);
   /*
    * If the mount() is not finished
    */
@@ -6516,6 +6506,44 @@ void Client::tick()
     _kick_stale_sessions();
     last_auto_reconnect = now;
   }
+}
+
+void Client::start_tick_thread()
+{
+  upkeeper = std::thread([this]() {
+    using time = ceph::coarse_mono_time;
+    using sec = std::chrono::seconds;
+
+    auto last_tick = time::min();
+
+    std::unique_lock cl(client_lock);
+    while (!tick_thread_stopped) {
+      auto now = clock::now();
+      auto since = now - last_tick;
+
+      auto t_interval = clock::duration(cct->_conf.get_val<sec>("client_tick_interval"));
+      auto d_interval = clock::duration(cct->_conf.get_val<sec>("client_debug_inject_tick_delay"));
+
+      // Clear the debug inject tick delay
+      if (unlikely(d_interval.count() > 0)) {
+        ldout(cct, 20) << "clear debug inject tick delay: " << d_interval << dendl;
+        ceph_assert(0 == cct->_conf.set_val("client_debug_inject_tick_delay", "0"));
+        cct->_conf.apply_changes(nullptr);
+      }
+
+      auto interval = std::max(t_interval, d_interval);
+      if (likely(since >= interval)) {
+        tick();
+        last_tick = clock::now();
+      } else {
+        interval -= since;
+      }
+
+      ldout(cct, 20) << "upkeep thread waiting interval " << interval << dendl;
+      if (!tick_thread_stopped)
+        upkeep_cond.wait_for(cl, interval);
+    }
+  });
 }
 
 void Client::collect_and_send_metrics() {
