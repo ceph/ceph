@@ -79,6 +79,10 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
+int rgw_stat_system_obj(RGWSysObjectCtx& obj_Ctx, const rgw_pool& pool,
+                        const string& key, RGWObjVersionTracker *objv_tracker,
+                        real_time *pmtime, optional_yield y,
+                        map<string, bufferlist> *pattrs = nullptr);
 int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker);
 
