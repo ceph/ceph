@@ -19,6 +19,7 @@ class StupidAllocator : public Allocator {
 
   int64_t num_free;     ///< total bytes in freelist
   int64_t block_size;
+  uint64_t bdev_block_size;
 
   template <typename K, typename V> using allocator_t =
     mempool::bluestore_alloc::pool_allocator<std::pair<const K, V>>;
