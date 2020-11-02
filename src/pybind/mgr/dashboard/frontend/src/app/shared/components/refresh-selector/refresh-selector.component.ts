@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { RefreshIntervalService } from '../../services/refresh-interval.service';
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 
 @Component({
   selector: 'cd-refresh-selector',

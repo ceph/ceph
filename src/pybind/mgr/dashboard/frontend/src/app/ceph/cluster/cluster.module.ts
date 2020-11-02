@@ -14,7 +14,7 @@ import {
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
 
-import { SharedModule } from '../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';

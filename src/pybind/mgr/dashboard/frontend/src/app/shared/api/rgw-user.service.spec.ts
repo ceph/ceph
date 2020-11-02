@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RgwUserService } from './rgw-user.service';
 
 describe('RgwUserService', () => {

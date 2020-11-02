@@ -6,7 +6,7 @@ import {
 } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdMirroringService } from './rbd-mirroring.service';
 
 describe('RbdMirroringService', () => {

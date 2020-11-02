@@ -1,12 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 
 @Component({
   selector: 'cd-cephfs-list',

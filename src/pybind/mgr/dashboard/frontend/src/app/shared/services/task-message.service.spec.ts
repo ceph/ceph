@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import _ from 'lodash';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { FinishedTask } from '../models/finished-task';
 import { TaskException } from '../models/task-exception';

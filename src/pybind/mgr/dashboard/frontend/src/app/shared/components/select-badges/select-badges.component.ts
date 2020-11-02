@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { ValidatorFn } from '@angular/forms';
 
-import { Icons } from '../../../shared/enum/icons.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { SelectMessages } from '../select/select-messages.model';
 import { SelectOption } from '../select/select-option.model';
 import { SelectComponent } from '../select/select.component';

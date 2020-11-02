@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import * as BrowserDetect from 'detect-browser';
 import { ToastrService } from 'ngx-toastr';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { Copy2ClipboardButtonDirective } from './copy2clipboard-button.directive';
 
 describe('Copy2clipboardButtonDirective', () => {

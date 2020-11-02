@@ -1,4 +1,4 @@
-import styles from '../../../styles.scss';
+import styles from '~/styles.scss';
 
 export class Color {
   // HEALTH

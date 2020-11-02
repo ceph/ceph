@@ -4,7 +4,7 @@ import { Injectable } from '@angular/core';
 import { Observable, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
-import { RoleFormModel } from '../../core/auth/role-form/role-form.model';
+import { RoleFormModel } from '~/app/core/auth/role-form/role-form.model';
 
 @Injectable({
   providedIn: 'root'

@@ -4,8 +4,8 @@ import { FormControl } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-iscsi-target-iqn-settings-modal',

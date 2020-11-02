@@ -3,7 +3,7 @@ import { AbstractControl, FormGroup, FormGroupDirective, NgForm } from '@angular
 
 import _ from 'lodash';
 
-import { Icons } from '../../../shared/enum/icons.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 /**
  * This component will render a submit button with the given label.

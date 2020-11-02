@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
-import { SettingsService } from '../../api/settings.service';
-import { CdPwdExpirationSettings } from '../../models/cd-pwd-expiration-settings';
-import { AuthStorageService } from '../../services/auth-storage.service';
+import { SettingsService } from '~/app/shared/api/settings.service';
+import { CdPwdExpirationSettings } from '~/app/shared/models/cd-pwd-expiration-settings';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-pwd-expiration-notification',

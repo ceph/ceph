@@ -1,11 +1,11 @@
 import { DatePipe } from '@angular/common';
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { HostService } from '../../../shared/api/host.service';
-import { OsdService } from '../../../shared/api/osd.service';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdDevice } from '../../../shared/models/devices';
+import { HostService } from '~/app/shared/api/host.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdDevice } from '~/app/shared/models/devices';
 
 @Component({
   selector: 'cd-device-list',

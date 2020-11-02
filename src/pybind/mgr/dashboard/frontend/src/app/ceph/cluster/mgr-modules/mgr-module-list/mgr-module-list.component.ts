@@ -3,18 +3,18 @@ import { Component, ViewChild } from '@angular/core';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { timer as observableTimer } from 'rxjs';
 
-import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
-import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
-import { TableComponent } from '../../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { Permission } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-mgr-module-list',

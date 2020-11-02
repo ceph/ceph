@@ -2,11 +2,11 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 
-import { MgrModuleService } from '../../api/mgr-module.service';
-import { NotificationType } from '../../enum/notification-type.enum';
-import { AuthStorageService } from '../../services/auth-storage.service';
-import { NotificationService } from '../../services/notification.service';
-import { TelemetryNotificationService } from '../../services/telemetry-notification.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
 
 @Component({
   selector: 'cd-telemetry-notification',

@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ModuleStatusGuardService } from './module-status-guard.service';
 
 describe('ModuleStatusGuardService', () => {

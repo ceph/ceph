@@ -4,14 +4,14 @@ import { FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { ConfigurationService } from '../../../../shared/api/configuration.service';
-import { OsdService } from '../../../../shared/api/osd.service';
-import { ConfigOptionTypes } from '../../../../shared/components/config-option/config-option.types';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { Permissions } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { ConfigOptionTypes } from '~/app/shared/components/config-option/config-option.types';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-osd-recv-speed-modal',

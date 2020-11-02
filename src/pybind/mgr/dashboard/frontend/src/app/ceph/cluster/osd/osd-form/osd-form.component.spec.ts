@@ -11,13 +11,13 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper
-} from '../../../../../testing/unit-test-helper';
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { SummaryService } from '../../../../shared/services/summary.service';
-import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
-import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
+} from '~/testing/unit-test-helper';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
 import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';

@@ -3,10 +3,10 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 
-import { AuthService } from '../../../shared/api/auth.service';
-import { Credentials } from '../../../shared/models/credentials';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
+import { AuthService } from '~/app/shared/api/auth.service';
+import { Credentials } from '~/app/shared/models/credentials';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 
 @Component({
   selector: 'cd-login',

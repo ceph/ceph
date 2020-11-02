@@ -11,11 +11,11 @@ import {
   FixtureHelper,
   FormHelper,
   Mocks
-} from '../../../../testing/unit-test-helper';
-import { CrushRuleService } from '../../../shared/api/crush-rule.service';
-import { CrushNode } from '../../../shared/models/crush-node';
-import { CrushRuleConfig } from '../../../shared/models/crush-rule';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+} from '~/testing/unit-test-helper';
+import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
+import { CrushNode } from '~/app/shared/models/crush-node';
+import { CrushRuleConfig } from '~/app/shared/models/crush-rule';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolModule } from '../pool.module';
 import { CrushRuleFormModalComponent } from './crush-rule-form-modal.component';
 

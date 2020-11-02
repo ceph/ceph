@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-rgw-user-swift-key-modal',

@@ -12,8 +12,8 @@ import {
   FixtureHelper,
   FormHelper,
   PrometheusHelper
-} from '../../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../../shared/shared.module';
+} from '~/testing/unit-test-helper';
+import { SharedModule } from '~/app/shared/shared.module';
 import { SilenceMatcherModalComponent } from './silence-matcher-modal.component';
 
 describe('SilenceMatcherModalComponent', () => {

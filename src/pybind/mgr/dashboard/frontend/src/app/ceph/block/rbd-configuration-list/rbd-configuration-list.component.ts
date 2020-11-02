@@ -1,15 +1,15 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField,
   RbdConfigurationType
-} from '../../../shared/models/configuration';
-import { RbdConfigurationSourcePipe } from '../../../shared/pipes/rbd-configuration-source.pipe';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { RbdConfigurationService } from '../../../shared/services/rbd-configuration.service';
+} from '~/app/shared/models/configuration';
+import { RbdConfigurationSourcePipe } from '~/app/shared/pipes/rbd-configuration-source.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration.service';
 
 @Component({
   selector: 'cd-rbd-configuration-table',

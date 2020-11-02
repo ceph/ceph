@@ -9,11 +9,11 @@ import {
 } from '@circlon/angular-tree-component';
 import _ from 'lodash';
 
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { BooleanTextPipe } from '../../../shared/pipes/boolean-text.pipe';
-import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { BooleanTextPipe } from '~/app/shared/pipes/boolean-text.pipe';
+import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
 
 @Component({
   selector: 'cd-iscsi-target-details',

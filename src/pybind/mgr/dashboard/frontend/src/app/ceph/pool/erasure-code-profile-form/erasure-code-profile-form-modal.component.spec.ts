@@ -11,11 +11,11 @@ import {
   FixtureHelper,
   FormHelper,
   Mocks
-} from '../../../../testing/unit-test-helper';
-import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
-import { CrushNode } from '../../../shared/models/crush-node';
-import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+} from '~/testing/unit-test-helper';
+import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
+import { CrushNode } from '~/app/shared/models/crush-node';
+import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolModule } from '../pool.module';
 import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-form-modal.component';
 

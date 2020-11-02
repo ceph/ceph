@@ -1,8 +1,8 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 
 @Component({
   selector: 'cd-cephfs-detail',

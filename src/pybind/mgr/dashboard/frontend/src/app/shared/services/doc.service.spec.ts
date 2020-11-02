@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { Subscriber } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SharedModule } from '../shared.module';
 import { DocService } from './doc.service';
 

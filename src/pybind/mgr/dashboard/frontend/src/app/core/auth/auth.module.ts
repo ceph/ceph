@@ -5,8 +5,8 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
-import { SharedModule } from '../../shared/shared.module';
+import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SharedModule } from '~/app/shared/shared.module';
 import { LoginPasswordFormComponent } from './login-password-form/login-password-form.component';
 import { LoginComponent } from './login/login.component';
 import { RoleDetailsComponent } from './role-details/role-details.component';

@@ -3,8 +3,8 @@ import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 
-import { LogsService } from '../../../shared/api/logs.service';
-import { Icons } from '../../../shared/enum/icons.enum';
+import { LogsService } from '~/app/shared/api/logs.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-logs',

@@ -1,7 +1,7 @@
 import { Location } from '@angular/common';
 import { Component, Input } from '@angular/core';
 
-import { ActionLabelsI18n } from '../../constants/app.constants';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-back-button',

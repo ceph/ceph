@@ -5,7 +5,7 @@ import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { SharedModule } from '../../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
 import { BootstrapCreateModalComponent } from './bootstrap-create-modal/bootstrap-create-modal.component';
 import { BootstrapImportModalComponent } from './bootstrap-import-modal/bootstrap-import-modal.component';
 import { DaemonListComponent } from './daemon-list/daemon-list.component';

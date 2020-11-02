@@ -1,4 +1,4 @@
-import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { SelectOption } from '~/app/shared/components/select/select-option.model';
 
 export class UserFormRoleModel implements SelectOption {
   name: string;

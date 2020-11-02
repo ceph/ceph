@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 
 @Component({
   selector: 'cd-nfs-details',

@@ -2,9 +2,9 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 
 import { Subscription } from 'rxjs';
 
-import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
-import { TableStatusViewCache } from '../../../../shared/classes/table-status-view-cache';
-import { CephShortVersionPipe } from '../../../../shared/pipes/ceph-short-version.pipe';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
 
 @Component({
   selector: 'cd-mirroring-daemons',
