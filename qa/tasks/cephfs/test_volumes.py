@@ -387,7 +387,7 @@ class TestVolumes(TestVolumesHelper):
         volumes = [volume['name'] for volume in vls]
 
         #create new volumes and add it to the existing list of volumes
-        volumenames = self._generate_random_volume_name(3)
+        volumenames = self._generate_random_volume_name(2)
         for volumename in volumenames:
             self._fs_cmd("volume", "create", volumename)
         volumes.extend(volumenames)
