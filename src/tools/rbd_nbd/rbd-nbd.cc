@@ -1864,6 +1864,17 @@ static bool find_mapped_dev_by_spec(Config *cfg, int skip_pid=-1) {
   return false;
 }
 
+static int find_proc_by_dev(Config *cfg) {
+  Config c;
+  NBDListIterator it;
+  while (it.get(&c)) {
+    if (c.devpath == cfg->devpath) {
+      *cfg = c;
+      return true;
+    }
+  }
+  return false;
+}
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg) {
@@ -2077,8 +2088,14 @@ static int rbd_nbd(int argc, const char *argv[])
         return -EINVAL;
       break;
     case Detach:
-      if (cfg.devpath.empty() && !find_mapped_dev_by_spec(&cfg)) {
-        cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
+      if (cfg.devpath.empty()) {
+        if (!find_mapped_dev_by_spec(&cfg)) {
+          cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
+               << std::endl;
+          return -ENOENT;
+        }
+      } else if (!find_proc_by_dev(&cfg)) {
+        cerr << "rbd-nbd: no process attached to " << cfg.devpath << " found"
              << std::endl;
         return -ENOENT;
       }
@@ -2087,10 +2104,14 @@ static int rbd_nbd(int argc, const char *argv[])
         return -EINVAL;
       break;
     case Unmap:
-      if (cfg.devpath.empty() && !find_mapped_dev_by_spec(&cfg)) {
-        cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
-             << std::endl;
-        return -ENOENT;
+      if (cfg.devpath.empty()) {
+        if (!find_mapped_dev_by_spec(&cfg)) {
+          cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
+               << std::endl;
+          return -ENOENT;
+        }
+      } else if (!find_proc_by_dev(&cfg)) {
+        // still try to send disconnect to the device
       }
       r = do_unmap(&cfg);
       if (r < 0)
