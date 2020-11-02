@@ -22,6 +22,7 @@
 #include "common/bounded_key_counter.h"
 #include "common/errno.h"
 #include "rgw_trim_bilog.h"
+#include "rgw_trim_tools.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_cr_tools.h"
@@ -436,6 +437,8 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   std::vector<StatusShards> peer_status; //< sync status for each peer
   std::vector<std::string> min_markers; //< min marker per shard
 
+  std::set<rgw_zone_id> sip_target_zones;
+
  public:
   BucketTrimInstanceCR(rgw::sal::RadosStore* store, RGWHTTPManager *http,
                        BucketTrimObserver *observer,
@@ -481,6 +484,22 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(-ENOENT);
     }
 
+    // initialize each shard with the maximum marker, which is only used when
+    // there are no peers syncing from us
+    min_markers.assign(std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards),
+                       RGWSyncLogTrimCR::max_marker);
+
+    yield call(RGWTrimTools::get_sip_targets_info_cr(store,
+                                            "bucket.inc",
+                                            bucket_instance,
+                                            &min_markers,
+                                            nullptr,
+                                            &sip_target_zones));
+    if (retcode < 0) {
+      ldout(cct, 0) << "ERROR: failed to get sip targets info for bucket instance=" << bucket_instance << ": ret=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
     // query peers for sync status
     set_status("fetching sync status from relevant peers");
     yield {
@@ -490,6 +509,11 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       rgw_zone_id last_zid;
       for (auto& diter : all_dests) {
         const auto& zid = diter.first;
+        if (sip_target_zones.find(zid) != sip_target_zones.end()) {
+          /* buckets from this zone already updated us, will not query zone */
+          ldout(cct, 20) << "bilog trim: not querying remote zone " << zid << ": local sip marker info for bucket (" << bucket_instance << ") exists" << dendl;
+          continue;
+        }
         if (zid == last_zid) {
           continue;
         }
@@ -532,11 +556,6 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
         return set_cr_error(child_ret);
       }
     }
-
-    // initialize each shard with the maximum marker, which is only used when
-    // there are no peers syncing from us
-    min_markers.assign(std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards),
-                       RGWSyncLogTrimCR::max_marker);
 
     // determine the minimum marker for each shard
     retcode = take_min_status(cct, peer_status.begin(), peer_status.end(),

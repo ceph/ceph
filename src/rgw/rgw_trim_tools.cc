@@ -113,7 +113,9 @@ int RGWTrimGetSIPTargetsInfo::operate()
     i = 0;
 
     for (auto& info : sip_shards_info) {
-      (*min_shard_markers)[i] = info.min_targets_pos;
+      if (!info.min_targets_pos.empty()) {
+        (*min_shard_markers)[i] = info.min_targets_pos;
+      }
       for (auto& entry : info.targets) {
         if (sip_targets) {
           sip_targets->insert(entry.first);
