@@ -970,6 +970,38 @@ class ShamanProject(GitbuilderProject):
             'repo',
         )
 
+    @property
+    def build_complete(self):
+        # use the repo search results to get a ref and a sha1; the
+        # input to teuthology-suite doesn't contain both
+        try:
+            self.assert_result()
+        except VersionNotFoundError:
+            return False
+
+        search_result = self._result.json()[0]
+
+        # now look for the build complete status
+        path = '/'.join(
+            ('builds/ceph', search_result['ref'], search_result['sha1'])
+        )
+        build_url = urljoin(self.query_url, path)
+
+        try:
+            resp = requests.get(build_url)
+            resp.raise_for_status()
+        except requests.HttpError:
+            return False
+        for build in resp.json():
+            if (
+                build['distro'] == search_result['distro'] and
+                build['distro_version'] == search_result['distro_version'] and
+                build['flavor'] == search_result['flavor'] and
+                build['distro_arch'] in search_result['archs']
+               ):
+                return build['status'] == 'completed'
+        return False
+
     def _get_repo(self):
         resp = requests.get(self.repo_url)
         resp.raise_for_status()
