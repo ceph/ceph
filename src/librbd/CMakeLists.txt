@@ -131,6 +131,7 @@ set(librbd_internal_srcs
   migration/OpenSourceImageRequest.cc
   migration/RawFormat.cc
   migration/SourceSpecBuilder.cc
+  migration/Utils.cc
   mirror/DemoteRequest.cc
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
