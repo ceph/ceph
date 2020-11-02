@@ -4,7 +4,6 @@
     "downlevelIteration": true,
     "esModuleInterop": true,
     "importHelpers": true,
-    "module": "es2020",
     "outDir": "./dist/out-tsc",
     "sourceMap": true,
     "declaration": false,
@@ -19,6 +18,11 @@
     "noImplicitAny": true,
     "suppressImplicitAnyIndexErrors": true,
     "target": "es2015",
+    "module": "es2020",
+    "baseUrl": "./",
+    "paths": {
+      "~/*": ["src/*"]
+    },
     "typeRoots": [
       "node_modules/@types"
     ],
