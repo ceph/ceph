@@ -84,6 +84,7 @@ int RGWSI_Role_RADOS::do_start()
 class PutRole
 {
   RGWSI_Role_RADOS* svc_role;
+  RGWSI_Role_RADOS::Svc *svc;
   RGWSI_MetaBackend::Context *ctx;
   RGWRoleInfo& info;
   RGWObjVersionTracker *objv_tracker;
@@ -93,7 +94,8 @@ class PutRole
   optional_yield y;
 
 public:
-  PutRole(RGWSI_Role_RADOS* _svc,
+  PutRole(RGWSI_Role_RADOS* _svc_role,
+          RGWSI_Role_RADOS::Svc *_svc,
           RGWSI_MetaBackend::Context *_ctx,
           RGWRoleInfo& _info,
           RGWObjVersionTracker *_ot,
@@ -101,17 +103,19 @@ public:
           bool _exclusive,
           map<std::string, bufferlist> *_pattrs,
           optional_yield _y) :
-    svc_role(_svc), ctx(_ctx), info(_info), objv_tracker(_ot),
+    svc_role(_svc_role), svc(_svc), ctx(_ctx), info(_info), objv_tracker(_ot),
     mtime(_mtime), exclusive(_exclusive), pattrs(_pattrs), y(_y)
   {}
 
   int prepare() {
     if (exclusive) {
-      // TODO replace this with a stat call instead we don't really need to read
-      // the values here
-      ceph::real_time _mtime;
-      int ret = svc_role->read_name(ctx, info.name, info.tenant, info.id,
-                                    objv_tracker, &_mtime, y);
+      RGWSI_MetaBackend_SObj::Context_SObj *sys_ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(ctx);
+      auto& obj_ctx = *sys_ctx->obj_ctx;
+
+      int ret = rgw_stat_system_obj(obj_ctx,
+                                    svc->zone->get_zone_params().roles_pool,
+                                    svc_role->get_role_name_meta_key(info.name, info.tenant),
+                                    nullptr, nullptr, y);
       if (ret == 0) {
         ldout(svc_role->ctx(), 0) << "ERROR: name " << info.name
                                   << " already in use for role id "
@@ -163,7 +167,7 @@ int RGWSI_Role_RADOS::create(RGWSI_MetaBackend::Context *ctx,
                              map<std::string, bufferlist> * pattrs,
                              optional_yield y)
 {
-  PutRole Op(this, ctx, info, objv_tracker, mtime, exclusive, pattrs, y);
+  PutRole Op(this, &svc, ctx, info, objv_tracker, mtime, exclusive, pattrs, y);
 
   int r = Op.prepare();
   if (r < 0) {
