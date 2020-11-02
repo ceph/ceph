@@ -197,7 +197,7 @@ include(CMakeDependentOption)
 CMAKE_DEPENDENT_OPTION(WITH_ZBD "Enable libzbd bluestore backend" OFF
   "WITH_BLUESTORE" OFF)
 if(WITH_ZBD)
-  find_package(zbd)
+  find_package(zbd REQUIRED)
   set(HAVE_LIBZBD ${ZBD_FOUND})
 endif()
 
