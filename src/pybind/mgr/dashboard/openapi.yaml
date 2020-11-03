@@ -5444,12 +5444,12 @@ paths:
                   available:
                     description: Orchestrator status
                     type: boolean
-                  description:
-                    description: Description
+                  message:
+                    description: Error message
                     type: string
                 required:
                 - available
-                - description
+                - message
                 type: object
           description: OK
         '400':
