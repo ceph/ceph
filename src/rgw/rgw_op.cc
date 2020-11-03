@@ -6379,11 +6379,11 @@ int RGWDeleteMultiObj::verify_permission(optional_yield y)
       }
     }
 
-    bool empty = rgw::sal::RGWObject::empty(s->object.get()) || s->object->get_instance().empty();
+    bool not_versioned = rgw::sal::RGWObject::empty(s->object.get()) || s->object->get_instance().empty();
 
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
-                                              empty ?
+                                              not_versioned ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
                                               ARN(s->bucket->get_key()));
@@ -6394,7 +6394,7 @@ int RGWDeleteMultiObj::verify_permission(optional_yield y)
     rgw::IAM::Effect r = Effect::Pass;
     if (s->iam_policy) {
       r = s->iam_policy->eval(s->env, *s->auth.identity,
-				 empty ?
+				 not_versioned ?
 				 rgw::IAM::s3DeleteObject :
 				 rgw::IAM::s3DeleteObjectVersion,
 				 ARN(s->bucket->get_key()));
