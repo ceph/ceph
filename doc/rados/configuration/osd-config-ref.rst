@@ -218,37 +218,53 @@ scrubbing operations.
 
 ``osd scrub begin hour``
 
-:Description: The time of day for the lower bound when a scheduled scrub can be
-              performed.
-:Type: Integer in the range of 0 to 24
+:Description: This restricts scrubbing to this hour of the day or later.
+              Use ``osd scrub begin hour = 0`` and ``osd scrub end hour = 0``
+              to allow scrubbing the entire day.  Along with ``osd scrub end hour``, they define a time
+              window, in which the scrubs can happen.
+              But a scrub will be performed
+              no matter whether the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd scrub max interval``.
+:Type: Integer in the range of 0 to 23
 :Default: ``0``
 
 
 ``osd scrub end hour``
 
-:Description: The time of day for the upper bound when a scheduled scrub can be
-              performed. Along with ``osd scrub begin hour``, they define a time
+:Description: This restricts scrubbing to the hour earlier than this.
+              Use ``osd scrub begin hour = 0`` and ``osd scrub end hour = 0`` to allow scrubbing
+              for the entire day.  Along with ``osd scrub begin hour``, they define a time
               window, in which the scrubs can happen. But a scrub will be performed
-              no matter the time window allows or not, as long as the placement
+              no matter whether the time window allows or not, as long as the placement
               group's scrub interval exceeds ``osd scrub max interval``.
-:Type: Integer in the range of 0 to 24
-:Default: ``24``
+:Type: Integer in the range of 0 to 23
+:Default: ``0``
 
 
 ``osd scrub begin week day``
 
 :Description: This restricts scrubbing to this day of the week or later.
-              0 or 7 = Sunday, 1 = Monday, etc.
-:Type: Integer in the range of 0 to 7
+              0  = Sunday, 1 = Monday, etc. Use ``osd scrub begin week day = 0``
+              and ``osd scrub end week day = 0`` to allow scrubbing for the entire week.
+              Along with ``osd scrub end week day``, they define a time window, in which
+              the scrubs can happen. But a scrub will be performed
+              no matter whether the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd scrub max interval``.
+:Type: Integer in the range of 0 to 6
 :Default: ``0``
 
 
 ``osd scrub end week day``
 
 :Description: This restricts scrubbing to days of the week earlier than this.
-              0 or 7 = Sunday, 1 = Monday, etc.
-:Type: Integer in the range of 0 to 7
-:Default: ``7``
+              0 = Sunday, 1 = Monday, etc.  Use ``osd scrub begin week day = 0``
+              and ``osd scrub end week day = 0`` to allow scrubbing for the entire week.
+              Along with ``osd scrub begin week day``, they define a time
+              window, in which the scrubs can happen. But a scrub will be performed
+              no matter whether the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd scrub max interval``.
+:Type: Integer in the range of 0 to 6
+:Default: ``0``
 
 
 ``osd scrub during recovery``
