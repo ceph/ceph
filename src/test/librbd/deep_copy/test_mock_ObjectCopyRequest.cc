@@ -475,6 +475,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, DNE) {
 
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -505,6 +506,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -546,6 +548,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadError) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -578,6 +581,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -631,6 +635,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -694,6 +699,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -747,6 +753,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -799,6 +806,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ObjectMapUpdateError) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 
@@ -865,6 +873,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
 
+  expect_op_work_queue(mock_src_image_ctx);
   expect_test_features(mock_dst_image_ctx);
   expect_get_object_count(mock_dst_image_ctx);
 

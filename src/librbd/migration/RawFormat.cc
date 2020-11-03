@@ -3,14 +3,15 @@
 
 #include "librbd/migration/RawFormat.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
+#include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/migration/FileStream.h"
+#include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/migration/StreamInterface.h"
-
-static const std::string STREAM{"stream"};
-static const std::string STREAM_TYPE{"type"};
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -20,10 +21,99 @@ static const std::string STREAM_TYPE{"type"};
 namespace librbd {
 namespace migration {
 
+#define dout_subsys ceph_subsys_rbd
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::migration::RawFormat::OpenRequest " \
+                           << this << " " << __func__ << ": "
+
+template <typename I>
+struct RawFormat<I>::OpenRequest {
+  RawFormat* raw_format;
+  Context* on_finish;
+
+  uint64_t image_size = 0;
+
+  OpenRequest(RawFormat* raw_format, Context* on_finish)
+    : raw_format(raw_format), on_finish(on_finish) {
+  }
+
+  void send() {
+    open_stream();
+  }
+
+  void open_stream() {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << dendl;
+
+    auto ctx = util::create_context_callback<
+      OpenRequest, &OpenRequest::handle_open_stream>(this);
+    raw_format->m_stream->open(ctx);
+  }
+
+  void handle_open_stream(int r) {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << "r=" << r << dendl;
+
+    if (r < 0) {
+      lderr(cct) << "failed to open stream: " << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+
+    get_image_size();
+  }
+
+  void get_image_size() {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << dendl;
+
+    auto ctx = util::create_context_callback<
+      OpenRequest, &OpenRequest::handle_get_image_size>(this);
+    raw_format->get_image_size(CEPH_NOSNAP, &image_size, ctx);
+  }
+
+  void handle_get_image_size(int r) {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << "r=" << r << dendl;
+
+    if (r < 0) {
+      lderr(cct) << "failed to open stream: " << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+
+    raw_format->m_image_ctx->image_lock.lock();
+    raw_format->m_image_ctx->size = image_size;
+    raw_format->m_image_ctx->image_lock.unlock();
+
+    finish(0);
+  }
+
+  void finish(int r) {
+    auto cct = raw_format->m_image_ctx->cct;
+    ldout(cct, 10) << "r=" << r << dendl;
+
+    if (r < 0) {
+      raw_format->m_image_ctx->state->close(new LambdaContext(
+        [r, on_finish=on_finish](int _) { on_finish->complete(r); }));
+    } else {
+      on_finish->complete(0);
+    }
+
+    delete this;
+  }
+};
+
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::migration::RawFormat: " << this \
+                           << " " << __func__ << ": "
+
 template <typename I>
 RawFormat<I>::RawFormat(
-    I* image_ctx, const json_spirit::mObject& json_object)
-  : m_image_ctx(image_ctx), m_json_object(json_object) {
+    I* image_ctx, const json_spirit::mObject& json_object,
+    const SourceSpecBuilder<I>* source_spec_builder)
+  : m_image_ctx(image_ctx), m_json_object(json_object),
+    m_source_spec_builder(source_spec_builder) {
 }
 
 template <typename I>
@@ -31,31 +121,17 @@ void RawFormat<I>::open(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
-  // TODO switch to stream builder when more available
-  auto& stream_value = m_json_object[STREAM];
-  if (stream_value.type() != json_spirit::obj_type) {
-    lderr(cct) << "missing stream section" << dendl;
-    on_finish->complete(-EINVAL);
+  int r = m_source_spec_builder->build_stream(m_json_object, &m_stream);
+  if (r < 0) {
+    lderr(cct) << "failed to build migration stream handler" << cpp_strerror(r)
+               << dendl;
+    m_image_ctx->state->close(
+      new LambdaContext([r, on_finish](int _) { on_finish->complete(r); }));
     return;
   }
 
-  auto& stream_obj = stream_value.get_obj();
-  auto& stream_type_value = stream_obj[STREAM_TYPE];
-  if (stream_type_value.type() != json_spirit::str_type) {
-    lderr(cct) << "missing stream type value" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& stream_type = stream_type_value.get_str();
-  if (stream_type != "file") {
-    lderr(cct) << "unknown stream type '" << stream_type << "'" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  m_stream.reset(FileStream<I>::create(m_image_ctx, stream_obj));
-  m_stream->open(on_finish);
+  auto req = new OpenRequest(this, on_finish);
+  req->send();
 }
 
 template <typename I>

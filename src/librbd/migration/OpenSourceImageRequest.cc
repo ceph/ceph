@@ -9,6 +9,7 @@
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/migration/ImageDispatch.h"
 #include "librbd/migration/NativeFormat.h"
+#include "librbd/migration/SourceSpecBuilder.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -40,13 +41,48 @@ void OpenSourceImageRequest<I>::open_source() {
   ldout(cct, 10) << dendl;
 
   // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", m_src_snap_id,
-    m_dst_image_ctx->md_ctx, true);
-  (*m_src_image_ctx)->child = m_dst_image_ctx;
+  *m_src_image_ctx = I::create("", "", m_src_snap_id, m_dst_image_ctx->md_ctx,
+                               true);
+  auto src_image_ctx = *m_src_image_ctx;
+  src_image_ctx->child = m_dst_image_ctx;
 
-  // TODO use factory once multiple sources are available
-  m_format = std::unique_ptr<FormatInterface>(NativeFormat<I>::create(
-    *m_src_image_ctx, m_migration_info));
+  // use default layout values (can be overridden by source layers later)
+  src_image_ctx->order = 22;
+  src_image_ctx->layout = file_layout_t();
+  src_image_ctx->layout.stripe_count = 1;
+  src_image_ctx->layout.stripe_unit = 1ULL << src_image_ctx->order;
+  src_image_ctx->layout.object_size = 1Ull << src_image_ctx->order;
+  src_image_ctx->layout.pool_id = -1;
+
+  bool import_only = true;
+  auto source_spec = m_migration_info.source_spec;
+  if (source_spec.empty()) {
+    // implies legacy migration from RBD image in same cluster
+    source_spec = NativeFormat<I>::build_source_spec(
+      m_migration_info.pool_id, m_migration_info.pool_namespace,
+      m_migration_info.image_name, m_migration_info.image_id);
+    import_only = false;
+  }
+
+  SourceSpecBuilder<I> source_spec_builder{src_image_ctx};
+  json_spirit::mObject source_spec_object;
+  int r = source_spec_builder.parse_source_spec(source_spec,
+                                                &source_spec_object);
+  if (r < 0) {
+    lderr(cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+  r = source_spec_builder.build_format(source_spec_object, import_only,
+                                       &m_format);
+  if (r < 0) {
+    lderr(cct) << "failed to build migration format handler: "
+               << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
 
   auto ctx = util::create_context_callback<
     OpenSourceImageRequest<I>,

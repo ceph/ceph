@@ -476,6 +476,9 @@ CEPH_RBD_API int rbd_migration_prepare(rados_ioctx_t ioctx,
                                        rados_ioctx_t dest_ioctx,
                                        const char *dest_image_name,
                                        rbd_image_options_t opts);
+CEPH_RBD_API int rbd_migration_prepare_import(
+    const char *source_spec, rados_ioctx_t dest_ioctx,
+    const char *dest_image_name, rbd_image_options_t opts);
 CEPH_RBD_API int rbd_migration_execute(rados_ioctx_t ioctx,
                                        const char *image_name);
 CEPH_RBD_API int rbd_migration_execute_with_progress(rados_ioctx_t ioctx,

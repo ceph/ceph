@@ -3,10 +3,12 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
+#include "test/librbd/mock/migration/MockStreamInterface.h"
 #include "include/rbd_types.h"
 #include "common/ceph_mutex.h"
 #include "librbd/migration/FileStream.h"
 #include "librbd/migration/RawFormat.h"
+#include "librbd/migration/SourceSpecBuilder.h"
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include "json_spirit/json_spirit.h"
@@ -24,30 +26,12 @@ struct MockTestImageCtx : public MockImageCtx {
 namespace migration {
 
 template<>
-struct FileStream<librbd::MockTestImageCtx> : public StreamInterface {
-  static FileStream* s_instance;
-  static FileStream* create(librbd::MockTestImageCtx*,
-                            const json_spirit::mObject&) {
-    ceph_assert(s_instance != nullptr);
-    return s_instance;
-  }
+struct SourceSpecBuilder<librbd::MockTestImageCtx> {
 
-  MOCK_METHOD1(open, void(Context*));
-  MOCK_METHOD1(close, void(Context*));
+  MOCK_CONST_METHOD2(build_stream, int(const json_spirit::mObject&,
+                                       std::unique_ptr<StreamInterface>*));
 
-  MOCK_METHOD2(get_size, void(uint64_t*, Context*));
-
-  MOCK_METHOD3(read, void(const io::Extents&, bufferlist*, Context*));
-  void read(io::Extents&& byte_extents, bufferlist* bl, Context* on_finish) {
-    read(byte_extents, bl, on_finish);
-  }
-
-  FileStream() {
-    s_instance = this;
-  }
 };
-
-FileStream<librbd::MockTestImageCtx>* FileStream<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace migration
 } // namespace librbd
@@ -67,7 +51,7 @@ using ::testing::Invoke;
 class TestMockMigrationRawFormat : public TestMockFixture {
 public:
   typedef RawFormat<MockTestImageCtx> MockRawFormat;
-  typedef FileStream<MockTestImageCtx> MockFileStream;
+  typedef SourceSpecBuilder<MockTestImageCtx> MockSourceSpecBuilder;
 
   librbd::ImageCtx *m_image_ctx;
 
@@ -81,34 +65,51 @@ public:
     json_object["stream"] = stream_obj;
   }
 
-  void expect_stream_open(MockFileStream& mock_file_stream, int r) {
-    EXPECT_CALL(mock_file_stream, open(_))
+  void expect_build_stream(MockSourceSpecBuilder& mock_source_spec_builder,
+                           MockStreamInterface* mock_stream_interface, int r) {
+    EXPECT_CALL(mock_source_spec_builder, build_stream(_, _))
+      .WillOnce(WithArgs<1>(Invoke([mock_stream_interface, r]
+        (std::unique_ptr<StreamInterface>* ptr) {
+          ptr->reset(mock_stream_interface);
+          return r;
+        })));
+  }
+
+  void expect_stream_open(MockStreamInterface& mock_stream_interface, int r) {
+    EXPECT_CALL(mock_stream_interface, open(_))
       .WillOnce(Invoke([r](Context* ctx) { ctx->complete(r); }));
   }
 
-  void expect_stream_close(MockFileStream& mock_file_stream, int r) {
-    EXPECT_CALL(mock_file_stream, close(_))
+  void expect_stream_close(MockStreamInterface& mock_stream_interface, int r) {
+    EXPECT_CALL(mock_stream_interface, close(_))
       .WillOnce(Invoke([r](Context* ctx) { ctx->complete(r); }));
   }
 
-  void expect_stream_get_size(MockFileStream& mock_file_stream,
+  void expect_stream_get_size(MockStreamInterface& mock_stream_interface,
                               uint64_t size, int r) {
-    EXPECT_CALL(mock_file_stream, get_size(_, _))
+    EXPECT_CALL(mock_stream_interface, get_size(_, _))
       .WillOnce(Invoke([size, r](uint64_t* out_size, Context* ctx) {
           *out_size = size;
           ctx->complete(r);
         }));
   }
 
-  void expect_stream_read(MockFileStream& mock_file_stream,
+  void expect_stream_read(MockStreamInterface& mock_stream_interface,
                           const io::Extents& byte_extents,
                           const bufferlist& bl, int r) {
-    EXPECT_CALL(mock_file_stream, read(byte_extents, _, _))
+    EXPECT_CALL(mock_stream_interface, read(byte_extents, _, _))
       .WillOnce(WithArgs<1, 2>(Invoke([bl, r]
         (bufferlist* out_bl, Context* ctx) {
           *out_bl = bl;
           ctx->complete(r);
         })));
+  }
+
+  void expect_close(MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.state, close(_))
+      .WillOnce(Invoke([this, r](Context* ctx) {
+                  ctx->complete(r);
+                }));
   }
 
   json_spirit::mObject json_object;
@@ -118,12 +119,18 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
-  auto mock_file_stream = new MockFileStream();
-  expect_stream_open(*mock_file_stream, 0);
+  MockSourceSpecBuilder mock_source_spec_builder;
 
-  expect_stream_close(*mock_file_stream, 0);
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object);
+  expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
+
+  expect_stream_close(*mock_stream_interface, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
 
   C_SaferCond ctx1;
   mock_raw_format.open(&ctx1);
@@ -134,16 +141,43 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
   ASSERT_EQ(0, ctx2.wait());
 }
 
+TEST_F(TestMockMigrationRawFormat, OpenError) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
+  InSequence seq;
+  MockSourceSpecBuilder mock_source_spec_builder;
+
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+
+  expect_stream_open(*mock_stream_interface, -ENOENT);
+
+  expect_close(mock_image_ctx, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
+
+  C_SaferCond ctx;
+  mock_raw_format.open(&ctx);
+  ASSERT_EQ(-ENOENT, ctx.wait());
+}
+
 TEST_F(TestMockMigrationRawFormat, GetSnapshots) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
-  auto mock_file_stream = new MockFileStream();
-  expect_stream_open(*mock_file_stream, 0);
+  MockSourceSpecBuilder mock_source_spec_builder;
 
-  expect_stream_close(*mock_file_stream, 0);
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object);
+  expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
+
+  expect_stream_close(*mock_stream_interface, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
 
   C_SaferCond ctx1;
   mock_raw_format.open(&ctx1);
@@ -164,14 +198,20 @@ TEST_F(TestMockMigrationRawFormat, GetImageSize) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
-  auto mock_file_stream = new MockFileStream();
-  expect_stream_open(*mock_file_stream, 0);
+  MockSourceSpecBuilder mock_source_spec_builder;
 
-  expect_stream_get_size(*mock_file_stream, 123, 0);
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
-  expect_stream_close(*mock_file_stream, 0);
+  expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object);
+  expect_stream_get_size(*mock_stream_interface, 123, 0);
+
+  expect_stream_close(*mock_stream_interface, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
 
   C_SaferCond ctx1;
   mock_raw_format.open(&ctx1);
@@ -192,12 +232,18 @@ TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshot) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
-  auto mock_file_stream = new MockFileStream();
-  expect_stream_open(*mock_file_stream, 0);
+  MockSourceSpecBuilder mock_source_spec_builder;
 
-  expect_stream_close(*mock_file_stream, 0);
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object);
+  expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
+
+  expect_stream_close(*mock_stream_interface, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
 
   C_SaferCond ctx1;
   mock_raw_format.open(&ctx1);
@@ -217,16 +263,22 @@ TEST_F(TestMockMigrationRawFormat, Read) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
-  auto mock_file_stream = new MockFileStream();
-  expect_stream_open(*mock_file_stream, 0);
+  MockSourceSpecBuilder mock_source_spec_builder;
+
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+
+  expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
 
   bufferlist expect_bl;
   expect_bl.append(std::string(123, '1'));
-  expect_stream_read(*mock_file_stream, {{123, 123}}, expect_bl, 0);
+  expect_stream_read(*mock_stream_interface, {{123, 123}}, expect_bl, 0);
 
-  expect_stream_close(*mock_file_stream, 0);
+  expect_stream_close(*mock_stream_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object);
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
 
   C_SaferCond ctx1;
   mock_raw_format.open(&ctx1);
@@ -251,12 +303,18 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
-  auto mock_file_stream = new MockFileStream();
-  expect_stream_open(*mock_file_stream, 0);
+  MockSourceSpecBuilder mock_source_spec_builder;
 
-  expect_stream_close(*mock_file_stream, 0);
+  auto mock_stream_interface = new MockStreamInterface();
+  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object);
+  expect_stream_open(*mock_stream_interface, 0);
+  expect_stream_get_size(*mock_stream_interface, 0, 0);
+
+  expect_stream_close(*mock_stream_interface, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
 
   C_SaferCond ctx1;
   mock_raw_format.open(&ctx1);
