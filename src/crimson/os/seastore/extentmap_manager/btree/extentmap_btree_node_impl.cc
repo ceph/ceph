@@ -73,7 +73,7 @@ ExtMapInnerNode::rm_lextent(ext_context_t ec, objaddr_t lo, lext_map_val_t val)
   auto rm_pt = get_containing_child(lo);
   return extmap_load_extent(ec, rm_pt->get_val(),  get_meta().depth - 1).safe_then(
     [this, ec, rm_pt, lo, val=std::move(val)](auto extent) mutable {
-    if (extent->at_min_capacity()) {
+    if (extent->at_min_capacity() && get_node_size() > 1) {
       return merge_entry(ec, lo, rm_pt, extent);
     } else {
       return merge_entry_ertr::make_ready_future<ExtMapNodeRef>(std::move(extent));
@@ -86,6 +86,7 @@ ExtMapInnerNode::rm_lextent(ext_context_t ec, objaddr_t lo, lext_map_val_t val)
 ExtMapInnerNode::split_children_ret
 ExtMapInnerNode::make_split_children(ext_context_t ec)
 {
+  logger().debug("{}: {}", "ExtMapInnerNode", __func__);
   return extmap_alloc_2extents<ExtMapInnerNode>(ec, EXTMAP_BLOCK_SIZE)
     .safe_then([this] (auto &&ext_pair) {
       auto [left, right] = ext_pair;
@@ -98,6 +99,7 @@ ExtMapInnerNode::make_split_children(ext_context_t ec)
 ExtMapInnerNode::full_merge_ret
 ExtMapInnerNode::make_full_merge(ext_context_t ec, ExtMapNodeRef right)
 {
+  logger().debug("{}: {}", "ExtMapInnerNode", __func__);
   return extmap_alloc_extent<ExtMapInnerNode>(ec, EXTMAP_BLOCK_SIZE)
     .safe_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<ExtMapInnerNode>());
@@ -110,6 +112,7 @@ ExtMapInnerNode::make_full_merge(ext_context_t ec, ExtMapNodeRef right)
 ExtMapInnerNode::make_balanced_ret
 ExtMapInnerNode::make_balanced(ext_context_t ec, ExtMapNodeRef _right, bool prefer_left)
 {
+  logger().debug("{}: {}", "ExtMapInnerNode", __func__);
   ceph_assert(_right->get_type() == type);
   return extmap_alloc_2extents<ExtMapInnerNode>(ec, EXTMAP_BLOCK_SIZE)
     .safe_then([this,  _right, prefer_left] (auto &&replacement_pair){
@@ -127,6 +130,7 @@ ExtMapInnerNode::split_entry_ret
 ExtMapInnerNode::split_entry(ext_context_t ec, objaddr_t lo,
 	                     internal_iterator_t iter, ExtMapNodeRef entry)
 {
+  logger().debug("{}: {}", "ExtMapInnerNode", __func__);
   if (!is_pending()) {
     auto mut = ec.tm.get_mutable_extent(ec.t, this)->cast<ExtMapInnerNode>();
     auto mut_iter = mut->iter_idx(iter->get_offset());
@@ -296,6 +300,7 @@ ExtMapLeafNode::rm_lextent(ext_context_t ec, objaddr_t lo, lext_map_val_t val)
 ExtMapLeafNode::split_children_ret
 ExtMapLeafNode::make_split_children(ext_context_t ec)
 {
+  logger().debug("{}: {}", "ExtMapLeafNode", __func__);
   return extmap_alloc_2extents<ExtMapLeafNode>(ec, EXTMAP_BLOCK_SIZE)
     .safe_then([this] (auto &&ext_pair) {
       auto [left, right] = ext_pair;
@@ -308,6 +313,7 @@ ExtMapLeafNode::make_split_children(ext_context_t ec)
 ExtMapLeafNode::full_merge_ret
 ExtMapLeafNode::make_full_merge(ext_context_t ec, ExtMapNodeRef right)
 {
+  logger().debug("{}: {}", "ExtMapLeafNode", __func__);
   return extmap_alloc_extent<ExtMapLeafNode>(ec, EXTMAP_BLOCK_SIZE)
     .safe_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<ExtMapLeafNode>());
@@ -319,6 +325,7 @@ ExtMapLeafNode::make_full_merge(ext_context_t ec, ExtMapNodeRef right)
 ExtMapLeafNode::make_balanced_ret
 ExtMapLeafNode::make_balanced(ext_context_t ec, ExtMapNodeRef _right, bool prefer_left)
 {
+  logger().debug("{}: {}", "ExtMapLeafNode", __func__);
   ceph_assert(_right->get_type() == type);
   return extmap_alloc_2extents<ExtMapLeafNode>(ec, EXTMAP_BLOCK_SIZE)
     .safe_then([this, _right, prefer_left] (auto &&replacement_pair) {
