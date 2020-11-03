@@ -59,8 +59,8 @@ class NodeExtentManager {
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
-  template <class... ValuesT>
-  using tm_future = tm_ertr::future<ValuesT...>;
+  template <class ValueT=void>
+  using tm_future = tm_ertr::future<ValueT>;
 
   virtual bool is_read_isolated() const = 0;
   virtual tm_future<NodeExtentRef> read_extent(
