@@ -469,12 +469,7 @@ public:
       pc->cond.notify_all();
       pc->put_unlock();
     } else {
-      r = fifos[index]->trim(marker, false, c);
-      if (r < 0) {
-	lderr(cct) << __PRETTY_FUNCTION__
-		   << ": unable to trim FIFO: " << get_oid(index)
-		   << ": " << cpp_strerror(-r) << dendl;
-      }
+      fifos[index]->trim(marker, false, c);
     }
     return r;
   }
