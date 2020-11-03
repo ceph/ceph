@@ -29,8 +29,8 @@ class Btree {
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
-  template <class... ValuesT>
-  using btree_future = btree_ertr::future<ValuesT...>;
+  template <class ValueT=void>
+  using btree_future = btree_ertr::future<ValueT>;
 
   Btree(NodeExtentManagerURef&& nm);
   Btree(const Btree&) = delete;

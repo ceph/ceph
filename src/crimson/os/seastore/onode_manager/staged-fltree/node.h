@@ -89,8 +89,8 @@ class Node
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
-  template <class... ValuesT>
-  using node_future = node_ertr::future<ValuesT...>;
+  template <class ValueT=void>
+  using node_future = node_ertr::future<ValueT>;
   struct search_result_t {
     bool is_end() const { return p_cursor->is_end(); }
     Ref<tree_cursor_t> p_cursor;
