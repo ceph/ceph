@@ -62,6 +62,7 @@ int get_meta(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string&
 	     std::uint32_t* part_entry_overhead,
 	     std::uint64_t tid, optional_yield y,
 	     bool probe = false);
+
 struct marker {
   std::int64_t num = 0;
   std::uint64_t ofs = 0;
