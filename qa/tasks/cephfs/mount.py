@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from textwrap import dedent
 from IPy import IP
 
+from teuthology.contextutil import safe_while
 from teuthology.misc import get_file, sudo_write_file
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
@@ -804,20 +805,13 @@ class CephFSMount(object):
         return rproc
 
     def wait_for_dir_empty(self, dirname, timeout=30):
-        i = 0
         dirpath = os.path.join(self.hostfs_mntpt, dirname)
-        while i < timeout:
-            nr_entries = int(self.getfattr(dirpath, "ceph.dir.entries"))
-            if nr_entries == 0:
-                log.debug("Directory {0} seen empty from {1} after {2}s ".format(
-                    dirname, self.client_id, i))
-                return
-            else:
-                time.sleep(1)
-                i += 1
-
-        raise RuntimeError("Timed out after {0}s waiting for {1} to become empty from {2}".format(
-            i, dirname, self.client_id))
+        with safe_while(sleep=5, tries=(timeout//5)) as proceed:
+            while proceed():
+                p = self.run_shell_payload(f"stat -c %h {dirpath}")
+                nr_links = int(p.stdout.getvalue().strip())
+                if nr_links == 2:
+                    return
 
     def wait_for_visible(self, basename="background_file", timeout=30):
         i = 0
