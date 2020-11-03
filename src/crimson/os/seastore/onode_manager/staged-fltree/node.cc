@@ -22,8 +22,8 @@ namespace {
 namespace crimson::os::seastore::onode {
 
 using node_ertr = Node::node_ertr;
-template <class... ValuesT>
-using node_future = Node::node_future<ValuesT...>;
+template <class ValueT=void>
+using node_future = Node::node_future<ValueT>;
 
 /*
  * tree_cursor_t

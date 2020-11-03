@@ -227,8 +227,8 @@ template <bool TRACK>
 class TreeBuilder {
  public:
   using ertr = Btree::btree_ertr;
-  template <class... ValuesT>
-  using future = ertr::future<ValuesT...>;
+  template <class ValueT=void>
+  using future = ertr::future<ValueT>;
 
   TreeBuilder(KVPool& kvs, NodeExtentManagerURef&& nm)
     : kvs{kvs}, ref_t{make_transaction()}, t{*ref_t}, tree{std::move(nm)} {}

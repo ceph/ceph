@@ -11,8 +11,8 @@
 namespace crimson::os::seastore::onode {
 
 using btree_ertr = Btree::btree_ertr;
-template <class... ValuesT>
-using btree_future = Btree::btree_future<ValuesT...>;
+template <class ValueT=void>
+using btree_future = Btree::btree_future<ValueT>;
 using Cursor = Btree::Cursor;
 
 Cursor::Cursor(Btree* p_tree, Ref<tree_cursor_t> _p_cursor)
