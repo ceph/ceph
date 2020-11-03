@@ -131,6 +131,10 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length);
   case extent_types_t::ONODE_BLOCK:
     return alloc_new_extent<OnodeBlock>(t, length);
+  case extent_types_t::EXTMAP_INNER:
+    return alloc_new_extent<extentmap_manager::ExtMapInnerNode>(t, length);
+  case extent_types_t::EXTMAP_LEAF:
+    return alloc_new_extent<extentmap_manager::ExtMapLeafNode>(t, length);
   case extent_types_t::TEST_BLOCK:
     return alloc_new_extent<TestBlock>(t, length);
   case extent_types_t::TEST_BLOCK_PHYSICAL:

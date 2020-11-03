@@ -114,6 +114,10 @@ struct ExtMapInnerNode
     return get_size() == get_capacity() / 2;
   }
 
+  unsigned get_node_size() const {
+    return get_size();
+  }
+
   /* get the iterator containing [l, r]
    */
   std::pair<internal_iterator_t, internal_iterator_t> bound(
@@ -245,6 +249,10 @@ struct ExtMapLeafNode
 
   bool at_min_capacity() const final {
     return get_size() == get_capacity() / 2;
+  }
+
+  unsigned get_node_size() const {
+    return get_size();
   }
 
   /* get the iterator containing [l, r]
