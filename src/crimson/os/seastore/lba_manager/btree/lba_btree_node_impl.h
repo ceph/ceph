@@ -30,8 +30,8 @@ constexpr size_t LBA_BLOCK_SIZE = 4096;
  * On disk layout for lba_node_meta_t
  */
 struct lba_node_meta_le_t {
-  laddr_le_t begin = init_le64(0);
-  laddr_le_t end = init_le64(0);
+  laddr_le_t begin = laddr_le_t(0);
+  laddr_le_t end = laddr_le_t(0);
   depth_le_t depth = init_les32(0);
 
   lba_node_meta_le_t() = default;
@@ -109,11 +109,27 @@ struct LBAInternalNode
     laddr_t laddr,
     mutate_func_t &&f) final;
 
+  mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) final;
+
   find_hole_ret find_hole(
     op_context_t c,
     laddr_t min,
     laddr_t max,
     extent_len_t len) final;
+
+  scan_mappings_ret scan_mappings(
+    op_context_t c,
+    laddr_t begin,
+    laddr_t end,
+    scan_mappings_func_t &f) final;
+
+  scan_mapped_space_ret scan_mapped_space(
+    op_context_t c,
+    scan_mapped_space_func_t &f) final;
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_split_children(op_context_t c) final {
@@ -168,8 +184,6 @@ struct LBAInternalNode
   }
 
   /**
-   * resolve_relative_addrs
-   *
    * Internal relative addresses on read or in memory prior to commit
    * are either record or block relative depending on whether this
    * physical node is is_initial_pending() or just is_pending().
@@ -178,21 +192,26 @@ struct LBAInternalNode
    * resolve_relative_addrs fixes up relative internal references
    * based on base.
    */
-  void resolve_relative_addrs(paddr_t base);
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    // All in-memory relative addrs are necessarily record-relative
-    resolve_relative_addrs(record_block_offset);
+  void resolve_relative_addrs(paddr_t base) final;
+  void node_resolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	if (i->get_val().is_relative()) {
+	  assert(i->get_val().is_block_relative());
+	  i->set_val(get_paddr().add_relative(i->get_val()));
+	}
+      }
+    }
   }
-
-  void on_initial_write() final {
-    // All in-memory relative addrs are necessarily block-relative
-    resolve_relative_addrs(get_paddr());
-  }
-
-  void on_clean_read() final {
-    // From initial write of block, relative addrs are necessarily block-relative
-    resolve_relative_addrs(get_paddr());
+  void node_unresolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	if (i->get_val().is_relative()) {
+	  assert(i->get_val().is_record_relative());
+	  i->set_val(i->get_val() - get_paddr());
+	}
+      }
+    }
   }
 
   extent_types_t get_type() const final {
@@ -363,11 +382,27 @@ struct LBALeafNode
     laddr_t laddr,
     mutate_func_t &&f) final;
 
+  mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) final;
+
   find_hole_ret find_hole(
     op_context_t c,
     laddr_t min,
     laddr_t max,
     extent_len_t len) final;
+
+  scan_mappings_ret scan_mappings(
+    op_context_t c,
+    laddr_t begin,
+    laddr_t end,
+    scan_mappings_func_t &f) final;
+
+  scan_mapped_space_ret scan_mapped_space(
+    op_context_t c,
+    scan_mapped_space_func_t &f) final;
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_split_children(op_context_t c) final {
@@ -422,18 +457,31 @@ struct LBALeafNode
   }
 
   // See LBAInternalNode, same concept
-  void resolve_relative_addrs(paddr_t base);
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    resolve_relative_addrs(record_block_offset);
+  void resolve_relative_addrs(paddr_t base) final;
+  void node_resolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	auto val = i->get_val();
+	if (val.paddr.is_relative()) {
+	  assert(val.paddr.is_block_relative());
+	  val.paddr = get_paddr().add_relative(val.paddr);
+	  i->set_val(val);
+	}
+      }
+    }
   }
-
-  void on_initial_write() final {
-    resolve_relative_addrs(get_paddr());
-  }
-
-  void on_clean_read() final {
-    resolve_relative_addrs(get_paddr());
+  void node_unresolve_vals(iterator from, iterator to) const final {
+    if (is_initial_pending()) {
+      for (auto i = from; i != to; ++i) {
+	auto val = i->get_val();
+	if (val.paddr.is_relative()) {
+	  auto val = i->get_val();
+	  assert(val.paddr.is_record_relative());
+	  val.paddr = val.paddr - get_paddr();
+	  i->set_val(val);
+	}
+      }
+    }
   }
 
   ceph::bufferlist get_delta() final {

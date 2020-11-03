@@ -2,7 +2,7 @@
 @use './src/styles/defaults' as *;
 
 // Angular2-Tree Component
-@import '~angular-tree-component/dist/angular-tree-component.css';
+@import '~@circlon/angular-tree-component/css/angular-tree-component.css';
 
 // Fork-Awesome
 $fa-font-path: '~fork-awesome/fonts';
@@ -11,6 +11,7 @@ $font-family-icon: 'ForkAwesome';
 $badge-font-size: 1rem;
 $form-feedback-font-size: 100%;
 $popover-max-width: 350px;
+$popover-font-size: 1rem;
 
 // https://getbootstrap.com/docs/4.5/layout/grid/#variables
 $grid-breakpoints: (

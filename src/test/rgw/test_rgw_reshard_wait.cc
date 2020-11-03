@@ -13,9 +13,7 @@
  */
 
 #include "rgw/rgw_reshard.h"
-#ifdef HAVE_BOOST_CONTEXT
 #include <spawn/spawn.hpp>
-#endif
 
 #include <gtest/gtest.h>
 
@@ -60,7 +58,6 @@ TEST(ReshardWait, stop_block)
   short_waiter.stop();
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST(ReshardWait, wait_yield)
 {
   constexpr ceph::timespan wait_duration = 50ms;
@@ -165,4 +162,3 @@ TEST(ReshardWait, stop_multiple)
   EXPECT_GT(long_duration, elapsed); // waited less than 10s
   short_waiter.stop();
 }
-#endif // HAVE_BOOST_CONTEXT

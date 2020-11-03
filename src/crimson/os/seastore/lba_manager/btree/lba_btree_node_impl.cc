@@ -39,15 +39,14 @@ LBAInternalNode::lookup_ret LBAInternalNode::lookup(
   }
   assert(meta.begin <= addr);
   assert(meta.end > addr);
-  auto [begin, end] = bound(addr, 0);
-  assert(begin == end + 1);
+  auto iter = lower_bound(addr);
   return get_lba_btree_extent(
     c,
-    meta.depth,
-    begin->get_val(),
+    meta.depth - 1,
+    iter->get_val(),
     get_paddr()).safe_then([c, addr, depth](auto child) {
       return child->lookup(c, addr, depth);
-    });
+    }).finally([ref=LBANodeRef(this)] {});
 }
 
 LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
@@ -77,7 +76,7 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
 				pin_list.begin(), pin_list.end());
 		});
 	  });
-    }).safe_then([result=std::move(result_up)] {
+    }).safe_then([result=std::move(result_up), ref=LBANodeRef(this)] {
       return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
 	std::move(*result));
     });
@@ -131,60 +130,136 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
   });
 }
 
+LBAInternalNode::mutate_internal_address_ret LBAInternalNode::mutate_internal_address(
+  op_context_t c,
+  depth_t depth,
+  laddr_t laddr,
+  paddr_t paddr)
+{
+  if (get_meta().depth == (depth + 1)) {
+    if (!is_pending()) {
+      return c.cache.duplicate_for_write(c.trans, this)->cast<LBAInternalNode>(
+      )->mutate_internal_address(
+	c,
+	depth,
+	laddr,
+	paddr);
+    }
+    auto iter = get_containing_child(laddr);
+    if (iter->get_key() != laddr) {
+      return crimson::ct_error::enoent::make();
+    }
+
+    auto old_paddr = iter->get_val();
+
+    journal_update(
+      iter,
+      maybe_generate_relative(paddr),
+      maybe_get_delta_buffer());
+
+    return mutate_internal_address_ret(
+      mutate_internal_address_ertr::ready_future_marker{},
+      old_paddr
+    );
+  } else {
+    auto iter = get_containing_child(laddr);
+    return get_lba_btree_extent(
+      c,
+      get_meta().depth - 1,
+      iter->get_val(),
+      get_paddr()
+    ).safe_then([=](auto node) {
+      return node->mutate_internal_address(
+	c,
+	depth,
+	laddr,
+	paddr);
+    });
+  }
+}
+
 LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
   op_context_t c,
-  laddr_t min,
-  laddr_t max,
+  laddr_t min_addr,
+  laddr_t max_addr,
   extent_len_t len)
 {
   logger().debug(
     "LBAInternalNode::find_hole min={}, max={}, len={}, *this={}",
-    min, max, len, *this);
-  auto bounds = bound(min, max);
-  return seastar::do_with(
-    bounds.first,
-    bounds.second,
-    L_ADDR_NULL,
-    [this, c, len](auto &i, auto &e, auto &ret) {
-      return crimson::do_until(
-	[this, c, &i, &e, &ret, len] {
-	  if (i == e) {
-	    return find_hole_ertr::make_ready_future<std::optional<laddr_t>>(
-	      std::make_optional<laddr_t>(L_ADDR_NULL));
-	  }
-	  return get_lba_btree_extent(
-	    c,
-	    get_meta().depth - 1,
-	    i->get_val(),
-	    get_paddr()
-	  ).safe_then([c, &i, len](auto extent) mutable {
-	    logger().debug(
-	      "LBAInternalNode::find_hole extent {} lb {} ub {}",
-	      *extent,
-	      i->get_key(),
-	      i->get_next_key_or_max());
-	    return extent->find_hole(
-	      c,
-	      i->get_key(),
-	      i->get_next_key_or_max(),
-	      len);
-	  }).safe_then([&i, &ret](auto addr) mutable {
-	    i++;
-	    if (addr != L_ADDR_NULL) {
-	      ret = addr;
-	    }
-	    return find_hole_ertr::make_ready_future<std::optional<laddr_t>>(
-	      addr == L_ADDR_NULL ? std::nullopt :
-	      std::make_optional<laddr_t>(addr));
-	  });
-	}).safe_then([&ret]() {
-	  return ret;
+    min_addr, max_addr, len, *this);
+  auto [begin, end] = bound(min_addr, max_addr);
+  return seastar::repeat_until_value(
+    [i=begin, e=end, c, min_addr, len, this]() mutable {
+    if (i == e) {
+      return seastar::make_ready_future<std::optional<laddr_t>>(
+        std::make_optional<laddr_t>(L_ADDR_NULL));
+    }
+    return get_lba_btree_extent(c,
+				get_meta().depth - 1,
+				i->get_val(),
+				get_paddr()).safe_then(
+      [c, min_addr, len, i](auto extent) mutable {
+      auto lb = std::max(min_addr, i->get_key());
+      auto ub = i->get_next_key_or_max();
+      logger().debug("LBAInternalNode::find_hole extent {} lb {} ub {}",
+		     *extent, lb, ub);
+      return extent->find_hole(c, lb, ub, len);
+    }).safe_then([&i](auto addr) mutable -> std::optional<laddr_t> {
+      if (addr == L_ADDR_NULL) {
+        ++i;
+        return {};
+      } else {
+        return addr;
+      }
+    },
+    // TODO: GCC enters a dead loop if crimson::do_until() is used
+    //       or erroratorized future is returned
+    crimson::ct_error::assert_all{ "fix me - APIv6" });
+  });
+}
+
+LBAInternalNode::scan_mappings_ret LBAInternalNode::scan_mappings(
+  op_context_t c,
+  laddr_t begin,
+  laddr_t end,
+  scan_mappings_func_t &f)
+{
+  auto [biter, eiter] = bound(begin, end);
+  return crimson::do_for_each(
+    std::move(biter),
+    std::move(eiter),
+    [=, &f](auto &viter) {
+      return get_lba_btree_extent(
+	c,
+	get_meta().depth - 1,
+	viter->get_val(),
+	get_paddr()).safe_then([=, &f](auto child) {
+	  return child->scan_mappings(c, begin, end, f);
 	});
-    });
+    }).safe_then([ref=LBANodeRef(this)]{});
+}
+
+LBAInternalNode::scan_mapped_space_ret LBAInternalNode::scan_mapped_space(
+  op_context_t c,
+  scan_mapped_space_func_t &f)
+{
+  f(get_paddr(), get_length());
+  return crimson::do_for_each(
+    begin(), end(),
+    [=, &f](auto &viter) {
+      return get_lba_btree_extent(
+	c,
+	get_meta().depth - 1,
+	viter->get_val(),
+	get_paddr()).safe_then([=, &f](auto child) {
+	  return child->scan_mapped_space(c, f);
+	});
+    }).safe_then([ref=LBANodeRef(this)]{});
 }
 
 
-void LBAInternalNode::resolve_relative_addrs(paddr_t base) {
+void LBAInternalNode::resolve_relative_addrs(paddr_t base)
+{
   for (auto i: *this) {
     if (i->get_val().is_relative()) {
       auto updated = base.add_relative(i->get_val());
@@ -346,7 +421,8 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
     auto begin = i->get_key();
     ret.emplace_back(
       std::make_unique<BtreeLBAPin>(
-	val.paddr,
+	this,
+	val.paddr.maybe_relative_to(get_paddr()),
 	lba_node_meta_t{ begin, begin + val.len, 0}));
   }
   return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
@@ -384,7 +460,8 @@ LBALeafNode::insert_ret LBALeafNode::insert(
   return insert_ret(
     insert_ertr::ready_future_marker{},
     std::make_unique<BtreeLBAPin>(
-      val.paddr,
+      this,
+      val.paddr.maybe_relative_to(get_paddr()),
       lba_node_meta_t{ begin, begin + val.len, 0}));
 }
 
@@ -401,13 +478,23 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
       std::move(f));
   }
 
-  ceph_assert(!at_min_capacity());
   auto mutation_pt = find(laddr);
   if (mutation_pt == end()) {
     return crimson::ct_error::enoent::make();
   }
 
-  auto mutated = f(mutation_pt.get_val());
+  auto cur = mutation_pt.get_val();
+  auto mutated = f(cur);
+
+  mutated.paddr = maybe_generate_relative(mutated.paddr);
+
+  logger().debug(
+    "{}: mutate addr {}: {} -> {}",
+    __func__,
+    laddr,
+    cur.paddr,
+    mutated.paddr);
+
   if (mutated.refcount > 0) {
     journal_update(mutation_pt, mutated, maybe_get_delta_buffer());
     return mutate_mapping_ret(
@@ -421,6 +508,18 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
   }
 }
 
+LBALeafNode::mutate_internal_address_ret LBALeafNode::mutate_internal_address(
+  op_context_t c,
+  depth_t depth,
+  laddr_t laddr,
+  paddr_t paddr)
+{
+  ceph_assert(0 == "Impossible");
+  return mutate_internal_address_ret(
+    mutate_internal_address_ertr::ready_future_marker{},
+    paddr);
+}
+
 LBALeafNode::find_hole_ret LBALeafNode::find_hole(
   op_context_t c,
   laddr_t min,
@@ -430,7 +529,8 @@ LBALeafNode::find_hole_ret LBALeafNode::find_hole(
   logger().debug(
     "LBALeafNode::find_hole min={} max={}, len={}, *this={}",
     min, max, len, *this);
-  for (auto i = begin(); i != end(); ++i) {
+  auto [liter, uiter] = bound(min, max);
+  for (auto i = liter; i != uiter; ++i) {
     auto ub = i->get_key();
     if (min + len <= ub) {
       return find_hole_ret(
@@ -451,7 +551,35 @@ LBALeafNode::find_hole_ret LBALeafNode::find_hole(
   }
 }
 
-void LBALeafNode::resolve_relative_addrs(paddr_t base) {
+LBALeafNode::scan_mappings_ret LBALeafNode::scan_mappings(
+  op_context_t c,
+  laddr_t begin,
+  laddr_t end,
+  scan_mappings_func_t &f)
+{
+  auto [biter, eiter] = bound(begin, end);
+  for (auto i = biter; i != eiter; ++i) {
+    auto val = i->get_val();
+    f(i->get_key(), val.paddr, val.len);
+  }
+  return scan_mappings_ertr::now();
+}
+
+LBALeafNode::scan_mapped_space_ret LBALeafNode::scan_mapped_space(
+  op_context_t c,
+  scan_mapped_space_func_t &f)
+{
+  f(get_paddr(), get_length());
+  for (auto i = begin(); i != end(); ++i) {
+    auto val = i->get_val();
+    f(val.paddr, val.len);
+  }
+  return scan_mappings_ertr::now();
+}
+
+
+void LBALeafNode::resolve_relative_addrs(paddr_t base)
+{
   for (auto i: *this) {
     if (i->get_val().paddr.is_relative()) {
       auto val = i->get_val();
@@ -475,7 +603,8 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
   op_context_t c,
   depth_t depth,
   paddr_t offset,
-  paddr_t base) {
+  paddr_t base)
+{
   offset = offset.maybe_relative_to(base);
   ceph_assert(depth > 0);
   if (depth > 1) {

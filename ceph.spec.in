@@ -21,6 +21,7 @@
 # bcond syntax!
 #################################################################################
 %bcond_with make_check
+%bcond_with zbd
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
 %ifarch s390 s390x
@@ -153,6 +154,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libcap-ng-devel
+BuildRequires:	fmt-devel >= 5.2.1
 BuildRequires:	pkgconfig(libudev)
 BuildRequires:	libnl3-devel
 BuildRequires:	liboath-devel
@@ -176,7 +178,7 @@ BuildRequires:	which
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
-BuildRequires:	yasm
+BuildRequires:	nasm
 %if 0%{with amqp_endpoint}
 BuildRequires:  librabbitmq-devel
 %endif
@@ -196,6 +198,9 @@ BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
 %endif
+%if 0%{with zbd}
+BuildRequires:  libzbd-devel
+%endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
 BuildRequires:  gnutls-devel
@@ -206,17 +211,16 @@ BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  yaml-cpp-devel
-%if 0%{?fedora} || 0%{?rhel} >= 8
-BuildRequires:  fmt-devel
+%if 0%{?fedora}
 BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  libatomic
-%if 0%{with seastar}
+%endif
+%if 0%{?rhel}
 BuildRequires:  gcc-toolset-9-annobin
 BuildRequires:  gcc-toolset-9-libubsan-devel
 BuildRequires:  gcc-toolset-9-libasan-devel
 BuildRequires:  gcc-toolset-9-libatomic-devel
-%endif
 %endif
 %endif
 #################################################################################
@@ -382,9 +386,6 @@ Base is the package that includes all the files shared amongst ceph servers
 %package -n cephadm
 Summary:        Utility to bootstrap Ceph clusters
 Requires:       lvm2
-%if 0%{?suse_version}
-Requires:       apparmor-abstractions
-%endif
 Requires:       python%{python3_pkgversion}
 %if 0%{?weak_deps}
 Recommends:     podman
@@ -442,6 +443,10 @@ Group:		System/Filesystems
 %endif
 Provides:	ceph-test:/usr/bin/ceph-monstore-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?weak_deps}
+Recommends:	nvme-cli
+Recommends:	smartmontools
+%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -696,6 +701,10 @@ Requires:	lvm2
 Requires:	sudo
 Requires:	libstoragemgmt
 Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?weak_deps}
+Recommends:	nvme-cli
+Recommends:	smartmontools
+%endif
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -1078,7 +1087,7 @@ This package provides Ceph’s default alerts for Prometheus.
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200
 %define _lto_cflags %{nil}
 
-%if 0%{with seastar}
+%if 0%{with seastar} && 0%{?rhel}
 . /opt/rh/gcc-toolset-9/enable
 %endif
 
@@ -1164,11 +1173,6 @@ ${CMAKE} .. \
 %if 0%{with ocf}
     -DWITH_OCF=ON \
 %endif
-%ifarch aarch64 armv7hl mips mipsel ppc ppc64 ppc64le %{ix86} x86_64
-    -DWITH_BOOST_CONTEXT=ON \
-%else
-    -DWITH_BOOST_CONTEXT=OFF \
-%endif
 %if 0%{with cephfs_shell}
     -DWITH_CEPHFS_SHELL=ON \
 %endif
@@ -1186,6 +1190,9 @@ ${CMAKE} .. \
     -DWITH_RADOSGW_KAFKA_ENDPOINT=ON \
 %else
     -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
+%endif
+%if 0%{with zbd}
+    -DWITH_ZBD=ON \
 %endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE=ON \
@@ -1256,7 +1263,6 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 
 # sudoers.d
 install -m 0600 -D sudoers.d/ceph-osd-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-osd-smartctl
-install -m 0600 -D sudoers.d/cephadm %{buildroot}%{_sysconfdir}/sudoers.d/cephadm
 
 %if 0%{?rhel} >= 8
 pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
@@ -1383,21 +1389,7 @@ fi
 
 %postun base
 /sbin/ldconfig
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph.target
-%endif
-if [ $1 -ge 1 ] ; then
-  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
-  # "yes". In any case: if units are not running, do not touch them.
-  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
-  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
-    source $SYSCONF_CEPH
-  fi
-fi
 
 %pre -n cephadm
 getent group cephadm >/dev/null || groupadd -r cephadm
@@ -1413,7 +1405,6 @@ exit 0
 %files -n cephadm
 %{_sbindir}/cephadm
 %{_mandir}/man8/cephadm.8*
-%{_sysconfdir}/sudoers.d/cephadm
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm/.ssh
 %attr(0600,cephadm,cephadm) %{_sharedstatedir}/cephadm/.ssh/authorized_keys
@@ -1544,13 +1535,7 @@ fi
 %endif
 
 %postun mds
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-mds@\*.service ceph-mds.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mds@\*.service ceph-mds.target
-%endif
 if [ $1 -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
@@ -1594,13 +1579,7 @@ fi
 %endif
 
 %postun mgr
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-mgr@\*.service ceph-mgr.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mgr@\*.service ceph-mgr.target
-%endif
 if [ $1 -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
@@ -1660,6 +1639,7 @@ fi
 %{_datadir}/ceph/mgr/restful
 %{_datadir}/ceph/mgr/selftest
 %{_datadir}/ceph/mgr/snap_schedule
+%{_datadir}/ceph/mgr/stats
 %{_datadir}/ceph/mgr/status
 %{_datadir}/ceph/mgr/telegraf
 %{_datadir}/ceph/mgr/telemetry
@@ -1736,13 +1716,7 @@ fi
 %endif
 
 %postun mon
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-mon@\*.service ceph-mon.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mon@\*.service ceph-mon.target
-%endif
 if [ $1 -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
@@ -1797,13 +1771,7 @@ fi
 %endif
 
 %postun -n rbd-mirror
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
-%endif
 if [ $1 -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
@@ -1845,13 +1813,7 @@ fi
 
 %postun immutable-object-cache
 test -n "$FIRST_ARG" || FIRST_ARG=$1
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
-%endif
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
@@ -1907,13 +1869,7 @@ fi
 
 %postun radosgw
 /sbin/ldconfig
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-radosgw@\*.service ceph-radosgw.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-radosgw@\*.service ceph-radosgw.target
-%endif
 if [ $1 -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
@@ -1975,13 +1931,7 @@ fi
 %endif
 
 %postun osd
-%if 0%{?suse_version}
-DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
-%endif
 if [ $1 -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.

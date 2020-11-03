@@ -1161,6 +1161,8 @@ struct pg_merge_meta_t {
 };
 WRITE_CLASS_ENCODER(pg_merge_meta_t)
 
+class OSDMap;
+
 /*
  * pg_pool
  */
@@ -1174,6 +1176,7 @@ struct pg_pool_t {
     //TYPE_RAID4 = 2,   // raid4 (never implemented)
     TYPE_ERASURE = 3,      // erasure-coded
   };
+  static constexpr uint32_t pg_CRUSH_ITEM_NONE = 0x7fffffff; /* can't import crush.h here */
   static std::string_view get_type_name(int t) {
     switch (t) {
     case TYPE_REPLICATED: return "replicated";
@@ -1381,7 +1384,16 @@ public:
   std::map<std::string, std::string> properties;  ///< OBSOLETE
   std::string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change = 0;      ///< most recent epoch changed, exclusing snapshot changes
-
+  // If non-zero, require OSDs in at least this many different instances...
+  uint32_t peering_crush_bucket_count = 0;
+  // of this bucket type...
+  uint32_t peering_crush_bucket_barrier = 0;
+  // including this one
+  int32_t peering_crush_mandatory_member = pg_CRUSH_ITEM_NONE;
+  // The per-bucket replica count is calculated with this "target"
+  // instead of the above crush_bucket_count. This means we can maintain a
+  // target size of 4 without attempting to place them all in 1 DC
+  uint32_t peering_crush_bucket_target = 0;
   /// last epoch that forced clients to resend
   epoch_t last_force_op_resend = 0;
   /// last epoch that forced clients to resend (pre-nautilus clients only)
@@ -1450,6 +1462,19 @@ public:
     hit_set_grade_decay_rate = 0;
     hit_set_search_last_n = 0;
     grade_table.resize(0);
+  }
+
+  bool is_stretch_pool() const {
+    return peering_crush_bucket_count != 0;
+  }
+
+  bool stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
+			    std::ostream *out) const;
+  bool stretch_set_can_peer(const vector<int>& want, const OSDMap& osdmap,
+			    std::ostream *out) const {
+    set<int> swant;
+    for (auto i : want) swant.insert(i);
+    return stretch_set_can_peer(swant, osdmap, out);
   }
 
   uint64_t target_max_bytes = 0;   ///< tiering: target max pool size
@@ -3055,7 +3080,6 @@ struct pg_fast_info_t {
 WRITE_CLASS_ENCODER(pg_fast_info_t)
 
 
-class OSDMap;
 /**
  * PastIntervals -- information needed to determine the PriorSet and
  * the might_have_unfound set
@@ -3191,6 +3215,14 @@ public:
     bool new_sort_bitwise,
     bool old_recovery_deletes,
     bool new_recovery_deletes,
+    uint32_t old_crush_count,
+    uint32_t new_crush_count,
+    uint32_t old_crush_target,
+    uint32_t new_crush_target,
+    uint32_t old_crush_barrier,
+    uint32_t new_crush_barrier,
+    int32_t old_crush_member,
+    int32_t new_crush_member,
     pg_t pgid
     );
 
@@ -3463,13 +3495,13 @@ PastIntervals::PriorSet::PriorSet(
   // so that we know what they do/do not have explicitly before
   // sending them any new info/logs/whatever.
   for (unsigned i = 0; i < acting.size(); i++) {
-    if (acting[i] != 0x7fffffff /* CRUSH_ITEM_NONE, can't import crush.h here */)
+    if (acting[i] != pg_pool_t::pg_CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   // It may be possible to exclude the up nodes, but let's keep them in
   // there for now.
   for (unsigned i = 0; i < up.size(); i++) {
-    if (up[i] != 0x7fffffff /* CRUSH_ITEM_NONE, can't import crush.h here */)
+    if (up[i] != pg_pool_t::pg_CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
 
@@ -4705,10 +4737,10 @@ public:
     return it->second.need;
   }
 
-  void claim(pg_missing_set& o) {
+  void claim(pg_missing_set&& o) {
     static_assert(!TrackChanges, "Can't use claim with TrackChanges");
-    missing.swap(o.missing);
-    rmissing.swap(o.rmissing);
+    missing = std::move(o.missing);
+    rmissing = std::move(o.rmissing);
   }
 
   /*
@@ -5447,7 +5479,7 @@ public:
     mut_ref(hoid, num);
   }
   void mut_ref(const hobject_t &hoid, int num) {
-    auto [iter, _] = ref_delta.try_emplace(hoid, 0);
+    [[maybe_unused]] auto [iter, _] = ref_delta.try_emplace(hoid, 0);
     iter->second += num;
     if (iter->second == 0)
       ref_delta.erase(iter);

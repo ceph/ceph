@@ -14,6 +14,7 @@
 
 #include "acconfig.h"
 #include <sys/types.h>
+#include <errno.h>
 
 #if defined(__linux__)
 #define PROCPREFIX
@@ -290,10 +291,15 @@ int chown(const char *path, uid_t owner, gid_t group);
 int fchown(int fd, uid_t owner, gid_t group);
 int lchown(const char *path, uid_t owner, gid_t group);
 
+int win_socketpair(int socks[2]);
+
 #ifdef __cplusplus
 }
-
 #endif
+
+// Use "aligned_free" when freeing memory allocated using posix_memalign or
+// _aligned_malloc. Using "free" will crash.
+#define aligned_free(ptr) _aligned_free(ptr)
 
 // O_CLOEXEC is not defined on Windows. Since handles aren't inherited
 // with subprocesses unless explicitly requested, we'll define this
@@ -301,10 +307,40 @@ int lchown(const char *path, uid_t owner, gid_t group);
 #define O_CLOEXEC 0
 #define SOCKOPT_VAL_TYPE char*
 
-#else
+#else /* WIN32 */
 
 #define SOCKOPT_VAL_TYPE void*
 
+#define aligned_free(ptr) free(ptr)
+
 #endif /* WIN32 */
+
+/* Supplies code to be run at startup time before invoking main().
+ * Use as:
+ *
+ *     CEPH_CONSTRUCTOR(my_constructor) {
+ *         ...some code...
+ *     }
+ */
+#ifdef _MSC_VER
+#pragma section(".CRT$XCU",read)
+#define CEPH_CONSTRUCTOR(f) \
+  static void __cdecl f(void); \
+  __declspec(allocate(".CRT$XCU")) static void (__cdecl*f##_)(void) = f; \
+  static void __cdecl f(void)
+#else
+#define CEPH_CONSTRUCTOR(f) \
+  static void f(void) __attribute__((constructor)); \
+  static void f(void)
+#endif
+
+/* This should only be used with the socket API. */
+static inline int ceph_sock_errno() {
+#ifdef _WIN32
+  return wsae_to_errno(WSAGetLastError());
+#else
+  return errno;
+#endif
+}
 
 #endif /* !CEPH_COMPAT_H */

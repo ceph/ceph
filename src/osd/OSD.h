@@ -31,11 +31,6 @@
 #include "mgr/MgrClient.h"
 
 #include "os/ObjectStore.h"
-#include "OSDCap.h"
-
-#include "auth/KeyRing.h"
-
-#include "osd/ClassHandler.h"
 
 #include "include/CompatSet.h"
 #include "include/common_fwd.h"
@@ -54,9 +49,6 @@
 
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
-#include "common/sharedptr_registry.hpp"
-#include "common/WeightedPriorityQueue.h"
-#include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
 #include "common/EventTrace.h"
 #include "osd/osd_perf_counters.h"
@@ -262,8 +254,8 @@ public:
   std::pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
   void send_message_osd_cluster(std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch);
-  void send_message_osd_cluster(Message *m, Connection *con) {
-    con->send_message(m);
+  void send_message_osd_cluster(MessageRef m, Connection *con) {
+    con->send_message2(m);
   }
   void send_message_osd_cluster(Message *m, const ConnectionRef& con) {
     con->send_message(m);
@@ -984,6 +976,7 @@ struct OSDShard {
   std::string sdata_wait_lock_name;
   ceph::mutex sdata_wait_lock;
   ceph::condition_variable sdata_cond;
+  int waiting_threads = 0;
 
   ceph::mutex osdmap_lock;  ///< protect shard_osdmap updates vs users w/o shard_lock
   OSDMapRef shard_osdmap;
@@ -1565,6 +1558,7 @@ protected:
   friend class ceph::osd::scheduler::PGOpItem;
   friend class ceph::osd::scheduler::PGPeeringItem;
   friend class ceph::osd::scheduler::PGRecovery;
+  friend class ceph::osd::scheduler::PGRecoveryMsg;
   friend class ceph::osd::scheduler::PGDelete;
 
   class ShardedOpWQ

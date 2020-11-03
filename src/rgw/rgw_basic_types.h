@@ -14,36 +14,49 @@ class cls_user_bucket;
 struct rgw_user {
   std::string tenant;
   std::string id;
+  std::string ns;
 
   rgw_user() {}
   explicit rgw_user(const std::string& s) {
     from_str(s);
   }
-  rgw_user(const std::string& tenant, const std::string& id)
+  rgw_user(const std::string& tenant, const std::string& id, const std::string& ns="")
     : tenant(tenant),
-      id(id) {
+      id(id),
+      ns(ns) {
   }
-  rgw_user(std::string&& tenant, std::string&& id)
+  rgw_user(std::string&& tenant, std::string&& id, std::string&& ns="")
     : tenant(std::move(tenant)),
-      id(std::move(id)) {
+      id(std::move(id)),
+      ns(std::move(ns)) {
   }
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(tenant, bl);
     encode(id, bl);
+    encode(ns, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(tenant, bl);
     decode(id, bl);
+    if (struct_v >= 2) {
+      decode(ns, bl);
+    }
     DECODE_FINISH(bl);
   }
 
   void to_str(std::string& str) const {
     if (!tenant.empty()) {
-      str = tenant + '$' + id;
+      if (!ns.empty()) {
+        str = tenant + '$' + ns + '$' + id;
+      } else {
+        str = tenant + '$' + id;
+      }
+    } else if (!ns.empty()) {
+      str = '$' + ns + '$' + id;
     } else {
       str = id;
     }
@@ -52,6 +65,7 @@ struct rgw_user {
   void clear() {
     tenant.clear();
     id.clear();
+    ns.clear();
   }
 
   bool empty() const {
@@ -68,9 +82,19 @@ struct rgw_user {
     size_t pos = str.find('$');
     if (pos != std::string::npos) {
       tenant = str.substr(0, pos);
-      id = str.substr(pos + 1);
+      string_view sv = str;
+      string_view ns_id = sv.substr(pos + 1);
+      size_t ns_pos = ns_id.find('$');
+      if (ns_pos != std::string::npos) {
+        ns = string(ns_id.substr(0, ns_pos));
+        id = string(ns_id.substr(ns_pos + 1));
+      } else {
+        ns.clear();
+        id = string(ns_id);
+      }
     } else {
       tenant.clear();
+      ns.clear();
       id = str;
     }
   }
@@ -84,7 +108,10 @@ struct rgw_user {
     int r = tenant.compare(u.tenant);
     if (r != 0)
       return r;
-
+    r = ns.compare(u.ns);
+    if (r != 0) {
+      return r;
+    }
     return id.compare(u.id);
   }
   int compare(const std::string& str) const {
@@ -102,6 +129,11 @@ struct rgw_user {
     if (tenant < rhs.tenant) {
       return true;
     } else if (tenant > rhs.tenant) {
+      return false;
+    }
+    if (ns < rhs.ns) {
+      return true;
+    } else if (ns > rhs.ns) {
       return false;
     }
     return (id < rhs.id);

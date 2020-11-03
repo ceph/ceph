@@ -12,15 +12,14 @@ set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
-  admin/admin_socket.cc
-  admin/osd_admin.cc
   common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
   common/formatter.cc
   common/perf_counters_collection.cc
   common/log.cc
-  common/throttle.cc)
+  common/throttle.cc
+  common/tri_mutex.cc)
 
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
@@ -182,5 +181,6 @@ target_link_libraries(crimson
   PUBLIC
     crimson-common
     crimson::cflags)
+add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)

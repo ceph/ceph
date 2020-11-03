@@ -343,7 +343,7 @@ your Linux distribution codename. Replace ``{arch}`` with the CPU architecture.
 RPM Packages
 ~~~~~~~~~~~~
 
-Ceph requires additional additional third party libraries.
+Ceph requires additional third party libraries.
 To add the EPEL repository, execute the following
 
 .. prompt:: bash $

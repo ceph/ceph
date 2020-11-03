@@ -3,13 +3,14 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import ApiController, RESTController, UiApiController,\
-    CreatePermission, ControllerDoc, EndpointDoc
 from .. import mgr
-from ..exceptions import RoleDoesNotExist, DashboardException,\
-    RoleIsAssociatedWithUser, RoleAlreadyExists
-from ..security import Scope as SecurityScope, Permission
+from ..exceptions import DashboardException, RoleAlreadyExists, \
+    RoleDoesNotExist, RoleIsAssociatedWithUser
+from ..security import Permission
+from ..security import Scope as SecurityScope
 from ..services.access_control import SYSTEM_ROLES
+from . import ApiController, ControllerDoc, CreatePermission, EndpointDoc, \
+    RESTController, UiApiController
 
 ROLE_SCHEMA = [{
     "name": (str, "Role Name"),

@@ -69,9 +69,7 @@ seastar::future<> ClientRequest::start()
 	return with_blocking_future(osd.wait_for_pg(m->get_spg()));
       }).then([this, opref](Ref<PG> pgref) {
 	PG &pg = *pgref;
-	if (__builtin_expect(m->get_map_epoch()
-			      < pg.get_info().history.same_primary_since,
-			     false)) {
+	if (pg.can_discard_op(*m)) {
 	  return osd.send_incremental_map(conn.get(), m->get_map_epoch());
 	}
 	return with_blocking_future(
@@ -127,10 +125,17 @@ seastar::future<> ClientRequest::process_op(
   ).then([this, &pg, pgref] {
     eversion_t ver;
     const hobject_t& soid = m->get_hobj();
-    if (pg.is_unreadable_object(soid, &ver)) {
-      auto [op, fut] = osd.get_shard_services().start_operation<UrgentRecovery>(
-			  soid, ver, pgref, osd.get_shard_services(), m->get_min_epoch());
-      return std::move(fut);
+    logger().debug("{} check for recovery, {}", *this, soid);
+    if (pg.is_unreadable_object(soid, &ver) ||
+	pg.is_degraded_or_backfilling_object(soid)) {
+      logger().debug("{} need to wait for recovery, {}", *this, soid);
+      if (pg.get_recovery_backend()->is_recovering(soid)) {
+	return pg.get_recovery_backend()->get_recovering(soid).wait_for_recovered();
+      } else {
+	auto [op, fut] = osd.get_shard_services().start_operation<UrgentRecovery>(
+			    soid, ver, pgref, osd.get_shard_services(), pg.get_osdmap_epoch());
+	return std::move(fut);
+      }
     }
     return seastar::now();
   }).then([this, &pg] {

@@ -44,7 +44,7 @@ seastar::future<> Watch::send_notify_msg(NotifyRef notify)
 
 seastar::future<> Watch::start_notify(NotifyRef notify)
 {
-  logger().info("{} adding &notify={}", __func__, notify.get());
+  logger().info("{} adding notify(id={})", __func__, notify->ninfo.notify_id);
   auto [ it, emplaced ] = in_progress_notifies.emplace(std::move(notify));
   ceph_assert(emplaced);
   ceph_assert(is_alive());

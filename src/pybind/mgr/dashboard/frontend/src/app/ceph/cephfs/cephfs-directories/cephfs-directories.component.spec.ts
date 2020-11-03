@@ -4,9 +4,8 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { Validators } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { TreeComponent, TreeModule, TREE_ACTIONS } from '@circlon/angular-tree-component';
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { TreeComponent, TreeModule, TREE_ACTIONS } from 'angular-tree-component';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
@@ -368,8 +367,7 @@ describe('CephfsDirectoriesComponent', () => {
         HttpClientTestingModule,
         SharedModule,
         RouterTestingModule,
-        TreeModule.forRoot(),
-        NgBootstrapFormValidationModule.forRoot(),
+        TreeModule,
         ToastrModule.forRoot(),
         NgbModalModule
       ],

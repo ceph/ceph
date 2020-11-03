@@ -26,7 +26,6 @@ class MockSafeTimer;
 
 namespace librbd {
 
-namespace cache { class MockImageCache; }
 namespace operation {
 template <typename> class ResizeRequest;
 }
@@ -222,6 +221,7 @@ struct MockImageCtx {
 
   MOCK_METHOD0(rebuild_data_io_context, void());
   IOContext get_data_io_context();
+  IOContext duplicate_data_io_context();
 
   static void set_timer_instance(MockSafeTimer *timer, ceph::mutex *timer_lock);
   static void get_timer_instance(CephContext *cct, MockSafeTimer **timer,
@@ -293,8 +293,6 @@ struct MockImageCtx {
   io::MockImageDispatcher *io_image_dispatcher;
   io::MockObjectDispatcher *io_object_dispatcher;
   MockContextWQ *op_work_queue;
-
-  cache::MockImageCache *image_cache = nullptr;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;

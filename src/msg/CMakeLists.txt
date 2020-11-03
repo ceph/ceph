@@ -2,7 +2,6 @@ set(msg_srcs
   DispatchQueue.cc
   Message.cc
   Messenger.cc
-  QueueStrategy.cc
   Connection.cc
   msg_types.cc)
 

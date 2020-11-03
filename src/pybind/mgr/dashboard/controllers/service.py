@@ -1,14 +1,15 @@
-from typing import List, Optional, Dict
-import cherrypy
+from typing import Dict, List, Optional
 
+import cherrypy
 from ceph.deployment.service_spec import ServiceSpec
-from . import ApiController, ControllerDoc, RESTController, Task, Endpoint, ReadPermission, \
-    CreatePermission, DeletePermission
-from .orchestrator import raise_if_no_orchestrator
+
 from ..exceptions import DashboardException
 from ..security import Scope
-from ..services.orchestrator import OrchClient, OrchFeature
 from ..services.exception import handle_orchestrator_error
+from ..services.orchestrator import OrchClient, OrchFeature
+from . import ApiController, ControllerDoc, CreatePermission, \
+    DeletePermission, Endpoint, ReadPermission, RESTController, Task
+from .orchestrator import raise_if_no_orchestrator
 
 
 def service_task(name, metadata, wait_for=2.0):
@@ -31,7 +32,7 @@ class Service(RESTController):
     @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST])
     def list(self, service_name: Optional[str] = None) -> List[dict]:
         orch = OrchClient.instance()
-        return [service.to_json() for service in orch.services.list(service_name)]
+        return [service.to_json() for service in orch.services.list(service_name=service_name)]
 
     @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST])
     def get(self, service_name: str) -> List[dict]:
@@ -45,7 +46,7 @@ class Service(RESTController):
     @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
     def daemons(self, service_name: str) -> List[dict]:
         orch = OrchClient.instance()
-        daemons = orch.services.list_daemons(service_name)
+        daemons = orch.services.list_daemons(service_name=service_name)
         return [d.to_json() for d in daemons]
 
     @CreatePermission

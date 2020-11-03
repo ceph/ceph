@@ -51,9 +51,6 @@ def monkey_with_compiler(customize):
 distutils.sysconfig.customize_compiler = \
     monkey_with_compiler(distutils.sysconfig.customize_compiler)
 
-distutils.sysconfig.customize_compiler = \
-    monkey_with_compiler(distutils.sysconfig.customize_compiler)
-
 # PEP 440 versioning of the Rados package on PyPI
 # Bump this version, after every changeset
 __version__ = '2.0.0'
@@ -192,6 +189,7 @@ setup(
                 **get_python_flags(['rados'])
             )
         ],
+        # use "3str" when Cython 3.0 is available
         compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None)
     ),

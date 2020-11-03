@@ -49,14 +49,22 @@ WebTokenEngine::is_applicable(const std::string& token) const noexcept
   return ! token.empty();
 }
 
-boost::optional<RGWOIDCProvider>
-WebTokenEngine::get_provider(const string& role_arn, const string& iss) const
+std::string
+WebTokenEngine::get_role_tenant(const string& role_arn) const
 {
   string tenant;
   auto r_arn = rgw::ARN::parse(role_arn);
   if (r_arn) {
     tenant = r_arn->account;
   }
+  return tenant;
+}
+
+boost::optional<RGWOIDCProvider>
+WebTokenEngine::get_provider(const string& role_arn, const string& iss) const
+{
+  string tenant = get_role_tenant(role_arn);
+
   string idp_url = iss;
   auto pos = idp_url.find("http://");
   if (pos == std::string::npos) {
@@ -151,12 +159,14 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     string role_arn = s->info.args.get("RoleArn");
     auto provider = get_provider(role_arn, t.iss);
     if (! provider) {
+      ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << t.iss << dendl;
       throw -EACCES;
     }
     vector<string> client_ids = provider->get_client_ids();
     vector<string> thumbprints = provider->get_thumbprints();
     if (! client_ids.empty()) {
       if (! is_client_id_valid(client_ids, t.client_id) && ! is_client_id_valid(client_ids, t.aud)) {
+        ldpp_dout(dpp, 0) << "Client id in token doesn't match with that registered with oidc provider" << dendl;
         throw -EACCES;
       }
     }
@@ -230,6 +240,7 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
               found_valid_cert = true;
             }
             if (! found_valid_cert) {
+              ldpp_dout(dpp, 0) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
               throw -EINVAL;
             }
             try {
@@ -331,9 +342,12 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   if (t) {
     string role_session = s->info.args.get("RoleSessionName");
     if (role_session.empty()) {
+      ldout(s->cct, 0) << "Role Session Name is empty " << dendl;
       return result_t::deny(-EACCES);
     }
-    auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, *t);
+    string role_arn = s->info.args.get("RoleArn");
+    string role_tenant = get_role_tenant(role_arn);
+    auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t);
     return result_t::grant(std::move(apl));
   }
   return result_t::deny(-EACCES);
@@ -349,6 +363,7 @@ int RGWREST_STS::verify_permission()
   string rArn = s->info.args.get("RoleArn");
   const auto& [ret, role] = sts.getRoleInfo(rArn);
   if (ret < 0) {
+    ldout(s->cct, 0) << "failed to get role info using role arn: " << rArn << dendl;
     return ret;
   }
   string policy = role.get_assume_role_policy();
@@ -362,14 +377,16 @@ int RGWREST_STS::verify_permission()
     // If yes, then return 0, else -EPERM
     auto p_res = p.eval_principal(s->env, *s->auth.identity);
     if (p_res == rgw::IAM::Effect::Deny) {
+      ldout(s->cct, 0) << "evaluating principal returned deny" << dendl;
       return -EPERM;
     }
     auto c_res = p.eval_conditions(s->env);
     if (c_res == rgw::IAM::Effect::Deny) {
+      ldout(s->cct, 0) << "evaluating condition returned deny" << dendl;
       return -EPERM;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldout(s->cct, 0) << "failed to parse policy: " << e.what() << dendl;
     return -EPERM;
   }
 
@@ -393,6 +410,7 @@ int RGWSTSGetSessionToken::verify_permission()
                               s,
                               rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
                               rgw::IAM::stsGetSessionToken)) {
+    ldout(s->cct, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
     return -EACCES;
   }
 
@@ -409,11 +427,13 @@ int RGWSTSGetSessionToken::get_params()
     string err;
     uint64_t duration_in_secs = strict_strtoll(duration.c_str(), 10, &err);
     if (!err.empty()) {
+      ldout(s->cct, 0) << "Invalid value of input duration: " << duration << dendl;
       return -EINVAL;
     }
 
     if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
             duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
+      ldout(s->cct, 0) << "Invalid duration in secs: " << duration_in_secs << dendl;
       return -EINVAL;
   }
 
@@ -455,7 +475,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   aud = s->info.args.get("aud");
 
   if (roleArn.empty() || roleSessionName.empty() || sub.empty() || aud.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of role arn or role session name or token is empty" << dendl;
+    ldout(s->cct, 0) << "ERROR: one of role arn or role session name or token is empty" << dendl;
     return -EINVAL;
   }
 
@@ -479,7 +499,7 @@ void RGWSTSAssumeRoleWithWebIdentity::execute()
     return;
   }
 
-  STS::AssumeRoleWithWebIdentityRequest req(duration, providerId, policy, roleArn,
+  STS::AssumeRoleWithWebIdentityRequest req(s->cct, duration, providerId, policy, roleArn,
                         roleSessionName, iss, sub, aud);
   STS::AssumeRoleWithWebIdentityResponse response = sts.assumeRoleWithWebIdentity(req);
   op_ret = std::move(response.assumeRoleResp.retCode);
@@ -514,7 +534,7 @@ int RGWSTSAssumeRole::get_params()
   tokenCode = s->info.args.get("TokenCode");
 
   if (roleArn.empty() || roleSessionName.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of role arn or role session name is empty" << dendl;
+    ldout(s->cct, 0) << "ERROR: one of role arn or role session name is empty" << dendl;
     return -EINVAL;
   }
 
@@ -524,7 +544,7 @@ int RGWSTSAssumeRole::get_params()
       const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
     }
     catch (rgw::IAM::PolicyParseException& e) {
-      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      ldout(s->cct, 0) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
       return -ERR_MALFORMED_DOC;
     }
   }
@@ -538,7 +558,7 @@ void RGWSTSAssumeRole::execute()
     return;
   }
 
-  STS::AssumeRoleRequest req(duration, externalId, policy, roleArn,
+  STS::AssumeRoleRequest req(s->cct, duration, externalId, policy, roleArn,
                         roleSessionName, serialNumber, tokenCode);
   STS::AssumeRoleResponse response = sts.assumeRole(req);
   op_ret = std::move(response.retCode);

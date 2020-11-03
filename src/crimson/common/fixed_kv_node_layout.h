@@ -325,6 +325,8 @@ public:
   FixedKVNodeLayout(char *buf) :
     buf(buf) {}
 
+  virtual ~FixedKVNodeLayout() = default;
+
   const_iterator begin() const {
     return const_iterator(
       this,
@@ -371,7 +373,7 @@ public:
   const_iterator lower_bound(K l) const {
     auto ret = begin();
     for (; ret != end(); ++ret) {
-      if (ret->get_key() > l)
+      if (ret->get_key() >= l)
 	break;
     }
     return ret;
@@ -639,6 +641,17 @@ private:
   }
 
   /**
+   * node_resolve/unresolve_vals
+   *
+   * If the representation for values depends in some way on the
+   * node in which they are located, users may implement
+   * resolve/unresolve to enable copy_from_foreign to handle that
+   * transition.
+   */
+  virtual void node_resolve_vals(iterator from, iterator to) const {}
+  virtual void node_unresolve_vals(iterator from, iterator to) const {}
+
+  /**
    * copy_from_foreign
    *
    * Copies entries from [from_src, to_src) to tgt.
@@ -658,6 +671,8 @@ private:
     memcpy(
       tgt->get_key_ptr(), from_src->get_key_ptr(),
       to_src->get_key_ptr() - from_src->get_key_ptr());
+    from_src->node->node_resolve_vals(tgt, tgt + (to_src - from_src));
+    tgt->node->node_unresolve_vals(tgt, tgt + (to_src - from_src));
   }
 
   /**

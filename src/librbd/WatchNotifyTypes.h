@@ -73,6 +73,7 @@ enum NotifyOp {
   NOTIFY_OP_SPARSIFY           = 17,
   NOTIFY_OP_QUIESCE            = 18,
   NOTIFY_OP_UNQUIESCE          = 19,
+  NOTIFY_OP_METADATA_UPDATE    = 20,
 };
 
 struct Payload {
@@ -436,6 +437,25 @@ struct UnquiescePayload : public AsyncRequestPayloadBase {
   bool check_for_refresh() const override {
     return false;
   }
+};
+
+struct MetadataUpdatePayload : public Payload {
+  std::string key;
+  std::optional<std::string> value;
+  MetadataUpdatePayload() {}
+  MetadataUpdatePayload(std::string key, std::optional<std::string> value)
+    : key(key), value(value) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_METADATA_UPDATE;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::const_iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct UnknownPayload : public Payload {

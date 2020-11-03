@@ -131,6 +131,8 @@ Displays overall cluster status, performance and capacity metrics. Gives instant
 feedback to changes in the cluster and provides easy access to subpages of the
 dashboard.
 
+.. _dashboard-landing-page-status:
+
 Status
 """"""
 
@@ -147,7 +149,7 @@ Status
   subpage containing a list of all OSDs and related management actions.
 * **Managers**: Displays the total number of active and standby Ceph Manager
   daemons (ceph-mgr) running alongside monitor daemons.
-* **Object Gateway**: Displays the total number of active object gateways and 
+* **Object Gateway**: Displays the total number of active object gateways and
   provides a link to the subpage displaying a list of all object gateway daemons.
 * **Metadata Servers**: Displays total number of active and standby metadata
   servers daemons for CephFS (ceph-mds).
@@ -155,6 +157,8 @@ Status
   number of active iSCSI gateways (up) and total number of inactive iSCSI
   Gateways (down). Provides link to the subpage providing a list of all iSCSI
   Gateways.
+
+.. _dashboard-landing-page-capacity:
 
 Capacity
 """"""""
@@ -171,6 +175,8 @@ Capacity
   lists all Ceph pools and their details.
 * **PGs per OSD**: Displays the number of placement groups per object storage
   daemons.
+
+.. _dashboard-landing-page-performance:
 
 Performance
 """""""""""
@@ -283,6 +289,8 @@ wanted or required. See :ref:`dashboard-proxy-configuration` for more details.
 
     $ ceph mgr module disable dashboard
     $ ceph mgr module enable dashboard
+
+.. _dashboard-host-name-and-port:
 
 Host Name and Port
 ^^^^^^^^^^^^^^^^^^
@@ -559,6 +567,13 @@ on your preferred hosts, proceed with the following steps.
       [security]
       allow_embedding = true
 
+Enabling RBD-Image monitoring
+"""""""""""""""""""""""""""""
+
+Due to performance reasons, monitoring of RBD images is disabled by default. For
+more information please see :ref:`prometheus-rbd-io-statistics`. If disabled,
+the overview and details dashboards will stay empty in Grafana and the metrics
+will not be visible in Prometheus.
 
 Configuring Dashboard
 """""""""""""""""""""
@@ -1186,6 +1201,16 @@ NFS-Ganesha cluster.
 
 When configuring the Ceph Dashboard with multiple NFS-Ganesha clusters, the
 Web UI will automatically allow to choose to which cluster an export belongs.
+
+
+Support for NFS-Ganesha Clusters Deployed by the Orchestrator
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Ceph Dashboard can be used to manage NFS-Ganesha clusters deployed by the
+Orchestrator. It can detect the clusters automatically. For more details
+on deploying NFS-Ganesha clusters with the Orchestrator, please see :ref:`orchestrator-cli-stateless-services`.
+Or particularly, see :ref:`deploy-cephadm-nfs-ganesha` for how to deploy
+NFS-Ganesha clusters with the Cephadm backend.
 
 
 Plug-ins

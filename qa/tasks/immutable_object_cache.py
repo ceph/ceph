@@ -32,16 +32,22 @@ def immutable_object_cache(ctx, config):
     try:
         yield
     finally:
-        log.info("cleanup immutable object cache")
+        log.info("check and cleanup immutable object cache")
         for client, client_config in config.items():
             client_config = client_config if client_config is not None else dict()
             (remote,) = ctx.cluster.only(client).remotes.keys()
+            cache_path = client_config.get('immutable object cache path', '/tmp/ceph-immutable-object-cache')
+            ls_command = '"$(ls {} )"'.format(cache_path)
+            remote.run(
+                args=[
+                    'test', '-n', run.Raw(ls_command),
+                    ]
+                )
             remote.run(
                 args=[
                     'sudo', 'killall', '-s', '9', 'ceph-immutable-object-cache', run.Raw('||'), 'true',
                     ]
                 )
-            cache_path = client_config.get('immutable object cache path', '/tmp/ceph-immutable-object-cache')
             remote.run(
                 args=[
                     'sudo', 'rm', '-rf', cache_path, run.Raw('||'), 'true',

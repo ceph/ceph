@@ -46,7 +46,7 @@ if(HAS_VTA)
 endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
-  PUBLIC dmclock::dmclock
+  PUBLIC dmclock::dmclock Boost::MPL
   PRIVATE os heap_profiler cpu_profiler ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
@@ -68,5 +68,5 @@ if(WITH_RBD)
   add_dependencies(osd cls_rbd)
 endif()
 if(WITH_RADOSGW)
-  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc cls_2pc_queue)
+  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc cls_2pc_queue cls_fifo)
 endif()

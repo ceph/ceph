@@ -39,10 +39,18 @@ void MockImageCtx::wait_for_async_ops() {
 IOContext MockImageCtx::get_data_io_context() {
   auto ctx = std::make_shared<neorados::IOContext>(
     data_ctx.get_id(), data_ctx.get_namespace());
-  ctx->read_snap(snap_id);
-  ctx->write_snap_context(
-    {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+  if (snap_id != CEPH_NOSNAP) {
+    ctx->read_snap(snap_id);
+  }
+  if (!snapc.snaps.empty()) {
+    ctx->write_snap_context(
+      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+  }
   return ctx;
+}
+
+IOContext MockImageCtx::duplicate_data_io_context() {
+  return std::make_shared<neorados::IOContext>(*get_data_io_context());
 }
 
 } // namespace librbd

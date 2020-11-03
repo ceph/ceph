@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_IO_SIMPLE_SCHEDULER_OBJECT_DISPATCH_H
 
 #include "common/ceph_mutex.h"
-#include "common/snap_types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
 
@@ -50,23 +49,22 @@ public:
   void shut_down(Context* on_finish) override;
 
   bool read(
-      uint64_t object_no, const Extents &extents, librados::snap_t snap_id,
-      int op_flags, const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, Extents* extent_map,
+      uint64_t object_no, ReadExtents* extents, IOContext io_context,
+      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
       uint64_t* version, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
   bool discard(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      const ::SnapContext &snapc, int discard_flags,
+      IOContext io_context, int discard_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags, int write_flags,
+      IOContext io_context, int op_flags, int write_flags,
       std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
@@ -75,14 +73,14 @@ public:
   bool write_same(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags,
+      IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool compare_and_write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
-      ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
+      ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
       int* object_dispatch_flags, uint64_t* journal_tid,
       DispatchResult* dispatch_result, Context** on_finish,
@@ -92,6 +90,15 @@ public:
       FlushSource flush_source, const ZTracer::Trace &parent_trace,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
+
+  bool list_snaps(
+      uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
+      int list_snap_flags, const ZTracer::Trace &parent_trace,
+      SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
+    return false;
+  }
 
   bool invalidate_cache(Context* on_finish) override {
     return false;
@@ -103,6 +110,11 @@ public:
   void extent_overwritten(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       uint64_t journal_tid, uint64_t new_journal_tid) override {
+  }
+
+  void prepare_copyup(
+      uint64_t object_no,
+      SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override {
   }
 
 private:
@@ -151,7 +163,7 @@ private:
     }
 
     bool try_delay_request(uint64_t object_off, ceph::bufferlist&& data,
-                           const ::SnapContext &snapc, int op_flags,
+                           IOContext io_context, int op_flags,
                            int object_dispatch_flags, Context* on_dispatched);
 
     void dispatch_delayed_requests(ImageCtxT *image_ctx,
@@ -162,7 +174,7 @@ private:
     uint64_t m_object_no;
     uint64_t m_dispatch_seq = 0;
     clock_t::time_point m_dispatch_time;
-    SnapContext m_snapc = {0, {}};
+    IOContext m_io_context;
     int m_op_flags = 0;
     int m_object_dispatch_flags = 0;
     std::map<uint64_t, MergedRequests> m_delayed_requests;
@@ -192,7 +204,7 @@ private:
   std::unique_ptr<LatencyStats> m_latency_stats;
 
   bool try_delay_write(uint64_t object_no, uint64_t object_off,
-                       ceph::bufferlist&& data, const ::SnapContext &snapc,
+                       ceph::bufferlist&& data, IOContext io_context,
                        int op_flags, int object_dispatch_flags,
                        Context* on_dispatched);
   bool intersects(uint64_t object_no, uint64_t object_off, uint64_t len) const;

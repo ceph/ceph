@@ -5,22 +5,23 @@ from __future__ import absolute_import
 
 import logging
 import math
-from functools import partial
 from datetime import datetime
+from functools import partial
 
 import rbd
 
-from . import ApiController, RESTController, Task, UpdatePermission, \
-    DeletePermission, CreatePermission, EndpointDoc, ControllerDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
 from ..services.rbd import RbdConfiguration, RbdService, RbdSnapshotService, \
-    format_bitmask, format_features, parse_image_spec, rbd_call, rbd_image_call
+    format_bitmask, format_features, parse_image_spec, rbd_call, \
+    rbd_image_call
 from ..tools import ViewCache, str_to_bool
-from ..services.exception import handle_rados_error, handle_rbd_error, \
-    serialize_dashboard_exception
+from . import ApiController, ControllerDoc, CreatePermission, \
+    DeletePermission, EndpointDoc, RESTController, Task, UpdatePermission, \
+    allow_empty_body
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +192,7 @@ class Rbd(RESTController):
               'dest_namespace': '{dest_namespace}',
               'dest_image_name': '{dest_image_name}'}, 2.0)
     @RESTController.Resource('POST')
+    @allow_empty_body
     def copy(self, image_spec, dest_pool_name, dest_namespace, dest_image_name,
              snapshot_name=None, obj_size=None, features=None,
              stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
@@ -221,6 +223,7 @@ class Rbd(RESTController):
     @RbdTask('flatten', ['{image_spec}'], 2.0)
     @RESTController.Resource('POST')
     @UpdatePermission
+    @allow_empty_body
     def flatten(self, image_spec):
 
         def _flatten(ioctx, image):
@@ -234,8 +237,24 @@ class Rbd(RESTController):
         rbd_default_features = mgr.get('config')['rbd_default_features']
         return format_bitmask(int(rbd_default_features))
 
+    @RESTController.Collection('GET')
+    def clone_format_version(self):
+        """Return the RBD clone format version.
+        """
+        rbd_default_clone_format = mgr.get('config')['rbd_default_clone_format']
+        if rbd_default_clone_format != 'auto':
+            return int(rbd_default_clone_format)
+        osd_map = mgr.get_osdmap().dump()
+        min_compat_client = osd_map.get('min_compat_client', '')
+        require_min_compat_client = osd_map.get('require_min_compat_client', '')
+        if max(min_compat_client, require_min_compat_client) < 'mimic':
+            return 1
+
+        return 2
+
     @RbdTask('trash/move', ['{image_spec}'], 2.0)
     @RESTController.Resource('POST')
+    @allow_empty_body
     def move_trash(self, image_spec, delay=0):
         """Move an image to the trash.
         Images, even ones actively in-use by clones,
@@ -290,6 +309,7 @@ class RbdSnapshot(RESTController):
              ['{image_spec}', '{snapshot_name}'], 5.0)
     @RESTController.Resource('POST')
     @UpdatePermission
+    @allow_empty_body
     def rollback(self, image_spec, snapshot_name):
         def _rollback(ioctx, img, snapshot_name):
             img.rollback_to_snap(snapshot_name)
@@ -303,6 +323,7 @@ class RbdSnapshot(RESTController):
               'child_namespace': '{child_namespace}',
               'child_image_name': '{child_image_name}'}, 2.0)
     @RESTController.Resource('POST')
+    @allow_empty_body
     def clone(self, image_spec, snapshot_name, child_pool_name,
               child_image_name, child_namespace=None, obj_size=None, features=None,
               stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
@@ -339,7 +360,10 @@ class RbdSnapshot(RESTController):
 @ControllerDoc("RBD Trash Management API", "RbdTrash")
 class RbdTrash(RESTController):
     RESOURCE_ID = "image_id_spec"
-    rbd_inst = rbd.RBD()
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
 
     @ViewCache()
     def _trash_pool_list(self, pool_name):
@@ -389,6 +413,7 @@ class RbdTrash(RESTController):
     @RbdTask('trash/purge', ['{pool_name}'], 2.0)
     @RESTController.Collection('POST', query_params=['pool_name'])
     @DeletePermission
+    @allow_empty_body
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
         now = "{}Z".format(datetime.utcnow().isoformat())
@@ -405,6 +430,7 @@ class RbdTrash(RESTController):
     @RbdTask('trash/restore', ['{image_id_spec}', '{new_image_name}'], 2.0)
     @RESTController.Resource('POST')
     @CreatePermission
+    @allow_empty_body
     def restore(self, image_id_spec, new_image_name):
         """Restore an image from trash."""
         pool_name, namespace, image_id = parse_image_spec(image_id_spec)
@@ -425,7 +451,10 @@ class RbdTrash(RESTController):
 @ApiController('/block/pool/{pool_name}/namespace', Scope.RBD_IMAGE)
 @ControllerDoc("RBD Namespace Management API", "RbdNamespace")
 class RbdNamespace(RESTController):
-    rbd_inst = rbd.RBD()
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
 
     def create(self, pool_name, namespace):
         with mgr.rados.open_ioctx(pool_name) as ioctx:

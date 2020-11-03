@@ -3,12 +3,11 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import ApiController, RESTController, ControllerDoc, EndpointDoc
 from .. import mgr
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
-from ..exceptions import DashboardException
-
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController
 
 FILTER_SCHEMA = [{
     "name": (str, 'Name of the config option'),

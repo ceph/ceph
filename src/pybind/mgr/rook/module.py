@@ -126,7 +126,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return False, "ceph-mgr not running in Rook cluster"
 
         try:
-            self.k8s.list_namespaced_pod(self._rook_env.cluster_name)
+            self.k8s.list_namespaced_pod(self._rook_env.namespace)
         except ApiException as e:
             return False, "Cannot reach Kubernetes API: {}".format(e)
         else:
@@ -169,12 +169,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         if self._rook_env.has_namespace():
             config.load_incluster_config()
-            cluster_name = self._rook_env.cluster_name
         else:
             self.log.warning("DEVELOPMENT ONLY: Reading kube config from ~")
             config.load_kube_config()
-
-            cluster_name = "rook-ceph"
 
             # So that I can do port forwarding from my workstation - jcsp
             from kubernetes.client import configuration
@@ -188,7 +185,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # this context, or subsequent API usage from handle_command
             # fails with SSLError('bad handshake').  Suspect some kind of
             # thread context setup in SSL lib?
-            self._k8s_CoreV1_api.list_namespaced_pod(cluster_name)
+            self._k8s_CoreV1_api.list_namespaced_pod(self._rook_env.namespace)
         except ApiException:
             # Ignore here to make self.available() fail with a proper error message
             pass
@@ -363,7 +360,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_read
     def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None,
                      refresh=False):
-        return self._list_daemons(daemon_type, daemon_id, host, refresh)
+        return self._list_daemons(service_name=service_name,
+                                  daemon_type=daemon_type,
+                                  daemon_id=daemon_id,
+                                  host=host,
+                                  refresh=refresh)
 
     def _list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None,
                       refresh=False):

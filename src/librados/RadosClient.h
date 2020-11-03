@@ -92,6 +92,7 @@ private:
   bool service_daemon = false;
   string daemon_name, service_name;
   map<string,string> daemon_metadata;
+  ceph::timespan rados_mon_op_timeout{};
 
   int wait_for_osdmap();
 

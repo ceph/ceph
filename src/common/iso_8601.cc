@@ -6,6 +6,7 @@
 
 #include "iso_8601.h"
 #include "include/timegm.h"
+#include "include/ceph_assert.h"
 
 namespace ceph {
 using std::chrono::duration_cast;

@@ -6,7 +6,7 @@
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
 #include "HybridAllocator.h"
-#ifdef HAVE_LIBZBC
+#ifdef HAVE_LIBZBD
 #include "ZonedAllocator.h"
 #endif
 #include "common/debug.h"
@@ -128,7 +128,7 @@ Allocator *Allocator::create(CephContext* cct, string type,
     return new HybridAllocator(cct, size, block_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
       name);
-#ifdef HAVE_LIBZBC
+#ifdef HAVE_LIBZBD
   } else if (type == "zoned") {
     return new ZonedAllocator(cct, size, block_size, name);
 #endif

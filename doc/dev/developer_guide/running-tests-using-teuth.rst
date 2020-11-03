@@ -125,7 +125,7 @@ to terminate a job::
 
         teuthology-kill -r teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi
 
-Let's call the the argument passed to ``-r`` as test ID. It can be found
+Let's call the argument passed to ``-r`` as test ID. It can be found
 easily in the link to the Pulpito page for the tests you triggered. For
 example, for the above test ID, the link is - http://pulpito.front.sepia.ceph.com/teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi/
 

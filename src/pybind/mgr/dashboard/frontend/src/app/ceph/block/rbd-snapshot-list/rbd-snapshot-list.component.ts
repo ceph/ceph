@@ -130,7 +130,11 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   ngOnChanges() {
     const imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName);
 
-    const actions = new RbdSnapshotActionsModel(this.actionLabels, this.featuresName);
+    const actions = new RbdSnapshotActionsModel(
+      this.actionLabels,
+      this.featuresName,
+      this.rbdService
+    );
     actions.create.click = () => this.openCreateSnapshotModal();
     actions.rename.click = () => this.openEditSnapshotModal();
     actions.protect.click = () => this.toggleProtection();

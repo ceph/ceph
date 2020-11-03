@@ -138,17 +138,15 @@ int PluginRegistry::load(const std::string &type,
   ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct, 1) << __func__ << " " << type << " " << name << dendl;
 
-  // std::string fname = cct->_conf->plugin_dir + "/" + type + "/" PLUGIN_PREFIX
-  //  + name + PLUGIN_SUFFIX;
   std::string fname = cct->_conf.get_val<std::string>("plugin_dir") + "/" + type + "/" + PLUGIN_PREFIX
       + name + PLUGIN_SUFFIX;
   void *library = dlopen(fname.c_str(), RTLD_NOW);
   if (!library) {
     string err1(dlerror());
     // fall back to plugin_dir
-    std::string fname2 = cct->_conf.get_val<std::string>("plugin_dir") + "/" + PLUGIN_PREFIX +
+    fname = cct->_conf.get_val<std::string>("plugin_dir") + "/" + PLUGIN_PREFIX +
       name + PLUGIN_SUFFIX;
-    library = dlopen(fname2.c_str(), RTLD_NOW);
+    library = dlopen(fname.c_str(), RTLD_NOW);
     if (!library) {
       lderr(cct) << __func__
 		 << " failed dlopen(): \""	<< err1.c_str() 

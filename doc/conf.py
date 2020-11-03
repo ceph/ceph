@@ -60,6 +60,7 @@ extensions = [
     'breathe',
     'edit_on_github',
     'ceph_releases',
+    'sphinxcontrib.openapi'
     ]
 
 ditaa = shutil.which("ditaa")

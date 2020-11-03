@@ -83,6 +83,20 @@ void MirrorWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
   acknowledge_notify(notify_id, handle, outbl);
 }
 
+void MirrorWatcher::handle_rewatch_complete(int r) {
+  dout(5) << ": r=" << r << dendl;
+
+  if (r == -EBLOCKLISTED) {
+    dout(0) << ": client blocklisted" <<dendl;
+    std::scoped_lock locker(m_lock);
+    m_blocklisted = true;
+  } else if (r == -ENOENT) {
+    derr << ": mirroring object deleted" << dendl;
+  } else if (r < 0) {
+    derr << ": rewatch error: " << cpp_strerror(r) << dendl;
+  }
+}
+
 void MirrorWatcher::register_watcher() {
   dout(20) << dendl;
 

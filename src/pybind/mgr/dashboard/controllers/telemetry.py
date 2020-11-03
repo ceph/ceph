@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ApiController, RESTController, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController
 
 REPORT_SCHEMA = {
     "report": ({
@@ -223,8 +223,8 @@ class Telemetry(RESTController):
         :param enable: Enable or disable sending data
         :type enable: bool
         :param license_name: License string e.g. 'sharing-1-0' to
-            make sure the user is aware of and accepts the license
-            for sharing Telemetry data.
+        make sure the user is aware of and accepts the license
+        for sharing Telemetry data.
         :type license_name: string
         """
         if enable:

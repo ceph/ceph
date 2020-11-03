@@ -6,6 +6,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
@@ -30,12 +31,12 @@ class RGWOp_Period_Base : public RGWRESTOp {
 // reply with the period object on success
 void RGWOp_Period_Base::send_response()
 {
-  set_req_state_err(s, http_ret, error_stream.str());
+  set_req_state_err(s, op_ret, error_stream.str());
   dump_errno(s);
 
-  if (http_ret < 0) {
+  if (op_ret < 0) {
     if (!s->err.message.empty()) {
-      ldout(s->cct, 4) << "Request failed with " << http_ret
+      ldout(s->cct, 4) << "Request failed with " << op_ret
           << ": " << s->err.message << dendl;
     }
     end_header(s);
@@ -72,8 +73,8 @@ void RGWOp_Period_Get::execute()
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  http_ret = period.init(store->ctx(), store->svc()->sysobj, realm_id, realm_name);
-  if (http_ret < 0)
+  op_ret = period.init(store->ctx(), store->svc()->sysobj, realm_id, realm_name);
+  if (op_ret < 0)
     ldout(store->ctx(), 5) << "failed to read period" << dendl;
 }
 
@@ -100,8 +101,8 @@ void RGWOp_Period_Post::execute()
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
   bool empty;
-  http_ret = rgw_rest_get_json_input(cct, s, period, max_size, &empty);
-  if (http_ret < 0) {
+  op_ret = rgw_rest_get_json_input(cct, s, period, max_size, &empty);
+  if (op_ret < 0) {
     lderr(cct) << "failed to decode period" << dendl;
     return;
   }
@@ -110,7 +111,7 @@ void RGWOp_Period_Post::execute()
   if (period.get_realm() != store->svc()->zone->get_realm().get_id()) {
     error_stream << "period with realm id " << period.get_realm()
         << " doesn't match current realm " << store->svc()->zone->get_realm().get_id() << std::endl;
-    http_ret = -EINVAL;
+    op_ret = -EINVAL;
     return;
   }
 
@@ -118,25 +119,25 @@ void RGWOp_Period_Post::execute()
   // period that we haven't restarted with yet. we also don't want to modify
   // the objects in use by RGWRados
   RGWRealm realm(period.get_realm());
-  http_ret = realm.init(cct, store->svc()->sysobj);
-  if (http_ret < 0) {
+  op_ret = realm.init(cct, store->svc()->sysobj);
+  if (op_ret < 0) {
     lderr(cct) << "failed to read current realm: "
-        << cpp_strerror(-http_ret) << dendl;
+        << cpp_strerror(-op_ret) << dendl;
     return;
   }
 
   RGWPeriod current_period;
-  http_ret = current_period.init(cct, store->svc()->sysobj, realm.get_id());
-  if (http_ret < 0) {
+  op_ret = current_period.init(cct, store->svc()->sysobj, realm.get_id());
+  if (op_ret < 0) {
     lderr(cct) << "failed to read current period: "
-        << cpp_strerror(-http_ret) << dendl;
+        << cpp_strerror(-op_ret) << dendl;
     return;
   }
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    http_ret = period.commit(store, realm, current_period, error_stream);
-    if (http_ret < 0) {
+    op_ret = period.commit(store, realm, current_period, error_stream);
+    if (op_ret < 0) {
       lderr(cct) << "master zone failed to commit period" << dendl;
     }
     return;
@@ -146,26 +147,26 @@ void RGWOp_Period_Post::execute()
   if (period.get_master_zone() == store->svc()->zone->get_zone_params().get_id()) {
     ldout(cct, 10) << "master zone rejecting period id="
         << period.get_id() << " epoch=" << period.get_epoch() << dendl;
-    http_ret = -EINVAL; // XXX: error code
+    op_ret = -EINVAL; // XXX: error code
     return;
   }
 
   // write the period to rados
-  http_ret = period.store_info(false);
-  if (http_ret < 0) {
+  op_ret = period.store_info(false);
+  if (op_ret < 0) {
     lderr(cct) << "failed to store period " << period.get_id() << dendl;
     return;
   }
   // set as latest epoch
-  http_ret = period.update_latest_epoch(period.get_epoch());
-  if (http_ret == -EEXIST) {
+  op_ret = period.update_latest_epoch(period.get_epoch());
+  if (op_ret == -EEXIST) {
     // already have this epoch (or a more recent one)
     ldout(cct, 4) << "already have epoch >= " << period.get_epoch()
         << " for period " << period.get_id() << dendl;
-    http_ret = 0;
+    op_ret = 0;
     return;
   }
-  if (http_ret < 0) {
+  if (op_ret < 0) {
     lderr(cct) << "failed to set latest epoch" << dendl;
     return;
   }
@@ -188,19 +189,19 @@ void RGWOp_Period_Post::execute()
       lderr(cct) << "discarding period " << period.get_id()
           << " with realm epoch " << period.get_realm_epoch() << " too far in "
           "the future from current epoch " << current_epoch << dendl;
-      http_ret = -ENOENT; // XXX: error code
+      op_ret = -ENOENT; // XXX: error code
       return;
     }
     // attach a copy of the period into the period history
     auto cursor = period_history->attach(RGWPeriod{period});
     if (!cursor) {
       // we're missing some history between the new period and current_period
-      http_ret = cursor.get_error();
+      op_ret = cursor.get_error();
       lderr(cct) << "failed to collect the periods between current period "
           << current_period.get_id() << " (realm epoch " << current_epoch
           << ") and the new period " << period.get_id()
           << " (realm epoch " << period.get_realm_epoch()
-          << "): " << cpp_strerror(-http_ret) << dendl;
+          << "): " << cpp_strerror(-op_ret) << dendl;
       return;
     }
     if (cursor.has_next()) {
@@ -210,8 +211,8 @@ void RGWOp_Period_Post::execute()
       return;
     }
     // set as current period
-    http_ret = realm.set_current_period(period);
-    if (http_ret < 0) {
+    op_ret = realm.set_current_period(period);
+    if (op_ret < 0) {
       lderr(cct) << "failed to update realm's current period" << dendl;
       return;
     }
@@ -222,10 +223,10 @@ void RGWOp_Period_Post::execute()
     return;
   }
   // reflect the period into our local objects
-  http_ret = period.reflect();
-  if (http_ret < 0) {
+  op_ret = period.reflect();
+  if (op_ret < 0) {
     lderr(cct) << "failed to update local objects: "
-        << cpp_strerror(-http_ret) << dendl;
+        << cpp_strerror(-op_ret) << dendl;
     return;
   }
   ldout(cct, 4) << "period epoch " << period.get_epoch()
@@ -279,18 +280,18 @@ void RGWOp_Realm_Get::execute()
 
   // read realm
   realm.reset(new RGWRealm(id, name));
-  http_ret = realm->init(g_ceph_context, store->svc()->sysobj);
-  if (http_ret < 0)
+  op_ret = realm->init(g_ceph_context, store->svc()->sysobj);
+  if (op_ret < 0)
     lderr(store->ctx()) << "failed to read realm id=" << id
         << " name=" << name << dendl;
 }
 
 void RGWOp_Realm_Get::send_response()
 {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
 
-  if (http_ret < 0) {
+  if (op_ret < 0) {
     end_header(s);
     return;
   }
@@ -323,17 +324,17 @@ void RGWOp_Realm_List::execute()
     RGWRealm realm(store->ctx(), store->svc()->sysobj);
     [[maybe_unused]] int ret = realm.read_default_id(default_id);
   }
-  http_ret = store->svc()->zone->list_realms(realms);
-  if (http_ret < 0)
+  op_ret = store->svc()->zone->list_realms(realms);
+  if (op_ret < 0)
     lderr(store->ctx()) << "failed to list realms" << dendl;
 }
 
 void RGWOp_Realm_List::send_response()
 {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
 
-  if (http_ret < 0) {
+  if (op_ret < 0) {
     end_header(s);
     return;
   }

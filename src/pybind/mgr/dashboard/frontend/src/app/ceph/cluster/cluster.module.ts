@@ -3,16 +3,16 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { TreeModule } from '@circlon/angular-tree-component';
 import {
   NgbDatepickerModule,
+  NgbDropdownModule,
   NgbNavModule,
   NgbPopoverModule,
   NgbTimepickerModule,
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { TreeModule } from 'angular-tree-component';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -33,6 +33,7 @@ import { OsdCreationPreviewModalComponent } from './osd/osd-creation-preview-mod
 import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
 import { OsdDevicesSelectionGroupsComponent } from './osd/osd-devices-selection-groups/osd-devices-selection-groups.component';
 import { OsdDevicesSelectionModalComponent } from './osd/osd-devices-selection-modal/osd-devices-selection-modal.component';
+import { OsdFlagsIndivModalComponent } from './osd/osd-flags-indiv-modal/osd-flags-indiv-modal.component';
 import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
 import { OsdFormComponent } from './osd/osd-form/osd-form.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
@@ -65,11 +66,11 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     MgrModulesModule,
     NgbTypeaheadModule,
     NgbTimepickerModule,
-    TreeModule.forRoot(),
-    NgBootstrapFormValidationModule,
+    TreeModule,
     CephSharedModule,
     NgbDatepickerModule,
-    NgbPopoverModule
+    NgbPopoverModule,
+    NgbDropdownModule
   ],
   declarations: [
     HostsComponent,
@@ -106,7 +107,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     ServiceDaemonListComponent,
     TelemetryComponent,
     PrometheusTabsComponent,
-    ServiceFormComponent
+    ServiceFormComponent,
+    OsdFlagsIndivModalComponent
   ]
 })
 export class ClusterModule {}

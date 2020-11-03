@@ -6,16 +6,14 @@ import errno
 import json
 import time
 import unittest
-
 from datetime import datetime, timedelta
 
-from . import CmdException, CLICommandTestMixin
 from .. import mgr
-from ..security import Scope, Permission
-from ..services.access_control import load_access_control_db, \
-                                      password_hash, AccessControlDB, \
-                                      SYSTEM_ROLES, PasswordPolicy
+from ..security import Permission, Scope
+from ..services.access_control import SYSTEM_ROLES, AccessControlDB, \
+    PasswordPolicy, load_access_control_db, password_hash
 from ..settings import Settings
+from . import CLICommandTestMixin, CmdException  # pylint: disable=no-name-in-module
 
 
 class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
@@ -389,7 +387,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             uroles.sort()
             user = self.exec_cmd('ac-user-add-roles', username=username,
                                  roles=[role])
-            self.assertDictContainsSubset({'roles': uroles}, user)
+            self.assertLessEqual(uroles, user['roles'])
         self.validate_persistent_user(username, uroles)
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
 
@@ -397,8 +395,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-add-roles', username="admin",
                              roles=['pool-manager', 'block-manager'])
-        self.assertDictContainsSubset(
-            {'roles': ['block-manager', 'pool-manager']}, user)
+        self.assertLessEqual(['block-manager', 'pool-manager'],
+                             user['roles'])
         self.validate_persistent_user('admin', ['block-manager',
                                                 'pool-manager'])
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
@@ -425,14 +423,13 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-add-roles', username="admin",
                              roles=['pool-manager'])
-        self.assertDictContainsSubset(
-            {'roles': ['pool-manager']}, user)
+        self.assertLessEqual(['pool-manager'], user['roles'])
         self.validate_persistent_user('admin', ['pool-manager'])
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
         user2 = self.exec_cmd('ac-user-set-roles', username="admin",
                               roles=['rgw-manager', 'block-manager'])
-        self.assertDictContainsSubset(
-            {'roles': ['block-manager', 'rgw-manager']}, user2)
+        self.assertLessEqual(['block-manager', 'rgw-manager'],
+                             user2['roles'])
         self.validate_persistent_user('admin', ['block-manager',
                                                 'rgw-manager'])
         self.assertGreaterEqual(user2['lastUpdate'], user['lastUpdate'])
@@ -459,8 +456,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.test_add_user_roles()
         user = self.exec_cmd('ac-user-del-roles', username="admin",
                              roles=['pool-manager'])
-        self.assertDictContainsSubset(
-            {'roles': ['block-manager']}, user)
+        self.assertLessEqual(['block-manager'], user['roles'])
         self.validate_persistent_user('admin', ['block-manager'])
 
     def test_del_user_roles_not_existent_user(self):

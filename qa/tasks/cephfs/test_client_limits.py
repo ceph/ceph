@@ -6,7 +6,6 @@ exceed the limits of how many caps/inodes they should hold.
 
 import logging
 from textwrap import dedent
-from teuthology.orchestra.run import CommandFailedError
 from tasks.ceph_test_case import TestTimeoutError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, needs_trimming
 from tasks.cephfs.fuse_mount import FuseMount
@@ -77,12 +76,7 @@ class TestClientLimits(CephFSTestCase):
         # When the client closes the files, it should retain only as many caps as allowed
         # under the SESSION_RECALL policy
         log.info("Terminating process holding files open")
-        open_proc.stdin.close()
-        try:
-            open_proc.wait()
-        except CommandFailedError:
-            # We killed it, so it raises an error
-            pass
+        self.mount_a._kill_background(open_proc)
 
         # The remaining caps should comply with the numbers sent from MDS in SESSION_RECALL message,
         # which depend on the caps outstanding, cache size and overall ratio

@@ -13,6 +13,20 @@ namespace {
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+void btree_range_pin_t::take_pin(btree_range_pin_t &other)
+{
+  assert(other.extent);
+  assert(other.pins);
+  other.pins->replace_pin(*this, other);
+  pins = other.pins;
+  other.pins = nullptr;
+
+  if (other.has_ref()) {
+    other.drop_ref();
+    acquire_ref();
+  }
+}
+
 btree_range_pin_t::~btree_range_pin_t()
 {
   assert(!pins == !is_linked());
@@ -22,6 +36,11 @@ btree_range_pin_t::~btree_range_pin_t()
     pins->remove_pin(*this, true);
   }
   extent = nullptr;
+}
+
+void btree_pin_set_t::replace_pin(btree_range_pin_t &to, btree_range_pin_t &from)
+{
+  pins.replace_node(pins.iterator_to(from), to);
 }
 
 void btree_pin_set_t::remove_pin(btree_range_pin_t &pin, bool do_check_parent)
@@ -102,10 +121,12 @@ void btree_pin_set_t::add_pin(btree_range_pin_t &pin)
     auto *parent = maybe_get_parent(pin.range);
     assert(parent);
     if (!parent->has_ref()) {
-      logger().debug("{}: acquiring parent {}", __func__, parent);
+      logger().debug("{}: acquiring parent {}", __func__,
+		     static_cast<void*>(parent));
       parent->acquire_ref();
     } else {
-      logger().debug("{}: parent has ref {}", __func__, parent);
+      logger().debug("{}: parent has ref {}", __func__,
+		     static_cast<void*>(parent));
     }
   }
   if (maybe_get_first_child(pin.range) != nullptr) {

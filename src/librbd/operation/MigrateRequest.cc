@@ -33,8 +33,8 @@ template <typename I>
 class C_MigrateObject : public C_AsyncObjectThrottle<I> {
 public:
   C_MigrateObject(AsyncObjectThrottle<I> &throttle, I *image_ctx,
-                  ::SnapContext snapc, uint64_t object_no)
-    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_snapc(snapc),
+                  IOContext io_context, uint64_t object_no)
+    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_io_context(io_context),
       m_object_no(object_no) {
   }
 
@@ -54,7 +54,7 @@ public:
   }
 
 private:
-  ::SnapContext m_snapc;
+  IOContext m_io_context;
   uint64_t m_object_no;
 
   io::AsyncOperation *m_async_op = nullptr;
@@ -118,8 +118,8 @@ private:
     if (is_within_overlap_bounds()) {
       bufferlist bl;
       auto req = new io::ObjectWriteRequest<I>(&image_ctx, m_object_no, 0,
-                                               std::move(bl), m_snapc, 0, 0,
-                                               std::nullopt, {}, ctx);
+                                               std::move(bl), m_io_context, 0,
+                                               0, std::nullopt, {}, ctx);
 
       ldout(cct, 20) << "copyup object req " << req << ", object_no "
                      << m_object_no << dendl;
@@ -192,7 +192,8 @@ void MigrateRequest<I>::migrate_objects() {
 
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_MigrateObject<I> >(),
-      boost::lambda::_1, &image_ctx, image_ctx.snapc, boost::lambda::_2));
+      boost::lambda::_1, &image_ctx, image_ctx.get_data_io_context(),
+      boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, 0, overlap_objects);
   throttle->start_ops(

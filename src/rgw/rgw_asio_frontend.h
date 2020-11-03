@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "rgw_frontend.h"
+#define REQUEST_TIMEOUT 65000
 
 class RGWAsioFrontend : public RGWFrontend {
   class Impl;

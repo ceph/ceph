@@ -93,6 +93,9 @@ fi
 
 cd $DASH_DIR/frontend
 
+# Remove existing XML results
+rm -f cypress/reports/results-*.xml || true
+
 case "$DEVICE" in
     docker)
         failed=0
@@ -104,7 +107,7 @@ case "$DEVICE" in
             --env CYPRESS_LOGIN_PWD \
             --name=e2e \
             --network=host \
-            cypress/included:4.4.0 || failed=1
+            cypress/included:5.1.0 || failed=1
         stop $failed
         ;;
     *)

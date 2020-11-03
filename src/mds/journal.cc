@@ -62,6 +62,48 @@
 // -----------------------
 // LogSegment
 
+struct BatchStoredBacktrace : public MDSIOContext {
+  MDSContext *fin;
+  std::vector<CInodeCommitOperations> ops_vec;
+
+  BatchStoredBacktrace(MDSRank *m, MDSContext *f,
+		       std::vector<CInodeCommitOperations>&& ops) :
+    MDSIOContext(m), fin(f), ops_vec(std::move(ops)) {}
+  void finish(int r) override {
+    for (auto& op : ops_vec) {
+      op.in->_stored_backtrace(r, op.version, nullptr);
+    }
+    fin->complete(r);
+  }
+  void print(ostream& out) const override {
+    out << "batch backtrace_store";
+  }
+};
+
+struct BatchCommitBacktrace : public Context {
+  MDSRank *mds;
+  MDSContext *fin;
+  std::vector<CInodeCommitOperations> ops_vec;
+
+  BatchCommitBacktrace(MDSRank *m, MDSContext *f,
+		       std::vector<CInodeCommitOperations>&& ops) :
+    mds(m), fin(f), ops_vec(std::move(ops)) {}
+  void finish(int r) override {
+    C_GatherBuilder gather(g_ceph_context);
+
+    for (auto &op : ops_vec) {
+      op.in->_commit_ops(r, gather, op.ops_vec, op.bt);
+      op.ops_vec.clear();
+      op.bt.clear();
+    }
+    ceph_assert(gather.has_subs());
+    gather.set_finisher(new C_OnFinisher(
+			  new BatchStoredBacktrace(mds, fin, std::move(ops_vec)),
+			  mds->finisher));
+    gather.activate();
+  }
+};
+
 void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio)
 {
   set<CDir*> commit;
@@ -187,18 +229,27 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
 
+  size_t count = 0;
+  for (elist<CInode*>::iterator it = dirty_parent_inodes.begin(); !it.end(); ++it)
+    count++;
+
+  std::vector<CInodeCommitOperations> ops_vec;
+  ops_vec.reserve(count);
   // backtraces to be stored/updated
   for (elist<CInode*>::iterator p = dirty_parent_inodes.begin(); !p.end(); ++p) {
     CInode *in = *p;
     ceph_assert(in->is_auth());
     if (in->can_auth_pin()) {
       dout(15) << "try_to_expire waiting for storing backtrace on " << *in << dendl;
-      in->store_backtrace(gather_bld.new_sub(), op_prio);
+      ops_vec.resize(ops_vec.size() + 1);
+      in->store_backtrace(ops_vec.back(), op_prio);
     } else {
       dout(15) << "try_to_expire waiting for unfreeze on " << *in << dendl;
       in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());
     }
   }
+  if (!ops_vec.empty())
+    mds->finisher->queue(new BatchCommitBacktrace(mds, gather_bld.new_sub(), std::move(ops_vec)));
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
 
@@ -523,10 +574,8 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
   if (in->is_dir()) {
     if (is_export_ephemeral_random()) {
       dout(15) << "random ephemeral pin on " << *in << dendl;
-      in->set_ephemeral_rand(true);
-      in->maybe_ephemeral_rand(true);
+      in->set_ephemeral_pin(false, true);
     }
-    in->maybe_ephemeral_dist();
     in->maybe_export_pin();
     if (!(in->dirfragtree == dirfragtree)) {
       dout(10) << "EMetaBlob::fullbit::update_inode dft " << in->dirfragtree << " -> "
@@ -573,9 +622,9 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 	!in->get_inode()->layout.is_valid()) {
       dout(0) << "EMetaBlob.replay invalid layout on ino " << *in
               << ": " << in->get_inode()->layout << dendl;
-      std::ostringstream oss;
-      oss << "Invalid layout for inode " << in->ino() << " in journal";
-      mds->clog->error() << oss.str();
+      CachedStackStringStream css;
+      *css << "Invalid layout for inode " << in->ino() << " in journal";
+      mds->clog->error() << css->strv();
       mds->damaged();
       ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
@@ -1241,11 +1290,11 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	if (!dn->get_linkage()->is_null()) {
 	  if (dn->get_linkage()->is_primary()) {
 	    unlinked[dn->get_linkage()->get_inode()] = dir;
-	    stringstream ss;
-	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	    CachedStackStringStream css;
+	    *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *dn->get_linkage()->get_inode() << " should be " << in->ino();
-	    dout(0) << ss.str() << dendl;
-	    mds->clog->warn(ss);
+	    dout(0) << css->strv() << dendl;
+	    mds->clog->warn() << css->strv();
 	  }
 	  dir->unlink_inode(dn, false);
 	}
@@ -1265,11 +1314,11 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
 	    if (dn->get_linkage()->is_primary()) {
 	      unlinked[dn->get_linkage()->get_inode()] = dir;
-	      stringstream ss;
-	      ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	      CachedStackStringStream css;
+	      *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 		 << " " << *dn->get_linkage()->get_inode() << " should be " << in->ino();
-	      dout(0) << ss.str() << dendl;
-	      mds->clog->warn(ss);
+	      dout(0) << css->strv() << dendl;
+	      mds->clog->warn() << css->strv();
 	    }
 	    dir->unlink_inode(dn, false);
 	  }
@@ -1312,10 +1361,10 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  if (dn->get_linkage()->is_primary()) {
 	    unlinked[dn->get_linkage()->get_inode()] = dir;
-	    stringstream ss;
-	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	    CachedStackStringStream css;
+	    *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *dn->get_linkage()->get_inode() << " should be remote " << rb.ino;
-	    dout(0) << ss.str() << dendl;
+	    dout(0) << css->strv() << dendl;
 	  }
 	  dir->unlink_inode(dn, false);
 	}

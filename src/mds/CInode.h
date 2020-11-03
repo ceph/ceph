@@ -60,6 +60,34 @@ struct cinode_lock_info_t {
   int wr_caps;
 };
 
+struct CInodeCommitOperation {
+public:
+  CInodeCommitOperation(int prio, int64_t po)
+    : pool(po), priority(prio) {
+  }
+  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f)
+    : pool(po), priority(prio), _layout(l), _features(f) {
+      update_layout = true;
+  }
+
+  void update(ObjectOperation &op, inode_backtrace_t &bt);
+  int64_t get_pool() { return pool; }
+
+private:
+  int64_t pool;     ///< pool id
+  int priority;
+  bool update_layout = false;
+  file_layout_t _layout;
+  uint64_t _features;
+};
+
+struct CInodeCommitOperations {
+  std::vector<CInodeCommitOperation> ops_vec;
+  inode_backtrace_t bt;
+  version_t version;
+  CInode *in;
+};
+
 /**
  * Base class for CInode, containing the backing store data and
  * serialization methods.  This exists so that we can read and
@@ -763,7 +791,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void fetch(MDSContext *fin);
   void _fetched(ceph::buffer::list& bl, ceph::buffer::list& bl2, Context *fin);  
 
+  void _commit_ops(int r, C_GatherBuilder &gather_bld,
+                   std::vector<CInodeCommitOperation> &ops_vec,
+                   inode_backtrace_t &bt);
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
+  void _store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
+                        inode_backtrace_t &bt, int op_prio);
+  void store_backtrace(CInodeCommitOperations &op, int op_prio);
   void store_backtrace(MDSContext *fin, int op_prio=-1);
   void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, ceph::buffer::list *backtrace);
@@ -1018,24 +1052,22 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     return !projected_parent.empty();
   }
 
-  mds_rank_t get_export_pin(bool inherit=true, bool ephemeral=true) const;
+  mds_rank_t get_export_pin(bool inherit=true) const;
+  void check_pin_policy(mds_rank_t target);
   void set_export_pin(mds_rank_t rank);
   void queue_export_pin(mds_rank_t target);
   void maybe_export_pin(bool update=false);
 
-  void check_pin_policy();
+  void set_ephemeral_pin(bool dist, bool rand);
+  void clear_ephemeral_pin(bool dist, bool rand);
 
-  void set_ephemeral_dist(bool yes);
-  void maybe_ephemeral_dist(bool update=false);
-  void maybe_ephemeral_dist_children(bool update=false);
   void setxattr_ephemeral_dist(bool val=false);
   bool is_ephemeral_dist() const {
     return state_test(STATE_DISTEPHEMERALPIN);
   }
 
-  double get_ephemeral_rand(bool inherit=true) const;
-  void set_ephemeral_rand(bool yes);
-  void maybe_ephemeral_rand(bool fresh=false, double threshold=-1.0);
+  double get_ephemeral_rand() const;
+  void maybe_ephemeral_rand(double threshold=-1.0);
   void setxattr_ephemeral_rand(double prob=0.0);
   bool is_ephemeral_rand() const {
     return state_test(STATE_RANDEPHEMERALPIN);
@@ -1048,13 +1080,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_ephemerally_pinned() const {
     return state_test(STATE_DISTEPHEMERALPIN) ||
            state_test(STATE_RANDEPHEMERALPIN);
-  }
-  bool is_exportable(mds_rank_t dest) const;
-
-  void maybe_pin() {
-    maybe_export_pin();
-    maybe_ephemeral_dist();
-    maybe_ephemeral_rand();
   }
 
   void print(std::ostream& out) override;

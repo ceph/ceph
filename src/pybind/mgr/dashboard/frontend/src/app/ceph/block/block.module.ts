@@ -3,9 +3,8 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { TreeModule } from 'angular-tree-component';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '../../shared/services/feature-toggles-guard.service';
@@ -48,8 +47,7 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     NgbTooltipModule,
     SharedModule,
     RouterModule,
-    NgBootstrapFormValidationModule,
-    TreeModule.forRoot()
+    TreeModule
   ],
   declarations: [
     RbdListComponent,

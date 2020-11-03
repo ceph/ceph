@@ -384,7 +384,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
       return of([]);
     }
 
-    return this.nfsService.lsDir(path);
+    const fsName = this.nfsForm.getValue('fsal').fs_name;
+    return this.nfsService.lsDir(fsName, path);
   }
 
   pathChangeHandler() {

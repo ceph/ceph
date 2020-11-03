@@ -4,6 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_bucket.h"
 #include "rgw_rest_bucket.h"
+#include "rgw_sal_rados.h"
 
 #include "include/str_list.h"
 
@@ -47,7 +48,7 @@ void RGWOp_Bucket_Info::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_fetch_stats(fetch_stats);
 
-  http_ret = RGWBucketAdminOp::info(store, op_state, flusher);
+  op_ret = RGWBucketAdminOp::info(store, op_state, flusher);
 }
 
 class RGWOp_Get_Policy : public RGWRESTOp {
@@ -77,7 +78,7 @@ void RGWOp_Get_Policy::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_object(object);
 
-  http_ret = RGWBucketAdminOp::get_policy(store, op_state, flusher);
+  op_ret = RGWBucketAdminOp::get_policy(store, op_state, flusher);
 }
 
 class RGWOp_Check_Bucket_Index : public RGWRESTOp {
@@ -111,7 +112,7 @@ void RGWOp_Check_Bucket_Index::execute()
   op_state.set_fix_index(fix_index);
   op_state.set_check_objects(check_objects);
 
-  http_ret = RGWBucketAdminOp::check_index(store, op_state, flusher, s->yield);
+  op_ret = RGWBucketAdminOp::check_index(store, op_state, flusher, s->yield);
 }
 
 class RGWOp_Bucket_Link : public RGWRESTOp {
@@ -149,12 +150,12 @@ void RGWOp_Bucket_Link::execute()
   op_state.set_new_bucket_name(new_bucket_name);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  http_ret = RGWBucketAdminOp::link(store, op_state);
+  op_ret = RGWBucketAdminOp::link(store, op_state);
 }
 
 class RGWOp_Bucket_Unlink : public RGWRESTOp {
@@ -187,12 +188,12 @@ void RGWOp_Bucket_Unlink::execute()
   op_state.set_bucket_name(bucket);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  http_ret = RGWBucketAdminOp::unlink(store, op_state);
+  op_ret = RGWBucketAdminOp::unlink(store, op_state);
 }
 
 class RGWOp_Bucket_Remove : public RGWRESTOp {
@@ -225,11 +226,6 @@ void RGWOp_Bucket_Remove::execute()
   }
 
   op_ret = bucket->remove_bucket(delete_children, string(), string(), true, &s->info, s->yield);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "remove_bucket returned ret=" << op_ret << dendl;
-    return;
-  }
-  http_ret = op_ret;
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
@@ -254,7 +250,7 @@ void RGWOp_Set_Bucket_Quota::execute()
   std::string uid_str;
   RESTArgs::get_string(s, "uid", uid_str, &uid_str, &uid_arg_existed);
   if (! uid_arg_existed) {
-    http_ret = -EINVAL;
+    op_ret = -EINVAL;
     return;
   }
   rgw_user uid(uid_str);
@@ -262,7 +258,7 @@ void RGWOp_Set_Bucket_Quota::execute()
   std::string bucket;
   RESTArgs::get_string(s, "bucket", bucket, &bucket, &bucket_arg_existed);
   if (! bucket_arg_existed) {
-    http_ret = -EINVAL;
+    op_ret = -EINVAL;
     return;
   }
 
@@ -277,8 +273,8 @@ void RGWOp_Set_Bucket_Quota::execute()
   RGWQuotaInfo quota;
   if (!use_http_params) {
     bool empty;
-    http_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
-    if (http_ret < 0) {
+    op_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
+    if (op_ret < 0) {
       if (!empty)
         return;
       /* was probably chunked input, but no content provided, configure via http params */
@@ -288,8 +284,8 @@ void RGWOp_Set_Bucket_Quota::execute()
   if (use_http_params) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
-    http_ret = store->getRados()->get_bucket_info(store->svc(), uid.tenant, bucket, bucket_info, NULL, s->yield, &attrs);
-    if (http_ret < 0) {
+    op_ret = store->getRados()->get_bucket_info(store->svc(), uid.tenant, bucket, bucket_info, NULL, s->yield, &attrs);
+    if (op_ret < 0) {
       return;
     }
     RGWQuotaInfo *old_quota = &bucket_info.quota;
@@ -306,7 +302,7 @@ void RGWOp_Set_Bucket_Quota::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_quota(quota);
 
-  http_ret = RGWBucketAdminOp::set_quota(store, op_state);
+  op_ret = RGWBucketAdminOp::set_quota(store, op_state);
 }
 
 class RGWOp_Sync_Bucket : public RGWRESTOp {
@@ -338,7 +334,7 @@ void RGWOp_Sync_Bucket::execute()
   op_state.set_tenant(tenant);
   op_state.set_sync_bucket(sync_bucket);
 
-  http_ret = RGWBucketAdminOp::sync_bucket(store, op_state);
+  op_ret = RGWBucketAdminOp::sync_bucket(store, op_state);
 }
 
 class RGWOp_Object_Remove: public RGWRESTOp {
@@ -368,7 +364,7 @@ void RGWOp_Object_Remove::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_object(object);
 
-  http_ret = RGWBucketAdminOp::remove_object(store, op_state);
+  op_ret = RGWBucketAdminOp::remove_object(store, op_state);
 }
 
 

@@ -3,25 +3,12 @@
 
 from __future__ import absolute_import
 
-
 from .helper import DashboardTestCase, JList, JObj
 
 
 class GaneshaTest(DashboardTestCase):
     CEPHFS = True
     AUTH_ROLES = ['pool-manager', 'ganesha-manager']
-
-    @classmethod
-    def create_pool(cls, name, pg_num, pool_type, application='rbd'):
-        data = {
-            'pool': name,
-            'pg_num': pg_num,
-            'pool_type': pool_type,
-            'application_metadata': [application]
-        }
-        if pool_type == 'erasure':
-            data['flags'] = ['ec_overwrites']
-        cls._task_post("/api/pool", data)
 
     @classmethod
     def setUpClass(cls):
@@ -33,7 +20,8 @@ class GaneshaTest(DashboardTestCase):
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha2', 'create', 'conf-node1'])
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha2', 'create', 'conf-node2'])
         cls._rados_cmd(['-p', 'ganesha', '-N', 'ganesha2', 'create', 'conf-node3'])
-        cls._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace', 'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
+        cls._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace',
+                       'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
 
         # RGW setup
         cls._radosgw_admin_cmd([
@@ -47,7 +35,8 @@ class GaneshaTest(DashboardTestCase):
     def tearDownClass(cls):
         super(GaneshaTest, cls).tearDownClass()
         cls._radosgw_admin_cmd(['user', 'rm', '--uid', 'admin', '--purge-data'])
-        cls._ceph_cmd(['osd', 'pool', 'delete', 'ganesha', 'ganesha', '--yes-i-really-really-mean-it'])
+        cls._ceph_cmd(['osd', 'pool', 'delete', 'ganesha', 'ganesha',
+                       '--yes-i-really-really-mean-it'])
 
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
@@ -68,7 +57,8 @@ class GaneshaTest(DashboardTestCase):
     @classmethod
     def create_export(cls, path, cluster_id, daemons, fsal, sec_label_xattr=None):
         if fsal == 'CEPH':
-            fsal = {"name": "CEPH", "user_id":"admin", "fs_name": None, "sec_label_xattr": sec_label_xattr}
+            fsal = {"name": "CEPH", "user_id": "admin", "fs_name": None,
+                    "sec_label_xattr": sec_label_xattr}
             pseudo = "/cephfs{}".format(path)
         else:
             fsal = {"name": "RGW", "rgw_user_id": "admin"}
@@ -77,7 +67,7 @@ class GaneshaTest(DashboardTestCase):
             "path": path,
             "fsal": fsal,
             "cluster_id": cluster_id,
-            "daemons": ["node1", "node3"],
+            "daemons": daemons,
             "pseudo": pseudo,
             "tag": None,
             "access_type": "RW",
@@ -86,7 +76,7 @@ class GaneshaTest(DashboardTestCase):
             "protocols": [4],
             "transports": ["TCP"],
             "clients": [{
-                "addresses":["10.0.0.0/8"],
+                "addresses": ["10.0.0.0/8"],
                 "access_type": "RO",
                 "squash": "root"
             }]
@@ -103,19 +93,26 @@ class GaneshaTest(DashboardTestCase):
             self._task_delete("/api/nfs-ganesha/export/{}/{}"
                               .format(exp['cluster_id'], exp['export_id']))
 
-    def test_create_export(self):
+    def _test_create_export(self, cephfs_path):
         exports = self._get("/api/nfs-ganesha/export")
         self.assertEqual(len(exports), 0)
 
-        data = self.create_export("/foo", 'cluster1', ['node1', 'node2'], 'CEPH', "security.selinux")
+        data = self.create_export(cephfs_path, 'cluster1', ['node1', 'node2'], 'CEPH',
+                                  "security.selinux")
 
         exports = self._get("/api/nfs-ganesha/export")
         self.assertEqual(len(exports), 1)
         self.assertDictEqual(exports[0], data)
         return data
 
+    def test_create_export(self):
+        self._test_create_export('/foo')
+
+    def test_create_export_for_cephfs_root(self):
+        self._test_create_export('/')
+
     def test_update_export(self):
-        export = self.test_create_export()
+        export = self._test_create_export('/foo')
         export['access_type'] = 'RO'
         export['daemons'] = ['node1', 'node3']
         export['security_label'] = True
@@ -129,7 +126,7 @@ class GaneshaTest(DashboardTestCase):
         self.assertEqual(exports[0]['security_label'], True)
 
     def test_delete_export(self):
-        export = self.test_create_export()
+        export = self._test_create_export('/foo')
         self._task_delete("/api/nfs-ganesha/export/{}/{}"
                           .format(export['cluster_id'], export['export_id']))
         self.assertStatus(204)
@@ -155,10 +152,13 @@ class GaneshaTest(DashboardTestCase):
         self.assertIn('available', data)
         self.assertIn('message', data)
         self.assertFalse(data['available'])
-        self.assertIn('Ganesha config location is not configured. Please set the GANESHA_RADOS_POOL_NAMESPACE setting.',
+        self.assertIn(("NFS-Ganesha cluster is not detected. "
+                       "Please set the GANESHA_RADOS_POOL_NAMESPACE "
+                       "setting or deploy an NFS-Ganesha cluster with the Orchestrator."),
                       data['message'])
 
-        self._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace', 'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
+        self._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace',
+                        'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
 
     def test_valid_status(self):
         data = self._get('/api/nfs-ganesha/status')
@@ -181,8 +181,13 @@ class GaneshaTest(DashboardTestCase):
         })))
 
     def test_ganesha_lsdir(self):
-        self._get('/ui-api/nfs-ganesha/lsdir')
-        self.assertStatus(500)
+        fss = self._get('/ui-api/nfs-ganesha/cephfs/filesystems')
+        self.assertStatus(200)
+        for fs in fss:
+            data = self._get('/ui-api/nfs-ganesha/lsdir/{}'.format(fs['name']))
+            self.assertStatus(200)
+            self.assertSchema(data, JObj({'paths': JList(str)}))
+            self.assertEqual(data['paths'][0], '/')
 
     def test_ganesha_buckets(self):
         data = self._get('/ui-api/nfs-ganesha/rgw/buckets')

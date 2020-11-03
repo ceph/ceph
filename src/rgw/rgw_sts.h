@@ -15,19 +15,21 @@ protected:
   static constexpr uint64_t MIN_POLICY_SIZE = 1;
   static constexpr uint64_t MAX_POLICY_SIZE = 2048;
   static constexpr uint64_t DEFAULT_DURATION_IN_SECS = 3600;
-  static constexpr uint64_t MIN_DURATION_IN_SECS = 900;
   static constexpr uint64_t MIN_ROLE_ARN_SIZE = 2;
   static constexpr uint64_t MAX_ROLE_ARN_SIZE = 2048;
   static constexpr uint64_t MIN_ROLE_SESSION_SIZE = 2;
   static constexpr uint64_t MAX_ROLE_SESSION_SIZE = 64;
+  uint64_t MIN_DURATION_IN_SECS;
   uint64_t MAX_DURATION_IN_SECS;
+  CephContext* cct;
   uint64_t duration;
   string err_msg;
   string iamPolicy;
   string roleArn;
   string roleSessionName;
 public:
-  AssumeRoleRequestBase(const string& duration,
+  AssumeRoleRequestBase(CephContext* cct,
+                        const string& duration,
                         const string& iamPolicy,
                         const string& roleArn,
                         const string& roleSessionName);
@@ -49,7 +51,8 @@ class AssumeRoleWithWebIdentityRequest : public AssumeRoleRequestBase {
   string sub;
   string aud;
 public:
-  AssumeRoleWithWebIdentityRequest( const string& duration,
+  AssumeRoleWithWebIdentityRequest( CephContext* cct,
+                      const string& duration,
                       const string& providerId,
                       const string& iamPolicy,
                       const string& roleArn,
@@ -57,7 +60,7 @@ public:
                       const string& iss,
                       const string& sub,
                       const string& aud)
-    : AssumeRoleRequestBase(duration, iamPolicy, roleArn, roleSessionName),
+    : AssumeRoleRequestBase(cct, duration, iamPolicy, roleArn, roleSessionName),
       providerId(providerId), iss(iss), sub(sub), aud(aud) {}
   const string& getProviderId() const { return providerId; }
   const string& getIss() const { return iss; }
@@ -76,14 +79,15 @@ class AssumeRoleRequest : public AssumeRoleRequestBase {
   string serialNumber;
   string tokenCode;
 public:
-  AssumeRoleRequest(const string& duration,
+  AssumeRoleRequest(CephContext* cct,
+                    const string& duration,
                     const string& externalId,
                     const string& iamPolicy,
                     const string& roleArn,
                     const string& roleSessionName,
                     const string& serialNumber,
                     const string& tokenCode)
-    : AssumeRoleRequestBase(duration, iamPolicy, roleArn, roleSessionName),
+    : AssumeRoleRequestBase(cct, duration, iamPolicy, roleArn, roleSessionName),
       externalId(externalId), serialNumber(serialNumber), tokenCode(tokenCode){}
   int validate_input() const;
 };
@@ -130,11 +134,12 @@ struct SessionToken {
   uint32_t acct_type;
   string role_session;
   std::vector<string> token_claims;
+  string issued_at;
 
   SessionToken() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(access_key_id, bl);
     encode(secret_access_key, bl);
     encode(expiration, bl);
@@ -147,11 +152,12 @@ struct SessionToken {
     encode(acct_type, bl);
     encode(role_session, bl);
     encode(token_claims, bl);
+    encode(issued_at, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(access_key_id, bl);
     decode(secret_access_key, bl);
     decode(expiration, bl);
@@ -167,6 +173,9 @@ struct SessionToken {
     }
     if (struct_v >= 3) {
       decode(token_claims, bl);
+    }
+    if (struct_v >= 4) {
+      decode(issued_at, bl);
     }
     DECODE_FINISH(bl);
   }

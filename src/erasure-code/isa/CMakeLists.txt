@@ -2,7 +2,8 @@
 set(isal_src_dir ${CMAKE_SOURCE_DIR}/src/isa-l)
 include_directories(${isal_src_dir}/include)
 
-if(HAVE_BETTER_YASM_ELF64)
+if(HAVE_NASM_X64_AVX2)
+  set(CMAKE_ASM_FLAGS "-i ${isal_src_dir}/include/ ${CMAKE_ASM_FLAGS}")
   set(isa_srcs
     ${isal_src_dir}/erasure_code/ec_base.c
     ${isal_src_dir}/erasure_code/gf_2vect_dot_prod_sse.asm

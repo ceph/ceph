@@ -13,8 +13,12 @@ namespace crypto {
 
 struct MockCryptoInterface : CryptoInterface {
 
-  MOCK_CONST_METHOD2(encrypt, void(ceph::bufferlist&&, uint64_t));
-  MOCK_CONST_METHOD2(decrypt, void(ceph::bufferlist&&, uint64_t));
+  MOCK_METHOD2(encrypt, int(ceph::bufferlist*, uint64_t));
+  MOCK_METHOD2(decrypt, int(ceph::bufferlist*, uint64_t));
+
+  uint64_t get_block_size() const override {
+    return 4096;
+  }
 };
 
 } // namespace crypto

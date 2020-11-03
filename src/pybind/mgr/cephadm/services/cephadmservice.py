@@ -3,7 +3,8 @@ import re
 import logging
 import subprocess
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Any, Tuple
+from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic, \
+    Optional, Dict, Any, Tuple, NewType
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
@@ -18,16 +19,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
+AuthEntity = NewType('AuthEntity', str)
 
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
     # typing.NamedTuple + Generic is broken in py36
-    def __init__(self, host: str, daemon_id,
+    def __init__(self, host: str, daemon_id: str,
                  spec: Optional[ServiceSpecs] = None,
                  network: Optional[str] = None,
                  keyring: Optional[str] = None,
                  extra_args: Optional[List[str]] = None,
-                 extra_config: Optional[Dict[str, Any]] = None,
+                 ceph_conf: str = '',
+                 extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
                  ports: Optional[List[int]] = None,):
         """
@@ -54,13 +57,22 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
 
         # For run_cephadm. Would be great to have more expressive names.
         self.extra_args: List[str] = extra_args or []
-        self.extra_config: Dict[str, Any] = extra_config or {}
+
+        self.ceph_conf = ceph_conf
+        self.extra_files = extra_files or {}
 
         # TCP ports used by the daemon
         self.ports:  List[int] = ports or []
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def config_get_files(self) -> Dict[str, Any]:
+        files = self.extra_files
+        if self.ceph_conf:
+            files['config'] = self.ceph_conf
+
+        return files
 
 
 class CephadmService(metaclass=ABCMeta):
@@ -70,13 +82,16 @@ class CephadmService(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def TYPE(self):
+    def TYPE(self) -> str:
         pass
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
-    def make_daemon_spec(self, host, daemon_id, netowrk, spec: ServiceSpecs) -> CephadmDaemonSpec:
+    def make_daemon_spec(self, host: str,
+                         daemon_id: str,
+                         netowrk: str,
+                         spec: ServiceSpecs) -> CephadmDaemonSpec:
         return CephadmDaemonSpec(
             host=host,
             daemon_id=daemon_id,
@@ -84,24 +99,13 @@ class CephadmService(metaclass=ABCMeta):
             network=netowrk
         )
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         raise NotImplementedError()
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
-        # Ceph.daemons (mon, mgr, mds, osd, etc)
-        cephadm_config = self.mgr._get_config_and_keyring(
-            daemon_spec.daemon_type,
-            daemon_spec.daemon_id,
-            host=daemon_spec.host,
-            keyring=daemon_spec.keyring,
-            extra_ceph_config=daemon_spec.extra_config.pop('config', ''))
+        raise NotImplementedError()
 
-        if daemon_spec.extra_config:
-            cephadm_config.update({'files': daemon_spec.extra_config})
-
-        return cephadm_config, []
-
-    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """The post actions needed to be done after daemons are checked"""
         if self.mgr.config_dashboard:
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
@@ -109,7 +113,7 @@ class CephadmService(metaclass=ABCMeta):
             else:
                 logger.debug('Dashboard is not enabled. Skip configuration.')
 
-    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         """Config dashboard settings."""
         raise NotImplementedError()
 
@@ -126,7 +130,7 @@ class CephadmService(metaclass=ABCMeta):
                                       service_name: str,
                                       get_mon_cmd: str,
                                       set_mon_cmd: str,
-                                      service_url: str):
+                                      service_url: str) -> None:
         """A helper to get and set service_url via Dashboard's MON command.
 
            If result of get_mon_cmd differs from service_url, set_mon_cmd will
@@ -148,7 +152,7 @@ class CephadmService(metaclass=ABCMeta):
     def _check_and_set_dashboard(self,
                                  service_name: str,
                                  get_cmd: str,
-                                 get_set_cmd_dicts: Callable[[str], List[dict]]):
+                                 get_set_cmd_dicts: Callable[[str], List[dict]]) -> None:
         """A helper to set configs in the Dashboard.
 
         The method is useful for the pattern:
@@ -221,17 +225,103 @@ class CephadmService(metaclass=ABCMeta):
         logger.info(out)
         return HandleCommandResult(r.retval, out, r.stderr)
 
-    def pre_remove(self, daemon_id: str) -> None:
+    def pre_remove(self, daemon: DaemonDescription) -> None:
         """
         Called before the daemon is removed.
         """
-        pass
+        assert self.TYPE == daemon.daemon_type
+        logger.debug(f'Pre remove daemon {self.TYPE}.{daemon.daemon_id}')
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called after the daemon is removed.
+        """
+        assert self.TYPE == daemon.daemon_type
+        logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
 
-class MonService(CephadmService):
+class CephService(CephadmService):
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        # Ceph.daemons (mon, mgr, mds, osd, etc)
+        cephadm_config = self.get_config_and_keyring(
+            daemon_spec.daemon_type,
+            daemon_spec.daemon_id,
+            host=daemon_spec.host,
+            keyring=daemon_spec.keyring,
+            extra_ceph_config=daemon_spec.ceph_conf)
+
+        if daemon_spec.config_get_files():
+            cephadm_config.update({'files': daemon_spec.config_get_files()})
+
+        return cephadm_config, []
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        super().post_remove(daemon)
+        self.remove_keyring(daemon)
+
+    def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
+        """
+        Map the daemon id to a cephx keyring entity name
+        """
+        if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
+            return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
+        elif self.TYPE == 'crash':
+            if host == "":
+                raise OrchestratorError("Host not provided to generate <crash> auth entity name")
+            return AuthEntity(f'client.{self.TYPE}.{host}')
+        elif self.TYPE == 'mon':
+            return AuthEntity('mon.')
+        elif self.TYPE in ['mgr', 'osd', 'mds']:
+            return AuthEntity(f'{self.TYPE}.{daemon_id}')
+        else:
+            raise OrchestratorError("unknown daemon type")
+
+    def get_config_and_keyring(self,
+                               daemon_type: str,
+                               daemon_id: str,
+                               host: str,
+                               keyring: Optional[str] = None,
+                               extra_ceph_config: Optional[str] = None
+                               ) -> Dict[str, Any]:
+        # keyring
+        if not keyring:
+            entity: AuthEntity = self.get_auth_entity(daemon_id, host=host)
+            ret, keyring, err = self.mgr.check_mon_command({
+                'prefix': 'auth get',
+                'entity': entity,
+            })
+
+        config = self.mgr.get_minimal_ceph_conf()
+
+        if extra_ceph_config:
+            config += extra_ceph_config
+
+        return {
+            'config': config,
+            'keyring': keyring,
+        }
+
+    def remove_keyring(self, daemon: DaemonDescription) -> None:
+        daemon_id: str = daemon.daemon_id
+        host: str = daemon.hostname
+
+        if daemon_id == 'mon':
+            # do not remove the mon keyring
+            return
+
+        entity = self.get_auth_entity(daemon_id, host=host)
+
+        logger.info(f'Remove keyring: {entity}')
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'auth rm',
+            'entity': entity,
+        })
+
+
+class MonService(CephService):
     TYPE = 'mon'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         """
         Create a new monitor on the given host.
         """
@@ -241,7 +331,7 @@ class MonService(CephadmService):
         # get mon. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get',
-            'entity': 'mon.',
+            'entity': self.get_auth_entity(name),
         })
 
         extra_config = '[mon.%s]\n' % name
@@ -274,10 +364,10 @@ class MonService(CephadmService):
                     'public_network is set but does not look like a CIDR network: \'%s\'' % network)
             extra_config += 'public network = %s\n' % network
 
-        daemon_spec.extra_config = {'config': extra_config}
+        daemon_spec.ceph_conf = extra_config
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def _check_safe_to_destroy(self, mon_id: str) -> None:
         ret, out, err = self.mgr.check_mon_command({
@@ -302,7 +392,10 @@ class MonService(CephadmService):
         raise OrchestratorError(
             'Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
 
-    def pre_remove(self, daemon_id: str) -> None:
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        super().pre_remove(daemon)
+
+        daemon_id: str = daemon.daemon_id
         self._check_safe_to_destroy(daemon_id)
 
         # remove mon from quorum before we destroy the daemon
@@ -313,10 +406,10 @@ class MonService(CephadmService):
         })
 
 
-class MgrService(CephadmService):
+class MgrService(CephService):
     TYPE = 'mgr'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         """
         Create a new manager instance on a host.
         """
@@ -326,7 +419,7 @@ class MgrService(CephadmService):
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % mgr_id,
+            'entity': self.get_auth_entity(mgr_id),
             'caps': ['mon', 'profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
@@ -355,7 +448,7 @@ class MgrService(CephadmService):
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         for daemon in daemon_descrs:
@@ -364,7 +457,7 @@ class MgrService(CephadmService):
         # if no active mgr found, return empty Daemon Desc
         return DaemonDescription()
 
-    def fail_over(self):
+    def fail_over(self) -> None:
         if not self.mgr_map_has_standby():
             raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
                 'daemon', 'mgr' + self.mgr.get_mgr_id()))
@@ -389,7 +482,7 @@ class MgrService(CephadmService):
         return bool(num)
 
 
-class MdsService(CephadmService):
+class MdsService(CephService):
     TYPE = 'mds'
 
     def config(self, spec: ServiceSpec) -> None:
@@ -404,21 +497,21 @@ class MdsService(CephadmService):
             'value': spec.service_id,
         })
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         mds_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mds.' + mds_id,
+            'entity': self.get_auth_entity(mds_id),
             'caps': ['mon', 'profile mds',
                      'osd', 'allow rw tag cephfs *=*',
                      'mds', 'allow'],
         })
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         active_mds_strs = list()
@@ -436,10 +529,10 @@ class MdsService(CephadmService):
         return DaemonDescription()
 
 
-class RgwService(CephadmService):
+class RgwService(CephService):
     TYPE = 'rgw'
 
-    def config(self, spec: RGWSpec, rgw_id: str):
+    def config(self, spec: RGWSpec, rgw_id: str) -> None:
         assert self.TYPE == spec.service_type
 
         # create realm, zonegroup, and zone if needed
@@ -499,7 +592,7 @@ class RgwService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -507,19 +600,19 @@ class RgwService(CephadmService):
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
-    def get_keyring(self, rgw_id: str):
+    def get_keyring(self, rgw_id: str) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
+            'entity': self.get_auth_entity(rgw_id),
             'caps': ['mon', 'allow *',
                      'mgr', 'allow rw',
                      'osd', 'allow rwx'],
         })
         return keyring
 
-    def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str):
+    def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str) -> None:
         if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
             raise OrchestratorError('Health not ok, will try agin when health ok')
 
@@ -544,7 +637,7 @@ class RgwService(CephadmService):
             except Exception as e:
                 raise OrchestratorError('failed to parse realm info')
 
-        def create_realm():
+        def create_realm() -> None:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
                    '--user', 'rgw.%s' % rgw_id,
@@ -570,7 +663,7 @@ class RgwService(CephadmService):
             except Exception as e:
                 raise OrchestratorError('failed to parse zonegroup info')
 
-        def create_zonegroup():
+        def create_zonegroup() -> None:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
                    '--user', 'rgw.%s' % rgw_id,
@@ -580,7 +673,7 @@ class RgwService(CephadmService):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.mgr.log.info('created zonegroup: default')
 
-        def create_zonegroup_if_required():
+        def create_zonegroup_if_required() -> None:
             zonegroups = get_zonegroups()
             if 'default' not in zonegroups:
                 create_zonegroup()
@@ -601,7 +694,7 @@ class RgwService(CephadmService):
             except Exception as e:
                 raise OrchestratorError('failed to parse zone info')
 
-        def create_zone():
+        def create_zone() -> None:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
                    '--user', 'rgw.%s' % rgw_id,
@@ -636,39 +729,39 @@ class RgwService(CephadmService):
             self.mgr.log.info('updated period')
 
 
-class RbdMirrorService(CephadmService):
+class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'client.rbd-mirror.' + daemon_id,
+            'entity': self.get_auth_entity(daemon_id),
             'caps': ['mon', 'profile rbd-mirror',
                      'osd', 'profile rbd'],
         })
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
 
-class CrashService(CephadmService):
+class CrashService(CephService):
     TYPE = 'crash'
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'client.crash.' + host,
+            'entity': self.get_auth_entity(daemon_id, host=host),
             'caps': ['mon', 'profile crash',
                      'mgr', 'profile crash'],
         })
 
         daemon_spec.keyring = keyring
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec

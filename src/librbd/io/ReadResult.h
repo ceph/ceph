@@ -38,27 +38,33 @@ public:
 
   struct C_ObjectReadRequest : public Context {
     AioCompletion *aio_completion;
-    uint64_t object_off;
-    uint64_t object_len;
-    LightweightBufferExtents buffer_extents;
+    ReadExtents extents;
 
-    bufferlist bl;
-    Extents extent_map;
-
-    C_ObjectReadRequest(AioCompletion *aio_completion, uint64_t object_off,
-                        uint64_t object_len,
-                        LightweightBufferExtents&& buffer_extents);
+    C_ObjectReadRequest(AioCompletion *aio_completion, ReadExtents&& extents);
 
     void finish(int r) override;
+  };
+
+  struct C_ObjectReadMergedExtents : public Context {
+      CephContext* cct;
+      ReadExtents* extents;
+      Context *on_finish;
+      bufferlist bl;
+
+      C_ObjectReadMergedExtents(CephContext* cct, ReadExtents* extents,
+                                Context* on_finish);
+
+      void finish(int r) override;
   };
 
   ReadResult();
   ReadResult(char *buf, size_t buf_len);
   ReadResult(const struct iovec *iov, int iov_count);
   ReadResult(ceph::bufferlist *bl);
-  ReadResult(std::map<uint64_t, uint64_t> *extent_map, ceph::bufferlist *bl);
+  ReadResult(Extents* extent_map, ceph::bufferlist* bl);
 
-  void set_clip_length(size_t length);
+  void set_image_extents(const Extents& image_extents);
+
   void assemble_result(CephContext *cct);
 
 private:
@@ -90,11 +96,12 @@ private:
   };
 
   struct SparseBufferlist {
-    std::map<uint64_t, uint64_t> *extent_map;
+    Extents *extent_map;
     ceph::bufferlist *bl;
 
-    SparseBufferlist(std::map<uint64_t, uint64_t> *extent_map,
-                     ceph::bufferlist *bl)
+    Extents image_extents;
+
+    SparseBufferlist(Extents* extent_map, ceph::bufferlist* bl)
       : extent_map(extent_map), bl(bl) {
     }
   };
@@ -104,7 +111,7 @@ private:
                          Vector,
                          Bufferlist,
                          SparseBufferlist> Buffer;
-  struct SetClipLengthVisitor;
+  struct SetImageExtentsVisitor;
   struct AssembleResultVisitor;
 
   Buffer m_buffer;

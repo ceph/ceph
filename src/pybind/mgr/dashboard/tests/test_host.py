@@ -7,9 +7,9 @@ except ImportError:
 
 from orchestrator import HostSpec
 
-from . import ControllerTestCase
-from ..controllers.host import get_hosts, Host, HostUi
 from .. import mgr
+from ..controllers.host import Host, HostUi, get_hosts
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class HostControllerTest(ControllerTestCase):

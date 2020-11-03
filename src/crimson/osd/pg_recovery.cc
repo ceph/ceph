@@ -258,10 +258,10 @@ std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
   const hobject_t &soid, eversion_t need)
 {
   if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
-    return pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    return pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
 	pg->get_recovery_backend()->recover_delete(soid, need));
   } else {
-    return pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    return pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
       pg->get_recovery_backend()->recover_object(soid, need).handle_exception(
 	[=, soid = std::move(soid)] (auto e) {
 	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
@@ -277,7 +277,7 @@ size_t PGRecovery::prep_object_replica_deletes(
   std::vector<crimson::osd::blocking_future<>> *in_progress)
 {
   in_progress->push_back(
-    pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
       pg->get_recovery_backend()->push_delete(soid, need).then([=] {
 	object_stat_sum_t stat_diff;
 	stat_diff.num_objects_recovered = 1;
@@ -295,7 +295,7 @@ size_t PGRecovery::prep_object_replica_pushes(
   std::vector<crimson::osd::blocking_future<>> *in_progress)
 {
   in_progress->push_back(
-    pg->get_recovery_backend()->get_recovering(soid).make_blocking_future(
+    pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
       pg->get_recovery_backend()->recover_object(soid, need).handle_exception(
 	[=, soid = std::move(soid)] (auto e) {
 	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
@@ -322,11 +322,12 @@ void PGRecovery::on_local_recover(
       obc->obs.oi = recovery_info.oi;
       // obc is loaded the excl lock
       obc->put_lock_type(RWState::RWEXCL);
-      ceph_assert_always(obc->get_recovery_read().get0());
+      ceph_assert_always(obc->get_recovery_read());
     }
     if (!pg->is_unreadable_object(soid)) {
       pg->get_recovery_backend()->get_recovering(soid).set_readable();
     }
+    pg->publish_stats_to_osd();
   }
 }
 
@@ -337,6 +338,7 @@ void PGRecovery::on_global_recover (
 {
   logger().info("{} {}", __func__, soid);
   pg->get_peering_state().object_recovered(soid, stat_diff);
+  pg->publish_stats_to_osd();
   auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
   if (!is_delete)
     recovery_waiter.obc->drop_recovery_read();
@@ -433,6 +435,7 @@ void PGRecovery::enqueue_push(
 {
   logger().debug("{}: target={} obj={} v={}",
                  __func__, target, obj, v);
+  pg->get_recovery_backend()->add_recovering(obj);
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception([] (auto) {
     ceph_abort_msg("got exception on backfill's push");

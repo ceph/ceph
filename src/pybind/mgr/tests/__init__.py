@@ -73,15 +73,18 @@ if 'UNITTEST' in os.environ:
             except FileNotFoundError:
                 val = None
             mo = [o for o in self.MODULE_OPTIONS if o['name'] == key]
-            if len(mo) == 1 and val is not None:
-                cls = {
-                    'str': str,
-                    'secs': int,
-                    'bool': lambda s: bool(s) and s != 'false' and s != 'False',
-                    'int': int,
-                }[mo[0].get('type', 'str')]
-                return cls(val)
-            return val
+            if len(mo) == 1:
+                if val is not None:
+                    cls = {
+                        'str': str,
+                        'secs': int,
+                        'bool': lambda s: bool(s) and s != 'false' and s != 'False',
+                        'int': int,
+                    }[mo[0].get('type', 'str')]
+                    return cls(val)
+                return val
+            else:
+                return val if val is not None else ''
 
         def _ceph_set_module_option(self, module, key, val):
             _, _, _ = self.check_mon_command({
@@ -165,6 +168,7 @@ if 'UNITTEST' in os.environ:
             self._unconfigure_logging = mock.MagicMock()
             self._ceph_log = mock.MagicMock()
             self._ceph_dispatch_remote = lambda *_: None
+            self._ceph_get_mgr_id = mock.MagicMock()
 
 
     cm = mock.Mock()

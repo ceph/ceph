@@ -294,6 +294,8 @@ public:
   int migration_prepare(IoCtx& io_ctx, const char *image_name,
                         IoCtx& dest_io_ctx, const char *dest_image_name,
                         ImageOptions& opts);
+  int migration_prepare_import(const char *source_spec, IoCtx& dest_io_ctx,
+                               const char *dest_image_name, ImageOptions& opts);
   int migration_execute(IoCtx& io_ctx, const char *image_name);
   int migration_execute_with_progress(IoCtx& io_ctx, const char *image_name,
                                       ProgressContext &prog_ctx);
@@ -527,6 +529,8 @@ public:
                    std::string *parent_id, std::string *parent_snapname)
       CEPH_RBD_DEPRECATED;
   int get_parent(linked_image_spec_t *parent_image, snap_spec_t *parent_snap);
+
+  int get_migration_source_spec(std::string* source_spec);
 
   int old_format(uint8_t *old);
   int size(uint64_t *size);
@@ -784,6 +788,8 @@ public:
       mirror_image_status_t *mirror_image_status, size_t status_size,
       RBD::AioCompletion *c)
     CEPH_RBD_DEPRECATED;
+  int aio_mirror_image_create_snapshot(uint32_t flags, uint64_t *snap_id,
+      RBD::AioCompletion *c);
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
@@ -794,7 +800,7 @@ public:
 
   int quiesce_watch(QuiesceWatchCtx *ctx, uint64_t *handle);
   int quiesce_unwatch(uint64_t handle);
-  void quiesce_complete(int r);
+  void quiesce_complete(uint64_t handle, int r);
 
 private:
   friend class RBD;

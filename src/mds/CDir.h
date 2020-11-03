@@ -39,8 +39,6 @@
 class CDentry;
 class MDCache;
 
-struct ObjectOperation;
-
 std::ostream& operator<<(std::ostream& out, const class CDir& dir);
 
 class CDir : public MDSCacheObject, public Counter<CDir> {
@@ -58,6 +56,27 @@ public:
     static mempool::mds_co::pool_allocator<fnode_t> allocator;
     return std::allocate_shared<fnode_t>(allocator, std::forward<Args>(args)...);
   }
+
+  struct dentry_commit_item {
+    dentry_key_t key;
+    snapid_t first;
+    bool is_remote = false;
+
+    inodeno_t ino;
+    unsigned char d_type;
+
+    bool snaprealm = false;
+    sr_t srnode;
+
+    mempool::mds_co::string symlink;
+    uint64_t features;
+    uint64_t dft_len;
+    CInode::inode_const_ptr inode;
+    CInode::xattr_map_const_ptr xattrs;
+    CInode::old_inode_map_const_ptr old_inodes;
+    snapid_t oldest_snap;
+    damage_flags_t damage_flags;
+  };
 
   // -- freezing --
   struct freeze_tree_state_t {
@@ -420,10 +439,7 @@ public:
            (int)get_frag_size() > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
-  bool should_merge() const {
-    return get_frag() != frag_t() &&
-	   (int)get_frag_size() < g_conf()->mds_bal_merge_size;
-  }
+  bool should_merge() const;
 
   mds_authority_t authority() const override;
   mds_authority_t get_dir_auth() const { return dir_auth; }
@@ -527,6 +543,9 @@ public:
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
 
   // -- import/export --
+  mds_rank_t get_export_pin(bool inherit=true) const;
+  bool is_exportable(mds_rank_t dest) const;
+
   void encode_export(ceph::buffer::list& bl);
   void finish_export();
   void abort_export() {
@@ -661,6 +680,7 @@ protected:
   friend class C_IO_Dir_OMAP_Fetched;
   friend class C_IO_Dir_OMAP_FetchedMore;
   friend class C_IO_Dir_Committed;
+  friend class C_IO_Dir_Commit_Ops;
 
   void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
   void _omap_fetch_more(
@@ -691,8 +711,12 @@ protected:
 
   // -- commit --
   void _commit(version_t want, int op_prio);
+  void _omap_commit_ops(int r, int op_prio, version_t version, bool _new, bufferlist &bl,
+                        vector<dentry_key_t> &to_remove, vector<dentry_commit_item> &to_set,
+			mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
   void _omap_commit(int op_prio);
-  void _encode_dentry(CDentry *dn, ceph::buffer::list& bl, const std::set<snapid_t> *snaps);
+  void _parse_dentry(CDentry *dn, dentry_commit_item &item,
+                     const set<snapid_t> *snaps, bufferlist &bl);
   void _committed(int r, version_t v);
 
   static fnode_const_ptr empty_fnode;

@@ -19,6 +19,9 @@ namespace cache {
 
 class ObjectCacherWriteback : public WritebackHandler {
 public:
+  static const int READ_FLAGS_MASK  = 0xF000;
+  static const int READ_FLAGS_SHIFT = 24;
+
   ObjectCacherWriteback(ImageCtx *ictx, ceph::mutex& lock);
 
   // Note that oloc, trunc_size, and trunc_seq are ignored

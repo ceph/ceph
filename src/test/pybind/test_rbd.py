@@ -325,6 +325,40 @@ def test_open_by_id():
                 eq(image.get_name(), image_name)
             RBD().remove(ioctx, image_name)
 
+def test_aio_open():
+    with Rados(conffile='') as cluster:
+        with cluster.open_ioctx(pool_name) as ioctx:
+            image_name = get_temp_image_name()
+            order = 20
+            RBD().create(ioctx, image_name, IMG_SIZE, order)
+
+            # this is a list so that the open_cb() can modify it
+            image = [None]
+            def open_cb(_, image_):
+                image[0] = image_
+
+            comp = RBD().aio_open_image(open_cb, ioctx, image_name)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), 2)
+            assert_not_equal(image[0], None)
+
+            image = image[0]
+            eq(image.get_name(), image_name)
+            check_stat(image.stat(), IMG_SIZE, order)
+
+            closed = [False]
+            def close_cb(_):
+                closed[0] = True
+
+            comp = image.aio_close(close_cb)
+            comp.wait_for_complete_and_cb()
+            eq(comp.get_return_value(), 0)
+            eq(sys.getrefcount(comp), 2)
+            eq(closed[0], True)
+
+            RBD().remove(ioctx, image_name)
+
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
 
@@ -2206,6 +2240,62 @@ class TestMirroring(object):
         self.rbd.mirror_peer_remove(ioctx, peer2_uuid)
         self.image.mirror_image_promote(False)
 
+    def test_aio_mirror_image_create_snapshot(self):
+        peer_uuid = self.rbd.mirror_peer_add(ioctx, "cluster", "client")
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        self.image.mirror_image_disable(False)
+        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+
+        snaps = list(self.image.list_snaps())
+        eq(1, len(snaps))
+        snap = snaps[0]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+
+        # this is a list so that the local cb() can modify it
+        info = [None]
+        def cb(_, _info):
+            info[0] = _info
+
+        comp = self.image.aio_mirror_image_get_info(cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(info[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        info = info[0]
+        global_id = info['global_id']
+        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+        mode = [None]
+        def cb(_, _mode):
+            mode[0] = _mode
+
+        comp = self.image.aio_mirror_image_get_mode(cb)
+        comp.wait_for_complete_and_cb()
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        eq(mode[0], RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+
+        snap_id = [None]
+        def cb(_, _snap_id):
+            snap_id[0] = _snap_id
+
+        comp = self.image.aio_mirror_image_create_snapshot(0, cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(snap_id[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+
+        snaps = list(self.image.list_snaps())
+        eq(2, len(snaps))
+        snap = snaps[1]
+        eq(snap['id'], snap_id[0])
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+        eq([peer_uuid], snap['mirror']['mirror_peer_uuids'])
+
+        self.rbd.mirror_peer_remove(ioctx, peer_uuid)
+
 class TestTrash(object):
 
     def setUp(self):
@@ -2521,9 +2611,43 @@ class TestMigration(object):
         eq(image_name, status['dest_image_name'])
         eq(RBD_IMAGE_MIGRATION_STATE_PREPARED, status['state'])
 
+        with Image(ioctx, image_name) as image:
+            source_spec = image.migration_source_spec()
+            eq("native", source_spec["type"])
+
         RBD().migration_execute(ioctx, image_name)
         RBD().migration_commit(ioctx, image_name)
         remove_image()
+
+    def test_migration_import(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        source_spec = json.dumps(
+            {'type': 'native',
+             'pool_id': ioctx.get_pool_id(),
+             'pool_namespace': '',
+             'image_name': image_name,
+             'image_id': image_id})
+        dst_image_name = get_temp_image_name()
+        RBD().migration_prepare_import(source_spec, ioctx, dst_image_name,
+                                       features=63, order=23, stripe_unit=1<<23,
+                                       stripe_count=1, data_pool=None)
+
+        status = RBD().migration_status(ioctx, dst_image_name)
+        eq('', status['source_image_name'])
+        eq(dst_image_name, status['dest_image_name'])
+        eq(RBD_IMAGE_MIGRATION_STATE_PREPARED, status['state'])
+
+        with Image(ioctx, dst_image_name) as image:
+            source_spec = image.migration_source_spec()
+            eq("native", source_spec["type"])
+
+        RBD().migration_execute(ioctx, dst_image_name)
+        RBD().migration_commit(ioctx, dst_image_name)
+        RBD().remove(ioctx, dst_image_name)
+        RBD().remove(ioctx, image_name)
 
     def test_migration_with_progress(self):
         d = {'received_callback': False}

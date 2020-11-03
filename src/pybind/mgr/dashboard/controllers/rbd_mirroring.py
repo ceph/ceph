@@ -2,25 +2,22 @@
 from __future__ import absolute_import
 
 import json
-import re
 import logging
-
+import re
 from functools import partial
 
 import cherrypy
-
 import rbd
-
-from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
-    UpdatePermission, RESTController, EndpointDoc, ControllerDoc
 
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
 from ..services.rbd import rbd_call
 from ..tools import ViewCache
-from ..services.exception import handle_rados_error, handle_rbd_error, \
-    serialize_dashboard_exception
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
+    allow_empty_body
 
 try:
     from typing import no_type_check
@@ -453,6 +450,7 @@ class RbdMirroringPoolBootstrap(BaseController):
     @Endpoint(method='POST', path='token')
     @handle_rbd_mirror_error()
     @UpdatePermission
+    @allow_empty_body
     def create_token(self, pool_name):
         ioctx = mgr.rados.open_ioctx(pool_name)
         token = rbd.RBD().mirror_peer_bootstrap_create(ioctx)
@@ -461,6 +459,7 @@ class RbdMirroringPoolBootstrap(BaseController):
     @Endpoint(method='POST', path='peer')
     @handle_rbd_mirror_error()
     @UpdatePermission
+    @allow_empty_body
     def import_token(self, pool_name, direction, token):
         ioctx = mgr.rados.open_ioctx(pool_name)
 

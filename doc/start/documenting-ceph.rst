@@ -151,13 +151,13 @@ If it doesn't exist, create your branch::
 Make a Change
 -------------
 
-Modifying a document involves opening a restructuredText file, changing
+Modifying a document involves opening a reStructuredText file, changing
 its contents, and saving the changes. See `Documentation Style Guide`_ for
 details on syntax requirements.
 
-Adding a document involves creating a new restructuredText file under the
-``doc`` directory or its subdirectories and saving the file with a ``*.rst``
-file extension. You must also include a reference to the  document: a hyperlink
+Adding a document involves creating a new reStructuredText file within the
+``doc`` directory tree with a ``*.rst``
+extension. You must also include a reference to the document: a hyperlink
 or a table of contents entry. The ``index.rst`` file of a top-level directory
 usually contains a TOC, where you can add the new file name. All documents must
 have a title. See `Headings`_ for details.

@@ -719,6 +719,40 @@ $extra_conf
 EOF
 }
 
+write_logrotate_conf() {
+    out_dir=$(pwd)"/out/*.log"
+
+    cat << EOF
+$out_dir
+{
+    rotate 5
+    size 1G
+    copytruncate
+    compress
+    notifempty
+    missingok
+    sharedscripts
+    postrotate
+        # NOTE: assuring that the absence of one of the following processes
+        # won't abort the logrotate command.
+        killall -u $USER -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror || echo ""
+    endscript
+}
+EOF
+}
+
+init_logrotate() {
+    logrotate_conf_path=$(pwd)"/logrotate.conf"
+    logrotate_state_path=$(pwd)"/logrotate.state"
+
+    if ! test -a $logrotate_conf_path; then
+        if test -a $logrotate_state_path; then
+            rm -f $logrotate_state_path
+        fi
+        write_logrotate_conf > $logrotate_conf_path
+    fi
+}
+
 start_mon() {
     local MONS=""
     local count=0
@@ -1347,7 +1381,7 @@ do
     [ $fs -eq $CEPH_NUM_FS ] && break
     fs=$(($fs + 1))
     if [ "$CEPH_MAX_MDS" -gt 1 ]; then
-        ceph_adm fs set "cephfs_${name}" max_mds "$CEPH_MAX_MDS"
+        ceph_adm fs set "${name}" max_mds "$CEPH_MAX_MDS"
     fi
 done
 
@@ -1557,3 +1591,5 @@ if [ -f "$STRAY_CONF_PATH" -a -n "$conf_fn" -a ! "$conf_fn" -ef "$STRAY_CONF_PAT
     echo "NOTE:"
     echo "    Remember to restart cluster after removing $STRAY_CONF_PATH"
 fi
+
+init_logrotate

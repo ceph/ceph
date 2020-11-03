@@ -44,19 +44,19 @@ int cephfs_feature_from_name(std::string_view name)
 
 std::string cephfs_stringify_features(const feature_bitset_t& features)
 {
-  std::ostringstream ss;
+  CachedStackStringStream css;
   bool first = true;
-  ss << "{";
+  *css << "{";
   for (size_t i = 0; i < feature_names.size(); ++i) {
     if (!features.test(i))
       continue;
     if (!first)
-      ss << ",";
-    ss << i << "=" << cephfs_feature_name(i);
+      *css << ",";
+    *css << i << "=" << cephfs_feature_name(i);
     first = false;
   }
-  ss << "}";
-  return ss.str();
+  *css << "}";
+  return css->str();
 }
 
 void cephfs_dump_features(ceph::Formatter *f, const feature_bitset_t& features)

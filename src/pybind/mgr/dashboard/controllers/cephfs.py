@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
+import os
 from collections import defaultdict
 
-import os
-
-import cherrypy
 import cephfs
+import cherrypy
 
-from . import ApiController, ControllerDoc, RESTController, \
-    UiApiController, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from ..services.cephfs import CephFS as CephFS_
 from ..services.ceph_service import CephService
+from ..services.cephfs import CephFS as CephFS_
 from ..tools import ViewCache
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController, \
+    UiApiController, allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -359,7 +358,7 @@ class CephFS(RESTController):
         List directories of specified path.
         :param fs_id: The filesystem identifier.
         :param path: The path where to start listing the directory content.
-          Defaults to '/' if not set.
+        Defaults to '/' if not set.
         :type path: str | bytes
         :param depth: The number of steps to go down the directory tree.
         :type depth: int | str
@@ -378,7 +377,7 @@ class CephFS(RESTController):
         """
         Transforms input path parameter of ls_dir methods (api and ui-api).
         :param path: The path where to start listing the directory content.
-          Defaults to '/' if not set.
+        Defaults to '/' if not set.
         :type path: str | bytes
         :return: Normalized path or root path
         :return: str
@@ -390,6 +389,7 @@ class CephFS(RESTController):
         return path
 
     @RESTController.Resource('POST', path='/tree')
+    @allow_empty_body
     def mk_tree(self, fs_id, path):
         """
         Create a directory.
@@ -410,6 +410,7 @@ class CephFS(RESTController):
         cfs.rm_dir(path)
 
     @RESTController.Resource('PUT', path='/quota')
+    @allow_empty_body
     def quota(self, fs_id, path, max_bytes=None, max_files=None):
         """
         Set the quotas of the specified path.
@@ -434,21 +435,21 @@ class CephFS(RESTController):
         :param fs_id: The filesystem identifier.
         :param path: The path of the directory/file.
         :return: Returns a dictionary containing 'max_bytes'
-            and 'max_files'.
+        and 'max_files'.
         :rtype: dict
         """
         cfs = self._cephfs_instance(fs_id)
         return cfs.get_quotas(path)
 
     @RESTController.Resource('POST', path='/snapshot')
+    @allow_empty_body
     def snapshot(self, fs_id, path, name=None):
         """
         Create a snapshot.
         :param fs_id: The filesystem identifier.
         :param path: The path of the directory.
-        :param name: The name of the snapshot. If not specified,
-            a name using the current time in RFC3339 UTC format
-            will be generated.
+        :param name: The name of the snapshot. If not specified, a name using the
+        current time in RFC3339 UTC format will be generated.
         :return: The name of the snapshot.
         :rtype: str
         """
@@ -514,7 +515,7 @@ class CephFsUi(CephFS):
         :param fs_id: The filesystem identifier.
         :type fs_id: int | str
         :param path: The path where to start listing the directory content.
-          Defaults to '/' if not set.
+        Defaults to '/' if not set.
         :type path: str | bytes
         :param depth: The number of steps to go down the directory tree.
         :type depth: int | str

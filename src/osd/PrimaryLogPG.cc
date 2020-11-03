@@ -24,6 +24,7 @@
 #include "ScrubStore.h"
 #include "Session.h"
 #include "objclass/objclass.h"
+#include "osd/ClassHandler.h"
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/ceph_crypto.h"
@@ -1001,11 +1002,14 @@ void PrimaryLogPG::do_command(
     f->dump_stream("snap_trimq") << snap_trimq;
     f->dump_unsigned("snap_trimq_len", snap_trimq.size());
     recovery_state.dump_peering_state(f.get());
-    f->close_section();
 
     f->open_array_section("recovery_state");
     handle_query_state(f.get());
     f->close_section();
+
+    if (is_primary() && is_active()) {
+      scrubber.dump(f.get());
+    }
 
     f->open_object_section("agent_state");
     if (agent_state)
@@ -1116,6 +1120,9 @@ void PrimaryLogPG::do_command(
       }
       f->close_section();
     }
+    // Get possible locations of missing objects from pg information
+    PeeringState::QueryUnfound q(f.get());
+    recovery_state.handle_event(q, 0);
     f->dump_bool("more", p != needs_recovery_map.end());
     f->close_section();
   }
@@ -1589,13 +1596,11 @@ int PrimaryLogPG::do_scrub_ls(const MOSDOp *m, OSDOp *osd_op)
   } else if (!scrubber.store) {
     r = -ENOENT;
   } else if (arg.get_snapsets) {
-    result.vals = scrubber.store->get_snap_errors(osd->store,
-						  get_pgid().pool(),
+    result.vals = scrubber.store->get_snap_errors(get_pgid().pool(),
 						  arg.start_after,
 						  arg.max_return);
   } else {
-    result.vals = scrubber.store->get_object_errors(osd->store,
-						    get_pgid().pool(),
+    result.vals = scrubber.store->get_object_errors(get_pgid().pool(),
 						    arg.start_after,
 						    arg.max_return);
   }
@@ -2369,7 +2374,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 	op.op == CEPH_OSD_OP_SET_CHUNK || 
 	op.op == CEPH_OSD_OP_UNSET_MANIFEST ||
 	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
-	op.op == CEPH_OSD_OP_TIER_FLUSH) {
+	op.op == CEPH_OSD_OP_TIER_FLUSH ||
+	op.op == CEPH_OSD_OP_TIER_EVICT) {
       return cache_result_t::NOOP;
     } 
   }
@@ -5649,6 +5655,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_SET_CHUNK:
     case CEPH_OSD_OP_TIER_PROMOTE:
     case CEPH_OSD_OP_TIER_FLUSH:
+    case CEPH_OSD_OP_TIER_EVICT:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -7028,6 +7035,48 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  result = 0;
 	}
+      }
+
+      break;
+
+    case CEPH_OSD_OP_TIER_EVICT:
+      ++ctx->num_write;
+      result = 0;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	if (!obs.oi.has_manifest()) {
+	  result = -EINVAL;
+	  break;
+	}
+	
+	// The chunks already has a reference, so it is just enough to invoke truncate if necessary
+	uint64_t chunk_length = 0;
+	for (auto p : obs.oi.manifest.chunk_map) {
+	  chunk_length += p.second.length;
+	}
+	if (chunk_length == obs.oi.size) {
+	  // truncate
+	  for (auto p : obs.oi.manifest.chunk_map) {
+	    p.second.set_flag(chunk_info_t::FLAG_MISSING);
+	  }
+	  t->truncate(obs.oi.soid, 0);
+	  ctx->delta_stats.num_bytes -= obs.oi.size;
+	  ctx->delta_stats.num_wr++;
+	  oi.size = 0;
+	  ctx->cache_operation = true;
+	}
+	osd->logger->inc(l_osd_tier_evict);
       }
 
       break;
@@ -12077,7 +12126,6 @@ void PrimaryLogPG::on_activate_complete()
 	  PeeringState::RequestBackfill())));
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
-    eio_errors_to_process = false;
     queue_peering_event(
       PGPeeringEventRef(
 	std::make_shared<PGPeeringEvent>(
@@ -12440,7 +12488,6 @@ bool PrimaryLogPG::start_recovery_ops(
             PeeringState::RequestBackfill())));
     } else {
       dout(10) << "recovery done, no backfill" << dendl;
-      eio_errors_to_process = false;
       state_clear(PG_STATE_FORCED_BACKFILL);
       queue_peering_event(
         PGPeeringEventRef(
@@ -12454,7 +12501,6 @@ bool PrimaryLogPG::start_recovery_ops(
     state_clear(PG_STATE_FORCED_BACKFILL);
     state_clear(PG_STATE_FORCED_RECOVERY);
     dout(10) << "recovery done, backfill done" << dendl;
-    eio_errors_to_process = false;
     queue_peering_event(
       PGPeeringEventRef(
         std::make_shared<PGPeeringEvent>(
@@ -15109,23 +15155,15 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
 
-  if (!eio_errors_to_process) {
-    eio_errors_to_process = true;
-    ceph_assert(is_clean());
-    state_set(PG_STATE_REPAIR);
-    state_clear(PG_STATE_CLEAN);
-    queue_peering_event(
-        PGPeeringEventRef(
-	  std::make_shared<PGPeeringEvent>(
-	  get_osdmap_epoch(),
-	  get_osdmap_epoch(),
-	  PeeringState::DoRecovery())));
-  } else {
-    // A prior error must have already cleared clean state and queued recovery
-    // or a map change has triggered re-peering.
-    // Not inlining the recovery by calling maybe_kick_recovery(soid);
-    dout(5) << __func__<< ": Read error on " << soid << ", but already seen errors" << dendl;
-  }
+  ceph_assert(is_clean());
+  state_set(PG_STATE_REPAIR);
+  state_clear(PG_STATE_CLEAN);
+  queue_peering_event(
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	get_osdmap_epoch(),
+	get_osdmap_epoch(),
+	PeeringState::DoRecovery())));
 
   return -EAGAIN;
 }

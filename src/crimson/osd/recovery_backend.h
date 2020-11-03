@@ -50,16 +50,22 @@ public:
       coll{coll},
       backend{backend} {}
   virtual ~RecoveryBackend() {}
+  WaitForObjectRecovery& add_recovering(const hobject_t& soid) {
+    auto [it, added] = recovering.emplace(soid, WaitForObjectRecovery{});
+    assert(added);
+    return it->second;
+  }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
-    return recovering[soid];
+    assert(is_recovering(soid));
+    return recovering.at(soid);
   }
   void remove_recovering(const hobject_t& soid) {
     recovering.erase(soid);
   }
-  bool is_recovering(const hobject_t& soid) {
+  bool is_recovering(const hobject_t& soid) const {
     return recovering.count(soid) != 0;
   }
-  uint64_t total_recovering() {
+  uint64_t total_recovering() const {
     return recovering.size();
   }
 
@@ -125,7 +131,7 @@ protected:
     static constexpr const char* type_name = "WaitForObjectRecovery";
 
     crimson::osd::ObjectContextRef obc;
-    PullInfo pi;
+    std::optional<PullInfo> pi;
     std::map<pg_shard_t, PushInfo> pushing;
 
     seastar::future<> wait_for_readable() {
@@ -152,16 +158,19 @@ protected:
     void set_pulled() {
       pulled.set_value();
     }
-    void interrupt(const std::string& why) {
+    void set_push_failed(pg_shard_t shard, std::exception_ptr e) {
+      pushes.at(shard).set_exception(e);
+    }
+    void interrupt(std::string_view why) {
       readable.set_exception(std::system_error(
-	    std::make_error_code(std::errc::interrupted), why));
+        std::make_error_code(std::errc::interrupted), why.data()));
       recovered.set_exception(std::system_error(
-	    std::make_error_code(std::errc::interrupted), why));
+        std::make_error_code(std::errc::interrupted), why.data()));
       pulled.set_exception(std::system_error(
-	    std::make_error_code(std::errc::interrupted), why));
+        std::make_error_code(std::errc::interrupted), why.data()));
       for (auto& [pg_shard, pr] : pushes) {
-	pr.set_exception(std::system_error(
-	      std::make_error_code(std::errc::interrupted), why));
+        pr.set_exception(std::system_error(
+          std::make_error_code(std::errc::interrupted), why.data()));
       }
     }
     void stop();
@@ -181,6 +190,6 @@ protected:
   void clear_temp_obj(const hobject_t &oid) {
     temp_contents.erase(oid);
   }
-  void clean_up(ceph::os::Transaction& t, const std::string& why);
+  void clean_up(ceph::os::Transaction& t, std::string_view why);
   virtual seastar::future<> on_stop() = 0;
 };

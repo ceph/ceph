@@ -1,5 +1,22 @@
 >=16.0.0
 --------
+* The allowable options for some "radosgw-admin" commands have been changed.
+
+  * "mdlog-list", "datalog-list", "sync-error-list" no longer accepts
+    start and end dates, but does accept a single optional start marker.
+  * "mdlog-trim", "datalog-trim", "sync-error-trim" only accept a
+    single marker giving the end of the trimmed range.
+  * Similarly the date ranges and marker ranges have been removed on
+    the RESTful DATALog and MDLog list and trim operations.
+
+* ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
+  a number of bugs and improves usability in terms of size specification and
+  calculation, as well as idempotency behaviour and disk replacement process.
+  Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
+  more detailed information.
+
+>=15.0.0
+--------
 
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
@@ -117,6 +134,12 @@
   contain alphanumeric and ``-``, ``_`` and ``.`` characters. Some commands
   or CephX credentials may not work with old FSs with non-conformant names.
 
+* It is now possible to specify the initial monitor to contact for Ceph tools
+  and daemons using the ``mon_host_override`` config option or
+  ``--mon-host-override <ip>`` command-line switch. This generally should only
+  be used for debugging and only affects initial communication with Ceph's
+  monitor cluster.
+
 * `blacklist` has been replaced with `blocklist` throughout.  The following commands have changed:
 
   - ``ceph osd blacklist ...`` are now ``ceph osd blocklist ...``
@@ -132,6 +155,14 @@
   - ``mds session blacklist on timeout`` is now ``mds session blocklist on timeout``
   - ``mds session blacklist on evict`` is now ``mds session blocklist on evict``
 
+* CephFS: Compatibility code for old on-disk format of snapshot has been removed.
+  Current on-disk format of snapshot was introduced by Mimic release. If there
+  are any snapshots created by Ceph release older than Mimic. Before upgrading,
+  either delete them all or scrub the whole filesystem:
+
+    ceph daemon <mds of rank 0> scrub_path / force recursive repair
+    ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
+
 * The following librados API calls have changed:
 
   - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.
@@ -141,3 +172,19 @@
 
   - ``ceph osd dump``
   - ``ceph <tell|daemon> osd.<N> dump_blocklist``
+
+* caps: MON and MDS caps can now be used to restrict client's ability to view
+  and operate on specific Ceph file systems. The FS can be specificed using
+  ``fsname`` in caps. This also affects subcommand ``fs authorize``, the caps
+  produce by it will be specific to the FS name passed in its arguments.
+
+* fs: root_squash flag can be set in MDS caps. It disallows file system
+  operations that need write access for clients with uid=0 or gid=0. This
+  feature should prevent accidents such as an inadvertent `sudo rm -rf /<path>`.
+
+* fs: "fs authorize" now sets MON cap to "allow <perm> fsname=<fsname>"
+      instead of setting it to "allow r" all the time.
+
+* ``ceph pg #.# list_unfound`` output has been enhanced to provide
+  might_have_unfound information which indicates which OSDs may
+  contain the unfound objects.

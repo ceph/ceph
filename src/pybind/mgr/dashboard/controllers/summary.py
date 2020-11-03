@@ -3,13 +3,13 @@ from __future__ import absolute_import
 
 import json
 
-from . import ApiController, Endpoint, BaseController, ControllerDoc, EndpointDoc
 from .. import mgr
-from ..security import Permission, Scope
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..exceptions import ViewCacheNoDataException
-from ..tools import TaskManager
+from ..security import Permission, Scope
 from ..services import progress
+from ..tools import TaskManager
+from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc
 
 SUMMARY_SCHEMA = {
     "health_status": (str, ""),

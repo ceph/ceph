@@ -216,8 +216,8 @@ DaemonStateCollection DaemonStateIndex::get_by_server(
 {
   std::shared_lock l{lock};
 
-  if (by_server.count(hostname)) {
-    return by_server.at(hostname);
+  if (auto found = by_server.find(hostname); found != by_server.end()) {
+    return found->second;
   } else {
     return {};
   }

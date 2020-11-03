@@ -30,9 +30,24 @@ bool assemble_write_same_extent(const LightweightObjectExtent &object_extent,
                                 bool force_write);
 
 template <typename ImageCtxT = librbd::ImageCtx>
-void read_parent(ImageCtxT *image_ctx, uint64_t object_no, const Extents &extents,
-                 librados::snap_t snap_id, const ZTracer::Trace &trace,
-                 ceph::bufferlist* data, Context* on_finish);
+void read_parent(ImageCtxT *image_ctx, uint64_t object_no,
+                 ReadExtents* extents, librados::snap_t snap_id,
+                 const ZTracer::Trace &trace, Context* on_finish);
+
+template <typename ImageCtxT = librbd::ImageCtx>
+int clip_request(ImageCtxT *image_ctx, Extents *image_extents);
+
+inline uint64_t get_extents_length(const Extents &extents) {
+  uint64_t total_bytes = 0;
+  for (auto [_, extent_length] : extents) {
+    total_bytes += extent_length;
+  }
+  return total_bytes;
+}
+
+void unsparsify(CephContext* cct, ceph::bufferlist* bl,
+                const Extents& extent_map, uint64_t bl_off,
+                uint64_t out_bl_len);
 
 } // namespace util
 } // namespace io

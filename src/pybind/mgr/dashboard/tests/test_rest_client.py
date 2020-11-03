@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import unittest
+
 import requests.exceptions
 
 try:
@@ -8,6 +9,7 @@ except ImportError:
     from unittest.mock import patch
 
 from urllib3.exceptions import MaxRetryError, ProtocolError
+
 from .. import mgr
 from ..rest_client import RequestException, RestClient
 

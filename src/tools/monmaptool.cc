@@ -346,6 +346,9 @@ int main(int argc, const char **argv)
       monmap.generate_fsid();
       cout << me << ": generated fsid " << monmap.fsid << std::endl;
     }
+    monmap.strategy = static_cast<MonMap::election_strategy>(
+		  g_conf().get_val<uint64_t>("mon_election_default_strategy"));
+    // TODO: why do we not use build_initial in our normal path here!?!?!
     modified = true;
   }
   if (enable_all_features) {

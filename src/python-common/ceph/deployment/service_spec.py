@@ -3,7 +3,7 @@ import fnmatch
 import re
 from collections import namedtuple, OrderedDict
 from functools import wraps
-from typing import Optional, Dict, Any, List, Union, Callable, Iterator
+from typing import Optional, Dict, Any, List, Union, Callable, Iterable
 
 import yaml
 
@@ -59,14 +59,12 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
+        if isinstance(data, str):
+            return cls.parse(data)
         return cls(**data)
 
-    def to_json(self):
-        return {
-            'hostname': self.hostname,
-            'network': self.network,
-            'name': self.name
-        }
+    def to_json(self) -> str:
+        return str(self)
 
     @classmethod
     def parse(cls, host, require_network=True):
@@ -190,10 +188,11 @@ class PlacementSpec(object):
             self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
                           for x in hosts if x]
 
+    # deprecated
     def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
         return self.filter_matching_hostspecs(_get_hosts_func(as_hostspec=True))
 
-    def filter_matching_hostspecs(self, hostspecs: Iterator[HostSpec]) -> List[str]:
+    def filter_matching_hostspecs(self, hostspecs: Iterable[HostSpec]) -> List[str]:
         if self.hosts:
             all_hosts = [hs.hostname for hs in hostspecs]
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
@@ -207,22 +206,27 @@ class PlacementSpec(object):
             # get_host_selection_size
             return []
 
-    def get_host_selection_size(self, hostspecs: Iterator[HostSpec]):
+    def get_host_selection_size(self, hostspecs: Iterable[HostSpec]):
         if self.count:
             return self.count
         return len(self.filter_matching_hostspecs(hostspecs))
 
     def pretty_str(self):
+        """
+        >>> #doctest: +SKIP
+        ... ps = PlacementSpec(...)  # For all placement specs:
+        ... PlacementSpec.from_string(ps.pretty_str()) == ps
+        """
         kv = []
+        if self.hosts:
+            kv.append(';'.join([str(h) for h in self.hosts]))
         if self.count:
             kv.append('count:%d' % self.count)
         if self.label:
             kv.append('label:%s' % self.label)
-        if self.hosts:
-            kv.append('%s' % ','.join([str(h) for h in self.hosts]))
         if self.host_pattern:
             kv.append(self.host_pattern)
-        return ' '.join(kv)
+        return ';'.join(kv)
 
     def __repr__(self):
         kv = []
@@ -244,9 +248,7 @@ class PlacementSpec(object):
         if hosts:
             c['hosts'] = []
             for host in hosts:
-                c['hosts'].append(HostPlacementSpec.parse(host) if
-                                  isinstance(host, str) else
-                                  HostPlacementSpec.from_json(host))
+                c['hosts'].append(HostPlacementSpec.from_json(host))
         _cls = cls(**c)
         _cls.validate()
         return _cls
@@ -378,8 +380,9 @@ class ServiceSpec(object):
 
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw'.split()
+                          'node-exporter osd prometheus rbd-mirror rgw ' \
+                          'container'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container'.split()
 
     @classmethod
     def _cls(cls, service_type):
@@ -390,7 +393,8 @@ class ServiceSpec(object):
             'nfs': NFSServiceSpec,
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
-            'alertmanager': AlertManagerSpec
+            'alertmanager': AlertManagerSpec,
+            'container': CustomContainerSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
@@ -588,8 +592,6 @@ class NFSServiceSpec(ServiceSpec):
         #: RADOS namespace where NFS client recovery data is stored in the pool.
         self.namespace = namespace
 
-        self.preview_only = preview_only
-
     def validate(self):
         super(NFSServiceSpec, self).validate()
 
@@ -659,7 +661,6 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
         self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
         self.ssl = ssl
-        self.preview_only = preview_only
 
     def get_port(self):
         if self.rgw_frontend_port:
@@ -723,7 +724,6 @@ class IscsiServiceSpec(ServiceSpec):
         self.api_secure = api_secure
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
-        self.preview_only = preview_only
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:
             self.api_secure = True
@@ -778,3 +778,67 @@ class AlertManagerSpec(ServiceSpec):
 
 
 yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
+
+
+class CustomContainerSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'container',
+                 service_id: str = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 image: str = None,
+                 entrypoint: Optional[str] = None,
+                 uid: Optional[int] = None,
+                 gid: Optional[int] = None,
+                 volume_mounts: Optional[Dict[str, str]] = {},
+                 args: Optional[List[str]] = [],
+                 envs: Optional[List[str]] = [],
+                 privileged: Optional[bool] = False,
+                 bind_mounts: Optional[List[List[str]]] = None,
+                 ports: Optional[List[int]] = [],
+                 dirs: Optional[List[str]] = [],
+                 files: Optional[Dict[str, Any]] = {},
+                 ):
+        assert service_type == 'container'
+        assert service_id is not None
+        assert image is not None
+
+        super(CustomContainerSpec, self).__init__(
+            service_type, service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only)
+
+        self.image = image
+        self.entrypoint = entrypoint
+        self.uid = uid
+        self.gid = gid
+        self.volume_mounts = volume_mounts
+        self.args = args
+        self.envs = envs
+        self.privileged = privileged
+        self.bind_mounts = bind_mounts
+        self.ports = ports
+        self.dirs = dirs
+        self.files = files
+
+    def config_json(self) -> Dict[str, Any]:
+        """
+        Helper function to get the value of the `--config-json` cephadm
+        command line option. It will contain all specification properties
+        that haven't a `None` value. Such properties will get default
+        values in cephadm.
+        :return: Returns a dictionary containing all specification
+            properties.
+        """
+        config_json = {}
+        for prop in ['image', 'entrypoint', 'uid', 'gid', 'args',
+                     'envs', 'volume_mounts', 'privileged',
+                     'bind_mounts', 'ports', 'dirs', 'files']:
+            value = getattr(self, prop)
+            if value is not None:
+                config_json[prop] = value
+        return config_json
+
+
+yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)

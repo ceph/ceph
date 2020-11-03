@@ -291,7 +291,7 @@ public:
   }
 
   void init_gather() {
-    for (const auto p : parent->get_replicas()) {
+    for (const auto& p : parent->get_replicas()) {
       more()->gather_set.insert(p.first);
     }
   }

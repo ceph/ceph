@@ -32,7 +32,7 @@ Install Software
 
 Once you have the Ceph software (or added repositories), installing the software
 is easy. To install packages on each :term:`Ceph Node` in your cluster. You may
-use  ``ceph-deploy`` to install Ceph for your storage cluster, or use package
+use  ``cephadm`` to install Ceph for your storage cluster, or use package
 management tools. You should install Yum Priorities for RHEL/CentOS and other
 distributions that use Yum if you intend to install the Ceph Object Gateway or
 QEMU.
@@ -40,7 +40,7 @@ QEMU.
 .. toctree::
    :maxdepth: 1
 
-	Install ceph-deploy <install-ceph-deploy>
+	Install cephadm <../cephadm/install>
     	Install Ceph Storage Cluster <install-storage-cluster>
 	Install Virtualization for Block <install-vm-cloud>
 

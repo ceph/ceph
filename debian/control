@@ -96,7 +96,7 @@ Build-Depends: cmake (>= 3.10.2),
                xfslibs-dev,
 # Make-Check   xfsprogs,
 # Make-Check   xmlstarlet,
-               yasm [amd64],
+               nasm [amd64],
                zlib1g-dev,
 Standards-Version: 4.4.0
 
@@ -215,6 +215,7 @@ Depends: ceph-base (= ${binary:Version}),
          ceph-mgr-modules-core (= ${binary:Version}),
          python3-bcrypt,
          python3-cherrypy3,
+         python3-distutils,
          python3-jwt,
          python3-openssl,
          python3-pecan,
@@ -364,6 +365,8 @@ Depends: ceph-base (= ${binary:Version}),
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
+Recommends: nvme-cli,
+            smartmontools,
 Description: monitor server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -397,6 +400,8 @@ Depends: ceph-base (= ${binary:Version}),
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
+Recommends: nvme-cli,
+            smartmontools,
 Description: OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,

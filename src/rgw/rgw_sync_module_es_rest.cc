@@ -7,6 +7,7 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -246,7 +247,8 @@ void RGWMetadataSearchOp::execute()
   }
   ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
   auto& extra_headers = es_module->get_request_headers();
-  op_ret = conn->get_resource(resource, &params, &extra_headers, out, &in);
+  op_ret = conn->get_resource(resource, &params, &extra_headers,
+                              out, &in, nullptr, null_yield);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;

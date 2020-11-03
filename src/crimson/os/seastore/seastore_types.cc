@@ -36,6 +36,14 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
   return out << ">";
 }
 
+std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq)
+{
+  return out << "journal_seq_t(segment_seq="
+	     << seq.segment_seq << ", offset="
+	     << seq.offset
+	     << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, extent_types_t t)
 {
   switch (t) {
@@ -45,6 +53,10 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "LADDR_INTERNAL";
   case extent_types_t::LADDR_LEAF:
     return out << "LADDR_LEAF";
+  case extent_types_t::EXTMAP_INNER:
+    return out << "EXTMAP_INNER";
+  case extent_types_t::EXTMAP_LEAF:
+    return out << "EXTMAP_LEAF";
   case extent_types_t::TEST_BLOCK:
     return out << "TEST_BLOCK";
   case extent_types_t::TEST_BLOCK_PHYSICAL:

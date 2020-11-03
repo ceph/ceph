@@ -13,7 +13,6 @@ import {
   NgbNavModule
 } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -144,7 +143,6 @@ describe('PoolFormComponent', () => {
         ToastrModule.forRoot(),
         NgbNavModule,
         PoolModule,
-        NgBootstrapFormValidationModule.forRoot(),
         NgbModalModule
       ],
       providers: [
@@ -317,6 +315,17 @@ describe('PoolFormComponent', () => {
       );
       formHelper.expectErrorChange('size', 4, 'max'); // More than rule allows
       formHelper.expectValidChange('size', 2);
+    });
+
+    it('validates if warning is displayed when size is 1', () => {
+      formHelper.setValue('poolType', 'replicated');
+      formHelper.expectValid('size');
+
+      formHelper.setValue('size', 1, true);
+      expect(fixtureHelper.getElementByCss('#size ~ .text-warning-dark')).toBeTruthy();
+
+      formHelper.setValue('size', 2, true);
+      expect(fixtureHelper.getElementByCss('#size ~ .text-warning-dark')).toBeFalsy();
     });
 
     it('validates compression mode default value', () => {

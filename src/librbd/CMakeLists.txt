@@ -1,9 +1,16 @@
-add_library(rbd_types STATIC
+set(librbd_types_srcs
   journal/Types.cc
   mirroring_watcher/Types.cc
   trash_watcher/Types.cc
   watcher/Types.cc
   WatchNotifyTypes.cc)
+
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+ list(APPEND librbd_types_srcs cache/pwl/Types.cc)
+endif()
+
+add_library(rbd_types STATIC
+  ${librbd_types_srcs})
 
 set(librbd_internal_srcs
   AsioEngine.cc
@@ -42,11 +49,15 @@ set(librbd_internal_srcs
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
-  cache/PassthroughImageCache.cc
-  cache/rwl/InitRequest.cc
-  cache/rwl/ShutdownRequest.cc
+  cache/pwl/DiscardRequest.cc
+  cache/pwl/InitRequest.cc
+  cache/pwl/ShutdownRequest.cc
+  cache/Utils.cc
   cache/WriteAroundObjectDispatch.cc
+  crypto/BlockCrypto.cc
+  crypto/CryptoContextPool.cc
   crypto/CryptoObjectDispatch.cc
+  crypto/openssl/DataCryptor.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
   deep_copy/ObjectCopyRequest.cc
@@ -95,6 +106,7 @@ set(librbd_internal_srcs
   io/ReadResult.cc
   io/RefreshImageDispatch.cc
   io/SimpleSchedulerObjectDispatch.cc
+  io/Types.cc
   io/Utils.cc
   io/WriteBlockImageDispatch.cc
   journal/CreateRequest.cc
@@ -113,6 +125,12 @@ set(librbd_internal_srcs
   managed_lock/ReacquireRequest.cc
   managed_lock/ReleaseRequest.cc
   managed_lock/Utils.cc
+  migration/FileStream.cc
+  migration/ImageDispatch.cc
+  migration/NativeFormat.cc
+  migration/OpenSourceImageRequest.cc
+  migration/RawFormat.cc
+  migration/SourceSpecBuilder.cc
   mirror/DemoteRequest.cc
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
@@ -178,18 +196,28 @@ if(WITH_EVENTTRACE)
   list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
 endif()
 
-if(WITH_RBD_RWL)
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   set(librbd_internal_srcs
     ${librbd_internal_srcs}
-    cache/rwl/ImageCacheState.cc
-    cache/rwl/LogEntry.cc
-    cache/rwl/LogMap.cc
-    cache/rwl/LogOperation.cc
-    cache/rwl/ReadRequest.cc
-    cache/rwl/Request.cc
-    cache/rwl/SyncPoint.cc
-    cache/rwl/Types.cc
-    cache/ReplicatedWriteLog.cc)
+    cache/pwl/ImageCacheState.cc
+    cache/pwl/LogEntry.cc
+    cache/pwl/LogMap.cc
+    cache/pwl/LogOperation.cc
+    cache/pwl/ReadRequest.cc
+    cache/pwl/Request.cc
+    cache/pwl/SyncPoint.cc
+    cache/pwl/AbstractWriteLog.cc
+    cache/WriteLogImageDispatch.cc)
+  if(WITH_RBD_RWL)
+    set(librbd_internal_srcs
+      ${librbd_internal_srcs}
+      cache/pwl/ReplicatedWriteLog.cc)
+  endif()
+  if(WITH_RBD_SSD_CACHE)
+    set(librbd_internal_srcs
+      ${librbd_internal_srcs}
+       cache/pwl/SSDWriteLog.cc)
+  endif()
 endif()
 
 add_library(rbd_api STATIC librbd.cc)
@@ -207,12 +235,18 @@ if(WITH_EVENTTRACE)
 endif()
 target_link_libraries(rbd_internal PRIVATE
   osdc rbd_types)
+target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
 
-if(WITH_RBD_RWL)
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   target_link_libraries(rbd_internal
     PUBLIC blk)
+  target_link_libraries(rbd_internal PRIVATE
+    StdFilesystem::filesystem)
 endif()
-
+if(WITH_RBD_RWL)
+  target_link_libraries(rbd_types
+    PUBLIC blk)
+endif()
 add_custom_target(librbd_plugins)
 set(librbd_plugins_dir ${CEPH_INSTALL_PKGLIBDIR}/librbd)
 
@@ -223,6 +257,7 @@ add_library(librbd_plugin_parent_cache SHARED
   ${rbd_plugin_parent_cache_srcs})
 target_link_libraries(librbd_plugin_parent_cache PRIVATE
   ceph_immutable_object_cache_lib ceph-common librbd
+  libneorados
   librados)
 set_target_properties(librbd_plugin_parent_cache PROPERTIES
   OUTPUT_NAME ceph_librbd_parent_cache

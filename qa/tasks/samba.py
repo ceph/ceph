@@ -138,7 +138,7 @@ def task(ctx, config):
                         ],
                     )
 
-        teuthology.sudo_write_file(remote, "/usr/local/samba/etc/smb.conf", """
+        remote.sudo_write_file("/usr/local/samba/etc/smb.conf", """
 [global]
   workgroup = WORKGROUP
   netbios name = DOMAIN

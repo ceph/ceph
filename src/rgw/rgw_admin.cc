@@ -39,6 +39,7 @@ extern "C" {
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
+#include "rgw_datalog.h"
 #include "rgw_lc.h"
 #include "rgw_log.h"
 #include "rgw_formats.h"
@@ -58,11 +59,12 @@ extern "C" {
 #include "rgw_pubsub.h"
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_sync_checkpoint.h"
+#include "rgw_lua.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
-#include "services/svc_datalog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"
 #include "services/svc_zone.h"
@@ -134,6 +136,7 @@ void usage()
   cout << "  bucket chown               link bucket to specified user and update its object ACLs\n";
   cout << "  bucket reshard             reshard bucket\n";
   cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
+  cout << "  bucket sync checkpoint     poll a bucket's sync status until it catches up to its remote\n";
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
   cout << "  bucket radoslist           list rados objects backing bucket's objects\n";
@@ -234,8 +237,7 @@ void usage()
   cout << "  metadata rm                remove metadata info\n";
   cout << "  metadata list              list metadata info\n";
   cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
-  cout << "                             start-marker, end-marker)\n";
+  cout << "  mdlog trim                 trim metadata log (use marker)\n";
   cout << "  mdlog status               read metadata log status\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
@@ -278,8 +280,12 @@ void usage()
   cout << "  subscription rm            remove a pubsub subscription\n";
   cout << "  subscription pull          show events in a pubsub subscription\n";
   cout << "  subscription ack           ack (remove) an events in a pubsub subscription\n";
+  cout << "  script put                 upload a lua script to a context\n";
+  cout << "  script get                 get the lua script of a context\n";
+  cout << "  script rm                  remove the lua scripts of a context\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
+  cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
   cout << "   --uid=<id>                user id\n";
   cout << "   --new-uid=<id>            new user id\n";
   cout << "   --subuser=<name>          subuser name\n";
@@ -426,6 +432,8 @@ void usage()
   cout << "   --topic                   bucket notifications/pubsub topic name\n";
   cout << "   --subscription            pubsub subscription name\n";
   cout << "   --event-id                event id in a pubsub subscription\n";
+  cout << "\nScript options:\n";
+  cout << "   --context                 context in which the script runs. one of: preRequest, postRequest\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -588,6 +596,7 @@ enum class OPT {
   BUCKET_UNLINK,
   BUCKET_STATS,
   BUCKET_CHECK,
+  BUCKET_SYNC_CHECKPOINT,
   BUCKET_SYNC_INFO,
   BUCKET_SYNC_STATUS,
   BUCKET_SYNC_MARKERS,
@@ -756,6 +765,9 @@ enum class OPT {
   PUBSUB_SUB_RM,
   PUBSUB_SUB_PULL,
   PUBSUB_EVENT_RM,
+  SCRIPT_PUT,
+  SCRIPT_GET,
+  SCRIPT_RM,
 };
 
 }
@@ -785,6 +797,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket unlink", OPT::BUCKET_UNLINK },
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket check", OPT::BUCKET_CHECK },
+  { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
   { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
   { "bucket sync markers", OPT::BUCKET_SYNC_MARKERS },
@@ -968,6 +981,9 @@ static SimpleCmd::Commands all_cmds = {
   { "subscription rm", OPT::PUBSUB_SUB_RM },
   { "subscription pull", OPT::PUBSUB_SUB_PULL },
   { "subscription ack", OPT::PUBSUB_EVENT_RM },
+  { "script put", OPT::SCRIPT_PUT },
+  { "script get", OPT::SCRIPT_GET },
+  { "script rm", OPT::SCRIPT_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -1203,24 +1219,6 @@ static int read_decode_json(const string& infile, T& t, K *k)
   return 0;
 }
 
-static int parse_date_str(const string& date_str, utime_t& ut)
-{
-  uint64_t epoch = 0;
-  uint64_t nsec = 0;
-
-  if (!date_str.empty()) {
-    int ret = utime_t::parse_date(date_str, &epoch, &nsec);
-    if (ret < 0) {
-      cerr << "ERROR: failed to parse date: " << date_str << std::endl;
-      return -EINVAL;
-    }
-  }
-
-  ut = utime_t(epoch, nsec);
-
-  return 0;
-}
-
 template <class T>
 static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
 {
@@ -1353,7 +1351,7 @@ int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& buc
 
   map<string, bufferlist>::iterator iter;
   iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
-  if (iter == obj->get_attrs().attrs.end()) {
+  if (iter == obj->get_attrs().end()) {
     *need_rewrite = (obj->get_obj_size() >= min_stripe_size);
     return 0;
   }
@@ -2233,31 +2231,6 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
   return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
 }
 
-static int remote_bilog_markers(rgw::sal::RGWRadosStore *store, const RGWZone& source,
-                                RGWRESTConn *conn, const RGWBucketInfo& info,
-                                BucketIndexShardsManager *markers)
-{
-  const auto instance_key = info.bucket.get_key();
-  const rgw_http_param_pair params[] = {
-    { "type" , "bucket-index" },
-    { "bucket-instance", instance_key.c_str() },
-    { "info" , nullptr },
-    { nullptr, nullptr }
-  };
-  rgw_bucket_index_marker_info result;
-  int r = conn->get_json_resource("/admin/log/", params, result);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to fetch remote log markers: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  r = markers->from_string(result.max_marker, -1);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to decode remote log markers" << dendl;
-    return r;
-  }
-  return 0;
-}
-
 static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
@@ -2320,7 +2293,7 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
 
   BucketIndexShardsManager remote_markers;
-  r = remote_bilog_markers(store, source, conn, source_bucket_info, &remote_markers);
+  r = rgw_read_remote_bilog_info(conn, source_bucket, remote_markers, null_yield);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
@@ -2792,18 +2765,14 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
   return -ENOENT;
 }
 
-static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
-                               const ceph::real_time& end_time,
-                               const string& start_marker, const string& end_marker,
-                               int delay_ms)
+static int trim_sync_error_log(int shard_id, const string& marker, int delay_ms)
 {
   auto oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
                                                shard_id);
   // call cls_log_trim() until it returns -ENODATA
   for (;;) {
-    int ret = store->svc()->cls->timelog.trim(oid, start_time, end_time,
-                                           start_marker, end_marker, nullptr,
-                                           null_yield);
+    int ret = store->svc()->cls->timelog.trim(oid, {}, {}, {}, marker, nullptr,
+					      null_yield);
     if (ret == -ENODATA) {
       return 0;
     }
@@ -3048,6 +3017,7 @@ int main(int argc, const char **argv)
 
   rgw_user user_id;
   string tenant;
+  string user_ns;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -3200,6 +3170,8 @@ int main(int argc, const char **argv)
   string sub_name;
   string event_id;
 
+  std::optional<std::string> str_script_ctx;
+
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
   std::optional<string> opt_flow_type;
@@ -3236,6 +3208,8 @@ int main(int argc, const char **argv)
   std::optional<int> opt_priority;
   std::optional<string> opt_mode;
   std::optional<rgw_user> opt_dest_owner;
+  ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
+  ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
 
@@ -3253,6 +3227,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
       opt_tenant = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--user_ns", (char*)NULL)) {
+      user_ns = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
@@ -3648,8 +3624,14 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-owner", (char*)NULL)) {
       opt_dest_owner.emplace(val);
       opt_dest_owner = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--retry-delay-ms", (char*)NULL)) {
+      opt_retry_delay_ms = std::chrono::milliseconds(atoi(val.c_str()));
+    } else if (ceph_argparse_witharg(args, i, &val, "--timeout-sec", (char*)NULL)) {
+      opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
+      str_script_ctx = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3731,6 +3713,11 @@ int main(int argc, const char **argv)
       }
       user_id.tenant = tenant;
     }
+    if (user_ns.empty()) {
+      user_ns = user_id.ns;
+    } else {
+      user_id.ns = user_ns;
+    }
 
     if (!new_user_id.empty() && !tenant.empty()) {
       new_user_id.tenant = tenant;
@@ -3807,6 +3794,7 @@ int main(int argc, const char **argv)
 			 OPT::BUCKETS_LIST,
 			 OPT::BUCKET_LIMIT_CHECK,
 			 OPT::BUCKET_STATS,
+			 OPT::BUCKET_SYNC_CHECKPOINT,
 			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
 			 OPT::BUCKET_SYNC_MARKERS,
@@ -3862,6 +3850,7 @@ int main(int argc, const char **argv)
        OPT::PUBSUB_TOPIC_GET,
        OPT::PUBSUB_SUB_GET,
        OPT::PUBSUB_SUB_PULL,
+       OPT::SCRIPT_GET,
   };
 
 
@@ -6030,10 +6019,17 @@ int main(int argc, const char **argv)
         return -ret;
       }
       formatter->open_array_section("entries");
-      bool truncated;
+
+      bool truncated = false;
       int count = 0;
-      if (max_entries < 0)
-        max_entries = 1000;
+
+      static constexpr int MAX_PAGINATE_SIZE = 10000;
+      static constexpr int DEFAULT_MAX_ENTRIES = 1000;
+
+      if (max_entries < 0) {
+	max_entries = DEFAULT_MAX_ENTRIES;
+      }
+      const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
 
       string prefix;
       string delim;
@@ -6053,7 +6049,10 @@ int main(int argc, const char **argv)
       list_op.params.allow_unordered = bool(allow_unordered);
 
       do {
-        ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated, null_yield);
+        const int remaining = max_entries - count;
+        ret = list_op.list_objects(std::min(remaining, paginate_size),
+				   &result, &common_prefixes, &truncated,
+				   null_yield);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -6061,8 +6060,7 @@ int main(int argc, const char **argv)
 
         count += result.size();
 
-        for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
-          rgw_bucket_dir_entry& entry = *iter;
+        for (const auto& entry : result) {
           encode_json("entry", entry, formatter.get());
         }
         formatter->flush(cout);
@@ -7572,15 +7570,26 @@ next:
   }
 
   if (opt_cmd == OPT::MDLOG_LIST) {
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      if (marker.empty()) {
+	marker = start_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     int i = (specified_shard_id ? shard_id : 0);
 
@@ -7599,8 +7608,7 @@ next:
       void *handle;
       list<cls_log_entry> entries;
 
-
-      meta_log->init_list_entries(i, start_time.to_real_time(), end_time.to_real_time(), marker, &handle);
+      meta_log->init_list_entries(i, {}, {}, marker, &handle);
       bool truncated;
       do {
 	  int ret = meta_log->list_entries(handle, 1000, entries, NULL, &truncated);
@@ -7678,20 +7686,31 @@ next:
   }
 
   if (opt_cmd == OPT::MDLOG_TRIM) {
-    utime_t start_time, end_time;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      std::cerr << "start-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      if (marker.empty()) {
+	marker = end_marker;
+      } else {
+	std::cerr << "end-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     if (!specified_shard_id) {
       cerr << "ERROR: shard-id must be specified for trim operation" << std::endl;
       return EINVAL;
     }
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
 
     if (period_id.empty()) {
       std::cerr << "missing --period argument" << std::endl;
@@ -7701,8 +7720,7 @@ next:
 
     // trim until -ENODATA
     do {
-      ret = meta_log->trim(shard_id, start_time.to_real_time(),
-                           end_time.to_real_time(), start_marker, end_marker);
+      ret = meta_log->trim(shard_id, {}, {}, {}, marker);
     } while (ret == 0);
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
@@ -7943,6 +7961,45 @@ next:
     }
   }
 
+  if (opt_cmd == OPT::BUCKET_SYNC_CHECKPOINT) {
+    std::optional<rgw_zone_id> opt_source_zone;
+    if (!source_zone.empty()) {
+      opt_source_zone = source_zone;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    rgw_bucket bucket;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    if (!store->ctl()->bucket->bucket_imports_data(bucket_info.bucket, null_yield)) {
+      std::cout << "Sync is disabled for bucket " << bucket_name << std::endl;
+      return 0;
+    }
+
+    RGWBucketSyncPolicyHandlerRef handler;
+    ret = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, bucket, &handler, null_yield);
+    if (ret < 0) {
+      std::cerr << "ERROR: failed to get policy handler for bucket ("
+          << bucket_info.bucket << "): r=" << ret << ": " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto timeout_at = ceph::coarse_mono_clock::now() + opt_timeout_sec;
+    ret = rgw_bucket_sync_checkpoint(dpp(), store, *handler, bucket_info,
+                                     opt_source_zone, opt_source_bucket,
+                                     opt_retry_delay_ms, timeout_at);
+    if (ret < 0) {
+      lderr(store->ctx()) << "bucket sync checkpoint failed: " << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+  }
+
   if ((opt_cmd == OPT::BUCKET_SYNC_DISABLE) || (opt_cmd == OPT::BUCKET_SYNC_ENABLE)) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -8096,17 +8153,28 @@ next:
     if (max_entries < 0) {
       max_entries = 1000;
     }
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      if (marker.empty()) {
+	marker = start_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     bool truncated;
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
 
     if (shard_id < 0) {
       shard_id = 0;
@@ -8124,11 +8192,10 @@ next:
 
       do {
         list<cls_log_entry> entries;
-        ret = store->svc()->cls->timelog.list(oid, start_time.to_real_time(), end_time.to_real_time(),
-                                           max_entries - count, entries, marker, &marker, &truncated,
-                                           null_yield);
-        if (ret == -ENOENT) {
-          break;
+        ret = store->svc()->cls->timelog.list(oid, {}, {}, max_entries - count, entries, marker, &marker, &truncated,
+					      null_yield);
+	if (ret == -ENOENT) {
+	  break;
         }
         if (ret < 0) {
           cerr << "ERROR: svc.cls->timelog.list(): " << cpp_strerror(-ret) << std::endl;
@@ -8171,23 +8238,29 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_ERROR_TRIM) {
-    utime_t start_time, end_time;
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
 
     if (shard_id < 0) {
       shard_id = 0;
     }
 
     for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
-      ret = trim_sync_error_log(shard_id, start_time.to_real_time(),
-                                end_time.to_real_time(), start_marker,
-                                end_marker, trim_delay_ms);
+      ret = trim_sync_error_log(shard_id, marker, trim_delay_ms);
       if (ret < 0) {
         cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -8599,26 +8672,42 @@ next:
     int count = 0;
     if (max_entries < 0)
       max_entries = 1000;
-
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      if (marker.empty()) {
+	marker = start_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     auto datalog_svc = store->svc()->datalog_rados;
     RGWDataChangesLog::LogMarker log_marker;
 
     do {
-      list<rgw_data_change_log_entry> entries;
+      std::vector<rgw_data_change_log_entry> entries;
       if (specified_shard_id) {
-        ret = datalog_svc->list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, marker, &marker, &truncated);
+        ret = datalog_svc->list_entries(shard_id, max_entries - count,
+					entries,
+					marker.empty() ?
+					std::nullopt :
+					std::make_optional(marker),
+					&marker, &truncated);
       } else {
-        ret = datalog_svc->list_entries(start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, log_marker, &truncated);
+        ret = datalog_svc->list_entries(max_entries - count, entries,
+					log_marker, &truncated);
       }
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -8627,8 +8716,7 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_data_change_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_data_change_log_entry& entry = *iter;
+      for (const auto& entry : entries) {
         if (!extra_info) {
           encode_json("entry", entry.entry, formatter.get());
         } else {
@@ -8681,15 +8769,26 @@ next:
   }
 
   if (opt_cmd == OPT::DATALOG_TRIM) {
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      std::cerr << "start-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      if (marker.empty()) {
+	marker = end_marker;
+      } else {
+	std::cerr << "end-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     if (!specified_shard_id) {
       cerr << "ERROR: requires a --shard-id" << std::endl;
@@ -8699,9 +8798,7 @@ next:
     // loop until -ENODATA
     do {
       auto datalog = store->svc()->datalog_rados;
-      ret = datalog->trim_entries(shard_id, start_time.to_real_time(),
-                                  end_time.to_real_time(),
-                                  start_marker, end_marker);
+      ret = datalog->trim_entries(shard_id, marker);
     } while (ret == 0);
 
     if (ret < 0 && ret != -ENODATA) {
@@ -9190,5 +9287,79 @@ next:
     }
   }
 
+  if (opt_cmd == OPT::SCRIPT_PUT) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    if (infile.empty()) {
+      cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
+      return EINVAL;
+    }
+    bufferlist bl;
+    auto rc = read_input(infile, bl);
+    if (rc < 0) {
+      cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
+      return rc;
+    }
+    const std::string script = bl.to_str();
+    std::string err_msg;
+    if (!rgw::lua::verify(script, err_msg)) {
+      cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
+      return EINVAL;
+    }
+    rc = rgw::lua::write_script(store, tenant, null_yield, script_ctx, script);
+    if (rc < 0) {
+      cerr << "ERROR: failed to put script. error: " << rc << std::endl;
+      return rc;
+    }
+  }
+
+  if (opt_cmd == OPT::SCRIPT_GET) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
+      return EINVAL;
+    }
+    std::string script;
+    const auto rc = rgw::lua::read_script(store, tenant, null_yield, script_ctx, script);
+    if (rc == -ENOENT) {
+      std::cout << "no script exists for context: " << *str_script_ctx << 
+        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+    } else if (rc < 0) {
+      cerr << "ERROR: failed to read script. error: " << rc << std::endl;
+      return rc;
+    } else {
+      std::cout << script << std::endl;
+    }
+  }
+  
+  if (opt_cmd == OPT::SCRIPT_RM) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: preRequest, postRequest" <<  std::endl;
+      return EINVAL;
+    }
+    const auto rc = rgw::lua::delete_script(store, tenant, null_yield, script_ctx);
+    if (rc < 0) {
+      cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
+      return rc;
+    }
+  }
+
   return 0;
 }
+

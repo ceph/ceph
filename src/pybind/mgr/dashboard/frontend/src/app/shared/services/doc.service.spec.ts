@@ -21,7 +21,7 @@ describe('DocService', () => {
   });
 
   it('should return full URL', () => {
-    expect(service.urlGenerator('foo', 'iscsi')).toBe(
+    expect(service.urlGenerator('iscsi', 'foo')).toBe(
       'http://docs.ceph.com/docs/foo/mgr/dashboard/#enabling-iscsi-management'
     );
   });

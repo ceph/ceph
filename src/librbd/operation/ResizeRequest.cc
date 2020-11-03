@@ -196,7 +196,7 @@ void ResizeRequest<I>::send_flush_cache() {
     ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this);
   auto aio_comp = io::AioCompletion::create_and_start(
     ctx, util::get_image_ctx(&image_ctx), io::AIO_TYPE_FLUSH);
-  auto req = io::ImageDispatchSpec<I>::create_flush(
+  auto req = io::ImageDispatchSpec::create_flush(
     image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
     io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
@@ -225,8 +225,7 @@ void ResizeRequest<I>::send_invalidate_cache() {
 
   // need to invalidate since we're deleting objects, and
   // ObjectCacher doesn't track non-existent objects
-  std::shared_lock owner_locker{image_ctx.owner_lock};
-  image_ctx.io_object_dispatcher->invalidate_cache(create_context_callback<
+  image_ctx.io_image_dispatcher->invalidate_cache(create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_invalidate_cache>(this));
 }
 

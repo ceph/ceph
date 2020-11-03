@@ -350,15 +350,13 @@ public:
       if (done) {
         return ret;
       }
-#ifdef HAVE_BOOST_CONTEXT
       if (y) {
-        auto& io_ctx = y.get_io_context();
+	auto& io_ctx = y.get_io_context();
         auto& yield_ctx = y.get_yield_context();
         boost::system::error_code ec;
         async_wait(io_ctx, yield_ctx[ec]);
         return -ec.value();
       }
-#endif
       std::unique_lock l(lock);
       cond.wait(l, [this]{return (done==true);});
       return ret;
@@ -622,7 +620,6 @@ public:
       if (done) {
         return ret;
       }
-#ifdef HAVE_BOOST_CONTEXT
       if (y) {
         auto& io_ctx = y.get_io_context();
         auto& yield_ctx = y.get_yield_context();
@@ -630,7 +627,6 @@ public:
         async_wait(io_ctx, yield_ctx[ec]);
         return -ec.value();
       }
-#endif
       std::unique_lock l(lock);
       cond.wait(l, [this]{return (done==true);});
       return ret;

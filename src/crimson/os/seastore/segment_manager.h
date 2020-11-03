@@ -21,6 +21,12 @@ class Segment : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>{
 public:
 
+  enum class segment_state_t {
+    EMPTY,
+    OPEN,
+    CLOSED
+  };
+
   /**
    * get_segment_id
    */
@@ -134,7 +140,7 @@ struct ephemeral_config_t {
 constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
   1 << 30,
   4 << 10,
-  32 << 20
+  8 << 20
 };
 
 std::ostream &operator<<(std::ostream &, const ephemeral_config_t &);

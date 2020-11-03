@@ -897,8 +897,6 @@ OPTION(bdev_debug_aio_log_age, OPT_DOUBLE)
 OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL)
 OPTION(bdev_enable_discard, OPT_BOOL)
 OPTION(bdev_async_discard, OPT_BOOL)
-OPTION(bdev_flock_retry_interval, OPT_FLOAT)
-OPTION(bdev_flock_retry, OPT_INT)
 
 OPTION(objectstore_blackhole, OPT_BOOL)
 
@@ -1232,8 +1230,6 @@ OPTION(journal_discard, OPT_BOOL) //using ssd disk as journal, whether support d
 
 OPTION(fio_dir, OPT_STR) // fio data directory for fio-objectstore
 
-OPTION(rados_mon_op_timeout, OPT_DOUBLE) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means no limit.
-OPTION(rados_osd_op_timeout, OPT_DOUBLE) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 OPTION(rados_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
 
@@ -1547,6 +1543,7 @@ OPTION(rgw_sts_entry, OPT_STR)
 OPTION(rgw_sts_key, OPT_STR)
 OPTION(rgw_s3_auth_use_sts, OPT_BOOL)  // should we try to use sts for s3?
 OPTION(rgw_sts_max_session_duration, OPT_U64) // Max duration in seconds for which the session token is valid.
+OPTION(rgw_sts_min_session_duration, OPT_U64) // Min duration in seconds for which the session token is valid.
 OPTION(fake_statfs_for_testing, OPT_INT) // Set a value for kb and compute kb_used from total of num_bytes
 OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web tokens
 OPTION(rgw_sts_client_id, OPT_STR) // Client Id

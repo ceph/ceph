@@ -109,8 +109,6 @@ AioResultList BlockingAioThrottle::drain()
   return std::move(completed);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
-
 template <typename CompletionToken>
 auto YieldingAioThrottle::async_wait(CompletionToken&& token)
 {
@@ -201,6 +199,4 @@ AioResultList YieldingAioThrottle::drain()
   }
   return std::move(completed);
 }
-#endif // HAVE_BOOST_CONTEXT
-
 } // namespace rgw

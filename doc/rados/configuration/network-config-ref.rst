@@ -9,7 +9,7 @@ requests directly to Ceph OSD Daemons. Ceph OSD Daemons perform data replication
 on behalf of Ceph Clients, which means replication and other factors impose
 additional loads on Ceph Storage Cluster networks.
 
-Our Quick Start configurations provide a trivial `Ceph configuration file`_ that
+Our Quick Start configurations provide a trivial Ceph configuration file that
 sets monitor IP addresses and daemon host names only. Unless you specify a
 cluster network, Ceph assumes a single "public" network. Ceph functions just
 fine with a public network only, but you may see significant performance
@@ -17,7 +17,10 @@ improvement with a second "cluster" network in a large cluster.
 
 It is possible to run a Ceph Storage Cluster with two networks: a public
 (front-side) network and a cluster (back-side) network.  However, this approach
-complicates network configuration (both hardware and software) and does not usually have a significant impact on overall performance.  For this reason, we generally recommend that dual-NIC systems either be configured with two IPs on the same network, or bonded.
+complicates network configuration (both hardware and software) and does not usually
+have a significant impact on overall performance.  For this reason, we recommend
+that for resilience and capacity dual-NIC systems either active/active bond
+these interfaces or implemebnt a layer 3 multipath strategy with eg. FRR.
 
 If, despite the complexity, one still wishes to use two networks, each
 :term:`Ceph Node` will need to have more than one NIC. See `Hardware
@@ -148,7 +151,7 @@ Ceph Networks
 
 To configure Ceph networks, you must add a network configuration to the
 ``[global]`` section of the configuration file. Our 5-minute Quick Start
-provides a trivial `Ceph configuration file`_ that assumes one public network
+provides a trivial Ceph configuration file that assumes one public network
 with client and server on the same network and subnet. Ceph functions just fine
 with a public network only. However, Ceph allows you to establish much more
 specific criteria, including multiple IP network and subnet masks for your
@@ -201,6 +204,27 @@ following option to the ``[global]`` section of your Ceph configuration file.
 We prefer that the cluster network is **NOT** reachable from the public network
 or the Internet for added security.
 
+IPv4/IPv6 Dual Stack Mode
+-------------------------
+
+If you want to run in an IPv4/IPv6 dual stack mode and want to define your public and/or
+cluster networks, then you need to specify both your IPv4 and IPv6 networks for each:
+
+.. code-block:: ini
+
+	[global]
+		# ... elided configuration
+		public network = {IPv4 public-network/netmask}, {IPv6 public-network/netmask}
+
+This is so ceph can find a valid IP address for both address families.
+
+If you want just an IPv4 or an IPv6 stack environment, then make sure you set the `ms bind`
+options correctly.
+
+.. note::
+   Binding to IPv4 is enabled by default, so if you just add the option to bind to IPv6
+   you'll actually put yourself into dual stack mode. If you want just IPv6, then disable IPv4 and
+   enable IPv6. See `Bind`_ below.
 
 Ceph Daemons
 ============
@@ -336,11 +360,16 @@ addresses.
 :Default: ``7300``
 :Required: No. 
 
+``ms bind ipv4``
+
+:Description: Enables Ceph daemons to bind to IPv4 addresses.
+:Type: Boolean
+:Default: ``true``
+:Required: No
 
 ``ms bind ipv6``
 
-:Description: Enables Ceph daemons to bind to IPv6 addresses. Currently the
-              messenger *either* uses IPv4 or IPv6, but it cannot do both.
+:Description: Enables Ceph daemons to bind to IPv6 addresses.
 :Type: Boolean
 :Default: ``false``
 :Required: No
@@ -407,7 +436,6 @@ Ceph disables TCP buffering by default.
 
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
-.. _Ceph configuration file: ../../../start/quick-ceph-deploy/#create-a-cluster
 .. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Monitor / OSD Interaction: ../mon-osd-interaction
 .. _Message Signatures: ../auth-config-ref#signatures

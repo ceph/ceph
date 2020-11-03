@@ -1,3 +1,4 @@
+# NOTE: these tests are not yet compatible with vstart_runner.py.
 import errno
 import json
 import time
@@ -361,6 +362,8 @@ class TestNFS(MgrTestCase):
         self._unload_module("cephadm")
         self._load_module("cephadm")
         self._orch_cmd("set", "backend", "cephadm")
+        # Check if ganesha daemon is running
+        self._check_nfs_cluster_status('running', 'Failed to redeploy NFS Ganesha cluster')
         # Checks if created export is listed
         self._test_list_export()
         port, ip = self._get_port_ip_info()

@@ -221,27 +221,26 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
+
+  bool ephemeral_pin_config_changed = false;
   if (changed.count("mds_export_ephemeral_distributed")) {
     export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
     dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
     /* copy to vector to avoid removals during iteration */
-    std::vector<CInode*> migrate;
-    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
-    for (auto& in : migrate) {
-      in->maybe_ephemeral_dist();
-    }
-    mds->balancer->handle_export_pins();
+    ephemeral_pin_config_changed = true;
   }
   if (changed.count("mds_export_ephemeral_random")) {
     export_ephemeral_random_config = g_conf().get_val<bool>("mds_export_ephemeral_random");
     dout(10) << "Migrating any ephemeral random pinned inodes" << dendl;
     /* copy to vector to avoid removals during iteration */
+    ephemeral_pin_config_changed = true;
+  }
+  if (ephemeral_pin_config_changed) {
     std::vector<CInode*> migrate;
-    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    migrate.assign(export_ephemeral_pins.begin(), export_ephemeral_pins.end());
     for (auto& in : migrate) {
-      in->maybe_ephemeral_rand();
+      in->maybe_export_pin(true);
     }
-    mds->balancer->handle_export_pins();
   }
   if (changed.count("mds_export_ephemeral_random_max")) {
     export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
@@ -327,8 +326,6 @@ void MDCache::add_inode(CInode *in)
   if (cache_toofull()) {
     exceeded_size_limit = true;
   }
-
-  in->maybe_ephemeral_dist(false);
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -359,8 +356,7 @@ void MDCache::remove_inode(CInode *o)
   if (o->state_test(CInode::STATE_DELAYEDEXPORTPIN))
     export_pin_delayed_queue.erase(o);
 
-  o->set_ephemeral_dist(false);
-  o->set_ephemeral_rand(false);
+  o->clear_ephemeral_pin(true, true);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -509,9 +505,9 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
   for (int i = 0; i < NUM_STRAY; ++i) {
     CInode *stray = create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR);
     CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
-    stringstream name;
-    name << "stray" << i;
-    CDentry *sdn = mydir->add_primary_dentry(name.str(), stray);
+    CachedStackStringStream css;
+    *css << "stray" << i;
+    CDentry *sdn = mydir->add_primary_dentry(css->str(), stray);
     sdn->_mark_dirty(mds->mdlog->get_current_segment());
 
     stray->_get_inode()->dirstat = straydir->get_fnode()->fragstat;
@@ -801,16 +797,16 @@ void MDCache::populate_mydir()
   // open or create stray
   uint64_t num_strays = 0;
   for (int i = 0; i < NUM_STRAY; ++i) {
-    stringstream name;
-    name << "stray" << i;
-    CDentry *straydn = mydir->lookup(name.str());
+    CachedStackStringStream css;
+    *css << "stray" << i;
+    CDentry *straydn = mydir->lookup(css->str());
 
     // allow for older fs's with stray instead of stray0
     if (straydn == NULL && i == 0)
       straydn = mydir->lookup("stray");
 
     if (!straydn || !straydn->get_linkage()->get_inode()) {
-      _create_system_file(mydir, name.str().c_str(), create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR),
+      _create_system_file(mydir, css->strv(), create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR),
 			  new C_MDS_RetryOpenRoot(this));
       return;
     }
@@ -900,10 +896,13 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 /*
  * hashing implementation based on Lamping and Veach's Jump Consistent Hash: https://arxiv.org/pdf/1406.2294.pdf
 */
-mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino)
+mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
 {
   const mds_rank_t max_mds = mds->mdsmap->get_max_mds();
   uint64_t hash = rjhash64(ino);
+  if (fg)
+    hash = rjhash64(hash + rjhash64(fg.value()));
+
   int64_t b = -1, j = 0;
   while (j < max_mds) {
     b = j;
@@ -988,11 +987,6 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
 	p = p->inode->get_parent_dir();
       }
     }
-  }
-
-  if (dir->is_auth()) {
-    /* do this now that we are auth for the CDir */
-    dir->inode->maybe_pin();
   }
 
   show_subtrees();
@@ -2370,22 +2364,6 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       }
     }
 
-    /* 
-     * the rule here is to follow the _oldest_ parent with dirty rstat
-     * data.  if we don't propagate all data, we add ourselves to the
-     * nudge list.  that way all rstat data will (eventually) get
-     * pushed up the tree.
-     *
-     * actually, no.  for now, silently drop rstats for old parents.  we need 
-     * hard link backpointers to do the above properly.
-     */
-
-    // stop?
-    if (pin->is_base())
-      break;
-    parentdn = pin->get_projected_parent_dn();
-    ceph_assert(parentdn);
-
     // rstat
     dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
 
@@ -2418,8 +2396,12 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     parent->check_rstats();
     broadcast_quota_to_client(pin);
+    if (pin->is_base())
+      break;
     // next parent!
     cur = pin;
+    parentdn = pin->get_projected_parent_dn();
+    ceph_assert(parentdn);
     parent = parentdn->get_dir();
     linkunlink = 0;
     do_parent_mtime = false;
@@ -5704,9 +5686,7 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
 
-  for (elist<CInode*>::iterator p = realm->inodes_with_caps.begin(member_offset(CInode, item_caps));
-       !p.end();
-       ++p)
+  for (auto p = realm->inodes_with_caps.begin(); !p.end(); ++p)
     split_inos.push_back((*p)->ino());
   for (set<SnapRealm*>::iterator p = realm->open_children.begin();
        p != realm->open_children.end();
@@ -5825,11 +5805,11 @@ void MDCache::export_remaining_imported_caps()
 {
   dout(10) << "export_remaining_imported_caps" << dendl;
 
-  stringstream warn_str;
+  CachedStackStringStream css;
 
   int count = 0;
   for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
-    warn_str << " ino " << p->first << "\n";
+    *css << " ino " << p->first << "\n";
     for (auto q = p->second.begin(); q != p->second.end(); ++q) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (session) {
@@ -5854,9 +5834,9 @@ void MDCache::export_remaining_imported_caps()
   cap_imports.clear();
   cap_reconnect_waiters.clear();
 
-  if (warn_str.peek() != EOF) {
-    mds->clog->warn() << "failed to reconnect caps for missing inodes:";
-    mds->clog->warn(warn_str);
+  if (css->strv().length()) {
+    mds->clog->warn() << "failed to reconnect caps for missing inodes:"
+                      << css->strv();
   }
 }
 
@@ -5907,24 +5887,20 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 			    int peer, int p_flags)
 {
   SnapRealm *realm = in->find_snaprealm();
-  if (realm->have_past_parents_open()) {
-    dout(10) << "do_cap_import " << session->info.inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
-    if (cap->get_last_seq() == 0) // reconnected cap
-      cap->inc_last_seq();
-    cap->set_last_issue();
-    cap->set_last_issue_stamp(ceph_clock_now());
-    cap->clear_new();
-    auto reap = make_message<MClientCaps>(
-      CEPH_CAP_OP_IMPORT, in->ino(), realm->inode->ino(), cap->get_cap_id(),
-      cap->get_last_seq(), cap->pending(), cap->wanted(), 0, cap->get_mseq(),
-      mds->get_osd_epoch_barrier());
-    in->encode_cap_message(reap, cap);
-    reap->snapbl = realm->get_snap_trace();
-    reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
-    mds->send_message_client_counted(reap, session);
-  } else {
-    ceph_abort();
-  }
+  dout(10) << "do_cap_import " << session->info.inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
+  if (cap->get_last_seq() == 0) // reconnected cap
+    cap->inc_last_seq();
+  cap->set_last_issue();
+  cap->set_last_issue_stamp(ceph_clock_now());
+  cap->clear_new();
+  auto reap = make_message<MClientCaps>(CEPH_CAP_OP_IMPORT,
+					in->ino(), realm->inode->ino(), cap->get_cap_id(),
+					cap->get_last_seq(), cap->pending(), cap->wanted(),
+					0, cap->get_mseq(), mds->get_osd_epoch_barrier());
+  in->encode_cap_message(reap, cap);
+  reap->snapbl = realm->get_snap_trace();
+  reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
+  mds->send_message_client_counted(reap, session);
 }
 
 void MDCache::do_delayed_cap_imports()
@@ -5945,77 +5921,50 @@ void MDCache::open_snaprealms()
 {
   dout(10) << "open_snaprealms" << dendl;
   
-  MDSGatherBuilder gather(g_ceph_context);
-
   auto it = rejoin_pending_snaprealms.begin();
   while (it != rejoin_pending_snaprealms.end()) {
     CInode *in = *it;
     SnapRealm *realm = in->snaprealm;
     ceph_assert(realm);
-    if (realm->have_past_parents_open() ||
-	realm->open_parents(gather.new_sub())) {
-      dout(10) << " past parents now open on " << *in << dendl;
 
-      map<client_t,ref_t<MClientSnap>> splits;
-      // finish off client snaprealm reconnects?
-      map<inodeno_t,map<client_t,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
-      if (q != reconnected_snaprealms.end()) {
-	for (const auto& r : q->second)
-	  finish_snaprealm_reconnect(r.first, realm, r.second, splits);
-	reconnected_snaprealms.erase(q);
-      }
+    map<client_t,ref_t<MClientSnap>> splits;
+    // finish off client snaprealm reconnects?
+    auto q = reconnected_snaprealms.find(in->ino());
+    if (q != reconnected_snaprealms.end()) {
+      for (const auto& r : q->second)
+	finish_snaprealm_reconnect(r.first, realm, r.second, splits);
+      reconnected_snaprealms.erase(q);
+    }
 
-      for (elist<CInode*>::iterator p = realm->inodes_with_caps.begin(member_offset(CInode, item_caps));
-	   !p.end(); ++p) {
-	CInode *child = *p;
-	auto q = reconnected_caps.find(child->ino());
-	ceph_assert(q != reconnected_caps.end());
-	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
-	  Capability *cap = child->get_client_cap(r->first);
-	  if (!cap)
-	    continue;
-	  if (r->second.snap_follows > 0) {
-	    if (r->second.snap_follows < child->first - 1) {
-	      rebuild_need_snapflush(child, realm, r->first, r->second.snap_follows);
-	    } else if (r->second.snapflush) {
-	      // When processing a cap flush message that is re-sent, it's possble
-	      // that the sender has already released all WR caps. So we should
-	      // force MDCache::cow_inode() to setup CInode::client_need_snapflush.
-	      cap->mark_needsnapflush();
-	    }
-	  }
-	  // make sure client's cap is in the correct snaprealm.
-	  if (r->second.realm_ino != in->ino()) {
-	    prepare_realm_split(realm, r->first, child->ino(), splits);
+    for (auto p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
+      CInode *child = *p;
+      auto q = reconnected_caps.find(child->ino());
+      ceph_assert(q != reconnected_caps.end());
+      for (auto r = q->second.begin(); r != q->second.end(); ++r) {
+	Capability *cap = child->get_client_cap(r->first);
+	if (!cap)
+	  continue;
+	if (r->second.snap_follows > 0) {
+	  if (r->second.snap_follows < child->first - 1) {
+	    rebuild_need_snapflush(child, realm, r->first, r->second.snap_follows);
+	  } else if (r->second.snapflush) {
+	    // When processing a cap flush message that is re-sent, it's possble
+	    // that the sender has already released all WR caps. So we should
+	    // force MDCache::cow_inode() to setup CInode::client_need_snapflush.
+	    cap->mark_needsnapflush();
 	  }
 	}
+	// make sure client's cap is in the correct snaprealm.
+	if (r->second.realm_ino != in->ino()) {
+	  prepare_realm_split(realm, r->first, child->ino(), splits);
+	}
       }
-
-      rejoin_pending_snaprealms.erase(it++);
-      in->put(CInode::PIN_OPENINGSNAPPARENTS);
-
-      send_snaps(splits);
-    } else {
-      dout(10) << " opening past parents on " << *in << dendl;
-      ++it;
     }
-  }
 
-  if (gather.has_subs()) {
-    if (gather.num_subs_remaining() == 0) {
-      // cleanup gather
-      gather.set_finisher(new C_MDSInternalNoop);
-      gather.activate();
-    } else {
-      // for multimds, must succeed the first time
-      ceph_assert(recovery_set.empty());
+    rejoin_pending_snaprealms.erase(it++);
+    in->put(CInode::PIN_OPENINGSNAPPARENTS);
 
-      dout(10) << "open_snaprealms - waiting for "
-	       << gather.num_subs_remaining() << dendl;
-      gather.set_finisher(new C_MDC_OpenSnapRealms(this));
-      gather.activate();
-      return;
-    }
+    send_snaps(splits);
   }
 
   notify_global_snaprealm_update(CEPH_SNAP_OP_UPDATE);
@@ -6023,16 +5972,16 @@ void MDCache::open_snaprealms()
   if (!reconnected_snaprealms.empty()) {
     dout(5) << "open_snaprealms has unconnected snaprealm:" << dendl;
     for (auto& p : reconnected_snaprealms) {
-      stringstream warn_str;
-      warn_str << " " << p.first << " {";
+      CachedStackStringStream css;
+      *css << " " << p.first << " {";
       bool first = true;
       for (auto& q : p.second) {
         if (!first)
-          warn_str << ", ";
-        warn_str << "client." << q.first << "/" << q.second;
+          *css << ", ";
+        *css << "client." << q.first << "/" << q.second;
       }
-      warn_str << "}";
-      dout(5) << warn_str.str() << dendl;
+      *css << "}";
+      dout(5) << css->strv() << dendl;
     }
   }
   ceph_assert(rejoin_waiters.empty());
@@ -6058,6 +6007,7 @@ bool MDCache::open_undef_inodes_dirfrags()
        ++p) {
     CInode *in = *p;
     ceph_assert(!in->is_base());
+    ceph_assert(in->get_parent_dir());
     fetch_queue.insert(in->get_parent_dir());
   }
 
@@ -7893,22 +7843,6 @@ bool MDCache::shutdown_pass()
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
-
-  {
-    dout(10) << "Migrating any ephemerally pinned inodes" << dendl;
-    /* copy to vector to avoid removals during iteration */
-    std::vector<CInode*> migrate;
-    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
-    for (auto& in : migrate) {
-      in->maybe_ephemeral_rand();
-    }
-    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
-    for (auto& in : migrate) {
-      in->maybe_ephemeral_dist();
-    }
-    mds->balancer->handle_export_pins();
-  }
-
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
   if (!subtrees.empty() && mds->get_nodeid() != 0) {
@@ -7930,7 +7864,8 @@ bool MDCache::shutdown_pass()
     }
 
     migrator->clear_export_queue();
-
+    // stopping mds does not call MDBalancer::tick()
+    mds->balancer->handle_export_pins();
     for (const auto& dir : ls) {
       mds_rank_t dest = dir->get_inode()->authority().first;
       if (dest > 0 && !mds->mdsmap->is_active(dest))
@@ -8318,12 +8253,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   if (cur->state_test(CInode::STATE_PURGING))
     return -ESTALE;
 
-  // make sure snaprealm are open...
-  if (mdr && cur->snaprealm && !cur->snaprealm->have_past_parents_open() &&
-      !cur->snaprealm->open_parents(cf.build())) {
-    return 1;
-  }
-
   if (flags & MDS_TRAVERSE_CHECK_LOCKCACHE)
     mds->locker->find_and_attach_lock_cache(mdr, cur);
 
@@ -8525,11 +8454,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       }
 
       cur = in;
-      // make sure snaprealm are open...
-      if (mdr && cur->snaprealm && !cur->snaprealm->have_past_parents_open() &&
-	  !cur->snaprealm->open_parents(cf.build())) {
-	return 1;
-      }
 
       if (rdlock_snap && !(want_dentry && depth == path.depth() - 1)) {
 	lov.clear();
@@ -9726,9 +9650,6 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_REPAIR_INODESTATS:
       repair_inode_stats_work(mdr);
       break;
-    case CEPH_MDS_OP_UPGRADE_SNAPREALM:
-      upgrade_inode_snaprealm_work(mdr);
-      break;
     default:
       ceph_abort();
     }
@@ -9891,21 +9812,16 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
   vector<inodeno_t> split_realms;
 
   if (notify_clients) {
-    ceph_assert(in->snaprealm->have_past_parents_open());
     if (snapop == CEPH_SNAP_OP_SPLIT) {
       // notify clients of update|split
-      for (elist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(member_offset(CInode, item_caps));
-	   !p.end(); ++p)
+      for (auto p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
 	split_inos.push_back((*p)->ino());
 
-      for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
-	   p != in->snaprealm->open_children.end();
-	   ++p)
-	split_realms.push_back((*p)->inode->ino());
+      for (auto& r : in->snaprealm->open_children)
+	split_realms.push_back(r->inode->ino());
     }
   }
 
-  set<SnapRealm*> past_children;
   map<client_t, ref_t<MClientSnap>> updates;
   list<SnapRealm*> q;
   q.push_back(in->snaprealm);
@@ -9934,60 +9850,14 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
       }
     }
 
-    if (snapop == CEPH_SNAP_OP_UPDATE || snapop == CEPH_SNAP_OP_DESTROY) {
-      for (set<SnapRealm*>::iterator p = realm->open_past_children.begin();
-	   p != realm->open_past_children.end();
-	   ++p)
-	past_children.insert(*p);
-    }
-
     // notify for active children, too.
     dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
-    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
-	 p != realm->open_children.end();
-	 ++p)
-      q.push_back(*p);
+    for (auto& r : realm->open_children)
+      q.push_back(r);
   }
 
   if (notify_clients)
     send_snaps(updates);
-
-  // notify past children and their descendants if we update/delete old snapshots
-  for (set<SnapRealm*>::iterator p = past_children.begin();
-       p !=  past_children.end();
-       ++p)
-    q.push_back(*p);
-
-  while (!q.empty()) {
-    SnapRealm *realm = q.front();
-    q.pop_front();
-
-    realm->invalidate_cached_snaps();
-
-    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
-	 p != realm->open_children.end();
-	 ++p) {
-      if (past_children.count(*p) == 0)
-	q.push_back(*p);
-    }
-
-    for (set<SnapRealm*>::iterator p = realm->open_past_children.begin();
-	 p != realm->open_past_children.end();
-	 ++p) {
-      if (past_children.count(*p) == 0) {
-	q.push_back(*p);
-	past_children.insert(*p);
-      }
-    }
-  }
-
-  if (snapop == CEPH_SNAP_OP_DESTROY) {
-    // eval stray inodes if we delete snapshot from their past ancestor snaprealm
-    for (set<SnapRealm*>::iterator p = past_children.begin();
-	p != past_children.end();
-	++p)
-      maybe_eval_stray((*p)->inode, true);
-  }
 }
 
 void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
@@ -10957,7 +10827,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     s &= CInode::MASK_STATE_REPLICATED;
     if (s & CInode::STATE_RANDEPHEMERALPIN) {
       dout(10) << "replica inode is random ephemeral pinned" << dendl;
-      in->set_ephemeral_rand(true);
+      in->set_ephemeral_pin(false, true);
     }
   }
 
@@ -11251,7 +11121,6 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	  bool hadrealm = (in->snaprealm ? true : false);
 	  in->decode_snap_blob(m->snapbl);
 	  ceph_assert(in->snaprealm);
-	  ceph_assert(in->snaprealm->have_past_parents_open());
 	  if (!hadrealm)
 	    do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
 	}
@@ -12732,10 +12601,10 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
 
   if (threshold && cache_size() > threshold) {
     if (f) {
-      std::stringstream ss;
-      ss << "cache usage exceeds dump threshold";
+      CachedStackStringStream css;
+      *css << "cache usage exceeds dump threshold";
       f->open_object_section("result");
-      f->dump_string("error", ss.str());
+      f->dump_string("error", css->strv());
       f->close_section();
     } else {
       derr << "cache usage exceeds dump threshold" << dendl;
@@ -12774,26 +12643,26 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
       f->close_section();
       return 1;
     } 
-    ostringstream ss;
-    ss << *in << std::endl;
-    std::string s = ss.str();
-    r = safe_write(fd, s.c_str(), s.length());
+    CachedStackStringStream css;
+    *css << *in << std::endl;
+    auto sv = css->strv();
+    r = safe_write(fd, sv.data(), sv.size());
     if (r < 0)
       return r;
     auto&& dfs = in->get_dirfrags();
     for (auto &dir : dfs) {
-      ostringstream tt;
-      tt << " " << *dir << std::endl;
-      std::string t = tt.str();
-      r = safe_write(fd, t.c_str(), t.length());
+      CachedStackStringStream css2;
+      *css2 << " " << *dir << std::endl;
+      auto sv = css2->strv();
+      r = safe_write(fd, sv.data(), sv.size());
       if (r < 0)
         return r;
       for (auto &p : dir->items) {
 	CDentry *dn = p.second;
-        ostringstream uu;
-        uu << "  " << *dn << std::endl;
-        std::string u = uu.str();
-        r = safe_write(fd, u.c_str(), u.length());
+        CachedStackStringStream css3;
+        *css3 << "  " << *dn << std::endl;
+        auto sv = css3->strv();
+        r = safe_write(fd, sv.data(), sv.size());
         if (r < 0)
           return r;
       }
@@ -12929,18 +12798,9 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   header->set_origin(in);
 
-  Context *fin;
-  if (header->get_recursive()) {
-    header->get_origin()->get(CInode::PIN_SCRUBQUEUE);
-    fin = new MDSInternalContextWrapper(mds,
-	    new LambdaContext([this, header](int r) {
-	      recursive_scrub_finish(header);
-	      header->get_origin()->put(CInode::PIN_SCRUBQUEUE);
-	    })
-	  );
-  } else {
+  Context *fin = nullptr;
+  if (!header->get_recursive())
     fin = cs->take_finisher();
-  }
 
   // If the scrub did some repair, then flush the journal at the end of
   // the scrub.  Otherwise in the case of e.g. rewriting a backtrace
@@ -12983,22 +12843,6 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   mds->server->respond_to_request(mdr, 0);
   return;
-}
-
-void MDCache::recursive_scrub_finish(const ScrubHeaderRef& header)
-{
-  if (header->get_origin()->is_base() &&
-      header->get_force() && header->get_repair()) {
-    // notify snapserver that base directory is recursively scrubbed.
-    // After both root and mdsdir are recursively scrubbed, snapserver
-    // knows that all old format snaprealms are converted to the new
-    // format.
-    if (mds->mdsmap->get_num_in_mds() == 1 &&
-	mds->mdsmap->get_num_failed_mds() == 0 &&
-	mds->mdsmap->get_tableserver() == mds->get_nodeid()) {
-      mds->mark_base_recursively_scrubbed(header->get_origin()->ino());
-    }
-  }
 }
 
 struct C_MDC_RespondInternalRequest : public MDCacheLogContext {
@@ -13216,49 +13060,6 @@ do_rdlocks:
   mds->server->respond_to_request(mdr, 0);
 }
 
-void MDCache::upgrade_inode_snaprealm(CInode *in)
-{
-  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_UPGRADE_SNAPREALM);
-  mdr->pin(in);
-  mdr->internal_op_private = in;
-  mdr->internal_op_finish = new C_MDSInternalNoop;
-  upgrade_inode_snaprealm_work(mdr);
-}
-
-void MDCache::upgrade_inode_snaprealm_work(MDRequestRef& mdr)
-{
-  CInode *in = static_cast<CInode*>(mdr->internal_op_private);
-  dout(10) << __func__ << " " << *in << dendl;
-
-  if (!in->is_auth()) {
-    mds->server->respond_to_request(mdr, -ESTALE);
-    return;
-  }
-
-  MutationImpl::LockOpVec lov;
-  lov.add_xlock(&in->snaplock);
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
-
-  // project_snaprealm() upgrades snaprealm format
-  auto pi = in->project_inode(mdr, false, true);
-  pi.inode->version = in->pre_dirty();
-
-  mdr->ls = mds->mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mds->mdlog, "upgrade_snaprealm");
-  mds->mdlog->start_entry(le);
-
-  if (in->is_base()) {
-    le->metablob.add_root(true, in);
-  } else {
-    CDentry *pdn = in->get_projected_parent_dn();
-    le->metablob.add_dir_context(pdn->get_dir());
-    le->metablob.add_primary_dentry(pdn, in, true);
-  }
-
-  mds->mdlog->submit_entry(le, new C_MDC_RespondInternalRequest(this, mdr));
-}
-
 void MDCache::flush_dentry(std::string_view path, Context *fin)
 {
   if (is_readonly()) {
@@ -13418,16 +13219,15 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
 }
 
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
+  const mds_rank_t max_mds = mdsmap.get_max_mds();
+
   // process export_pin_delayed_queue whenever a new MDSMap received
   auto &q = export_pin_delayed_queue;
   for (auto it = q.begin(); it != q.end(); ) {
     auto *in = *it;
     mds_rank_t export_pin = in->get_export_pin(false);
-    if (in->is_ephemerally_pinned()) {
-      dout(10) << "ephemeral export pin to " << export_pin << " for " << *in << dendl;
-    }
     dout(10) << " delayed export_pin=" << export_pin << " on " << *in 
-      << " max_mds=" << mdsmap.get_max_mds() << dendl;
+             << " max_mds=" << max_mds << dendl;
     if (export_pin >= mdsmap.get_max_mds()) {
       it++;
       continue;
@@ -13442,13 +13242,20 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
     dout(10) << "Checking ephemerally pinned directories for redistribute due to max_mds change." << dendl;
     /* copy to vector to avoid removals during iteration */
     std::vector<CInode*> migrate;
-    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    migrate.assign(export_ephemeral_pins.begin(), export_ephemeral_pins.end());
     for (auto& in : migrate) {
-      in->maybe_ephemeral_rand();
+      in->maybe_export_pin();
     }
-    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
-    for (auto& in : migrate) {
-      in->maybe_ephemeral_dist();
-    }
+  }
+
+  if (max_mds <= 1) {
+    export_ephemeral_dist_frag_bits = 0;
+  } else {
+    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
+    want *= max_mds;
+    unsigned n = 0;
+    while ((1U << n) < (unsigned)want)
+      ++n;
+    export_ephemeral_dist_frag_bits = n;
   }
 }

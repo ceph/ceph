@@ -12,10 +12,9 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 
-from .iscsi_config import IscsiGatewaysConfig  # pylint: disable=cyclic-import
-from ..settings import Settings
 from ..rest_client import RestClient
-
+from ..settings import Settings
+from .iscsi_config import IscsiGatewaysConfig
 
 logger = logging.getLogger('iscsi_client')
 
@@ -201,6 +200,15 @@ class IscsiClient(RestClient):
     def create_group(self, target_iqn, group_name, members, image_ids, request=None):
         logger.debug("[%s] Creating group: %s/%s", self.gateway_name, target_iqn, group_name)
         return request({
+            'members': ','.join(members),
+            'disks': ','.join(image_ids)
+        })
+
+    @RestClient.api_put('/api/hostgroup/{target_iqn}/{group_name}')
+    def update_group(self, target_iqn, group_name, members, image_ids, request=None):
+        logger.debug("iSCSI[%s] Updating group: %s/%s", self.gateway_name, target_iqn, group_name)
+        return request({
+            'action': 'remove',
             'members': ','.join(members),
             'disks': ','.join(image_ids)
         })

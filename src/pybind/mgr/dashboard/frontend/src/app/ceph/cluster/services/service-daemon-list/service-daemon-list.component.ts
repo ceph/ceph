@@ -22,6 +22,7 @@ import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
 import { Daemon } from '../../../../shared/models/daemon.interface';
+import { RelativeDatePipe } from '../../../../shared/pipes/relative-date.pipe';
 
 @Component({
   selector: 'cd-service-daemon-list',
@@ -52,7 +53,8 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   constructor(
     private hostService: HostService,
     private cephServiceService: CephServiceService,
-    private orchService: OrchestratorService
+    private orchService: OrchestratorService,
+    private relativeDatePipe: RelativeDatePipe
   ) {}
 
   ngOnInit() {
@@ -117,6 +119,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       {
         name: $localize`Last Refreshed`,
         prop: 'last_refresh',
+        pipe: this.relativeDatePipe,
         flexGrow: 2
       }
     ];

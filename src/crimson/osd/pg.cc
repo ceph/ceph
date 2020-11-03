@@ -495,6 +495,19 @@ void PG::print(ostream& out) const
   out << peering_state << " ";
 }
 
+void PG::dump_primary(Formatter* f)
+{
+  peering_state.dump_peering_state(f);
+
+  f->open_array_section("recovery_state");
+  PeeringState::QueryState q(f);
+  peering_state.handle_event(q, 0);
+  f->close_section();
+
+  // TODO: snap_trimq
+  // TODO: scrubber state
+  // TODO: agent state
+}
 
 std::ostream& operator<<(std::ostream& os, const PG& pg)
 {
@@ -561,6 +574,7 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
                    __func__, log_entries.back().op_returns);
   }
   log_entries.back().clean_regions = std::move(osd_op_p.clean_regions);
+  peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
   peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
 						txn, true, false);
 
@@ -611,7 +625,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       *m,
       obc->obs.oi.soid);
     return std::move(*ox).flush_changes(
-      [this, m] (auto&& obc) -> osd_op_errorator::future<> {
+      [m] (auto&& obc) -> osd_op_errorator::future<> {
 	logger().debug(
 	  "do_osd_ops: {} - object {} txn is empty, bypassing mutate",
 	  *m,
@@ -704,23 +718,24 @@ seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
   });
 }
 
-std::pair<hobject_t, RWState::State> PG::get_oid_and_lock(
-  const MOSDOp &m,
-  const OpInfo &op_info)
+hobject_t PG::get_oid(const MOSDOp &m)
 {
-  auto oid = m.get_snapid() == CEPH_SNAPDIR ?
-    m.get_hobj().get_head() : m.get_hobj();
+  return (m.get_snapid() == CEPH_SNAPDIR ?
+          m.get_hobj().get_head() :
+          m.get_hobj());
+}
 
-  RWState::State lock_type = RWState::RWNONE;
+RWState::State PG::get_lock_type(const OpInfo &op_info)
+{
+
   if (op_info.rwordered() && op_info.may_read()) {
-    lock_type = RWState::RWState::RWEXCL;
+    return RWState::RWEXCL;
   } else if (op_info.rwordered()) {
-    lock_type = RWState::RWState::RWWRITE;
+    return RWState::RWWRITE;
   } else {
     ceph_assert(op_info.may_read());
-    lock_type = RWState::RWState::RWREAD;
+    return RWState::RWREAD;
   }
-  return std::make_pair(oid, lock_type);
 }
 
 std::optional<hobject_t> PG::resolve_oid(
@@ -818,28 +833,36 @@ PG::get_or_load_head_obc(hobject_t oid)
       oid);
     bool got = obc->maybe_get_excl();
     ceph_assert(got);
-    return backend->load_metadata(oid).safe_then(
-      [oid, obc=std::move(obc)](auto md) ->
-        load_obc_ertr::future<
-          std::pair<crimson::osd::ObjectContextRef, bool>>
-      {
-	logger().debug(
-	  "get_or_load_head_obc: loaded obs {} for {}", md->os.oi, oid);
-	if (!md->ss) {
-	  logger().error(
-	    "get_or_load_head_obc: oid {} missing snapset", oid);
-	  return crimson::ct_error::object_corrupted::make();
-	}
-	obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
-	  logger().debug(
-	    "get_or_load_head_obc: returning obc {} for {}",
-	    obc->obs.oi, obc->obs.oi.soid);
-	  return load_obc_ertr::make_ready_future<
-	    std::pair<crimson::osd::ObjectContextRef, bool>>(
-	      std::make_pair(obc, false)
-	    );
-      });
+    return load_head_obc(obc).safe_then([](auto obc) {
+      return load_obc_ertr::make_ready_future<
+        std::pair<crimson::osd::ObjectContextRef, bool>>(
+          std::make_pair(std::move(obc), false)
+        );
+    });
   }
+}
+
+PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
+PG::load_head_obc(ObjectContextRef obc)
+{
+  hobject_t oid = obc->get_oid();
+  return backend->load_metadata(oid).safe_then([obc=std::move(obc)](auto md)
+    -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
+    const hobject_t& oid = md->os.oi.soid;
+    logger().debug(
+      "get_or_load_head_obc: loaded obs {} for {}", md->os.oi, oid);
+    if (!md->ss) {
+      logger().error(
+        "get_or_load_head_obc: oid {} missing snapset", oid);
+      return crimson::ct_error::object_corrupted::make();
+    }
+    obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
+    logger().debug(
+      "get_or_load_head_obc: returning obc {} for {}",
+      obc->obs.oi, obc->obs.oi.soid);
+    return load_obc_ertr::make_ready_future<
+      crimson::osd::ObjectContextRef>(obc);
+  });
 }
 
 PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
@@ -895,6 +918,10 @@ seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 	crimson::common::system_shutdown_exception());
   }
 
+  if (can_discard_replica_op(*req)) {
+    return seastar::now();
+  }
+
   ceph::os::Transaction txn;
   auto encoded_txn = req->get_data().cbegin();
   decode(txn, encoded_txn);
@@ -918,7 +945,42 @@ seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 void PG::handle_rep_op_reply(crimson::net::Connection* conn,
 			     const MOSDRepOpReply& m)
 {
-  backend->got_rep_op_reply(m);
+  if (!can_discard_replica_op(m)) {
+    backend->got_rep_op_reply(m);
+  }
+}
+
+template <typename MsgType>
+bool PG::can_discard_replica_op(const MsgType& m) const
+{
+  // if a repop is replied after a replica goes down in a new osdmap, and
+  // before the pg advances to this new osdmap, the repop replies before this
+  // repop can be discarded by that replica OSD, because the primary resets the
+  // connection to it when handling the new osdmap marking it down, and also
+  // resets the messenger sesssion when the replica reconnects. to avoid the
+  // out-of-order replies, the messages from that replica should be discarded.
+  const auto osdmap = peering_state.get_osdmap();
+  const int from_osd = m.get_source().num();
+  if (osdmap->is_down(from_osd)) {
+    return true;
+  }
+  // Mostly, this overlaps with the old_peering_msg
+  // condition.  An important exception is pushes
+  // sent by replicas not in the acting set, since
+  // if such a replica goes down it does not cause
+  // a new interval.
+  if (osdmap->get_down_at(from_osd) >= m.map_epoch) {
+    return true;
+  }
+  // same pg?
+  //  if pg changes *at all*, we reset and repeer!
+  if (epoch_t lpr = peering_state.get_last_peering_reset();
+      lpr > m.map_epoch) {
+    logger().debug("{}: pg changed {} after {}, dropping",
+                   __func__, get_info().history, m.map_epoch);
+    return true;
+  }
+  return false;
 }
 
 seastar::future<> PG::stop()
@@ -939,6 +1001,40 @@ seastar::future<> PG::stop()
 void PG::on_change(ceph::os::Transaction &t) {
   recovery_backend->on_peering_interval_change(t);
   backend->on_actingset_changed({ is_primary() });
+}
+
+bool PG::can_discard_op(const MOSDOp& m) const {
+  return __builtin_expect(m.get_map_epoch()
+      < peering_state.get_info().history.same_primary_since, false);
+}
+
+bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
+  /* The conditions below may clear (on_local_recover, before we queue
+   * the transaction) before we actually requeue the degraded waiters
+   * in on_global_recover after the transaction completes.
+   */
+  if (peering_state.get_pg_log().get_missing().get_items().count(soid))
+    return true;
+  ceph_assert(!get_acting_recovery_backfill().empty());
+  for (auto& peer : get_acting_recovery_backfill()) {
+    if (peer == get_primary()) continue;
+    auto peer_missing_entry = peering_state.get_peer_missing().find(peer);
+    // If an object is missing on an async_recovery_target, return false.
+    // This will not block the op and the object is async recovered later.
+    if (peer_missing_entry != peering_state.get_peer_missing().end() &&
+	peer_missing_entry->second.get_items().count(soid)) {
+	return true;
+    }
+    // Object is degraded if after last_backfill AND
+    // we are backfilling it
+    if (is_backfill_target(peer) &&
+        peering_state.get_peer_info(peer).last_backfill <= soid &&
+	recovery_handler->backfill_state->get_last_backfill_started() >= soid &&
+	recovery_backend->is_recovering(soid)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }

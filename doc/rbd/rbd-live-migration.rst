@@ -7,16 +7,16 @@
 RBD images can be live-migrated between different pools within the same cluster
 or between different image formats and layouts. When started, the source image
 will be deep-copied to the destination image, pulling all snapshot history and
-optionally keeping any link to the source image's parent to help preserve
+optionally preserving any link to the source image's parent to preserve
 sparseness.
 
 This copy process can safely run in the background while the new target image is
-in-use. There is currently a requirement to temporarily stop using the source
+in use. There is currently a requirement to temporarily stop using the source
 image before preparing a migration. This helps to ensure that the client using
 the image is updated to point to the new target image.
 
 .. note::
-   Image live-migration requires the Ceph Nautilus release or later. The krbd
+   Image live-migration requires the Ceph Nautilus release or later. The ``krbd``
    kernel module does not support live-migration at this time.
 
 

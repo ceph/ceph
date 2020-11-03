@@ -16,6 +16,7 @@ tasks:
         mon pg warn min per osd: 0
     log-ignorelist:
       - Not found or unloadable
+      - evicting unresponsive client
 - exec:
     osd.0:
       - ceph osd require-osd-release nautilus

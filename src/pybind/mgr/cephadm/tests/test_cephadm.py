@@ -6,6 +6,7 @@ from unittest.mock import ANY
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from cephadm.serve import CephadmServe
 from cephadm.services.osd import OSD, OSDQueue
 
 try:
@@ -16,7 +17,7 @@ except ImportError:
 from execnet.gateway_bootstrap import HostNotFound
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec
+    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
@@ -124,7 +125,7 @@ class TestCephadm(object):
                     out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
                     expected = [
                         {
-                            'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
+                            'placement': {'hosts': ['test']},
                             'service_id': 'name',
                             'service_name': 'mds.name',
                             'service_type': 'mds',
@@ -134,7 +135,7 @@ class TestCephadm(object):
                         {
                             'placement': {
                                 'count': 1,
-                                'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
+                                'hosts': ["test"]
                             },
                             'spec': {
                                 'rgw_realm': 'r',
@@ -172,7 +173,7 @@ class TestCephadm(object):
     def test_list_daemons(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
-            cephadm_module._refresh_host_daemons('test')
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
             c = cephadm_module.list_daemons()
             assert wait(cephadm_module, c)[0].name() == 'rgw.myrgw.foobar'
 
@@ -199,7 +200,7 @@ class TestCephadm(object):
                 }
                 cephadm_module.notify('mon_map', None)
 
-                cephadm_module._check_daemons()
+                CephadmServe(cephadm_module)._check_daemons()
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
@@ -218,7 +219,7 @@ class TestCephadm(object):
                     })
                     cephadm_module.notify('mon_map', None)
 
-                    cephadm_module._check_daemons()
+                    CephadmServe(cephadm_module)._check_daemons()
 
                     evs = [e.message for e in cephadm_module.events.get_for_daemon(
                         f'rgw.{daemon_id}')]
@@ -246,9 +247,45 @@ class TestCephadm(object):
                 assert cephadm_module.cache.get_scheduled_daemon_action(
                     'test', daemon_name) == action
 
-                cephadm_module._check_daemons()
+                CephadmServe(cephadm_module)._check_daemons()
 
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_daemon_check_extra_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+
+        with with_host(cephadm_module, 'test'):
+
+            # Also testing deploying mons without explicit network placement
+            cephadm_module.check_mon_command({
+                'prefix': 'config set',
+                'who': 'mon',
+                'name': 'public_network',
+                'value': '127.0.0.0/8'
+            })
+
+            cephadm_module.cache.update_host_devices_networks(
+                'test',
+                [],
+                {
+                    "127.0.0.0/8": [
+                        "127.0.0.1"
+                    ],
+                }
+            )
+
+            with with_service(cephadm_module, ServiceSpec(service_type='mon'), CephadmOrchestrator.apply_mon, 'test') as d_names:
+                [daemon_name] = d_names
+
+                cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
+
+                CephadmServe(cephadm_module)._check_daemons()
+
+                _run_cephadm.assert_called_with('test', 'mon.test', 'deploy', [
+                                                '--name', 'mon.test', '--reconfig', '--config-json', '-'],
+                                                stdin='{"config": "\\n\\n[mon]\\nk=v\\n", "keyring": ""}',
+                                                image='')
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
@@ -266,8 +303,7 @@ class TestCephadm(object):
                 })
 
                 with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
-
-                    cephadm_module._check_daemons()
+                    CephadmServe(cephadm_module)._check_daemons()
                     _mon_cmd.assert_any_call(
                         {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://test:3000'})
 
@@ -287,7 +323,7 @@ class TestCephadm(object):
     def test_mgr_update(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            r = cephadm_module._apply_service(ServiceSpec('mgr', placement=ps))
+            r = CephadmServe(cephadm_module)._apply_service(ServiceSpec('mgr', placement=ps))
             assert r
 
             assert_rm_daemon(cephadm_module, 'mgr.a', 'test')
@@ -372,12 +408,12 @@ class TestCephadm(object):
 
             _run_cephadm.return_value = (['{}'], '', 0)
 
-            assert cephadm_module._apply_all_services() == False
+            assert CephadmServe(cephadm_module)._apply_all_services() == False
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
-                ['--config-json', '-', '--', 'lvm', 'prepare',
-                    '--bluestore', '--data', '/dev/sdb', '--no-systemd'],
+                ['--config-json', '-', '--', 'lvm', 'batch',
+                    '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
@@ -418,12 +454,12 @@ class TestCephadm(object):
         "devices, preview, exp_command",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, "lvm prepare --bluestore --data /dev/sda --no-systemd"),
+            (['/dev/sda'], False, "lvm batch --no-auto /dev/sda --yes --no-systemd"),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
              "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --report --format json"),
+            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
              "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
@@ -455,7 +491,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.services.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
     def test_remove_osds(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
-            cephadm_module._refresh_host_daemons('test')
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
             c = cephadm_module.list_daemons()
             wait(cephadm_module, c)
 
@@ -490,7 +526,7 @@ class TestCephadm(object):
                 match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
 
                 ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
-                r = cephadm_module._apply_service(
+                r = CephadmServe(cephadm_module)._apply_service(
                     RGWSpec(rgw_realm='realm', rgw_zone='zone1', placement=ps))
                 assert r
 
@@ -511,7 +547,7 @@ class TestCephadm(object):
     ))
     def test_remove_daemon(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
-            cephadm_module._refresh_host_daemons('test')
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
             c = cephadm_module.list_daemons()
             wait(cephadm_module, c)
             c = cephadm_module.remove_daemons(['rgw.myrgw.myhost.myid'])
@@ -658,6 +694,28 @@ class TestCephadm(object):
                 api_user='user',
                 api_password='password'
             ), CephadmOrchestrator.apply_iscsi),
+            (CustomContainerSpec(
+                service_id='hello-world',
+                image='docker.io/library/hello-world:latest',
+                uid=65534,
+                gid=65534,
+                dirs=['foo/bar'],
+                files={
+                    'foo/bar/xyz.conf': 'aaa\nbbb'
+                },
+                bind_mounts=[[
+                    'type=bind',
+                    'source=lib/modules',
+                    'destination=/lib/modules',
+                    'ro=true'
+                ]],
+                volume_mounts={
+                    'foo/bar': '/foo/bar:Z'
+                },
+                args=['--no-healthcheck'],
+                envs=['SECRET=password'],
+                ports=[8080, 8443]
+            ), CephadmOrchestrator.apply_container),
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
@@ -679,7 +737,7 @@ class TestCephadm(object):
             c = cephadm_module.apply_mds(spec)
             out = wait(cephadm_module, c)
             match_glob(out, "Scheduled mds.fsname update...")
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             [daemon] = cephadm_module.cache.daemons['host1'].keys()
 
@@ -690,7 +748,7 @@ class TestCephadm(object):
             c = cephadm_module.apply_mds(spec)
             out = wait(cephadm_module, c)
             match_glob(out, "Scheduled mds.fsname update...")
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             ok_to_stop.assert_called_with([daemon[4:]])
 
@@ -712,7 +770,7 @@ class TestCephadm(object):
             assert out == HostSpec('test', 'test', status='Offline').to_json()
 
             _get_connection.side_effect = None
-            assert cephadm_module._check_host('test') is None
+            assert CephadmServe(cephadm_module)._check_host('test') is None
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test').to_json()
 
@@ -747,7 +805,7 @@ class TestCephadm(object):
             return '{}', None, 0
         with mock.patch("remoto.Connection", side_effect=[Connection(), Connection(), Connection()]):
             with mock.patch("remoto.process.check", _check):
-                with with_host(cephadm_module, 'test'):
+                with with_host(cephadm_module, 'test', refresh_hosts=False):
                     code, out, err = cephadm_module.check_host('test')
                     # First should succeed.
                     assert err is None
@@ -774,11 +832,18 @@ class TestCephadm(object):
             cephadm_module.config_notify()
             assert cephadm_module.manage_etc_ceph_ceph_conf == True
 
-            cephadm_module._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')
 
             assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
 
+            # set extra config and expect that we deploy another ceph.conf
+            cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
+            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+            _check.assert_called_with(
+                ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'\n\n[mon]\nk=v\n')
+
+            # reload
             cephadm_module.cache.last_etc_ceph_ceph_conf = {}
             cephadm_module.cache.load()
 
@@ -845,3 +910,30 @@ class TestCephadm(object):
             code, out, err = cephadm_module.registry_login('fail-url', 'fail-user', 'fail-password')
             assert err == 'Host test failed to login to fail-url as fail-user with given password'
             check_registry_credentials('json-url', 'json-user', 'json-pass')
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(json.dumps({
+        'image_id': 'image_id',
+                    'repo_digest': 'image@repo_digest',
+    })))
+    @pytest.mark.parametrize("use_repo_digest",
+                             [
+                                 False,
+                                 True
+                             ])
+    def test_upgrade_run(self, use_repo_digest, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test', refresh_hosts=False):
+            cephadm_module.set_container_image('global', 'image')
+            if use_repo_digest:
+                cephadm_module.use_repo_digest = True
+
+                CephadmServe(cephadm_module).convert_tags_to_repo_digest()
+
+            _, image, _ = cephadm_module.check_mon_command({
+                'prefix': 'config get',
+                'who': 'global',
+                'key': 'container_image',
+            })
+            if use_repo_digest:
+                assert image == 'image@repo_digest'
+            else:
+                assert image == 'image'

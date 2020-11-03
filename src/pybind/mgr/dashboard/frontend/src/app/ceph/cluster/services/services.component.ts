@@ -19,6 +19,7 @@ import { OrchestratorFeature } from '../../../shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '../../../shared/models/orchestrator.interface';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephServiceSpec } from '../../../shared/models/service.interface';
+import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { ModalService } from '../../../shared/services/modal.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -61,6 +62,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     private modalService: ModalService,
     private orchService: OrchestratorService,
     private cephServiceService: CephServiceService,
+    private relativeDatePipe: RelativeDatePipe,
     private taskWrapperService: TaskWrapperService,
     private urlBuilder: URLBuilderService
   ) {
@@ -119,6 +121,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       {
         name: $localize`Last Refreshed`,
         prop: 'status.last_refresh',
+        pipe: this.relativeDatePipe,
         flexGrow: 1
       }
     ];

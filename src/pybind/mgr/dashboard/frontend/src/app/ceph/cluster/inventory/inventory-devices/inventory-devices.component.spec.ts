@@ -13,6 +13,7 @@ import { TableActionsComponent } from '../../../../shared/datatable/table-action
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '../../../../shared/models/orchestrator.interface';
 import { Permissions } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -30,7 +31,7 @@ describe('InventoryDevicesComponent', () => {
   };
 
   const mockOrchStatus = (available: boolean, features?: OrchestratorFeature[]) => {
-    const orchStatus = { available: available, description: '', features: {} };
+    const orchStatus: OrchestratorStatus = { available: available, message: '', features: {} };
     if (features) {
       features.forEach((feature: OrchestratorFeature) => {
         orchStatus.features[feature] = { available: true };

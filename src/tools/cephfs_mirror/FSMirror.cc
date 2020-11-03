@@ -50,12 +50,13 @@ private:
 
 class MirrorAdminSocketHook : public AdminSocketHook {
 public:
-  MirrorAdminSocketHook(CephContext *cct, std::string_view fs_name, FSMirror *fs_mirror)
+  MirrorAdminSocketHook(CephContext *cct, const Filesystem &filesystem, FSMirror *fs_mirror)
     : admin_socket(cct->get_admin_socket()) {
     int r;
     std::string cmd;
 
-    cmd = "fs mirror status " + std::string(fs_name);
+    // mirror status format is name@fscid
+    cmd = "fs mirror status " + stringify(filesystem.fs_name) + "@" + stringify(filesystem.fscid);
     r = admin_socket->register_command(
       cmd, this, "get filesystem mirror status");
     if (r == 0) {
@@ -83,23 +84,27 @@ private:
   Commands commands;
 };
 
-FSMirror::FSMirror(CephContext *cct, std::string_view fs_name, uint64_t pool_id,
+FSMirror::FSMirror(CephContext *cct, const Filesystem &filesystem, uint64_t pool_id,
                    std::vector<const char*> args, ContextWQ *work_queue)
-  : m_fs_name(fs_name),
+  : m_filesystem(filesystem),
     m_pool_id(pool_id),
     m_args(args),
     m_work_queue(work_queue),
     m_snap_listener(this),
-    m_asok_hook(new MirrorAdminSocketHook(cct, fs_name, this)) {
+    m_asok_hook(new MirrorAdminSocketHook(cct, filesystem, this)) {
 }
 
 FSMirror::~FSMirror() {
   dout(20) << dendl;
 
-  std::scoped_lock locker(m_lock);
-  delete m_instance_watcher;
-  delete m_mirror_watcher;
-  m_cluster.reset();
+  {
+    std::scoped_lock locker(m_lock);
+    delete m_instance_watcher;
+    delete m_mirror_watcher;
+    m_cluster.reset();
+  }
+  // outside the lock so that in-progress commands can acquire
+  // lock and finish executing.
   delete m_asok_hook;
 }
 
@@ -154,14 +159,15 @@ int FSMirror::connect(std::string_view client_name, std::string_view cluster_nam
   return 0;
 }
 
-void FSMirror::run() {
+void FSMirror::run(PeerReplayer *peer_replayer) {
   dout(20) << dendl;
 
   std::unique_lock locker(m_lock);
   while (true) {
     dout(20) << ": trying to pick from " << m_directories.size() << " directories" << dendl;
-    m_cond.wait(locker, [this]{return m_directories.size() || is_stopping();});
-    if (is_stopping()) {
+    m_cond.wait(locker, [this, peer_replayer]{return m_directories.size() || peer_replayer->is_stopping();});
+    if (peer_replayer->is_stopping()) {
+      dout(5) << ": exiting" << dendl;
       break;
     }
 
@@ -171,19 +177,35 @@ void FSMirror::run() {
   }
 }
 
-void FSMirror::init_replayers() {
-  std::scoped_lock locker(m_lock);
+void FSMirror::init_replayers(PeerReplayer *peer_replayer) {
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
-  auto replayers = g_ceph_context->_conf.get_val<uint64_t>(
+  auto nr_replayers = g_ceph_context->_conf.get_val<uint64_t>(
     "cephfs_mirror_max_concurrent_directory_syncs");
-  dout(20) << ": spawning " << replayers << " snapshot replayer(s)" << dendl;
+  dout(20) << ": spawning " << nr_replayers << " snapshot replayer(s)" << dendl;
 
-  while (replayers-- > 0) {
-    std::unique_ptr<SnapshotReplayer> replayer(new SnapshotReplayer(this));
-    std::string name("replayer-" + stringify(replayers));
+  while (nr_replayers-- > 0) {
+    std::unique_ptr<SnapshotReplayerThread> replayer(
+      new SnapshotReplayerThread(this, peer_replayer));
+    std::string name("replayer-" + stringify(nr_replayers));
     replayer->create(name.c_str());
-    m_snapshot_replayers.push_back(std::move(replayer));
+    peer_replayer->replayers.push_back(std::move(replayer));
   }
+}
+
+void FSMirror::shutdown_replayers(PeerReplayer *peer_replayer,
+                                  std::unique_lock<ceph::mutex> &locker) {
+  peer_replayer->stopping = true;
+  m_cond.notify_all();
+
+  locker.unlock();
+  // safe to iterate unlocked
+  for (auto &replayer : peer_replayer->replayers) {
+    replayer->join();
+  }
+  locker.lock();
+
+  peer_replayer->replayers.clear();
 }
 
 void FSMirror::init(Context *on_finish) {
@@ -215,7 +237,7 @@ void FSMirror::shutdown(Context *on_finish) {
   dout(20) << dendl;
 
   {
-    std::scoped_lock locker(m_lock);
+    std::unique_lock locker(m_lock);
     m_stopping = true;
     m_cond.notify_all();
     if (m_on_init_finish != nullptr) {
@@ -232,17 +254,23 @@ void FSMirror::shutdown(Context *on_finish) {
     }
 
     m_on_shutdown_finish = on_finish;
+
+    for (auto &[peer, peer_replayer] : m_peer_replayers) {
+      dout(5) << ": shutting down replayer for peer=" << peer << dendl;
+      shutdown_replayers(&peer_replayer, locker);
+    }
+    m_peer_replayers.clear();
   }
 
-  wait_for_replayers();
+  shutdown_mirror_watcher();
 }
 
 void FSMirror::init_instance_watcher(Context *on_finish) {
   dout(20) << dendl;
 
   m_on_init_finish = new LambdaContext([this, on_finish](int r) {
-                                         if (r == 0 ) {
-                                           init_replayers();
+                                         if (r < 0) {
+                                           m_init_failed = true;
                                          }
                                          on_finish->complete(r);
                                          if (m_on_shutdown_finish != nullptr) {
@@ -305,17 +333,6 @@ void FSMirror::handle_init_mirror_watcher(int r) {
   shutdown_instance_watcher();
 }
 
-void FSMirror::wait_for_replayers() {
-  dout(20) << dendl;
-
-  for (auto &replayer : m_snapshot_replayers) {
-    replayer->join();
-  }
-
-  m_snapshot_replayers.clear();
-  shutdown_mirror_watcher();
-}
-
 void FSMirror::shutdown_mirror_watcher() {
   dout(20) << dendl;
 
@@ -360,19 +377,19 @@ void FSMirror::handle_shutdown_instance_watcher(int r) {
   }
 }
 
-void FSMirror::handle_acquire_directory(string_view dir_name) {
-  dout(5) << ": dir_name=" << dir_name << dendl;
+void FSMirror::handle_acquire_directory(string_view dir_path) {
+  dout(5) << ": dir_path=" << dir_path << dendl;
 
   std::scoped_lock locker(m_lock);
-  m_directories.emplace(dir_name);
+  m_directories.emplace(dir_path);
   m_cond.notify_all();
 }
 
-void FSMirror::handle_release_directory(string_view dir_name) {
-  dout(5) << ": dir_name=" << dir_name << dendl;
+void FSMirror::handle_release_directory(string_view dir_path) {
+  dout(5) << ": dir_path=" << dir_path << dendl;
 
   std::scoped_lock locker(m_lock);
-  auto it = m_directories.find(dir_name);
+  auto it = m_directories.find(dir_path);
   if (it != m_directories.end()) {
     m_directories.erase(it);
   }
@@ -382,28 +399,44 @@ void FSMirror::add_peer(const Peer &peer) {
   dout(10) << ": peer=" << peer << dendl;
 
   std::scoped_lock locker(m_lock);
-  m_peers.emplace(peer);
-  ceph_assert(m_peers.size() == 1); // support only a single peer
+  auto p = m_peer_replayers.emplace(peer, PeerReplayer());
+  ceph_assert(m_peer_replayers.size() == 1); // support only a single peer
+  if (p.second) {
+    init_replayers(&p.first->second);
+  }
 }
 
 void FSMirror::remove_peer(const Peer &peer) {
   dout(10) << ": peer=" << peer << dendl;
 
-  std::scoped_lock locker(m_lock);
-  m_peers.erase(peer);
+  std::unique_lock locker(m_lock);
+  auto it = m_peer_replayers.find(peer);
+  if (it != m_peer_replayers.end()) {
+    dout(5) << ": shutting down replayers for peer=" << peer << dendl;
+    shutdown_replayers(&it->second, locker);
+  }
+  m_peer_replayers.erase(it);
 }
 
 void FSMirror::mirror_status(Formatter *f) {
   std::scoped_lock locker(m_lock);
   f->open_object_section("status");
-  f->open_object_section("peers");
-  for (auto &peer : m_peers) {
-    peer.dump(f);
+  if (m_init_failed) {
+    f->dump_string("state", "failed");
+  } else if (is_blocklisted(locker)) {
+    f->dump_string("state", "blocklisted");
+  } else {
+    // dump rados addr for blocklist test
+    f->dump_string("rados_inst", m_addrs);
+    f->open_object_section("peers");
+    for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
+      peer.dump(f);
+    }
+    f->close_section(); // peers
+    f->open_object_section("snap_dirs");
+    f->dump_int("dir_count", m_directories.size());
+    f->close_section(); // snap_dirs
   }
-  f->close_section(); // peers
-  f->open_object_section("snap_dirs");
-  f->dump_int("dir_count", m_directories.size());
-  f->close_section(); // snap_dirs
   f->close_section(); // status
 }
 

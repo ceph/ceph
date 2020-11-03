@@ -62,7 +62,7 @@ TEST(TestOSDScrub, scrub_time_permit) {
   std::string cluster_msgr_type = g_conf()->ms_cluster_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_cluster_type;
   Messenger *ms = Messenger::create(g_ceph_context, cluster_msgr_type,
 				    entity_name_t::OSD(0), "make_checker",
-				    getpid(), 0);
+				    getpid());
   ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms->set_default_policy(Messenger::Policy::stateless_server(0));
   ms->bind(g_conf()->public_addr);

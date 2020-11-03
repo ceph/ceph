@@ -39,6 +39,10 @@ struct SeastoreCollection final : public FuturizedCollection {
 SeaStore::SeaStore(const std::string& path)
   : segment_manager(segment_manager::create_ephemeral(
 		      segment_manager::DEFAULT_TEST_EPHEMERAL)),
+    segment_cleaner(
+      std::make_unique<SegmentCleaner>(
+	SegmentCleaner::config_t::default_from_segment_manager(
+	  *segment_manager))),
     cache(std::make_unique<Cache>(*segment_manager)),
     journal(new Journal(*segment_manager)),
     lba_manager(
@@ -46,11 +50,15 @@ SeaStore::SeaStore(const std::string& path)
     transaction_manager(
       new TransactionManager(
 	*segment_manager,
+	*segment_cleaner,
 	*journal,
 	*cache,
 	*lba_manager)),
     onode_manager(onode_manager::create_ephemeral())
-{}
+{
+  journal->set_segment_provider(&*segment_cleaner);
+  segment_cleaner->set_extent_callback(&*transaction_manager);
+}
 
 SeaStore::~SeaStore() = default;
 

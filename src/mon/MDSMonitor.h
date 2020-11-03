@@ -89,8 +89,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   bool prepare_offload_targets(MonOpRequestRef op);
 
   int fail_mds(FSMap &fsmap, std::ostream &ss,
-      const std::string &arg,
-      mds_info_t *failed_info);
+      const std::string &arg, mds_info_t *failed_info);
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);

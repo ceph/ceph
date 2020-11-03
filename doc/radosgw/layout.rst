@@ -8,8 +8,8 @@ new developers to get up to speed with the implementation details.
 Introduction
 ------------
 
-Swift offers something called a container, that we use interchangeably with
-the term bucket. One may say that RGW's buckets implement Swift containers.
+Swift offers something called a *container*, which we use interchangeably with
+the term *bucket*, so we say that RGW's buckets implement Swift containers.
 
 This document does not consider how RGW operates on these structures,
 e.g. the use of encode() and decode() methods for serialization and so on.
@@ -42,18 +42,18 @@ Some variables have been used in above commands, they are:
 - bucket: Holds a mapping between bucket name and bucket instance id
 - bucket.instance: Holds bucket instance information[2]
 
-Every metadata entry is kept on a single rados object. See below for implementation details.
+Every metadata entry is kept on a single RADOS object. See below for implementation details.
 
 Note that the metadata is not indexed. When listing a metadata section we do a
-rados pgls operation on the containing pool.
+RADOS ``pgls`` operation on the containing pool.
 
 Bucket Index
 ^^^^^^^^^^^^
 
 It's a different kind of metadata, and kept separately. The bucket index holds
-a key-value map in rados objects. By default it is a single rados object per
-bucket, but it is possible since Hammer to shard that map over multiple rados
-objects. The map itself is kept in omap, associated with each rados object.
+a key-value map in RADOS objects. By default it is a single RADOS object per
+bucket, but it is possible since Hammer to shard that map over multiple RADOS
+objects. The map itself is kept in omap, associated with each RADOS object.
 The key of each omap is the name of the objects, and the value holds some basic
 metadata of that object -- metadata that shows up when listing the bucket.
 Also, each omap holds a header, and we keep some bucket accounting metadata
@@ -66,7 +66,7 @@ objects there is more information that we keep on other keys.
 Data
 ^^^^
 
-Objects data is kept in one or more rados objects for each rgw object.
+Objects data is kept in one or more RADOS objects for each rgw object.
 
 Object Lookup Path
 ------------------
@@ -96,7 +96,7 @@ causes no ambiguity. For the same reason, slashes are permitted in object
 names (keys).
 
 It is also possible to create multiple data pools and make it so that
-different users buckets will be created in different rados pools by default,
+different users buckets will be created in different RADOS pools by default,
 thus providing the necessary scaling. The layout and naming of these pools
 is controlled by a 'policy' setting.[3]
 
@@ -187,7 +187,7 @@ Known pools:
   namespace: users.keys
     47UA98JSTJZ9YAN3OS3O
 
-    This allows radosgw to look up users by their access keys during authentication.
+    This allows ``radosgw`` to look up users by their access keys during authentication.
 
   namespace: users.swift
     test:tester

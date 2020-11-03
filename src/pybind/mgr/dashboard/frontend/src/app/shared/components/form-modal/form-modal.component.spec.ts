@@ -3,7 +3,6 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { configureTestBed, FixtureHelper, FormHelper } from '../../../../testing/unit-test-helper';
 import { CdValidators } from '../../forms/cd-validators';
@@ -47,12 +46,7 @@ describe('InputModalComponent', () => {
   };
 
   configureTestBed({
-    imports: [
-      NgBootstrapFormValidationModule.forRoot(),
-      RouterTestingModule,
-      ReactiveFormsModule,
-      SharedModule
-    ],
+    imports: [RouterTestingModule, ReactiveFormsModule, SharedModule],
     providers: [NgbActiveModal]
   });
 

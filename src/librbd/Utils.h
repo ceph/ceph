@@ -8,11 +8,15 @@
 #include "include/rbd_types.h"
 #include "include/ceph_assert.h"
 #include "include/Context.h"
+#include "common/snap_types.h"
 #include "common/zipkin_trace.h"
 #include "common/RefCountedObj.h"
 
 #include <atomic>
+#include <optional>
 #include <type_traits>
+#include <utility>
+#include <vector>
 #include <stdio.h>
 
 namespace librbd {
@@ -264,6 +268,11 @@ int snap_create_flags_api_to_internal(CephContext *cct, uint32_t api_flags,
                                       uint64_t *internal_flags);
 
 uint32_t get_default_snap_create_flags(ImageCtx *ictx);
+
+SnapContext get_snap_context(
+    const std::optional<
+      std::pair<std::uint64_t,
+                std::vector<std::uint64_t>>>& write_snap_context);
 
 } // namespace util
 } // namespace librbd

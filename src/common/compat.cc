@@ -18,7 +18,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <thread>
 #ifndef _WIN32
 #include <sys/mount.h>
 #endif
@@ -358,6 +360,101 @@ ssize_t writev(int fd, const struct iovec *iov, int iov_cnt) {
   }
 
   return written;
+}
+
+int &alloc_tls() {
+  static __thread int tlsvar;
+  tlsvar++;
+  return tlsvar;
+}
+
+int apply_tls_workaround() {
+  // Workaround for the following Mingw bugs:
+  // https://sourceforge.net/p/mingw-w64/bugs/727/
+  // https://sourceforge.net/p/mingw-w64/bugs/527/
+  // https://sourceforge.net/p/mingw-w64/bugs/445/
+  // https://gcc.gnu.org/bugzilla/attachment.cgi?id=41382
+  pthread_key_t key;
+  pthread_key_create(&key, nullptr);
+  // Use a TLS slot for emutls
+  alloc_tls();
+  // Free up a slot that can now be used for c++ destructors
+  pthread_key_delete(key);
+}
+
+CEPH_CONSTRUCTOR(ceph_windows_init) {
+  // This will run at startup time before invoking main().
+  WSADATA wsaData;
+  int error;
+
+  #ifdef __MINGW32__
+  apply_tls_workaround();
+  #endif
+
+  error = WSAStartup(MAKEWORD(2, 2), &wsaData);
+  if (error != 0) {
+    fprintf(stderr, "WSAStartup failed: %d", WSAGetLastError());
+    exit(error);
+  }
+}
+
+int win_socketpair(int socks[2])
+{
+    union {
+       struct sockaddr_in inaddr;
+       struct sockaddr addr;
+    } a;
+    int listener;
+    int e;
+    socklen_t addrlen = sizeof(a.inaddr);
+    int reuse = 1;
+
+    if (socks == 0) {
+      errno = -EINVAL;
+      return SOCKET_ERROR;
+    }
+
+    listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET)
+        return SOCKET_ERROR;
+
+    memset(&a, 0, sizeof(a));
+    a.inaddr.sin_family = AF_INET;
+    a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    a.inaddr.sin_port = 0;
+
+    socks[0] = socks[1] = INVALID_SOCKET;
+    do {
+        if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+               (char*) &reuse, (socklen_t) sizeof(reuse)) == -1)
+            break;
+        if  (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+            break;
+        if  (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
+            break;
+        if (listen(listener, 1) == SOCKET_ERROR)
+            break;
+        socks[0] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (socks[0] == INVALID_SOCKET)
+            break;
+        if (connect(socks[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+            break;
+        socks[1] = accept(listener, NULL, NULL);
+        if (socks[1] == INVALID_SOCKET)
+            break;
+
+        closesocket(listener);
+
+        return 0;
+
+    } while (0);
+
+    e = errno;
+    closesocket(listener);
+    closesocket(socks[0]);
+    closesocket(socks[1]);
+    errno = e;
+    return SOCKET_ERROR;
 }
 
 #endif /* _WIN32 */

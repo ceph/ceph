@@ -28,7 +28,6 @@ set(librgw_common_srcs
   services/svc_bucket_sync_sobj.cc
   services/svc_cls.cc
   services/svc_config_key_rados.cc
-  services/svc_datalog_rados.cc
   services/svc_mdlog.cc
   services/svc_meta.cc
   services/svc_meta_be.cc
@@ -131,6 +130,7 @@ set(librgw_common_srcs
   rgw_rest_s3.cc
   rgw_role.cc
   rgw_sal.cc
+  rgw_sal_rados.cc
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
@@ -153,7 +153,12 @@ set(librgw_common_srcs
   rgw_object_lock.cc
   rgw_kms.cc
   rgw_url.cc
-  rgw_oidc_provider)
+  rgw_oidc_provider
+  rgw_datalog.cc
+  cls_fifo_legacy.cc
+  rgw_lua_utils.cc
+  rgw_lua.cc
+  rgw_lua_request.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -168,11 +173,12 @@ target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/lua/src")
+target_include_directories(rgw_common PRIVATE "${CMAKE_BINARY_DIR}/src/lua")
 
-if(WITH_BOOST_CONTEXT)
-  target_include_directories(rgw_common PRIVATE
-    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
-endif()
+
+target_include_directories(rgw_common PRIVATE
+  $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -250,9 +256,8 @@ if(WITH_CURL_OPENSSL)
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
 endif()
 
-if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_a PUBLIC spawn)
-endif()
+target_link_libraries(rgw_a PRIVATE liblua)
+target_link_libraries(rgw_a PUBLIC spawn)
 
 set(rgw_libs rgw_a)
 if(WITH_RADOSGW_AMQP_ENDPOINT)
@@ -263,6 +268,8 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   list(APPEND rgw_libs RDKafka::RDKafka)
 endif()
+
+list(APPEND rgw_libs ${LUA_LIBRARIES})
 
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
@@ -315,7 +322,7 @@ install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 add_executable(radosgwd radosgw.cc)
 target_link_libraries(radosgwd radosgw librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_timeindex_client
+  cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global
   ${FCGI_LIBRARY} ${LIB_RESOLV}
@@ -326,11 +333,12 @@ install(TARGETS radosgwd DESTINATION bin)
 
 set(radosgw_admin_srcs
   rgw_admin.cc
+  rgw_sync_checkpoint.cc
   rgw_orphan.cc)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_timeindex_client
+  cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
@@ -341,7 +349,7 @@ set(radosgw_es_srcs
 add_executable(radosgw-es ${radosgw_es_srcs})
 target_link_libraries(radosgw-es ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_timeindex_client
+  cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
@@ -359,7 +367,7 @@ set(radosgw_object_expirer_srcs
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
 target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_timeindex_client
+  cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
@@ -379,6 +387,7 @@ target_link_libraries(rgw
   cls_refcount_client
   cls_log_client
   cls_timeindex_client
+  neorados_cls_fifo
   cls_version_client
   cls_user_client
   global
@@ -395,6 +404,8 @@ endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw PRIVATE RDKafka::RDKafka)
 endif()
+
+target_link_libraries(rgw PRIVATE ${LUA_LIBRARIES})
 
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)

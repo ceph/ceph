@@ -46,6 +46,7 @@
 #define MSG_MON_PROBE              67
 #define MSG_MON_JOIN               68
 #define MSG_MON_SYNC		   69
+#define MSG_MON_PING               140
 
 /* monitor <-> mon admin tool */
 #define MSG_MON_COMMAND            50
@@ -317,8 +318,6 @@ public:
     header.type = t;
     header.version = version;
     header.compat_version = compat_version;
-    header.priority = 0;  // undef
-    header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
   }
 

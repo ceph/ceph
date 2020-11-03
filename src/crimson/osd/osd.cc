@@ -37,6 +37,8 @@
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
 
+#include "crimson/admin/osd_admin.h"
+#include "crimson/admin/pg_commands.h"
 #include "crimson/common/exception.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
@@ -87,7 +89,10 @@ OSD::OSD(int id, uint32_t nonce,
     shard_services{*this, whoami, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
-    heartbeat_timer{[this] { update_heartbeat_peers(); }},
+    tick_timer{[this] {
+      update_heartbeat_peers();
+      update_stats();
+    }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
@@ -431,7 +436,10 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)),
       asok->register_command(make_asok_hook<DumpPGStateHistory>(std::as_const(*this))),
-      asok->register_command(make_asok_hook<SeastarMetricsHook>()));
+      asok->register_command(make_asok_hook<SeastarMetricsHook>()),
+      // PG commands
+      asok->register_command(make_asok_hook<pg::QueryCommand>(*this)),
+      asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)));
   }).then_unpack([] {
     return seastar::now();
   });
@@ -590,6 +598,8 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
 
 seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 {
+  logger().debug("{}: {}", __func__, pgid);
+
   return seastar::do_with(PGMeta(store.get(), pgid), [] (auto& pg_meta) {
     return pg_meta.get_epoch();
   }).then([this](epoch_t e) {
@@ -714,6 +724,11 @@ void OSD::update_stats()
   osd_stat.up_from = get_up_epoch();
   osd_stat.hb_peers = heartbeat->get_peers();
   osd_stat.seq = (static_cast<uint64_t>(get_up_epoch()) << 32) | osd_stat_seq;
+  gate.dispatch_in_background("statfs", *this, [this] {
+    (void) store->stat().then([this](store_statfs_t&& st) {
+      osd_stat.statfs = st;
+    });
+  });
 }
 
 MessageRef OSD::get_stats() const
@@ -1031,7 +1046,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         state.set_active();
         beacon_timer.arm_periodic(
           std::chrono::seconds(local_conf()->osd_beacon_report_interval));
-        heartbeat_timer.arm_periodic(
+        tick_timer.arm_periodic(
           std::chrono::seconds(TICK_INTERVAL));
       }
     } else if (!osdmap->is_up(whoami)) {
@@ -1198,7 +1213,7 @@ bool OSD::should_restart() const
 seastar::future<> OSD::restart()
 {
   beacon_timer.cancel();
-  heartbeat_timer.cancel();
+  tick_timer.cancel();
   up_epoch = 0;
   bind_epoch = osdmap->get_epoch();
   // TODO: promote to shutdown if being marked down for multiple times
@@ -1224,7 +1239,8 @@ seastar::future<> OSD::send_beacon()
   epoch_t min_last_epoch_clean = osdmap->get_epoch();
   auto m = make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean,
-				    superblock.last_purged_snaps_scrub);
+                                    superblock.last_purged_snaps_scrub,
+                                    local_conf()->osd_beacon_report_interval);
   return monc->send_message(m);
 }
 
@@ -1292,18 +1308,27 @@ OSD::get_or_create_pg(
   epoch_t epoch,
   std::unique_ptr<PGCreateInfo> info)
 {
-  auto [fut, creating] = pg_map.get_pg(pgid, bool(info));
-  if (!creating && info) {
-    pg_map.set_creating(pgid);
-    (void)handle_pg_create_info(std::move(info));
+  if (info) {
+    auto [fut, creating] = pg_map.wait_for_pg(pgid);
+    if (!creating) {
+      pg_map.set_creating(pgid);
+      (void)handle_pg_create_info(std::move(info));
+    }
+    return std::move(fut);
+  } else {
+    return make_ready_blocking_future<Ref<PG>>(pg_map.get_pg(pgid));
   }
-  return std::move(fut);
 }
 
 blocking_future<Ref<PG>> OSD::wait_for_pg(
   spg_t pgid)
 {
-  return pg_map.get_pg(pgid).first;
+  return pg_map.wait_for_pg(pgid).first;
+}
+
+Ref<PG> OSD::get_pg(spg_t pgid)
+{
+  return pg_map.get_pg(pgid);
 }
 
 seastar::future<> OSD::prepare_to_stop()

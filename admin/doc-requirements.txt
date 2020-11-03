@@ -8,3 +8,4 @@ sphinx-autodoc-typehints
 sphinx-prompt
 Sphinx-Substitution-Extensions
 typed-ast
+sphinxcontrib-openapi

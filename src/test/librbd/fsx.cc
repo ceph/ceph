@@ -1227,7 +1227,7 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE,
 			   SubProcess::KEEP);
 	process.add_cmd_arg("map");
-	process.add_cmd_arg("--timeout=600");
+	process.add_cmd_arg("--io-timeout=600");
 	std::string img;
 	img.append(pool);
 	img.append("/");
@@ -1954,7 +1954,7 @@ create_image()
 		goto failed_shutdown;
 	}
 #if defined(WITH_KRBD)
-	r = krbd_create_from_context(rados_cct(cluster), &krbd);
+	r = krbd_create_from_context(rados_cct(cluster), 0, &krbd);
 	if (r < 0) {
 		simple_err("Could not create libkrbd handle", r);
 		goto failed_shutdown;
