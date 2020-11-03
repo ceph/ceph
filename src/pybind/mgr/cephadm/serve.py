@@ -494,9 +494,19 @@ class CephadmServe:
                 daemon_type, daemon_id, host))
 
             try:
-                daemon_spec = self.mgr.cephadm_services[daemon_type].prepare_create(daemon_spec)
-                self.mgr._create_daemon(daemon_spec)
-                r = True
+                # HA_RGW needs to deploy 2 daemons
+                if daemon_type == 'HA_RGW':
+                    daemon_spec.daemon_type = 'haproxy'
+                    daemon_spec = self.mgr.cephadm_services['haproxy'].prepare_create(daemon_spec)
+                    self.mgr._create_daemon(daemon_spec)
+                    daemon_spec.daemon_type = 'keepalived'
+                    daemon_spec = self.mgr.cephadm_services['keepalived'].prepare_create(
+                        daemon_spec)
+                    self.mgr._create_daemon(daemon_spec)
+                else:
+                    daemon_spec = self.mgr.cephadm_services[daemon_type].prepare_create(daemon_spec)
+                    self.mgr._create_daemon(daemon_spec)
+                    r = True
             except (RuntimeError, OrchestratorError) as e:
                 self.mgr.events.for_service(spec, 'ERROR',
                                             f"Failed while placing {daemon_type}.{daemon_id}"

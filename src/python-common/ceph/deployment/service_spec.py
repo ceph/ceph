@@ -381,8 +381,9 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container'.split()
+                          'container HA_RGW haproxy keepalived'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container HA_RGW haproxy ' \
+                          'keepalived'.split()
 
     @classmethod
     def _cls(cls, service_type):
@@ -785,7 +786,7 @@ class HA_RGWSpec(ServiceSpec):
                  service_type: str = 'HA_RGW',
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
-                 virtual_ip_interfaces: Optional[str] = None,
+                 virtual_ip_interface: Optional[str] = None,
                  virtual_ip_address: Optional[str] = None,
                  frontend_port: Optional[int] = None,
                  ha_proxy_port: Optional[int] = None,
@@ -800,7 +801,7 @@ class HA_RGWSpec(ServiceSpec):
         super(HA_RGWSpec, self).__init__('HA_RGW', service_id=service_id,
                                                placement=placement)
 
-        self.virtual_ip_interfaces = virtual_ip_interfaces
+        self.virtual_ip_interface = virtual_ip_interface
         self.virtual_ip_address = virtual_ip_address
         self.frontend_port = frontend_port
         self.ha_proxy_port = ha_proxy_port
@@ -815,7 +816,7 @@ class HA_RGWSpec(ServiceSpec):
     def validate(self):
         super(HA_RGWSpec, self).validate()
 
-        if not self.virtual_ip_interfaces:
+        if not self.virtual_ip_interface:
             raise ServiceSpecValidationError(
                 'Cannot add HA_RGW: No Virtual IP Interface specified')
         if not self.virtual_ip_address:

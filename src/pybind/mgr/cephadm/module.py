@@ -25,7 +25,7 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
-    CustomContainerSpec
+    CustomContainerSpec, HA_RGWSpec
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
@@ -42,6 +42,7 @@ from .services.cephadmservice import MonService, MgrService, MdsService, RgwServ
     RbdMirrorService, CrashService, CephadmService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
+from .services.ha_rgw import HA_RGWService, HAproxyService, KeepAlivedService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -182,6 +183,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'desc': 'Prometheus container image',
         },
         {
+            'name': 'container_image_haproxy',
+            'default': 'haproxy',
+            'desc': 'HAproxy container image',
+        },
+        {
+            'name': 'container_image_keepalived',
+            'default': 'arcts/keepalived',
+            'desc': 'Keepalived container image',
+        },
+        {
             'name': 'warn_on_stray_hosts',
             'type': 'bool',
             'default': True,
@@ -300,6 +311,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_grafana = ''
             self.container_image_alertmanager = ''
             self.container_image_node_exporter = ''
+            self.container_image_haproxy = ''
+            self.container_image_keepalived = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -380,6 +393,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.node_exporter_service = NodeExporterService(self)
         self.crash_service = CrashService(self)
         self.iscsi_service = IscsiService(self)
+        self.ha_rgw_service = HA_RGWService(self)
+        self.haproxy_service = HAproxyService(self)
+        self.keepalived_service = KeepAlivedService(self)
         self.container_service = CustomContainerService(self)
         self.cephadm_services = {
             'mon': self.mon_service,
@@ -395,6 +411,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'node-exporter': self.node_exporter_service,
             'crash': self.crash_service,
             'iscsi': self.iscsi_service,
+            'HA_RGW': self.ha_rgw_service,
+            'haproxy': self.haproxy_service,
+            'keepalived': self.keepalived_service,
             'container': self.container_service,
         }
 
@@ -1047,6 +1066,10 @@ To check that the host is reachable:
             image = self.container_image_alertmanager
         elif daemon_type == 'node-exporter':
             image = self.container_image_node_exporter
+        elif daemon_type == 'haproxy':
+            image = self.container_image_haproxy
+        elif daemon_type == 'keepalived':
+            image = self.container_image_keepalived
         elif daemon_type == CustomContainerService.TYPE:
             # The image can't be resolved, the necessary information
             # is only available when a container is deployed (given

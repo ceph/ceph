@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class HA_RGWService(CephService):
     TYPE = 'HA_RGW'
 
+
 class HAproxyService(CephService):
     TYPE = 'haproxy'
 
@@ -30,12 +31,21 @@ class HAproxyService(CephService):
         host = daemon_spec.host
         spec = daemon_spec.spec
 
-        rgw_daemons = self.mgr.cache.get_daemons_by_service('rgw')
+        rgw_daemons = self.mgr.cache.get_daemons_by_type('rgw')
         rgw_servers = []
         for daemon in rgw_daemons:
-            rgw_servers.append(self.rgw_server(daemon.hostname, self.mgr.inventory.get_addr(daemon.hostname)))
+            rgw_servers.append(self.rgw_server(
+                daemon.hostname, self.mgr.inventory.get_addr(daemon.hostname)))
 
-        ha_context = {'spec': spec, 'rgw_servers': rgw_servers}
+        # virtual ip address cannot have netmask attached when passed to haproxy config
+        # since the port is added to the end and something like 123.123.123.10/24:8080 is invalid
+        virtual_ip_address = spec.virtual_ip_address
+        if "/" in str(spec.virtual_ip_address):
+            just_ip = str(spec.virtual_ip_address).split('/')[0]
+            virtual_ip_address = just_ip
+
+        ha_context = {'spec': spec, 'rgw_servers': rgw_servers,
+                      'virtual_ip_address': virtual_ip_address}
 
         haproxy_conf = self.mgr.template.render('services/haproxy/haproxy.cfg.j2', ha_context)
 
@@ -50,6 +60,7 @@ class HAproxyService(CephService):
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
         return daemon_spec
+
 
 class KeepAlivedService(CephService):
     TYPE = 'keepalived'
