@@ -369,6 +369,9 @@ class Batch(object):
         ssd = []
         for d in self.args.devices:
             rotating.append(d) if d.rotational else ssd.append(d)
+        if ssd and not rotating:
+            # no need for additional sorting, we'll only deploy standalone on ssds
+            return
         self.args.devices = rotating
         if self.args.filestore:
             self.args.journal_devices = ssd
