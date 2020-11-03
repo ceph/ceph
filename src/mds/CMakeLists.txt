@@ -49,4 +49,5 @@ set(mds_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
-  heap_profiler cpu_profiler osdc liblua)
+  heap_profiler cpu_profiler osdc ${LUA_LIBRARIES})
+target_include_directories(mds PRIVATE "${LUA_INCLUDE_DIR}")
