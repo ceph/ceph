@@ -1597,7 +1597,9 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store,
   const std::string& bucket_name = op_state.get_bucket_name();
   if (!bucket_name.empty()) {
     ret = bucket.init(store, op_state, null_yield);
-    if (ret < 0)
+    if (-ENOENT == ret)
+      return -ERR_NO_SUCH_BUCKET;
+    else if (ret < 0)
       return ret;
   }
 
