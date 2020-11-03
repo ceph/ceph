@@ -80,6 +80,12 @@ describe('RbdService', () => {
     expect(req.request.method).toBe('GET');
   });
 
+  it('should call cloneFormatVersion', () => {
+    service.cloneFormatVersion().subscribe();
+    const req = httpTesting.expectOne('api/block/image/clone_format_version');
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should call createSnapshot', () => {
     service.createSnapshot(new ImageSpec('poolName', null, 'rbdName'), 'snapshotName').subscribe();
     const req = httpTesting.expectOne('api/block/image/poolName%2FrbdName/snap');

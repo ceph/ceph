@@ -29,7 +29,8 @@ def available_clusters(mgr):
     completion = mgr.describe_service(service_type='nfs')
     mgr._orchestrator_wait([completion])
     orchestrator.raise_if_exception(completion)
-    return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result]
+    return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result
+            if cluster.spec.service_id]
 
 
 def export_cluster_checker(func):
@@ -555,7 +556,7 @@ class FSExport(object):
             pseudo_path = self.format_path(pseudo_path)
             if not isabs(pseudo_path) or pseudo_path == "/":
                 return -errno.EINVAL, "", f"pseudo path {pseudo_path} is invalid. "\
-                        "It should not be absolute path or just '/'."
+                        "It should be an absolute path and it cannot be just '/'."
 
             if cluster_id not in self.exports:
                 self.exports[cluster_id] = []

@@ -8,6 +8,7 @@
 #include "rgw_bucket.h"
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/errno.h"
@@ -937,7 +938,6 @@ int RGWReshardWait::wait(optional_yield y)
     return -ECANCELED;
   }
 
-#ifdef HAVE_BOOST_CONTEXT
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
@@ -955,7 +955,6 @@ int RGWReshardWait::wait(optional_yield y)
     waiters.erase(waiters.iterator_to(waiter));
     return -ec.value();
   }
-#endif
 
   cond.wait_for(lock, duration);
 

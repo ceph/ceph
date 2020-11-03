@@ -9,6 +9,7 @@ from textwrap import dedent
 from ceph_volume import process, decorators, terminal, conf
 from ceph_volume.util import system, disk
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.systemd import systemctl
 
 
@@ -169,13 +170,22 @@ class Activate(object):
 
         # XXX there is no support for LVM here
         data_device = self.get_device(data_uuid)
+
+        if not data_device:
+            raise RuntimeError("osd fsid {} doesn't exist, this file will "
+                "be skipped, consider cleaning legacy "
+                "json file {}".format(osd_metadata['fsid'], args.json_config))
+
         journal_device = self.get_device(osd_metadata.get('journal', {}).get('uuid'))
         block_device = self.get_device(osd_metadata.get('block', {}).get('uuid'))
         block_db_device = self.get_device(osd_metadata.get('block.db', {}).get('uuid'))
         block_wal_device = self.get_device(osd_metadata.get('block.wal', {}).get('uuid'))
 
         if not system.device_is_mounted(data_device, destination=osd_dir):
-            process.run(['mount', '-v', data_device, osd_dir])
+            if osd_metadata.get('type') == 'filestore':
+                prepare_utils.mount_osd(data_device, osd_id)
+            else:
+                process.run(['mount', '-v', data_device, osd_dir])
 
         device_map = {
             'journal': journal_device,
@@ -277,7 +287,10 @@ class Activate(object):
             for json_config in json_configs:
                 mlogger.info('activating OSD specified in {}'.format(json_config))
                 args.json_config = json_config
-                self.activate(args)
+                try:
+                    self.activate(args)
+                except RuntimeError as e:
+                    terminal.warning(e.message)
         else:
             if args.file:
                 json_config = args.file

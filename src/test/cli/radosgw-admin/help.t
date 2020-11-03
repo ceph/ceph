@@ -29,6 +29,7 @@
     bucket chown               link bucket to specified user and update its object ACLs
     bucket reshard             reshard bucket
     bucket rewrite             rewrite all objects in the specified bucket
+    bucket sync checkpoint     poll a bucket's sync status until it catches up to its remote
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
     bucket radoslist           list rados objects backing bucket's objects
@@ -129,8 +130,7 @@
     metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog list                 list metadata log
-    mdlog trim                 trim metadata log (use start-date, end-date or
-                               start-marker, end-marker)
+    mdlog trim                 trim metadata log (use marker)
     mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
@@ -173,8 +173,12 @@
     subscription rm            remove a pubsub subscription
     subscription pull          show events in a pubsub subscription
     subscription ack           ack (remove) an events in a pubsub subscription
+    script put                 upload a lua script to a context
+    script get                 get the lua script of a context
+    script rm                  remove the lua scripts of a context
   options:
      --tenant=<tenant>         tenant name
+     --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)
      --uid=<id>                user id
      --new-uid=<id>            new user id
      --subuser=<name>          subuser name
@@ -327,6 +331,9 @@
      --topic                   bucket notifications/pubsub topic name
      --subscription            pubsub subscription name
      --event-id                event id in a pubsub subscription
+  
+  Script options:
+     --context                 context in which the script runs. one of: preRequest, postRequest
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name

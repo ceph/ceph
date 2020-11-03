@@ -15,6 +15,7 @@ method.
 # Copyright 2015 Hector Martin <marcan@marcan.st>
 
 import cython
+import json
 import sys
 
 from cpython cimport PyObject, ref, exc
@@ -369,6 +370,10 @@ cdef extern from "rbd/librbd.h" nogil:
                               rados_ioctx_t dest_io_ctx,
                               const char *dest_image_name,
                               rbd_image_options_t opts)
+    int rbd_migration_prepare_import(const char *source_spec,
+                                    rados_ioctx_t dest_io_ctx,
+                                    const char *dest_image_name,
+                                    rbd_image_options_t opts)
     int rbd_migration_execute_with_progress(rados_ioctx_t io_ctx,
                                             const char *image_name,
                                             librbd_progress_fn_t cb,
@@ -471,9 +476,20 @@ cdef extern from "rbd/librbd.h" nogil:
                            rbd_image_t *image, const char *snap_name)
     int rbd_open_by_id_read_only(rados_ioctx_t io, const char *image_id,
                                  rbd_image_t *image, const char *snap_name)
+    int rbd_aio_open(rados_ioctx_t io, const char *name, rbd_image_t *image,
+                     const char *snap_name, rbd_completion_t c)
+    int rbd_aio_open_by_id(rados_ioctx_t io, const char *id, rbd_image_t *image,
+                           const char *snap_name, rbd_completion_t c)
+    int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
+                               rbd_image_t *image, const char *snap_name,
+                               rbd_completion_t c)
+    int rbd_aio_open_by_id_read_only(rados_ioctx_t io, const char *id,
+                                     rbd_image_t *image, const char *snap_name,
+                                     rbd_completion_t c)
     int rbd_features_to_string(uint64_t features, char *str_features, size_t *size)
     int rbd_features_from_string(const char *str_features, uint64_t *features)
     int rbd_close(rbd_image_t image)
+    int rbd_aio_close(rbd_image_t image, rbd_completion_t c)
     int rbd_resize2(rbd_image_t image, uint64_t size, bint allow_shrink,
                     librbd_progress_fn_t cb, void *cbdata)
     int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize)
@@ -497,6 +513,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_parent(rbd_image_t image,
                        rbd_linked_image_spec_t *parent_image,
                        rbd_snap_spec_t *parent_snap)
+    int rbd_get_migration_source_spec(rbd_image_t image,
+                                      char* source_spec, size_t* max_len)
     int rbd_get_flags(rbd_image_t image, uint64_t *flags)
     int rbd_get_group(rbd_image_t image, rbd_group_info_t *group_info,
                       size_t group_info_size)
@@ -610,13 +628,22 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_resync(rbd_image_t image)
     int rbd_mirror_image_create_snapshot2(rbd_image_t image, uint32_t flags,
                                           uint64_t *snap_id)
+    int rbd_aio_mirror_image_create_snapshot(rbd_image_t image, uint32_t flags,
+                                             uint64_t *snap_id,
+                                             rbd_completion_t c)
     int rbd_mirror_image_get_info(rbd_image_t image,
                                   rbd_mirror_image_info_t *mirror_image_info,
                                   size_t info_size)
     void rbd_mirror_image_get_info_cleanup(
         rbd_mirror_image_info_t *mirror_image_info)
+    int rbd_aio_mirror_image_get_info(
+        rbd_image_t image, rbd_mirror_image_info_t *mirror_image_info,
+        size_t info_size, rbd_completion_t c)
     int rbd_mirror_image_get_mode(rbd_image_t image,
                                   rbd_mirror_image_mode_t *mode)
+    int rbd_aio_mirror_image_get_mode(rbd_image_t image,
+                                      rbd_mirror_image_mode_t *mode,
+                                      rbd_completion_t c)
     int rbd_mirror_image_get_global_status(
         rbd_image_t image,
         rbd_mirror_image_global_status_t *mirror_image_global_status,
@@ -1050,7 +1077,7 @@ def decode_cstr(val, encoding="utf-8"):
     Decode a byte string into a Python string.
 
     :param bytes val: byte string
-    :rtype: unicode or None
+    :rtype: str or None
     """
     if val is None:
         return None
@@ -1664,6 +1691,67 @@ class RBD(object):
             rbd_image_options_destroy(opts)
         if ret < 0:
             raise make_ex(ret, 'error migrating image %s' % (image_name))
+
+    def migration_prepare_import(self, source_spec, dest_ioctx, dest_image_name,
+                          features=None, order=None, stripe_unit=None,
+                          stripe_count=None, data_pool=None):
+        """
+        Prepare an RBD image migration.
+
+        :param source_spec: JSON-encoded source-spec
+        :type source_spec: str
+        :param dest_ioctx: determines which pool to migration into
+        :type dest_ioctx: :class:`rados.Ioctx`
+        :param dest_image_name: the name of the destination image (may be the same image)
+        :type dest_image_name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
+        """
+        source_spec = cstr(source_spec, 'source_spec')
+        dest_image_name = cstr(dest_image_name, 'dest_image_name')
+        cdef:
+            char *_source_spec = source_spec
+            rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
+            char *_dest_image_name = dest_image_name
+            rbd_image_options_t opts
+
+        rbd_image_options_create(&opts)
+        try:
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
+            with nogil:
+                ret = rbd_migration_prepare_import(_source_spec, _dest_ioctx,
+                                                   _dest_image_name, opts)
+        finally:
+            rbd_image_options_destroy(opts)
+        if ret < 0:
+            raise make_ex(ret, 'error migrating image %s' % (source_spec))
 
     def migration_execute(self, ioctx, image_name, on_progress=None):
         """
@@ -2686,6 +2774,45 @@ class RBD(object):
             raise make_ex(ret, 'error getting features bitmask from str')
         return features
 
+    def aio_open_image(self, oncomplete, ioctx, name=None, snapshot=None,
+                       read_only=False, image_id=None):
+        """
+        Asynchronously open the image at the given snapshot.
+        Specify either name or id, otherwise :class:`InvalidArgument` is raised.
+
+        oncomplete will be called with the created Image object as
+        well as the completion:
+
+        oncomplete(completion, image)
+
+        If a snapshot is specified, the image will be read-only, unless
+        :func:`Image.set_snap` is called later.
+
+        If read-only mode is used, metadata for the :class:`Image`
+        object (such as which snapshots exist) may become obsolete. See
+        the C api for more details.
+
+        To clean up from opening the image, :func:`Image.close` or
+        :func:`Image.aio_close` should be called.
+
+        :param oncomplete: what to do when open is complete
+        :type oncomplete: completion
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: the name of the image
+        :type name: str
+        :param snapshot: which snapshot to read from
+        :type snaphshot: str
+        :param read_only: whether to open the image in read-only mode
+        :type read_only: bool
+        :param image_id: the id of the image
+        :type image_id: str
+        :returns: :class:`Completion` - the completion object
+        """
+
+        image = Image(ioctx, name, snapshot, read_only, image_id, oncomplete)
+        comp, image._open_completion = image._open_completion, None
+        return comp
 
 cdef class MirrorPeerIterator(object):
     """
@@ -3328,9 +3455,10 @@ cdef class Image(object):
     cdef object name
     cdef object ioctx
     cdef rados_ioctx_t _ioctx
+    cdef Completion _open_completion
 
     def __init__(self, ioctx, name=None, snapshot=None,
-                 read_only=False, image_id=None):
+                 read_only=False, image_id=None, _oncomplete=None):
         """
         Open the image at the given snapshot.
         Specify either name or id, otherwise :class:`InvalidArgument` is raised.
@@ -3376,6 +3504,51 @@ cdef class Image(object):
             char *_name = opt_str(name)
             char *_image_id = opt_str(image_id)
             char *_snapshot = opt_str(snapshot)
+            cdef Completion completion
+
+        if _oncomplete:
+            def oncomplete(completion_v):
+                cdef Completion _completion_v = completion_v
+                return_value = _completion_v.get_return_value()
+                if return_value == 0:
+                    self.closed = False
+                    if name is None:
+                        self.name = self.get_name()
+                return _oncomplete(_completion_v, self)
+
+            completion = self.__get_completion(oncomplete)
+            try:
+                completion.__persist()
+                if read_only:
+                    with nogil:
+                        if name is not None:
+                            ret = rbd_aio_open_read_only(
+                                _ioctx, _name, &self.image, _snapshot,
+                                completion.rbd_comp)
+                        else:
+                            ret = rbd_aio_open_by_id_read_only(
+                                _ioctx, _image_id, &self.image, _snapshot,
+                                completion.rbd_comp)
+                else:
+                    with nogil:
+                        if name is not None:
+                            ret = rbd_aio_open(
+                                _ioctx, _name, &self.image, _snapshot,
+                                completion.rbd_comp)
+                        else:
+                            ret = rbd_aio_open_by_id(
+                                _ioctx, _image_id, &self.image, _snapshot,
+                                completion.rbd_comp)
+                if ret != 0:
+                    raise make_ex(ret, 'error opening image %s at snapshot %s' %
+                                  (self.name, snapshot))
+            except:
+                completion.__unpersist()
+                raise
+
+            self._open_completion = completion
+            return
+
         if read_only:
             with nogil:
                 if name is not None:
@@ -3451,6 +3624,31 @@ cdef class Image(object):
             if ret < 0:
                 raise make_ex(ret, 'error while closing image %s' % (
                               self.name,))
+
+    @requires_not_closed
+    def aio_close(self, oncomplete):
+        """
+        Asynchronously close the image.
+
+        After this is called, this object should not be used.
+
+        :param oncomplete: what to do when close is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        """
+        cdef Completion completion = self.__get_completion(oncomplete)
+        self.closed = True
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_close(self.image, completion.rbd_comp)
+            if ret < 0:
+                raise make_ex(ret, 'error while closing image %s' %
+                              self.name)
+        except:
+            completion.__unpersist()
+            raise
+        return completion
 
     def __dealloc__(self):
         self.close()
@@ -3671,6 +3869,30 @@ cdef class Image(object):
         rbd_linked_image_spec_cleanup(&parent_spec)
         rbd_snap_spec_cleanup(&snap_spec)
         return result
+
+    @requires_not_closed
+    def migration_source_spec(self):
+        """
+        Get migration source spec (if any)
+
+        :returns: dict
+        :raises: :class:`ImageNotFound` if the image is not migration destination
+        """
+        cdef:
+            size_t size = 512
+            char *spec = NULL
+        try:
+            while True:
+                spec = <char *>realloc_chk(spec, size)
+                with nogil:
+                    ret = rbd_get_migration_source_spec(self.image, spec, &size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error retrieving migration source')
+            return json.loads(decode_cstr(spec))
+        finally:
+            free(spec)
 
     @requires_not_closed
     def old_format(self):
@@ -4844,8 +5066,8 @@ written." % (self.name, ret, length))
         """
         Create mirror snapshot.
 
-        :param force: ignore mirror snapshot limit
-        :type force: bool
+        :param flags: create snapshot flags
+        :type flags: int
         :returns: int - the snapshot Id
         """
         cdef:
@@ -4858,6 +5080,54 @@ written." % (self.name, ret, length))
             raise make_ex(ret, 'error creating mirror snapshot for image %s' %
                           self.name)
         return snap_id
+
+    @requires_not_closed
+    def aio_mirror_image_create_snapshot(self, flags, oncomplete):
+        """
+        Asynchronously create mirror snapshot.
+
+        Raises :class:`InvalidArgument` if the image is not in mirror
+        snapshot mode.
+
+        oncomplete will be called with the created snap ID as
+        well as the completion:
+
+        oncomplete(completion, snap_id)
+
+        :param flags: create snapshot flags
+        :type flags: int
+        :param oncomplete: what to do when the read is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        :raises: :class:`InvalidArgument`
+        """
+        cdef:
+            uint32_t _flags = flags
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            snap_id = <object>(<uint64_t *>_completion_v.buf)[0] \
+                if return_value >= 0 else None
+            return oncomplete(_completion_v, snap_id)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(NULL, sizeof(uint64_t))
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_image_create_snapshot(self.image, _flags,
+                                                           <uint64_t *>completion.buf,
+                                                           completion.rbd_comp)
+            if ret < 0:
+                raise make_ex(ret, 'error creating mirror snapshot for image %s' %
+                              self.name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
 
     @requires_not_closed
     def mirror_image_get_info(self):
@@ -4886,6 +5156,53 @@ written." % (self.name, ret, length))
         return info
 
     @requires_not_closed
+    def aio_mirror_image_get_info(self,  oncomplete):
+        """
+         Asynchronously get mirror info for the image.
+
+        oncomplete will be called with the returned info as
+        well as the completion:
+
+        oncomplete(completion, info)
+
+        :param oncomplete: what to do when get info is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        """
+        cdef:
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef:
+                Completion _completion_v = completion_v
+                rbd_mirror_image_info_t *c_info = <rbd_mirror_image_info_t *>_completion_v.buf
+            info = {
+                'global_id' : decode_cstr(c_info[0].global_id),
+                'state'     : int(c_info[0].state),
+                'primary'   : c_info[0].primary,
+            }
+            rbd_mirror_image_get_info_cleanup(c_info)
+            return oncomplete(_completion_v, info)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(
+            NULL, sizeof(rbd_mirror_image_info_t))
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_image_get_info(
+                    self.image, <rbd_mirror_image_info_t *>completion.buf,
+                    sizeof(rbd_mirror_image_info_t), completion.rbd_comp)
+            if ret != 0:
+                raise make_ex(
+                    ret, 'error getting mirror info for image %s' % self.name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
+
+    @requires_not_closed
     def mirror_image_get_mode(self):
         """
         Get mirror mode for the image.
@@ -4898,6 +5215,48 @@ written." % (self.name, ret, length))
         if ret != 0:
             raise make_ex(ret, 'error getting mirror mode for image %s' % self.name)
         return int(c_mode)
+
+    @requires_not_closed
+    def aio_mirror_image_get_mode(self,  oncomplete):
+        """
+         Asynchronously get mirror mode for the image.
+
+        oncomplete will be called with the returned mode as
+        well as the completion:
+
+        oncomplete(completion, mode)
+
+        :param oncomplete: what to do when get info is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        """
+        cdef:
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            mode = int((<rbd_mirror_image_mode_t *>_completion_v.buf)[0]) \
+                if return_value >= 0 else None
+            return oncomplete(_completion_v, mode)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(
+            NULL, sizeof(rbd_mirror_image_mode_t))
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_image_get_mode(
+                    self.image, <rbd_mirror_image_mode_t *>completion.buf,
+                    completion.rbd_comp)
+            if ret != 0:
+                raise make_ex(
+                    ret, 'error getting mirror mode for image %s' % self.name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
 
     @requires_not_closed
     def mirror_image_get_status(self):

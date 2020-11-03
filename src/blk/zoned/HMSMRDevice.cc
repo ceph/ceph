@@ -37,7 +37,7 @@
 #include "kernel/io_uring.h"
 
 extern "C" {
-#include <libzbc/zbc.h>
+#include <libzbd/zbd.h>
 }
 
 #define dout_context cct
@@ -78,7 +78,7 @@ HMSMRDevice::HMSMRDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_
 
 bool HMSMRDevice::support(const std::string& path)
 {
-  return zbc_device_is_zoned(path.c_str(), false, nullptr) == 1;
+  return zbd_device_is_zoned(path.c_str()) == 1;
 }
 
 int HMSMRDevice::_lock()
@@ -95,23 +95,23 @@ int HMSMRDevice::_lock()
 bool HMSMRDevice::set_smr_params(const std::string& path) {
   dout(10) << __func__ << " opening " << path << dendl;
 
-  zbc_device *dev;
-  if (zbc_open(path.c_str(), O_RDWR | O_DIRECT, &dev) != 0) {
+  int dev = zbd_open(path.c_str(), O_RDWR | O_DIRECT | O_LARGEFILE, nullptr);
+  if (dev < 0) {
     return false;
   }
-  auto close_dev = make_scope_guard([dev] { zbc_close(dev); });
+  auto close_dev = make_scope_guard([dev] { zbd_close(dev); });
 
   unsigned int nr_zones = 0;
-  if (zbc_report_nr_zones(dev, 0, ZBC_RO_NOT_WP, &nr_zones) != 0) {
+  if (zbd_report_nr_zones(dev, 0, 0, ZBD_RO_NOT_WP, &nr_zones) != 0) {
     return false;
   }
 
-  std::vector<zbc_zone> zones(nr_zones);
-  if (zbc_report_zones(dev, 0, ZBC_RO_NOT_WP, zones.data(), &nr_zones) != 0) {
+  std::vector<zbd_zone> zones(nr_zones);
+  if (zbd_report_zones(dev, 0, 0, ZBD_RO_NOT_WP, zones.data(), &nr_zones) != 0) {
     return false;
   }
 
-  zone_size = 512 * zbc_zone_length(&zones[0]); // on HM-SMR zones are equisized
+  zone_size = zbd_zone_len(&zones[0]);
   conventional_region_size = nr_zones * zone_size;
 
   dout(10) << __func__ << " setting zone size to " << zone_size

@@ -15,7 +15,6 @@
 #include "crimson/common/gated.h"
 #include "crimson/net/chained_dispatchers.h"
 #include "crimson/admin/admin_socket.h"
-#include "crimson/admin/osd_admin.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
@@ -106,7 +105,7 @@ class OSD final : public crimson::net::Dispatcher,
   // pg statistics including osd ones
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
-  void update_stats() final;
+  void update_stats();
   MessageRef get_stats() const final;
 
   // AuthHandler methods
@@ -116,7 +115,7 @@ class OSD final : public crimson::net::Dispatcher,
   crimson::osd::ShardServices shard_services;
 
   std::unique_ptr<Heartbeat> heartbeat;
-  seastar::timer<seastar::lowres_clock> heartbeat_timer;
+  seastar::timer<seastar::lowres_clock> tick_timer;
 
   // admin-socket
   seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;
@@ -232,6 +231,7 @@ public:
     std::unique_ptr<PGCreateInfo> info);
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
+  Ref<PG> get_pg(spg_t pgid);
 
   bool should_restart() const;
   seastar::future<> restart();

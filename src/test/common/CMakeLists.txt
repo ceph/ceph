@@ -27,6 +27,12 @@ add_executable(unittest_lockdep
 add_ceph_unittest(unittest_lockdep)
 target_link_libraries(unittest_lockdep ceph-common)
 
+# unittest_counter
+add_executable(unittest_counter
+  test_counter.cc)
+add_ceph_unittest(unittest_counter)
+target_link_libraries(unittest_counter ceph-common)
+
 # FreeBSD only has shims to support NUMA, no functional code.
 if(LINUX)
 # unittest_numa
@@ -337,6 +343,10 @@ add_ceph_unittest(unittest_cdc)
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
 
+
 add_executable(unittest_blocked_completion test_blocked_completion.cc)
 add_ceph_unittest(unittest_blocked_completion)
 target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
+
+add_executable(unittest_allocate_unique test_allocate_unique.cc)
+add_ceph_unittest(unittest_allocate_unique)

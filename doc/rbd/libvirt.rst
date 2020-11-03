@@ -175,7 +175,7 @@ Configuring the VM
 When configuring the VM for use with Ceph, it is important  to use ``virsh``
 where appropriate. Additionally, ``virsh`` commands often require root
 privileges  (i.e., ``sudo``) and will not return appropriate results or notify
-you that that root privileges are required. For a reference of ``virsh``
+you that root privileges are required. For a reference of ``virsh``
 commands, refer to `Virsh Command Reference`_.
 
 

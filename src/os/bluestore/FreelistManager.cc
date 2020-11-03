@@ -3,7 +3,7 @@
 
 #include "FreelistManager.h"
 #include "BitmapFreelistManager.h"
-#ifdef HAVE_LIBZBC
+#ifdef HAVE_LIBZBD
 #include "ZonedFreelistManager.h"
 #endif
 
@@ -20,7 +20,7 @@ FreelistManager *FreelistManager::create(
   if (type == "bitmap")
     return new BitmapFreelistManager(cct, "B", "b");
 
-#ifdef HAVE_LIBZBC
+#ifdef HAVE_LIBZBD
   // With zoned drives there is only one FreelistManager implementation that we
   // can use, and we also know if a drive is zoned right after opening it
   // (BlueStore::_open_bdev).  Hence, we set freelist_type to "zoned" whenever
@@ -37,7 +37,7 @@ FreelistManager *FreelistManager::create(
 void FreelistManager::setup_merge_operators(KeyValueDB *db,
 					    const std::string& type)
 {
-#ifdef HAVE_LIBZBC
+#ifdef HAVE_LIBZBD
   if (type == "zoned")
     ZonedFreelistManager::setup_merge_operator(db, "z");
   else

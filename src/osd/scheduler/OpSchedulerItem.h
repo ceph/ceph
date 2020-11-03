@@ -401,4 +401,32 @@ public:
   }
 };
 
+class PGRecoveryMsg : public PGOpQueueable {
+  OpRequestRef op;
+
+public:
+  PGRecoveryMsg(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
+  op_type_t get_op_type() const final {
+    return op_type_t::bg_recovery;
+  }
+
+  std::ostream &print(std::ostream &rhs) const final {
+    return rhs << "PGRecoveryMsg(op=" << *(op->get_req()) << ")";
+  }
+
+  std::optional<OpRequestRef> maybe_get_op() const final {
+    return op;
+  }
+
+  op_scheduler_class get_scheduler_class() const final {
+    auto priority = op->get_req()->get_priority();
+    if (priority >= CEPH_MSG_PRIO_HIGH) {
+      return op_scheduler_class::immediate;
+    }
+    return op_scheduler_class::background_recovery;
+  }
+
+  void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
+};
+
 }

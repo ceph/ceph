@@ -61,6 +61,10 @@ struct cls_log_header {
     DECODE_FINISH(bl);
   }
 };
+inline bool operator ==(const cls_log_header& lhs, const cls_log_header& rhs) {
+  return (lhs.max_marker == rhs.max_marker &&
+	  lhs.max_time == rhs.max_time);
+}
 WRITE_CLASS_ENCODER(cls_log_header)
 
 

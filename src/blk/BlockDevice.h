@@ -140,7 +140,7 @@ private:
     unknown,
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
     aio,
-#if defined(HAVE_LIBZBC)
+#if defined(HAVE_LIBZBD)
     hm_smr,
 #endif
 #endif

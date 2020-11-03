@@ -42,6 +42,7 @@ struct BackTrace {
 
   void print(std::ostream& out) const;
   void dump(Formatter *f) const;
+  static std::string demangle(const char* name);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BackTrace& bt) {

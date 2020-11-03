@@ -790,7 +790,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   ceph_assert(dest != mds->get_nodeid());
    
   CDir* parent = dir->inode->get_projected_parent_dir();
-  if (!mds->is_stopping() && !dir->inode->is_exportable(dest) && dir->get_num_head_items() > 0) {
+  if (!mds->is_stopping() && !dir->is_exportable(dest) && dir->get_num_head_items() > 0) {
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": dir is export pinned" << dendl;
     return;
   } else if (!(mds->is_active() || mds->is_stopping())) {
@@ -3472,7 +3472,6 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
     dir->verify_fragstat();
 #endif
 
-  dir->inode->maybe_ephemeral_dist();
   dir->inode->maybe_export_pin();
 
   dout(7) << " done " << *dir << dendl;

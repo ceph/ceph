@@ -75,8 +75,8 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
-/* Defined if you have libzbc */
-#cmakedefine HAVE_LIBZBC
+/* Defined if you have libzbd */
+#cmakedefine HAVE_LIBZBD
 
 /* Defined if you have liburing */
 #cmakedefine HAVE_LIBURING
@@ -220,6 +220,9 @@
 /* Define to 1 if you have sched.h. */
 #cmakedefine HAVE_SCHED 1
 
+/* Define to 1 if you have sigdescr_np. */
+#cmakedefine HAVE_SIGDESCR_NP 1
+
 /* Support SSE (Streaming SIMD Extensions) instructions */
 #cmakedefine HAVE_SSE
 
@@ -238,11 +241,14 @@
 /* name_to_handle_at exists */
 #cmakedefine HAVE_NAME_TO_HANDLE_AT
 
-/* we have a recent yasm and are x86_64 */
-#cmakedefine HAVE_GOOD_YASM_ELF64 
+/* we have a recent nasm and are x86_64 */
+#cmakedefine HAVE_NASM_X64
 
-/* yasm can also build the isa-l */
-#cmakedefine HAVE_BETTER_YASM_ELF64
+/* nasm can also build the isa-l:avx2 */
+#cmakedefine HAVE_NASM_X64_AVX2
+
+/* nasm can also build the isa-l:avx512 */
+#cmakedefine HAVE_NASM_X64_AVX512
 
 /* Define if isa-l is compiled for arm64 */
 #cmakedefine HAVE_ARMV8_SIMD
@@ -324,9 +330,6 @@
 /* Defined if getentropy() is available */
 #cmakedefine HAVE_GETENTROPY
 
-/* Defined if boost::context is available */
-#cmakedefine HAVE_BOOST_CONTEXT
-
 /* Defined if libradosstriper is enabled: */
 #cmakedefine WITH_LIBRADOSSTRIPER
 
@@ -353,6 +356,9 @@
 
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
+
+/* Define if PWL-SSD is enabled */
+#cmakedefine WITH_RBD_SSD_CACHE
 
 /* Shared library extension, such as .so, .dll or .dylib */
 #cmakedefine CMAKE_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"

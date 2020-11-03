@@ -27,7 +27,7 @@ export class ErasureCodeProfileService {
           carefully. All of reed_sol_r6_op, liberation, blaum_roth, liber8tion are RAID6 equivalents
           in the sense that they can only be configured with m=2.`,
         packetSize: $localize`The encoding will be done on packets of bytes size at a time.
-          Chosing the right packet size is difficult.
+          Choosing the right packet size is difficult.
           The jerasure documentation contains extensive information on this topic.`
       },
       lrc: {
@@ -59,6 +59,21 @@ export class ErasureCodeProfileService {
         c: $localize`The number of parity chunks each of which includes each data chunk in its
           calculation range. The number is used as a durability estimator. For instance, if c=2,
           2 OSDs can be down without losing data.`
+      },
+      clay: {
+        description: $localize`CLAY (short for coupled-layer) codes are erasure codes designed to
+          bring about significant savings in terms of network bandwidth and disk IO when a failed
+          node/OSD/rack is being repaired.`,
+        d: $localize`Number of OSDs requested to send data during recovery of a single chunk.
+          d needs to be chosen such that k+1 <= d <= k+m-1. The larger the d, the better
+          the savings.`,
+        scalar_mds: $localize`scalar_mds specifies the plugin that is used as a building block
+          in the layered construction. It can be one of jerasure, isa, shec.`,
+        technique: $localize`technique specifies the technique that will be picked
+          within the 'scalar_mds' plugin specified. Supported techniques
+          are 'reed_sol_van', 'reed_sol_r6_op', 'cauchy_orig',
+          'cauchy_good', 'liber8tion' for jerasure, 'reed_sol_van',
+          'cauchy' for isa and 'single', 'multiple' for shec.`
       }
     },
 

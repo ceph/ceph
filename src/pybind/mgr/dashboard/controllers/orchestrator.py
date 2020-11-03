@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import os.path
 
+import os.path
 import time
 from functools import wraps
 
-from . import ApiController, Endpoint, ReadPermission, UpdatePermission, ControllerDoc, EndpointDoc
-from . import RESTController, Task
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
-from ..tools import TaskManager
+from ..tools import TaskManager, str_to_bool
+from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UpdatePermission
 
 STATUS_SCHEMA = {
     "available": (bool, "Orchestrator status"),
-    "description": (str, "Description")
+    "message": (str, "Error message")
 }
 
 
@@ -103,7 +103,7 @@ class Orchestrator(RESTController):
         Identify a device by switching on the device light for N seconds.
         :param hostname: The hostname of the device to process.
         :param device: The device identifier to process, e.g. ``/dev/dm-0`` or
-          ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+        ``ABC1234DEF567-1R1234_ABC8DE0Q``.
         :param duration: The duration in seconds how long the LED should flash.
         """
         orch = OrchClient.instance()
@@ -122,10 +122,13 @@ class Orchestrator(RESTController):
 class OrchestratorInventory(RESTController):
 
     @raise_if_no_orchestrator([OrchFeature.DEVICE_LIST])
-    def list(self, hostname=None):
+    def list(self, hostname=None, refresh=None):
         orch = OrchClient.instance()
         hosts = [hostname] if hostname else None
-        inventory_hosts = [host.to_json() for host in orch.inventory.list(hosts)]
+        do_refresh = False
+        if refresh is not None:
+            do_refresh = str_to_bool(refresh)
+        inventory_hosts = [host.to_json() for host in orch.inventory.list(hosts, do_refresh)]
         device_osd_map = get_device_osd_map()
         for inventory_host in inventory_hosts:
             host_osds = device_osd_map.get(inventory_host['name'])

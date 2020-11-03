@@ -34,7 +34,19 @@ export class ApiInterceptorService implements HttpInterceptor {
   ) {}
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    return next.handle(request).pipe(
+    const defaultVersion = '1.0';
+    const acceptHeader = request.headers.get('Accept');
+    let reqWithVersion: HttpRequest<any>;
+    if (acceptHeader && acceptHeader.startsWith('application/vnd.ceph.api.v')) {
+      reqWithVersion = request.clone();
+    } else {
+      reqWithVersion = request.clone({
+        setHeaders: {
+          Accept: `application/vnd.ceph.api.v${defaultVersion}+json`
+        }
+      });
+    }
+    return next.handle(reqWithVersion).pipe(
       catchError((resp: CdHttpErrorResponse) => {
         if (resp instanceof HttpErrorResponse) {
           let timeoutId: number;

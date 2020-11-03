@@ -346,13 +346,11 @@ def build_ceph_cluster(ctx, config):
             confp = config.get('conf')
             for section, keys in confp.items():
                 lines = '[{section}]\n'.format(section=section)
-                teuthology.append_lines_to_file(ceph_admin, conf_path, lines,
-                                                sudo=True)
+                ceph_admin.sudo_write_file(conf_path, lines, append=True)
                 for key, value in keys.items():
                     log.info("[%s] %s = %s" % (section, key, value))
                     lines = '{key} = {value}\n'.format(key=key, value=value)
-                    teuthology.append_lines_to_file(
-                        ceph_admin, conf_path, lines, sudo=True)
+                    ceph_admin.sudo_write_file(conf_path, lines, append=True)
 
         # install ceph
         dev_branch = ctx.config['branch']
@@ -420,19 +418,11 @@ def build_ceph_cluster(ctx, config):
             admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
             first_mon = teuthology.get_first_mon(ctx, config)
             (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
-            conf_data = teuthology.get_file(
-                remote=mon0_remote,
-                path=conf_path,
-                sudo=True,
-            )
-            admin_keyring = teuthology.get_file(
-                remote=mon0_remote,
-                path=admin_keyring_path,
-                sudo=True,
-            )
+            conf_data = mon0_remote.read_file(conf_path, sudo=True)
+            admin_keyring = mon0_remote.read_file(admin_keyring_path, sudo=True)
 
             clients = ctx.cluster.only(teuthology.is_type('client'))
-            for remot, roles_for_host in clients.remotes.items():
+            for remote, roles_for_host in clients.remotes.items():
                 for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
                     client_keyring = \
                         '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
@@ -454,28 +444,24 @@ def build_ceph_cluster(ctx, config):
                             run.Raw('"'),
                         ],
                     )
-                    key_data = teuthology.get_file(
-                        remote=mon0_remote,
+                    key_data = mon0_remote.read_file(
                         path=client_keyring,
                         sudo=True,
                     )
-                    teuthology.sudo_write_file(
-                        remote=remot,
+                    remote.sudo_write_file(
                         path=client_keyring,
                         data=key_data,
-                        perms='0644'
+                        mode='0644'
                     )
-                    teuthology.sudo_write_file(
-                        remote=remot,
+                    remote.sudo_write_file(
                         path=admin_keyring_path,
                         data=admin_keyring,
-                        perms='0644'
+                        mode='0644'
                     )
-                    teuthology.sudo_write_file(
-                        remote=remot,
+                    remote.sudo_write_file(
                         path=conf_path,
                         data=conf_data,
-                        perms='0644'
+                        mode='0644'
                     )
 
             if mds_nodes:
@@ -640,13 +626,11 @@ def cli_test(ctx, config):
         confp = config.get('conf')
         for section, keys in confp.items():
             lines = '[{section}]\n'.format(section=section)
-            teuthology.append_lines_to_file(admin, conf_path, lines,
-                                            sudo=True)
+            admin.sudo_write_file(conf_path, lines, append=True)
             for key, value in keys.items():
                 log.info("[%s] %s = %s" % (section, key, value))
                 lines = '{key} = {value}\n'.format(key=key, value=value)
-                teuthology.append_lines_to_file(admin, conf_path, lines,
-                                                sudo=True)
+                admin.sudo_write_file(conf_path, lines, append=True)
     new_mon_install = 'install {branch} --mon '.format(
         branch=test_branch) + nodename
     new_mgr_install = 'install {branch} --mgr '.format(

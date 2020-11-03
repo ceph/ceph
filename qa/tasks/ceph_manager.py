@@ -15,6 +15,7 @@ import traceback
 import os
 
 from io import BytesIO, StringIO
+from subprocess import DEVNULL
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from tasks.util.rados import cmd_erasure_code_profile
@@ -25,10 +26,6 @@ from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
 from tasks.thrasher import Thrasher
 
-try:
-    from subprocess import DEVNULL # py3k
-except ImportError:
-    DEVNULL = open(os.devnull, 'r+')  # type: ignore
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
 
@@ -1345,7 +1342,7 @@ class CephManager:
         testdir = teuthology.get_testdir(self.ctx)
         prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
                   f'{testdir}/archive/coverage', 'timeout', '120', 'ceph',
-                  '--cluster', self.cluster, '--log-early']
+                  '--cluster', self.cluster]
         kwargs['args'] = prefix + list(kwargs['args'])
         return self.controller.run(**kwargs)
 
@@ -1360,10 +1357,6 @@ class CephManager:
         """
         Start ceph on a cluster.  Return success or failure information.
         """
-        if self.cephadm:
-            return shell(self.ctx, self.cluster, self.controller, args=args,
-                         check_status=False).existatus
-
         kwargs['args'], kwargs['check_status'] = args, False
         return self.run_cluster_cmd(**kwargs).exitstatus
 
@@ -2860,7 +2853,6 @@ class CephManager:
         """
         out = self.raw_cluster_cmd('quorum_status')
         j = json.loads(out)
-        self.log('quorum_status is %s' % out)
         return j['quorum']
 
     def wait_for_mon_quorum_size(self, size, timeout=300):

@@ -26,6 +26,7 @@
 #include "rgw/rgw_auth.h"
 #include "rgw/rgw_iam_policy.h"
 #include "rgw/rgw_op.h"
+#include "rgw_sal_rados.h"
 
 
 using std::string;
@@ -910,10 +911,11 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
   rgw::sal::RGWRadosStore store;
-  rgw::sal::RGWRadosUser user(&store);
+  std::unique_ptr<rgw::sal::RGWUser> user = store.get_user(rgw_user());
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
-  req_state rgw_req_state(cct.get(), &rgw_env, &user, 0);
+  req_state rgw_req_state(cct.get(), &rgw_env, 0);
+  rgw_req_state.set_user(user);
   rgw_build_iam_environment(&store, &rgw_req_state);
   auto ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());

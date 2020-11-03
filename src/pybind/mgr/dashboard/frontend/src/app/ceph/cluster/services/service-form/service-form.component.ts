@@ -197,8 +197,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ngOnInit(): void {
     this.action = this.actionLabels.CREATE;
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
-      // Remove service type 'osd', this is deployed a different way.
-      this.serviceTypes = _.difference(resp, ['osd']).sort();
+      // Remove service types:
+      // osd       - This is deployed a different way.
+      // container - This should only be used in the CLI.
+      this.serviceTypes = _.difference(resp, ['container', 'osd']).sort();
     });
     this.hostService.list().subscribe((resp: object[]) => {
       const options: SelectOption[] = [];

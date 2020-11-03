@@ -3,9 +3,9 @@ from __future__ import absolute_import
 
 import json
 
-from . import ApiController, Endpoint, BaseController, ReadPermission, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..security import Scope
+from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc, ReadPermission
 
 MONITOR_SCHEMA = {
     "mon_status": ({

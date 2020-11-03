@@ -139,7 +139,8 @@ void MDSDaemon::asok_command(
 
   int r = -ENOSYS;
   bufferlist outbl;
-  stringstream ss;
+  CachedStackStringStream css;
+  auto& ss = *css;
   if (command == "status") {
     dump_status(f);
     r = 0;
@@ -595,8 +596,8 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 
   int r = 0;
   cmdmap_t cmdmap;
-  std::stringstream ss;
-  std::string outs;
+  CachedStackStringStream css;
+  auto& ss = *css;
   bufferlist outbl;
 
   // If someone is using a closed session for sending commands (e.g.
@@ -625,16 +626,14 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
   } else if (m->cmd.empty()) {
     r = -EINVAL;
     ss << "no command given";
-    outs = ss.str();
   } else if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     r = -EINVAL;
-    outs = ss.str();
   } else {
     cct->get_admin_socket()->queue_tell_command(m);
     return;
   }
 
-  auto reply = make_message<MCommandReply>(r, outs);
+  auto reply = make_message<MCommandReply>(r, ss.str());
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
   m->get_connection()->send_message2(reply);
@@ -747,12 +746,11 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(
-	whoami, mds_lock, clog,
-	timer, beacon, mdsmap, messenger, monc, &mgrc,
-	new LambdaContext([this](int r){respawn();}),
-	new LambdaContext([this](int r){suicide();}),
-	ioctx);
+      mds_rank = new MDSRankDispatcher(whoami, m->map_fs_name, mds_lock, clog,
+          timer, beacon, mdsmap, messenger, monc, &mgrc,
+          new LambdaContext([this](int r){respawn();}),
+          new LambdaContext([this](int r){suicide();}),
+	  ioctx);
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();

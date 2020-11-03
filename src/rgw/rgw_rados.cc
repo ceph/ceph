@@ -31,6 +31,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
+#include "rgw_datalog.h"
 #include "rgw_putobj_processor.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
@@ -82,7 +83,6 @@ using namespace librados;
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_bucket.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_datalog_rados.h"
 
 #include "compressor/Compressor.h"
 
@@ -328,7 +328,8 @@ public:
     http_manager.start();
   }
 
-  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
+  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map,
+		 bc::flat_map<int, bc::flat_set<string> >& shards) {
     rgw_http_param_pair pairs[] = { { "type", "data" },
                                     { "notify", NULL },
                                     { "source-zone", store->svc.zone->get_zone_params().get_id().c_str() },
@@ -338,7 +339,7 @@ public:
     for (auto iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
       RGWRESTConn *conn = iter->second;
       RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
-      stack->call(new RGWPostRESTResourceCR<map<int, set<string> >, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
+      stack->call(new RGWPostRESTResourceCR<bc::flat_map<int, bc::flat_set<string> >, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
 
       stacks.push_back(stack);
     }
@@ -455,21 +456,20 @@ public:
 
 int RGWDataNotifier::process()
 {
-  auto data_log = store->svc.datalog_rados->get_log();
+  auto data_log = store->svc.datalog_rados;
   if (!data_log) {
     return 0;
   }
 
-  map<int, set<string> > shards;
-
-  data_log->read_clear_modified(shards);
+  auto shards = data_log->read_clear_modified();
 
   if (shards.empty()) {
     return 0;
   }
 
-  for (map<int, set<string> >::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
-    ldout(cct, 20) << __func__ << "(): notifying datalog change, shard_id=" << iter->first << ": " << iter->second << dendl;
+  for (const auto& [shard_id, keys] : shards) {
+    ldout(cct, 20) << __func__ << "(): notifying datalog change, shard_id="
+		   << shard_id << ": " << keys << dendl;
   }
 
   notify_mgr.notify_all(store->svc.zone->get_zone_data_notify_to_map(), shards);
@@ -1785,13 +1785,13 @@ int RGWRados::Bucket::List::list_objects_ordered(
   // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.marker.ns);
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-			     params.end_marker.ns);
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
@@ -2070,13 +2070,13 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
   // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.marker.ns);
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-			     params.end_marker.ns);
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
@@ -3283,17 +3283,17 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw_obj obj;
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
-  boost::optional<RGWPutObj_ETagVerifier_Atomic> etag_verifier_atomic;
-  boost::optional<RGWPutObj_ETagVerifier_MPU> etag_verifier_mpu;
+  bool try_etag_verify;
+  rgw::putobj::etag_verifier_ptr etag_verifier;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl, manifest_bl;
+  std::optional<RGWCompressionInfo> compression_info;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
-  SourceObjType obj_type{OBJ_TYPE_UNINIT};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
@@ -3310,6 +3310,7 @@ public:
                        cct(cct),
                        filter(p),
                        compressor(compressor),
+                       try_etag_verify(cct->_conf->rgw_sync_obj_etag_verify),
                        plugin(plugin),
                        processor(p),
                        progress_cb(_progress_cb),
@@ -3326,9 +3327,28 @@ public:
 
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
-      src_attrs.erase(RGW_ATTR_COMPRESSION);
+      auto iter = src_attrs.find(RGW_ATTR_COMPRESSION);
+      if (iter != src_attrs.end()) {
+        const bufferlist bl = std::move(iter->second);
+        src_attrs.erase(iter); // don't preserve source compression info
+
+        if (try_etag_verify) {
+          // if we're trying to verify etags, we need to convert compressed
+          // ranges in the manifest back into logical multipart part offsets
+          RGWCompressionInfo info;
+          bool compressed = false;
+          int r = rgw_compression_info_from_attr(bl, compressed, info);
+          if (r < 0) {
+            ldout(cct, 4) << "failed to decode compression info, "
+                "disabling etag verification" << dendl;
+            try_etag_verify = false;
+          } else if (compressed) {
+            compression_info = std::move(info);
+          }
+        }
+      }
       /* We need the manifest to recompute the ETag for verification */
-      auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+      iter = src_attrs.find(RGW_ATTR_MANIFEST);
       if (iter != src_attrs.end()) {
         manifest_bl = std::move(iter->second);
         src_attrs.erase(iter);
@@ -3365,49 +3385,15 @@ public:
      * requested. We can enable simultaneous support once we have a mechanism
      * to know the sequence in which the filters must be applied.
      */
-    if (cct->_conf->rgw_sync_obj_etag_verify &&
-        src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
-
-      RGWObjManifest manifest;
-
-      auto miter = manifest_bl.cbegin();
-      try {
-        decode(manifest, miter);
-      } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
-        return -EIO;
-      }
-
-      RGWObjManifestRule rule;
-      bool found = manifest.get_rule(0, &rule);
-      if (!found) {
-        lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
-        return -EIO;
-      }
-
-      if (rule.part_size == 0) {
-        /* Atomic object */
-        obj_type = OBJ_TYPE_ATOMIC;
-        etag_verifier_atomic = boost::in_place(cct, filter);
-        filter = &*etag_verifier_atomic;
+    if (try_etag_verify && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+      ret = rgw::putobj::create_etag_verifier(cct, filter, manifest_bl,
+                                              compression_info,
+                                              etag_verifier);
+      if (ret < 0) {
+        ldout(cct, 4) << "failed to initial etag verifier, "
+            "disabling etag verification" << dendl;
       } else {
-        obj_type = OBJ_TYPE_MPU;
-        etag_verifier_mpu = boost::in_place(cct, filter);
-        uint64_t cur_part_ofs = UINT64_MAX;
-
-        /*
-         * We must store the offset of each part to calculate the ETAGs for each
-         * MPU part. These part ETags then become the input for the MPU object
-         * Etag.
-         */
-        for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
-          if (cur_part_ofs == mi.get_part_ofs())
-            continue;
-          cur_part_ofs = mi.get_part_ofs();
-          ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
-          etag_verifier_mpu->append_part_ofs(cur_part_ofs);
-        }
-        filter = &*etag_verifier_mpu;
+        filter = etag_verifier.get();
       }
     }
 
@@ -3478,20 +3464,13 @@ public:
     return data_len;
   }
 
-  string get_calculated_etag() {
-    if (obj_type == OBJ_TYPE_ATOMIC) {
-      etag_verifier_atomic->calculate_etag();
-      return etag_verifier_atomic->get_calculated_etag();
-    } else if (obj_type == OBJ_TYPE_MPU) {
-      etag_verifier_mpu->calculate_etag();
-      return etag_verifier_mpu->get_calculated_etag();
+  std::string get_verifier_etag() {
+    if (etag_verifier) {
+      etag_verifier->calculate_etag();
+      return etag_verifier->get_calculated_etag();
     } else {
       return "";
     }
-  }
-
-  SourceObjType get_obj_type() {
-    return obj_type;
   }
 };
 
@@ -3703,7 +3682,8 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
-  ret = conn->complete_request(in_stream_req, nullptr, &set_mtime, psize, nullptr, pheaders);
+  ret = conn->complete_request(in_stream_req, nullptr, &set_mtime, psize,
+                               nullptr, pheaders, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -3917,7 +3897,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
-                               &expected_size, nullptr, nullptr);
+                               &expected_size, nullptr, nullptr, null_yield);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -4029,17 +4009,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   /* Perform ETag verification is we have computed the object's MD5 sum at our end */
-  if (cb.get_obj_type() != OBJ_TYPE_UNINIT) {
+  if (const auto& verifier_etag = cb.get_verifier_etag();
+      !verifier_etag.empty()) {
     string trimmed_etag = etag;
 
     /* Remove the leading and trailing double quotes from etag */
     trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
       trimmed_etag.end());
 
-    if (cb.get_calculated_etag().compare(trimmed_etag)) {
+    if (verifier_etag != trimmed_etag) {
       ret = -EIO;
       ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
-        << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+        << trimmed_etag << " Computed etag:" << verifier_etag << dendl;
       goto set_err_state;
     }
   }
@@ -4126,7 +4107,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
     return ret;
   }
 
-  ret = rest_master_conn->complete_request(out_stream_req, etag, mtime);
+  ret = rest_master_conn->complete_request(out_stream_req, etag, mtime, null_yield);
   if (ret < 0)
     return ret;
 

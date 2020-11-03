@@ -741,17 +741,16 @@ void MonClient::_reopen_session(int rank)
   }
 }
 
-MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
+void MonClient::_add_conn(unsigned rank, uint64_t global_id)
 {
   auto peer = monmap.get_addrs(rank);
   auto conn = messenger->connect_to_mon(peer);
   MonConnection mc(cct, conn, global_id, &auth_registry);
-  auto inserted = pending_cons.insert(std::make_pair(peer, std::move(mc)));
+  pending_cons.insert(std::make_pair(peer, std::move(mc)));
   ldout(cct, 10) << "picked mon." << monmap.get_name(rank)
                  << " con " << conn
                  << " addr " << peer
                  << dendl;
-  return inserted.first->second;
 }
 
 void MonClient::_add_conns(uint64_t global_id)

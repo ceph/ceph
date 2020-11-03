@@ -145,7 +145,7 @@ const error_category& ceph_category() noexcept {
 // This is part of the glue for hooking new code to old. Since
 // Context* and other things give us integer codes from errno, wrap
 // them in an error_code.
-boost::system::error_code to_error_code(int ret) noexcept
+[[nodiscard]] boost::system::error_code to_error_code(int ret) noexcept
 {
   if (ret == 0)
     return {};
@@ -154,7 +154,7 @@ boost::system::error_code to_error_code(int ret) noexcept
 
 // This is more complicated. For the case of categories defined
 // elsewhere, we have to convert everything here.
-int from_error_code(boost::system::error_code e) noexcept
+[[nodiscard]] int from_error_code(boost::system::error_code e) noexcept
 {
   if (!e)
     return 0;

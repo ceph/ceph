@@ -50,9 +50,8 @@ struct btree_lba_manager_test :
       next++);
   }
 
-  void put_segment(segment_id_t segment) final {
-    return;
-  }
+  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+  void update_journal_tail_committed(journal_seq_t committed) final {}
 
   auto submit_transaction(TransactionRef t)
   {
@@ -62,8 +61,9 @@ struct btree_lba_manager_test :
     }
 
     return journal.submit_record(std::move(*record)).safe_then(
-      [this, t=std::move(t)](paddr_t addr) mutable {
-	cache.complete_commit(*t, addr);
+      [this, t=std::move(t)](auto p) mutable {
+	auto [addr, seq] = p;
+	cache.complete_commit(*t, addr, seq);
 	lba_manager->complete_transaction(*t);
       },
       crimson::ct_error::all_same_way([](auto e) {
@@ -75,7 +75,7 @@ struct btree_lba_manager_test :
     return segment_manager->init(
     ).safe_then([this] {
       return journal.open_for_write();
-    }).safe_then([this] {
+    }).safe_then([this](auto addr) {
       return seastar::do_with(
 	make_transaction(),
 	[this](auto &transaction) {
@@ -127,6 +127,14 @@ struct btree_lba_manager_test :
     return t;
   }
 
+  auto create_weak_transaction() {
+    auto t = test_transaction_t{
+      make_weak_transaction(),
+      test_lba_mappings
+    };
+    return t;
+  }
+
   void submit_test_transaction(test_transaction_t t) {
     submit_transaction(std::move(t.t)).get0();
     test_lba_mappings.swap(t.mappings);
@@ -140,7 +148,7 @@ struct btree_lba_manager_test :
 	bottom->first + bottom->second.len <= addr)
       ++bottom;
 
-    auto top = t.mappings.upper_bound(addr + len);
+    auto top = t.mappings.lower_bound(addr + len);
     return std::make_pair(
       bottom,
       top
@@ -221,6 +229,12 @@ struct btree_lba_manager_test :
     }
   }
 
+  auto incref_mapping(
+    test_transaction_t &t,
+    laddr_t addr) {
+    return incref_mapping(t, t.mappings.find(addr));
+  }
+
   void incref_mapping(
     test_transaction_t &t,
     test_lba_mapping_t::iterator target) {
@@ -236,6 +250,15 @@ struct btree_lba_manager_test :
     std::vector<laddr_t> addresses;
     addresses.reserve(test_lba_mappings.size());
     for (auto &i: test_lba_mappings) {
+      addresses.push_back(i.first);
+    }
+    return addresses;
+  }
+
+  std::vector<laddr_t> get_mapped_addresses(test_transaction_t &t) {
+    std::vector<laddr_t> addresses;
+    addresses.reserve(t.mappings.size());
+    for (auto &i: t.mappings) {
       addresses.push_back(i.first);
     }
     return addresses;
@@ -257,6 +280,17 @@ struct btree_lba_manager_test :
       EXPECT_EQ(i.first, ret->get_laddr());
       EXPECT_EQ(i.second.len, ret->get_length());
     }
+    lba_manager->scan_mappings(
+      *t.t,
+      0,
+      L_ADDR_MAX,
+      [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
+	EXPECT_NE(iter, t.mappings.end());
+	EXPECT_EQ(l, iter->first);
+	EXPECT_EQ(p, iter->second.addr);
+	EXPECT_EQ(len, iter->second.len);
+	++iter;
+      }).unsafe_get();
   }
 };
 
@@ -309,6 +343,8 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	  check_mappings(t);
 	  check_mappings();
 	}
+	incref_mapping(t, ret->get_laddr());
+	decref_mapping(t, ret->get_laddr());
       }
       logger().debug("submitting transaction");
       submit_test_transaction(std::move(t));
@@ -316,22 +352,80 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	check_mappings();
       }
     }
-    auto addresses = get_mapped_addresses();
-    auto t = create_transaction();
-    for (unsigned i = 0; i != addresses.size(); ++i) {
-      if (i % 2 == 0) {
+    {
+      auto addresses = get_mapped_addresses();
+      auto t = create_transaction();
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	if (i % 2 == 0) {
+	  incref_mapping(t, addresses[i]);
+	  decref_mapping(t, addresses[i]);
+	  decref_mapping(t, addresses[i]);
+	}
+	logger().debug("submitting transaction");
+	if (i % 7 == 0) {
+	  submit_test_transaction(std::move(t));
+	  t = create_transaction();
+	}
+	if (i % 13 == 0) {
+	  check_mappings();
+	  check_mappings(t);
+	}
+      }
+      submit_test_transaction(std::move(t));
+    }
+    {
+      auto addresses = get_mapped_addresses();
+      auto t = create_transaction();
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	incref_mapping(t, addresses[i]);
+	decref_mapping(t, addresses[i]);
 	decref_mapping(t, addresses[i]);
       }
-      logger().debug("submitting transaction");
-      if (i % 7 == 0) {
-	submit_test_transaction(std::move(t));
-	t = create_transaction();
-      }
-      if (i % 13 == 0) {
-	check_mappings();
-	check_mappings(t);
-      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+      check_mappings();
     }
-    submit_test_transaction(std::move(t));
+  });
+}
+
+TEST_F(btree_lba_manager_test, single_transaction_split_merge)
+{
+  run_async([this] {
+    {
+      auto t = create_transaction();
+      for (unsigned i = 0; i < 600; ++i) {
+	alloc_mapping(t, 0, block_size, get_paddr());
+      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+    }
+    check_mappings();
+
+    {
+      auto addresses = get_mapped_addresses();
+      auto t = create_transaction();
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	if (i % 4 != 0) {
+	  decref_mapping(t, addresses[i]);
+	}
+      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+    }
+    check_mappings();
+
+    {
+      auto t = create_transaction();
+      for (unsigned i = 0; i < 600; ++i) {
+	alloc_mapping(t, 0, block_size, get_paddr());
+      }
+      auto addresses = get_mapped_addresses(t);
+      for (unsigned i = 0; i != addresses.size(); ++i) {
+	decref_mapping(t, addresses[i]);
+      }
+      check_mappings(t);
+      submit_test_transaction(std::move(t));
+    }
+    check_mappings();
   });
 }

@@ -129,8 +129,8 @@ namespace rgw {
 	if (cur_gen != gen)
 	  goto restart; /* invalidated */
       }
+      cv.wait_for(uniq, std::chrono::seconds(delay_s));
       uniq.unlock();
-      std::this_thread::sleep_for(std::chrono::seconds(delay_s));
     }
   }
 
@@ -227,7 +227,7 @@ namespace rgw {
     rgw_env.set("HTTP_HOST", "");
 
     /* XXX and -then- bloat up req_state with string copies from it */
-    struct req_state rstate(req->cct, &rgw_env, req->get_user(), req->id);
+    struct req_state rstate(req->cct, &rgw_env, req->id);
     struct req_state *s = &rstate;
 
     // XXX fix this

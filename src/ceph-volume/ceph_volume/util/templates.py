@@ -8,11 +8,15 @@ osd_component_titles = """
 
 
 osd_reused_id = """
-  OSD id {id_: <55}"""
+  OSD id          {id_: <55}"""
 
 
 osd_component = """
-  {_type: <15} {path: <55} {size: <15} {percent}%"""
+  {_type: <15} {path: <55} {size: <15} {percent:.2%}"""
+
+
+osd_encryption = """
+  encryption:     {enc: <15}"""
 
 
 total_osds = """

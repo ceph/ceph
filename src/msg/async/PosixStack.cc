@@ -64,9 +64,13 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   }
 
   ssize_t read(char *buf, size_t len) override {
+    #ifdef _WIN32
+    ssize_t r = ::recv(_fd, buf, len, 0);
+    #else
     ssize_t r = ::read(_fd, buf, len);
+    #endif
     if (r < 0)
-      r = -errno;
+      r = -ceph_sock_errno();
     return r;
   }
 
@@ -81,12 +85,13 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
       ssize_t r;
       r = ::sendmsg(fd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
       if (r < 0) {
-        if (errno == EINTR) {
+        int err = ceph_sock_errno();
+        if (err == EINTR) {
           continue;
-        } else if (errno == EAGAIN) {
+        } else if (err == EAGAIN) {
           break;
         }
-        return -errno;
+        return -err;
       }
 
       sent += r;
@@ -233,19 +238,19 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
   socklen_t slen = sizeof(ss);
   int sd = accept_cloexec(_fd, (sockaddr*)&ss, &slen);
   if (sd < 0) {
-    return -errno;
+    return -ceph_sock_errno();
   }
 
   int r = handler.set_nonblock(sd);
   if (r < 0) {
     ::close(sd);
-    return -errno;
+    return -ceph_sock_errno();
   }
 
   r = handler.set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(sd);
-    return -errno;
+    return -ceph_sock_errno();
   }
 
   ceph_assert(NULL != out); //out should not be NULL in accept connection
@@ -270,24 +275,24 @@ int PosixWorker::listen(entity_addr_t &sa,
 {
   int listen_sd = net.create_socket(sa.get_family(), true);
   if (listen_sd < 0) {
-    return -errno;
+    return -ceph_sock_errno();
   }
 
   int r = net.set_nonblock(listen_sd);
   if (r < 0) {
     ::close(listen_sd);
-    return -errno;
+    return -ceph_sock_errno();
   }
 
   r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(listen_sd);
-    return -errno;
+    return -ceph_sock_errno();
   }
 
   r = ::bind(listen_sd, sa.get_sockaddr(), sa.get_sockaddr_len());
   if (r < 0) {
-    r = -errno;
+    r = -ceph_sock_errno();
     ldout(cct, 10) << __func__ << " unable to bind to " << sa.get_sockaddr()
                    << ": " << cpp_strerror(r) << dendl;
     ::close(listen_sd);
@@ -296,7 +301,7 @@ int PosixWorker::listen(entity_addr_t &sa,
 
   r = ::listen(listen_sd, cct->_conf->ms_tcp_listen_backlog);
   if (r < 0) {
-    r = -errno;
+    r = -ceph_sock_errno();
     lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << dendl;
     ::close(listen_sd);
     return r;
@@ -318,7 +323,7 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   }
 
   if (sd < 0) {
-    return -errno;
+    return -ceph_sock_errno();
   }
 
   net.set_priority(sd, opts.priority, addr.get_family());

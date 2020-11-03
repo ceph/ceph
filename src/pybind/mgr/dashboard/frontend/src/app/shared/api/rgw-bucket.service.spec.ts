@@ -26,33 +26,10 @@ describe('RgwBucketService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call list, with enumerate returning empty', () => {
-    let result;
-    service.list().subscribe((resp) => {
-      result = resp;
-    });
-    const req = httpTesting.expectOne('api/rgw/bucket');
-    req.flush([]);
+  it('should call list', () => {
+    service.list().subscribe();
+    const req = httpTesting.expectOne('api/rgw/bucket?stats=true');
     expect(req.request.method).toBe('GET');
-    expect(result).toEqual([]);
-  });
-
-  it('should call list, with enumerate returning 2 elements', () => {
-    let result;
-    service.list().subscribe((resp) => {
-      result = resp;
-    });
-    let req = httpTesting.expectOne('api/rgw/bucket');
-    req.flush(['foo', 'bar']);
-
-    req = httpTesting.expectOne('api/rgw/bucket/foo');
-    req.flush({ name: 'foo' });
-
-    req = httpTesting.expectOne('api/rgw/bucket/bar');
-    req.flush({ name: 'bar' });
-
-    expect(req.request.method).toBe('GET');
-    expect(result).toEqual([{ name: 'foo' }, { name: 'bar' }]);
   });
 
   it('should call get', () => {

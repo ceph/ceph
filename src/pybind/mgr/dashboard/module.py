@@ -13,9 +13,19 @@ import tempfile
 import threading
 import time
 
-from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
-from mgr_util import get_default_addr, ServerConfigException, verify_tls_files, \
-    create_self_signed_cert
+from mgr_module import CLIWriteCommand, MgrModule, MgrStandbyModule, Option
+from mgr_util import ServerConfigException, create_self_signed_cert, \
+    get_default_addr, verify_tls_files
+
+from . import mgr
+from .controllers import generate_routes, json_error_page
+from .grafana import push_local_dashboards
+from .services.auth import AuthManager, AuthManagerTool, JwtManager
+from .services.exception import dashboard_exception_handler
+from .services.sso import SSO_COMMANDS, handle_sso_command
+from .settings import handle_option_command, options_command_list, options_schema_list
+from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
+    prepare_url_prefix, str_to_bool
 
 try:
     import cherrypy
@@ -31,21 +41,7 @@ if cherrypy is not None:
     patch_cherrypy(cherrypy.__version__)
 
 # pylint: disable=wrong-import-position
-from . import mgr
-from .controllers import generate_routes, json_error_page
-from .grafana import push_local_dashboards
-from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
-                   prepare_url_prefix, str_to_bool
-from .services.auth import AuthManager, AuthManagerTool, JwtManager
-from .services.sso import SSO_COMMANDS, \
-                          handle_sso_command
-from .services.exception import dashboard_exception_handler
-from .settings import options_command_list, options_schema_list, \
-                      handle_option_command
-
-from .plugins import PLUGIN_MANAGER
-from .plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
-
+from .plugins import PLUGIN_MANAGER, debug, feature_toggles  # noqa # pylint: disable=unused-import
 
 PLUGIN_MANAGER.hook.init()
 
@@ -137,10 +133,11 @@ class CherryPyConfig(object):
                 'text/html', 'text/plain',
                 # We also want JSON and JavaScript to be compressed
                 'application/json',
+                'application/*+json',
                 'application/javascript',
             ],
             'tools.json_in.on': True,
-            'tools.json_in.force': False,
+            'tools.json_in.force': True,
             'tools.plugin_hooks_filter_request.on': True,
         }
 
@@ -278,7 +275,8 @@ class Module(MgrModule, CherryPyConfig):
             return False, "Missing dependency: cherrypy"
 
         if not os.path.exists(cls.get_frontend_path()):
-            return False, "Frontend assets not found: incomplete build?"
+            return False, ("Frontend assets not found at '{}': incomplete build?"
+                           .format(cls.get_frontend_path()))
 
         return True, ""
 
@@ -354,7 +352,7 @@ class Module(MgrModule, CherryPyConfig):
     def set_ssl_certificate(self, mgr_id=None, inbuf=None):
         if inbuf is None:
             return -errno.EINVAL, '',\
-                   'Please specify the certificate file with "-i" option'
+                'Please specify the certificate file with "-i" option'
         if mgr_id is not None:
             self.set_store('{}/crt'.format(mgr_id), inbuf)
         else:
@@ -366,7 +364,7 @@ class Module(MgrModule, CherryPyConfig):
     def set_ssl_certificate_key(self, mgr_id=None, inbuf=None):
         if inbuf is None:
             return -errno.EINVAL, '',\
-                   'Please specify the certificate key file with "-i" option'
+                'Please specify the certificate key file with "-i" option'
         if mgr_id is not None:
             self.set_store('{}/key'.format(mgr_id), inbuf)
         else:

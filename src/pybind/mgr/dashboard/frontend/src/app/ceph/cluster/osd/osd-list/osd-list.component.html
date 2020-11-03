@@ -45,7 +45,7 @@
     <ng-template ngbNavContent>
       <cd-grafana [grafanaPath]="'osd-overview?'"
                   uid="lo02I1Aiz"
-                  grafanaStyle="three">
+                  grafanaStyle="four">
       </cd-grafana>
     </ng-template>
   </li>
@@ -72,6 +72,14 @@
   </div>
   <ng-container i18n><strong>OSD {{ osdIds | join }}</strong> will be
   <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+</ng-template>
+
+<ng-template #flagsTpl
+             let-row="row">
+  <span *ngFor="let flag of row.cdClusterFlags;"
+        class="badge badge-hdd mr-1">{{ flag }}</span>
+  <span *ngFor="let flag of row.cdIndivFlags;"
+        class="badge badge-info mr-1">{{ flag }}</span>
 </ng-template>
 
 <ng-template #osdUsageTpl

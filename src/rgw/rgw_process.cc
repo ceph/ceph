@@ -15,6 +15,8 @@
 #include "rgw_client_io.h"
 #include "rgw_opa.h"
 #include "rgw_perf_counters.h"
+#include "rgw_lua.h"
+#include "rgw_lua_request.h"
 
 #include "services/svc_zone_utils.h"
 
@@ -188,10 +190,11 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  rgw::sal::RGWRadosUser user(store);
-
-  struct req_state rstate(g_ceph_context, &rgw_env, &user, req->id);
+  struct req_state rstate(g_ceph_context, &rgw_env, req->id);
   struct req_state *s = &rstate;
+
+  std::unique_ptr<rgw::sal::RGWUser> u = store->get_user(rgw_user());
+  s->set_user(u);
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
@@ -234,6 +237,20 @@ int process_request(rgw::sal::RGWRadosStore* const store,
   if (!op) {
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
+  }
+  {
+    std::string script;
+    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    if (rc == -ENOENT) {
+      // no script, nothing to do
+    } else if (rc < 0) {
+      ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
+    } else {
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      if (rc < 0) {
+        ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
+      }
+    }
   }
   std::tie(ret,c) = schedule_request(scheduler, s, op);
   if (ret < 0) {
@@ -289,6 +306,21 @@ int process_request(rgw::sal::RGWRadosStore* const store,
   }
 
 done:
+  if (op) {
+    std::string script;
+    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    if (rc == -ENOENT) {
+      // no script, nothing to do
+    } else if (rc < 0) {
+      ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
+    } else {
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      if (rc < 0) {
+        ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
+      }
+    }
+  }
+
   try {
     client_io->complete_request();
   } catch (rgw::io::Exception& e) {

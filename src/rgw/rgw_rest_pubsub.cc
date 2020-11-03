@@ -15,6 +15,7 @@
 #include "rgw_arn.h"
 #include "rgw_auth_s3.h"
 #include "rgw_notify.h"
+#include "rgw_sal_rados.h"
 #include "services/svc_zone.h"
 
 #define dout_context g_ceph_context

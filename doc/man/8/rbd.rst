@@ -452,7 +452,7 @@ Commands
   Execute image migration. This step is run after a successful migration
   prepare step and copies image data to the destination.
 
-:command:`migration prepare` [--order *order*] [--object-size *object-size*] [--image-feature *image-feature*] [--image-shared] [--stripe-unit *stripe-unit*] [--stripe-count *stripe-count*] [--data-pool *data-pool*] *src-image-spec* [*dest-image-spec*]
+:command:`migration prepare` [--order *order*] [--object-size *object-size*] [--image-feature *image-feature*] [--image-shared] [--stripe-unit *stripe-unit*] [--stripe-count *stripe-count*] [--data-pool *data-pool*] [--import-only] [--source-spec *json*] [--source-spec-path *path*] *src-image-spec* [*dest-image-spec*]
   Prepare image migration. This is the first step when migrating an
   image, i.e. changing the image location, format or other
   parameters that can't be changed dynamically. The destination can
@@ -460,6 +460,11 @@ Commands
   After this step the source image is set as a parent of the
   destination image, and the image is accessible in copy-on-write mode
   by its destination spec.
+
+  An image can also be migrated from a read-only import source by adding the
+  *--import-only* optional and providing a JSON-encoded *--source-spec* or a
+  path to a JSON-encoded source-spec file using the *--source-spec-path*
+  optionals.
 
 :command:`mirror image demote` *image-spec*
   Demote a primary image to non-primary for RBD mirroring.
@@ -762,7 +767,7 @@ Per client instance `rbd device map` options:
 
 Per mapping (block device) `rbd device map` options:
 
-* rw - Map the image read-write (default).
+* rw - Map the image read-write (default).  Overridden by --read-only.
 
 * ro - Map the image read-only.  Equivalent to --read-only.
 
@@ -772,6 +777,7 @@ Per mapping (block device) `rbd device map` options:
   discards (since 4.9).
 
 * exclusive - Disable automatic exclusive lock transitions (since 4.12).
+  Equivalent to --exclusive.
 
 * lock_timeout=x - A timeout on waiting for the acquisition of exclusive lock
   (since 4.17, default is 0 seconds, meaning no timeout).
@@ -843,11 +849,24 @@ Per mapping (block device) `rbd device map` options:
   backend that the data is incompressible, disabling compression in aggressive
   mode (since 5.8).
 
+* udev - Wait for udev device manager to finish executing all matching
+  "add" rules and release the device before exiting (default).  This option
+  is not passed to the kernel.
+
+* noudev - Don't wait for udev device manager.  When enabled, the device may
+  not be fully usable immediately on exit.
+
 `rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
   driver will wait for running requests to complete and then unmap; requests
   sent to the driver after initiating the unmap will be failed.
+
+* udev - Wait for udev device manager to finish executing all matching
+  "remove" rules and clean up after the device before exiting (default).
+  This option is not passed to the kernel.
+
+* noudev - Don't wait for udev device manager.
 
 
 Examples

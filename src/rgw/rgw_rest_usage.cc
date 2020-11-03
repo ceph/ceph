@@ -4,6 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
+#include "rgw_sal_rados.h"
 
 #include "include/str_list.h"
 
@@ -52,7 +53,7 @@ void RGWOp_Usage_Get::execute() {
     }
   }
 
-  http_ret = RGWUsage::show(store->getRados(), uid, bucket_name, start, end, show_entries, show_summary, &categories, flusher);
+  op_ret = RGWUsage::show(store->getRados(), uid, bucket_name, start, end, show_entries, show_summary, &categories, flusher);
 }
 
 class RGWOp_Usage_Delete : public RGWRESTOp {
@@ -87,12 +88,12 @@ void RGWOp_Usage_Delete::execute() {
     bool remove_all;
     RESTArgs::get_bool(s, "remove-all", false, &remove_all);
     if (!remove_all) {
-      http_ret = -EINVAL;
+      op_ret = -EINVAL;
       return;
     }
   }
 
-  http_ret = RGWUsage::trim(store->getRados(), uid, bucket_name, start, end);
+  op_ret = RGWUsage::trim(store->getRados(), uid, bucket_name, start, end);
 }
 
 RGWOp *RGWHandler_Usage::op_get()

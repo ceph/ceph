@@ -19,6 +19,7 @@
 
 #include "crimson/osd/exceptions.h"
 
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -34,26 +35,14 @@ class Journal;
  * Abstraction hiding reading and writing to persistence.
  * Exposes transaction based interface with read isolation.
  */
-class TransactionManager : public JournalSegmentProvider {
+class TransactionManager : public SegmentCleaner::ExtentCallbackInterface {
 public:
   TransactionManager(
     SegmentManager &segment_manager,
+    SegmentCleaner &segment_cleaner,
     Journal &journal,
     Cache &cache,
     LBAManager &lba_manager);
-
-  segment_id_t next = 0;
-  get_segment_ret get_segment() final {
-    // TODO -- part of gc
-    return get_segment_ret(
-      get_segment_ertr::ready_future_marker{},
-      next++);
-  }
-
-  void put_segment(segment_id_t segment) final {
-    // TODO -- part of gc
-    return;
-  }
 
   /// Writes initial metadata to disk
   using mkfs_ertr = crimson::errorator<
@@ -76,6 +65,11 @@ public:
   /// Creates empty transaction
   TransactionRef create_transaction() {
     return make_transaction();
+  }
+
+  /// Creates weak transaction
+  TransactionRef create_weak_transaction() {
+    return make_weak_transaction();
   }
 
   /**
@@ -136,10 +130,25 @@ public:
 
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
+    auto &logger = crimson::get_logger(ceph_subsys_filestore);
     auto ret = cache.duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    ret->set_pin(ref->get_pin().duplicate());
+    if (!ret->has_pin()) {
+      logger.debug(
+	"{}: duplicating {} for write: {}",
+	__func__,
+	*ref,
+	*ret);
+      ret->set_pin(ref->get_pin().duplicate());
+    } else {
+      logger.debug(
+	"{}: {} already pending",
+	__func__,
+	*ref);
+      assert(ref->is_pending());
+      assert(&*ref == &*ret);
+    }
     return ret;
   }
 
@@ -207,12 +216,47 @@ public:
     >;
   submit_transaction_ertr::future<> submit_transaction(TransactionRef);
 
+  /// SegmentCleaner::ExtentCallbackInterface
+
+  using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
+  get_next_dirty_extents_ret get_next_dirty_extents(
+    journal_seq_t seq) final;
+
+  using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
+  rewrite_extent_ret rewrite_extent(
+    Transaction &t,
+    CachedExtentRef extent) final;
+
+  using SegmentCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
+  get_extent_if_live_ret get_extent_if_live(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t addr,
+    laddr_t laddr,
+    segment_off_t len) final;
+
+  using scan_extents_ret =
+    SegmentCleaner::ExtentCallbackInterface::scan_extents_ret;
+  scan_extents_ret scan_extents(
+    paddr_t addr,
+    extent_len_t bytes_to_read) final {
+    return journal.scan_extents(addr, bytes_to_read);
+  }
+
+  using release_segment_ret =
+    SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
+  release_segment_ret release_segment(
+    segment_id_t id) final {
+    return segment_manager.release(id);
+  }
+
   ~TransactionManager();
 
 private:
   friend class Transaction;
 
   SegmentManager &segment_manager;
+  SegmentCleaner &segment_cleaner;
   Cache &cache;
   LBAManager &lba_manager;
   Journal &journal;

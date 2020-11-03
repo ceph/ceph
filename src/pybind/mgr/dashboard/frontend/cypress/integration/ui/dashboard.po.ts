@@ -24,4 +24,8 @@ export class DashboardPageHelper extends PageHelper {
   infoCardBodyText(infoCard: string) {
     return this.infoCard(infoCard).find('.card-text').text();
   }
+
+  infoCardBody(infoCard: string) {
+    return this.infoCard(infoCard).find('.card-text');
+  }
 }

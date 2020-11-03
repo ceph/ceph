@@ -57,7 +57,14 @@ cd build-doc
 if [ ! -e $vdir ]; then
     virtualenv --python=python3 $vdir
 fi
-$vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
+
+# be compatible with pip shipped by distro older v20.2
+if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
+    PIP_INSTALL="$vdir/bin/pip install --use-feature=2020-resolver"
+else
+    PIP_INSTALL="$vdir/bin/pip install"
+fi
+$PIP_INSTALL --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
 
 install -d -m0755 \
     $TOPDIR/build-doc/output/html \

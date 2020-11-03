@@ -5,6 +5,7 @@
 #include "rgw_rest_pubsub_common.h"
 #include "common/dout.h"
 #include "rgw_url.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

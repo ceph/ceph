@@ -18,9 +18,7 @@
 #include <thread>
 #include "include/scope_guard.h"
 
-#ifdef HAVE_BOOST_CONTEXT
 #include <spawn/spawn.hpp>
-#endif
 #include <gtest/gtest.h>
 
 struct RadosEnv : public ::testing::Environment {
@@ -166,7 +164,6 @@ TEST_F(Aio_Throttle, ThrottleOverMax)
   EXPECT_EQ(window, max_outstanding);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(Aio_Throttle, YieldCostOverWindow)
 {
   auto obj = make_obj(__PRETTY_FUNCTION__);
@@ -216,6 +213,5 @@ TEST_F(Aio_Throttle, YieldingThrottleOverMax)
   EXPECT_EQ(0u, outstanding);
   EXPECT_EQ(window, max_outstanding);
 }
-#endif // HAVE_BOOST_CONTEXT
 
 } // namespace rgw

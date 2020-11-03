@@ -229,7 +229,11 @@
             <div class="form-group row">
               <label i18n
                      for="reportId"
-                     class="cd-col-form-label">Report ID</label>
+                     class="cd-col-form-label">Report ID
+              <cd-helper i18n-html
+                         html="A randomized UUID to identify a particular cluster over the course of several telemetry reports.">
+              </cd-helper>
+              </label>
               <div class="cd-col-form-input">
                 <input class="form-control"
                        type="text"
@@ -243,7 +247,11 @@
             <div class="form-group row">
               <label i18n
                      for="report"
-                     class="cd-col-form-label">Report preview</label>
+                     class="cd-col-form-label">Report preview
+                <cd-helper i18n-html
+                           html="The actual telemetry data that will be submitted.">
+                </cd-helper>
+              </label>
               <div class="cd-col-form-input">
                 <textarea class="form-control"
                           id="report"
@@ -254,17 +262,16 @@
             </div>
             <div class="form-group row">
               <div class="cd-col-form-offset">
-                <button type="button"
-                        class="btn btn-light mr-2"
-                        title="Download"
-                        (click)="download(report, 'telemetry_report.json')"
-                        i18n-title>
-                  <i class="fa fa-download"></i>
-                </button>
-                <button type="button"
-                        class="btn btn-light"
-                        cdCopy2ClipboardButton="report">
-                </button>
+                <div class="btn-group"
+                     role="group">
+                  <cd-download-button [objectItem]="report"
+                                      fileName="telemetry_report">
+                  </cd-download-button>
+                  <button type="button"
+                          class="btn btn-light"
+                          cdCopy2ClipboardButton="report">
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -279,7 +286,7 @@
                          formControlName="licenseAgrmt">
                   <label class="custom-control-label"
                          for="licenseAgrmt"
-                         i18n>I agree to my telemetry data being submitted under the Community Data License Agreement - Sharing - Version 1.0 (<a href="https://cdla.io/sharing-1-0/">https://cdla.io/sharing-1-0/</a>)</label>
+                         i18n>I agree to my telemetry data being submitted under the <a href="https://cdla.io/sharing-1-0/">Community Data License Agreement - Sharing - Version 1.0</a></label>
                 </div>
               </div>
             </div>

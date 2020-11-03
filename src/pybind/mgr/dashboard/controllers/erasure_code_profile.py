@@ -3,11 +3,11 @@ from __future__ import absolute_import
 
 from cherrypy import NotFound
 
-from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, \
-    UiApiController, EndpointDoc
+from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from .. import mgr
+from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, UiApiController
 
 LIST_CODE__SCHEMA = {
     "crush-failure-domain": (str, ''),
@@ -58,8 +58,8 @@ class ErasureCodeProfileUi(ErasureCodeProfile):
         """
         config = mgr.get('config')
         return {
-            # Because 'shec' is experimental it's not included
-            'plugins': config['osd_erasure_code_plugins'].split() + ['shec'],
+            # Because 'shec' and 'clay' are experimental they're not included
+            'plugins': config['osd_erasure_code_plugins'].split() + ['shec', 'clay'],
             'directory': config['erasure_code_dir'],
             'nodes': mgr.get('osd_map_tree')['nodes'],
             'names': [name for name, _ in

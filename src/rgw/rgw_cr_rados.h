@@ -8,6 +8,7 @@
 #include "include/ceph_assert.h"
 #include "rgw_coroutine.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
@@ -1342,7 +1343,6 @@ class RGWSyncLogTrimCR : public RGWRadosTimelogTrimCR {
   CephContext *cct;
   std::string *last_trim_marker;
  public:
-  // a marker that compares greater than any timestamp-based index
   static constexpr const char* max_marker = "99999999";
 
   RGWSyncLogTrimCR(rgw::sal::RGWRadosStore *store, const std::string& oid,

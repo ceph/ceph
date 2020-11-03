@@ -64,7 +64,7 @@ class FlagSetHandler : public FileSystemCommandHandler
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -126,10 +126,6 @@ class FailHandler : public FileSystemCommandHandler
     }
 
     auto fs = fsmap.get_filesystem(fs_name);
-    if (fs == nullptr) {
-      ss << "Not found: '" << fs_name << "'";
-      return -ENOENT;
-    }
 
     auto f = [](auto fs) {
       fs->mds_map.set_flag(CEPH_MDSMAP_NOT_JOINABLE);
@@ -169,7 +165,7 @@ class FsNewHandler : public FileSystemCommandHandler
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -323,7 +319,7 @@ public:
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -335,11 +331,6 @@ public:
     }
 
     auto fs = fsmap.get_filesystem(fs_name);
-    if (fs == nullptr) {
-      ss << "Not found: '" << fs_name << "'";
-      return -ENOENT;
-    }
-
     string var;
     if (!cmd_getval(cmdmap, "var", var) || var.empty()) {
       ss << "Invalid variable";
@@ -364,6 +355,7 @@ public:
         ss << "You must specify at least one MDS";
         return -EINVAL;
       }
+
       if (n > 1 && n > fs->mds_map.get_max_mds()) {
 	if (fs->mds_map.was_snaps_ever_allowed() &&
 	    !fs->mds_map.allows_multimds_snaps()) {
@@ -704,21 +696,37 @@ class RequiredClientFeaturesHandler : public FileSystemCommandHandler
       }
 
       if (subop == "add") {
+	bool ret = false;
 	fsmap.modify_filesystem(
 	    fs->fscid,
-	    [feature](std::shared_ptr<Filesystem> fs)
+	    [feature, &ret](auto&& fs)
 	{
+	  if (fs->mds_map.get_required_client_features().test(feature))
+	    return;
 	  fs->mds_map.add_required_client_feature(feature);
+	  ret = true;
 	});
-	ss << "added feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+	if (ret) {
+	  ss << "added feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+	} else {
+	  ss << "feature '" << cephfs_feature_name(feature) << "' is already set";
+	}
       } else {
+	bool ret = false;
 	fsmap.modify_filesystem(
 	    fs->fscid,
-	    [feature](std::shared_ptr<Filesystem> fs)
+	    [feature, &ret](auto&& fs)
 	{
-	  fs->mds_map.remove_required_client_feature(feature);
+          if (!fs->mds_map.get_required_client_features().test(feature))
+            return;
+          fs->mds_map.remove_required_client_feature(feature);
+          ret = true;
 	});
-	ss << "removed feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+	if (ret) {
+	  ss << "removed feature '" << cephfs_feature_name(feature) << "' from required_client_features";
+	} else {
+	  ss << "feature '" << cephfs_feature_name(feature) << "' is already unset";
+	}
       }
       return 0;
    }
@@ -738,7 +746,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -753,12 +761,6 @@ class AddDataPoolHandler : public FileSystemCommandHandler
         || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
-    }
-
-    auto fs = fsmap.get_filesystem(fs_name);
-    if (fs == nullptr) {
-      ss << "Not found: '" << fs_name << "'";
-      return -ENOENT;
     }
 
     int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
@@ -776,6 +778,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       return r;
     }
 
+    auto fs = fsmap.get_filesystem(fs_name);
     // no-op when the data_pool already on fs
     if (fs->mds_map.is_data_pool(poolid)) {
       ss << "data pool " << poolid << " is already on fs " << fs_name;
@@ -817,7 +820,7 @@ class SetDefaultHandler : public FileSystemCommandHandler
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -844,7 +847,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -918,7 +921,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -963,7 +966,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -976,12 +979,6 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
         || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
-    }
-
-    auto fs = fsmap.get_filesystem(fs_name);
-    if (fs == nullptr) {
-      ss << "Not found: '" << fs_name << "'";
-      return -ENOENT;
     }
 
     int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
@@ -999,11 +996,11 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
 
     ceph_assert(poolid >= 0);  // Checked by parsing code above
 
+    auto fs = fsmap.get_filesystem(fs_name);
     if (fs->mds_map.get_first_data_pool() == poolid) {
       ss << "cannot remove default data pool";
       return -EINVAL;
     }
-
 
     int r = 0;
     fsmap.modify_filesystem(fs->fscid,
@@ -1040,11 +1037,11 @@ class AliasHandler : public T
     alias_prefix = new_prefix;
   }
 
-  std::string const &get_prefix() override {return alias_prefix;}
+  std::string const &get_prefix() const override {return alias_prefix;}
 
   int handle(
       Monitor *mon,
-      FSMap &fsmap,
+      FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
@@ -1355,3 +1352,27 @@ int FileSystemCommandHandler::_check_pool(
   return 0;
 }
 
+int FileSystemCommandHandler::is_op_allowed(
+    const MonOpRequestRef& op, const FSMap& fsmap, const cmdmap_t& cmdmap,
+    std::stringstream &ss) const
+{
+    string fs_name;
+    cmd_getval(cmdmap, "fs_name", fs_name);
+
+    // so that fsmap can filtered and the original copy is untouched.
+    FSMap fsmap_copy = fsmap;
+    fsmap_copy.filter(op->get_session()->get_allowed_fs_names());
+
+    auto fs = fsmap_copy.get_filesystem(fs_name);
+    if (fs == nullptr) {
+      ss << "Filesystem not found: '" << fs_name << "'";
+      return -ENOENT;
+    }
+
+    if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
+      ss << "Permission denied: '" << fs_name << "'";
+      return -EPERM;
+    }
+
+  return 1;
+}

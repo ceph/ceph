@@ -30,3 +30,10 @@ void OSDPerfMetricCollector::process_reports(const MetricPayload &payload) {
       counter->second += update.second;
     });
 }
+
+int OSDPerfMetricCollector::get_counters(PerfCollector *collector) {
+  OSDPerfCollector *c = static_cast<OSDPerfCollector *>(collector);
+
+  std::lock_guard locker(lock);
+  return get_counters_generic(c->query_id, &c->counters);
+}

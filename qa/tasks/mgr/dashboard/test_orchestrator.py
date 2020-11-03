@@ -1,54 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import json
 
 from .helper import DashboardTestCase
-
-
-test_data = {
-    'inventory': [
-        {
-            'name': 'test-host0',
-            'addr': '1.2.3.4',
-            'devices': [
-                {
-                    'path': '/dev/sda',
-                }
-            ]
-        },
-        {
-            'name': 'test-host1',
-            'addr': '1.2.3.5',
-            'devices': [
-                {
-                    'path': '/dev/sdb',
-                }
-            ]
-        }
-    ],
-    'daemons': [
-        {
-            'nodename': 'test-host0',
-            'daemon_type': 'mon',
-            'daemon_id': 'a'
-        },
-        {
-            'nodename': 'test-host0',
-            'daemon_type': 'mgr',
-            'daemon_id': 'x'
-        },
-        {
-            'nodename': 'test-host0',
-            'daemon_type': 'osd',
-            'daemon_id': '0'
-        },
-        {
-            'nodename': 'test-host1',
-            'daemon_type': 'osd',
-            'daemon_id': '1'
-        }
-    ]
-}
 
 
 class OrchestratorControllerTest(DashboardTestCase):
@@ -59,24 +12,19 @@ class OrchestratorControllerTest(DashboardTestCase):
     URL_INVENTORY = '/api/orchestrator/inventory'
     URL_OSD = '/api/orchestrator/osd'
 
+    ORCHESTRATOR = True
 
     @property
     def test_data_inventory(self):
-        return test_data['inventory']
+        return self.ORCHESTRATOR_TEST_DATA['inventory']
 
     @property
     def test_data_daemons(self):
-        return test_data['daemons']
+        return self.ORCHESTRATOR_TEST_DATA['daemons']
 
     @classmethod
     def setUpClass(cls):
         super(OrchestratorControllerTest, cls).setUpClass()
-        cls._load_module('test_orchestrator')
-        cmd = ['orch', 'set', 'backend', 'test_orchestrator']
-        cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
-
-        cmd = ['test_orchestrator', 'load_data', '-i', '-']
-        cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd, stdin=json.dumps(test_data))
 
     @classmethod
     def tearDownClass(cls):
@@ -119,7 +67,9 @@ class OrchestratorControllerTest(DashboardTestCase):
         data = self._get(self.URL_INVENTORY)
         self.assertStatus(200)
 
-        sorting_key = lambda node: node['name']
+        def sorting_key(node):
+            return node['name']
+
         test_inventory = sorted(self.test_data_inventory, key=sorting_key)
         resp_inventory = sorted(data, key=sorting_key)
         self.assertEqual(len(test_inventory), len(resp_inventory))

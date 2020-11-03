@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import logging
 
+import logging
 from functools import wraps
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from ceph.deployment.service_spec import ServiceSpec
-from orchestrator import InventoryFilter, DeviceLightLoc, Completion
-from orchestrator import ServiceDescription, DaemonDescription
-from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
-from orchestrator import HostSpec
+from orchestrator import Completion, DaemonDescription, DeviceLightLoc, \
+    HostSpec, InventoryFilter, OrchestratorClientMixin, OrchestratorError, \
+    ServiceDescription, raise_if_exception
+
 from .. import mgr
 
 logger = logging.getLogger('orchestrator')
@@ -23,13 +23,13 @@ class OrchestratorAPI(OrchestratorClientMixin):
 
     def status(self):
         try:
-            status, desc = super(OrchestratorAPI, self).available()
-            logger.info("is orchestrator available: %s, %s", status, desc)
-            return dict(available=status, description=desc)
-        except (RuntimeError, OrchestratorError, ImportError):
+            status, message = super().available()
+            logger.info("is orchestrator available: %s, %s", status, message)
+            return dict(available=status, message=message)
+        except (RuntimeError, OrchestratorError, ImportError) as e:
             return dict(
                 available=False,
-                description='Orchestrator is unavailable for unknown reason')
+                message='Orchestrator is unavailable for unknown reason: {}'.format(str(e)))
 
     def orchestrator_wait(self, completions):
         return self._orchestrator_wait(completions)
@@ -85,8 +85,10 @@ class InventoryManager(ResourceManager):
 
 class ServiceManager(ResourceManager):
     @wait_api_result
-    def list(self, service_name: Optional[str] = None) -> List[ServiceDescription]:
-        return self.api.describe_service(None, service_name)
+    def list(self,
+             service_type: Optional[str] = None,
+             service_name: Optional[str] = None) -> List[ServiceDescription]:
+        return self.api.describe_service(service_type, service_name)
 
     @wait_api_result
     def get(self, service_name: str) -> ServiceDescription:
@@ -95,8 +97,11 @@ class ServiceManager(ResourceManager):
     @wait_api_result
     def list_daemons(self,
                      service_name: Optional[str] = None,
+                     daemon_type: Optional[str] = None,
                      hostname: Optional[str] = None) -> List[DaemonDescription]:
-        return self.api.list_daemons(service_name, host=hostname)
+        return self.api.list_daemons(service_name=service_name,
+                                     daemon_type=daemon_type,
+                                     host=hostname)
 
     def reload(self, service_type, service_ids):
         if not isinstance(service_ids, list):

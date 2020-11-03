@@ -1,4 +1,4 @@
-if(WITH_BLUESTORE OR WITH_RBD_RWL)
+if(WITH_BLUESTORE OR  WITH_RBD_SSD_CACHE)
 list(APPEND libblk_srcs
   BlockDevice.cc)
 endif()
@@ -20,7 +20,7 @@ if(WITH_SPDK)
     spdk/NVMEDevice.cc)
 endif()
 
-if(HAVE_LIBZBC)
+if(WITH_ZBD)
   list(APPEND libblk_srcs
     zoned/HMSMRDevice.cc)
 endif()
@@ -36,8 +36,8 @@ if(WITH_SPDK)
   target_link_libraries(blk PRIVATE ${SPDK_LIBRARIES})
 endif()
 
-if(HAVE_LIBZBC)
-  target_link_libraries(blk PRIVATE ${ZBC_LIBRARIES})
+if(WITH_ZBD)
+  target_link_libraries(blk PRIVATE ${ZBD_LIBRARIES})
 endif()
 
 if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)

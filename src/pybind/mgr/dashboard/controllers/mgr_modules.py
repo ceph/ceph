@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ApiController, RESTController, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 from ..tools import find_object_in_list, str_to_bool
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController, allow_empty_body
 
 MGR_MODULE_SCHEMA = ([{
     "name": (str, "Module Name"),
@@ -35,6 +35,7 @@ MGR_MODULE_SCHEMA = ([{
 @ControllerDoc("Get details of MGR Module", "MgrModule")
 class MgrModules(RESTController):
     ignore_modules = ['selftest']
+
     @EndpointDoc("List Mgr modules",
                  responses={200: MGR_MODULE_SCHEMA})
     def list(self):
@@ -93,6 +94,7 @@ class MgrModules(RESTController):
 
     @RESTController.Resource('POST')
     @handle_send_command_error('mgr_modules')
+    @allow_empty_body
     def enable(self, module_name):
         """
         Enable the specified Ceph Mgr module.
@@ -105,6 +107,7 @@ class MgrModules(RESTController):
 
     @RESTController.Resource('POST')
     @handle_send_command_error('mgr_modules')
+    @allow_empty_body
     def disable(self, module_name):
         """
         Disable the specified Ceph Mgr module.

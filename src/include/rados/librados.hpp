@@ -753,6 +753,11 @@ inline namespace v14_2_0 {
      * updates.
      */
     void tier_flush();
+    /**
+     * evict a manifest tier object to backing tier; will block racing
+     * updates.
+     */
+    void tier_evict();
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
@@ -1237,6 +1242,12 @@ inline namespace v14_2_0 {
                    bufferlist& bl,         ///< optional broadcast payload
                    uint64_t timeout_ms,    ///< timeout (in ms)
                    bufferlist *pbl);       ///< reply buffer
+   /*
+    * Decode a notify response into acks and timeout vectors.
+    */
+    void decode_notify_response(bufferlist &bl,
+                                std::vector<librados::notify_ack_t> *acks,
+                                std::vector<librados::notify_timeout_t> *timeouts);
 
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     int list_snaps(const std::string& o, snap_set_t *out_snaps);

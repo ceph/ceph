@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from base64 import b64encode
 import json
 import logging
 import os
 import threading
 import time
 import uuid
+from base64 import b64encode
 
 import cherrypy
 import jwt
 
-from .access_control import LocalAuthenticator, UserDoesNotExist
 from .. import mgr
+from .access_control import LocalAuthenticator, UserDoesNotExist
 
 cherrypy.config.update({
     'response.headers.server': 'Ceph-Dashboard'
-    })
+})
 
 
 class JwtManager(object):
@@ -181,7 +181,6 @@ class AuthManagerTool(cherrypy.Tool):
 
     def _check_authorization(self, username):
         self.logger.debug("checking authorization...")
-        username = username
         handler = cherrypy.request.handler.callable
         controller = handler.__self__
         sec_scope = getattr(controller, '_security_scope', None)

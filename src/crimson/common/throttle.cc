@@ -27,13 +27,13 @@ int64_t Throttle::put(int64_t c)
 seastar::future<> Throttle::get(size_t c)
 {
   if (!max) {
-    return seastar::now();
+    return seastar::make_ready_future<>();
   }
   return on_free_slots.wait([this, c] {
     return !_should_wait(c);
   }).then([this, c] {
     count += c;
-    return seastar::now();
+    return seastar::make_ready_future<>();
   });
 }
 

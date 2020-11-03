@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
@@ -31,6 +30,7 @@ import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
+import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
@@ -64,8 +64,7 @@ describe('RbdSnapshotListComponent', () => {
         RouterTestingModule,
         NgbNavModule,
         ToastrModule.forRoot(),
-        NgbModalModule,
-        NgBootstrapFormValidationModule.forRoot()
+        NgbModalModule
       ],
       providers: [
         { provide: AuthStorageService, useValue: fakeAuthStorageService },
@@ -275,6 +274,34 @@ describe('RbdSnapshotListComponent', () => {
         actions: [],
         primary: { multiple: '', executing: '', single: '', no: '' }
       }
+    });
+  });
+
+  describe('clone button disable state', () => {
+    let actions: RbdSnapshotActionsModel;
+
+    beforeEach(() => {
+      fixture.detectChanges();
+      const rbdService = TestBed.inject(RbdService);
+      const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
+      actions = new RbdSnapshotActionsModel(actionLabelsI18n, [], rbdService);
+    });
+
+    it('should be disabled with version 1 and protected false', () => {
+      const selection = new CdTableSelection([{ name: 'someName', is_protected: false }]);
+      const disableDesc = actions.getCloneDisableDesc(selection, ['layering']);
+      expect(disableDesc).toBe('Snapshot must be protected in order to clone.');
+    });
+
+    it.each([
+      [1, true],
+      [2, true],
+      [2, false]
+    ])('should be enabled with version %d and protected %s', (version, is_protected) => {
+      actions.cloneFormatVersion = version;
+      const selection = new CdTableSelection([{ name: 'someName', is_protected: is_protected }]);
+      const disableDesc = actions.getCloneDisableDesc(selection, ['layering']);
+      expect(disableDesc).toBe(false);
     });
   });
 });

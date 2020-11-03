@@ -42,10 +42,9 @@ namespace plugin {
 
 template <>
 struct Api<MockParentImageCacheImageCtx> {
-  MOCK_METHOD7(read_parent, void(MockParentImageCacheImageCtx*, uint64_t,
-                                 const librbd::io::Extents &, librados::snap_t,
-                                 const ZTracer::Trace &, ceph::bufferlist*,
-                                 Context*));
+  MOCK_METHOD6(read_parent, void(MockParentImageCacheImageCtx*, uint64_t,
+                                 librbd::io::ReadExtents*, librados::snap_t,
+                                 const ZTracer::Trace &, Context*));
 };
 
 } // namespace plugin
@@ -114,11 +113,11 @@ public :
   }
 
   void expect_read_parent(MockPluginApi &mock_plugin_api, uint64_t object_no,
-                          const io::Extents &extents, librados::snap_t snap_id,
+                          io::ReadExtents* extents, librados::snap_t snap_id,
                           int r) {
     EXPECT_CALL(mock_plugin_api,
-                read_parent(_, object_no, extents, snap_id, _, _, _))
-      .WillOnce(WithArg<6>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
+                read_parent(_, object_no, extents, snap_id, _, _))
+      .WillOnce(WithArg<5>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
   }
 
   void expect_cache_close(MockParentImageCache& mparent_image_cache, int ret_val) {
@@ -287,7 +286,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
 
   std::string temp_oid("12345");
   ceph::bufferlist temp_bl;
-  ::SnapContext *temp_snapc = nullptr;
+  IOContext io_context = mock_image_ctx.get_data_io_context();
   io::DispatchResult* temp_dispatch_result = nullptr;
   io::Extents temp_buffer_extents;
   int* temp_op_flags = nullptr;
@@ -297,17 +296,20 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
   ZTracer::Trace* temp_trace = nullptr;
   io::LightweightBufferExtents buffer_extents;
 
-  ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, *temp_snapc, 0, *temp_trace, temp_op_flags,
-            temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl), *temp_snapc, 0, 0, std::nullopt,
+  ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, io_context, 0,
             *temp_trace, temp_op_flags, temp_journal_tid, temp_dispatch_result,
             temp_on_finish, temp_on_dispatched), false);
+  ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl),
+            io_context, 0, 0, std::nullopt, *temp_trace, temp_op_flags,
+            temp_journal_tid, temp_dispatch_result, temp_on_finish,
+            temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->write_same(0, 0, 0, std::move(buffer_extents),
-            std::move(temp_bl), *temp_snapc, 0, *temp_trace, temp_op_flags,
+            std::move(temp_bl), io_context, 0, *temp_trace, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false );
   ASSERT_EQ(mock_parent_image_cache->compare_and_write(0, 0, std::move(temp_bl), std::move(temp_bl),
-            *temp_snapc, 0, *temp_trace, temp_journal_tid, temp_op_flags, temp_journal_tid,
-            temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
+            io_context, 0, *temp_trace, temp_journal_tid, temp_op_flags,
+            temp_journal_tid, temp_dispatch_result, temp_on_finish,
+            temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->flush(io::FLUSH_SOURCE_USER, *temp_trace, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->invalidate_cache(nullptr), false);
@@ -357,10 +359,10 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
 
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
-  ceph::bufferlist read_data;
-  mock_parent_image_cache->read(0, {{0, 4096}}, CEPH_NOSNAP, 0, {}, &read_data,
-                                nullptr, nullptr, nullptr, &dispatch_result,
-                                nullptr, &on_dispatched);
+  io::ReadExtents extents = {{0, 4096}, {8192, 4096}};
+  mock_parent_image_cache->read(
+    0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr, 
+    nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
   mock_parent_image_cache->get_cache_client()->close();
@@ -407,13 +409,14 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read_dne) {
 
   expect_cache_lookup_object(*mock_parent_image_cache, "");
 
-  expect_read_parent(mock_plugin_api, 0, {{0, 4096}}, CEPH_NOSNAP, 0);
+  io::ReadExtents extents = {{0, 4096}};
+  expect_read_parent(mock_plugin_api, 0, &extents, CEPH_NOSNAP, 0);
 
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
-  mock_parent_image_cache->read(0, {{0, 4096}}, CEPH_NOSNAP, 0, {}, nullptr,
-                                nullptr, nullptr, nullptr, &dispatch_result,
-                                nullptr, &on_dispatched);
+  mock_parent_image_cache->read(
+    0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr,
+    nullptr, &dispatch_result, nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
   mock_parent_image_cache->get_cache_client()->close();

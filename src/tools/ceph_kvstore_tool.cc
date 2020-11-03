@@ -97,9 +97,9 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
-  bool need_open_db = (cmd != "destructive-repair");
+  bool to_repair = (cmd == "destructive-repair");
   bool need_stats = (cmd == "stats");
-  StoreTool st(type, path, need_open_db, need_stats);
+  StoreTool st(type, path, to_repair, need_stats);
 
   if (cmd == "destructive-repair") {
     int ret = st.destructive_repair();

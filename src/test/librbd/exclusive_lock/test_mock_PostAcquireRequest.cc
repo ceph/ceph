@@ -11,8 +11,7 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
-#include "librbd/cache/rwl/InitRequest.h"
-#include "librbd/cache/rwl/ShutdownRequest.h"
+#include "librbd/cache/pwl/InitRequest.h"
 #include "librbd/exclusive_lock/PostAcquireRequest.h"
 #include "librbd/image/RefreshRequest.h"
 
@@ -63,7 +62,7 @@ RefreshRequest<librbd::MockTestImageCtx> *RefreshRequest<librbd::MockTestImageCt
 } // namespace image
 
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 template<>
 struct InitRequest<librbd::MockTestImageCtx> {
@@ -85,27 +84,7 @@ struct InitRequest<librbd::MockTestImageCtx> {
 
 InitRequest<librbd::MockTestImageCtx> *InitRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
-template<>
-struct ShutdownRequest<librbd::MockTestImageCtx> {
-  static ShutdownRequest *s_instance;
-  Context *on_finish = nullptr;
-
-  static ShutdownRequest *create(librbd::MockTestImageCtx &image_ctx,
-                             Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  ShutdownRequest() {
-    s_instance = this;
-  }
-  MOCK_METHOD0(send, void());
-};
-
-ShutdownRequest<librbd::MockTestImageCtx> *ShutdownRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
@@ -138,8 +117,7 @@ class TestMockExclusiveLockPostAcquireRequest : public TestMockFixture {
 public:
   typedef PostAcquireRequest<MockTestImageCtx> MockPostAcquireRequest;
   typedef librbd::image::RefreshRequest<MockTestImageCtx> MockRefreshRequest;
-  typedef librbd::cache::rwl::InitRequest<MockTestImageCtx> MockInitRequest;
-  typedef librbd::cache::rwl::ShutdownRequest<MockTestImageCtx> MockShutdownRequest;
+  typedef librbd::cache::pwl::InitRequest<MockTestImageCtx> MockInitRequest;
 
   void expect_test_features(MockTestImageCtx &mock_image_ctx, uint64_t features,
                             bool enabled) {
@@ -228,12 +206,6 @@ public:
                                MockInitRequest &mock_init_request, int r) {
     EXPECT_CALL(mock_init_request, send())
                   .WillOnce(FinishRequest(&mock_init_request, r, &mock_image_ctx));
-  }
-
-  void expect_close_image_cache(MockTestImageCtx &mock_image_ctx,
-      MockShutdownRequest &mock_shutdown_request, int r) {
-    EXPECT_CALL(mock_shutdown_request, send())
-                  .WillOnce(FinishRequest(&mock_shutdown_request, r, &mock_image_ctx));
   }
 
 };
@@ -551,11 +523,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, InitImageCacheError) {
 
   MockInitRequest mock_init_request;
   expect_init_image_cache(mock_image_ctx, mock_init_request, -ENOENT);
-
-  cache::MockImageCache mock_image_cache;
-  mock_image_ctx.image_cache = &mock_image_cache;
-  MockShutdownRequest mock_shutdown_request;
-  expect_close_image_cache(mock_image_ctx, mock_shutdown_request, 0);
 
   expect_close_journal(mock_image_ctx, mock_journal);
   expect_close_object_map(mock_image_ctx, mock_object_map);

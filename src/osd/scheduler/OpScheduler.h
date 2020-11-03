@@ -15,6 +15,7 @@
 #pragma once
 
 #include <ostream>
+#include <variant>
 
 #include "common/ceph_context.h"
 #include "osd/scheduler/OpSchedulerItem.h"
@@ -22,6 +23,7 @@
 namespace ceph::osd::scheduler {
 
 using client = uint64_t;
+using WorkItem = std::variant<std::monostate, OpSchedulerItem, double>;
 
 /**
  * Base interface for classes responsible for choosing
@@ -40,7 +42,7 @@ public:
   virtual bool empty() const = 0;
 
   // Return next op to be processed
-  virtual OpSchedulerItem dequeue() = 0;
+  virtual WorkItem dequeue() = 0;
 
   // Dump formatted representation for the queue
   virtual void dump(ceph::Formatter &f) const = 0;
@@ -117,7 +119,7 @@ public:
     return queue.empty();
   }
 
-  OpSchedulerItem dequeue() final {
+  WorkItem dequeue() final {
     return queue.dequeue();
   }
 

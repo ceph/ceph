@@ -2,6 +2,12 @@
  API Documentation
 ===================
 
+Ceph RESTful API
+================
+
+See `Ceph REST API`_.
+
+.. _Ceph REST API: ../mgr/ceph_api/
 
 Ceph Storage Cluster APIs
 =========================

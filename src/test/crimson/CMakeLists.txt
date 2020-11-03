@@ -41,6 +41,8 @@ target_link_libraries(unittest_seastar_alienstore_thread_pool
 
 add_executable(unittest_seastar_config
   test_config.cc)
+add_ceph_test(unittest_seastar_config
+  unittest_seastar_config --memory 256M)
 target_link_libraries(unittest_seastar_config crimson)
 
 add_executable(unittest_seastar_monc
@@ -69,3 +71,10 @@ add_library(crimson-gtest STATIC
   gtest_seastar.cc)
 target_link_libraries(crimson-gtest crimson-common GTest::GTest)
 add_library(crimson::gtest ALIAS crimson-gtest)
+
+add_executable(unittest-seastar-errorator
+  test_errorator.cc)
+target_link_libraries(
+  unittest-seastar-errorator
+  crimson::gtest)
+

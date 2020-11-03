@@ -508,7 +508,7 @@ def decode_cstr(val, encoding="utf-8"):
     Decode a byte string into a Python string.
 
     :param bytes val: byte string
-    :rtype: unicode or None
+    :rtype: str or None
     """
     if val is None:
         return None

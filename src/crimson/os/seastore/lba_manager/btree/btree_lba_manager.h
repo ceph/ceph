@@ -87,8 +87,31 @@ public:
     Transaction &t,
     CachedExtentRef e) final;
 
+  scan_mappings_ret scan_mappings(
+    Transaction &t,
+    laddr_t begin,
+    laddr_t end,
+    scan_mappings_func_t &&f) final;
+
+  scan_mapped_space_ret scan_mapped_space(
+    Transaction &t,
+    scan_mapped_space_func_t &&f) final;
+
+  rewrite_extent_ret rewrite_extent(
+    Transaction &t,
+    CachedExtentRef extent);
+
+  get_physical_extent_if_live_ret get_physical_extent_if_live(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t addr,
+    laddr_t laddr,
+    segment_off_t len) final;
+
   void add_pin(LBAPin &pin) final {
-    pin_set.add_pin(reinterpret_cast<BtreeLBAPin*>(&pin)->pin);
+    auto *bpin = reinterpret_cast<BtreeLBAPin*>(&pin);
+    pin_set.add_pin(bpin->pin);
+    bpin->parent = nullptr;
   }
 
 private:
@@ -151,6 +174,14 @@ private:
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);
+
+  using update_internal_mapping_ertr = LBANode::mutate_internal_address_ertr;
+  using update_internal_mapping_ret = LBANode::mutate_internal_address_ret;
+  update_internal_mapping_ret update_internal_mapping(
+    Transaction &t,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

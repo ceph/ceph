@@ -68,6 +68,8 @@ Third, edit the file so it does not ask for your OpenStack password
 interactively. Comment out the relevant lines and replace them with
 something like::
 
+.. prompt:: bash $
+
     export OS_PASSWORD="aiVeth0aejee3eep8rogho3eep7Pha6ek"
 
 When ``ceph-workbench ceph-qa-suite`` connects to your OpenStack tenant for
@@ -82,9 +84,11 @@ Run the dummy suite
 -------------------
 
 You are now ready to take your OpenStack teuthology setup for a test
-drive::
+drive
 
-    $ ceph-workbench ceph-qa-suite --suite dummy
+.. prompt:: bash $
+
+   ceph-workbench ceph-qa-suite --suite dummy
 
 Be forewarned that the first run of ``ceph-workbench ceph-qa-suite`` on a
 pristine tenant will take a long time to complete because it downloads a VM
@@ -106,9 +110,11 @@ What this means is that ``ceph-workbench ceph-qa-suite`` triggered the test
 suite run. It does not mean that the suite run has completed. To monitor
 progress of the run, check the Pulpito web interface URL periodically, or
 if you are impatient, ssh to the teuthology machine using the ssh command
-shown and do::
+shown and do
 
-    $ tail -f /var/log/teuthology.*
+.. prompt:: bash $
+
+   tail -f /var/log/teuthology.*
 
 The `/usr/share/nginx/html` directory contains the complete logs of the
 test suite. If we had provided the ``--upload`` option to the
@@ -119,9 +125,11 @@ Run a standalone test
 ---------------------
 
 The standalone test explained in `Reading a standalone test`_ can be run
-with the following command::
+with the following command
 
-    $ ceph-workbench ceph-qa-suite --suite rados/singleton/all/admin-socket.yaml
+.. prompt:: bash $
+
+   ceph-workbench ceph-qa-suite --suite rados/singleton/all/admin-socket.yaml
 
 This will run the suite shown on the current ``master`` branch of
 ``ceph/ceph.git``. You can specify a different branch with the ``--ceph``
@@ -140,7 +148,9 @@ Interrupt a running suite
 Teuthology suites take time to run. From time to time one may wish to
 interrupt a running suite. One obvious way to do this is::
 
-    ceph-workbench ceph-qa-suite --teardown
+.. prompt:: bash $
+
+   ceph-workbench ceph-qa-suite --teardown
 
 This destroys all VMs created by ``ceph-workbench ceph-qa-suite`` and
 returns the OpenStack tenant to a "clean slate".
@@ -149,9 +159,11 @@ Sometimes you may wish to interrupt the running suite, but keep the logs,
 the teuthology VM, the packages-repository VM, etc. To do this, you can
 ``ssh`` to the teuthology VM (using the ``ssh access`` command reported
 when you triggered the suite -- see `Run the dummy suite`_) and, once
-there::
+there
 
-    sudo /etc/init.d/teuthology restart
+.. prompt:: bash $
+
+   sudo /etc/init.d/teuthology restart
 
 This will keep the teuthology machine, the logs and the packages-repository
 instance but nuke everything else.
@@ -182,6 +194,8 @@ Provision VMs ad hoc
 From the teuthology VM, it is possible to provision machines on an "ad hoc"
 basis, to use however you like. The magic incantation is::
 
+.. prompt:: bash $
+
     teuthology-lock --lock-many $NUMBER_OF_MACHINES \
         --os-type $OPERATING_SYSTEM \
         --os-version $OS_VERSION \
@@ -190,16 +204,22 @@ basis, to use however you like. The magic incantation is::
 
 The command must be issued from the ``~/teuthology`` directory. The possible
 values for ``OPERATING_SYSTEM`` AND ``OS_VERSION`` can be found by examining
-the contents of the directory ``teuthology/openstack/``. For example::
+the contents of the directory ``teuthology/openstack/``. For example
+
+.. prompt:: bash $
 
     teuthology-lock --lock-many 1 --os-type ubuntu --os-version 16.04 \
         --machine-type openstack --owner foo@example.com
 
-When you are finished with the machine, find it in the list of machines::
+When you are finished with the machine, find it in the list of machines
+
+.. prompt:: bash $
 
     openstack server list
 
-to determine the name or ID, and then terminate it with::
+to determine the name or ID, and then terminate it with
+
+.. prompt:: bash $
 
     openstack server delete $NAME_OR_ID
 

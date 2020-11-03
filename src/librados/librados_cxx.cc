@@ -638,6 +638,13 @@ void librados::ObjectReadOperation::tier_flush()
   o->tier_flush();
 }
 
+void librados::ObjectReadOperation::tier_evict()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_evict();
+}
+
 void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj, 
 						  const IoCtx& tgt_ioctx,
 						  uint64_t tgt_version,
@@ -2150,6 +2157,25 @@ int librados::IoCtx::aio_notify(const string& oid, AioCompletion *c,
   object_t obj(oid);
   return io_ctx_impl->aio_notify(obj, c->pc, bl, timeout_ms, preplybl, NULL,
                                  NULL);
+}
+
+void librados::IoCtx::decode_notify_response(bufferlist &bl,
+                                             std::vector<librados::notify_ack_t> *acks,
+                                             std::vector<librados::notify_timeout_t> *timeouts)
+{
+  map<pair<uint64_t,uint64_t>,bufferlist> acked;
+  set<pair<uint64_t,uint64_t>> missed;
+
+  auto iter = bl.cbegin();
+  decode(acked, iter);
+  decode(missed, iter);
+
+  for (auto &[who, payload] : acked) {
+    acks->emplace_back(librados::notify_ack_t{who.first, who.second, payload});
+  }
+  for (auto &[notifier_id, cookie] : missed) {
+    timeouts->emplace_back(librados::notify_timeout_t{notifier_id, cookie});
+  }
 }
 
 void librados::IoCtx::notify_ack(const std::string& o,

@@ -121,6 +121,10 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       asok_hook(nullptr),
       trace_endpoint("librbd")
   {
+    ldout(cct, 10) << this << " " << __func__ << ": "
+                   << "image_name=" << image_name << ", "
+                   << "image_id=" << image_id << dendl;
+
     if (snap)
       snap_name = snap;
 
@@ -147,6 +151,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   ImageCtx::~ImageCtx() {
+    ldout(cct, 10) << this << " " << __func__ << dendl;
+
     ceph_assert(config_watcher == nullptr);
     ceph_assert(image_watcher == NULL);
     ceph_assert(exclusive_lock == NULL);
@@ -723,14 +729,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     std::unique_lock image_locker(image_lock);
 
     // reset settings back to global defaults
-    for (auto& key : config_overrides) {
-      std::string value;
-      int r = cct->_conf.get_val(key, &value);
-      ceph_assert(r == 0);
-
-      config.set_val(key, value);
-    }
     config_overrides.clear();
+    config.set_config_values(cct->_conf.get_config_values());
 
     // extract config overrides
     for (auto meta_pair : meta) {
@@ -912,9 +912,13 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   void ImageCtx::rebuild_data_io_context() {
     auto ctx = std::make_shared<neorados::IOContext>(
       data_ctx.get_id(), data_ctx.get_namespace());
-    ctx->read_snap(snap_id);
-    ctx->write_snap_context(
-      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+    if (snap_id != CEPH_NOSNAP) {
+      ctx->read_snap(snap_id);
+    }
+    if (!snapc.snaps.empty()) {
+      ctx->write_snap_context(
+        {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+    }
 
     // atomically reset the data IOContext to new version
     atomic_store(&data_io_context, ctx);
@@ -922,6 +926,11 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
   IOContext ImageCtx::get_data_io_context() const {
     return atomic_load(&data_io_context);
+  }
+
+  IOContext ImageCtx::duplicate_data_io_context() const {
+    auto ctx = get_data_io_context();
+    return std::make_shared<neorados::IOContext>(*ctx);
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,

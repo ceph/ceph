@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+
 import json
 import logging
 
 import rados
-
 from mgr_module import CommandResult
-from mgr_util import get_time_series_rates, get_most_recent_rate
+from mgr_util import get_most_recent_rate, get_time_series_rates
 
 from .. import mgr
 from ..exceptions import DashboardException
 
 try:
-    from typing import Dict, Any, Union  # pylint: disable=unused-import
+    from typing import Any, Dict, Union
 except ImportError:
     pass  # For typing only
 

@@ -923,6 +923,13 @@ namespace librbd {
     return r;
   }
 
+  int RBD::migration_prepare_import(const char *source_spec, IoCtx& dest_io_ctx,
+                                    const char *dest_image_name,
+                                    ImageOptions& opts) {
+    return librbd::api::Migration<>::prepare_import(source_spec, dest_io_ctx,
+                                                    dest_image_name, opts);
+  }
+
   int RBD::migration_execute(IoCtx& io_ctx, const char *image_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -1825,6 +1832,12 @@ namespace librbd {
                parent_image->image_id.c_str(),
                parent_snap->name.c_str());
     return r;
+  }
+
+  int Image::get_migration_source_spec(std::string* source_spec)
+  {
+    auto ictx = reinterpret_cast<ImageCtx*>(ctx);
+    return librbd::api::Migration<>::get_source_spec(ictx, source_spec);
   }
 
   int Image::get_flags(uint64_t *flags)
@@ -3023,6 +3036,17 @@ namespace librbd {
 
 #pragma GCC diagnostic pop
 
+  int Image::aio_mirror_image_create_snapshot(uint32_t flags, uint64_t *snap_id,
+                                              RBD::AioCompletion *c) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    librbd::api::Mirror<>::image_snapshot_create(
+        ictx, flags, snap_id, new C_AioCompletion(ictx,
+                                                  librbd::io::AIO_TYPE_GENERIC,
+                                                  get_aio_completion(c)));
+    return 0;
+  }
+
   int Image::update_watch(UpdateWatchCtx *wctx, uint64_t *handle) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, update_watch_enter, ictx, wctx);
@@ -3071,9 +3095,9 @@ namespace librbd {
     return r;
   }
 
-  void Image::quiesce_complete(int r) {
+  void Image::quiesce_complete(uint64_t handle, int r) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    ictx->state->quiesce_complete(r);
+    ictx->state->quiesce_complete(handle, r);
   }
 
 } // namespace librbd
@@ -4353,6 +4377,16 @@ extern "C" int rbd_migration_prepare(rados_ioctx_t p, const char *image_name,
   return r;
 }
 
+extern "C" int rbd_migration_prepare_import(
+    const char *source_spec, rados_ioctx_t dest_p,
+    const char *dest_image_name, rbd_image_options_t opts_) {
+  librados::IoCtx dest_io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(dest_p, dest_io_ctx);
+  librbd::ImageOptions opts(opts_);
+  return librbd::api::Migration<>::prepare_import(source_spec, dest_io_ctx,
+                                                  dest_image_name, opts);
+}
+
 extern "C" int rbd_migration_execute(rados_ioctx_t p, const char *image_name)
 {
   librados::IoCtx io_ctx;
@@ -5127,6 +5161,31 @@ extern "C" int rbd_get_parent(rbd_image_t image,
              parent_image->image_id,
              parent_snap->name);
   return r;
+}
+
+extern "C" int rbd_get_migration_source_spec(rbd_image_t image,
+                                             char* source_spec,
+                                             size_t* max_len)
+{
+  auto ictx = reinterpret_cast<librbd::ImageCtx*>(image);
+
+  std::string cpp_source_spec;
+  int r = librbd::api::Migration<>::get_source_spec(ictx, &cpp_source_spec);
+  if (r < 0) {
+    return r;
+  }
+
+  size_t expected_size = cpp_source_spec.size();
+  if (expected_size >= *max_len) {
+    *max_len = expected_size + 1;
+    return -ERANGE;
+  }
+
+  strncpy(source_spec, cpp_source_spec.c_str(), expected_size);
+  source_spec[expected_size] = '\0';
+  *max_len = expected_size + 1;
+
+  return 0;
 }
 
 extern "C" int rbd_get_flags(rbd_image_t image, uint64_t *flags)
@@ -6579,6 +6638,20 @@ extern "C" int rbd_aio_mirror_image_get_status(
 
 #pragma GCC diagnostic pop
 
+extern "C" int rbd_aio_mirror_image_create_snapshot(rbd_image_t image,
+                                                    uint32_t flags,
+                                                    uint64_t *snap_id,
+                                                    rbd_completion_t c) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  librbd::api::Mirror<>::image_snapshot_create(
+      ictx, flags, snap_id, new C_AioCompletion(ictx,
+                                                librbd::io::AIO_TYPE_GENERIC,
+                                                get_aio_completion(comp)));
+  return 0;
+}
+
 extern "C" int rbd_update_watch(rbd_image_t image, uint64_t *handle,
 				rbd_update_callback_t watch_cb, void *arg)
 {
@@ -7238,8 +7311,8 @@ extern "C" int rbd_quiesce_unwatch(rbd_image_t image, uint64_t handle)
   return r;
 }
 
-extern "C" void rbd_quiesce_complete(rbd_image_t image, int r)
+extern "C" void rbd_quiesce_complete(rbd_image_t image, uint64_t handle, int r)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  ictx->state->quiesce_complete(r);
+  ictx->state->quiesce_complete(handle, r);
 }

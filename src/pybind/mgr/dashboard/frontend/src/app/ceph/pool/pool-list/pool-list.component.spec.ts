@@ -8,7 +8,7 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, expectItemTasks } from '../../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks, Mocks } from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -29,18 +29,8 @@ describe('PoolListComponent', () => {
   let fixture: ComponentFixture<PoolListComponent>;
   let poolService: PoolService;
 
-  const createPool = (name: string, id: number): Pool => {
-    return _.merge(new Pool(name), {
-      pool: id,
-      pg_num: 256,
-      pg_placement_num: 256,
-      pg_num_target: 256,
-      pg_placement_num_target: 256
-    });
-  };
-
   const getPoolList = (): Pool[] => {
-    return [createPool('a', 0), createPool('b', 1), createPool('c', 2)];
+    return [Mocks.getPool('a', 0), Mocks.getPool('b', 1), Mocks.getPool('c', 2)];
   };
 
   configureTestBed({
@@ -141,13 +131,15 @@ describe('PoolListComponent', () => {
 
   describe('pool deletion', () => {
     let taskWrapper: TaskWrapperService;
+    let modalRef: any;
 
     const setSelectedPool = (poolName: string) =>
       (component.selection.selected = [{ pool_name: poolName }]);
 
     const callDeletion = () => {
       component.deletePoolModal();
-      const deletion: CriticalConfirmationModalComponent = component.modalRef.componentInstance;
+      expect(modalRef).toBeTruthy();
+      const deletion: CriticalConfirmationModalComponent = modalRef && modalRef.componentInstance;
       deletion.submitActionObservable();
     };
 
@@ -168,9 +160,10 @@ describe('PoolListComponent', () => {
 
     beforeEach(() => {
       spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, initialState) => {
-        return {
+        modalRef = {
           componentInstance: Object.assign(new deletionClass(), initialState)
         };
+        return modalRef;
       });
       spyOn(poolService, 'delete').and.stub();
       taskWrapper = TestBed.inject(TaskWrapperService);
@@ -299,7 +292,7 @@ describe('PoolListComponent', () => {
 
     const getPoolData = (o: object) => [
       _.merge(
-        _.merge(createPool('a', 0), {
+        _.merge(Mocks.getPool('a', 0), {
           cdIsBinary: true,
           pg_status: '',
           stats: {
@@ -319,7 +312,7 @@ describe('PoolListComponent', () => {
     ];
 
     beforeEach(() => {
-      pool = createPool('a', 0);
+      pool = Mocks.getPool('a', 0);
     });
 
     it('transforms pools data correctly', () => {
@@ -451,7 +444,7 @@ describe('PoolListComponent', () => {
 
     it('should select correct existing cache tier', () => {
       setSelectionTiers([0]);
-      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([Mocks.getPool('a', 0)]);
     });
 
     it('should not select cache tier if id is invalid', () => {
@@ -468,7 +461,7 @@ describe('PoolListComponent', () => {
       setSelectionTiers([0, 1, 2]);
       expect(component.cacheTiers).toEqual(getPoolList());
       setSelectionTiers([0]);
-      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([Mocks.getPool('a', 0)]);
       setSelectionTiers([]);
       expect(component.cacheTiers).toEqual([]);
     });

@@ -23,16 +23,19 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
-  [[maybe_unused]] auto [r, added] =
-    recovering.emplace(soid, WaitForObjectRecovery{});
+  // always add_recovering(soid) before recover_object(soid)
+  assert(is_recovering(soid));
   // start tracking the recovery of soid
-  assert(added);
   return seastar::do_with(std::map<pg_shard_t, PushOp>(), get_shards_to_push(soid),
     [this, soid, need](auto& pops, auto& shards) {
     return maybe_pull_missing_obj(soid, need).then([this, soid](bool pulled) {
       return load_obc_for_recovery(soid, pulled);
     }).then([this, soid, need, &pops, &shards] {
-      return prep_push(soid, need, &pops, shards);
+      if (!shards.empty()) {
+	return prep_push(soid, need, &pops, shards);
+      } else {
+	return seastar::now();
+      }
     }).handle_exception([this, soid](auto e) {
       auto recovery_waiter = recovering.find(soid);
       if (auto obc = recovery_waiter->second.obc; obc) {
@@ -58,25 +61,24 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
       });
     }).then([this, soid] {
       auto& recovery = recovering.at(soid);
-      bool error = recovery.pi.recovery_progress.error;
-      if (!error) {
-        auto push_info = recovery.pushing.begin();
-        object_stat_sum_t stat = {};
-        if (push_info != recovery.pushing.end()) {
-          stat = push_info->second.stat;
-        } else {
-          // no push happened, take pull_info's stat
-          stat = recovery.pi.stat;
-        }
-        pg.get_recovery_handler()->on_global_recover(soid, stat, false);
-        return seastar::make_ready_future<>();
+      auto push_info = recovery.pushing.begin();
+      object_stat_sum_t stat = {};
+      if (push_info != recovery.pushing.end()) {
+	stat = push_info->second.stat;
       } else {
-	if (recovery.obc)
-	  recovery.obc->drop_recovery_read();
-	recovering.erase(soid);
-	return seastar::make_exception_future<>(
-	    std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
+	// no push happened, take pull_info's stat
+	assert(recovery.pi);
+	stat = recovery.pi->stat;
       }
+      pg.get_recovery_handler()->on_global_recover(soid, stat, false);
+      return seastar::make_ready_future<>();
+    }).handle_exception([this, soid](auto e) {
+      auto& recovery = recovering.at(soid);
+      if (recovery.obc)
+	recovery.obc->drop_recovery_read();
+      recovering.erase(soid);
+      return seastar::make_exception_future<>(
+	  std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
     });
   });
 }
@@ -92,7 +94,8 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   }
   PullOp po;
   auto& recovery_waiter = recovering.at(soid);
-  auto& pi = recovery_waiter.pi;
+  recovery_waiter.pi = std::make_optional<RecoveryBackend::PullInfo>();
+  auto& pi = *recovery_waiter.pi;
   prepare_pull(po, pi, soid, need);
   auto msg = make_message<MOSDPGPull>();
   msg->from = pg.get_pg_whoami();
@@ -121,7 +124,7 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
     return seastar::now();
   }
   return pg.get_or_load_head_obc(soid).safe_then(
-    [&recovery_waiter, pulled](auto p) {
+    [&recovery_waiter](auto p) {
     auto& [obc, existed] = p;
     logger().debug("load_obc_for_recovery: loaded obc: {}", obc->obs.oi.soid);
     recovery_waiter.obc = obc;
@@ -129,14 +132,7 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
       // obc is loaded with excl lock
       recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
     }
-    bool got = recovery_waiter.obc->get_recovery_read().get0();
-    ceph_assert_always(pulled ? got : 1);
-    if (got) {
-      return seastar::make_ready_future<>();
-    }
-    return recovery_waiter.obc->get_recovery_read(true).then([](bool) {
-      return seastar::now();
-    });
+    return recovery_waiter.obc->wait_recovery_read();
   }, crimson::osd::PG::load_obc_ertr::all_same_way(
       [this, &recovery_waiter, soid](const std::error_code& e) {
       auto [obc, existed] =
@@ -146,7 +142,7 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
       recovery_waiter.obc = obc;
       // obc is loaded with excl lock
       recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-      ceph_assert_always(recovery_waiter.obc->get_recovery_read().get0());
+      ceph_assert_always(recovery_waiter.obc->get_recovery_read());
       return seastar::make_ready_future<>();
     })
   );
@@ -180,7 +176,7 @@ seastar::future<> ReplicatedRecoveryBackend::push_delete(
       return shard_services.send_to_osd(shard.osd, std::move(msg),
 					pg.get_osdmap_epoch()).then(
 	[this, soid, shard] {
-	return recovering[soid].wait_for_pushes(shard);
+	return recovering.at(soid).wait_for_pushes(shard);
       });
     }
     return seastar::make_ready_future<>();
@@ -241,19 +237,17 @@ seastar::future<> ReplicatedRecoveryBackend::local_recover_delete(
     }
     return seastar::make_ready_future<>();
   }).safe_then([this, soid, epoch_to_freeze, need] {
-    auto& recovery_waiter = recovering[soid];
-    auto& pi = recovery_waiter.pi;
-    pi.recovery_info.soid = soid;
-    pi.recovery_info.version = need;
-    return on_local_recover_persist(soid, pi.recovery_info,
+    ObjectRecoveryInfo recovery_info;
+    recovery_info.soid = soid;
+    recovery_info.version = need;
+    return on_local_recover_persist(soid, recovery_info,
 	                            true, epoch_to_freeze);
   }, PGBackend::load_metadata_ertr::all_same_way(
       [this, soid, epoch_to_freeze, need] (auto e) {
-      auto& recovery_waiter = recovering[soid];
-      auto& pi = recovery_waiter.pi;
-      pi.recovery_info.soid = soid;
-      pi.recovery_info.version = need;
-      return on_local_recover_persist(soid, pi.recovery_info,
+      ObjectRecoveryInfo recovery_info;
+      recovery_info.soid = soid;
+      recovery_info.version = need;
+      return on_local_recover_persist(soid, recovery_info,
 				      true, epoch_to_freeze);
     })
   );
@@ -312,7 +306,7 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
     return seastar::parallel_for_each(shards,
       [this, soid, pops, &data_subsets](auto pg_shard) mutable {
       pops->emplace(pg_shard->first, PushOp());
-      auto& recovery_waiter = recovering[soid];
+      auto& recovery_waiter = recovering.at(soid);
       auto& obc = recovery_waiter.obc;
       auto& data_subset = data_subsets[pg_shard->first];
 
@@ -349,7 +343,7 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
       return build_push_op(pi.recovery_info, pi.recovery_progress,
 			   &pi.stat, &(*pops)[pg_shard->first]).then(
 	[this, soid, pg_shard](auto new_progress) {
-	auto& recovery_waiter = recovering[soid];
+	auto& recovery_waiter = recovering.at(soid);
 	auto& pi = recovery_waiter.pushing[pg_shard->first];
 	pi.recovery_progress = new_progress;
 	return seastar::make_ready_future<>();
@@ -632,8 +626,8 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
       pop.recovery_info, pop.after_progress, pop.data.length(), pop.data_included);
 
   const hobject_t &hoid = pop.soid;
-  auto& recovery_waiter = recovering[hoid];
-  auto& pi = recovery_waiter.pi;
+  auto& recovery_waiter = recovering.at(hoid);
+  auto& pi = *recovery_waiter.pi;
   if (pi.recovery_info.size == (uint64_t(-1))) {
     pi.recovery_info.size = pop.recovery_info.size;
     pi.recovery_info.copy_subset.intersection_of(
@@ -698,8 +692,9 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
 
 	if (complete) {
 	  pi.stat.num_objects_recovered++;
-	  pg.get_recovery_handler()->on_local_recover(pop.soid, recovering[pop.soid].pi.recovery_info,
-			      false, *t);
+	  pg.get_recovery_handler()->on_local_recover(
+	      pop.soid, recovering.at(pop.soid).pi->recovery_info,
+	      false, *t);
 	  return seastar::make_ready_future<bool>(true);
 	} else {
 	  response->soid = pop.soid;
@@ -719,7 +714,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
   if (pop.version == eversion_t()) {
     // replica doesn't have it!
     pg.get_recovery_handler()->on_failed_recover({ m->from }, pop.soid,
-	get_recovering(pop.soid).pi.recovery_info.version);
+	get_recovering(pop.soid).pi->recovery_info.version);
     return seastar::make_exception_future<>(
 	std::runtime_error(fmt::format(
 	    "Error on pushing side {} when pulling obj {}",
@@ -860,7 +855,7 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_push_reply(
       return seastar::make_ready_future<bool>(true);
     }().handle_exception([recovering_iter, &pi, peer] (auto e) {
       pi.recovery_progress.error = true;
-      recovering_iter->second.set_pushed(peer);
+      recovering_iter->second.set_push_failed(peer, e);
       return seastar::make_ready_future<bool>(true);
     });
   }

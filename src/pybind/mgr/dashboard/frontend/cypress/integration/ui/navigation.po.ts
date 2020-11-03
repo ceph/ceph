@@ -26,7 +26,7 @@ export class NavigationPageHelper extends PageHelper {
         { menu: 'OSDs', component: 'cd-osd-list' },
         { menu: 'Configuration', component: 'cd-configuration' },
         { menu: 'CRUSH map', component: 'cd-crushmap' },
-        { menu: 'Manager modules', component: 'cd-mgr-module-list' },
+        { menu: 'Manager Modules', component: 'cd-mgr-module-list' },
         { menu: 'Logs', component: 'cd-logs' },
         { menu: 'Monitoring', component: 'cd-prometheus-tabs' }
       ]

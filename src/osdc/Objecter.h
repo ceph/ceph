@@ -811,7 +811,7 @@ struct ObjectOperation {
 	      clone.cloneid = std::move(c.cloneid);
 	      clone.snaps.reserve(c.snaps.size());
 	      std::move(c.snaps.begin(), c.snaps.end(),
-			clone.snaps.end());
+			std::back_inserter(clone.snaps));
 	      clone.overlap = c.overlap;
 	      clone.size = c.size;
 	      neosnaps->clones.push_back(std::move(clone));
@@ -1557,6 +1557,10 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_TIER_FLUSH);
   }
 
+  void tier_evict() {
+    add_op(CEPH_OSD_OP_TIER_EVICT);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -1778,6 +1782,10 @@ public:
     int min_size = -1; ///< the min size of the pool when were were last mapped
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
+    uint32_t peering_crush_bucket_count = 0;
+    uint32_t peering_crush_bucket_target = 0;
+    uint32_t peering_crush_bucket_barrier = 0;
+    int32_t peering_crush_mandatory_member = CRUSH_ITEM_NONE;
 
     bool used_replica = false;
     bool paused = false;
@@ -2567,9 +2575,7 @@ private:
 			     cct->_conf->objecter_inflight_ops)};
  public:
   Objecter(CephContext *cct, Messenger *m, MonClient *mc,
-	   boost::asio::io_context& service,
-	   double mon_timeout,
-	   double osd_timeout);
+	   boost::asio::io_context& service);
   ~Objecter() override;
 
   void init();

@@ -44,9 +44,8 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 		     cct->_conf.get_val<std::string>("ms_type"),
 		     entity_name_t::MGR(),
 		     "mgr",
-		     Messenger::get_pid_nonce(),
-		     0)),
-  objecter{g_ceph_context, client_messenger.get(), &monc, poolctx, 0, 0},
+		     Messenger::get_pid_nonce())),
+  objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
   client{client_messenger.get(), &monc, &objecter},
   mgrc(g_ceph_context, client_messenger.get(), &monc.monmap),
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
@@ -387,6 +386,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
   // this MgrMap is changing its set of enabled modules
   bool need_respawn = py_module_registry.handle_mgr_map(map);
   if (need_respawn) {
+    dout(1) << "respawning because set of enabled modules changed!" << dendl;
     respawn();
   }
 

@@ -4,7 +4,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { SharedModule } from '../../shared/shared.module';
@@ -25,8 +24,7 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     RouterModule,
     ReactiveFormsModule,
     NgbTooltipModule,
-    BlockModule,
-    NgBootstrapFormValidationModule
+    BlockModule
   ],
   exports: [PoolListComponent, PoolFormComponent],
   declarations: [

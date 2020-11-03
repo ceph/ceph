@@ -35,3 +35,6 @@ target_link_libraries(libneorados PRIVATE
 #   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 # target_link_libraries(libneorados ${rados_libs})
 # install(TARGETS libneorados DESTINATION ${CMAKE_INSTALL_LIBDIR})
+add_library(neorados_cls_fifo STATIC cls/fifo.cc)
+target_link_libraries(neorados_cls_fifo PRIVATE
+	libneorados ceph-common fmt::fmt)

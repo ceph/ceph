@@ -7,6 +7,7 @@ add_library(crimson-seastore STATIC
   journal.cc
   cache.cc
   lba_manager.cc
+  segment_cleaner.cc
   lba_manager/btree/btree_lba_manager.cc
   lba_manager/btree/lba_btree_node_impl.cc
   lba_manager/btree/btree_range_pin.cc
@@ -14,6 +15,9 @@ add_library(crimson-seastore STATIC
   onode_manager/simple-fltree/onode_block.cc
   onode_manager/simple-fltree/onode_delta.cc
   onode_manager/simple-fltree/onode_node.cc
+  extentmap_manager.cc
+  extentmap_manager/btree/extentmap_btree_node_impl.cc
+  extentmap_manager/btree/btree_extentmap_manager.cc
   seastore.cc
   ../../../test/crimson/seastore/test_block.cc
 	)

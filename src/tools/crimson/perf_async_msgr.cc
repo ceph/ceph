@@ -19,7 +19,7 @@ struct Server {
   Server(CephContext* cct, unsigned msg_len)
     : dummy_auth(cct), dispatcher(cct, msg_len)
   {
-    msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(0), "server", 0, 0));
+    msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(0), "server", 0));
     dummy_auth.auth_registry.refresh_config();
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));

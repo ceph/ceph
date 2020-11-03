@@ -3461,6 +3461,7 @@ def command_deploy():
                       uid=cc.uid, gid=cc.gid, config=None,
                       keyring=None, reconfig=args.reconfig,
                       ports=daemon_ports)
+
     elif daemon_type == CephadmDaemon.daemon_type:
         # get current user gid and uid
         uid = os.getuid()
@@ -3470,7 +3471,7 @@ def command_deploy():
             return
         deploy_daemon(args.fsid, daemon_type, daemon_id, None,
                       uid, gid, ports=daemon_ports)
-
+    
     else:
         raise Error('daemon type {} not implemented in command_deploy function'
                     .format(daemon_type))

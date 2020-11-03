@@ -8,6 +8,7 @@
 /doc/mgr/dashboard.rst                          @ceph/dashboard
 
 # Dashboard API team
+/src/pybind/mgr/dashboard/openapi.yaml                 @ceph/api
 /src/pybind/mgr/dashboard/controllers                  @ceph/api
 /src/pybind/mgr/dashboard/frontend/src/app/shared/api  @ceph/api
 /src/pybind/mgr/dashboard/run-backend-api-tests.sh     @ceph/api

@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, JObj, JList
+from .helper import DashboardTestCase, JList, JObj
 
 
 class CrushRuleTest(DashboardTestCase):
@@ -84,4 +84,3 @@ class CrushRuleTest(DashboardTestCase):
             'names': JList(str),
             'nodes': JList(JObj({}, allow_unknown=True))
         }))
-

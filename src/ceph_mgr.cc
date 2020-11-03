@@ -58,8 +58,7 @@ int main(int argc, const char **argv)
     { "keyring", "$mgr_data/keyring" }
   };
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_MGR,
-			 CODE_ENVIRONMENT_DAEMON, 0,
-			 "mgr_data");
+			 CODE_ENVIRONMENT_DAEMON, 0);
 
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 

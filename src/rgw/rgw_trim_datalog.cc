@@ -4,15 +4,17 @@
 #include <vector>
 #include <string>
 
+#include "common/errno.h"
+
 #include "rgw_trim_datalog.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
+#include "rgw_datalog.h"
 #include "rgw_data_sync.h"
 #include "rgw_zone.h"
 #include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_datalog_rados.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -22,6 +24,46 @@
 #define dout_prefix (*_dout << "data trim: ")
 
 namespace {
+
+class DatalogTrimImplCR : public RGWSimpleCoroutine {
+  rgw::sal::RGWRadosStore *store;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
+  int shard;
+  std::string marker;
+  std::string* last_trim_marker;
+
+ public:
+  DatalogTrimImplCR(rgw::sal::RGWRadosStore* store, int shard,
+		    const std::string& marker, std::string* last_trim_marker)
+  : RGWSimpleCoroutine(store->ctx()), store(store), shard(shard),
+    marker(marker), last_trim_marker(last_trim_marker) {
+    set_description() << "Datalog trim shard=" << shard
+		      << " marker=" << marker;
+  }
+
+  int send_request() override {
+    set_status() << "sending request";
+    cn = stack->create_completion_notifier();
+    return store->svc()->datalog_rados->trim_entries(shard, marker,
+						     cn->completion());
+  }
+  int request_complete() override {
+    int r = cn->completion()->get_return_value();
+    ldout(cct, 20) << __PRETTY_FUNCTION__ << "(): trim of shard=" << shard
+		  << " marker=" << marker << " returned r=" << r << dendl;
+
+    set_status() << "request complete; ret=" << r;
+    if (r != -ENODATA) {
+      return r;
+    }
+    // nothing left to trim, update last_trim_marker
+    if (*last_trim_marker < marker &&
+	marker != store->svc()->datalog_rados->max_marker()) {
+      *last_trim_marker = marker;
+    }
+    return 0;
+  }
+};
 
 /// return the marker that it's safe to trim up to
 const std::string& get_stable_marker(const rgw_data_sync_marker& m)
@@ -52,7 +94,7 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
 } // anonymous namespace
 
 class DataLogTrimCR : public RGWCoroutine {
-  using TrimCR = RGWSyncLogTrimCR;
+  using TrimCR = DatalogTrimImplCR;
   rgw::sal::RGWRadosStore *store;
   RGWHTTPManager *http;
   const int num_shards;
@@ -69,7 +111,8 @@ class DataLogTrimCR : public RGWCoroutine {
       num_shards(num_shards),
       zone_id(store->svc()->zone->get_zone().id),
       peer_status(store->svc()->zone->get_zone_data_notify_to_map().size()),
-      min_shard_markers(num_shards, TrimCR::max_marker),
+      min_shard_markers(num_shards,
+			std::string(store->svc()->datalog_rados->max_marker())),
       last_trim(last_trim)
   {}
 
@@ -128,8 +171,7 @@ int DataLogTrimCR::operate()
         ldout(cct, 10) << "trimming log shard " << i
             << " at marker=" << m
             << " last_trim=" << last_trim[i] << dendl;
-        spawn(new TrimCR(store, store->svc()->datalog_rados->get_oid(i),
-                         m, &last_trim[i]),
+        spawn(new TrimCR(store, i, m, &last_trim[i]),
               true);
       }
     }

@@ -107,8 +107,7 @@ By default, Ceph authentication is ``on``. Your application will need to know
 the location of the keyring. The ``python-ceph`` module doesn't have the default
 location, so you need to specify the keyring path. The easiest way to specify
 the keyring is to add it to the Ceph configuration file. The following Ceph
-configuration file example uses the ``client.admin`` keyring you generated with
-``ceph-deploy``.
+configuration file example uses the ``client.admin`` keyring.
 
 .. code-block:: ini
    :linenos:

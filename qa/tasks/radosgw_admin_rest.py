@@ -464,6 +464,11 @@ def task(ctx, config):
     assert out['usage']['rgw.main']['num_objects'] == 1
     assert out['usage']['rgw.main']['size_kb'] > 0
 
+    # TESTCASE 'bucket-stats6', 'bucket', 'stats', 'non-existent bucket', 'fails, 'bucket not found error'
+    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'bucket' : 'doesnotexist'})
+    assert ret == 404
+    assert out['Code'] == 'NoSuchBucket'
+
     # reclaim it
     key.delete()
 

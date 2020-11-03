@@ -33,16 +33,31 @@ describe('OrchestratorService', () => {
     expect(req.request.method).toBe('GET');
   });
 
-  it('should call inventoryList', () => {
-    service.inventoryList().subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/inventory`);
-    expect(req.request.method).toBe('GET');
-  });
+  it('should call inventoryList with arguments', () => {
+    const inventoryPath = `${apiPath}/inventory`;
+    const tests: { args: any[]; expectedUrl: any }[] = [
+      {
+        args: [],
+        expectedUrl: inventoryPath
+      },
+      {
+        args: ['host0'],
+        expectedUrl: `${inventoryPath}?hostname=host0`
+      },
+      {
+        args: [undefined, true],
+        expectedUrl: `${inventoryPath}?refresh=true`
+      },
+      {
+        args: ['host0', true],
+        expectedUrl: `${inventoryPath}?hostname=host0&refresh=true`
+      }
+    ];
 
-  it('should call inventoryList with a host', () => {
-    const host = 'host0';
-    service.inventoryList(host).subscribe();
-    const req = httpTesting.expectOne(`${apiPath}/inventory?hostname=${host}`);
-    expect(req.request.method).toBe('GET');
+    for (const test of tests) {
+      service.inventoryList(...test.args).subscribe();
+      const req = httpTesting.expectOne(test.expectedUrl);
+      expect(req.request.method).toBe('GET');
+    }
   });
 });

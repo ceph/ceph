@@ -79,6 +79,8 @@ public:
 
   /* Subuser of Account */
   virtual string get_subuser() const = 0;
+
+  virtual string get_role_tenant() const { return ""; }
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -366,24 +368,26 @@ protected:
   CephContext* const cct;
   RGWCtl* const ctl;
   string role_session;
+  string role_tenant;
   rgw::web_idp::WebTokenClaims token_claims;
 
   string get_idp_url() const;
 
+  void create_account(const DoutPrefixProvider* dpp,
+                      const rgw_user& acct_user,
+                      const string& display_name,
+                      RGWUserInfo& user_info) const;     /* out */
 public:
   WebIdentityApplier( CephContext* const cct,
                       RGWCtl* const ctl,
                       const string& role_session,
+                      const string& role_tenant,
                       const rgw::web_idp::WebTokenClaims& token_claims)
     : cct(cct),
       ctl(ctl),
       role_session(role_session),
+      role_tenant(role_tenant),
       token_claims(token_claims) {
-  }
-
-  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {
-    user_info.user_id = rgw_user(token_claims.sub);
-    user_info.display_name = token_claims.user_name;
   }
 
   void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
@@ -397,6 +401,9 @@ public:
   }
 
   bool is_owner_of(const rgw_user& uid) const override {
+    if (uid.id == token_claims.sub && uid.tenant == role_tenant && uid.ns == "oidc") {
+      return true;
+    }
     return false;
   }
 
@@ -407,6 +414,8 @@ public:
   void to_str(std::ostream& out) const override;
 
   bool is_identity(const idset_t& ids) const override;
+
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;
 
   uint32_t get_identity_type() const override {
     return TYPE_WEB;
@@ -426,6 +435,7 @@ public:
     virtual aplptr_t create_apl_web_identity( CephContext* cct,
                                               const req_state* s,
                                               const string& role_session,
+                                              const string& role_tenant,
                                               const rgw::web_idp::WebTokenClaims& token) const = 0;
   };
 };
@@ -639,6 +649,7 @@ protected:
   string token_policy;
   string role_session_name;
   std::vector<string> token_claims;
+  string token_issued_at;
 
 public:
 
@@ -647,12 +658,14 @@ public:
                const rgw_user& user_id,
                const string& token_policy,
                const string& role_session_name,
-               const std::vector<string>& token_claims)
+               const std::vector<string>& token_claims,
+               const string& token_issued_at)
     : role(role),
       user_id(user_id),
       token_policy(token_policy),
       role_session_name(role_session_name),
-      token_claims(token_claims) {}
+      token_claims(token_claims),
+      token_issued_at(token_issued_at) {}
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
@@ -661,7 +674,7 @@ public:
     return false;
   }
   bool is_owner_of(const rgw_user& uid) const override {
-    return false;
+    return (this->user_id.id == uid.id && this->user_id.tenant == uid.tenant && this->user_id.ns == uid.ns);
   }
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
@@ -673,16 +686,18 @@ public:
   string get_acct_name() const override { return {}; }
   string get_subuser() const override { return {}; }
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
+  string get_role_tenant() const override { return role.tenant; }
 
   struct Factory {
     virtual ~Factory() {}
     virtual aplptr_t create_apl_role( CephContext* cct,
                                       const req_state* s,
-                                      const rgw::auth::RoleApplier::Role& role_name,
+                                      const rgw::auth::RoleApplier::Role& role,
                                       const rgw_user& user_id,
                                       const std::string& token_policy,
                                       const std::string& role_session,
-                                      const std::vector<string>& token_claims) const = 0;
+                                      const std::vector<string>& token_claims,
+                                      const std::string& token_issued_at) const = 0;
     };
 };
 

@@ -542,10 +542,8 @@ public:
 
 class RGWRESTOp : public RGWOp {
 protected:
-  int http_ret;
   RGWRESTFlusher flusher;
 public:
-  RGWRESTOp() : http_ret(0) {}
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s,
             RGWHandler *dialect_handler) override {
     RGWOp::init(store, s, dialect_handler);

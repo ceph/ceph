@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { MonitorService } from '../../../shared/api/monitor.service';
+import { SharedModule } from '../../../shared/shared.module';
 import { MonitorComponent } from './monitor.component';
 
 describe('MonitorComponent', () => {
@@ -14,7 +15,7 @@ describe('MonitorComponent', () => {
   let getMonitorSpy: jasmine.Spy;
 
   configureTestBed({
-    imports: [HttpClientTestingModule],
+    imports: [HttpClientTestingModule, SharedModule],
     declarations: [MonitorComponent],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [MonitorService]

@@ -566,6 +566,7 @@ void ObjectCacher::Object::truncate(loff_t s)
   ceph_assert(ceph_mutex_is_locked(oc->lock));
   ldout(oc->cct, 10) << "truncate " << *this << " to " << s << dendl;
 
+  std::list<Context*> waiting_for_read;
   while (!data.empty()) {
     BufferHead *bh = data.rbegin()->second;
     if (bh->end() <= s)
@@ -580,11 +581,18 @@ void ObjectCacher::Object::truncate(loff_t s)
 
     // remove bh entirely
     ceph_assert(bh->start() >= s);
-    ceph_assert(bh->waitfor_read.empty());
+    for ([[maybe_unused]] auto& [off, ctxs] : bh->waitfor_read) {
+      waiting_for_read.splice(waiting_for_read.end(), ctxs);
+    }
+    bh->waitfor_read.clear();
     replace_journal_tid(bh, 0);
     oc->bh_remove(this, bh);
     delete bh;
   }
+  if (!waiting_for_read.empty()) {
+    ldout(oc->cct, 10) <<  "restarting reads post-truncate" << dendl;
+  }
+  finish_contexts(oc->cct, waiting_for_read, 0);
 }
 
 void ObjectCacher::Object::discard(loff_t off, loff_t len,
@@ -603,6 +611,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
     complete = false;
   }
 
+  std::list<Context*> waiting_for_read;
   auto p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
@@ -640,12 +649,19 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
       // we should mark all Rx bh to zero
       continue;
     } else {
-      ceph_assert(bh->waitfor_read.empty());
+      for ([[maybe_unused]] auto& [off, ctxs] : bh->waitfor_read) {
+        waiting_for_read.splice(waiting_for_read.end(), ctxs);
+      }
+      bh->waitfor_read.clear();
     }
 
     oc->bh_remove(this, bh);
     delete bh;
   }
+  if (!waiting_for_read.empty()) {
+    ldout(oc->cct, 10) <<  "restarting reads post-discard" << dendl;
+  }
+  finish_contexts(oc->cct, waiting_for_read, 0); /* restart reads */
 }
 
 
@@ -1720,6 +1736,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     trace.event("start");
   }
 
+  list<Context*> wait_for_reads;
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ++ex_it) {
@@ -1732,6 +1749,12 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     BufferHead *bh = o->map_write(*ex_it, wr->journal_tid);
     bool missing = bh->is_missing();
     bh->snapc = wr->snapc;
+
+    // readers that need to be woken up due to an overwrite
+    for (auto& [_, wait_for_read] : bh->waitfor_read) {
+      wait_for_reads.splice(wait_for_reads.end(), wait_for_read);
+    }
+    bh->waitfor_read.clear();
 
     bytes_written += ex_it->length;
     if (bh->is_tx()) {
@@ -1791,6 +1814,8 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 
   int r = _wait_for_write(wr, bytes_written, oset, &trace, onfreespace);
   delete wr;
+
+  finish_contexts(cct, wait_for_reads, 0);
 
   //verify_stats();
   trim();

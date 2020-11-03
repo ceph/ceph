@@ -5,10 +5,12 @@ import { By } from '@angular/platform-browser';
 import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
 import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 import { configureTestSuite } from 'ng-bullet';
 import { of } from 'rxjs';
 
 import { InventoryDevice } from '../app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { Pool } from '../app/ceph/pool/pool';
 import { OrchestratorService } from '../app/shared/api/orchestrator.service';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
@@ -382,6 +384,17 @@ export class Mocks {
   ): CrushNode {
     return { name, type, type_id, id, children, device_class };
   }
+
+  static getPool = (name: string, id: number): Pool => {
+    return _.merge(new Pool(name), {
+      pool: id,
+      type: 'replicated',
+      pg_num: 256,
+      pg_placement_num: 256,
+      pg_num_target: 256,
+      pg_placement_num_target: 256
+    });
+  };
 
   /**
    * Create the following test crush map:

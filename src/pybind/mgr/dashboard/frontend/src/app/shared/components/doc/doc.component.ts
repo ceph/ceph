@@ -10,14 +10,19 @@ import { DocService } from '../../../shared/services/doc.service';
 export class DocComponent implements OnInit {
   @Input() section: string;
   @Input() docText = $localize`documentation`;
+  @Input() noSubscribe: boolean;
 
   docUrl: string;
 
   constructor(private docService: DocService) {}
 
   ngOnInit() {
-    this.docService.subscribeOnce(this.section, (url: string) => {
-      this.docUrl = url;
-    });
+    if (this.noSubscribe) {
+      this.docUrl = this.docService.urlGenerator(this.section);
+    } else {
+      this.docService.subscribeOnce(this.section, (url: string) => {
+        this.docUrl = url;
+      });
+    }
   }
 }

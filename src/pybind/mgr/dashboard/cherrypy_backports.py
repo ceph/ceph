@@ -43,8 +43,7 @@ def patch_http_connection_init(v):
     # It was fixed in 3.7.0.  Exact lower bound version is probably earlier,
     # but 3.5.0 is what this monkey patch is tested on.
     if StrictVersion("3.5.0") <= v < StrictVersion("3.7.0"):
-        from cherrypy.wsgiserver.wsgiserver2 import \
-            HTTPConnection, CP_fileobject
+        from cherrypy.wsgiserver.wsgiserver2 import CP_fileobject, HTTPConnection
 
         def fixed_init(hc_self, server, sock, makefile=CP_fileobject):
             hc_self.server = server
@@ -156,6 +155,7 @@ def patch_request_unique_id(v):
     if v < StrictVersion('11.1.0'):
         import uuid
         from functools import update_wrapper
+
         from cherrypy._cprequest import Request
 
         class LazyUUID4(object):

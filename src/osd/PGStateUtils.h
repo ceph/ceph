@@ -10,7 +10,6 @@
 #include <vector>
 #include <boost/circular_buffer.hpp>
 
-class PG;
 class PGStateHistory;
 
 struct EpochSource {

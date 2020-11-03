@@ -1,0 +1,390 @@
+[
+  {
+    "addr": "node1",
+    "devices": [
+      {
+        "available": false,
+        "device_id": "",
+        "human_readable_type": "hdd",
+        "lvs": [],
+        "path": "/dev/vda",
+        "rejected_reasons": ["locked"],
+        "sys_api": {
+          "human_readable_size": "42.00 GB",
+          "locked": 1,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {
+            "vda1": {
+              "holders": [],
+              "human_readable_size": "2.00 MB",
+              "sectors": "4096",
+              "sectorsize": 512,
+              "size": 2097152.0,
+              "start": "2048"
+            },
+            "vda2": {
+              "holders": [],
+              "human_readable_size": "20.00 MB",
+              "sectors": "40960",
+              "sectorsize": 512,
+              "size": 20971520.0,
+              "start": "6144"
+            },
+            "vda3": {
+              "holders": [],
+              "human_readable_size": "41.98 GB",
+              "sectors": "88033247",
+              "sectorsize": 512,
+              "size": 45073022464.0,
+              "start": "47104"
+            }
+          },
+          "path": "/dev/vda",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 45097156608.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": false,
+        "device_id": "641526",
+        "human_readable_type": "hdd",
+        "lvs": [
+          {
+            "block_uuid": "355c2I-e5kg-WWeT-bOsI-0Ez5-sfb7-7TZyE4",
+            "cluster_fsid": "68a32428-e2ab-11ea-9d25-525400ef4c6e",
+            "cluster_name": "ceph",
+            "name": "osd-data-3de18e23-8849-494c-83b0-458d97d32d72",
+            "osd_fsid": "a438ac13-f1bd-412c-9626-e2f063dbbf94",
+            "osd_id": "0",
+            "osdspec_affinity": "dashboard-admin-1597903910143",
+            "type": "block"
+          }
+        ],
+        "path": "/dev/vdb",
+        "rejected_reasons": ["locked", "LVM detected", "Insufficient space (<5GB) on vgs"],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 1,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vdb",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": false,
+        "device_id": "467047",
+        "human_readable_type": "hdd",
+        "lvs": [
+          {
+            "block_uuid": "iGC2VU-MSTt-ZP05-kKCP-5EtO-F1Y3-DYAAeb",
+            "cluster_fsid": "68a32428-e2ab-11ea-9d25-525400ef4c6e",
+            "cluster_name": "ceph",
+            "name": "osd-data-2031893c-c83b-4ff0-bfa1-de548044f707",
+            "osd_fsid": "6f544fc4-a3ea-40f9-9c48-69b5ee866709",
+            "osd_id": "1",
+            "osdspec_affinity": "dashboard-admin-1597903910143",
+            "type": "block"
+          }
+        ],
+        "path": "/dev/vdc",
+        "rejected_reasons": ["locked", "LVM detected", "Insufficient space (<5GB) on vgs"],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 1,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vdc",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": false,
+        "device_id": "900807",
+        "human_readable_type": "hdd",
+        "lvs": [
+          {
+            "block_uuid": "nO2VSn-IbXr-pxnx-ieXx-kIxk-B4hB-BM6ADc",
+            "cluster_fsid": "68a32428-e2ab-11ea-9d25-525400ef4c6e",
+            "cluster_name": "ceph",
+            "name": "osd-data-537f7b60-5887-440e-80c7-759c028db12d",
+            "osd_fsid": "adeddd37-5cc9-406a-88e5-2add3f81d089",
+            "osd_id": "2",
+            "osdspec_affinity": "dashboard-admin-1597903910143",
+            "type": "block"
+          }
+        ],
+        "path": "/dev/vdd",
+        "rejected_reasons": ["locked", "LVM detected", "Insufficient space (<5GB) on vgs"],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 1,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vdd",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": false,
+        "device_id": "757404",
+        "human_readable_type": "hdd",
+        "lvs": [
+          {
+            "block_uuid": "3YSAlw-VMeK-XfUK-rbOB-IKD1-Z9ZI-hUzlDe",
+            "cluster_fsid": "68a32428-e2ab-11ea-9d25-525400ef4c6e",
+            "cluster_name": "ceph",
+            "name": "osd-data-15b39d59-f259-4e93-adc6-bdac7d490d88",
+            "osd_fsid": "840a7138-88e2-4ecb-b88d-6fa2d04d88e7",
+            "osd_id": "3",
+            "osdspec_affinity": "dashboard-admin-1597903910143",
+            "type": "block"
+          }
+        ],
+        "path": "/dev/vde",
+        "rejected_reasons": ["locked", "LVM detected", "Insufficient space (<5GB) on vgs"],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 1,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vde",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      }
+    ],
+    "labels": [],
+    "name": "node1"
+  },
+  {
+    "addr": "node2",
+    "devices": [
+      {
+        "available": true,
+        "device_id": "115432",
+        "human_readable_type": "hdd",
+        "lvs": [],
+        "path": "/dev/vdb",
+        "rejected_reasons": [],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 0,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vdb",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": true,
+        "device_id": "937699",
+        "human_readable_type": "hdd",
+        "lvs": [],
+        "path": "/dev/vdc",
+        "rejected_reasons": [],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 0,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vdc",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": true,
+        "device_id": "854127",
+        "human_readable_type": "hdd",
+        "lvs": [],
+        "path": "/dev/vdd",
+        "rejected_reasons": [],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 0,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vdd",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": true,
+        "device_id": "122615",
+        "human_readable_type": "hdd",
+        "lvs": [],
+        "path": "/dev/vde",
+        "rejected_reasons": [],
+        "sys_api": {
+          "human_readable_size": "8.00 GB",
+          "locked": 0,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {},
+          "path": "/dev/vde",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 8589934592.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      },
+      {
+        "available": false,
+        "device_id": "",
+        "human_readable_type": "hdd",
+        "lvs": [],
+        "path": "/dev/vda",
+        "rejected_reasons": ["locked"],
+        "sys_api": {
+          "human_readable_size": "42.00 GB",
+          "locked": 1,
+          "model": "",
+          "nr_requests": "256",
+          "partitions": {
+            "vda1": {
+              "holders": [],
+              "human_readable_size": "2.00 MB",
+              "sectors": "4096",
+              "sectorsize": 512,
+              "size": 2097152.0,
+              "start": "2048"
+            },
+            "vda2": {
+              "holders": [],
+              "human_readable_size": "20.00 MB",
+              "sectors": "40960",
+              "sectorsize": 512,
+              "size": 20971520.0,
+              "start": "6144"
+            },
+            "vda3": {
+              "holders": [],
+              "human_readable_size": "41.98 GB",
+              "sectors": "88033247",
+              "sectorsize": 512,
+              "size": 45073022464.0,
+              "start": "47104"
+            }
+          },
+          "path": "/dev/vda",
+          "removable": "0",
+          "rev": "",
+          "ro": "0",
+          "rotational": "1",
+          "sas_address": "",
+          "sas_device_handle": "",
+          "scheduler_mode": "mq-deadline",
+          "sectors": 0,
+          "sectorsize": "512",
+          "size": 45097156608.0,
+          "support_discard": "512",
+          "vendor": "0x1af4"
+        }
+      }
+    ],
+    "labels": [],
+    "name": "node2"
+  }
+]

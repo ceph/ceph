@@ -23,7 +23,9 @@ BackgroundRecovery::BackgroundRecovery(
   ShardServices &ss,
   epoch_t epoch_started,
   crimson::osd::scheduler::scheduler_class_t scheduler_class)
-  : pg(pg), ss(ss), epoch_started(epoch_started),
+  : pg(pg),
+    epoch_started(epoch_started),
+    ss(ss),
     scheduler_class(scheduler_class)
 {}
 

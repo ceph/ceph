@@ -22,7 +22,6 @@ namespace io {
 
 struct ImageDispatcherInterface;
 
-template <typename ImageCtxT = ImageCtx>
 class ImageDispatchSpec {
 private:
   // helper to avoid extra heap allocation per object IO
@@ -40,8 +39,10 @@ private:
 public:
   struct Read {
     ReadResult read_result;
+    int read_flags;
 
-    Read(ReadResult &&read_result) : read_result(std::move(read_result)) {
+    Read(ReadResult &&read_result, int read_flags)
+      : read_result(std::move(read_result)), read_flags(read_flags) {
     }
   };
 
@@ -86,12 +87,25 @@ public:
     }
   };
 
+  struct ListSnaps {
+    SnapIds snap_ids;
+    int list_snaps_flags;
+    SnapshotDelta* snapshot_delta;
+
+    ListSnaps(SnapIds&& snap_ids, int list_snaps_flags,
+              SnapshotDelta* snapshot_delta)
+      : snap_ids(std::move(snap_ids)), list_snaps_flags(list_snaps_flags),
+        snapshot_delta(snapshot_delta) {
+    }
+  };
+
   typedef boost::variant<Read,
                          Discard,
                          Write,
                          WriteSame,
                          CompareAndWrite,
-                         Flush> Request;
+                         Flush,
+                         ListSnaps> Request;
 
   C_Dispatcher dispatcher_ctx;
 
@@ -103,71 +117,97 @@ public:
   AioCompletion* aio_comp;
   Extents image_extents;
   Request request;
+  IOContext io_context;
   int op_flags;
   ZTracer::Trace parent_trace;
-  uint64_t tid;
+  uint64_t tid = 0;
 
+  template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_read(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
-      ReadResult &&read_result, int op_flags,
-      const ZTracer::Trace &parent_trace) {
-    return new ImageDispatchSpec(image_ctx, image_dispatch_layer, aio_comp,
+      ReadResult &&read_result, IOContext io_context, int op_flags,
+      int read_flags, const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp,
                                  std::move(image_extents),
-                                 Read{std::move(read_result)},
-                                 op_flags, parent_trace, 0);
+                                 Read{std::move(read_result), read_flags},
+                                 io_context, op_flags, parent_trace);
   }
 
+  template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_discard(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
-      uint64_t tid) {
-    return new ImageDispatchSpec(image_ctx, image_dispatch_layer, aio_comp,
-                                 {{off, len}},
+      uint32_t discard_granularity_bytes, IOContext io_context,
+      const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp, {{off, len}},
                                  Discard{discard_granularity_bytes},
-                                 0, parent_trace, tid);
+                                 io_context, 0, parent_trace);
   }
 
+  template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace,
-      uint64_t tid) {
-    return new ImageDispatchSpec(image_ctx, image_dispatch_layer, aio_comp,
+      bufferlist &&bl, IOContext io_context, int op_flags,
+      const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp,
                                  std::move(image_extents), Write{std::move(bl)},
-                                 op_flags, parent_trace, tid);
+                                 io_context, op_flags, parent_trace);
   }
 
+  template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_write_same(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace,
-      uint64_t tid) {
-    return new ImageDispatchSpec(image_ctx, image_dispatch_layer, aio_comp,
+      bufferlist &&bl, IOContext io_context, int op_flags,
+      const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp,
                                  {{off, len}}, WriteSame{std::move(bl)},
-                                 op_flags, parent_trace, tid);
+                                 io_context, op_flags, parent_trace);
   }
 
+  template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_compare_and_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid) {
-    return new ImageDispatchSpec(image_ctx, image_dispatch_layer, aio_comp,
+      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp,
                                  std::move(image_extents),
                                  CompareAndWrite{std::move(cmp_bl),
                                                  std::move(bl),
                                                  mismatch_offset},
-                                 op_flags, parent_trace, tid);
+                                 io_context, op_flags, parent_trace);
   }
 
+  template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_flush(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, FlushSource flush_source,
       const ZTracer::Trace &parent_trace) {
-    return new ImageDispatchSpec(image_ctx, image_dispatch_layer, aio_comp, {},
-                                 Flush{flush_source}, 0, parent_trace, 0);
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp, {},
+                                 Flush{flush_source}, {}, 0, parent_trace);
+  }
+
+  template <typename ImageCtxT = ImageCtx>
+  static ImageDispatchSpec* create_list_snaps(
+      ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
+      AioCompletion *aio_comp, Extents &&image_extents, SnapIds&& snap_ids,
+      int list_snaps_flags, SnapshotDelta* snapshot_delta,
+      const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
+                                 image_dispatch_layer, aio_comp,
+                                 std::move(image_extents),
+                                 ListSnaps{std::move(snap_ids),
+                                           list_snaps_flags, snapshot_delta},
+                                 {}, 0, parent_trace);
   }
 
   ~ImageDispatchSpec() {
@@ -177,45 +217,27 @@ public:
   void send();
   void fail(int r);
 
-  bool is_write_op() const;
-
-  void start_op();
-
-  const Extents& get_image_extents() const;
-
-  AioCompletion* get_aio_completion() const {
-    return aio_comp;
-  }
-
-  uint64_t get_tid();
-  bool blocked = false;
-
 private:
   struct SendVisitor;
   struct IsWriteOpVisitor;
   struct TokenRequestedVisitor;
 
-  ImageDispatchSpec(ImageCtxT& image_ctx,
+  ImageDispatchSpec(ImageDispatcherInterface* image_dispatcher,
                     ImageDispatchLayer image_dispatch_layer,
                     AioCompletion* aio_comp, Extents&& image_extents,
-                    Request&& request, int op_flags,
-                    const ZTracer::Trace& parent_trace, uint64_t tid)
-    : dispatcher_ctx(this), image_dispatcher(image_ctx.io_image_dispatcher),
+                    Request&& request, IOContext io_context, int op_flags,
+                    const ZTracer::Trace& parent_trace)
+    : dispatcher_ctx(this), image_dispatcher(image_dispatcher),
       dispatch_layer(image_dispatch_layer), aio_comp(aio_comp),
       image_extents(std::move(image_extents)), request(std::move(request)),
-      op_flags(op_flags), parent_trace(parent_trace), tid(tid) {
+      io_context(io_context), op_flags(op_flags), parent_trace(parent_trace) {
+    ceph_assert(aio_comp->image_dispatcher_ctx == nullptr);
     aio_comp->image_dispatcher_ctx = &dispatcher_ctx;
     aio_comp->get();
   }
-
-  void finish(int r);
-
-  uint64_t extents_length();
 };
 
 } // namespace io
 } // namespace librbd
-
-extern template class librbd::io::ImageDispatchSpec<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IO_IMAGE_DISPATCH_SPEC_H

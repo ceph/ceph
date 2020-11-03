@@ -370,7 +370,7 @@ public:
     if (type) {
       type->items -= n;
     }
-    ::free(p);
+    aligned_free(p);
   }
 
   void destroy(T* p) {

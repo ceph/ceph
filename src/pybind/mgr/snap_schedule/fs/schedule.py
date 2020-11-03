@@ -207,12 +207,18 @@ class Schedule(object):
     GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'''
 
     @classmethod
-    def get_db_schedules(cls, path, db, fs, repeat=None, start=None):
+    def get_db_schedules(cls, path, db, fs,
+                         schedule=None,
+                         start=None,
+                         repeat=None):
         query = cls.GET_SCHEDULES
         data: Tuple[Any, ...] = (path,)
         if repeat:
             query += ' AND sm.repeat = ?'
             data += (repeat,)
+        if schedule:
+            query += ' AND sm.schedule = ?'
+            data += (schedule,)
         if start:
             query += ' AND sm.start = ?'
             data += (start,)

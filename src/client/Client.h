@@ -616,6 +616,7 @@ public:
   virtual void shutdown();
 
   // messaging
+  void cancel_commands(const MDSMap& newmap);
   void handle_mds_map(const MConstRef<MMDSMap>& m);
   void handle_fs_map(const MConstRef<MFSMap>& m);
   void handle_fs_map_user(const MConstRef<MFSMapUser>& m);
@@ -790,8 +791,6 @@ protected:
   void resend_unsafe_requests(MetaSession *s);
   void wait_unsafe_requests();
 
-  void _sync_write_commit(Inode *in);
-
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
@@ -854,10 +853,10 @@ protected:
    * Resolve file descriptor, or return NULL.
    */
   Fh *get_filehandle(int fd) {
-    ceph::unordered_map<int, Fh*>::iterator p = fd_map.find(fd);
-    if (p == fd_map.end())
+    auto it = fd_map.find(fd);
+    if (it == fd_map.end())
       return NULL;
-    return p->second;
+    return it->second;
   }
 
   // helpers
@@ -869,6 +868,8 @@ protected:
   // -- metadata cache stuff
 
   // decrease inode ref.  delete if dangling.
+  void _put_inode(Inode *in, int n);
+  void delay_put_inodes(bool wakeup=false);
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
@@ -1234,8 +1235,10 @@ private:
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
           const struct iovec *iov, int iovcnt);
-  int64_t _preadv_pwritev_locked(Fh *f, const struct iovec *iov,
-	      unsigned iovcnt, int64_t offset, bool write, bool clamp_to_int);
+  int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
+                                 unsigned iovcnt, int64_t offset,
+                                 bool write, bool clamp_to_int,
+                                 std::unique_lock<ceph::mutex> &cl);
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
@@ -1291,6 +1294,9 @@ private:
 
   bool _vxattrcb_snap_btime_exists(Inode *in);
   size_t _vxattrcb_snap_btime(Inode *in, char *val, size_t size);
+
+  bool _vxattrcb_mirror_info_exists(Inode *in);
+  size_t _vxattrcb_mirror_info(Inode *in, char *val, size_t size);
 
   static const VXattr *_get_vxattrs(Inode *in);
   static const VXattr *_match_vxattr(Inode *in, const char *name);
@@ -1355,6 +1361,8 @@ private:
   std::unique_ptr<FSMap> fsmap;
   std::unique_ptr<FSMapUser> fsmap_user;
 
+  // This mutex only protects command_table
+  ceph::mutex command_lock = ceph::make_mutex("Client::command_lock");
   // MDS command state
   CommandTable<MDSCommandOp> command_table;
 
@@ -1370,6 +1378,7 @@ private:
   ceph::unordered_set<dir_result_t*> opened_dirs;
   uint64_t fd_gen = 1;
 
+  bool   mount_aborted = false;
   bool   blocklisted = false;
 
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
@@ -1415,6 +1424,9 @@ private:
 
   uint64_t cap_hits = 0;
   uint64_t cap_misses = 0;
+
+  ceph::spinlock delay_i_lock;
+  std::map<Inode*,int> delay_i_release;
 };
 
 /**

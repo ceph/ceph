@@ -13,6 +13,7 @@
 #include "rgw_http_client.h"
 #include "rgw_sal.h"
 
+#include "rgw_datalog.h"
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
 #include "rgw_sync_policy.h"
@@ -348,7 +349,6 @@ struct RGWDataSyncCtx {
 };
 
 class RGWRados;
-class RGWDataChangesLogInfo;
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
@@ -612,6 +612,13 @@ public:
 
   void wakeup();
 };
+
+class BucketIndexShardsManager;
+
+int rgw_read_remote_bilog_info(RGWRESTConn* conn,
+                               const rgw_bucket& bucket,
+                               BucketIndexShardsManager& markers,
+                               optional_yield y);
 
 class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
   rgw::sal::RGWRadosStore *store;

@@ -117,6 +117,8 @@ public:
     extent = nextent;
   }
 
+  void take_pin(btree_range_pin_t &other);
+
   friend bool operator<(
     const btree_range_pin_t &lhs, const btree_range_pin_t &rhs) {
     return get_tuple(lhs.range) < get_tuple(rhs.range);
@@ -183,6 +185,8 @@ class btree_pin_set_t {
   /// Removes pin from set optionally checking whether parent has other children
   void remove_pin(btree_range_pin_t &pin, bool check_parent);
 
+  void replace_pin(btree_range_pin_t &to, btree_range_pin_t &from);
+
   /// Returns parent pin if exists
   btree_range_pin_t *maybe_get_parent(const lba_node_meta_t &pin);
 
@@ -215,6 +219,15 @@ public:
 
 class BtreeLBAPin : public LBAPin {
   friend class BtreeLBAManager;
+
+  /**
+   * parent
+   *
+   * populated until link_extent is called to ensure cache residence
+   * until add_pin is called.
+   */
+  CachedExtentRef parent;
+
   paddr_t paddr;
   btree_range_pin_t pin;
 
@@ -222,9 +235,10 @@ public:
   BtreeLBAPin() = default;
 
   BtreeLBAPin(
+    CachedExtentRef parent,
     paddr_t paddr,
     lba_node_meta_t &&meta)
-    : paddr(paddr) {
+    : parent(parent), paddr(paddr) {
     pin.set_range(std::move(meta));
   }
 
@@ -250,6 +264,10 @@ public:
     ret->pin.set_range(pin.range);
     ret->paddr = paddr;
     return ret;
+  }
+
+  void take_pin(LBAPin &opin) final {
+    pin.take_pin(static_cast<BtreeLBAPin&>(opin).pin);
   }
 };
 

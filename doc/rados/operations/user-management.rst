@@ -244,7 +244,7 @@ The following entries describe valid capability profiles:
 ``profile bootstrap-osd`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an OSD. Conferred on
-              deployment tools such as ``ceph-volume``, ``ceph-deploy``, etc.
+              deployment tools such as ``ceph-volume``, ``cephadm``, etc.
               so that they have permissions to add keys, etc. when
               bootstrapping an OSD.
 
@@ -252,21 +252,21 @@ The following entries describe valid capability profiles:
 ``profile bootstrap-mds`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap a metadata server.
-              Conferred on deployment tools such as ``ceph-deploy``, etc.
+              Conferred on deployment tools such as ``cephadm``, etc.
               so they have permissions to add keys, etc. when bootstrapping
               a metadata server.
 
 ``profile bootstrap-rbd`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an RBD user.
-              Conferred on deployment tools such as ``ceph-deploy``, etc.
+              Conferred on deployment tools such as ``cephadm``, etc.
               so they have permissions to add keys, etc. when bootstrapping
               an RBD user.
 
 ``profile bootstrap-rbd-mirror`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an ``rbd-mirror`` daemon
-              user. Conferred on deployment tools such as ``ceph-deploy``, etc.
+              user. Conferred on deployment tools such as ``cephadm``, etc.
               so they have permissions to add keys, etc. when bootstrapping
               an ``rbd-mirror`` daemon.
 
@@ -652,7 +652,7 @@ and the user followed by the capabilities. For example::
 	sudo ceph-authtool /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx'
 
 To update the user to the Ceph Storage Cluster, you must update the user
-in the keyring to the user entry in the the Ceph Storage Cluster. ::
+in the keyring to the user entry in the Ceph Storage Cluster. ::
 
 	sudo ceph auth import -i /etc/ceph/ceph.keyring
 

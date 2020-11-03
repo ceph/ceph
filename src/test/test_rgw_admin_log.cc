@@ -33,6 +33,7 @@ extern "C"{
 #include "common/Finisher.h"
 #include "global/global_init.h"
 #include "rgw/rgw_common.h"
+#include "rgw/rgw_datalog.h"
 #include "rgw/rgw_mdlog.h"
 #include "rgw/rgw_bucket.h"
 #include "rgw/rgw_rados.h"

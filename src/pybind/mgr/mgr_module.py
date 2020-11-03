@@ -234,8 +234,8 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
             return None
 
         try:
-            first_take = [s for s in rule['steps'] if s['op'] == 'take'][0]
-        except IndexError:
+            first_take = next(s for s in rule['steps'] if s.get('op') == 'take')
+        except StopIteration:
             logging.warning("CRUSH rule '{0}' has no 'take' step".format(
                 rule_name))
             return None
@@ -1491,10 +1491,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
-    def update_progress_event(self, evid, desc, progress):
+    def update_progress_event(self, evid, desc, progress, add_to_ceph_s):
         return self._ceph_update_progress_event(str(evid),
                                                 str(desc),
-                                                float(progress))
+                                                float(progress), 
+                                                bool(add_to_ceph_s))
 
     def complete_progress_event(self, evid):
         return self._ceph_complete_progress_event(str(evid))
@@ -1602,6 +1603,51 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param int query_id: query ID
         """
         return self._ceph_get_osd_perf_counters(query_id)
+
+    def add_mds_perf_query(self, query):
+        """
+        Register an MDS perf query.  Argument is a
+        dict of the query parameters, in this form:
+
+        ::
+
+           {
+             'key_descriptor': [
+               {'type': subkey_type, 'regex': regex_pattern},
+               ...
+             ],
+             'performance_counter_descriptors': [
+               list, of, descriptor, types
+             ],
+           }
+
+        NOTE: 'limit' and 'order_by' are not supported (yet).
+
+        Valid subkey types:
+           'mds_rank', 'client_id'
+        Valid performance counter types:
+           'cap_hit_metric'
+
+        :param object query: query
+        :rtype: int (query id)
+        """
+        return self._ceph_add_mds_perf_query(query)
+
+    def remove_mds_perf_query(self, query_id):
+        """
+        Unregister an MDS perf query.
+
+        :param int query_id: query ID
+        """
+        return self._ceph_remove_mds_perf_query(query_id)
+
+    def get_mds_perf_counters(self, query_id):
+        """
+        Get stats collected for an MDS perf query.
+
+        :param int query_id: query ID
+        """
+        return self._ceph_get_mds_perf_counters(query_id)
 
     def is_authorized(self, arguments):
         """

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-public-methods
 
 from __future__ import absolute_import
 
 import time
-
 from datetime import datetime, timedelta
 
 from .helper import DashboardTestCase

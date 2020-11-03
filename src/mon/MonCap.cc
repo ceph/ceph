@@ -139,7 +139,8 @@ BOOST_FUSION_ADAPT_STRUCT(MonCapGrant,
 			  (std::string, command)
 			  (kvmap, command_args)
 			  (mon_rwxa_t, allow)
-			  (std::string, network))
+			  (std::string, network)
+                          (std::string, fs_name))
 
 BOOST_FUSION_ADAPT_STRUCT(StringConstraint,
                           (StringConstraint::MatchType, match_type)
@@ -539,6 +540,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     unquoted_word %= +char_("a-zA-Z0-9_./-");
     str %= quoted_string | unquoted_word;
     network_str %= +char_("/.:a-fA-F0-9][");
+    fs_name_str %= +char_("a-zA-Z0-9-_.");
 
     spaces = +(lit(' ') | lit('\n') | lit('\t'));
 
@@ -579,7 +581,8 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 			  >> qi::attr(string()) >> qi::attr(string()) >> qi::attr(string())
 			  >> qi::attr(map<string,StringConstraint>())
 			  >> rwxa
-			  >> -(spaces >> lit("network") >> spaces >> network_str);
+			  >> -(spaces >> lit("network") >> spaces >> network_str)
+			  >> -(spaces >> lit("fsname") >> (lit('=') | spaces) >> fs_name_str);
 
     // rwxa := * | [r][w][x]
     rwxa =
@@ -605,6 +608,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
   qi::rule<Iterator, string()> quoted_string;
   qi::rule<Iterator, string()> unquoted_word;
   qi::rule<Iterator, string()> str, network_str;
+  qi::rule<Iterator, string()> fs_name_str;
 
   qi::rule<Iterator, StringConstraint()> str_match, str_prefix, str_regex;
   qi::rule<Iterator, pair<string, StringConstraint>()> kv_pair;

@@ -1,9 +1,9 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 .fa {
   font-size: large;
 
   &.fa-square-o {
-    color: bd.$gray-400;
+    color: vv.$gray-400;
   }
 }

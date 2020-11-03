@@ -385,6 +385,10 @@ public:
   int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
 		   const std::vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
+  bool fs_name_capable(std::string_view fs_name, unsigned mask) const {
+    return auth_caps.fs_name_capable(fs_name, mask);
+  }
+
   void set_connection(ConnectionRef con) {
     connection = std::move(con);
     auto& c = connection;
@@ -495,7 +499,7 @@ public:
   bool match(
       const Session &session,
       std::function<bool(client_t)> is_reconnecting) const;
-  int parse(const std::vector<std::string> &args, std::stringstream *ss);
+  int parse(const std::vector<std::string> &args, std::ostream *ss);
   void set_reconnecting(bool v)
   {
     reconnecting.first = true;

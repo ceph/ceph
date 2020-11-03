@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 from collections import defaultdict
+
 try:
     from mock import Mock
 except ImportError:
     from unittest.mock import Mock
 
 from .. import mgr
-from . import ControllerTestCase
 from ..controllers.cephfs import CephFS
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class MetaDataMock(object):

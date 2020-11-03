@@ -75,9 +75,10 @@ bool ExclusiveLock<I>::accept_ops(const ceph::mutex &lock) const {
 }
 
 template <typename I>
-void ExclusiveLock<I>::set_require_lock(io::Direction direction,
+void ExclusiveLock<I>::set_require_lock(bool init_shutdown,
+                                        io::Direction direction,
                                         Context* on_finish) {
-  m_image_dispatch->set_require_lock(direction, on_finish);
+  m_image_dispatch->set_require_lock(init_shutdown, direction, on_finish);
 }
 
 template <typename I>
@@ -124,17 +125,33 @@ void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
 
   on_init = create_context_callback<Context>(on_init, this);
 
-  ldout(m_image_ctx.cct, 10) << dendl;
+  ldout(m_image_ctx.cct, 10) << ": features=" << features << dendl;
 
   {
     std::lock_guard locker{ML<I>::m_lock};
     ML<I>::set_state_initializing();
   }
 
-  auto ctx = new LambdaContext([this, features, on_init](int r) {
-      handle_init_complete(r, features, on_init);
+  m_image_dispatch = exclusive_lock::ImageDispatch<I>::create(&m_image_ctx);
+  m_image_ctx.io_image_dispatcher->register_dispatch(m_image_dispatch);
+
+  on_init = new LambdaContext([this, on_init](int r) {
+      {
+        std::lock_guard locker{ML<I>::m_lock};
+        ML<I>::set_state_unlocked();
+      }
+
+      on_init->complete(r);
     });
-  m_image_ctx.io_image_dispatcher->block_writes(ctx);
+
+  bool pwl_enabled = cache::util::is_pwl_enabled(m_image_ctx);
+  if (m_image_ctx.clone_copy_on_read ||
+      (features & RBD_FEATURE_JOURNALING) != 0 ||
+      pwl_enabled) {
+    m_image_dispatch->set_require_lock(true, io::DIRECTION_BOTH, on_init);
+  } else {
+    m_image_dispatch->set_require_lock(true, io::DIRECTION_WRITE, on_init);
+  }
 }
 
 template <typename I>
@@ -178,41 +195,6 @@ Context *ExclusiveLock<I>::start_op(int* ret_val) {
   return new LambdaContext([this](int r) {
       m_async_op_tracker.finish_op();
     });
-}
-
-template <typename I>
-void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
-                                            Context* on_finish) {
-  if (r < 0) {
-    m_image_ctx.io_image_dispatcher->unblock_writes();
-    on_finish->complete(r);
-    return;
-  }
-
-  ldout(m_image_ctx.cct, 10) << ": features=" << features << dendl;
-
-  m_image_dispatch = exclusive_lock::ImageDispatch<I>::create(&m_image_ctx);
-  m_image_ctx.io_image_dispatcher->register_dispatch(m_image_dispatch);
-
-  on_finish = new LambdaContext([this, on_finish](int r) {
-      m_image_ctx.io_image_dispatcher->unblock_writes();
-
-      {
-        std::lock_guard locker{ML<I>::m_lock};
-        ML<I>::set_state_unlocked();
-      }
-
-      on_finish->complete(r);
-    });
-
-  bool rwl_enabled = cache::util::is_rwl_enabled(m_image_ctx);
-  if (m_image_ctx.clone_copy_on_read ||
-      (features & RBD_FEATURE_JOURNALING) != 0 ||
-      rwl_enabled) {
-    m_image_dispatch->set_require_lock(io::DIRECTION_BOTH, on_finish);
-  } else {
-    m_image_dispatch->set_require_lock(io::DIRECTION_WRITE, on_finish);
-  }
 }
 
 template <typename I>

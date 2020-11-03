@@ -127,20 +127,19 @@ namespace rgw {
 
   class RGWLibRequest : public RGWRequest,
 			public RGWHandler_Lib {
+  private:
+    std::unique_ptr<rgw::sal::RGWUser> tuser; // Don't use this.  It's empty except during init.
   public:
     CephContext* cct;
-    rgw::sal::RGWUser* user;
     boost::optional<RGWSysObjectCtx> sysobj_ctx;
 
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
-    RGWLibRequest(CephContext* _cct, rgw::sal::RGWUser* _user)
-      :  RGWRequest(rgwlib.get_store()->getRados()->get_new_req_id()), cct(_cct),
-	 user(_user)
+    RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user)
+      :  RGWRequest(rgwlib.get_store()->getRados()->get_new_req_id()),
+	 tuser(std::move(_user)), cct(_cct)
       {}
-
-    rgw::sal::RGWUser* get_user() { return user; }
 
   int postauth_init() override { return 0; }
 
@@ -168,6 +167,8 @@ namespace rgw {
       get_state()->sysobj_ctx = &(sysobj_ctx.get());
       get_state()->req_id = store->svc()->zone_utils->unique_id(id);
       get_state()->trans_id = store->svc()->zone_utils->unique_trans_id(id);
+      get_state()->bucket_tenant = tuser->get_tenant();
+      get_state()->set_user(tuser);
 
       ldpp_dout(_s, 2) << "initializing for trans_id = "
 	  << get_state()->trans_id.c_str() << dendl;
@@ -191,9 +192,9 @@ namespace rgw {
     RGWObjectCtx rados_ctx;
   public:
 
-    RGWLibContinuedReq(CephContext* _cct, rgw::sal::RGWUser* _user)
-      :  RGWLibRequest(_cct, _user), io_ctx(),
-	 rstate(_cct, &io_ctx.get_env(), _user, id),
+    RGWLibContinuedReq(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user)
+      :  RGWLibRequest(_cct, std::move(_user)), io_ctx(),
+	 rstate(_cct, &io_ctx.get_env(), id),
 	 rados_ctx(rgwlib.get_store(), &rstate)
       {
 	io_ctx.init(_cct);

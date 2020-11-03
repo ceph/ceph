@@ -2,13 +2,13 @@
 from __future__ import absolute_import
 
 import logging
+
 import cherrypy
 
-from . import ApiController, RESTController, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..services.auth import AuthManager, JwtManager
-
+from . import ApiController, ControllerDoc, EndpointDoc, RESTController, allow_empty_body
 
 logger = logging.getLogger('controllers.auth')
 
@@ -28,6 +28,7 @@ class Auth(RESTController):
     """
     Provide authenticates and returns JWT token.
     """
+
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
@@ -56,6 +57,7 @@ class Auth(RESTController):
                                  component='auth')
 
     @RESTController.Collection('POST')
+    @allow_empty_body
     def logout(self):
         logger.debug('Logout successful')
         token = JwtManager.get_token_from_header()

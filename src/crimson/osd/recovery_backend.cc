@@ -30,7 +30,7 @@ hobject_t RecoveryBackend::get_temp_recovery_object(
 }
 
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
-			       const std::string& why)
+			       std::string_view why)
 {
   for (auto& soid : temp_contents) {
     t.remove(pg.get_collection_ref()->get_cid(),
@@ -39,8 +39,12 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   temp_contents.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if (recovery_waiter.obc && recovery_waiter.obc->obs.exists) {
-      recovery_waiter.obc->drop_recovery_read();
+    if ((recovery_waiter.pi && recovery_waiter.pi->is_complete())
+	|| (!recovery_waiter.pi
+	  && recovery_waiter.obc && recovery_waiter.obc->obs.exists)) {
+      recovery_waiter.obc->interrupt(
+	  ::crimson::common::actingset_changed(
+	      pg.is_primary()));
       recovery_waiter.interrupt(why);
     }
   }
@@ -229,7 +233,7 @@ seastar::future<> RecoveryBackend::handle_scan_digest(
 {
   logger().debug("{}", __func__);
   // Check that from is in backfill_targets vector
-  ceph_assert(pg.get_peering_state().is_backfill_target(m.from));
+  ceph_assert(pg.is_backfill_target(m.from));
 
   BackfillInterval bi;
   bi.begin = m.begin;

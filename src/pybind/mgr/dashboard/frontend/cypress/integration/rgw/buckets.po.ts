@@ -68,7 +68,7 @@ export class BucketsPageHelper extends PageHelper {
     cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
 
     // Disable versioning:
-    this.navigateEdit(name, false);
+    this.navigateEdit(name);
 
     cy.get('label[for=versioning]').click();
     cy.get('input[id=versioning]').should('not.be.checked');

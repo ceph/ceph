@@ -40,7 +40,6 @@ you may write data with one API and retrieve it with the other.
 .. toctree::
    :maxdepth: 1
 
-   Manual Install w/Civetweb <../../install/ceph-deploy/install-ceph-gateway>
    HTTP Frontends <frontends>
    Pool Placement and Storage Classes <placement>
    Multisite Configuration <multisite>
@@ -79,4 +78,5 @@ you may write data with one API and retrieve it with the other.
    Manpage radosgw-admin <../../man/8/radosgw-admin>
    QAT Acceleration for Encryption and Compression <qat-accel>
    S3-select <s3select>
+   Lua Scripting <lua-scripting>
 

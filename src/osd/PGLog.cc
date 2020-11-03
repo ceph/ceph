@@ -356,7 +356,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
   dirty_big_info = true;
 }
 
-void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
+void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
                       pg_info_t &info, LogEntryHandler *rollbacker,
                       bool &dirty_info, bool &dirty_big_info)
 {
@@ -399,7 +399,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
 
     // splice into our log.
     log.log.splice(log.log.begin(),
-		   olog.log, from, to);
+		   std::move(olog.log), from, to);
 
     info.log_tail = log.tail = olog.tail;
     changed = true;

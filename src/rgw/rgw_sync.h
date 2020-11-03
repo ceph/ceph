@@ -14,12 +14,9 @@
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_sync_trace.h"
 #include "rgw_mdlog.h"
-
-namespace rgw { namespace sal {
-  class RGWRadosStore;
-} }
 
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"

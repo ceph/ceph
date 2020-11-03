@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from .. import mgr
-from . import ControllerTestCase
 from ..controllers.erasure_code_profile import ErasureCodeProfile
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class ErasureCodeProfileTest(ControllerTestCase):

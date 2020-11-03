@@ -23,7 +23,7 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
-| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* ] ...
+| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* ] ...
 
 | **ceph** **fsid**
 
@@ -385,6 +385,13 @@ Usage::
 
 	ceph fs rm <fs_name> {--yes-i-really-mean-it}
 
+Subcommand ``authorize`` creates a new client that will be authorized for the
+given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
+``<perms>`` below can be ``r``, ``rw`` or ``rwp``.
+
+Usage::
+
+    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
 
 fsid
 ----
@@ -1145,7 +1152,7 @@ Usage::
 
         ceph osd pool application rm <pool-name> <app> <key>
 
-Subcommand ``set`` assosciates or updates, if it already exists, a key-value
+Subcommand ``set`` associates or updates, if it already exists, a key-value
 pair with the given application for the given pool.
 
 Usage::
@@ -1186,12 +1193,14 @@ Usage::
 	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
 	{--no-increasing}
 
-Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
-[overload-percentage-for-consideration, default 120].
+Subcommand ``reweight-by-utilization`` reweights OSDs by utilization.  It only reweights
+outlier OSDs whose utilization exceeds the average, eg. the default 120%
+limits reweight to those OSDs that are more than 20% over the average.
+[overload-threshold, default 120 [max_weight_change, default 0.05 [max_osds_to_adjust, default 4]]] 
 
 Usage::
 
-	ceph osd reweight-by-utilization {<int[100-]>}
+	ceph osd reweight-by-utilization {<int[100-]> {<float[0.0-]> {<int[0-]>}}}
 	{--no-increasing}
 
 Subcommand ``rm`` removes osd(s) <id> [<id>...] from the OSD map.

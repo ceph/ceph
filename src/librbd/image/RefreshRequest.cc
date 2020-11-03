@@ -922,7 +922,7 @@ void RefreshRequest<I>::send_v2_open_journal() {
           send_v2_block_writes();
         });
       m_image_ctx.exclusive_lock->set_require_lock(
-        librbd::io::DIRECTION_BOTH, ctx);
+        true, librbd::io::DIRECTION_BOTH, ctx);
       return;
     }
 
@@ -1245,9 +1245,9 @@ Context *RefreshRequest<I>::send_flush_aio() {
       RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
     auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
-    auto req = io::ImageDispatchSpec<I>::create_flush(
-      m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
-      io::FLUSH_SOURCE_INTERNAL, {});
+    auto req = io::ImageDispatchSpec::create_flush(
+      m_image_ctx, io::IMAGE_DISPATCH_LAYER_REFRESH, aio_comp,
+      io::FLUSH_SOURCE_REFRESH, {});
     req->send();
     return nullptr;
   } else if (m_error_result < 0) {
@@ -1489,9 +1489,17 @@ int RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
     return 0;
   }
 
-  parent_md->spec.pool_id = m_migration_spec.pool_id;
-  parent_md->spec.pool_namespace = m_migration_spec.pool_namespace;
-  parent_md->spec.image_id = m_migration_spec.image_id;
+  if (!m_migration_spec.source_spec.empty()) {
+    // use special pool id just to indicate a parent (migration source image)
+    // exists
+    parent_md->spec.pool_id = std::numeric_limits<int64_t>::max();
+    parent_md->spec.pool_namespace = "";
+    parent_md->spec.image_id = "";
+  } else {
+    parent_md->spec.pool_id = m_migration_spec.pool_id;
+    parent_md->spec.pool_namespace = m_migration_spec.pool_namespace;
+    parent_md->spec.image_id = m_migration_spec.image_id;
+  }
   parent_md->spec.snap_id = CEPH_NOSNAP;
   parent_md->overlap = std::min(m_size, m_migration_spec.overlap);
 
@@ -1521,8 +1529,9 @@ int RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
   }
 
   *migration_info = {m_migration_spec.pool_id, m_migration_spec.pool_namespace,
-                     m_migration_spec.image_name, m_migration_spec.image_id, {},
-                     overlap, m_migration_spec.flatten};
+                     m_migration_spec.image_name, m_migration_spec.image_id,
+                     m_migration_spec.source_spec, {}, overlap,
+                     m_migration_spec.flatten};
   *migration_info_valid = true;
 
   deep_copy::util::compute_snap_map(m_image_ctx.cct, 0, CEPH_NOSNAP, {},

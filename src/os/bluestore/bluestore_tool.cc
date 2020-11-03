@@ -161,7 +161,10 @@ void add_devices(
       cout << " -> " << target_path;
     }
     cout << std::endl;
-    int r = fs->add_block_device(e.second, e.first, false);
+
+    // We provide no shared allocator which prevents bluefs to operate in R/W mode.
+    // Read-only mode isn't strictly enforced though
+    int r = fs->add_block_device(e.second, e.first, false, 0); // 'reserved' is fake
     if (r < 0) {
       cerr << "unable to open " << e.first << ": " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -169,7 +172,7 @@ void add_devices(
   }
 }
 
-BlueFS *open_bluefs(
+BlueFS *open_bluefs_readonly(
   CephContext *cct,
   const string& path,
   const vector<string>& devs)
@@ -595,7 +598,7 @@ int main(int argc, char **argv)
     }
   }
   else if (action == "bluefs-export") {
-    BlueFS *fs = open_bluefs(cct.get(), path, devs);
+    BlueFS *fs = open_bluefs_readonly(cct.get(), path, devs);
 
     vector<string> dirs;
     int r = fs->readdir("", &dirs);
@@ -932,7 +935,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr);
+    int r = bluestore.open_db_environment(&db_ptr, false);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
