@@ -23,13 +23,13 @@ class OrchestratorAPI(OrchestratorClientMixin):
 
     def status(self):
         try:
-            status, desc = super(OrchestratorAPI, self).available()
-            logger.info("is orchestrator available: %s, %s", status, desc)
-            return dict(available=status, description=desc)
-        except (RuntimeError, OrchestratorError, ImportError):
+            status, message = super().available()
+            logger.info("is orchestrator available: %s, %s", status, message)
+            return dict(available=status, message=message)
+        except (RuntimeError, OrchestratorError, ImportError) as e:
             return dict(
                 available=False,
-                description='Orchestrator is unavailable for unknown reason')
+                message='Orchestrator is unavailable for unknown reason: {}'.format(str(e)))
 
     def orchestrator_wait(self, completions):
         return self._orchestrator_wait(completions)
