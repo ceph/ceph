@@ -580,6 +580,97 @@ class HAproxy(object):
 ##################################
 
 
+class Keepalived(object):
+    """Defines an Keepalived container"""
+    daemon_type = 'keepalived'
+    required_files = ['keepalived.conf']
+    default_image = 'arcts/keepalived'
+
+    def __init__(self, fsid: str, daemon_id: Union[int, str],
+                 config_json: Dict, image: str) -> None:
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.image = image
+
+        # config-json options
+        self.files = dict_get(config_json, 'files', {})
+
+        self.validate()
+
+    @classmethod
+    def init(cls, fsid: str, daemon_id: Union[int, str]) -> 'Keepalived':
+        return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
+
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
+        # type: (str, int, int) -> None
+        """Create files under the container data dir"""
+        if not os.path.isdir(data_dir):
+            raise OSError('data_dir is not a directory: %s' % (data_dir))
+
+        # create additional directories in data dir for keepalived to use
+        if not os.path.isdir(os.path.join(data_dir, 'keepalived')):
+            makedirs(os.path.join(data_dir, 'keepalived'), uid, gid, DATA_DIR_MODE)
+
+        # populate files from the config-json
+        for fname in self.files:
+            config_file = os.path.join(data_dir, fname)
+            config_content = dict_get_join(self.files, fname)
+            logger.info('Write file: %s' % (config_file))
+            with open(config_file, 'w') as f:
+                os.fchown(f.fileno(), uid, gid)
+                os.fchmod(f.fileno(), 0o600)
+                f.write(config_content)
+
+    def validate(self):
+        # type: () -> None
+        if not is_fsid(self.fsid):
+            raise Error('not an fsid: %s' % self.fsid)
+        if not self.daemon_id:
+            raise Error('invalid daemon_id: %s' % self.daemon_id)
+        if not self.image:
+            raise Error('invalid image: %s' % self.image)
+
+        # check for the required files
+        if self.required_files:
+            for fname in self.required_files:
+                if fname not in self.files:
+                    raise Error('required file missing from config-json: %s' % fname)
+
+    def get_daemon_name(self):
+        # type: () -> str
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def get_container_name(self, desc=None):
+        # type: (Optional[str]) -> str
+        cname = 'ceph-%s-%s' % (self.fsid, self.get_daemon_name())
+        if desc:
+            cname = '%s-%s' % (cname, desc)
+        return cname
+
+    @staticmethod
+    def get_container_envs():
+        # type: () -> List[str]
+        envs = [
+            'KEEPALIVED_AUTOCONF=false',
+            'KEEPALIVED_CONF=/etc/keepalived/keepalived.conf',
+            'KEEPALIVED_CMD="/usr/sbin/keepalived -n -l -f /etc/keepalived/keepalived.conf"',
+            'KEEPALIVED_DEBUG=false'
+        ]
+        return envs
+
+    def extract_uid_gid_keepalived(self):
+        # better directory for this?
+        return extract_uid_gid(file_path='/var/lib')
+
+    @staticmethod
+    def get_container_mounts(data_dir: str) -> Dict[str, str]:
+        mounts = dict()
+        mounts[os.path.join(data_dir,'keepalived.conf')] = '/etc/keepalived/keepalived.conf'
+        return mounts
+
+##################################
+
+
 class CustomContainer(object):
     """Defines a custom container"""
     daemon_type = 'container'
@@ -740,6 +831,7 @@ def get_supported_daemons():
     supported_daemons.append(CephIscsi.daemon_type)
     supported_daemons.append(CustomContainer.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
+    supported_daemons.append(Keepalived.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -1456,6 +1548,8 @@ def default_image(func):
                     args.image = Monitoring.components[type_]['image']
                 if type_ == 'haproxy':
                     args.image = HAproxy.default_image
+                if type_ == 'keepalived':
+                    args.image = Keepalived.default_image
             if not args.image:
                 args.image = os.environ.get('CEPHADM_IMAGE')
             if not args.image:
@@ -1875,6 +1969,10 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
         haproxy = HAproxy.init(fsid, daemon_id)
         haproxy.create_daemon_dirs(data_dir, uid, gid)
 
+    elif daemon_type == Keepalived.daemon_type:
+        keepalived = Keepalived.init(fsid, daemon_id)
+        keepalived.create_daemon_dirs(data_dir, uid, gid)
+
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(fsid, daemon_id)
         cc.create_daemon_dirs(data_dir, uid, gid)
@@ -2039,6 +2137,11 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         log_dir = get_log_dir(fsid)
         mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
 
+    if daemon_type == Keepalived.daemon_type:
+        assert daemon_id
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+        mounts.update(Keepalived.get_container_mounts(data_dir))
+
     if daemon_type == CustomContainer.daemon_type:
         assert daemon_id
         cc = CustomContainer.init(fsid, daemon_id)
@@ -2083,6 +2186,10 @@ def get_container(fsid: str, daemon_type: str, daemon_id: Union[int, str],
         envs.extend(NFSGanesha.get_container_envs())
     elif daemon_type == HAproxy.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
+    elif daemon_type == Keepalived.daemon_type:
+        name = '%s.%s' % (daemon_type, daemon_id)
+        envs.extend(Keepalived.get_container_envs())
+        container_args.extend(['--cap-add NET_ADMIN'])
     elif daemon_type == CephIscsi.daemon_type:
         entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
@@ -3514,6 +3621,14 @@ def command_deploy():
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(args.fsid, daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()
+        c = get_container(args.fsid, daemon_type, daemon_id)
+        deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
+                      reconfig=args.reconfig,
+                      ports=daemon_ports)
+
+    elif daemon_type == Keepalived.daemon_type:
+        keepalived = Keepalived.init(args.fsid, daemon_id)
+        uid, gid = keepalived.extract_uid_gid_keepalived()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=args.reconfig,
