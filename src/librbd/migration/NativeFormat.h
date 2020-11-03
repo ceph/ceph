@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "librbd/Types.h"
 #include "librbd/migration/FormatInterface.h"
+#include "json_spirit/json_spirit.h"
 #include <memory>
 
 struct Context;
@@ -27,11 +28,13 @@ public:
                                        const std::string& image_id);
 
   static NativeFormat* create(ImageCtxT* image_ctx,
-                              const MigrationInfo& migration_info) {
-    return new NativeFormat(image_ctx, migration_info);
+                              const json_spirit::mObject& json_object,
+                              bool import_only) {
+    return new NativeFormat(image_ctx, json_object, import_only);
   }
 
-  NativeFormat(ImageCtxT* image_ctx, const MigrationInfo& migration_info);
+  NativeFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+               bool import_only);
   NativeFormat(const NativeFormat&) = delete;
   NativeFormat& operator=(const NativeFormat&) = delete;
 
@@ -56,7 +59,13 @@ public:
 
 private:
   ImageCtxT* m_image_ctx;
-  MigrationInfo m_migration_info;
+  json_spirit::mObject m_json_object;
+  bool m_import_only;
+
+  int64_t m_pool_id = -1;
+  std::string m_pool_namespace;
+  std::string m_image_name;
+  std::string m_image_id;
 
 };
 

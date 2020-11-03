@@ -294,6 +294,8 @@ public:
   int migration_prepare(IoCtx& io_ctx, const char *image_name,
                         IoCtx& dest_io_ctx, const char *dest_image_name,
                         ImageOptions& opts);
+  int migration_prepare_import(const char *source_spec, IoCtx& dest_io_ctx,
+                               const char *dest_image_name, ImageOptions& opts);
   int migration_execute(IoCtx& io_ctx, const char *image_name);
   int migration_execute_with_progress(IoCtx& io_ctx, const char *image_name,
                                       ProgressContext &prog_ctx);

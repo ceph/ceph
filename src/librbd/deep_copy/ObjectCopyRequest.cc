@@ -8,6 +8,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
@@ -24,6 +25,7 @@
 namespace librbd {
 namespace deep_copy {
 
+using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
@@ -83,8 +85,9 @@ void ObjectCopyRequest<I>::send_list_snaps() {
 
   m_snapshot_delta.clear();
 
-  auto ctx = create_context_callback<
-    ObjectCopyRequest, &ObjectCopyRequest<I>::handle_list_snaps>(this);
+  auto ctx = create_async_context_callback(
+    *m_src_image_ctx, create_context_callback<
+      ObjectCopyRequest, &ObjectCopyRequest<I>::handle_list_snaps>(this));
   auto aio_comp = io::AioCompletion::create_and_start(
     ctx, util::get_image_ctx(m_src_image_ctx), io::AIO_TYPE_GENERIC);
   auto req = io::ImageDispatchSpec::create_list_snaps(
