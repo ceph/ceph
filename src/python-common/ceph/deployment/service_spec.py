@@ -381,8 +381,10 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container HA_RGW cephadm-exporter'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container HA_RGW '.split()
+                          'container HA_RGW cephadm-exporter haproxy ' \
+                          'keepalived'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container HA_RGW haproxy ' \
+                           'keepalived'.split()
 
     @classmethod
     def _cls(cls, service_type):
