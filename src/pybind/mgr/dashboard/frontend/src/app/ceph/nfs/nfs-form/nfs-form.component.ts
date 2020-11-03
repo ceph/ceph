@@ -20,6 +20,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NFSClusterType } from '../nfs-cluster-type.enum';
 import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 
 @Component({
@@ -38,13 +39,14 @@ export class NfsFormComponent extends CdForm implements OnInit {
   isEdit = false;
 
   cluster_id: string = null;
+  clusterType: string = null;
   export_id: string = null;
 
   isNewDirectory = false;
   isNewBucket = false;
   isDefaultCluster = false;
 
-  allClusters: string[] = null;
+  allClusters: { cluster_id: string; cluster_type: string }[] = null;
   allDaemons = {};
   icons = Icons;
 
@@ -227,11 +229,13 @@ export class NfsFormComponent extends CdForm implements OnInit {
       res.sec_label_xattr = res.fsal.sec_label_xattr;
     }
 
-    this.daemonsSelections = _.map(
-      this.allDaemons[res.cluster_id],
-      (daemon) => new SelectOption(res.daemons.indexOf(daemon) !== -1, daemon, '')
-    );
-    this.daemonsSelections = [...this.daemonsSelections];
+    if (this.clusterType === NFSClusterType.user) {
+      this.daemonsSelections = _.map(
+        this.allDaemons[res.cluster_id],
+        (daemon) => new SelectOption(res.daemons.indexOf(daemon) !== -1, daemon, '')
+      );
+      this.daemonsSelections = [...this.daemonsSelections];
+    }
 
     res.protocolNfsv3 = res.protocols.indexOf(3) !== -1;
     res.protocolNfsv4 = res.protocols.indexOf(4) !== -1;
@@ -259,25 +263,27 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   resolveDaemons(daemons: Record<string, any>) {
     daemons = _.sortBy(daemons, ['daemon_id']);
+    const clusters = _.groupBy(daemons, 'cluster_id');
 
-    this.allClusters = _(daemons)
-      .map((daemon) => daemon.cluster_id)
-      .sortedUniq()
-      .value();
-
-    _.forEach(this.allClusters, (cluster) => {
-      this.allDaemons[cluster] = [];
+    this.allClusters = [];
+    _.forIn(clusters, (cluster, cluster_id) => {
+      this.allClusters.push({ cluster_id: cluster_id, cluster_type: cluster[0].cluster_type });
+      this.allDaemons[cluster_id] = [];
     });
 
     _.forEach(daemons, (daemon) => {
       this.allDaemons[daemon.cluster_id].push(daemon.daemon_id);
     });
 
+    if (this.isEdit) {
+      this.clusterType = _.find(this.allClusters, { cluster_id: this.cluster_id })?.cluster_type;
+    }
+
     const hasOneCluster = _.isArray(this.allClusters) && this.allClusters.length === 1;
-    this.isDefaultCluster = hasOneCluster && this.allClusters[0] === '_default_';
+    this.isDefaultCluster = hasOneCluster && this.allClusters[0].cluster_id === '_default_';
     if (hasOneCluster) {
       this.nfsForm.patchValue({
-        cluster_id: this.allClusters[0]
+        cluster_id: this.allClusters[0].cluster_id
       });
       this.onClusterChange();
     }
@@ -467,11 +473,16 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   onClusterChange() {
     const cluster_id = this.nfsForm.getValue('cluster_id');
-    this.daemonsSelections = _.map(
-      this.allDaemons[cluster_id],
-      (daemon) => new SelectOption(false, daemon, '')
-    );
-    this.daemonsSelections = [...this.daemonsSelections];
+    this.clusterType = _.find(this.allClusters, { cluster_id: cluster_id })?.cluster_type;
+    if (this.clusterType === NFSClusterType.user) {
+      this.daemonsSelections = _.map(
+        this.allDaemons[cluster_id],
+        (daemon) => new SelectOption(false, daemon, '')
+      );
+      this.daemonsSelections = [...this.daemonsSelections];
+    } else {
+      this.daemonsSelections = [];
+    }
     this.nfsForm.patchValue({ daemons: [] });
   }
 
@@ -491,6 +502,13 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   onDaemonSelection() {
     this.nfsForm.get('daemons').setValue(this.nfsForm.getValue('daemons'));
+  }
+
+  onToggleAllDaemonsSelection() {
+    const cluster_id = this.nfsForm.getValue('cluster_id');
+    const daemons =
+      this.nfsForm.getValue('daemons').length === 0 ? this.allDaemons[cluster_id] : [];
+    this.nfsForm.patchValue({ daemons: daemons });
   }
 
   submitAction() {
