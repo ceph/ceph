@@ -2183,12 +2183,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	pf->fragstat.mtime = mut->get_op_stamp();
 	pf->fragstat.change_attr++;
 	dout(10) << "predirty_journal_parents bumping change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
-	if (pf->fragstat.mtime > pf->rstat.rctime) {
-	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
-	  pf->rstat.rctime = pf->fragstat.mtime;
-	} else {
-	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
-	}
+	pf->rstat.rctime = std::max(pf->rstat.rctime, ceph_clock_now());
       }
       if (linkunlink) {
 	dout(10) << "predirty_journal_parents updating size on " << *parent << dendl;
@@ -2306,7 +2301,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       pi.inode->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime, &touched_chattr);
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
-	pi.inode->mtime = pi.inode->ctime = pi.inode->dirstat.mtime;
+	pi.inode->mtime = pi.inode->dirstat.mtime;
       if (touched_chattr)
 	pi.inode->change_attr = pi.inode->dirstat.change_attr;
       dout(20) << "predirty_journal_parents     gives " << pi.inode->dirstat << " on " << *pin << dendl;
