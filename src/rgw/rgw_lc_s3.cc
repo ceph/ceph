@@ -139,7 +139,16 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
     single_cond = true;
   }
 
-  RGWXMLDecoder::decode_xml("Prefix", prefix, o);
+  {
+    auto prefix_iter = o->find("Prefix");
+    auto prefix_val = prefix_iter.get_next();
+    if(prefix_val) {
+      decode_xml_obj(prefix, prefix_val);
+      if(prefix_iter.get_next()){
+        throw RGWXMLDecoder::err("Bad filter: there should not be more than one prefix!");
+      }
+    }
+  }
   if (!prefix.empty())
     num_conditions++;
   auto tags_iter = o->find("Tag");
