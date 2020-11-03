@@ -12918,7 +12918,13 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_NAME_CEPH(dir, rsubdirs, VXATTR_RSTAT),
   XATTR_NAME_CEPH(dir, rsnaps, VXATTR_RSTAT),
   XATTR_NAME_CEPH(dir, rbytes, VXATTR_RSTAT),
-  XATTR_NAME_CEPH(dir, rctime, VXATTR_RSTAT),
+  {
+    name: "ceph.dir.rctime",
+    getxattr_cb: &Client::_vxattrcb_dir_rctime,
+    readonly: false,
+    exists_cb: NULL,
+    flags: VXATTR_RSTAT,
+  },
   {
     name: "ceph.quota",
     getxattr_cb: &Client::_vxattrcb_quota,
