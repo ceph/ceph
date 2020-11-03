@@ -42,7 +42,7 @@ function TEST_recovery_scrub() {
     OBJECTS=4
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
