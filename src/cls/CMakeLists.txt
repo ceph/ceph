@@ -243,8 +243,9 @@ set_target_properties(cls_lua PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_lua DESTINATION ${cls_dir})
 target_link_libraries(cls_lua
-    liblua
+    ${LUA_LIBRARIES}
     json_spirit)
+target_include_directories(cls_lua PRIVATE "${LUA_INCLUDE_DIR}")
 
 set(cls_lua_client_srcs
     lua/cls_lua_client.cc)

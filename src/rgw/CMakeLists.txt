@@ -173,8 +173,7 @@ target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
-target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/lua/src")
-target_include_directories(rgw_common PRIVATE "${CMAKE_BINARY_DIR}/src/lua")
+target_include_directories(rgw_common PRIVATE "${LUA_INCLUDE_DIR}")
 
 
 target_include_directories(rgw_common PRIVATE
@@ -256,7 +255,7 @@ if(WITH_CURL_OPENSSL)
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
 endif()
 
-target_link_libraries(rgw_a PRIVATE liblua)
+target_link_libraries(rgw_a PRIVATE ${LUA_LIBRARIES})
 target_link_libraries(rgw_a PUBLIC spawn)
 
 set(rgw_libs rgw_a)
