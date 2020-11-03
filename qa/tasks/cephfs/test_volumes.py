@@ -1262,7 +1262,9 @@ class TestSubvolumes(TestVolumesHelper):
 
         usedsize = int(self.mount_a.getfattr(subvolpath, "ceph.dir.rbytes"))
         susedsize = int(self.mount_a.run_shell(['stat', '-c' '%s', subvolpath]).stdout.getvalue().strip())
-        self.assertEqual(usedsize, susedsize)
+        if isinstance(self.mount_a, FuseMount):
+            # kclient dir does not have size==rbytes
+            self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
         nsize = usedsize // 2
@@ -1307,7 +1309,9 @@ class TestSubvolumes(TestVolumesHelper):
 
         usedsize = int(self.mount_a.getfattr(subvolpath, "ceph.dir.rbytes"))
         susedsize = int(self.mount_a.run_shell(['stat', '-c' '%s', subvolpath]).stdout.getvalue().strip())
-        self.assertEqual(usedsize, susedsize)
+        if isinstance(self.mount_a, FuseMount):
+            # kclient dir does not have size==rbytes
+            self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
         nsize = usedsize // 2
