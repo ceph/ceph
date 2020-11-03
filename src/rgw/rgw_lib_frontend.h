@@ -14,6 +14,7 @@ namespace rgw {
   class RGWLibProcess : public RGWProcess {
     RGWAccessKey access_key;
     std::mutex mtx;
+    std::condition_variable cv;
     int gen;
     bool shutdown;
 
@@ -36,6 +37,7 @@ namespace rgw {
       for (const auto& fs: mounted_fs) {
 	fs.second->stop();
       }
+      cv.notify_all();
     }
 
     void register_fs(RGWLibFS* fs) {

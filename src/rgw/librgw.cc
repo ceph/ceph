@@ -128,8 +128,8 @@ namespace rgw {
 	if (cur_gen != gen)
 	  goto restart; /* invalidated */
       }
+      cv.wait_for(uniq, std::chrono::seconds(delay_s));
       uniq.unlock();
-      std::this_thread::sleep_for(std::chrono::seconds(delay_s));
     }
   }
 
