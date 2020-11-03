@@ -3257,24 +3257,30 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_begin_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_min_max(0, 23)
     .set_description("Restrict scrubbing to this hour of the day or later")
+    .set_long_description("Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.")
     .add_see_also("osd_scrub_end_hour"),
 
     Option("osd_scrub_end_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(24)
+    .set_default(0)
+    .set_min_max(0, 23)
     .set_description("Restrict scrubbing to hours of the day earlier than this")
+    .set_long_description("Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.")
     .add_see_also("osd_scrub_begin_hour"),
 
     Option("osd_scrub_begin_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_min_max(0, 6)
     .set_description("Restrict scrubbing to this day of the week or later")
-    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .set_long_description("0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0 for the entire week.")
     .add_see_also("osd_scrub_end_week_day"),
 
     Option("osd_scrub_end_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(7)
+    .set_default(0)
+    .set_min_max(0, 6)
     .set_description("Restrict scrubbing to days of the week earlier than this")
-    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .set_long_description("0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0 for the entire week.")
     .add_see_also("osd_scrub_begin_week_day"),
 
     Option("osd_scrub_load_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)

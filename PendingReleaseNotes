@@ -15,6 +15,14 @@
   Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
   more detailed information.
 
+* Configuration variables for permitted scrub times have changed.  The legal
+  values for ``osd_scrub_begin_hour`` and ``osd_scrub_end_hour`` are 0 - 23.
+  The use of 24 is now illegal.  Specifying ``0`` for both values causes every
+  hour to be allowed.  The legal vaues for ``osd_scrub_begin_week_day`` and
+  ``osd_scrub_end_week_day`` are 0 - 6.  The use of 7 is now illegal.
+  Specifying ``0`` for both values causes every day of the week to be allowed.
+
+
 >=15.0.0
 --------
 
