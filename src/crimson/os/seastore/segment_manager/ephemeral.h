@@ -86,10 +86,10 @@ public:
   size_t get_size() const final {
     return config.size;
   }
-  segment_off_t get_block_size() const {
+  segment_off_t get_block_size() const final {
     return config.block_size;
   }
-  segment_off_t get_segment_size() const {
+  segment_off_t get_segment_size() const final {
     return config.segment_size;
   }
 
