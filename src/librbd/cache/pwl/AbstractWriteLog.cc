@@ -18,6 +18,7 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/cache/pwl/ReadRequest.h"
+#include "librbd/plugin/Api.h"
 #include <map>
 #include <vector>
 
@@ -37,24 +38,27 @@ typedef AbstractWriteLog<ImageCtx>::Extent Extent;
 typedef AbstractWriteLog<ImageCtx>::Extents Extents;
 
 template <typename I>
-AbstractWriteLog<I>::AbstractWriteLog(I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state)
+AbstractWriteLog<I>::AbstractWriteLog(I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state,
+    cache::ImageWritebackInterface& image_writeback,
+    plugin::Api<I>& plugin_api)
   : m_write_log_guard(image_ctx.cct),
-    m_deferred_dispatch_lock(ceph::make_mutex(util::unique_lock_name(
+    m_deferred_dispatch_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_deferred_dispatch_lock", this))),
-    m_blockguard_lock(ceph::make_mutex(util::unique_lock_name(
+    m_blockguard_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_blockguard_lock", this))),
     m_thread_pool(
         image_ctx.cct, "librbd::cache::pwl::AbstractWriteLog::thread_pool", "tp_pwl", 4, ""),
     m_cache_state(cache_state),
     m_image_ctx(image_ctx),
     m_log_pool_config_size(DEFAULT_POOL_SIZE),
-    m_image_writeback(image_ctx),
-    m_log_retire_lock(ceph::make_mutex(util::unique_lock_name(
+    m_image_writeback(image_writeback),
+    m_plugin_api(plugin_api),
+    m_log_retire_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_log_retire_lock", this))),
     m_entry_reader_lock("librbd::cache::pwl::AbstractWriteLog::m_entry_reader_lock"),
-       m_log_append_lock(ceph::make_mutex(util::unique_lock_name(
+       m_log_append_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_log_append_lock", this))),
-    m_lock(ceph::make_mutex(util::unique_lock_name(
+    m_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_lock", this))),
     m_blocks_to_log_entries(image_ctx.cct),
     m_work_queue("librbd::cache::pwl::ReplicatedWriteLog::work_queue",
@@ -64,7 +68,7 @@ AbstractWriteLog<I>::AbstractWriteLog(I &image_ctx, librbd::cache::pwl::ImageCac
                  &m_thread_pool)
 {
   CephContext *cct = m_image_ctx.cct;
-  ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
+  m_plugin_api.get_image_timer_instance(cct, &m_timer, &m_timer_lock);
 }
 
 template <typename I>

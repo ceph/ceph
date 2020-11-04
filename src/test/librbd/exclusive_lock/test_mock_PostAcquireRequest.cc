@@ -11,7 +11,6 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
-#include "librbd/cache/pwl/InitRequest.h"
 #include "librbd/exclusive_lock/PostAcquireRequest.h"
 #include "librbd/image/RefreshRequest.h"
 
@@ -60,32 +59,6 @@ struct RefreshRequest<librbd::MockTestImageCtx> {
 RefreshRequest<librbd::MockTestImageCtx> *RefreshRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace image
-
-namespace cache {
-namespace pwl {
-
-template<>
-struct InitRequest<librbd::MockTestImageCtx> {
-  static InitRequest *s_instance;
-  Context *on_finish = nullptr;
-
-  static InitRequest *create(librbd::MockTestImageCtx &image_ctx,
-                             Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  InitRequest() {
-    s_instance = this;
-  }
-  MOCK_METHOD0(send, void());
-};
-
-InitRequest<librbd::MockTestImageCtx> *InitRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace pwl
-} // namespace cache
 } // namespace librbd
 
 // template definitions
@@ -117,7 +90,6 @@ class TestMockExclusiveLockPostAcquireRequest : public TestMockFixture {
 public:
   typedef PostAcquireRequest<MockTestImageCtx> MockPostAcquireRequest;
   typedef librbd::image::RefreshRequest<MockTestImageCtx> MockRefreshRequest;
-  typedef librbd::cache::pwl::InitRequest<MockTestImageCtx> MockInitRequest;
 
   void expect_test_features(MockTestImageCtx &mock_image_ctx, uint64_t features,
                             bool enabled) {
@@ -245,8 +217,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, Success) {
 
   expect_acquired_exclusive_lock(mock_image_ctx, 0);
 
-  MockInitRequest mock_init_request;
-  expect_init_image_cache(mock_image_ctx, mock_init_request, 0);
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
   MockPostAcquireRequest *req = MockPostAcquireRequest::create(mock_image_ctx,
@@ -278,9 +248,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, SuccessRefresh) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   expect_acquired_exclusive_lock(mock_image_ctx, 0);
-
-  MockInitRequest mock_init_request;
-  expect_init_image_cache(mock_image_ctx, mock_init_request, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -314,9 +281,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, SuccessJournalDisabled) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   expect_acquired_exclusive_lock(mock_image_ctx, 0);
-
-  MockInitRequest mock_init_request;
-  expect_init_image_cache(mock_image_ctx, mock_init_request, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -355,9 +319,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, SuccessObjectMapDisabled) {
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
 
   expect_acquired_exclusive_lock(mock_image_ctx, 0);
-
-  MockInitRequest mock_init_request;
-  expect_init_image_cache(mock_image_ctx, mock_init_request, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -414,9 +375,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, RefreshLockDisabled) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   expect_acquired_exclusive_lock(mock_image_ctx, 0);
-
-  MockInitRequest mock_init_request;
-  expect_init_image_cache(mock_image_ctx, mock_init_request, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -538,9 +496,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, InitImageCacheError) {
   expect_acquired_exclusive_lock(mock_image_ctx, -ENOENT);
   expect_prerelease_exclusive_lock(mock_image_ctx, 0);
 
-  MockInitRequest mock_init_request;
-  expect_init_image_cache(mock_image_ctx, mock_init_request, -ENOENT);
-
   expect_close_journal(mock_image_ctx, mock_journal);
   expect_close_object_map(mock_image_ctx, mock_object_map);
 
@@ -611,9 +566,6 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, OpenObjectMapTooBig) {
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
 
   expect_acquired_exclusive_lock(mock_image_ctx, 0);
-
-  MockInitRequest mock_init_request;
-  expect_init_image_cache(mock_image_ctx, mock_init_request, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;

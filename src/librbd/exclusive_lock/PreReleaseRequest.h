@@ -106,9 +106,6 @@ private:
   void send_process_plugin_release_lock();
   void handle_process_plugin_release_lock(int r);
 
-  void send_shut_down_image_cache();
-  void handle_shut_down_image_cache(int r);
-
   void send_invalidate_cache();
   void handle_invalidate_cache(int r);
 

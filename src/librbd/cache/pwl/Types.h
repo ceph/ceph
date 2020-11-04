@@ -370,6 +370,8 @@ public:
     : io::Extent(extent), m_bl(bl) { }
 };
 
+std::string unique_lock_name(const std::string &name, void *address);
+
 } // namespace pwl
 } // namespace cache
 } // namespace librbd

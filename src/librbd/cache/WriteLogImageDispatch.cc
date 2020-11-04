@@ -18,16 +18,6 @@
 namespace librbd {
 namespace cache {
 
-namespace {
-
-void start_in_flight_io(io::AioCompletion* aio_comp) {
-  if (!aio_comp->async_op.started()) {
-    aio_comp->start_op();
-  }
-}
-
-} // anonymous namespace
-
 template <typename I>
 void WriteLogImageDispatch<I>::shut_down(Context* on_finish) {
   ceph_assert(m_image_cache != nullptr);
@@ -39,7 +29,7 @@ void WriteLogImageDispatch<I>::shut_down(Context* on_finish) {
       });
 
   cache::pwl::ShutdownRequest<I> *req = cache::pwl::ShutdownRequest<I>::create(
-    *m_image_ctx, m_image_cache, ctx);
+    *m_image_ctx, m_image_cache, m_plugin_api, ctx);
   req->send();
 }
 
@@ -64,14 +54,9 @@ bool WriteLogImageDispatch<I>::read(
     return true;
   }
 
-  start_in_flight_io(aio_comp);
+  m_plugin_api.update_aio_comp(aio_comp, 1, read_result, image_extents);
 
-  aio_comp->set_request_count(1);
-  aio_comp->read_result = std::move(read_result);
-  aio_comp->read_result.set_image_extents(image_extents);
-
-  auto *req_comp = new io::ReadResult::C_ImageReadRequest(
-    aio_comp, 0, image_extents);
+  auto *req_comp = m_plugin_api.create_image_read_request(aio_comp, 0, image_extents);
 
   m_image_cache->read(std::move(image_extents),
                       &req_comp->bl, op_flags,
@@ -94,10 +79,8 @@ bool WriteLogImageDispatch<I>::write(
     return true;
   }
 
-  start_in_flight_io(aio_comp);
-
-  aio_comp->set_request_count(1);
-  io::C_AioRequest *req_comp = new io::C_AioRequest(aio_comp);
+  m_plugin_api.update_aio_comp(aio_comp, 1);
+  io::C_AioRequest *req_comp = m_plugin_api.create_aio_request(aio_comp);
   m_image_cache->write(std::move(image_extents),
                        std::move(bl), op_flags, req_comp);
   return true;
@@ -119,11 +102,9 @@ bool WriteLogImageDispatch<I>::discard(
     return true;
   }
 
-  start_in_flight_io(aio_comp);
-
-  aio_comp->set_request_count(image_extents.size());
+  m_plugin_api.update_aio_comp(aio_comp, image_extents.size());
   for (auto &extent : image_extents) {
-    io::C_AioRequest *req_comp = new io::C_AioRequest(aio_comp);
+    io::C_AioRequest *req_comp = m_plugin_api.create_aio_request(aio_comp);
     m_image_cache->discard(extent.first, extent.second,
                            discard_granularity_bytes,
                            req_comp);
@@ -147,11 +128,9 @@ bool WriteLogImageDispatch<I>::write_same(
     return true;
   }
 
-  start_in_flight_io(aio_comp);
-
-  aio_comp->set_request_count(image_extents.size());
+  m_plugin_api.update_aio_comp(aio_comp, image_extents.size());
   for (auto &extent : image_extents) {
-    io::C_AioRequest *req_comp = new io::C_AioRequest(aio_comp);
+    io::C_AioRequest *req_comp = m_plugin_api.create_aio_request(aio_comp);
     m_image_cache->writesame(extent.first, extent.second,
                              std::move(bl), op_flags,
                              req_comp);
@@ -175,10 +154,8 @@ bool WriteLogImageDispatch<I>::compare_and_write(
     return true;
   }
 
-  start_in_flight_io(aio_comp);
-
-  aio_comp->set_request_count(1);
-  io::C_AioRequest *req_comp = new io::C_AioRequest(aio_comp);
+  m_plugin_api.update_aio_comp(aio_comp, 1);
+  io::C_AioRequest *req_comp = m_plugin_api.create_aio_request(aio_comp);
   m_image_cache->compare_and_write(
     std::move(image_extents), std::move(cmp_bl), std::move(bl),
     mismatch_offset, op_flags, req_comp);
@@ -195,12 +172,11 @@ bool WriteLogImageDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  start_in_flight_io(aio_comp);
-
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
 
-  aio_comp->set_request_count(1);
-  io::C_AioRequest *req_comp = new io::C_AioRequest(aio_comp);
+  m_plugin_api.update_aio_comp(aio_comp, 1);
+
+  io::C_AioRequest *req_comp = m_plugin_api.create_aio_request(aio_comp);
   m_image_cache->flush(flush_source, req_comp);
 
   return true;
@@ -223,7 +199,7 @@ bool WriteLogImageDispatch<I>::preprocess_length(
     io::AioCompletion* aio_comp, io::Extents &image_extents) const {
   auto total_bytes = io::util::get_extents_length(image_extents);
   if (total_bytes == 0) {
-    aio_comp->set_request_count(0);
+    m_plugin_api.update_aio_comp(aio_comp, 0);
     return true;
   }
   return false;

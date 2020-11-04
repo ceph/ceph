@@ -34,7 +34,9 @@ template <typename ImageCtxT>
 class SSDWriteLog : public AbstractWriteLog<ImageCtxT> {
 public:
   SSDWriteLog(ImageCtxT &image_ctx,
-              librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
+              librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state,
+              cache::ImageWritebackInterface& image_writeback,
+              plugin::Api<ImageCtxT>& plugin_api);
   ~SSDWriteLog() {}
   SSDWriteLog(const SSDWriteLog&) = delete;
   SSDWriteLog &operator=(const SSDWriteLog&) = delete;
