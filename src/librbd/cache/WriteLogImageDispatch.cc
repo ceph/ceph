@@ -71,7 +71,7 @@ bool WriteLogImageDispatch<I>::read(
   aio_comp->read_result.set_image_extents(image_extents);
 
   auto *req_comp = new io::ReadResult::C_ImageReadRequest(
-    aio_comp, image_extents);
+    aio_comp, 0, image_extents);
 
   m_image_cache->read(std::move(image_extents),
                       &req_comp->bl, op_flags,
