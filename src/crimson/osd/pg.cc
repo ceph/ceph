@@ -865,6 +865,23 @@ PG::load_head_obc(ObjectContextRef obc)
   });
 }
 
+PG::load_obc_ertr::future<>
+PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
+		    Operation *op, PG::with_obc_func_t &&f)
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  RWState::State type = get_lock_type(op_info);
+  return get_locked_obc(op, get_oid(*m), type)
+    .safe_then([f=std::move(f), type=type](auto obc) {
+    return f(obc).finally([obc, type=type] {
+      obc->put_lock_type(type);
+      return load_obc_ertr::now();
+    });
+  });
+}
+
 PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
 PG::get_locked_obc(
   Operation *op, const hobject_t &oid, RWState::State type)
