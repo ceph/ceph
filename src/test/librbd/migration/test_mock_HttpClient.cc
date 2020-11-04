@@ -9,6 +9,8 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
 
 namespace librbd {
 namespace {
@@ -22,6 +24,35 @@ struct MockTestImageCtx : public MockImageCtx {
 } // namespace librbd
 
 #include "librbd/migration/HttpClient.cc"
+
+using EmptyHttpRequest = boost::beast::http::request<
+  boost::beast::http::empty_body>;
+using HttpRequest = boost::beast::http::request<
+  boost::beast::http::string_body>;
+using HttpResponse = boost::beast::http::response<
+  boost::beast::http::string_body>;
+
+namespace boost {
+namespace beast {
+namespace http {
+
+template <typename Body>
+bool operator==(const boost::beast::http::request<Body>& lhs,
+                const boost::beast::http::request<Body>& rhs) {
+  return (lhs.method() == rhs.method() &&
+          lhs.target() == rhs.target());
+}
+
+template <typename Body>
+bool operator==(const boost::beast::http::response<Body>& lhs,
+                const boost::beast::http::response<Body>& rhs) {
+  return (lhs.result() == rhs.result() &&
+          lhs.body() == rhs.body());
+}
+
+} // namespace http
+} // namespace beast
+} // namespace boost
 
 namespace librbd {
 namespace migration {
@@ -37,16 +68,20 @@ public:
 
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
 
-    m_acceptor.emplace(*m_image_ctx->asio_engine,
-                       boost::asio::ip::tcp::endpoint(
-                         boost::asio::ip::tcp::v4(), 0));
-    m_server_port = m_acceptor->local_endpoint().port();
+    create_acceptor();
   }
 
   void TearDown() override {
     m_acceptor.reset();
 
     TestMockFixture::TearDown();
+  }
+
+  void create_acceptor() {
+    m_acceptor.emplace(*m_image_ctx->asio_engine,
+                       boost::asio::ip::tcp::endpoint(
+                         boost::asio::ip::tcp::v4(), m_server_port));
+    m_server_port = m_acceptor->local_endpoint().port();
   }
 
   std::string get_local_url(UrlScheme url_scheme) {
@@ -63,7 +98,7 @@ public:
       break;
     }
 
-    sstream << ":" << m_server_port << "/";
+    sstream << ":" << m_server_port << "/target";
     return sstream.str();
   }
 
@@ -81,6 +116,32 @@ public:
         }
         on_connect->complete(0);
       });
+  }
+
+  template <typename Body>
+  void client_read_request(boost::asio::ip::tcp::socket& socket,
+                           boost::beast::http::request<Body>& expected_req) {
+    boost::beast::http::request<Body> req;
+    boost::beast::error_code ec;
+    boost::beast::http::read(socket, m_buffer, req, ec);
+    ASSERT_FALSE(ec);
+
+    expected_req.target("/target");
+    ASSERT_EQ(expected_req, req);
+  }
+
+  void client_write_response(boost::asio::ip::tcp::socket& socket,
+                             HttpResponse& expected_res) {
+    expected_res.result(boost::beast::http::status::ok);
+    expected_res.set(boost::beast::http::field::server,
+                     BOOST_BEAST_VERSION_STRING);
+    expected_res.set(boost::beast::http::field::content_type, "text/plain");
+    expected_res.content_length(expected_res.body().size());
+    expected_res.prepare_payload();
+
+    boost::beast::error_code ec;
+    boost::beast::http::write(socket, expected_res, ec);
+    ASSERT_FALSE(ec);
   }
 
   template <typename Stream>
@@ -179,6 +240,7 @@ public:
   librbd::ImageCtx *m_image_ctx;
 
   std::optional<boost::asio::ip::tcp::acceptor> m_acceptor;
+  boost::beast::flat_buffer m_buffer;
   uint64_t m_server_port = 0;
 };
 
@@ -288,6 +350,392 @@ TEST_F(TestMockMigrationHttpClient, OpenConnectFail) {
   C_SaferCond ctx1;
   http_client.open(&ctx1);
   ASSERT_EQ(-ECONNREFUSED, ctx1.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, IssueHead) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx;
+  client_accept(&socket, false, &on_connect_ctx);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  EmptyHttpRequest req;
+  req.method(boost::beast::http::verb::head);
+
+  C_SaferCond ctx2;
+  HttpResponse res;
+  http_client.issue(EmptyHttpRequest{req},
+    [&ctx2, &res](int r, HttpResponse&& response) mutable {
+      res = std::move(response);
+      ctx2.complete(r);
+    });
+
+  HttpResponse expected_res;
+  client_read_request(socket, req);
+  client_write_response(socket, expected_res);
+
+  ASSERT_EQ(0, ctx2.wait());
+  ASSERT_EQ(expected_res, res);
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, IssueGet) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx;
+  client_accept(&socket, false, &on_connect_ctx);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  HttpRequest req;
+  req.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx2;
+  HttpResponse res;
+  http_client.issue(HttpRequest{req},
+    [&ctx2, &res](int r, HttpResponse&& response) mutable {
+      res = std::move(response);
+      ctx2.complete(r);
+    });
+
+  HttpResponse expected_res;
+  expected_res.body() = "test";
+  client_read_request(socket, req);
+  client_write_response(socket, expected_res);
+
+  ASSERT_EQ(0, ctx2.wait());
+  ASSERT_EQ(expected_res, res);
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, IssueSendFailed) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx1;
+  client_accept(&socket, false, &on_connect_ctx1);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx1.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  // close connection to client
+  boost::system::error_code ec;
+  socket.close(ec);
+
+  C_SaferCond on_connect_ctx2;
+  client_accept(&socket, false, &on_connect_ctx2);
+
+  // send request via closed connection
+  HttpRequest req;
+  req.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx2;
+  http_client.issue(HttpRequest{req},
+    [&ctx2](int r, HttpResponse&&) mutable {
+      ctx2.complete(r);
+    });
+
+  // connection will be reset and request retried
+  ASSERT_EQ(0, on_connect_ctx2.wait());
+  HttpResponse expected_res;
+  expected_res.body() = "test";
+  client_read_request(socket, req);
+  client_write_response(socket, expected_res);
+  ASSERT_EQ(0, ctx2.wait());
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, IssueReceiveFailed) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx1;
+  client_accept(&socket, false, &on_connect_ctx1);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx1.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  // send request via closed connection
+  HttpRequest req;
+  req.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx2;
+  http_client.issue(HttpRequest{req},
+    [&ctx2](int r, HttpResponse&&) mutable {
+      ctx2.complete(r);
+    });
+
+  C_SaferCond on_connect_ctx2;
+  client_accept(&socket, false, &on_connect_ctx2);
+
+  // close connection to client after reading request
+  client_read_request(socket, req);
+  boost::system::error_code ec;
+  socket.close(ec);
+
+  // connection will be reset and request retried
+  ASSERT_EQ(0, on_connect_ctx2.wait());
+  HttpResponse expected_res;
+  expected_res.body() = "test";
+  client_read_request(socket, req);
+  client_write_response(socket, expected_res);
+  ASSERT_EQ(0, ctx2.wait());
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, IssueResetFailed) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx1;
+  client_accept(&socket, false, &on_connect_ctx1);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx1.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  // send requests then close connection
+  HttpRequest req;
+  req.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx2;
+  http_client.issue(HttpRequest{req},
+    [&ctx2](int r, HttpResponse&&) mutable {
+      ctx2.complete(r);
+    });
+
+  C_SaferCond ctx3;
+  http_client.issue(HttpRequest{req},
+    [&ctx3](int r, HttpResponse&&) mutable {
+      ctx3.complete(r);
+    });
+
+  client_read_request(socket, req);
+  client_read_request(socket, req);
+
+  // close connection to client and verify requests are failed
+  m_acceptor.reset();
+  boost::system::error_code ec;
+  socket.close(ec);
+
+  ASSERT_EQ(-ECONNREFUSED, ctx2.wait());
+  ASSERT_EQ(-ECONNREFUSED, ctx3.wait());
+
+  // additional request will retry the failed connection
+  create_acceptor();
+
+  C_SaferCond on_connect_ctx2;
+  client_accept(&socket, false, &on_connect_ctx2);
+
+  C_SaferCond ctx4;
+  http_client.issue(HttpRequest{req},
+    [&ctx4](int r, HttpResponse&&) mutable {
+      ctx4.complete(r);
+    });
+
+  ASSERT_EQ(0, on_connect_ctx2.wait());
+  client_read_request(socket, req);
+
+  HttpResponse expected_res;
+  expected_res.body() = "test";
+  client_write_response(socket, expected_res);
+  ASSERT_EQ(0, ctx4.wait());
+
+  C_SaferCond ctx5;
+  http_client.close(&ctx5);
+  ASSERT_EQ(0, ctx5.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, IssuePipelined) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx;
+  client_accept(&socket, false, &on_connect_ctx);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  // issue two pipelined (concurrent) get requests
+  HttpRequest req1;
+  req1.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx2;
+  HttpResponse res1;
+  http_client.issue(HttpRequest{req1},
+    [&ctx2, &res1](int r, HttpResponse&& response) mutable {
+      res1 = std::move(response);
+      ctx2.complete(r);
+    });
+
+  HttpRequest req2;
+  req2.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx3;
+  HttpResponse res2;
+  http_client.issue(HttpRequest{req2},
+    [&ctx3, &res2](int r, HttpResponse&& response) mutable {
+      res2 = std::move(response);
+      ctx3.complete(r);
+    });
+
+  client_read_request(socket, req1);
+  client_read_request(socket, req2);
+
+  // read the responses sequentially
+  HttpResponse expected_res1;
+  expected_res1.body() = "test";
+  client_write_response(socket, expected_res1);
+  ASSERT_EQ(0, ctx2.wait());
+  ASSERT_EQ(expected_res1, res1);
+
+  HttpResponse expected_res2;
+  expected_res2.body() = "test";
+  client_write_response(socket, expected_res2);
+  ASSERT_EQ(0, ctx3.wait());
+  ASSERT_EQ(expected_res2, res2);
+
+  C_SaferCond ctx4;
+  http_client.close(&ctx4);
+  ASSERT_EQ(0, ctx4.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, IssuePipelinedRestart) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx1;
+  client_accept(&socket, false, &on_connect_ctx1);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx1.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  // issue two pipelined (concurrent) get requests
+  HttpRequest req1;
+  req1.keep_alive(false);
+  req1.method(boost::beast::http::verb::get);
+
+  C_SaferCond on_connect_ctx2;
+  client_accept(&socket, false, &on_connect_ctx2);
+
+  C_SaferCond ctx2;
+  HttpResponse res1;
+  http_client.issue(HttpRequest{req1},
+    [&ctx2, &res1](int r, HttpResponse&& response) mutable {
+      res1 = std::move(response);
+      ctx2.complete(r);
+    });
+
+  HttpRequest req2;
+  req2.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx3;
+  HttpResponse res2;
+  http_client.issue(HttpRequest{req2},
+    [&ctx3, &res2](int r, HttpResponse&& response) mutable {
+      res2 = std::move(response);
+      ctx3.complete(r);
+    });
+
+  client_read_request(socket, req1);
+  client_read_request(socket, req2);
+
+  // read the responses sequentially
+  HttpResponse expected_res1;
+  expected_res1.body() = "test";
+  expected_res1.keep_alive(false);
+  client_write_response(socket, expected_res1);
+  ASSERT_EQ(0, ctx2.wait());
+  ASSERT_EQ(expected_res1, res1);
+
+  // second request will need to be re-sent due to 'need_eof' condition
+  ASSERT_EQ(0, on_connect_ctx2.wait());
+  client_read_request(socket, req2);
+
+  HttpResponse expected_res2;
+  expected_res2.body() = "test";
+  client_write_response(socket, expected_res2);
+  ASSERT_EQ(0, ctx3.wait());
+  ASSERT_EQ(expected_res2, res2);
+
+  C_SaferCond ctx4;
+  http_client.close(&ctx4);
+  ASSERT_EQ(0, ctx4.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, ShutdownInFlight) {
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx;
+  client_accept(&socket, false, &on_connect_ctx);
+
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  HttpRequest req;
+  req.method(boost::beast::http::verb::get);
+
+  C_SaferCond ctx2;
+  http_client.issue(HttpRequest{req},
+    [&ctx2](int r, HttpResponse&&) mutable {
+      ctx2.complete(r);
+    });
+
+  client_read_request(socket, req);
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+  ASSERT_EQ(-ESHUTDOWN, ctx2.wait());
 }
 
 } // namespace migration
