@@ -1411,32 +1411,32 @@ public:
     ret = crs.run(new RGWLCCloudCheckCR(tier_ctx, &al_tiered));
     
     if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "XXXXXXXXXXXXXX failed in RGWCloudCheckCR() ret=" << ret << dendl;
+      ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudCheckCR() ret=" << ret << dendl;
     }
 
     if (!al_tiered) {
-        ldout(tier_ctx.cct, 0) << "XXXXXXXXXXXXXX lc.cc is_already_tiered false" << dendl;
+        ldout(tier_ctx.cct, 20) << "is_already_tiered false" << dendl;
 	   ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
     } else {
-        ldout(tier_ctx.cct, 0) << "XXXXXXXXXXXXXX lc.cc is_already_tiered true" << dendl;
+        ldout(tier_ctx.cct, 20) << "is_already_tiered true" << dendl;
     }
     http_manager.stop();
          
     if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "failed in RGWCloudTierCR() ret=" << ret << dendl;
+      ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudTierCR() ret=" << ret << dendl;
       return ret;
     }
 
     if (oc.tier.retain_object) {
       ret = update_tier_obj(oc, tier_ctx);
       if (ret < 0) {
-        ldpp_dout(oc.dpp, 0) << "Updating tier object failed ret=" << ret << dendl;
+        ldpp_dout(oc.dpp, 0) << "ERROR: Updating tier object failed ret=" << ret << dendl;
         return ret;
       }
     } else {
       ret = delete_tier_obj(oc, tier_ctx);
       if (ret < 0) {
-        ldpp_dout(oc.dpp, 0) << "Deleting tier object failed ret=" << ret << dendl;
+        ldpp_dout(oc.dpp, 0) << "ERROR: Deleting tier object failed ret=" << ret << dendl;
         return ret;
       }
     }
