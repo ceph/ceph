@@ -70,30 +70,32 @@ TEST(TestOSDScrub, scrub_time_permit) {
   mc.build_initial_monmap();
   TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "", icp);
 
+  // These are now invalid
+  int err = g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "24");
+  ASSERT_TRUE(err < 0);
+  //GTEST_LOG_(INFO) << " osd_scrub_begin_hour = " << g_ceph_context->_conf.get_val<int64_t>("osd_scrub_begin_hour");
+
+  err = g_ceph_context->_conf.set_val("osd_scrub_end_hour", "24");
+  ASSERT_TRUE(err < 0);
+  //GTEST_LOG_(INFO) << " osd_scrub_end_hour = " << g_ceph_context->_conf.get_val<int64_t>("osd_scrub_end_hour");
+
+  err = g_ceph_context->_conf.set_val("osd_scrub_begin_week_day", "7");
+  ASSERT_TRUE(err < 0);
+  //GTEST_LOG_(INFO) << " osd_scrub_begin_week_day = " << g_ceph_context->_conf.get_val<int64_t>("osd_scrub_begin_week_day");
+
+  err = g_ceph_context->_conf.set_val("osd_scrub_end_week_day", "7");
+  ASSERT_TRUE(err < 0);
+  //GTEST_LOG_(INFO) << " osd_scrub_end_week_day = " << g_ceph_context->_conf.get_val<int64_t>("osd_scrub_end_week_day");
+
+  // Test all day
   g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "0");
-  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "24");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "0");
   g_ceph_context->_conf.apply_changes(nullptr);
   tm tm;
   tm.tm_isdst = -1;
   strptime("2015-01-16 12:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   utime_t now = utime_t(mktime(&tm), 0);
   bool ret = osd->scrub_time_permit(now);
-  ASSERT_TRUE(ret);
-
-  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "24");
-  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "0");
-  g_ceph_context->_conf.apply_changes(nullptr);
-  strptime("2015-01-16 12:05:13", "%Y-%m-%d %H:%M:%S", &tm);
-  now = utime_t(mktime(&tm), 0);
-  ret = osd->scrub_time_permit(now);
-  ASSERT_FALSE(ret);
-
-  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "0");
-  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "0");
-  g_ceph_context->_conf.apply_changes(nullptr);
-  strptime("2015-01-16 12:05:13", "%Y-%m-%d %H:%M:%S", &tm);
-  now = utime_t(mktime(&tm), 0);
-  ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
   g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "20");
@@ -144,6 +146,53 @@ TEST(TestOSDScrub, scrub_time_permit) {
   ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
+  // Sun = 0, Mon = 1, Tue = 2, Wed = 3, Thu = 4m, Fri = 5, Sat = 6
+  // Jan 16, 2015 is a Friday (5)
+  // every day
+  g_ceph_context->_conf.set_val("osd_scrub_begin_week day", "0"); // inclusive
+  g_ceph_context->_conf.set_val("osd_scrub_end_week_day", "0"); // not inclusive
+  g_ceph_context->_conf.apply_changes(nullptr);
+  strptime("2015-01-16 04:05:13", "%Y-%m-%d %H:%M:%S", &tm);
+  now = utime_t(mktime(&tm), 0);
+  ret = osd->scrub_time_permit(now);
+  ASSERT_TRUE(ret);
+
+  // test Sun - Thu
+  g_ceph_context->_conf.set_val("osd_scrub_begin_week day", "0"); // inclusive
+  g_ceph_context->_conf.set_val("osd_scrub_end_week_day", "5"); // not inclusive
+  g_ceph_context->_conf.apply_changes(nullptr);
+  strptime("2015-01-16 04:05:13", "%Y-%m-%d %H:%M:%S", &tm);
+  now = utime_t(mktime(&tm), 0);
+  ret = osd->scrub_time_permit(now);
+  ASSERT_FALSE(ret);
+
+  // test Fri - Sat
+  g_ceph_context->_conf.set_val("osd_scrub_begin_week day", "5"); // inclusive
+  g_ceph_context->_conf.set_val("osd_scrub_end_week_day", "0"); // not inclusive
+  g_ceph_context->_conf.apply_changes(nullptr);
+  strptime("2015-01-16 04:05:13", "%Y-%m-%d %H:%M:%S", &tm);
+  now = utime_t(mktime(&tm), 0);
+  ret = osd->scrub_time_permit(now);
+  ASSERT_TRUE(ret);
+
+  // Jan 14, 2015 is a Wednesday (3)
+  // test Tue - Fri
+  g_ceph_context->_conf.set_val("osd_scrub_begin_week day", "2"); // inclusive
+  g_ceph_context->_conf.set_val("osd_scrub_end_week_day", "6"); // not inclusive
+  g_ceph_context->_conf.apply_changes(nullptr);
+  strptime("2015-01-14 04:05:13", "%Y-%m-%d %H:%M:%S", &tm);
+  now = utime_t(mktime(&tm), 0);
+  ret = osd->scrub_time_permit(now);
+  ASSERT_TRUE(ret);
+
+  // Test Sat - Sun
+  g_ceph_context->_conf.set_val("osd_scrub_begin_week day", "6"); // inclusive
+  g_ceph_context->_conf.set_val("osd_scrub_end_week_day", "1"); // not inclusive
+  g_ceph_context->_conf.apply_changes(nullptr);
+  strptime("2015-01-14 04:05:13", "%Y-%m-%d %H:%M:%S", &tm);
+  now = utime_t(mktime(&tm), 0);
+  ret = osd->scrub_time_permit(now);
+  ASSERT_FALSE(ret);
 }
 
 // Local Variables:
