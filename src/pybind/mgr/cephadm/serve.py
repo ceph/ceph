@@ -200,9 +200,13 @@ class CephadmServe:
             if code:
                 return 'host %s cephadm ls returned %d: %s' % (
                     host, code, err)
+            ls = json.loads(''.join(out))
+        except ValueError:
+            msg = 'host %s scrape failed: Cannot decode JSON' % host
+            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
+            return msg
         except Exception as e:
             return 'host %s scrape failed: %s' % (host, e)
-        ls = json.loads(''.join(out))
         dm = {}
         for d in ls:
             if not d['style'].startswith('cephadm'):
@@ -255,9 +259,13 @@ class CephadmServe:
             if code:
                 return 'host %s ceph-volume inventory returned %d: %s' % (
                     host, code, err)
+            devices = json.loads(''.join(out))
+        except ValueError:
+            msg = 'host %s scrape failed: Cannot decode JSON' % host
+            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
+            return msg
         except Exception as e:
             return 'host %s ceph-volume inventory failed: %s' % (host, e)
-        devices = json.loads(''.join(out))
         try:
             out, err, code = self.mgr._run_cephadm(
                 host, 'mon',
@@ -267,9 +275,13 @@ class CephadmServe:
             if code:
                 return 'host %s list-networks returned %d: %s' % (
                     host, code, err)
+            networks = json.loads(''.join(out))
+        except ValueError:
+            msg = 'host %s scrape failed: Cannot decode JSON' % host
+            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
+            return msg
         except Exception as e:
             return 'host %s list-networks failed: %s' % (host, e)
-        networks = json.loads(''.join(out))
         self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
             host, len(devices), len(networks)))
         devices = inventory.Devices.from_json(devices)
