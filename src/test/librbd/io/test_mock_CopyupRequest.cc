@@ -198,7 +198,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
           aio_comp->read_result = std::move(req->read_result);
           aio_comp->read_result.set_image_extents(image_extents);
           aio_comp->set_request_count(1);
-          auto ctx = new ReadResult::C_ImageReadRequest(aio_comp,
+          auto ctx = new ReadResult::C_ImageReadRequest(aio_comp, 0,
                                                         image_extents);
           ctx->bl.append(data);
           mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
