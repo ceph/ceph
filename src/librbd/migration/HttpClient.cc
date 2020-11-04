@@ -14,7 +14,9 @@
 #include <boost/asio/read.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/core.hpp>
+#include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/read.hpp>
+#include <boost/lexical_cast.hpp>
 #include <deque>
 
 namespace librbd {
@@ -768,6 +770,59 @@ template <typename I>
 void HttpClient<I>::close(Context* on_finish) {
   boost::asio::post(m_strand, [this, on_finish]() mutable {
     shut_down_http_session(on_finish); });
+}
+
+template <typename I>
+void HttpClient<I>::get_size(uint64_t* size, Context* on_finish) {
+  ldout(m_cct, 10) << dendl;
+
+  boost::beast::http::request<boost::beast::http::empty_body> req;
+  req.method(boost::beast::http::verb::head);
+
+  issue(
+    std::move(req), [this, size, on_finish]
+    (int r, boost::beast::http::response<StringBody>&& response) {
+      handle_get_size(r, std::move(response), size, on_finish);
+    });
+}
+
+template <typename I>
+void HttpClient<I>::handle_get_size(
+    int r, boost::beast::http::response<StringBody>&& response,
+    uint64_t* size, Context* on_finish) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to retrieve size: " << cpp_strerror(r) << dendl;
+    on_finish->complete(r);
+    return;
+  } else if (response.result() == boost::beast::http::status::not_found) {
+    lderr(m_cct) << "failed to retrieve size: " << cpp_strerror(-ENOENT)
+                 << dendl;
+    on_finish->complete(-ENOENT);
+    return;
+  } else if (boost::beast::http::to_status_class(response.result()) !=
+               boost::beast::http::status_class::successful) {
+    lderr(m_cct) << "failed to retrieve size: HTTP " << response.result()
+                 << dendl;
+    on_finish->complete(-EIO);
+    return;
+  } else if (!response.has_content_length()) {
+    lderr(m_cct) << "failed to retrieve size: missing content-length" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  auto content_length = response[boost::beast::http::field::content_length];
+  try {
+    *size = boost::lexical_cast<uint64_t>(content_length);
+  } catch (boost::bad_lexical_cast&) {
+    lderr(m_cct) << "invalid content-length in response" << dendl;
+    on_finish->complete(-EBADMSG);
+    return;
+  }
+
+  on_finish->complete(0);
 }
 
 template <typename I>

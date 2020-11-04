@@ -132,7 +132,6 @@ public:
 
   void client_write_response(boost::asio::ip::tcp::socket& socket,
                              HttpResponse& expected_res) {
-    expected_res.result(boost::beast::http::status::ok);
     expected_res.set(boost::beast::http::field::server,
                      BOOST_BEAST_VERSION_STRING);
     expected_res.set(boost::beast::http::field::content_type, "text/plain");
@@ -736,6 +735,73 @@ TEST_F(TestMockMigrationHttpClient, ShutdownInFlight) {
   http_client.close(&ctx3);
   ASSERT_EQ(0, ctx3.wait());
   ASSERT_EQ(-ESHUTDOWN, ctx2.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, GetSize) {
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx;
+  client_accept(&socket, false, &on_connect_ctx);
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  uint64_t size = 0;
+  C_SaferCond ctx2;
+  http_client.get_size(&size, &ctx2);
+
+  HttpRequest expected_req;
+  expected_req.method(boost::beast::http::verb::head);
+  client_read_request(socket, expected_req);
+
+  HttpResponse expected_res;
+  expected_res.body() = std::string(123, '1');
+  client_write_response(socket, expected_res);
+
+  ASSERT_EQ(0, ctx2.wait());
+  ASSERT_EQ(123, size);
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, GetSizeError) {
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx;
+  client_accept(&socket, false, &on_connect_ctx);
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  uint64_t size = 0;
+  C_SaferCond ctx2;
+  http_client.get_size(&size, &ctx2);
+
+  HttpRequest expected_req;
+  expected_req.method(boost::beast::http::verb::head);
+  client_read_request(socket, expected_req);
+
+  HttpResponse expected_res;
+  expected_res.result(boost::beast::http::status::internal_server_error);
+  client_write_response(socket, expected_res);
+
+  ASSERT_EQ(-EIO, ctx2.wait());
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
 }
 
 } // namespace migration
