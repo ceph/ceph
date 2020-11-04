@@ -529,7 +529,7 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
       return seastar::make_ready_future<>();
     }
     return omap_iter->lower_bound(progress.omap_recovered_to).then(
-      [omap_iter, &new_progress, &max_len, push_op](int ret) {
+      [omap_iter, &new_progress, &max_len, push_op] {
       return seastar::repeat([omap_iter, &new_progress, &max_len, push_op] {
         if (!omap_iter->valid()) {
           new_progress.omap_complete = true;
@@ -552,7 +552,7 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
         } else {
           max_len = 0;
         }
-        return omap_iter->next().then([](int r) {
+        return omap_iter->next().then([] {
           return seastar::stop_iteration::no;
         });
       });

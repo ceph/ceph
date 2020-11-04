@@ -1747,7 +1747,7 @@ public:
 		      seastar::stop_iteration::yes);
 	  }
 	  process_entry(iter);
-	  return iter->next().then([](int) {
+	  return iter->next().then([] {
 	    return seastar::stop_iteration::no;
 	  });
 	});
