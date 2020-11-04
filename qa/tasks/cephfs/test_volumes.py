@@ -11,6 +11,7 @@ from hashlib import md5
 from textwrap import dedent
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -102,10 +103,7 @@ class TestVolumesHelper(CephFSTestCase):
             self.assertEqual(sval, cval)
 
             # inode timestamps
-            sval = int(self.mount_a.run_shell(['stat', '-c' '%X', source_path]).stdout.getvalue().strip())
-            cval = int(self.mount_a.run_shell(['stat', '-c' '%X', sink_path]).stdout.getvalue().strip())
-            self.assertEqual(sval, cval)
-
+            # do not check access as kclient will generally not update this like ceph-fuse will.
             sval = int(self.mount_a.run_shell(['stat', '-c' '%Y', source_path]).stdout.getvalue().strip())
             cval = int(self.mount_a.run_shell(['stat', '-c' '%Y', sink_path]).stdout.getvalue().strip())
             self.assertEqual(sval, cval)
@@ -118,7 +116,9 @@ class TestVolumesHelper(CephFSTestCase):
 
         # verify quota is inherited from source snapshot
         src_quota = self.mount_a.getfattr(source_path, "ceph.quota.max_bytes")
-        self.assertEqual(clone_info["bytes_quota"], "infinite" if src_quota is None else int(src_quota))
+        # FIXME: kclient fails to get this quota value: https://tracker.ceph.com/issues/48075
+        if isinstance(self.mount_a, FuseMount):
+            self.assertEqual(clone_info["bytes_quota"], "infinite" if src_quota is None else int(src_quota))
 
         if clone_pool:
             # verify pool is set as per request
@@ -389,7 +389,7 @@ class TestVolumes(TestVolumesHelper):
         volumes = [volume['name'] for volume in vls]
 
         #create new volumes and add it to the existing list of volumes
-        volumenames = self._generate_random_volume_name(3)
+        volumenames = self._generate_random_volume_name(2)
         for volumename in volumenames:
             self._fs_cmd("volume", "create", volumename)
         volumes.extend(volumenames)
@@ -413,6 +413,8 @@ class TestVolumes(TestVolumesHelper):
         That the volume can only be removed when --yes-i-really-mean-it is used
         and verify that the deleted volume is not listed anymore.
         """
+        for m in self.mounts:
+            m.umount_wait()
         try:
             self._fs_cmd("volume", "rm", self.volname)
         except CommandFailedError as ce:
@@ -435,6 +437,8 @@ class TestVolumes(TestVolumesHelper):
         That the arbitrary pool added to the volume out of band is removed
         successfully on volume removal.
         """
+        for m in self.mounts:
+            m.umount_wait()
         new_pool = "new_pool"
         # add arbitrary data pool
         self.fs.add_data_pool(new_pool)
@@ -456,6 +460,8 @@ class TestVolumes(TestVolumesHelper):
         That the volume can only be removed when mon_allowd_pool_delete is set
         to true and verify that the pools are removed after volume deletion.
         """
+        for m in self.mounts:
+            m.umount_wait()
         self.config_set('mon', 'mon_allow_pool_delete', False)
         try:
             self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
@@ -551,7 +557,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
         self.assertNotEqual(default_pool, new_pool)
 
         # add data pool
-        self.fs.add_data_pool(new_pool)
+        newid = self.fs.add_data_pool(new_pool)
 
         # create group specifying the new data pool as its pool layout
         self._fs_cmd("subvolumegroup", "create", self.volname, group2,
@@ -559,7 +565,10 @@ class TestSubvolumeGroups(TestVolumesHelper):
         group2_path = self._get_subvolume_group_path(self.volname, group2)
 
         desired_pool = self.mount_a.getfattr(group2_path, "ceph.dir.layout.pool")
-        self.assertEqual(desired_pool, new_pool)
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         self._fs_cmd("subvolumegroup", "rm", self.volname, group1)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group2)
@@ -863,7 +872,7 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertNotEqual(default_pool, new_pool)
 
         # add data pool
-        self.fs.add_data_pool(new_pool)
+        newid = self.fs.add_data_pool(new_pool)
 
         # create subvolume specifying the new data pool as its pool layout
         self._fs_cmd("subvolume", "create", self.volname, subvol2, "--group_name", group,
@@ -871,7 +880,10 @@ class TestSubvolumes(TestVolumesHelper):
         subvol2_path = self._get_subvolume_path(self.volname, subvol2, group_name=group)
 
         desired_pool = self.mount_a.getfattr(subvol2_path, "ceph.dir.layout.pool")
-        self.assertEqual(desired_pool, new_pool)
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
         self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
@@ -1250,7 +1262,9 @@ class TestSubvolumes(TestVolumesHelper):
 
         usedsize = int(self.mount_a.getfattr(subvolpath, "ceph.dir.rbytes"))
         susedsize = int(self.mount_a.run_shell(['stat', '-c' '%s', subvolpath]).stdout.getvalue().strip())
-        self.assertEqual(usedsize, susedsize)
+        if isinstance(self.mount_a, FuseMount):
+            # kclient dir does not have size==rbytes
+            self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
         nsize = usedsize // 2
@@ -1295,7 +1309,9 @@ class TestSubvolumes(TestVolumesHelper):
 
         usedsize = int(self.mount_a.getfattr(subvolpath, "ceph.dir.rbytes"))
         susedsize = int(self.mount_a.run_shell(['stat', '-c' '%s', subvolpath]).stdout.getvalue().strip())
-        self.assertEqual(usedsize, susedsize)
+        if isinstance(self.mount_a, FuseMount):
+            # kclient dir does not have size==rbytes
+            self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
         nsize = usedsize // 2
@@ -3044,7 +3060,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # add data pool
         new_pool = "new_pool"
-        self.fs.add_data_pool(new_pool)
+        newid = self.fs.add_data_pool(new_pool)
 
         # create subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
@@ -3069,7 +3085,10 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         subvol_path = self._get_subvolume_path(self.volname, clone)
         desired_pool = self.mount_a.getfattr(subvol_path, "ceph.dir.layout.pool")
-        self.assertEqual(desired_pool, new_pool)
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
 
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
