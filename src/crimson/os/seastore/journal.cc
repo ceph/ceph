@@ -52,7 +52,7 @@ Journal::initialize_segment(Segment &segment)
     seq,
     segment.get_segment_id(),
     segment_provider->get_journal_tail_target()};
-  ::encode(header, bl);
+  encode(header, bl);
 
   bufferptr bp(
     ceph::buffer::create_page_aligned(
@@ -85,12 +85,12 @@ ceph::bufferlist Journal::encode_record(
     record.deltas.size(),
     record.extents.size()
   };
-  ::encode(header, metadatabl);
+  encode(header, metadatabl);
   for (const auto &i: record.extents) {
-    ::encode(extent_info_t(i), metadatabl);
+    encode(extent_info_t(i), metadatabl);
   }
   for (const auto &i: record.deltas) {
-    ::encode(i, metadatabl);
+    encode(i, metadatabl);
   }
   bufferlist databl;
   for (auto &i: record.extents) {
@@ -225,7 +225,7 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 
 	    auto bp = bl.cbegin();
 	    try {
-	      ::decode(header, bp);
+	      decode(header, bp);
 	    } catch (ceph::buffer::error &e) {
 	      logger().debug(
 		"find_replay_segments: segment {} unable to decode "
@@ -337,7 +337,7 @@ Journal::read_record_metadata_ret Journal::read_record_metadata(
       auto bp = bl.cbegin();
       record_header_t header;
       try {
-	::decode(header, bp);
+	decode(header, bp);
       } catch (ceph::buffer::error &e) {
 	return read_record_metadata_ret(
 	  read_record_metadata_ertr::ready_future_marker{},
@@ -378,7 +378,7 @@ std::optional<std::vector<delta_info_t>> Journal::try_decode_deltas(
   std::vector<delta_info_t> deltas(header.deltas);
   for (auto &&i : deltas) {
     try {
-      ::decode(i, bliter);
+      decode(i, bliter);
     } catch (ceph::buffer::error &e) {
       return std::nullopt;
     }
@@ -396,7 +396,7 @@ std::optional<std::vector<extent_info_t>> Journal::try_decode_extent_infos(
   std::vector<extent_info_t> extent_infos(header.extents);
   for (auto &&i : extent_infos) {
     try {
-      ::decode(i, bliter);
+      decode(i, bliter);
     } catch (ceph::buffer::error &e) {
       return std::nullopt;
     }
