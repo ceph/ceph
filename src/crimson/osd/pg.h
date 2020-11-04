@@ -513,24 +513,12 @@ public:
     const hobject_t &oid,
     RWState::State type);
 public:
-  template <typename F>
-  auto with_locked_obc(
+  using with_obc_func_t = std::function<seastar::future<> (ObjectContextRef)>;
+  load_obc_ertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
     const OpInfo &op_info,
     Operation *op,
-    F &&f) {
-    if (__builtin_expect(stopping, false)) {
-      throw crimson::common::system_shutdown_exception();
-    }
-    RWState::State type = get_lock_type(op_info);
-    return get_locked_obc(op, get_oid(*m), type)
-      .safe_then([f=std::forward<F>(f), type=type](auto obc) {
-	return f(obc).finally([obc, type=type] {
-	  obc->put_lock_type(type);
-	  return load_obc_ertr::now();
-	});
-      });
-  }
+    with_obc_func_t&& f);
 
   seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
   void handle_rep_op_reply(crimson::net::Connection* conn,
