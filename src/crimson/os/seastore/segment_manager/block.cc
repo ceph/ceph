@@ -115,7 +115,8 @@ block_sm_superblock_t make_superblock(
     data.block_size,
     segments,
     data.block_size,
-    tracker_size + data.block_size
+    tracker_size + data.block_size,
+    config.meta
   };
 }
 
