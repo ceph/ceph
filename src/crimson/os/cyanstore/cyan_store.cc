@@ -802,22 +802,22 @@ CyanStore::stat(
   return seastar::make_ready_future<struct stat>(std::move(st));
 }
 
-seastar::future<int> CyanStore::CyanOmapIterator::seek_to_first()
+seastar::future<> CyanStore::CyanOmapIterator::seek_to_first()
 {
   iter = obj->omap.begin();
-  return seastar::make_ready_future<int>(0);
+  return seastar::make_ready_future<>();
 }
 
-seastar::future<int> CyanStore::CyanOmapIterator::upper_bound(const std::string& after)
+seastar::future<> CyanStore::CyanOmapIterator::upper_bound(const std::string& after)
 {
   iter = obj->omap.upper_bound(after);
-  return seastar::make_ready_future<int>(0);
+  return seastar::make_ready_future<>();
 }
 
-seastar::future<int> CyanStore::CyanOmapIterator::lower_bound(const std::string &to)
+seastar::future<> CyanStore::CyanOmapIterator::lower_bound(const std::string &to)
 {
   iter = obj->omap.lower_bound(to);
-  return seastar::make_ready_future<int>(0);
+  return seastar::make_ready_future<>();
 }
 
 bool CyanStore::CyanOmapIterator::valid() const
@@ -825,10 +825,10 @@ bool CyanStore::CyanOmapIterator::valid() const
   return iter != obj->omap.end();
 }
 
-seastar::future<int> CyanStore::CyanOmapIterator::next()
+seastar::future<> CyanStore::CyanOmapIterator::next()
 {
   ++iter;
-  return seastar::make_ready_future<int>(0);
+  return seastar::make_ready_future<>();
 }
 
 }

@@ -28,20 +28,20 @@ class FuturizedStore {
 public:
   class OmapIterator {
   public:
-    virtual seastar::future<int> seek_to_first() {
-      return seastar::make_ready_future<int>(0);
+    virtual seastar::future<> seek_to_first() {
+      return seastar::make_ready_future<>();
     }
-    virtual seastar::future<int> upper_bound(const std::string &after) {
-      return seastar::make_ready_future<int>(0);
+    virtual seastar::future<> upper_bound(const std::string &after) {
+      return seastar::make_ready_future<>();
     }
-    virtual seastar::future<int> lower_bound(const std::string &to) {
-      return seastar::make_ready_future<int>(0);
+    virtual seastar::future<> lower_bound(const std::string &to) {
+      return seastar::make_ready_future<>();
     }
     virtual bool valid() const {
       return false;
     }
-    virtual seastar::future<int> next() {
-      return seastar::make_ready_future<int>(0);
+    virtual seastar::future<> next() {
+      return seastar::make_ready_future<>();
     }
     virtual std::string key() {
       return {};
