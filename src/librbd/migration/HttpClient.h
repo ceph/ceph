@@ -43,6 +43,8 @@ public:
   void open(Context* on_finish);
   void close(Context* on_finish);
 
+  void get_size(uint64_t* size, Context* on_finish);
+
   void set_ignore_self_signed_cert(bool ignore) {
     m_ignore_self_signed_cert = ignore;
   }
@@ -156,6 +158,10 @@ private:
     fields.set(boost::beast::http::field::user_agent,
                BOOST_BEAST_VERSION_STRING);
   }
+
+  void handle_get_size(
+    int r, boost::beast::http::response<StringBody>&& response,
+    uint64_t* size, Context* on_finish);
 
   void issue(std::shared_ptr<Work>&& work);
 
