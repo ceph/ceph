@@ -424,7 +424,8 @@ public:
       std::vector<rgw::cls::fifo::list_entry> log_entries;
       bool more = false;
       auto r = rgw::cls::fifo::FIFO::open(ioctx, oid,
-					  &fifo, null_yield);
+					  &fifo, null_yield,
+					  std::nullopt, true);
       if (r == -ENOENT || r == -ENODATA) {
 	continue;
       } else if (r < 0) {
@@ -458,13 +459,8 @@ public:
       c.push_back(std::move(bl));
     }
 
-    auto r = fifos[index]->push(c, completion);
-    if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__
-		 << ": unable to push to FIFO: " << get_shard_oid(index)
-		 << ": " << cpp_strerror(-r) << dendl;
-    }
-    return r;
+    fifos[index]->push(std::move(c), completion);
+    return 0;
   }
   int push(int index, ceph::real_time now,
 	   const std::string& section,
@@ -481,13 +477,8 @@ public:
     bufferlist ble;
     encode(entry, ble);
 
-    auto r = fifos[index]->push(std::move(ble), null_yield);
-    if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__
-		 << ": unable to push to FIFO: " << get_shard_oid(index)
-		 << ": " << cpp_strerror(-r) << dendl;
-    }
-    return r;
+    fifos[index]->push(std::move(ble), null_yield);
+    return 0;
   }
   int list(int index, int max_entries,
 	   std::vector<cls_log_entry>& e,
@@ -558,24 +549,13 @@ public:
 		     RGWMetadataLogInfoCompletion *completion) override {
     auto& fifo = fifos[index];
     auto c = completion->get_completion();
-    auto r = fifo->get_head_info([completion](int p,
-					      rgw::cls::fifo::part_info* h) {
-      if (h) {
-	completion->get_header().max_marker =
-	  rgw::cls::fifo::marker{p, h->last_ofs}.to_string();
-	completion->get_header().max_time = utime_t(h->max_time);
-      } else {
-	completion->get_header().max_marker =
-	  rgw::cls::fifo::marker{}.to_string();
-	completion->get_header().max_time = utime_t{};
-      }
+    rgw::cls::fifo::part_info h;
+    fifo->get_head_info([completion](int p, rgw::cls::fifo::part_info&& h) {
+      completion->get_header().max_marker =
+	  rgw::cls::fifo::marker{p, h.last_ofs}.to_string();
+      completion->get_header().max_time = utime_t(h.max_time);
     }, c);
-    if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__
-		 << ": unable to get head info: " << get_shard_oid(index) << "/"
-		 << ": " << cpp_strerror(-r) << dendl;
-    }
-    return r;
+    return 0;
   }
 
   int trim(int index, std::string_view marker, bool exclusive) override {
@@ -613,12 +593,7 @@ public:
       pc->cond.notify_all();
       pc->put_unlock();
     } else {
-      r = fifos[index]->trim(marker, exclusive, c);
-      if (r < 0) {
-	lderr(cct) << __PRETTY_FUNCTION__
-		   << ": unable to trim FIFO: " << get_shard_oid(index)
-		   << ": " << cpp_strerror(-r) << dendl;
-      }
+      fifos[index]->trim(marker, exclusive, c);
     }
     return r;
   }
@@ -679,14 +654,14 @@ int RGWMetadataLog::init(librados::Rados* lr)
   auto r = RGWMetadataLogOmap::exists(cct, *svc.cls, prefix, &omapexists, &omaphasentries);
   if (r < 0) {
     lderr(cct) << __PRETTY_FUNCTION__
-	       << ": Error when checking for existing Omap datalog backend: "
+	       << ": Error when checking for existing Omap mdlog backend: "
 	       << cpp_strerror(-r) << dendl;
   }
   bool fifoexists = false, fifohasentries = false;
   r = RGWMetadataLogFIFO::exists(cct, prefix, lr, log_pool, &fifoexists, &fifohasentries);
   if (r < 0) {
     lderr(cct) << __PRETTY_FUNCTION__
-	       << ": Error when checking for existing FIFO datalog backend: "
+	       << ": Error when checking for existing FIFO mdlog backend: "
 	       << cpp_strerror(-r) << dendl;
   }
 
@@ -745,8 +720,10 @@ int RGWMetadataLog::init(librados::Rados* lr)
 
   try {
     if (backing == "omap" || (backing == "auto" && omapexists)) {
+      ldout(cct, 20) << __func__ << " Configuring omap for metadata log backing." << dendl;
       be = std::make_unique<RGWMetadataLogOmap>(cct, prefix, *svc.cls);
     } else if (backing != "omap") {
+      ldout(cct, 20) << __func__ << " Configuring fifo for metadata log backing." << dendl;
       be = std::make_unique<RGWMetadataLogFIFO>(cct, prefix, lr, log_pool);
     }
   } catch (bs::system_error& e) {
