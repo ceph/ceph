@@ -2587,7 +2587,7 @@ public:
              RGWMetadataObject *obj,
              RGWObjVersionTracker& objv_tracker,
              optional_yield y,
-             RGWMDLogSyncType type) override;
+             RGWMDLogSyncType type, bool from_remote_zone) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
                 optional_yield y) override {
@@ -2616,7 +2616,7 @@ public:
                              RGWSI_MetaBackend_Handler::Op *op, string& entry,
                              RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
                              optional_yield y,
-                             RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type),
+                             RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type, from_remote_zone),
                                                                 uhandler(_handler) {
     uobj = static_cast<RGWUserMetadataObject *>(obj);
   }
@@ -2628,9 +2628,9 @@ int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& en
                                    RGWMetadataObject *obj,
                                    RGWObjVersionTracker& objv_tracker,
                                    optional_yield y,
-                                   RGWMDLogSyncType type)
+                                   RGWMDLogSyncType type, bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_User put_op(this, op, entry, obj, objv_tracker, y, type);
+  RGWMetadataHandlerPut_User put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op);
 }
 

@@ -70,7 +70,11 @@ public:
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
   virtual int get(string& entry, RGWMetadataObject **obj, optional_yield) = 0;
-  virtual int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, RGWMDLogSyncType type) = 0;
+  virtual int put(string& entry,
+                  RGWMetadataObject *obj,
+                  RGWObjVersionTracker& objv_tracker,
+                  optional_yield, RGWMDLogSyncType type,
+                  bool from_remote_zone) = 0;
   virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield) = 0;
 
   virtual int mutate(const string& entry,
@@ -106,7 +110,8 @@ protected:
 
   virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y) = 0;
   virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
-                     RGWObjVersionTracker& objv_tracker, optional_yield y, RGWMDLogSyncType type) = 0;
+                     RGWObjVersionTracker& objv_tracker, optional_yield y,
+                     RGWMDLogSyncType type, bool from_remote_zone) = 0;
   virtual int do_put_operate(Put *put_op);
   virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y) = 0;
 
@@ -132,6 +137,7 @@ public:
     RGWObjVersionTracker& objv_tracker;
     RGWMDLogSyncType apply_type;
     optional_yield y;
+    bool from_remote_zone{false};
 
     int get(RGWMetadataObject **obj) {
       return handler->do_get(op, entry, obj, y);
@@ -140,7 +146,7 @@ public:
     Put(RGWMetadataHandler_GenericMetaBE *_handler, RGWSI_MetaBackend_Handler::Op *_op,
         string& _entry, RGWMetadataObject *_obj,
         RGWObjVersionTracker& _objv_tracker, optional_yield _y,
-        RGWMDLogSyncType _type);
+        RGWMDLogSyncType _type, bool from_remote_zone);
 
     virtual ~Put() {}
 
@@ -159,7 +165,7 @@ public:
   };
 
   int get(string& entry, RGWMetadataObject **obj, optional_yield) override;
-  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, RGWMDLogSyncType type) override;
+  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, RGWMDLogSyncType type, bool from_remote_zone) override;
   int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield) override;
 
   int mutate(const string& entry,
@@ -230,6 +236,7 @@ public:
   int get(string& metadata_key, Formatter *f, optional_yield y);
   int put(string& metadata_key, bufferlist& bl, optional_yield y,
           RGWMDLogSyncType sync_mode,
+          bool from_remote_zone,
           obj_version *existing_version = NULL);
   int remove(string& metadata_key, optional_yield y);
 
@@ -267,7 +274,7 @@ public:
   RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
                              string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
 			     optional_yield y,
-                             RGWMDLogSyncType type);
+                             RGWMDLogSyncType type, bool from_remote_zone);
   ~RGWMetadataHandlerPut_SObj();
 
   int put_pre() override;

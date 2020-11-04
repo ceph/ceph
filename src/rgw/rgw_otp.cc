@@ -119,7 +119,7 @@ class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
   int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
              RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
              optional_yield y,
-             RGWMDLogSyncType type) override {
+             RGWMDLogSyncType type, bool from_remote_zone) override {
     RGWOTPMetadataObject *obj = static_cast<RGWOTPMetadataObject *>(_obj);
 
     RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
