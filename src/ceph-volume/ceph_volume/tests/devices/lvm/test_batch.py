@@ -116,6 +116,40 @@ class TestBatch(object):
         report = b._create_report(plan)
         json.loads(report)
 
+    @pytest.mark.parametrize('rota', [0, 1])
+    def test_batch_sort_full(self, factory, rota):
+        device1 = factory(used_by_ceph=False, available=True, rotational=rota, abspath="/dev/sda")
+        device2 = factory(used_by_ceph=False, available=True, rotational=rota, abspath="/dev/sdb")
+        device3 = factory(used_by_ceph=False, available=True, rotational=rota, abspath="/dev/sdc")
+        devices = [device1, device2, device3]
+        args = factory(report=True,
+                       devices=devices,
+                       filestore=False,
+                      )
+        b = batch.Batch([])
+        b.args = args
+        b._sort_rotational_disks()
+        assert len(b.args.devices) == 3
+
+    @pytest.mark.parametrize('objectstore', ['bluestore', 'filestore'])
+    def test_batch_sort_mixed(self, factory, objectstore):
+        device1 = factory(used_by_ceph=False, available=True, rotational=1, abspath="/dev/sda")
+        device2 = factory(used_by_ceph=False, available=True, rotational=1, abspath="/dev/sdb")
+        device3 = factory(used_by_ceph=False, available=True, rotational=0, abspath="/dev/sdc")
+        devices = [device1, device2, device3]
+        args = factory(report=True,
+                       devices=devices,
+                       filestore=False if objectstore == 'bluestore' else True,
+                      )
+        b = batch.Batch([])
+        b.args = args
+        b._sort_rotational_disks()
+        assert len(b.args.devices) == 2
+        if objectstore == 'bluestore':
+            assert len(b.args.db_devices) == 1
+        else:
+            assert len(b.args.journal_devices) == 1
+
     def test_get_physical_osds_return_len(self, factory,
                                           mock_devices_available,
                                           conf_ceph_stub,
