@@ -637,6 +637,7 @@ static int check_index(cls_method_context_t hctx,
 
   calc_header->tag_timeout = existing_header->tag_timeout;
   calc_header->ver = existing_header->ver;
+  calc_header->syncstopped = existing_header->syncstopped;
 
   map<string, bufferlist> keys;
   string start_obj;
