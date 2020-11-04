@@ -11152,7 +11152,7 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
 // and insert a new tuple corresponding to the new location of the object.  The
 // cleaner can now identify live objects within the zone <zone_num> by
 // enumerating all the keys starting with <zone_num> prefix.
-void BlueStore::zoned_update_cleaning_metadata(TransContext *txc) {
+void BlueStore::_zoned_update_cleaning_metadata(TransContext *txc) {
   for (const auto &[o, offsets] : txc->zoned_onode_to_offset_map) {
     std::string key;
     get_object_key(cct, o->oid, &key);
@@ -11160,15 +11160,15 @@ void BlueStore::zoned_update_cleaning_metadata(TransContext *txc) {
       if (offset > 0) {
 	bufferlist offset_bl;
 	encode(offset, offset_bl);
-        txc->t->set(zoned_get_prefix(offset), key, offset_bl);
+        txc->t->set(_zoned_get_prefix(offset), key, offset_bl);
       } else {
-        txc->t->rmkey(zoned_get_prefix(-offset), key);
+        txc->t->rmkey(_zoned_get_prefix(-offset), key);
       }
     }
   }
 }
 
-std::string BlueStore::zoned_get_prefix(uint64_t offset) {
+std::string BlueStore::_zoned_get_prefix(uint64_t offset) {
   uint64_t zone_num = offset / bdev->get_zone_size();
   std::string zone_key;
   _key_encode_u64(zone_num, &zone_key);
@@ -11262,7 +11262,7 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
   }
 
   if (bdev->is_smr()) {
-    zoned_update_cleaning_metadata(txc);
+    _zoned_update_cleaning_metadata(txc);
   }
 
   _txc_update_store_statfs(txc);
