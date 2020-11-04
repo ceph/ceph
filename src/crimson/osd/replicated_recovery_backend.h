@@ -134,4 +134,10 @@ private:
     uint64_t offset,
     uint64_t max_len,
     PushOp* push_op);
+  seastar::future<> read_omap_for_push_op(
+    const hobject_t& oid,
+    const ObjectRecoveryProgress& progress,
+    ObjectRecoveryProgress& new_progress,
+    uint64_t max_len,
+    PushOp* push_op);
 };
