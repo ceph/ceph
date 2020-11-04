@@ -127,11 +127,89 @@ struct DentryLeaseHitMetric {
   }
 };
 
+struct OpenedFilesMetric {
+  uint64_t opened_files = 0;
+  uint64_t total_inodes = 0;
+  bool updated = false;
+
+  DENC(OpenedFilesMetric, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.opened_files, p);
+    denc(v.total_inodes, p);
+    denc(v.updated, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("opened_files", opened_files);
+    f->dump_unsigned("total_inodes", total_inodes);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const OpenedFilesMetric &metric) {
+    os << "{opened_files=" << metric.opened_files  << ", total_inodes="
+       << metric.total_inodes << "}";
+    return os;
+  }
+};
+
+struct PinnedIcapsMetric {
+  uint64_t pinned_icaps = 0;
+  uint64_t total_inodes = 0;
+  bool updated = false;
+
+  DENC(PinnedIcapsMetric, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.pinned_icaps, p);
+    denc(v.total_inodes, p);
+    denc(v.updated, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("pinned_icaps", pinned_icaps);
+    f->dump_unsigned("total_inodes", total_inodes);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const PinnedIcapsMetric &metric) {
+    os << "{pinned_icaps=" << metric.pinned_icaps << ", total_inodes="
+       << metric.total_inodes << "}";
+    return os;
+  }
+};
+
+struct OpenedInodesMetric {
+  uint64_t opened_inodes = 0;
+  uint64_t total_inodes = 0;
+  bool updated = false;
+
+  DENC(OpenedInodesMetric, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.opened_inodes, p);
+    denc(v.total_inodes, p);
+    denc(v.updated, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("opened_inodes", opened_inodes);
+    f->dump_unsigned("total_inodes", total_inodes);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const OpenedInodesMetric &metric) {
+    os << "{opened_inodes=" << metric.opened_inodes << ", total_inodes="
+       << metric.total_inodes << "}";
+    return os;
+  }
+};
+
 WRITE_CLASS_DENC(CapHitMetric)
 WRITE_CLASS_DENC(ReadLatencyMetric)
 WRITE_CLASS_DENC(WriteLatencyMetric)
 WRITE_CLASS_DENC(MetadataLatencyMetric)
 WRITE_CLASS_DENC(DentryLeaseHitMetric)
+WRITE_CLASS_DENC(OpenedFilesMetric)
+WRITE_CLASS_DENC(PinnedIcapsMetric)
+WRITE_CLASS_DENC(OpenedInodesMetric)
 
 // metrics that are forwarded to the MDS by client(s).
 struct Metrics {
@@ -141,12 +219,15 @@ struct Metrics {
   WriteLatencyMetric write_latency_metric;
   MetadataLatencyMetric metadata_latency_metric;
   DentryLeaseHitMetric dentry_lease_metric;
+  OpenedFilesMetric opened_files_metric;
+  PinnedIcapsMetric pinned_icaps_metric;
+  OpenedInodesMetric opened_inodes_metric;
 
   // metric update type
   uint32_t update_type = UpdateType::UPDATE_TYPE_REFRESH;
 
   DENC(Metrics, v, p) {
-    DENC_START(2, 1, p);
+    DENC_START(3, 1, p);
     denc(v.update_type, p);
     denc(v.cap_hit_metric, p);
     denc(v.read_latency_metric, p);
@@ -154,6 +235,11 @@ struct Metrics {
     denc(v.metadata_latency_metric, p);
     if (struct_v >= 2) {
       denc(v.dentry_lease_metric, p);
+    }
+    if (struct_v >= 3) {
+      denc(v.opened_files_metric, p);
+      denc(v.pinned_icaps_metric, p);
+      denc(v.opened_inodes_metric, p);
     }
     DENC_FINISH(p);
   }
@@ -165,6 +251,9 @@ struct Metrics {
     f->dump_object("write_latency_metric", write_latency_metric);
     f->dump_object("metadata_latency_metric", metadata_latency_metric);
     f->dump_object("dentry_lease_metric", dentry_lease_metric);
+    f->dump_object("opened_files_metric", opened_files_metric);
+    f->dump_object("pinned_icaps_metric", pinned_icaps_metric);
+    f->dump_object("opened_inodes_metric", opened_inodes_metric);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Metrics& metrics) {
@@ -174,6 +263,9 @@ struct Metrics {
        << ", write_latency=" << metrics.write_latency_metric
        << ", metadata_latency=" << metrics.metadata_latency_metric
        << ", dentry_lease =" << metrics.dentry_lease_metric
+       << ", opened_files_metric =" << metrics.opened_files_metric
+       << ", pinned_icaps_metric =" << metrics.pinned_icaps_metric
+       << ", opened_inodes_metric =" << metrics.opened_inodes_metric
        << "}]";
     return os;
   }

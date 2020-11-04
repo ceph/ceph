@@ -22,6 +22,9 @@ enum ClientMetricType {
   CLIENT_METRIC_TYPE_WRITE_LATENCY,
   CLIENT_METRIC_TYPE_METADATA_LATENCY,
   CLIENT_METRIC_TYPE_DENTRY_LEASE,
+  CLIENT_METRIC_TYPE_OPENED_FILES,
+  CLIENT_METRIC_TYPE_PINNED_ICAPS,
+  CLIENT_METRIC_TYPE_OPENED_INODES,
 };
 inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) {
   switch(type) {
@@ -39,6 +42,15 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     break;
   case ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE:
     os << "DENTRY_LEASE";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_FILES:
+    os << "OPENED_FILES";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_PINNED_ICAPS:
+    os << "PINNED_ICAPS";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
+    os << "OPENED_INODES";
     break;
   default:
     ceph_abort();
@@ -232,6 +244,120 @@ struct DentryLeasePayload {
   }
 };
 
+struct OpenedFilesPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_OPENED_FILES;
+
+  uint64_t opened_files = 0;
+  uint64_t total_inodes = 0;
+
+  OpenedFilesPayload() { }
+  OpenedFilesPayload(uint64_t opened_files, uint64_t total_inodes)
+    : opened_files(opened_files), total_inodes(total_inodes) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(opened_files, bl);
+    encode(total_inodes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(opened_files, iter);
+    decode(total_inodes, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("opened_files", opened_files);
+    f->dump_int("total_inodes", total_inodes);
+  }
+
+  void print(ostream *out) const {
+    *out << "opened_files: " << opened_files << " "
+	 << "total_inodes: " << total_inodes;
+  }
+};
+
+struct PinnedIcapsPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_PINNED_ICAPS;
+
+  uint64_t pinned_icaps = 0;
+  uint64_t total_inodes = 0;
+
+  PinnedIcapsPayload() { }
+  PinnedIcapsPayload(uint64_t pinned_icaps, uint64_t total_inodes)
+    : pinned_icaps(pinned_icaps), total_inodes(total_inodes) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(pinned_icaps, bl);
+    encode(total_inodes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(pinned_icaps, iter);
+    decode(total_inodes, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("pinned_icaps", pinned_icaps);
+    f->dump_int("total_inodes", total_inodes);
+  }
+
+  void print(ostream *out) const {
+    *out << "pinned_icaps: " << pinned_icaps << " "
+	 << "total_inodes: " << total_inodes;
+  }
+};
+
+struct OpenedInodesPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES;
+
+  uint64_t opened_inodes = 0;
+  uint64_t total_inodes = 0;
+
+  OpenedInodesPayload() { }
+  OpenedInodesPayload(uint64_t opened_inodes, uint64_t total_inodes)
+    : opened_inodes(opened_inodes), total_inodes(total_inodes) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(opened_inodes, bl);
+    encode(total_inodes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(opened_inodes, iter);
+    decode(total_inodes, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("opened_inodes", opened_inodes);
+    f->dump_int("total_inodes", total_inodes);
+  }
+
+  void print(ostream *out) const {
+    *out << "opened_inodes: " << opened_inodes << " "
+	 << "total_inodes: " << total_inodes;
+  }
+};
+
 struct UnknownPayload {
   static const ClientMetricType METRIC_TYPE = static_cast<ClientMetricType>(-1);
 
@@ -255,6 +381,9 @@ typedef boost::variant<CapInfoPayload,
                        WriteLatencyPayload,
                        MetadataLatencyPayload,
 		       DentryLeasePayload,
+		       OpenedFilesPayload,
+		       PinnedIcapsPayload,
+		       OpenedInodesPayload,
                        UnknownPayload> ClientMetricPayload;
 
 // metric update message sent by clients
@@ -353,6 +482,15 @@ public:
       break;
     case ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE:
       payload = DentryLeasePayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_FILES:
+      payload = OpenedFilesPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_PINNED_ICAPS:
+      payload = PinnedIcapsPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
+      payload = OpenedInodesPayload();
       break;
     default:
       payload = UnknownPayload();

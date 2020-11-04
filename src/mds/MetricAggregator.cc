@@ -138,6 +138,24 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
         c->second = metrics.dentry_lease_metric.misses;
       }
       break;
+    case MDSPerformanceCounterType::OPENED_FILES_METRIC:
+      if (metrics.opened_files_metric.updated) {
+        c->first = metrics.opened_files_metric.opened_files;
+        c->second = metrics.opened_files_metric.total_inodes;
+      }
+      break;
+    case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
+      if (metrics.pinned_icaps_metric.updated) {
+        c->first = metrics.pinned_icaps_metric.pinned_icaps;
+        c->second = metrics.pinned_icaps_metric.total_inodes;
+      }
+      break;
+    case MDSPerformanceCounterType::OPENED_INODES_METRIC:
+      if (metrics.opened_inodes_metric.updated) {
+        c->first = metrics.opened_inodes_metric.opened_inodes;
+        c->second = metrics.opened_inodes_metric.total_inodes;
+      }
+      break;
     default:
       ceph_abort_msg("unknown counter type");
     }
