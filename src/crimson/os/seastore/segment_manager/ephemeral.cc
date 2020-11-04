@@ -96,6 +96,8 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
     "Initing ephemeral segment manager with config {}",
     config);
 
+  meta = seastore_meta_t{};
+
   if (config.block_size % (4<<10) != 0) {
     return crimson::ct_error::invarg::make();
   }
