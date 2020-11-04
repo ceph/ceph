@@ -112,6 +112,8 @@ protected:
 public:
   AuthClient *auth_client = 0;
   AuthServer *auth_server = 0;
+  uint64_t dispatch_throttle_bytes;
+  std::chrono::seconds dispatch_throttle_log_interval;
 
 #ifdef UNIT_TESTS_BUILT
   Interceptor *interceptor = nullptr;
@@ -812,6 +814,18 @@ public:
 
   void set_require_authorizer(bool b) {
     require_authorizer = b;
+  }
+  /**
+   * Notify each Dispatcher that the Throttle Limit has been hit. Call
+   * this function whenever the connections are getting throttled.
+   *
+   * @param ttype Throttle type
+   */
+  void ms_deliver_throttle(ms_throttle_t ttype) {
+    for (const auto &dispatcher : dispatchers) {
+      if (dispatcher->ms_handle_throttle(ttype))
+        return;
+    }
   }
 
   /**

@@ -268,8 +268,9 @@ inline boost::system::error_condition make_error_condition(monc_errc e) noexcept
 const boost::system::error_category& monc_category() noexcept;
 
 class MonClient : public Dispatcher,
-		  public AuthClient,
-		  public AuthServer /* for mgr, osd, mds */ {
+                  public AuthClient,
+                  public AuthServer, /* for mgr, osd, mds */
+                  public md_config_obs_t {
   static constexpr auto dout_subsys = ceph_subsys_monc;
 public:
   // Error, Newest, Oldest
@@ -309,6 +310,7 @@ private:
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override { return false; }
+  bool ms_handle_throttle(ms_throttle_t ttype) override;
 
   void handle_monmap(MMonMap *m);
   void handle_config(MConfig *m);
@@ -402,6 +404,11 @@ public:
     uint32_t auth_method,
     const ceph::buffer::list& bl,
     ceph::buffer::list *reply) override;
+  // md_config_obs_t (config observer)
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(
+    const ConfigProxy& conf,
+    const std::set<std::string> &changed) override;
 
   void set_entity_name(EntityName name) { entity_name = name; }
   void set_handle_authentication_dispatcher(Dispatcher *d) {

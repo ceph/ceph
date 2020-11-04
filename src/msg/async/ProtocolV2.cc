@@ -1572,6 +1572,10 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
 
   const size_t cur_msg_size = get_current_msg_size();
   if (cur_msg_size) {
+    Messenger* msgr = connection->dispatch_queue->get_messenger();
+    //update max if it's changed in the conf. Expecting qa tests would change ms_dispatch_throttle_bytes.
+    connection->dispatch_queue->dispatch_throttler.reset_max(msgr->dispatch_throttle_bytes);
+
     if (!connection->dispatch_queue->dispatch_throttler.get_or_fail(
             cur_msg_size)) {
       ldout(cct, 10)
@@ -1580,6 +1584,16 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
           << connection->dispatch_queue->dispatch_throttler.get_current() << "/"
           << connection->dispatch_queue->dispatch_throttler.get_max()
           << " failed, just wait." << dendl;
+      ceph::mono_time throttle_now = ceph::mono_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(throttle_now - throttle_prev);
+      if (duration >= msgr->dispatch_throttle_log_interval) {
+        ldout(cct, 1) << __func__ << " Throttler Limit has been hit. "
+                      << "Some message processing may be significantly delayed." << dendl;
+        throttle_prev = throttle_now;
+
+        //Cluster logging that throttling is occurring.
+        msgr->ms_deliver_throttle(ms_throttle_t::DISPATCH_QUEUE);
+      }
       // following thread pool deal with th full message queue isn't a
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {
