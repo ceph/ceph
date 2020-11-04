@@ -3,7 +3,6 @@ overrides:
     conf:
       client:
         fuse set user groups: true
-        fuse default permissions: false
 tasks:
 - workunit:
     timeout: 6h

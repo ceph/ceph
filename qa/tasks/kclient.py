@@ -68,10 +68,6 @@ def task(ctx, config):
     else:
         raise ValueError("Invalid config object: {0} ({1})".format(config, config.__class__))
 
-    # config has been converted to a dict by this point
-    overrides = ctx.config.get('overrides', {})
-    deep_merge(config, overrides.get('kclient', {}))
-
     clients = list(misc.get_clients(ctx=ctx, roles=client_roles))
 
     test_dir = misc.get_testdir(ctx)
@@ -80,10 +76,13 @@ def task(ctx, config):
         KernelMount.cleanup_stale_netnses_and_bridge(remote)
 
     mounts = {}
+    overrides = ctx.config.get('overrides', {}).get('kclient', {})
     for id_, remote in clients:
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
+
+        deep_merge(client_config, overrides)
 
         if config.get("disabled", False) or not client_config.get('mounted', True):
             continue
@@ -93,7 +92,8 @@ def task(ctx, config):
             test_dir=test_dir,
             client_id=id_,
             client_remote=remote,
-            brxnet=ctx.teuthology_config.get('brxnet', None))
+            brxnet=ctx.teuthology_config.get('brxnet', None),
+            config=client_config)
 
         mounts[id_] = kernel_mount
 

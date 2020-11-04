@@ -7,7 +7,6 @@ from shlex import split as shlex_split
 from io import StringIO
 
 from tasks.ceph_test_case import CephTestCase
-from tasks.cephfs.fuse_mount import FuseMount
 
 from teuthology import contextutil
 from teuthology.misc import sudo_write_file
@@ -106,13 +105,6 @@ class CephFSTestCase(CephTestCase):
             self.skipTest("Only have {0} clients, require {1}".format(
                 len(self.mounts), self.CLIENTS_REQUIRED
             ))
-
-        if self.REQUIRE_KCLIENT_REMOTE:
-            if not isinstance(self.mounts[0], FuseMount) or not isinstance(self.mounts[1], FuseMount):
-                # kclient kill() power cycles nodes, so requires clients to each be on
-                # their own node
-                if self.mounts[0].client_remote.hostname == self.mounts[1].client_remote.hostname:
-                    self.skipTest("kclient clients must be on separate nodes")
 
         if self.REQUIRE_ONE_CLIENT_REMOTE:
             if self.mounts[0].client_remote.hostname in self.mds_cluster.get_mds_hostnames():
