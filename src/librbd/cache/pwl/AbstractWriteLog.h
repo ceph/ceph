@@ -24,6 +24,8 @@ namespace librbd {
 
 struct ImageCtx;
 
+namespace plugin { template <typename> struct Api; }
+
 namespace cache {
 
 namespace pwl {
@@ -64,7 +66,9 @@ public:
   typedef io::Extent Extent;
   typedef io::Extents Extents; 
 
-  AbstractWriteLog(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
+  AbstractWriteLog(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state,
+                   cache::ImageWritebackInterface& image_writeback,
+		   plugin::Api<ImageCtxT>& plugin_api);
   virtual ~AbstractWriteLog();
   AbstractWriteLog(const AbstractWriteLog&) = delete;
   AbstractWriteLog &operator=(const AbstractWriteLog&) = delete;
@@ -253,7 +257,9 @@ protected:
 
   std::atomic<bool> m_alloc_failed_since_retire = {false};
 
-  ImageWriteback<ImageCtxT> m_image_writeback;
+  cache::ImageWritebackInterface& m_image_writeback;
+  plugin::Api<ImageCtxT>& m_plugin_api;
+
   /*
    * When m_first_free_entry == m_first_valid_entry, the log is
    * empty. There is always at least one free entry, which can't be

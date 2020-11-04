@@ -52,10 +52,6 @@ private:
    *  PROCESS_PLUGIN_ACQUIRE*
    *      |            *    *
    *      |            *    *
-   *      v            *    *
-   *  OPEN_IMAGE_CACHE      *
-   *      |         *  *    *
-   *      |         *  *    *
    *      |         v  v    v
    *      |         PROCESS_PLUGIN_RELEASE
    *      |               |
@@ -107,9 +103,6 @@ private:
 
   void send_process_plugin_release_lock();
   void handle_process_plugin_release_lock(int r);
-
-  void send_open_image_cache();
-  void handle_open_image_cache(int r);
 
   void apply();
   void revert();

@@ -31,6 +31,7 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
+#include "librbd/PluginRegistry.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
@@ -1629,7 +1630,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
          !ictx->exclusive_lock->is_lock_owner()) &&
         ictx->test_features(RBD_FEATURE_DIRTY_CACHE)) {
       C_SaferCond ctx3;
-      librbd::cache::util::discard_cache<>(*ictx, &ctx3);
+      ictx->plugin_registry->discard(&ctx3);
       r = ctx3.wait();
     }
     return r;

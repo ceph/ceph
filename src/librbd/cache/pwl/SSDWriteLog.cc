@@ -36,8 +36,10 @@ const unsigned long int ops_appended_together = MAX_WRITES_PER_SYNC_POINT;
 
 template <typename I>
 SSDWriteLog<I>::SSDWriteLog(
-    I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state)
-  : AbstractWriteLog<I>(image_ctx, cache_state)
+    I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state,
+    cache::ImageWritebackInterface& image_writeback,
+    plugin::Api<I>& plugin_api)
+  : AbstractWriteLog<I>(image_ctx, cache_state, image_writeback, plugin_api)
 {
 }
 

@@ -5,6 +5,7 @@
 #include "Types.h"
 #include "common/ceph_context.h"
 #include "include/Context.h"
+#include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
@@ -170,6 +171,10 @@ Context * override_ctx(int r, Context *ctx) {
   } else {
     return ctx;
   }
+}
+
+std::string unique_lock_name(const std::string &name, void *address) {
+  return name + " (" + stringify(address) + ")";
 }
 
 } // namespace pwl
