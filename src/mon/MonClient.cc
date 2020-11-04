@@ -509,6 +509,7 @@ int MonClient::init()
 
   initialized = true;
 
+  cct->_conf.add_observer(this);
   messenger->set_auth_client(this);
   messenger->add_dispatcher_head(this);
 
@@ -547,6 +548,7 @@ void MonClient::shutdown()
   if (initialized) {
     initialized = false;
   }
+  cct->_conf.remove_observer(this);
   monc_lock.lock();
   timer.shutdown();
   stopping = false;
@@ -853,6 +855,29 @@ bool MonClient::ms_handle_reset(Connection *con)
       return true;
     }
   }
+}
+
+bool MonClient::ms_handle_throttle(ms_throttle_t ttype) {
+  switch (ttype) {
+  case ms_throttle_t::MESSAGE:
+    break; // TODO
+  case ms_throttle_t::BYTES:
+    break; // TODO
+  case ms_throttle_t::DISPATCH_QUEUE:
+    {
+      //cluster log a warning that Dispatch Queue Throttle Limit hit
+      if (!log_client) {
+        return false; //cannot handle if the daemon didn't setup a log_client for me
+      }
+      LogChannelRef clog = log_client->create_channel(CLOG_CHANNEL_CLUSTER);
+      clog->warn() << "Throttler Limit has been hit. "
+                   << "Some message processing may be significantly delayed.";
+    }
+    break;
+  default:
+    return false;
+  }
+  return true;
 }
 
 bool MonClient::_opened() const
@@ -1614,6 +1639,24 @@ int MonClient::handle_auth_request(
   // discard old challenge
   auth_meta->authorizer_challenge.reset();
   return -EACCES;
+}
+
+const char** MonClient::get_tracked_conf_keys() const {
+  static const char* KEYS[] = {
+    "ms_dispatch_throttle_bytes",
+    "ms_dispatch_throttle_log_interval",
+    NULL
+  };
+  return KEYS;
+}
+
+void MonClient::handle_conf_change(const ConfigProxy& conf, const std::set<std::string> &changed) {
+  if (changed.count("ms_dispatch_throttle_bytes") || changed.count("ms_dispatch_throttle_log_interval")) {
+    if (messenger) {
+      messenger->dispatch_throttle_bytes = cct->_conf.get_val<Option::size_t>("ms_dispatch_throttle_bytes");
+      messenger->dispatch_throttle_log_interval = cct->_conf.get_val<std::chrono::seconds>("ms_dispatch_throttle_log_interval");
+    }
+  }
 }
 
 AuthAuthorizer* MonClient::build_authorizer(int service_id) const {
