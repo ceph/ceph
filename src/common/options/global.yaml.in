@@ -1189,6 +1189,14 @@ options:
   fmt_desc: Throttles total size of messages waiting to be dispatched.
   default: 100_M
   with_legacy: true
+- name: ms_dispatch_throttle_log_interval
+  type: secs
+  level: advanced
+  desc: Interval in seconds to show the cluster warning and health warning (in ceph status)
+        when the dispatch throttle limit is exceeded. Setting it to 0 disables the
+        cluster warning and health warning.
+  default: 30
+  min: 0
 - name: ms_bind_ipv4
   type: bool
   level: advanced
