@@ -71,7 +71,11 @@ class OSDService(CephService):
                 '--format', 'json',
             ])
         before_osd_uuid_map = self.mgr.get_osd_uuid_map(only_up=True)
-        osds_elems = json.loads('\n'.join(out))
+        try:
+            osds_elems = json.loads('\n'.join(out))
+        except ValueError:
+            logger.exception('Cannot decode JSON: \'%s\'' % '\n'.join(out))
+            osds_elems = {}
         fsid = self.mgr._cluster_fsid
         osd_uuid_map = self.mgr.get_osd_uuid_map()
         created = []
@@ -201,7 +205,12 @@ class OSDService(CephService):
                 # get preview data from ceph-volume
                 out, err, code = self._run_ceph_volume_command(host, cmd)
                 if out:
-                    concat_out: Dict[str, Any] = json.loads(" ".join(out))
+                    try:
+                        concat_out: Dict[str, Any] = json.loads(' '.join(out))
+                    except ValueError:
+                        logger.exception('Cannot decode JSON: \'%s\'' % ' '.join(out))
+                        concat_out = {}
+
                     ret_all.append({'data': concat_out,
                                     'osdspec': osdspec.service_id,
                                     'host': host})
@@ -274,8 +283,8 @@ class OSDService(CephService):
             raise OrchestratorError(str(e))
         try:
             tree = json.loads(out)
-        except json.decoder.JSONDecodeError:
-            logger.exception(f"Could not decode json -> {out}")
+        except ValueError:
+            logger.exception(f'Cannot decode JSON: \'{out}\'')
             return osd_host_map
 
         nodes = tree.get('nodes', {})
@@ -371,7 +380,12 @@ class RemoveUtil(object):
             'prefix': base_cmd,
             'format': 'json'
         })
-        return json.loads(out)
+        try:
+            ret = json.loads(out)
+        except ValueError:
+            logger.exception(f'Cannot decode JSON: \'{out}\'')
+            return {}
+        return ret
 
     def get_pg_count(self, osd_id: int, osd_df: Optional[dict] = None) -> int:
         if not osd_df:
