@@ -157,12 +157,12 @@ public:
   WriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
                 const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
-      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+      m_entry_bl_lock(ceph::make_mutex(pwl::unique_lock_name(
         "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
   WriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes),
-      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+      m_entry_bl_lock(ceph::make_mutex(pwl::unique_lock_name(
         "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
   ~WriteLogEntry() override {};

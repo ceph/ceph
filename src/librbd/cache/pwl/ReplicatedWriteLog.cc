@@ -16,6 +16,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
+#include "librbd/plugin/Api.h"
 #include <map>
 #include <vector>
 
@@ -35,8 +36,10 @@ const unsigned long int OPS_APPENDED_TOGETHER = MAX_ALLOC_PER_TRANSACTION;
 
 template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(
-    I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state)
-: AbstractWriteLog<I>(image_ctx, cache_state),
+    I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state,
+    ImageWritebackInterface& image_writeback,
+    plugin::Api<I>& plugin_api)
+: AbstractWriteLog<I>(image_ctx, cache_state, image_writeback, plugin_api),
   m_pwl_pool_layout_name(POBJ_LAYOUT_NAME(rbd_pwl))
 { 
 }

@@ -9,6 +9,7 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
+namespace plugin { template <typename> struct Api; }
 
 namespace cache {
 
@@ -22,6 +23,7 @@ class DiscardRequest {
 public:
   static DiscardRequest* create(
       ImageCtxT &image_ctx,
+      plugin::Api<ImageCtxT>& plugin_api,
       Context *on_finish);
 
   void send();
@@ -51,10 +53,12 @@ private:
    */
 
   DiscardRequest(ImageCtxT &image_ctx,
+    plugin::Api<ImageCtxT>& plugin_api,
     Context *on_finish);
 
   ImageCtxT &m_image_ctx;
   ImageCacheState<ImageCtxT>* m_cache_state;
+  plugin::Api<ImageCtxT>& m_plugin_api;
   Context *m_on_finish;
 
   int m_error_result;

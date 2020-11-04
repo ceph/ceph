@@ -114,7 +114,7 @@ GenericWriteLogOperation::GenericWriteLogOperation(std::shared_ptr<SyncPoint> sy
                                                    PerfCounters *perfcounter,
                                                    CephContext *cct)
   : GenericLogOperation(dispatch_time, perfcounter),
-  m_lock(ceph::make_mutex(util::unique_lock_name(
+  m_lock(ceph::make_mutex(pwl::unique_lock_name(
     "librbd::cache::pwl::GenericWriteLogOperation::m_lock", this))),
   m_cct(cct),
   sync_point(sync_point) {
