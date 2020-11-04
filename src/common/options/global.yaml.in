@@ -1079,6 +1079,18 @@ options:
   fmt_desc: Throttles total size of messages waiting to be dispatched.
   default: 100_M
   with_legacy: true
+- name: ms_dispatch_throttle_log_interval
+  type: secs
+  level: advanced
+  desc: Interval in seconds for high verbosity debug log message when the dispatch throttle limit are hit
+  default: 30
+  min: 0
+- name: ms_dispatch_throttle_clog_interval
+  type: secs
+  level: advanced
+  desc: Interval in seconds for the cluster log message when the dispatch throttle limit are hit
+  default: 30
+  min: 0
 - name: ms_bind_ipv4
   type: bool
   level: advanced

@@ -79,10 +79,13 @@ MonClient::MonClient(CephContext *cct_, boost::asio::io_context& service) :
     cct_->_conf.get_val<double>("mon_client_hunt_interval_min_multiple")),
   last_mon_command_tid(0),
   version_req_id(0)
-{}
+{
+  cct->_conf.add_observer(this);
+}
 
 MonClient::~MonClient()
 {
+  cct->_conf.remove_observer(this);
 }
 
 int MonClient::build_initial_monmap()
@@ -853,6 +856,32 @@ bool MonClient::ms_handle_reset(Connection *con)
   }
 }
 
+bool MonClient::ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) {
+  switch (ttype) {
+  case ms_throttle_t::MESSAGE:
+    break; // TODO
+  case ms_throttle_t::BYTES:
+    break; // TODO
+  case ms_throttle_t::DISPATCH_QUEUE:
+    {
+      //cluster log a warning that Dispatch Queue Throttle Limit hit
+      if (!log_client) {
+        return false; //cannot handle if the daemon didn't setup a log_client for me
+      }
+      LogChannelRef clog = log_client->create_channel(CLOG_CHANNEL_CLUSTER);
+      clog->warn() << "Throttler Limit has been hit. "
+                   << "Some message processing may be significantly delayed. "
+                   << "Additional info: " << tinfo.str();
+    }
+    break;
+  case ms_throttle_t::NONE:
+    break;
+  default:
+    return false;
+  }
+  return true;
+}
+
 bool MonClient::_opened() const
 {
   ceph_assert(ceph_mutex_is_locked(monc_lock));
@@ -967,7 +996,6 @@ void MonClient::tick()
     }
   }
 }
-
 void MonClient::_un_backoff()
 {
   // un-backoff our reconnect interval
@@ -1613,6 +1641,38 @@ int MonClient::handle_auth_request(
   // discard old challenge
   auth_meta->authorizer_challenge.reset();
   return -EACCES;
+}
+
+const char** MonClient::get_tracked_conf_keys() const {
+  static const char* KEYS[] = {
+    "ms_dispatch_throttle_bytes",
+    "ms_dispatch_throttle_log_interval",
+    "ms_dispatch_throttle_clog_interval",
+    NULL
+  };
+  return KEYS;
+}
+
+void MonClient::handle_conf_change(const ConfigProxy& conf, const std::set<std::string> &changed) {
+  ldout(cct, 10) << __func__ << " " << changed << dendl;
+  if (changed.count("ms_dispatch_throttle_bytes")) {
+    if (messenger) {
+      messenger->dispatch_throttle_bytes =
+        cct->_conf.get_val<Option::size_t>("ms_dispatch_throttle_bytes");
+    }
+  }
+  if (changed.count("ms_dispatch_throttle_log_interval")) {
+    if (messenger) {
+      messenger->dispatch_throttle_log_interval =
+        cct->_conf.get_val<std::chrono::seconds>("ms_dispatch_throttle_log_interval");
+    }
+  }
+  if (changed.count("ms_dispatch_throttle_clog_interval")) {
+    if (messenger) {
+      messenger->dispatch_throttle_clog_interval =
+        cct->_conf.get_val<std::chrono::seconds>("ms_dispatch_throttle_clog_interval");
+    }
+  }
 }
 
 AuthAuthorizer* MonClient::build_authorizer(int service_id) const {

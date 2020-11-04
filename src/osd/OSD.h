@@ -1311,6 +1311,8 @@ public:
 
 private:
   std::atomic<int> state{STATE_INITIALIZING};
+  std::atomic<ceph::coarse_mono_time> last_throttled {ceph::coarse_mono_clock::zero()};
+  std::atomic<std::chrono::seconds> THROTTLE_STATUS_INTERVAL {std::chrono::seconds(10)};
 
 public:
   int get_state() const {
@@ -2031,6 +2033,7 @@ private:
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
+  bool ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) override;
 
  public:
   /* internal and external can point to the same messenger, they will still

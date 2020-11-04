@@ -10,6 +10,7 @@
 enum class daemon_metric : uint8_t {
   SLOW_OPS,
   PENDING_CREATING_PGS,
+  DISPATCH_QUEUE_THROTTLE,
   NONE,
 };
 
@@ -17,6 +18,7 @@ static inline const char *daemon_metric_name(daemon_metric t) {
   switch (t) {
   case daemon_metric::SLOW_OPS: return "SLOW_OPS";
   case daemon_metric::PENDING_CREATING_PGS: return "PENDING_CREATING_PGS";
+  case daemon_metric::DISPATCH_QUEUE_THROTTLE: return "DISPATCH_QUEUE_THROTTLE";
   case daemon_metric::NONE: return "NONE";
   default: return "???";
   }

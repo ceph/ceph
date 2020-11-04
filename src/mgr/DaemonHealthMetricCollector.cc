@@ -85,6 +85,31 @@ class PendingPGs final : public DaemonHealthMetricCollector {
   vector<DaemonKey> osds;
 };
 
+class DispatchQueueThrottle final : public DaemonHealthMetricCollector {
+  bool _is_relevant(daemon_metric type) const override {
+    return type == daemon_metric::DISPATCH_QUEUE_THROTTLE;
+  }
+  health_check_t& _get_check(health_check_map_t& cm) const override {
+    return cm.get_or_add("DISPATCH_QUEUE_THROTTLE", HEALTH_WARN, "", 1);
+  }
+  bool _update(const DaemonKey& daemon, const DaemonHealthMetric& metric) override {
+    value.n += metric.get_n();
+    if (metric.get_n()) {
+      daemons.push_back(daemon);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  void _summarize(health_check_t& check) const override {
+    if (daemons.empty()) {
+      return;
+    }
+    check.summary = fmt::format("{} Dispatch Queue Throttling", value.n);
+  }
+  vector<DaemonKey> daemons;
+};
+
 } // anonymous namespace
 
 unique_ptr<DaemonHealthMetricCollector>
@@ -95,6 +120,8 @@ DaemonHealthMetricCollector::create(daemon_metric m)
     return std::make_unique<SlowOps>();
   case daemon_metric::PENDING_CREATING_PGS:
     return std::make_unique<PendingPGs>();
+  case daemon_metric::DISPATCH_QUEUE_THROTTLE:
+    return std::make_unique<DispatchQueueThrottle>();
   default:
     return {};
   }

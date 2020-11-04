@@ -196,6 +196,7 @@ bool Throttle::get_or_fail(int64_t c)
     std::lock_guard l(lock);
     if (_should_wait(c) || !conds.empty()) {
       ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
+      failed++;
       result = false;
     } else {
       ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
@@ -255,6 +256,7 @@ void Throttle::reset()
   if (!conds.empty())
     conds.front().notify_one();
   count = 0;
+  failed = 0;
   if (logger) {
     logger->set(l_throttle_val, 0);
   }
