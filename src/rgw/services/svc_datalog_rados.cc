@@ -56,9 +56,9 @@ int RGWSI_DataLog_RADOS::get_info(int shard_id, RGWDataChangesLogInfo *info)
   return log->get_info(shard_id, info);
 }
 
-int RGWSI_DataLog_RADOS::add_entry(const RGWBucketInfo& bucket_info, int shard_id)
+int RGWSI_DataLog_RADOS::add_entry(const RGWBucketInfo& bucket_info, int shard_id, uint64_t gen_id)
 {
-  return log->add_entry(bucket_info, shard_id);
+  return log->add_entry(bucket_info, shard_id, gen_id);
 }
 
 int RGWSI_DataLog_RADOS::list_entries(int shard, int max_entries,

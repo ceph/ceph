@@ -209,7 +209,7 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_b
 
 int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
                                                      uint32_t num_shards, rgw::BucketHashType hash_type,
-                                                     string *bucket_obj, int *shard_id)
+                                                     uint64_t gen_id, string *bucket_obj, int *shard_id)
 {
   int r = 0;
   switch (hash_type) {
@@ -222,8 +222,12 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_ba
         }
       } else {
         uint32_t sid = bucket_shard_index(obj_key, num_shards);
-        char buf[bucket_oid_base.size() + 32];
-        snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
+        char buf[bucket_oid_base.size() + 64];
+        if (gen_id) {
+          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, sid);
+        } else {
+          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, sid);
+        }
         (*bucket_obj) = buf;
         if (shard_id) {
           *shard_id = (int)sid;
@@ -255,7 +259,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   string oid;
 
   ret = get_bucket_index_object(bucket_oid_base, obj_key, bucket_info.layout.current_index.layout.normal.num_shards,
-        bucket_info.layout.current_index.layout.normal.hash_type, &oid, shard_id);
+        bucket_info.layout.current_index.layout.normal.hash_type, bucket_info.layout.current_index.gen, &oid, shard_id);
   if (ret < 0) {
     ldout(cct, 10) << "get_bucket_index_object() returned ret=" << ret << dendl;
     return ret;
@@ -427,6 +431,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
   if (old_sync_enabled != new_sync_enabled) {
     int shards_num = info.layout.current_index.layout.normal.num_shards? info.layout.current_index.layout.normal.num_shards : 1;
     int shard_id = info.layout.current_index.layout.normal.num_shards? 0 : -1;
+    uint64_t gen_id = bucket_info.layout.current_index.gen? bucket_info.layout.current_index.gen : 0;
 
     int ret;
     if (!new_sync_enabled) {
@@ -440,9 +445,9 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
     }
 
     for (int i = 0; i < shards_num; ++i, ++shard_id) {
-      ret = svc.datalog_rados->add_entry(info, shard_id);
+      ret = svc.datalog_rados->add_entry(info, shard_id, gen_id);
       if (ret < 0) {
-        lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
+        lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", gen_id=" << gen_id << ", shard_id=" << shard_id << ")" << dendl;
         return ret;
       }
     }

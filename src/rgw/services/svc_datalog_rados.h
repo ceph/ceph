@@ -58,7 +58,7 @@ public:
 
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
 
-  int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
+  int add_entry(const RGWBucketInfo& bucket_info, int shard_id, uint64_t gen_id);
   int list_entries(int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::optional<std::string_view> marker,
