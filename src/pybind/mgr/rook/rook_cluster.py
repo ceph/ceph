@@ -21,7 +21,7 @@ from urllib.parse import urljoin
 from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 from mgr_util import merge_dicts
 
 try:
@@ -384,18 +384,15 @@ class RookCluster(object):
             else:
                 raise
 
-    def apply_filesystem(self, spec):
-        # type: (ServiceSpec) -> None
+    def apply_filesystem(self, spec: ServiceSpec) -> None:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
-        def _update_fs(current, new):
-            # type: (cfs.CephFilesystem, cfs.CephFilesystem) -> cfs.CephFilesystem
+        def _update_fs(new: cfs.CephFilesystem) -> cfs.CephFilesystem:
             new.spec.metadataServer.activeCount = spec.placement.count or 1
             return new
 
-        def _create_fs():
-            # type: () -> cfs.CephFilesystem
+        def _create_fs() -> cfs.CephFilesystem:
             return cfs.CephFilesystem(
                 apiVersion=self.rook_env.api_name,
                 metadata=dict(
@@ -423,8 +420,7 @@ class RookCluster(object):
         assert spec.subcluster is None
         name = realm
 
-        def _create_zone():
-            # type: () -> cos.CephObjectStore
+        def _create_zone() -> cos.CephObjectStore:
             port = None
             secure_port = None
             if spec.ssl:
@@ -447,7 +443,7 @@ class RookCluster(object):
                 )
             )
 
-        def _update_zone(current, new):
+        def _update_zone(new: cos.CephObjectStore) -> cos.CephObjectStore:
             new.spec.gateway.instances = spec.placement.count or 1
             return new
 
@@ -455,32 +451,41 @@ class RookCluster(object):
             cos.CephObjectStore, 'cephobjectstores', name,
             _update_zone, _create_zone)
 
-    def add_nfsgw(self, spec):
+    def apply_nfsgw(self, spec: NFSServiceSpec) -> None:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
+        # TODO Number of pods should be based on the list of hosts in the
+        #      PlacementSpec.
+        count = spec.placement.count or 1
+        def _update_nfs(new: cnfs.CephNFS) -> cnfs.CephNFS:
+            new.spec.server.active = count
+            return new
 
-        rook_nfsgw = cnfs.CephNFS(
-            apiVersion=self.rook_env.api_name,
-            metadata=dict(
-                name=spec.service_id,
-                namespace=self.rook_env.namespace,
-            ),
-            spec=cnfs.Spec(
-                rados=cnfs.Rados(
-                    pool=spec.pool
-                ),
-                server=cnfs.Server(
-                    active=spec.placement.count
-                )
-            )
-        )
+        def _create_nfs() -> cnfs.CephNFS:
+            rook_nfsgw = cnfs.CephNFS(
+                    apiVersion=self.rook_env.api_name,
+                    metadata=dict(
+                        name=spec.service_id,
+                        namespace=self.rook_env.namespace,
+                        ),
+                    spec=cnfs.Spec(
+                        rados=cnfs.Rados(
+                            pool=spec.pool
+                            ),
+                        server=cnfs.Server(
+                            active=count
+                            )
+                        )
+                    )
 
-        if spec.namespace:
-            rook_nfsgw.spec.rados.namespace = spec.namespace
+            if spec.namespace:
+                rook_nfsgw.spec.rados.namespace = spec.namespace
 
-        with self.ignore_409("NFS cluster '{0}' already exists".format(spec.service_id)):
-            self.rook_api_post("cephnfses/", body=rook_nfsgw.to_json())
+            return rook_nfsgw
+
+        return self._create_or_patch(cnfs.CephNFS, 'cephnfses', spec.service_id,
+                _update_nfs, _create_nfs)
 
     def rm_service(self, rooktype, service_id):
 
@@ -513,13 +518,6 @@ class RookCluster(object):
             new.spec.mon.count = newcount
             return new
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
-
-    def update_nfs_count(self, svc_id, newcount):
-        def _update_nfs_count(current, new):
-            # type: (cnfs.CephNFS, cnfs.CephNFS) -> cnfs.CephNFS
-            new.spec.server.active = newcount
-            return new
-        return self._patch(cnfs.CephNFS, 'cephnfses',svc_id, _update_nfs_count)
 
     def add_osds(self, drive_group, matching_hosts):
         # type: (DriveGroupSpec, List[str]) -> str
@@ -625,10 +623,9 @@ class RookCluster(object):
                 raise
 
         if current_json:
-            current = crd.from_json(current_json)
             new = crd.from_json(current_json)  # no deepcopy.
 
-            new = update_func(current, new)
+            new = update_func(new)
 
             patch = list(jsonpatch.make_patch(current_json, new.to_json()))
 

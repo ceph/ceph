@@ -413,11 +413,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def add_nfs(self, spec):
-        # type: (NFSServiceSpec) -> RookCompletion
-        return self._service_add_decorate("NFS", spec,
-                                          self.rook_cluster.add_nfsgw)
-
     def _service_rm_decorate(self, typename, name, func):
         return write_completion(
             on_complete=lambda : func(name),
@@ -463,12 +458,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> RookCompletion
-        num = spec.placement.count
-        return write_completion(
-            lambda: self.rook_cluster.update_nfs_count(spec.service_id, num),
-            "Updating NFS server count in {0} to {1}".format(spec.service_id, num),
-            mgr=self
-        )
+        return self._service_add_decorate("NFS", spec,
+                                          self.rook_cluster.apply_nfsgw)
 
     def remove_daemons(self, names):
         return write_completion(
