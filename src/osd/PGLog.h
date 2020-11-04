@@ -1664,14 +1664,13 @@ public:
       missing, pgmeta_oid, this);
   }
 
-  template <typename missing_type>
   struct FuturizedStoreLogReader {
     crimson::os::FuturizedStore &store;
     crimson::os::CollectionRef ch;
     const pg_info_t &info;
     IndexedLog &log;
     std::set<std::string>* log_keys_debug = NULL;
-    missing_type &missing;
+    pg_missing_tracker_t &missing;
     ghobject_t pgmeta_oid;
     const DoutPrefixProvider *dpp;
 
@@ -1764,21 +1763,20 @@ public:
     }
   };
 
-  template <typename missing_type>
   static seastar::future<> read_log_and_missing_crimson(
     crimson::os::FuturizedStore &store,
     crimson::os::CollectionRef ch,
     const pg_info_t &info,
     IndexedLog &log,
     std::set<std::string>* log_keys_debug,
-    missing_type &missing,
+    pg_missing_tracker_t &missing,
     ghobject_t pgmeta_oid,
     const DoutPrefixProvider *dpp = nullptr
     ) {
     ldpp_dout(dpp, 20) << "read_log_and_missing coll "
 		       << ch->get_cid()
 		       << " " << pgmeta_oid << dendl;
-    return (new FuturizedStoreLogReader<missing_type>{
+    return (new FuturizedStoreLogReader{
       store, ch, info, log, log_keys_debug,
       missing, pgmeta_oid, dpp})->start();
   }
