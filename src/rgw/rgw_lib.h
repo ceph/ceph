@@ -192,7 +192,8 @@ namespace rgw {
     RGWObjectCtx rados_ctx;
   public:
 
-    RGWLibContinuedReq(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user)
+    RGWLibContinuedReq(CephContext* _cct,
+		       std::unique_ptr<rgw::sal::RGWUser> _user)
       :  RGWLibRequest(_cct, std::move(_user)), io_ctx(),
 	 rstate(_cct, &io_ctx.get_env(), id),
 	 rados_ctx(rgwlib.get_store(), &rstate)
@@ -204,6 +205,7 @@ namespace rgw {
 
 	sysobj_ctx.emplace(store->svc()->sysobj);
 
+	get_state()->cio = &io_ctx;
 	get_state()->obj_ctx = &rados_ctx;
 	get_state()->sysobj_ctx = &(sysobj_ctx.get());
 	get_state()->req_id = store->svc()->zone_utils->unique_id(id);
@@ -214,6 +216,8 @@ namespace rgw {
       }
 
     inline rgw::sal::RGWRadosStore* get_store() { return store; }
+    inline RGWLibIO& get_io() { return io_ctx; }
+    inline RGWObjectCtx& get_octx() { return rados_ctx; }
 
     virtual int execute() final { ceph_abort(); }
     virtual int exec_start() = 0;
