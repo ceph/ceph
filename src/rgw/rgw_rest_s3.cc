@@ -2426,11 +2426,16 @@ int RGWPutObj_ObjStore_S3::get_params()
   append = s->info.args.exists("append");
   if (append) {
     string pos_str = s->info.args.get("position");
-    if (pos_str.empty()) {
+    string err;
+    long long pos_tmp = strict_strtoll(pos_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 10) << "bad position: " << pos_str << ": " << err << dendl;
       return -EINVAL;
-    } else {
-      position = strtoull(pos_str.c_str(), NULL, 10);
+    } else if (pos_tmp < 0) {
+      ldpp_dout(s, 10) << "bad position: " << pos_str << ": " << "position shouldn't be negative" << dendl;
+      return -EINVAL;
     }
+    position = uint64_t(pos_tmp);
   }
 
   return RGWPutObj_ObjStore::get_params();
