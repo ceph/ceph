@@ -1,7 +1,7 @@
-.. _testing-integration-tests:
+.. _tests-integration-testing-teuthology-intro:
 
-Testing - Integration Tests
-===========================
+Testing - Integration Tests - Introduction
+==========================================
 
 Ceph has two types of tests: :ref:`make check <make-check>` tests and integration tests.
 When a test requires multiple machines, root access or lasts for a
@@ -100,7 +100,7 @@ all the integration tests, for all the Ceph components.
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
-  verify the :ref:`testing-integration-tests` infrastructure works as expected)
+  verify the `Integration Testing` _ infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
   test CephFS mounted using FUSE
@@ -143,10 +143,8 @@ all the integration tests, for all the Ceph components.
 teuthology-describe-tests
 -------------------------
 
-In February 2016, a new feature called ``teuthology-describe-tests`` was
-added to the `teuthology framework`_ to facilitate documentation and better
-understanding of integration tests (`feature announcement
-<http://article.gmane.org/gmane.comp.file-systems.ceph.devel/29287>`_).
+``teuthology-describe`` was added to the `teuthology framework`_ to facilitate
+documentation and better understanding of integration tests.
 
 The upshot is that tests can be documented by embedding ``meta:``
 annotations in the yaml files used to define the tests. The results can be
@@ -156,6 +154,8 @@ seen in the `ceph-qa-suite wiki
 Since this is a new feature, many yaml files have yet to be annotated.
 Developers are encouraged to improve the documentation, in terms of both
 coverage and quality.
+
+Please also see, `teuthology-desribe usecases`_
 
 How integration tests are run
 -----------------------------
@@ -524,5 +524,8 @@ test will be first.
 
 .. _ceph/qa sub-directory: https://github.com/ceph/ceph/tree/master/qa
 .. _Sepia Lab: https://wiki.sepia.ceph.com/doku.php
+.. _Integration Testing: ../testing_integration_tests/tests-integration-testing-teuthology-intro.rst
 .. _teuthology repository: https://github.com/ceph/teuthology
 .. _teuthology framework: https://github.com/ceph/teuthology
+.. _teuthology-desribe usecases: https://gist.github.com/jdurgin/09711d5923b583f60afc
+
