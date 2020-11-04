@@ -24,6 +24,8 @@ struct block_sm_superblock_t {
   size_t segments = 0;
   uint64_t tracker_offset = 0;
   uint64_t first_segment_offset = 0;
+
+  seastore_meta_t meta;
     
   DENC(block_sm_superblock_t, v, p) {
     DENC_START(1, 1, p);
@@ -33,6 +35,7 @@ struct block_sm_superblock_t {
     denc(v.segments, p);
     denc(v.tracker_offset, p);
     denc(v.first_segment_offset, p);
+    denc(v.meta, p);
     DENC_FINISH(p);
   }
 };
@@ -146,6 +149,7 @@ public:
     std::string path;
     size_t segment_size = 0;
     size_t total_size = 0;
+    seastore_meta_t meta;
   };
   using mkfs_ertr = access_ertr;
   using mkfs_ret = mkfs_ertr::future<>;
@@ -197,6 +201,10 @@ private:
     return superblock.first_segment_offset +
       (addr.segment * superblock.segment_size) +
       addr.offset;
+  }
+
+  const seastore_meta_t &get_meta() const {
+    return superblock.meta;
   }
 
   std::vector<segment_state_t> segment_state;

@@ -118,7 +118,7 @@ public:
     ceph_assert(get_size() % get_segment_size() == 0);
     return ((segment_id_t)(get_size() / get_segment_size()));
   }
-
+  virtual const seastore_meta_t &get_meta() const = 0;
 
   virtual ~SegmentManager() {}
 };
