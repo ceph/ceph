@@ -1018,12 +1018,10 @@ void PGLog::rebuild_missing_set_with_deletes(
 namespace {
   struct FuturizedStoreLogReader {
     crimson::os::FuturizedStore &store;
-    crimson::os::CollectionRef ch;
     const pg_info_t &info;
     PGLog::IndexedLog &log;
     std::set<std::string>* log_keys_debug = NULL;
     pg_missing_tracker_t &missing;
-    ghobject_t pgmeta_oid;
     const DoutPrefixProvider *dpp;
 
     eversion_t on_disk_can_rollback_to;
@@ -1084,32 +1082,26 @@ namespace {
       }
     }
 
-    seastar::future<> start() {
+    seastar::future<> read(crimson::os::CollectionRef ch,
+                           ghobject_t pgmeta_oid) {
       // will get overridden if recorded
       on_disk_can_rollback_to = info.last_update;
       missing.may_include_deletes = false;
 
-      auto reader = std::unique_ptr<FuturizedStoreLogReader>(this);
       return store.get_omap_iterator(ch, pgmeta_oid).then([this](auto iter) {
-	return seastar::repeat([this, iter]() mutable {
-	  if (!iter->valid()) {
-	    return seastar::make_ready_future<seastar::stop_iteration>(
-		      seastar::stop_iteration::yes);
-	  }
-	  process_entry(iter);
-	  return iter->next().then([] {
-	    return seastar::stop_iteration::no;
-	  });
-	});
-      }).then([this, reader{std::move(reader)}]() {
-	log = PGLog::IndexedLog(
-	     info.last_update,
-	     info.log_tail,
-	     on_disk_can_rollback_to,
-	     on_disk_rollback_info_trimmed_to,
-	     std::move(entries),
-	     std::move(dups));
-        return seastar::now();
+        return seastar::do_until([iter] { return !iter->valid(); },
+                                 [iter, this]() mutable {
+          process_entry(iter);
+          return iter->next();
+        });
+      }).then([this] {
+        log = PGLog::IndexedLog(
+             info.last_update,
+             info.log_tail,
+             on_disk_can_rollback_to,
+             on_disk_rollback_info_trimmed_to,
+             std::move(entries),
+             std::move(dups));
       });
     }
   };
@@ -1128,8 +1120,12 @@ seastar::future<> PGLog::read_log_and_missing_crimson(
   ldpp_dout(dpp, 20) << "read_log_and_missing coll "
                      << ch->get_cid()
                      << " " << pgmeta_oid << dendl;
-  return (new FuturizedStoreLogReader{
-    store, ch, info, log, log_keys_debug,
-    missing, pgmeta_oid, dpp})->start();
+  return seastar::do_with(FuturizedStoreLogReader{
+      store, info, log, log_keys_debug,
+      missing, dpp},
+    [ch, pgmeta_oid](FuturizedStoreLogReader& reader) {
+    return reader.read(ch, pgmeta_oid);
+  });
 }
+
 #endif
