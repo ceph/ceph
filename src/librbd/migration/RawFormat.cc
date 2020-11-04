@@ -188,7 +188,7 @@ bool RawFormat<I>::read(
 
   aio_comp->set_request_count(1);
   auto ctx = new io::ReadResult::C_ImageReadRequest(aio_comp,
-                                                    image_extents);
+                                                    0, image_extents);
 
   // raw directly maps the image-extent IO down to a byte IO extent
   m_stream->read(std::move(image_extents), &ctx->bl, ctx);
