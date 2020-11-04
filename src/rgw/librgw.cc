@@ -371,9 +371,21 @@ namespace rgw {
     }
 
     struct req_state* s = req->get_state();
+    RGWLibIO& io_ctx = req->get_io();
+    RGWEnv& rgw_env = io_ctx.get_env();
+    RGWObjectCtx& rados_ctx = req->get_octx();
+
+    rgw_env.set("HTTP_HOST", "");
+
+    int ret = req->init(rgw_env, &rados_ctx, &io_ctx, s);
+    if (ret < 0) {
+      dout(10) << "failed to initialize request" << dendl;
+      abort_req(s, op, ret);
+      goto done;
+    }
 
     /* req is-a RGWOp, currently initialized separately */
-    int ret = req->op_init();
+    ret = req->op_init();
     if (ret < 0) {
       dout(10) << "failed to initialize RGWOp" << dendl;
       abort_req(s, op, ret);
@@ -459,6 +471,8 @@ namespace rgw {
 	    << " finishing continued request req=" << hex << req << dec
 	    << " op status=" << op_ret
 	    << " ======" << dendl;
+
+    perfcounter->inc(l_rgw_req);
 
     return ret;
   }
