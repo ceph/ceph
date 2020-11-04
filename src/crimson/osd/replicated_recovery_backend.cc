@@ -530,31 +530,37 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
     }
     return omap_iter->lower_bound(progress.omap_recovered_to).then(
       [omap_iter, &new_progress, &max_len, push_op] {
-      return seastar::repeat([omap_iter, &new_progress, &max_len, push_op] {
+      return seastar::do_until([omap_iter, &new_progress, max_len, push_op] {
         if (!omap_iter->valid()) {
           new_progress.omap_complete = true;
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
+          return true;
         }
-        unsigned entry_size = omap_iter->key().size() + omap_iter->value().length();
-        if (!push_op->omap_entries.empty() &&
-            ((crimson::common::local_conf()->osd_recovery_max_omap_entries_per_chunk > 0 &&
-              (push_op->omap_entries.size() >=
-               crimson::common::local_conf()->osd_recovery_max_omap_entries_per_chunk)) ||
-             max_len <= entry_size)) {
+        if (push_op->omap_entries.empty()) {
+          return false;
+        }
+        if (const uint64_t entries_per_chunk =
+            crimson::common::local_conf()->osd_recovery_max_omap_entries_per_chunk;
+            entries_per_chunk > 0 &&
+            push_op->omap_entries.size() >= entries_per_chunk) {
           new_progress.omap_recovered_to = omap_iter->key();
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
+          return true;
         }
+        if (omap_iter->key().size() + omap_iter->value().length() > max_len) {
+          new_progress.omap_recovered_to = omap_iter->key();
+          return true;
+        }
+        return false;
+      },
+      [omap_iter, &max_len, push_op] {
         push_op->omap_entries.emplace(omap_iter->key(), omap_iter->value());
-        if (entry_size >= max_len) {
+        if (const uint64_t entry_size =
+            omap_iter->key().size() + omap_iter->value().length() > max_len;
+            entry_size >= max_len) {
           max_len -= entry_size;
         } else {
           max_len = 0;
         }
-        return omap_iter->next().then([] {
-          return seastar::stop_iteration::no;
-        });
+        return omap_iter->next();
       });
     });
   });
