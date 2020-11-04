@@ -351,6 +351,28 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 last_refresh=now,
             )
 
+        # CephNFSes
+        all_nfs = self.rook_cluster.rook_api_get(
+            "cephnfses/")
+        self.log.warning('CephNFS %s' % all_nfs)
+        for nfs in all_nfs.get('items', []):
+            nfs_name = nfs['metadata']['name']
+            svc = 'nfs.' + nfs_name
+            if svc in spec:
+                continue
+            active = nfs['spec'].get('server', {}).get('active')
+            spec[svc] = orchestrator.ServiceDescription(
+                    spec=NFSServiceSpec(
+                        service_id=nfs_name,
+                        pool=nfs['spec']['rados']['pool'],
+                        namespace=nfs['spec']['rados'].get('namespace', None),
+                        placement=PlacementSpec(count=active),
+                        ),
+                    size=active,
+                    container_image_name=image_name,
+                    last_refresh=now,
+                    )
+
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
                 continue
