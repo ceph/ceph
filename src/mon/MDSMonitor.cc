@@ -1685,38 +1685,33 @@ void MDSMonitor::check_sub(Subscription *sub)
   FSMap _fsmap_copy = get_fsmap();
   _fsmap_copy.filter(sub->session->get_allowed_fs_names());
   const auto& fsmap = _fsmap_copy;
+  if (sub->next > fsmap.get_epoch()) {
+    return;
+  }
 
   if (sub->type == "fsmap") {
-    if (sub->next <= fsmap.get_epoch()) {
-      sub->session->con->send_message(new MFSMap(mon->monmap->fsid, fsmap));
-      if (sub->onetime) {
-        mon->session_map.remove_sub(sub);
-      } else {
-        sub->next = fsmap.get_epoch() + 1;
-      }
+    sub->session->con->send_message(new MFSMap(mon->monmap->fsid, fsmap));
+    if (sub->onetime) {
+      mon->session_map.remove_sub(sub);
+    } else {
+      sub->next = fsmap.get_epoch() + 1;
     }
   } else if (sub->type == "fsmap.user") {
-    if (sub->next <= fsmap.get_epoch()) {
-      FSMapUser fsmap_u;
-      fsmap_u.epoch = fsmap.get_epoch();
-      fsmap_u.legacy_client_fscid = fsmap.legacy_client_fscid;
-      for (const auto &p : fsmap.filesystems) {
-	FSMapUser::fs_info_t& fs_info = fsmap_u.filesystems[p.second->fscid];
-	fs_info.cid = p.second->fscid;
-	fs_info.name = p.second->mds_map.fs_name;
-      }
-      sub->session->con->send_message(new MFSMapUser(mon->monmap->fsid, fsmap_u));
-      if (sub->onetime) {
-	mon->session_map.remove_sub(sub);
-      } else {
-	sub->next = fsmap.get_epoch() + 1;
-      }
+    FSMapUser fsmap_u;
+    fsmap_u.epoch = fsmap.get_epoch();
+    fsmap_u.legacy_client_fscid = fsmap.legacy_client_fscid;
+    for (const auto &p : fsmap.filesystems) {
+      FSMapUser::fs_info_t& fs_info = fsmap_u.filesystems[p.second->fscid];
+      fs_info.cid = p.second->fscid;
+      fs_info.name = p.second->mds_map.fs_name;
+    }
+    sub->session->con->send_message(new MFSMapUser(mon->monmap->fsid, fsmap_u));
+    if (sub->onetime) {
+      mon->session_map.remove_sub(sub);
+    } else {
+      sub->next = fsmap.get_epoch() + 1;
     }
   } else if (sub->type.compare(0, 6, "mdsmap") == 0) {
-    if (sub->next > fsmap.get_epoch()) {
-      return;
-    }
-
     const bool is_mds = sub->session->name.is_mds();
     mds_gid_t mds_gid = MDS_GID_NONE;
     fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
