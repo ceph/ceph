@@ -15,6 +15,10 @@ namespace librbd {
 
 struct ImageCtx;
 
+namespace cache {
+class ImageWritebackInterface;
+}
+
 namespace plugin { template <typename> struct Api; }
 
 template <typename ImageCtxT>
@@ -25,15 +29,18 @@ public:
 
   void init(const std::string& plugins, Context* on_finish);
 
-private:
-  typedef std::list<plugin::HookPoints> PluginHookPoints;
+  void acquired_exclusive_lock(Context* on_finish);
+  void prerelease_exclusive_lock(Context* on_finish);
+  void discard(Context* on_finish);
 
+private:
   ImageCtxT* m_image_ctx;
   std::unique_ptr<plugin::Api<ImageCtxT>> m_plugin_api;
+  std::unique_ptr<cache::ImageWritebackInterface> m_image_writeback;
 
   std::string m_plugins;
 
-  PluginHookPoints m_plugin_hook_points;
+  plugin::PluginHookPoints m_plugin_hook_points;
 
 };
 

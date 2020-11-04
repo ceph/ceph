@@ -49,6 +49,9 @@ private:
    * PREPARE_LOCK
    *    |
    *    v
+   * PROCESS_PLUGIN_RELEASE
+   *    |
+   *    v
    * SHUT_DOWN_IMAGE_CACHE
    *    |
    *    v
@@ -99,6 +102,9 @@ private:
 
   void send_prepare_lock();
   void handle_prepare_lock(int r);
+
+  void send_process_plugin_release_lock();
+  void handle_process_plugin_release_lock(int r);
 
   void send_shut_down_image_cache();
   void handle_shut_down_image_cache(int r);
