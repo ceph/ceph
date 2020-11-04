@@ -425,11 +425,12 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_bucket &b) {
 struct rgw_bucket_shard {
   rgw_bucket bucket;
   int shard_id;
+  uint64_t gen_id;
 
-  rgw_bucket_shard() : shard_id(-1) {}
-  rgw_bucket_shard(const rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
+  rgw_bucket_shard() : shard_id(-1), gen_id(-1) {}
+  rgw_bucket_shard(const rgw_bucket& _b, int _sid, int _gen_id) : bucket(_b), shard_id(_sid), gen_id(_gen_id) {}
 
-  std::string get_key(char tenant_delim = '/', char id_delim = ':',
+  std::string get_key(char tenant_delim = '/', char id_delim = ':', char gen_delim = ':',
                       char shard_delim = ':') const;
 
   bool operator<(const rgw_bucket_shard& b) const {
