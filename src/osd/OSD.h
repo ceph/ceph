@@ -1425,6 +1425,9 @@ public:
 
 private:
   std::atomic<int> state{STATE_INITIALIZING};
+  std::atomic<ceph::coarse_mono_time> last_throttled {ceph::coarse_mono_clock::zero()};
+  std::atomic<int64_t> messages_throttled {0};
+  const std::chrono::seconds THROTTLE_STATUS_INTERVAL {std::chrono::seconds(10)};
 
 public:
   int get_state() const {
@@ -1953,6 +1956,7 @@ protected:
   std::atomic<size_t> num_pgs = {0};
 
   std::mutex pending_creates_lock;
+  std::mutex dispatch_queue_throttle_lock;
   using create_from_osd_t = std::pair<spg_t, bool /* is primary*/>;
   std::set<create_from_osd_t> pending_creates_from_osd;
   unsigned pending_creates_from_mon = 0;
@@ -2150,6 +2154,7 @@ private:
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
+  bool ms_handle_throttle(ms_throttle_t ttype, const ThrottleInfo& tinfo) override;
 
  public:
   /* internal and external can point to the same messenger, they will still
