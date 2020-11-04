@@ -6,12 +6,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
 import { ToastrModule } from 'ngx-toastr';
-import { of } from 'rxjs';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../shared/services/summary.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from './nfs-form.component';
@@ -37,21 +34,11 @@ describe('NfsFormComponent', () => {
         provide: ActivatedRoute,
         useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
       },
-      i18nProviders,
-      SummaryService,
-      CephReleaseNamePipe
+      i18nProviders
     ]
   });
 
   beforeEach(() => {
-    const summaryService = TestBed.get(SummaryService);
-    spyOn(summaryService, 'refresh').and.callFake(() => true);
-    spyOn(summaryService, 'subscribeOnce').and.callFake(() =>
-      of({
-        version: 'master'
-      })
-    );
-
     fixture = TestBed.createComponent(NfsFormComponent);
     component = fixture.componentInstance;
     httpTesting = TestBed.get(HttpTestingController);
@@ -116,6 +103,7 @@ describe('NfsFormComponent', () => {
       transportTCP: true,
       transportUDP: true
     });
+    expect(component.nfsForm.get('cluster_id').disabled).toBeFalsy();
   });
 
   it('should prepare data when selecting an cluster', () => {
@@ -137,6 +125,12 @@ describe('NfsFormComponent', () => {
     component.onClusterChange();
 
     expect(component.nfsForm.getValue('daemons')).toEqual([]);
+  });
+
+  it('should not allow changing cluster in edit mode', () => {
+    component.isEdit = true;
+    component.ngOnInit();
+    expect(component.nfsForm.get('cluster_id').disabled).toBeTruthy();
   });
 
   describe('should submit request', () => {
