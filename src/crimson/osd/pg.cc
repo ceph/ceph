@@ -850,15 +850,15 @@ PG::load_head_obc(ObjectContextRef obc)
     -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
     const hobject_t& oid = md->os.oi.soid;
     logger().debug(
-      "get_or_load_head_obc: loaded obs {} for {}", md->os.oi, oid);
+      "load_head_obc: loaded obs {} for {}", md->os.oi, oid);
     if (!md->ss) {
       logger().error(
-        "get_or_load_head_obc: oid {} missing snapset", oid);
+        "load_head_obc: oid {} missing snapset", oid);
       return crimson::ct_error::object_corrupted::make();
     }
     obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
     logger().debug(
-      "get_or_load_head_obc: returning obc {} for {}",
+      "load_head_obc: returning obc {} for {}",
       obc->obs.oi, obc->obs.oi.soid);
     return load_obc_ertr::make_ready_future<
       crimson::osd::ObjectContextRef>(obc);
