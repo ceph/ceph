@@ -8,10 +8,8 @@
 
 struct do_until_test_t : public seastar_test_suite_t {
   using ertr = crimson::errorator<crimson::ct_error::invarg>;
-  template <class... ValuesT>
-  using future = ertr::future<ValuesT...>;
-  future<> test() {
-    return crimson::do_until([this]() -> future<bool> {
+  ertr::future<> test() {
+    return crimson::do_until([this] {
       if (i < 5) {
         ++i;
         return ertr::make_ready_future<bool>(false);

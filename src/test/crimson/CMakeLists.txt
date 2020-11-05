@@ -77,4 +77,4 @@ add_executable(unittest-seastar-errorator
 target_link_libraries(
   unittest-seastar-errorator
   crimson::gtest)
-
+add_ceph_unittest(unittest-seastar-errorator)

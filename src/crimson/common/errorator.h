@@ -49,24 +49,24 @@ inline auto do_for_each(Container& c, AsyncAction action) {
 
 template<typename AsyncAction>
 inline auto do_until(AsyncAction action) {
-  using futurator = \
-    ::seastar::futurize<std::result_of_t<AsyncAction()>>;
+  using errorator_t =
+    typename ::seastar::futurize_t<std::invoke_result_t<AsyncAction>>::errorator_type;
 
   while (true) {
-    auto f = futurator::invoke(action);
+    auto f = ::seastar::futurize_invoke(action);
     if (f.failed()) {
-      return futurator::type::errorator_type::template make_exception_future2<>(
+      return errorator_t::template make_exception_future2<>(
         f.get_exception()
       );
     } else if (f.available()) {
       if (auto done = f.get0()) {
-        return futurator::type::errorator_type::template make_ready_future<>();
+        return errorator_t::template make_ready_future<>();
       }
     } else {
       return std::move(f)._then(
         [action = std::move(action)] (auto &&done) mutable {
           if (done) {
-            return futurator::type::errorator_type::template make_ready_future<>();
+            return errorator_t::template make_ready_future<>();
           }
           return ::crimson::do_until(
             std::move(action));
