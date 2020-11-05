@@ -55,8 +55,8 @@ struct uuid_d {
     return boost::uuids::to_string(uuid);
   }
 
-  char *bytes() const {
-    return (char*)uuid.data;
+  const char *bytes() const {
+    return (const char*)uuid.data;
   }
 
   void encode(::ceph::buffer::list::contiguous_appender& p) const {
