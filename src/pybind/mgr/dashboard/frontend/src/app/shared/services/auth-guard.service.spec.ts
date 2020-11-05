@@ -1,6 +1,6 @@
 import { Component, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { Router, Routes } from '@angular/router';
+import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
@@ -11,6 +11,8 @@ describe('AuthGuardService', () => {
   let service: AuthGuardService;
   let authStorageService: AuthStorageService;
   let ngZone: NgZone;
+  let route: ActivatedRouteSnapshot;
+  let state: RouterStateSnapshot;
 
   @Component({ selector: 'cd-login', template: '' })
   class LoginComponent {}
@@ -34,16 +36,19 @@ describe('AuthGuardService', () => {
   });
 
   it('should allow the user if loggedIn', () => {
+    route = null;
+    state = { url: '/', root: null };
     spyOn(authStorageService, 'isLoggedIn').and.returnValue(true);
-    expect(service.canActivate()).toBe(true);
+    expect(service.canActivate(route, state)).toBe(true);
   });
 
   it('should prevent user if not loggedIn and redirect to login page', fakeAsync(() => {
     const router = TestBed.get(Router);
+    state = { url: '/pool', root: null };
     ngZone.run(() => {
-      expect(service.canActivate()).toBe(false);
+      expect(service.canActivate(route, state)).toBe(false);
     });
     tick();
-    expect(router.url).toBe('/login');
+    expect(router.url).toBe('/login?returnUrl=%2Fpool');
   }));
 });

@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+
+import * as _ from 'lodash';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
 
@@ -15,11 +17,13 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 export class LoginComponent implements OnInit {
   model = new Credentials();
   isLoginActive = false;
+  returnUrl: string;
 
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
     private bsModalService: BsModalService,
+    private route: ActivatedRoute,
     private router: Router
   ) {}
 
@@ -57,7 +61,8 @@ export class LoginComponent implements OnInit {
 
   login() {
     this.authService.login(this.model).then(() => {
-      this.router.navigate(['']);
+      const url = _.get(this.route.snapshot.queryParams, 'returnUrl', '/');
+      this.router.navigate([url]);
     });
   }
 }
