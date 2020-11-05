@@ -108,7 +108,7 @@ unmap_device()
 
     _sudo rbd-nbd unmap ${dev}
     rbd-nbd list-mapped | expect_false grep "^${pid}\\b" || return 1
-    ps -C rbd-nbd | expect_false grep "^${pid}\\b" || return 1
+    ps -C rbd-nbd | expect_false grep "^ *${pid}\\b" || return 1
 
     # workaround possible race between unmap and following map
     sleep 0.5
