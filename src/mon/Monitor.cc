@@ -4546,6 +4546,13 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       paxos_service[PAXOS_LOG]->dispatch(op);
       return;
 
+#if defined(WITH_CACHE_REPLICA)
+    // ReplicaDaemons
+    case MSG_REPLICADAEMON_BLINK:
+      paxos_service[PAXOS_REPLICAMAP]->dispatch(op);
+      return;
+#endif
+
     // handle_command() does its own caps checking
     case MSG_MON_COMMAND:
       op->set_type_command();
