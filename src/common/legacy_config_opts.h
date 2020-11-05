@@ -1058,7 +1058,6 @@ OPTION(bluestore_blobid_prealloc, OPT_U64)
 OPTION(bluestore_clone_cow, OPT_BOOL)  // do copy-on-write for clones
 OPTION(bluestore_default_buffered_read, OPT_BOOL)
 OPTION(bluestore_default_buffered_write, OPT_BOOL)
-OPTION(bluestore_debug_misc, OPT_BOOL)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL)
 OPTION(bluestore_debug_small_allocations, OPT_INT)
 OPTION(bluestore_debug_too_many_blobs_threshold, OPT_INT)
