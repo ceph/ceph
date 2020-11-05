@@ -63,7 +63,6 @@ target_link_libraries(unittest-seastar-lru crimson GTest::Main)
 add_executable(unittest-fixed-kv-node-layout
   test_fixed_kv_node_layout.cc)
 add_ceph_unittest(unittest-fixed-kv-node-layout)
-target_link_libraries(unittest-seastar-lru crimson GTest::Main)
 
 add_subdirectory(seastore)
 
