@@ -26,6 +26,7 @@
 #include "ScrubStore.h"
 #include "Session.h"
 #include "objclass/objclass.h"
+#include "osd/ClassHandler.h"
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/ceph_crypto.h"
@@ -936,7 +937,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
     if (r != 0) {
       derr << "Error opening class '" << class_name << "': "
            << cpp_strerror(r) << dendl;
-      if (r != -EPERM) // propogate permission error
+      if (r != -EPERM) // propagate permission error
         r = -EINVAL;
       return { r, nullptr };
     } else {

@@ -1,6 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-
 #pragma once
 
 #include <string>
@@ -29,12 +28,6 @@ namespace Scrub {
 
 namespace sc = ::boost::statechart;
 namespace mpl = ::boost::mpl;
-
-struct state_logger_t {
-  state_logger_t(std::string_view nm);
-  std::string_view m_name;
-};
-
 
 //
 //  EVENTS
@@ -107,13 +100,13 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   friend class PgScrubber;
 
  public:
-  explicit ScrubMachine(PG* pg, PgScrubber* pg_scrub);
+  explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub);
   ~ScrubMachine();
 
   PG* m_pg;  // used only for testing and messages
   spg_t m_pg_id;
 
-  ScrubMachineListener* const m_scrbr;
+  ScrubMachineListener* m_scrbr;
 
   void down_on_epoch_change(const EpochChanged&);
 
@@ -136,7 +129,7 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
  *    not required to reserve resources.
  *  - (for a replica) 'StartReplica', triggered by an incoming MOSDRepScrub msg.
  */
-struct NotActive : sc::state<NotActive, ScrubMachine>, state_logger_t {
+struct NotActive : sc::state<NotActive, ScrubMachine> {
   explicit NotActive(my_context ctx);
 
   using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
@@ -154,7 +147,7 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, state_logger_t {
   }
 };
 
-struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine>, state_logger_t {
+struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {
 
   explicit ReservingReplicas(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
@@ -182,8 +175,7 @@ struct DrainReplMaps;  ///< a problem during BuildMap. Wait for all replicas to 
 		       ///< then restart.
 struct WaitReplicas;   ///< wait for all replicas to report
 
-struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer>,
-			 state_logger_t {
+struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer> {
 
   explicit ActiveScrubbing(my_context ctx);
   ~ActiveScrubbing();
@@ -202,19 +194,19 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer>,
   sc::result react(const FullReset&);
 };
 
-struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, state_logger_t {
+struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing> {
   explicit RangeBlocked(my_context ctx);
   using reactions = mpl::list<sc::transition<Unblocked, PendingTimer>>;
 };
 
-struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing>, state_logger_t {
+struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing> {
 
   explicit PendingTimer(my_context ctx);
 
   using reactions = mpl::list<sc::transition<InternalSchedScrub, NewChunk>>;
 };
 
-struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, state_logger_t {
+struct NewChunk : sc::state<NewChunk, ActiveScrubbing> {
 
   explicit NewChunk(my_context ctx);
 
@@ -232,7 +224,7 @@ struct NewChunk : sc::state<NewChunk, ActiveScrubbing>, state_logger_t {
  * scrub waits until the correct data is readable (in-flight data to the Objectstore is
  * not readable until written to disk, termed 'applied' here)
  */
-struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing>, state_logger_t {
+struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing> {
 
   explicit WaitPushes(my_context ctx);
 
@@ -241,7 +233,7 @@ struct WaitPushes : sc::state<WaitPushes, ActiveScrubbing>, state_logger_t {
   sc::result react(const ActivePushesUpd&);
 };
 
-struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing>, state_logger_t {
+struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing> {
 
   explicit WaitLastUpdate(my_context ctx);
 
@@ -255,7 +247,7 @@ struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing>, state_logger
   sc::result react(const InternalAllUpdates&);
 };
 
-struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, state_logger_t {
+struct BuildMap : sc::state<BuildMap, ActiveScrubbing> {
   explicit BuildMap(my_context ctx);
 
   using reactions =
@@ -267,15 +259,12 @@ struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, state_logger_t {
 	      sc::transition<InternalError, NotActive>>;  // to discuss RRR
 
   sc::result react(const IntLocalMapDone&);
-
-  //  testing aids (to be removed)
-  inline static bool m_fake_preemption{true};
 };
 
 /*
  *  "drain" scrub-maps responses from replicas
  */
-struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing>, state_logger_t {
+struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing> {
   explicit DrainReplMaps(my_context ctx);
 
   using reactions =
@@ -285,8 +274,7 @@ struct DrainReplMaps : sc::state<DrainReplMaps, ActiveScrubbing>, state_logger_t
   sc::result react(const GotReplicas&);
 };
 
-struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, state_logger_t {
-
+struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing> {
   explicit WaitReplicas(my_context ctx);
 
   using reactions =
@@ -295,13 +283,12 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, state_logger_t {
   sc::result react(const GotReplicas&);
 };
 
-struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>, state_logger_t {
+struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
   explicit WaitDigestUpdate(my_context ctx);
 
   using reactions = mpl::list<sc::custom_reaction<DigestUpdate>>;
   sc::result react(const DigestUpdate&);
 };
-
 
 // ----------------------------- the "replica active" states -----------------------
 
@@ -312,8 +299,7 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>, state_lo
  * - the details of the Primary's request were internalized by PgScrubber;
  * - 'active' scrubbing is set
  */
-struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>, state_logger_t {
-
+struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine> {
   explicit ReplicaWaitUpdates(my_context ctx);
   using reactions =
     mpl::list<sc::custom_reaction<ReplicaPushesUpd>, sc::custom_reaction<EpochChanged>>;
@@ -323,8 +309,7 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>, state_l
 };
 
 
-struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, state_logger_t {
-
+struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine> {
   explicit ActiveReplica(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
 			      sc::custom_reaction<SchedReplica>,
@@ -337,9 +322,6 @@ struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, state_logger_t {
   sc::result react(const IntLocalMapDone&);
   sc::result react(const FullReset&);
   sc::result react(const InternalError&);
-
-  //  testing aids (to be removed)
-  inline static bool m_fake_preemption{true};
 };
 
 }  // namespace Scrub

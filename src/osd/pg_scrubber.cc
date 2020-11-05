@@ -45,7 +45,6 @@ ostream& operator<<(ostream& out, const scrub_flags_t& sf)
     out << " DEEP_SCRUB_ON_ERROR";
   if (sf.required)
     out << " REQ_SCRUB";
-  // RRR - mine. Do we want it displayed?
   if (sf.marked_must)
     out << " MARKED_AS_MUST";
 
@@ -76,20 +75,12 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
   return out;
 }
 
-/*
- * are we still a clean & healthy scrubbing primary?
- *
- * relevant only after the initial sched_scrub
- */
 bool PgScrubber::is_event_relevant(epoch_t queued) const
 {
   return is_primary() && m_pg->is_active() && m_pg->is_clean() && is_scrub_active() &&
 	 !was_epoch_changed() && (!queued || !m_pg->pg_has_reset_since(queued));
 }
 
-/**
- * check the 'no scrub' configuration options.
- */
 bool PgScrubber::should_abort_scrub(epoch_t queued) const
 {
   dout(10) << __func__ << "(): queued:" << queued << " required: " << m_flags.required
@@ -130,7 +121,6 @@ void PgScrubber::send_start_scrub()
     scrub_clear_state(false);
   } else {
     m_fsm->my_states();
-    // ceph_assert(state_downcast<const NotActive*>() != 0);
     m_fsm->process_event(StartScrub{});
   }
   dout(10) << "scrubber event --<< " << __func__ << dendl;
@@ -210,7 +200,7 @@ void PgScrubber::active_pushes_notification()
 
 void PgScrubber::update_applied_notification(epoch_t epoch_queued)
 {
-  dout(10) << "scrubber event -->> " << __func__ << "() ep: " << epoch_queued << dendl;
+  dout(10) << "scrubber event -->> " << __func__ << "() epoch: " << epoch_queued << dendl;
   if (should_abort_scrub(epoch_queued)) {
     dout(10) << __func__ << " aborting!" << dendl;
     scrub_clear_state(false);
@@ -313,7 +303,6 @@ void PgScrubber::reset_epoch(epoch_t epoch_queued)
   m_is_deep = state_test(PG_STATE_DEEP_SCRUB);
 }
 
-// RRR verify the cct used here is the same one used by the osd when accessing the conf
 unsigned int PgScrubber::scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const
 {
   unsigned int qu_priority = m_flags.priority;
@@ -325,7 +314,6 @@ unsigned int PgScrubber::scrub_requeue_priority(Scrub::scrub_prio_t with_priorit
   return qu_priority;
 }
 
-// RRR verify the cct used here is the same one used by the osd when accessing the conf
 unsigned int PgScrubber::scrub_requeue_priority(Scrub::scrub_prio_t with_priority,
 						unsigned int suggested_priority) const
 {
@@ -347,7 +335,7 @@ bool PgScrubber::is_scrub_registered() const
 void PgScrubber::reg_next_scrub(requested_scrub_t& request_flags)
 {
   if (!is_primary()) {
-    dout(15) << __func__ << ": not a primary!" << dendl;
+    dout(20) << __func__ << ": not a primary!" << dendl;
     return;
   }
 
@@ -373,7 +361,7 @@ void PgScrubber::reg_next_scrub(requested_scrub_t& request_flags)
   }
 
   dout(9) << __func__ << " pg(" << m_pg_id << ") must: " << must
-	  << " mm:" << m_flags.marked_must << " flags: " << request_flags
+	  << " marked_must:" << m_flags.marked_must << " flags: " << request_flags
 	  << " stamp: " << reg_stamp << dendl;
 
   // note down the sched_time, so we can locate this scrub, and remove it
@@ -385,7 +373,7 @@ void PgScrubber::reg_next_scrub(requested_scrub_t& request_flags)
 
   m_scrub_reg_stamp = m_osds->reg_pg_scrub(m_pg->info.pgid, reg_stamp, scrub_min_interval,
 					   scrub_max_interval, must);
-  dout(10) << __func__ << " pg(" << m_pg_id << ") register next scrub, scrub time "
+  dout(15) << __func__ << " pg(" << m_pg_id << ") register next scrub, scrub time "
 	   << m_scrub_reg_stamp << ", must = " << (int)must << dendl;
 }
 
@@ -942,8 +930,8 @@ int PgScrubber::build_replica_map_chunk()
     _scan_snaps(for_meta_scrub);
   }
 
-  // previous version used low priority here. Now switched to using the priority of the
-  // original message
+  // previous version used low priority here. Now switched to using the priority
+  // of the original message
   if (ret == -EINPROGRESS)
     requeue_replica(m_replica_request_priority);
 
@@ -1176,8 +1164,8 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
 }
 
 /**
- *  RRR \todo ask why we collect from acting+recovery+backfill, but use the size of
- *  only the acting set
+ *  RRR \todo ask why we collect from acting+recovery+backfill, but use the size
+ * of only the acting set
  */
 void PgScrubber::scrub_compare_maps()
 {
@@ -1201,7 +1189,7 @@ void PgScrubber::scrub_compare_maps()
   set<hobject_t> master_set;
 
   // Construct master set
-  for (const auto map : maps) {
+  for (const auto& map : maps) {
     for (const auto& i : map.second->objects) {
       master_set.insert(i.first);
     }
@@ -1239,34 +1227,33 @@ void PgScrubber::scrub_compare_maps()
       m_osds->clog->error(ss);
     }
 
-    for (auto& [hobj, shrd_list] : authoritative) {
+    for (map<hobject_t, list<pg_shard_t>>::iterator i = authoritative.begin();
+	 i != authoritative.end(); ++i) {
       list<pair<ScrubMap::object, pg_shard_t>> good_peers;
-      for (const auto shrd : shrd_list) {
-	good_peers.emplace_back(maps[shrd]->objects[hobj], shrd);
+      for (list<pg_shard_t>::const_iterator j = i->second.begin(); j != i->second.end();
+	   ++j) {
+	good_peers.emplace_back(maps[*j]->objects[i->first], *j);
       }
-
-      m_authoritative.emplace(hobj, good_peers);
+      m_authoritative.emplace(i->first, good_peers);
     }
 
-    for (const auto& [hobj, shrd_list] : authoritative) {
-
-      // RRR a comment?
-
-      m_cleaned_meta_map.objects.erase(hobj);
-      m_cleaned_meta_map.objects.insert(*(maps[shrd_list.back()]->objects.find(hobj)));
+    for (auto i = authoritative.begin(); i != authoritative.end(); ++i) {
+      m_cleaned_meta_map.objects.erase(i->first);
+      m_cleaned_meta_map.objects.insert(
+	*(maps[i->second.back()]->objects.find(i->first)));
     }
   }
 
   ScrubMap for_meta_scrub;
-  clean_meta_map(for_meta_scrub);  // RRR understand what's the meaning of cleaning here
+  clean_meta_map(for_meta_scrub);
 
   // ok, do the pg-type specific scrubbing
 
   // (Validates consistency of the object info and snap sets)
   scrub_snapshot_metadata(for_meta_scrub, missing_digest);
 
-  // RRR ask: this comment??
-  // Called here on the primary can use an authoritative map if it isn't the primary
+  // Called here on the primary can use an authoritative map if it isn't the
+  // primary
   _scan_snaps(for_meta_scrub);
 
   if (!m_store->empty()) {
@@ -1314,8 +1301,8 @@ void PgScrubber::send_replica_map(bool was_preempted)
  *  - when all maps are received, we signal the FSM with the GotReplicas event (see
  *    scrub_send_replmaps_ready()). Note that due to the no-reentrancy limitations of the
  *    FSM, we do not 'process' the event directly. Instead - it is queued for the OSD to
- *    handle (well - the incoming message is marked for fast dispatching, which is an even
- *    better reason for handling it via the queue).
+ *    handle (well - the incoming message is marked for fast dispatching, which is an
+ *    even better reason for handling it via the queue).
  */
 void PgScrubber::map_from_replica(OpRequestRef op)
 {
@@ -1496,7 +1483,7 @@ void PgScrubber::unreserve_replicas()
 
 	if (m_inconsistent.count(hobj)) {
 	  m_pg->repair_object(hobj, shrd_list, m_inconsistent[hobj]);
-	  m_fixed_count += missing_entry->second.size();
+	  m_fixed_count += m_inconsistent[hobj].size();
 	}
       }
     }
@@ -1715,8 +1702,7 @@ void PgScrubber::dump(ceph::Formatter* f) const
     f->dump_bool("check_repair", m_flags.check_repair);
     f->dump_bool("deep_scrub_on_error", m_flags.deep_scrub_on_error);
     f->dump_stream("scrub_reg_stamp") << m_scrub_reg_stamp;  // utime_t
-    // f->dump_stream("waiting_on_whom") << waiting_on_whom;   // set<pg_shard_t> ///
-    // \todo fix waiting_on_whom
+    // f->dump_stream("waiting_on_whom") << waiting_on_whom; /// \todo fix waiting_on_whom
     f->dump_unsigned("priority", m_flags.priority);
     f->dump_int("shallow_errors", m_shallow_errors);
     f->dump_int("deep_errors", m_deep_errors);

@@ -422,8 +422,16 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void run_callbacks();
 
+  /**
+   * are we still a clean & healthy scrubbing primary?
+   *
+   * relevant only after the initial sched_scrub
+   */
   [[nodiscard]] bool is_event_relevant(epoch_t queued) const;
 
+  /**
+   * check the 'no scrub' configuration options.
+   */
   [[nodiscard]] bool should_abort_scrub(epoch_t queued) const;
 
   void send_epoch_changed();
@@ -434,12 +442,9 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 			     ///< 'true', unless we just got out of a sleep period
 
 
-  // 'optional', as ReplicaReservations is 'RAII-designed' to guarantee un-reserving when
-  //  deleted.
+  // 'optional', as 'ReplicaReservations' & 'LocalReservation' are 'RAII-designed'
+  // to guarantee un-reserving when deleted.
   std::optional<Scrub::ReplicaReservations> m_reservations;
-
-  // 'optional', as LocalReservation is 'RAII-designed' to guarantee un-reserving when
-  //  deleted.
   std::optional<Scrub::LocalReservation> m_local_osd_resource;
 
   // the 'remote' resource we, as a replica, grant our Primary when it is scrubbing

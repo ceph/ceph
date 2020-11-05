@@ -1305,7 +1305,7 @@ void PG::requeue_map_waiters()
 
 bool PG::get_must_scrub() const
 {
-  dout(15) << __func__ << " must_scrub? " << (m_planned_scrub.must_scrub ? "true" : "false") << dendl;
+  dout(20) << __func__ << " must_scrub? " << (m_planned_scrub.must_scrub ? "true" : "false") << dendl;
   return m_planned_scrub.must_scrub;
 }
 
