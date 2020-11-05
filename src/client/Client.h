@@ -739,6 +739,22 @@ public:
   void flush_cap_releases();
   void tick();
 
+  void inc_dentry_nr() {
+    ++dentry_nr;
+  }
+  void dec_dentry_nr() {
+    --dentry_nr;
+  }
+  void dlease_hit() {
+    ++dlease_hits;
+  }
+  void dlease_miss() {
+    ++dlease_misses;
+  }
+  std::tuple<uint64_t, uint64_t, uint64_t> get_dlease_hit_rates() {
+    return std::make_tuple(dlease_hits, dlease_misses, dentry_nr);
+  }
+
   void cap_hit() {
     ++cap_hits;
   }
@@ -1174,6 +1190,8 @@ private:
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
 
+  bool _dentry_valid(const Dentry *dn);
+
   // internal interface
   //   call these with client_lock held!
   int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
@@ -1421,6 +1439,11 @@ private:
   int reclaim_errno = 0;
   epoch_t reclaim_osd_epoch = 0;
   entity_addrvec_t reclaim_target_addrs;
+
+  // dentry lease metrics
+  uint64_t dentry_nr = 0;
+  uint64_t dlease_hits = 0;
+  uint64_t dlease_misses = 0;
 
   uint64_t cap_hits = 0;
   uint64_t cap_misses = 0;
