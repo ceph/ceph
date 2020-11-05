@@ -815,9 +815,11 @@ private:
   std::map<int, Config> m_mapped_info_cache;
 
   int get_mapped_info(int pid, Config *cfg) {
+    ceph_assert(!cfg->devpath.empty());
+
     auto it = m_mapped_info_cache.find(pid);
     if (it != m_mapped_info_cache.end()) {
-      if (it->second.devpath.empty()) {
+      if (it->second.devpath != cfg->devpath) {
         return -EINVAL;
       }
       *cfg = it->second;
@@ -868,22 +870,28 @@ private:
     }
 
     std::ostringstream err_msg;
-    r = parse_args(args, &err_msg, cfg);
+    Config c;
+    r = parse_args(args, &err_msg, &c);
     if (r < 0) {
       return r;
     }
 
-    if (cfg->command != Map && cfg->command != Attach) {
+    if (c.command != Map && c.command != Attach) {
       return -ENOENT;
     }
 
-    cfg->pid = pid;
-
+    c.pid = pid;
     m_mapped_info_cache.erase(pid);
-    if (!cfg->devpath.empty()) {
-      m_mapped_info_cache[pid] = *cfg;
+    if (!c.devpath.empty()) {
+      m_mapped_info_cache[pid] = c;
+      if (c.devpath != cfg->devpath) {
+        return -ENOENT;
+      }
+    } else {
+      c.devpath = cfg->devpath;
     }
 
+    *cfg = c;
     return 0;
   }
 
@@ -901,8 +909,8 @@ private:
       }
 
       Config cfg;
-      if (get_mapped_info(pid, &cfg) >=0 && cfg.devpath == devpath &&
-          cfg.command == Attach) {
+      cfg.devpath = devpath;
+      if (get_mapped_info(pid, &cfg) >=0 && cfg.command == Attach) {
         return cfg.pid;
       }
     }
@@ -1867,7 +1875,8 @@ static bool find_mapped_dev_by_spec(Config *cfg, int skip_pid=-1) {
   while (it.get(&c)) {
     if (c.pid != skip_pid &&
         c.poolname == cfg->poolname && c.nsname == cfg->nsname &&
-        c.imgname == cfg->imgname && c.snapname == cfg->snapname) {
+        c.imgname == cfg->imgname && c.snapname == cfg->snapname &&
+        (cfg->devpath.empty() || c.devpath == cfg->devpath)) {
       *cfg = c;
       return true;
     }
@@ -2014,7 +2023,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       if (cfg->devpath.empty()) {
         *err_msg << "rbd-nbd: must specify device to attach";
         return -EINVAL;
-      }      
+      }
       [[fallthrough]];
     case Map:
       if (args.begin() == args.end()) {
