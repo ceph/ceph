@@ -1,9 +1,12 @@
 import { Injectable } from '@angular/core';
 
+import { environment } from '../../../environments/environment';
+
 export class AppConstants {
   public static readonly organization = 'ceph';
   public static readonly projectName = 'Ceph Dashboard';
   public static readonly license = 'Free software (LGPL 2.1).';
+  public static readonly copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
 }
 
 export enum URLVerbs {
