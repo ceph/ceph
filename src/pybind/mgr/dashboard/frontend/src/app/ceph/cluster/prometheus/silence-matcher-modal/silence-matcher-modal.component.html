@@ -80,7 +80,7 @@
                           [form]="form">
           <span i18n>{editMode, select, true {Edit} other {Add}}</span>
         </cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
+        <cd-back-button (backAction)="activeModal.close()"
                         name="Close"
                         i18n-name>
         </cd-back-button>
