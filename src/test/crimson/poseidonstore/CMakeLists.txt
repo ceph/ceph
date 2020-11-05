@@ -1,0 +1,10 @@
+add_executable(unittest_poseidonstore_wal
+  test_poseidonstore_wal.cc)
+add_ceph_test(unittest_poseidonstore_wal
+  unittest_poseidonstore_wal)
+target_link_libraries(
+  unittest_poseidonstore_wal
+  crimson::gtest
+  crimson-poseidonstore
+  crimson-os
+  crimson-common)

@@ -73,6 +73,7 @@ add_executable(unittest-fixed-kv-node-layout
 add_ceph_unittest(unittest-fixed-kv-node-layout)
 
 add_subdirectory(seastore)
+add_subdirectory(poseidonstore)
 
 add_library(crimson-gtest STATIC
   gtest_seastar.cc)

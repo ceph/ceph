@@ -8,8 +8,10 @@ if(WITH_BLUESTORE)
 endif()
 
 add_subdirectory(seastore)
+add_subdirectory(poseidonstore)
 target_link_libraries(crimson-os
   crimson-cyanstore
   crimson-alienstore
   crimson-seastore
+  crimson-poseidonstore
   crimson)
