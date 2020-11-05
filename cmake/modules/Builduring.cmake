@@ -6,6 +6,8 @@ function(build_uring)
   ExternalProject_Add(liburing_ext
     GIT_REPOSITORY https://git.kernel.dk/liburing
     GIT_TAG "liburing-0.7"
+    GIT_SHALLOW TRUE
+    UPDATE_DISCONNECTED TRUE
     SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
     BUILD_COMMAND env CC=${CMAKE_C_COMPILER} ${make_cmd} -C src -s
