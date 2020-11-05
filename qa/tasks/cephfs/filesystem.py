@@ -452,18 +452,17 @@ class Filesystem(MDSCluster):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fs_config=None, fscid=None, name=None, create=False,
-                 ec_profile=None):
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False):
         super(Filesystem, self).__init__(ctx)
 
         self.name = name
-        self.ec_profile = ec_profile
         self.id = None
         self.metadata_pool_name = None
         self.metadata_overlay = False
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
+        self.ec_profile = fs_config.get('cephfs_ec_profile')
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]

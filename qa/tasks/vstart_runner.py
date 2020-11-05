@@ -1165,18 +1165,18 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
-    def __init__(self, ctx, fscid=None, name=None, create=False, ec_profile=None):
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
 
         self.id = None
         self.name = name
-        self.ec_profile = ec_profile
         self.metadata_pool_name = None
         self.metadata_overlay = False
         self.data_pool_name = None
         self.data_pools = None
-        self.fs_config = None
+        self.fs_config = fs_config
+        self.ec_profile = fs_config.get('cephfs_ec_profile')
 
         # Hack: cheeky inspection of ceph.conf to see what MDSs exist
         self.mds_ids = set()
