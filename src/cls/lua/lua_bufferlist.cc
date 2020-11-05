@@ -163,7 +163,7 @@ static const struct luaL_Reg bllib_f[] = {
   {NULL, NULL}
 };
 
-LUALIB_API int luaopen_bufferlist(lua_State *L)
+int luaopen_bufferlist(lua_State *L)
 {
   /* Setup bufferlist user-data type */
   luaL_newmetatable(L, LUA_BUFFERLIST);
