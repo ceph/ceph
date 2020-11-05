@@ -32,6 +32,7 @@ if(WITH_GTEST_PARALLEL)
       SOURCE_DIR "${gtest_parallel_source_dir}"
       GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
       GIT_TAG "master"
+      GIT_SHALLOW TRUE
       CONFIGURE_COMMAND ""
       BUILD_COMMAND ""
       INSTALL_COMMAND "")
