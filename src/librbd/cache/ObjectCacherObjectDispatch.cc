@@ -326,9 +326,9 @@ bool ObjectCacherObjectDispatch<I>::write(
   SnapContext snapc;
   if (io_context->write_snap_context()) {
     auto write_snap_context = *io_context->write_snap_context();
-    snapc = std::move(SnapContext(write_snap_context.first,
-                                  {write_snap_context.second.begin(),
-                                   write_snap_context.second.end()}));
+    snapc = SnapContext(write_snap_context.first,
+                        {write_snap_context.second.begin(),
+                         write_snap_context.second.end()});
   }
 
   m_image_ctx->image_lock.lock_shared();
