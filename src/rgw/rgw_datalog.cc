@@ -672,8 +672,8 @@ void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
   status->cur_expiration = expiration;
 }
 
-int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
-  rgw_bucket_shard bs(bucket, shard_id);
+int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id, uint64_t gen_id) {
+  rgw_bucket_shard bs(bucket, shard_id, gen_id);
   return choose_oid(bs);
 }
 

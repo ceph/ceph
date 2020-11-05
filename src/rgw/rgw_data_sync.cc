@@ -788,6 +788,7 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
 
   rgw_data_sync_status *sync_status;
   int num_shards;
+  uint64_t gen_id;
 
   int req_ret;
   int ret;
@@ -856,15 +857,16 @@ public:
           }
 
           num_shards = meta_info.data.get_bucket_info().layout.current_index.layout.normal.num_shards;
+          gen_id = meta_info.data.get_bucket_info().layout.current_index.gen;
           if (num_shards > 0) {
             for (i = 0; i < num_shards; i++) {
               char buf[16];
               snprintf(buf, sizeof(buf), ":%d", i);
               s = key + buf;
-              yield entries_index->append(s, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
+              yield entries_index->append(s, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i, gen_id));
             }
           } else {
-            yield entries_index->append(key, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
+            yield entries_index->append(key, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1, -1));
           }
         }
         truncated = result.truncated;
@@ -5002,8 +5004,10 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   {
     shard_to_shard_sync = (source_bucket_info.layout.current_index.layout.normal.num_shards == dest_bucket_info.layout.current_index.layout.normal.num_shards);
 
-    source_bs = rgw_bucket_shard(source_bucket_info.bucket, source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
-    dest_bs = rgw_bucket_shard(dest_bucket_info.bucket, dest_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
+    source_bs = rgw_bucket_shard(source_bucket_info.bucket, source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1, 
+                                 source_bucket_info.layout.current_index.gen);
+    dest_bs = rgw_bucket_shard(dest_bucket_info.bucket, dest_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1,
+                               dest_bucket_info.layout.current_index.gen);
 
     status->clear();
     status->resize(std::max<size_t>(1, source_bucket_info.layout.current_index.layout.normal.num_shards));

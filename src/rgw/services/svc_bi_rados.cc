@@ -224,9 +224,9 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_ba
         uint32_t sid = bucket_shard_index(obj_key, num_shards);
         char buf[bucket_oid_base.size() + 64];
         if (gen_id) {
-          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, sid);
+          snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, sid);
         } else {
-          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, sid);
+          snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
         }
         (*bucket_obj) = buf;
         if (shard_id) {
@@ -431,7 +431,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
   if (old_sync_enabled != new_sync_enabled) {
     int shards_num = info.layout.current_index.layout.normal.num_shards? info.layout.current_index.layout.normal.num_shards : 1;
     int shard_id = info.layout.current_index.layout.normal.num_shards? 0 : -1;
-    uint64_t gen_id = bucket_info.layout.current_index.gen? bucket_info.layout.current_index.gen : 0;
+    uint64_t gen_id = info.layout.current_index.gen? info.layout.current_index.gen : 0;
 
     int ret;
     if (!new_sync_enabled) {

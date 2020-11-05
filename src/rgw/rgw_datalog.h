@@ -220,7 +220,7 @@ public:
 	    RGWSI_Cls *cls_svc, librados::Rados* lr);
 
   int add_entry(const RGWBucketInfo& bucket_info, int shard_id, uint64_t gen_id);
-  int get_log_shard_id(rgw_bucket& bucket, int shard_id);
+  int get_log_shard_id(rgw_bucket& bucket, int shard_id, uint64_t gen_id);
   int list_entries(int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::optional<std::string_view> marker,
