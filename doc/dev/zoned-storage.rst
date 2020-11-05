@@ -34,21 +34,21 @@ Currently we can perform basic RADOS benchmarks on an OSD running on an HM-SMR
 drives, restart the OSD, and read the written data, and write new data, as can
 be seen below.
 
-Please contact Abutalib Aghayev <agayev@cs.cmu.edu> for questions.
+Please contact Abutalib Aghayev <agayev@psu.edu> for questions.
 
 ::
    
-  $ zbc_info /dev/sdc
+  $ sudo zbd report -i -n /dev/sdc
   Device /dev/sdc:
       Vendor ID: ATA HGST HSH721414AL T240
-      Zoned block device interface, Host-managed zone model
-      27344764928 512-bytes sectors
-      3418095616 logical blocks of 4096 B
-      3418095616 physical blocks of 4096 B
-      14000.520 GB capacity
-      Read commands are unrestricted
-      672 KiB max R/W size
-      Maximum number of open sequential write required zones: 128
+      Zone model: host-managed
+      Capacity: 14000.520 GB (27344764928 512-bytes sectors)
+      Logical blocks: 3418095616 blocks of 4096 B
+      Physical blocks: 3418095616 blocks of 4096 B
+      Zones: 52156 zones of 256.0 MB
+      Maximum number of open zones: no limit
+      Maximum number of active zones: no limit
+  52156 / 52156 zones
   $ MON=1 OSD=1 MDS=0 sudo ../src/vstart.sh --new --localhost --bluestore --bluestore-devs /dev/sdc --bluestore-zoned
   <snipped verbose output>
   $ sudo ./bin/ceph osd pool create bench 32 32
