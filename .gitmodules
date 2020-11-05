@@ -32,11 +32,6 @@
 [submodule "src/isa-l"]
 	path = src/isa-l
 	url = https://github.com/ceph/isa-l
-[submodule "src/lua"]
-	path = src/lua
-	url = https://github.com/ceph/lua.git
-	branch = lua-5.3-ceph
-	ignore = dirty
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
