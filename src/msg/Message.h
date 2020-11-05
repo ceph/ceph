@@ -235,6 +235,9 @@
 #define MSG_MGR_COMMAND           0x709
 #define MSG_MGR_COMMAND_REPLY     0x70a
 
+// *** Replica ***
+#define MSG_REPLICADAEMON_BLINK         0x800
+
 // ======================================================
 
 // abstract Message class
