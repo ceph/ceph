@@ -3017,6 +3017,9 @@ TEST_P(StoreTest, MultipoolListTest) {
 TEST_P(StoreTest, SimpleCloneTest) {
   int r;
   coll_t cid;
+
+  SetDeathTestStyle("threadsafe");
+
   auto ch = store->create_new_collection(cid);
   {
     ObjectStore::Transaction t;
@@ -3289,13 +3292,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ASSERT_TRUE(bl_eq(rl, final));
   }
 
-  //Unfortunately we need a workaround for filestore since EXPECT_DEATH
-  // macro has potential issues when using /in multithread environments. 
-  //It works well for all stores but filestore for now. 
-  //A fix setting gtest_death_test_style = "threadsafe" doesn't help as well - 
-  //  test app clone asserts on store folder presence.
-  //
-  if (string(GetParam()) != "filestore") { 
+  {
     //verify if non-empty collection is properly handled after store reload
     ch.reset();
     r = store->umount();
@@ -3316,8 +3313,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  //See comment above for "filestore" check explanation.
-  if (string(GetParam()) != "filestore") {
+  {
     ObjectStore::Transaction t;
     //verify if non-empty collection is properly handled when there are some pending removes and live records in db
     cerr << "Invalid rm coll again" << std::endl;
