@@ -24,7 +24,18 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 	     << "segment_seq=" << header.journal_segment_seq
 	     << ", physical_segment_id=" << header.physical_segment_id
 	     << ", journal_tail=" << header.journal_tail
+	     << ", segment_nonce=" << header.segment_nonce
 	     << ")";
+}
+
+segment_nonce_t generate_nonce(
+  segment_seq_t seq,
+  const seastore_meta_t &meta)
+{
+  return ceph_crc32c(
+    seq,
+    reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
+    sizeof(meta.seastore_id.uuid));
 }
 
 Journal::Journal(SegmentManager &segment_manager)
@@ -47,11 +58,15 @@ Journal::initialize_segment(Segment &segment)
   // write out header
   ceph_assert(segment.get_write_ptr() == 0);
   bufferlist bl;
+
   segment_seq_t seq = next_journal_segment_seq++;
+  current_segment_nonce = generate_nonce(
+    seq, segment_manager.get_meta());
   auto header = segment_header_t{
     seq,
     segment.get_segment_id(),
-    segment_provider->get_journal_tail_target()};
+    segment_provider->get_journal_tail_target(),
+    current_segment_nonce};
   encode(header, bl);
 
   bufferptr bp(
@@ -83,7 +98,8 @@ ceph::bufferlist Journal::encode_record(
     rsize.dlength,
     0 /* checksum, TODO */,
     record.deltas.size(),
-    record.extents.size()
+    record.extents.size(),
+    current_segment_nonce
   };
   encode(header, metadatabl);
   for (const auto &i: record.extents) {
