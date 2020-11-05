@@ -270,3 +270,15 @@ the location of the sandbox directory, the following option can be
 specified in ``$HOME/.teuthology.yaml``::
 
     test_path: <directory>
+
+Shaman options
+==============
+
+Shaman is a helper class which could be used to build the uri for specified
+packages based the 'shaman_host': 'shaman.ceph.com'.
+
+Options::
+
+    use_shaman: True # Enable to use Shaman, False as default
+    shaman:
+      force_noarch: True # Force to use "noarch" to build the uri

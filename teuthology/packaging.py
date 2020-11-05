@@ -853,6 +853,9 @@ class ShamanProject(GitbuilderProject):
         super(ShamanProject, self).__init__(project, job_config, ctx, remote)
         self.query_url = 'https://%s/api/' % config.shaman_host
 
+        # Force to use the "noarch" instead to build the uri.
+        self.force_noarch = self.job_config.get("shaman", {}).get("force_noarch", False)
+
     def _get_base_url(self):
         self.assert_result()
         return self._result.json()[0]['url']
@@ -882,7 +885,8 @@ class ShamanProject(GitbuilderProject):
         req_obj['status'] = 'ready'
         req_obj['project'] = self.project
         req_obj['flavor'] = flavor
-        req_obj['distros'] = '%s/%s' % (self.distro, self.arch)
+        arch = "noarch" if self.force_noarch else self.arch
+        req_obj['distros'] = '%s/%s' % (self.distro, arch)
         ref_name, ref_val = list(self._choose_reference().items())[0]
         if ref_name == 'tag':
             req_obj['sha1'] = self._sha1 = self._tag_to_sha1()
