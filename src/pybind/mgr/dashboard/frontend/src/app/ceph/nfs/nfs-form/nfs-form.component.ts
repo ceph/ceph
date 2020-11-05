@@ -118,6 +118,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
         this.getData(promises);
       });
+      this.nfsForm.get('cluster_id').disable();
     } else {
       this.action = this.actionLabels.CREATE;
       this.getData(promises);
