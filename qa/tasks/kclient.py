@@ -84,6 +84,7 @@ def task(ctx, config):
 
         deep_merge(client_config, overrides)
 
+        cephfs_name = client_config.get("cephfs_name")
         if config.get("disabled", False) or not client_config.get('mounted', True):
             continue
 
@@ -93,7 +94,8 @@ def task(ctx, config):
             client_id=id_,
             client_remote=remote,
             brxnet=ctx.teuthology_config.get('brxnet', None),
-            config=client_config)
+            config=client_config,
+            cephfs_name=cephfs_name)
 
         mounts[id_] = kernel_mount
 
