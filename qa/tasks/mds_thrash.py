@@ -416,7 +416,7 @@ def task(ctx, config):
         config['cluster'] = 'ceph'
 
     for fs in status.get_filesystems():
-        thrasher = MDSThrasher(ctx, manager, config, Filesystem(ctx, fs['id']), fs['mdsmap']['max_mds'])
+        thrasher = MDSThrasher(ctx, manager, config, Filesystem(ctx, fscid=fs['id']), fs['mdsmap']['max_mds'])
         thrasher.start()
         ctx.ceph[config['cluster']].thrashers.append(thrasher)
 
