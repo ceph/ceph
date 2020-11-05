@@ -22,13 +22,13 @@ target_link_libraries(unittest-seastar-messenger crimson)
 add_executable(test-seastar-messenger-peer test_messenger_peer.cc)
 target_link_libraries(test-seastar-messenger-peer ceph-common global ${ALLOC_LIBS})
 
-add_executable(unittest-seastar-echo
+add_executable(test-seastar-echo
   test_alien_echo.cc)
-target_link_libraries(unittest-seastar-echo crimson)
+target_link_libraries(test-seastar-echo crimson)
 
-add_executable(unittest-async-echo
+add_executable(test-async-echo
   test_async_echo.cc)
-target_link_libraries(unittest-async-echo ceph-common global)
+target_link_libraries(test-async-echo ceph-common global)
 
 add_executable(unittest-seastar-alienstore-thread-pool
   test_alienstore_thread_pool.cc)
