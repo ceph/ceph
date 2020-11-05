@@ -374,7 +374,13 @@ void MonMap::print(ostream& out) const
   }
   unsigned i = 0;
   for (auto p = ranks.begin(); p != ranks.end(); ++p) {
-    out << i++ << ": " << get_addrs(*p) << " mon." << *p << "\n";
+    const auto &mi = mon_info.find(*p);
+    ceph_assert(mi != mon_info.end());
+    out << i++ << ": " << mi->second.public_addrs << " mon." << *p;
+    if (!mi->second.crush_loc.empty()) {
+      out << "; crush_location " << mi->second.crush_loc;
+    }
+    out << "\n";
   }
 }
 
@@ -387,7 +393,8 @@ void MonMap::dump(Formatter *f) const
   f->dump_unsigned("min_mon_release", to_integer<unsigned>(min_mon_release));
   f->dump_string("min_mon_release_name", to_string(min_mon_release));
   f->dump_int ("election_strategy", strategy);
-  f->dump_stream("disallowed_leaders") << disallowed_leaders;
+  f->dump_stream("disallowed_leaders: ") << disallowed_leaders;
+  f->dump_bool("stretch_mode", stretch_mode_enabled);
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
@@ -404,6 +411,9 @@ void MonMap::dump(Formatter *f) const
     f->dump_stream("public_addr") << get_addrs(*p).get_legacy_str();
     f->dump_unsigned("priority", get_priority(*p));
     f->dump_unsigned("weight", get_weight(*p));
+    const auto &mi = mon_info.find(*p);
+    // we don't need to assert this validity as all the get_* functions did
+    f->dump_stream("crush_location") << mi->second.crush_loc;
     f->close_section();
   }
   f->close_section();
