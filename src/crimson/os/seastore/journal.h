@@ -19,6 +19,9 @@
 
 namespace crimson::os::seastore {
 
+using segment_nonce_t = uint32_t;
+
+
 /**
  * Segment header
  *
@@ -32,12 +35,14 @@ struct segment_header_t {
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
+  segment_nonce_t segment_nonce;
 
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.journal_segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
+    denc(v.segment_nonce, p);
     DENC_FINISH(p);
   }
 };
@@ -50,6 +55,7 @@ struct record_header_t {
   checksum_t    full_checksum;  // checksum for full record (TODO)
   size_t deltas;                // number of deltas
   size_t extents;               // number of extents
+  segment_nonce_t segment_nonce;// nonce of containing segment
 
   DENC(record_header_t, v, p) {
     DENC_START(1, 1, p);
@@ -58,6 +64,7 @@ struct record_header_t {
     denc(v.full_checksum, p);
     denc(v.deltas, p);
     denc(v.extents, p);
+    denc(v.segment_nonce, p);
     DENC_FINISH(p);
   }
 };
@@ -223,6 +230,7 @@ private:
   SegmentManager &segment_manager;
 
   segment_seq_t next_journal_segment_seq = 0;
+  segment_nonce_t current_segment_nonce = 0;
 
   SegmentRef current_journal_segment;
   segment_off_t written_to = 0;

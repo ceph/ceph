@@ -19,7 +19,7 @@ using depth_le_t = ceph_les32;
 
 using checksum_t = uint32_t;
 
-// Immutable metadata for seastore set a mkfs time
+// Immutable metadata for seastore to set at mkfs time
 struct seastore_meta_t {
   uuid_d seastore_id;
 
