@@ -82,6 +82,12 @@ struct CapInfoPayload {
     f->dump_int("cap_misses", cap_misses);
     f->dump_int("num_caps", nr_caps);
   }
+
+  void print(ostream *out) const {
+    *out << "cap_hits: " << cap_hits << " "
+	 << "cap_misses: " << cap_misses << " "
+	 << "num_caps: " << nr_caps;
+  }
 };
 
 struct ReadLatencyPayload {
@@ -110,6 +116,10 @@ struct ReadLatencyPayload {
 
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
+  }
+
+  void print(ostream *out) const {
+    *out << "latency: " << lat;
   }
 };
 
@@ -140,6 +150,10 @@ struct WriteLatencyPayload {
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
   }
+
+  void print(ostream *out) const {
+    *out << "latency: " << lat;
+  }
 };
 
 struct MetadataLatencyPayload {
@@ -168,6 +182,10 @@ struct MetadataLatencyPayload {
 
   void dump(Formatter *f) const {
     f->dump_int("latency", lat);
+  }
+
+  void print(ostream *out) const {
+    *out << "latency: " << lat;
   }
 };
 
@@ -226,6 +244,9 @@ struct UnknownPayload {
   }
 
   void dump(Formatter *f) const {
+  }
+
+  void print(ostream *out) const {
   }
 };
 
@@ -290,6 +311,23 @@ public:
     Formatter *m_formatter;
   };
 
+  class PrintPayloadVisitor : public boost::static_visitor<void> {
+  public:
+    explicit PrintPayloadVisitor(ostream *out) : _out(out) {
+    }
+
+    template <typename ClientMetricPayload>
+    inline void operator()(const ClientMetricPayload &payload) const {
+      ClientMetricType metric_type = ClientMetricPayload::METRIC_TYPE;
+      *_out << "[client_metric_type: " << metric_type;
+      payload.print(_out);
+      *_out << "]";
+    }
+
+  private:
+    ostream *_out;
+  };
+
   void encode(bufferlist &bl) const {
     boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   }
@@ -326,6 +364,10 @@ public:
 
   void dump(Formatter *f) const {
     apply_visitor(DumpPayloadVisitor(f), payload);
+  }
+
+  void print(ostream *out) const {
+    apply_visitor(PrintPayloadVisitor(out), payload);
   }
 
   ClientMetricPayload payload;
