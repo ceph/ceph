@@ -4,8 +4,8 @@ function(build_uring)
 
   include(ExternalProject)
   ExternalProject_Add(liburing_ext
-    GIT_REPOSITORY http://git.kernel.dk/liburing
-    GIT_TAG "4e360f71131918c36774f51688e5c65dea8d43f2"
+    GIT_REPOSITORY https://git.kernel.dk/liburing
+    GIT_TAG "liburing-0.7"
     SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
     BUILD_COMMAND env CC=${CMAKE_C_COMPILER} ${make_cmd} -C src -s
