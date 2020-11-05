@@ -38,6 +38,7 @@ protected:
   LogChannelRef clog;
 
 private:
+  std::unique_ptr<ReplicaDaemonMap> replicadaemon_map;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;

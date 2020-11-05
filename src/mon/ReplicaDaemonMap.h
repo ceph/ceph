@@ -51,4 +51,38 @@ struct ReplicaDaemonState {
 };
 WRITE_CLASS_ENCODER(ReplicaDaemonState)
 
+class ReplicaDaemonMap {
+public:
+  ReplicaDaemonMap();
+
+  void encode(bufferlist& replicadaemon_map_bl, uint64_t features) const;
+  void decode(bufferlist::const_iterator& replicadaemon_map_bl_it);
+  void decode(bufferlist& replicadaemon_map_bl) {
+    auto bl_it = replicadaemon_map_bl.cbegin();
+    decode(bl_it);
+  }
+
+  epoch_t get_epoch() const {
+    return epoch;
+  }
+  void set_epoch(epoch_t epoch) {
+    this->epoch = epoch;
+  }
+  const std::vector<ReplicaDaemonState>& get_replicadaemons_stateref(void) const {
+    return replicadaemons_state;
+  }
+
+  void update_daemonmap(const ReplicaDaemonState& new_daemon_state);
+  void print_map(std::ostream& oss) const;
+
+  bool empty() {
+    return replicadaemons_state.empty();
+  }
+
+private:
+  epoch_t epoch = 0;
+  std::vector<ReplicaDaemonState> replicadaemons_state;
+};
+WRITE_CLASS_ENCODER_FEATURES(ReplicaDaemonMap)
+
 #endif // defined CEPH_REPLICADAEMONMAP_H

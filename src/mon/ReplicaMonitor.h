@@ -37,6 +37,11 @@ public:
   void on_restart() override;
 
   void check_sub(Subscription *sub);
+private:
+  /* The trusted ReplicaDaemonMap is at the ReplicMonitor attached with Leader Monitor */
+  ReplicaDaemonMap cur_cache_replicadaemon_map;  /* cache replicadaemon_map at current epoch */
+  /* cache replicadaemon_map pending to be updated to MonitorDBStore */
+  ReplicaDaemonMap pending_cache_replicadaemon_map;
 };
 
 #endif // defined CEPH_REPLICA_MONITOR_H
