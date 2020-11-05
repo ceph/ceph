@@ -47,7 +47,7 @@
                           (submitAction)="callSubmitAction()">
           <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
         </cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
+        <cd-back-button (backAction)="activeModal.close()"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

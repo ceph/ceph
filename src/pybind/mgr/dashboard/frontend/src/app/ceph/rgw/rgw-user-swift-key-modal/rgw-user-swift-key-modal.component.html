@@ -51,7 +51,7 @@
     </div>
 
     <div class="modal-footer">
-      <cd-back-button [back]="activeModal.close"></cd-back-button>
+      <cd-back-button (backAction)="activeModal.close()"></cd-back-button>
     </div>
   </ng-container>
 </cd-modal>
