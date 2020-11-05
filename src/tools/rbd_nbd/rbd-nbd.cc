@@ -827,8 +827,19 @@ private:
     m_mapped_info_cache[pid] = {};
 
     int r;
-    std::string path = "/proc/" + stringify(pid) + "/cmdline";
+    std::string path = "/proc/" + stringify(pid) + "/comm";
     std::ifstream ifs;
+    std::string comm;
+    ifs.open(path.c_str(), std::ifstream::in);
+    if (!ifs.is_open())
+      return -1;
+    ifs >> comm;
+    if (comm != "rbd-nbd") {
+      return -EINVAL;
+    }
+    ifs.close();
+
+    path = "/proc/" + stringify(pid) + "/cmdline";
     std::string cmdline;
     std::vector<const char*> args;
 
