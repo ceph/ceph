@@ -284,11 +284,13 @@ private:
   bool needs_roll(segment_off_t length) const;
 
   /// return ordered vector of segments to replay
+  using replay_segments_t = std::vector<
+    std::pair<journal_seq_t, segment_header_t>>;
   using find_replay_segments_ertr = crimson::errorator<
     crimson::ct_error::input_output_error
     >;
   using find_replay_segments_fut = find_replay_segments_ertr::future<
-    std::vector<journal_seq_t>>;
+    replay_segments_t>;
   find_replay_segments_fut find_replay_segments();
 
   /// read record metadata for record starting at start

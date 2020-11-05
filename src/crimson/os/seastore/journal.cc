@@ -315,7 +315,7 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	  } else {
 	    replay_from = paddr_t{from->first, (segment_off_t)block_size};
 	  }
-	  auto ret = std::vector<journal_seq_t>(segments.end() - from);
+	  auto ret = replay_segments_t(segments.end() - from);
 	  std::transform(
 	    from, segments.end(), ret.begin(),
 	    [this](const auto &p) {
@@ -325,9 +325,9 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	      logger().debug(
 		"Journal::find_replay_segments: replaying from  {}",
 		ret);
-	      return ret;
+	      return std::make_pair(ret, p.second);
 	    });
-	  ret[0].offset = replay_from;
+	  ret[0].first.offset = replay_from;
 	  return find_replay_segments_fut(
 	    find_replay_segments_ertr::ready_future_marker{},
 	    std::move(ret));
@@ -460,14 +460,14 @@ Journal::replay_segment(
 Journal::replay_ret Journal::replay(delta_handler_t &&delta_handler)
 {
   return seastar::do_with(
-    std::move(delta_handler), std::vector<journal_seq_t>(),
+    std::move(delta_handler), replay_segments_t(),
     [this](auto &handler, auto &segments) mutable -> replay_ret {
       return find_replay_segments().safe_then(
         [this, &handler, &segments](auto replay_segs) mutable {
           logger().debug("replay: found {} segments", replay_segs.size());
           segments = std::move(replay_segs);
           return crimson::do_for_each(segments, [this, &handler](auto i) mutable {
-            return replay_segment(i, handler);
+            return replay_segment(i.first, handler);
           });
         });
     });
