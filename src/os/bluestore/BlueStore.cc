@@ -3617,8 +3617,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
   if (v.length() == 0) {
     ceph_assert(r == -ENOENT);
-    if (!store->cct->_conf->bluestore_debug_misc &&
-	!create)
+    if (!create)
       return OnodeRef();
 
     // new object, new onode
