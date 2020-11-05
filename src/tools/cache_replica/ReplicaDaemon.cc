@@ -24,6 +24,7 @@ ReplicaDaemon::ReplicaDaemon(std::string_view name,
   name(name),
   msgr_public(msgr_public),
   mon_client(mon_client),
+  self_state{0, STATE_BOOTING, {}},
   ioctx(ioctx),
   log_client(msgr_public->cct, msgr_public, &mon_client->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel())
@@ -56,6 +57,7 @@ int ReplicaDaemon::init()
     return r;
   }
   ceph_assert(mon_client->is_connected());
+  self_state.replica_route_addr = msgr_public->get_myaddrs();
 
   mon_client->sub_want("replicamap", 0, 0);
   mon_client->renew_subs();

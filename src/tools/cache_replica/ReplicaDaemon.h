@@ -14,6 +14,7 @@
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
+#include "mon/ReplicaDaemonMap.h"
 #include "common/LogClient.h"
 #include "common/errno.h"
 
@@ -31,6 +32,7 @@ protected:
   std::string name;
   Messenger *msgr_public;
   MonClient *mon_client;
+  ReplicaDaemonState self_state;
   boost::asio::io_context& ioctx;
   LogClient log_client;
   LogChannelRef clog;
