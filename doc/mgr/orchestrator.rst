@@ -447,8 +447,9 @@ A corresponding :ref:`orchestrator-cli-service-spec` must look like:
       - CONFIG_DIR
     files:
       CONFIG_DIR/foo.conf:
-          - refresh=true
-          - username=xyz
+        - refresh=true
+        - username=xyz
+        - "port: 1234"
 
 where the properties of a service specification are:
 
@@ -483,9 +484,11 @@ where the properties of a service specification are:
 * ``files``
     A dictionary, where the key is the relative path of the file and the
     value the file content. The content must be double quoted when using
-    a string. Use '\n' for line breaks in that case. Otherwise define
+    a string. Use '\\n' for line breaks in that case. Otherwise define
     multi-line content as list of strings. The given files will be created
     below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+    The absolute path of the directory where the file will be created must
+    exist. Use the `dirs` property to create them if necessary.
 
 .. _orchestrator-cli-service-spec:
 
