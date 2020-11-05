@@ -24,6 +24,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { PlacementPipe } from './placement.pipe';
 
 const BASE_URL = 'services';
 
@@ -107,6 +108,12 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         customTemplateConfig: {
           length: 12
         }
+      },
+      {
+        name: $localize`Placement`,
+        prop: '',
+        pipe: new PlacementPipe(),
+        flexGrow: 1
       },
       {
         name: $localize`Running`,
