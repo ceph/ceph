@@ -12,7 +12,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 
 try:
-    from typing import Any, Dict, Union
+    from typing import Any, Dict, Optional, Union
 except ImportError:
     pass  # For typing only
 
@@ -158,8 +158,9 @@ class CephService(object):
             return {}
         return mgr.get("pg_summary")['by_pool'][pool['pool'].__str__()]
 
-    @classmethod
-    def send_command(cls, srv_type, prefix, srv_spec='', **kwargs):
+    @staticmethod
+    def send_command(srv_type, prefix, srv_spec='', **kwargs):
+        # type: (str, str, Optional[str], Any) -> Any
         """
         :type prefix: str
         :param srv_type: mon |
@@ -247,14 +248,14 @@ class CephService(object):
 
     @staticmethod
     def get_devices_by_host(hostname):
-        # (str) -> dict
+        # type: (str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-host',
                                         host=hostname)
 
     @staticmethod
     def get_devices_by_daemon(daemon_type, daemon_id):
-        # (str, str) -> dict
+        # type: (str, str) -> dict
         return CephService.send_command('mon',
                                         'device ls-by-daemon',
                                         who='{}.{}'.format(
@@ -278,6 +279,8 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            logger.debug('[SMART] could not retrieve device list from host %s', hostname)
         return smart_data
 
     @staticmethod
@@ -298,6 +301,10 @@ class CephService(object):
                 if device['devid'] not in smart_data:
                     smart_data.update(
                         CephService._get_smart_data_by_device(device))
+        else:
+            msg = '[SMART] could not retrieve device list from daemon with type %s and ' +\
+                'with ID %d'
+            logger.debug(msg, daemon_type, daemon_id)
         return smart_data
 
     @classmethod
