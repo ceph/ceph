@@ -163,6 +163,7 @@ rgw_compression=""
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 #disable SPDK by default
 zoned_enabled=0
+io_uring_enabled=0
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
@@ -229,6 +230,7 @@ usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
 usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)\n"
+usage=$usage"\t--bluestore-io-uring: enable io_uring backend\n"
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
@@ -424,13 +426,13 @@ case $1 in
     --without-dashboard)
         with_mgr_dashboard=false
         ;;
-    --bluestore-spdk )
+    --bluestore-spdk)
         [ -z "$2" ] && usage_exit
         IFS=',' read -r -a bluestore_spdk_dev <<< "$2"
         spdk_enabled=1
         shift
         ;;
-    --bluestore-devs )
+    --bluestore-devs)
         IFS=',' read -r -a bluestore_dev <<< "$2"
         for dev in "${bluestore_dev[@]}"; do
             if [ ! -b $dev -o ! -w $dev ]; then
@@ -440,8 +442,11 @@ case $1 in
         done
         shift
         ;;
-    --bluestore-zoned )
+    --bluestore-zoned)
         zoned_enabled=1
+        ;;
+    --bluestore-io-uring)
+        io_uring_enabled=1
         ;;
     * )
         usage_exit
@@ -644,12 +649,16 @@ EOF
         bluestore block wal create = true"
         fi
         if [ "$zoned_enabled" -eq 1 ]; then
-            BLUESTORE_OPTS="${BLUESTORE_OPTS}
+            BLUESTORE_OPTS+="
         bluestore min alloc size = 65536
         bluestore prefer deferred size = 0
         bluestore prefer deferred size hdd = 0
         bluestore prefer deferred size ssd = 0
         bluestore allocator = zoned"
+        fi
+        if [ "$io_uring_enabled" -eq 1 ]; then
+            BLUESTORE_OPTS+="
+        bdev ioring = true"
         fi
     fi
     wconf <<EOF
