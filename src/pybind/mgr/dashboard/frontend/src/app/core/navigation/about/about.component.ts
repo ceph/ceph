@@ -4,7 +4,6 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { detect } from 'detect-browser';
 import { Subscription } from 'rxjs';
 
-import { environment } from '../../../../environments/environment';
 import { UserService } from '../../../shared/api/user.service';
 import { AppConstants } from '../../../shared/constants/app.constants';
 import { Permission } from '../../../shared/models/permissions';
@@ -37,7 +36,6 @@ export class AboutComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    this.copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
     this.projectConstants = AppConstants;
     this.hostAddr = window.location.hostname;
     this.modalVariables = this.setVariables();
