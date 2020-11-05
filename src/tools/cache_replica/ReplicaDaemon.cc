@@ -10,6 +10,7 @@
 #include "include/ceph_assert.h"
 #include "ReplicaDaemon.h"
 #include "messages/MReplicaDaemonMap.h"
+#include "messages/MReplicaDaemonBlink.h"
 
 #define FN_NAME (__CEPH_ASSERT_FUNCTION == nullptr ? __func__ : __CEPH_ASSERT_FUNCTION)
 #define dout_context g_ceph_context
@@ -63,6 +64,8 @@ int ReplicaDaemon::init()
 
   mon_client->sub_want("replicamap", 0, 0);
   mon_client->renew_subs();
+  MReplicaDaemonBlink *blink_msg = new MReplicaDaemonBlink(self_state);
+  mon_client->send_mon_message(blink_msg);
 
   return 0;
 }
