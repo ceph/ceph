@@ -241,6 +241,9 @@ class Cloner(AsyncJobs):
         }
         super(Cloner, self).__init__(volume_client, "cloner", tp_size)
 
+    def reconfigure_max_concurrent_clones(self, tp_size):
+        super(Cloner, self).reconfigure_max_concurrent_clones("cloner", tp_size)
+
     def is_clone_cancelable(self, clone_state):
         return not (OpSm.is_final_state(clone_state) or OpSm.is_failed_state(clone_state))
 
