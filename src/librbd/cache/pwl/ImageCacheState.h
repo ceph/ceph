@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H
-#define CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H 
+#define CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H
 
 #include "librbd/ImageCtx.h"
 #include "librbd/cache/Types.h"
@@ -31,6 +31,7 @@ public:
   bool clean = true;
   std::string host;
   std::string path;
+  std::string cache_type;
   uint64_t size = 0;
   bool log_periodic_stats;
 
@@ -42,7 +43,12 @@ public:
   ~ImageCacheState() {}
 
   ImageCacheType get_image_cache_type() const {
-    return IMAGE_CACHE_TYPE_RWL;
+    if (cache_type == "rwl") {
+      return IMAGE_CACHE_TYPE_RWL;
+    } else if (cache_type == "ssd") {
+      return IMAGE_CACHE_TYPE_SSD;
+    }
+    return IMAGE_CACHE_TYPE_UNKNOWN;
   }
 
 

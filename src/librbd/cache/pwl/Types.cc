@@ -35,26 +35,26 @@ void DeferredContexts::add(Context* ctx) {
  * convert between image and block extents here using a "block size"
  * of 1.
  */
-BlockExtent convert_to_block_extent(const uint64_t offset_bytes, const uint64_t length_bytes)
+BlockExtent convert_to_block_extent(uint64_t offset_bytes, uint64_t length_bytes)
 {
   return BlockExtent(offset_bytes,
                      offset_bytes + length_bytes);
 }
 
-BlockExtent WriteLogPmemEntry::block_extent() {
+BlockExtent WriteLogCacheEntry::block_extent() {
   return convert_to_block_extent(image_offset_bytes, write_bytes);
 }
 
-uint64_t WriteLogPmemEntry::get_offset_bytes() {
+uint64_t WriteLogCacheEntry::get_offset_bytes() {
   return image_offset_bytes;
 }
 
-uint64_t WriteLogPmemEntry::get_write_bytes() {
+uint64_t WriteLogCacheEntry::get_write_bytes() {
   return write_bytes;
 }
 
 #ifdef WITH_RBD_SSD_CACHE
-void WriteLogPmemEntry::dump(Formatter *f) const {
+void WriteLogCacheEntry::dump(Formatter *f) const {
   f->dump_unsigned("sync_gen_number", sync_gen_number);
   f->dump_unsigned("write_sequence_number", write_sequence_number);
   f->dump_unsigned("image_offset_bytes", image_offset_bytes);
@@ -70,9 +70,9 @@ void WriteLogPmemEntry::dump(Formatter *f) const {
   f->dump_unsigned("entry_index", entry_index);
 }
 
-void WriteLogPmemEntry::generate_test_instances(list<WriteLogPmemEntry*>& ls) {
-  ls.push_back(new WriteLogPmemEntry);
-  ls.push_back(new WriteLogPmemEntry);
+void WriteLogCacheEntry::generate_test_instances(list<WriteLogCacheEntry*>& ls) {
+  ls.push_back(new WriteLogCacheEntry);
+  ls.push_back(new WriteLogCacheEntry);
   ls.back()->sync_gen_number = 1;
   ls.back()->write_sequence_number = 1;
   ls.back()->image_offset_bytes = 1;
@@ -113,7 +113,7 @@ void WriteLogPoolRoot::generate_test_instances(list<WriteLogPoolRoot*>& ls) {
 #endif
 
 std::ostream& operator<<(std::ostream& os,
-                         const WriteLogPmemEntry &entry) {
+                         const WriteLogCacheEntry &entry) {
   os << "entry_valid=" << (bool)entry.entry_valid << ", "
      << "sync_point=" << (bool)entry.sync_point << ", "
      << "sequenced=" << (bool)entry.sequenced << ", "
