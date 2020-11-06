@@ -88,7 +88,9 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
     auto m = dest;
     for (auto &shard : p->sync_markers) {
       const auto& stable = get_stable_marker(shard.second);
-      if (*m > stable) {
+      auto& m_entry = *m; /* m_entry is optional if not set */
+      if (!m_entry ||
+          m_entry > stable) {
         *m = stable;
       }
       ++m;
@@ -108,8 +110,8 @@ class DataLogTrimCR : public RGWCoroutine {
   const int num_shards;
   const std::string& zone_id; //< my zone id
   std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
-  std::vector<std::string> min_shard_markers; //< min marker per shard
-  std::vector<std::string>& last_trim; //< last trimmed marker per shard
+  std::vector<std::optional<std::string> > min_shard_markers; //< min marker per shard
+  std::vector<std::optional<std::string> > last_trim; //< last trimmed marker per shard
   int ret{0};
 
   int i;
@@ -119,13 +121,12 @@ class DataLogTrimCR : public RGWCoroutine {
 
  public:
   DataLogTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
-                   int num_shards, std::vector<std::string>& last_trim)
+                int num_shards)
     : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards),
       zone_id(store->svc()->zone->get_zone().id),
-      min_shard_markers(num_shards,
-			std::string(store->svc()->datalog_rados->max_marker())),
-      last_trim(last_trim)
+      min_shard_markers(num_shards),
+      last_trim(num_shards)
   {
   }
 
@@ -149,7 +150,7 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
     }
 
     yield call(sip_mgr->get_targets_info_cr(&min_shard_markers,
-                                            nullptr,
+                                            &last_trim,
                                             &sip_targets,
                                             nullptr));
     if (retcode < 0) {
@@ -212,11 +213,11 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
           continue;
         }
         ldpp_dout(dpp, 10) << "trimming log shard " << i
-            << " at marker=" << m
+            << " at marker=" << *m
             << " last_trim=" << last_trim[i] << dendl;
         spawn(new RGWSerialCR(cct,
-                              { new TrimCR(dpp, store, i, m, &last_trim[i]),
-                                sip_mgr->set_min_source_pos_cr(i, m)
+                              { new TrimCR(dpp, store, i, *m, nullptr),
+                                sip_mgr->set_min_source_pos_cr(i, *m)
                               }),
               true);
       }
@@ -228,10 +229,9 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
 
 RGWCoroutine* create_admin_data_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
                                             RGWHTTPManager *http,
-                                            int num_shards,
-                                            std::vector<std::string>& markers)
+                                            int num_shards)
 {
-  return new DataLogTrimCR(dpp, store, http, num_shards, markers);
+  return new DataLogTrimCR(dpp, store, http, num_shards);
 }
 
 class DataLogTrimPollCR : public RGWCoroutine {
@@ -242,7 +242,6 @@ class DataLogTrimPollCR : public RGWCoroutine {
   const utime_t interval; //< polling interval
   const std::string lock_oid; //< use first data log shard for lock
   const std::string lock_cookie;
-  std::vector<std::string> last_trim; //< last trimmed marker per shard
 
  public:
   DataLogTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
@@ -250,8 +249,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
     : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards), interval(interval),
       lock_oid(store->svc()->datalog_rados->get_oid(0, 0)),
-      lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
-      last_trim(num_shards)
+      lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
   int operate(const DoutPrefixProvider *dpp) override;
@@ -279,7 +277,7 @@ int DataLogTrimPollCR::operate(const DoutPrefixProvider *dpp)
       }
 
       set_status("trimming");
-      yield call(new DataLogTrimCR(dpp, store, http, num_shards, last_trim));
+      yield call(new DataLogTrimCR(dpp, store, http, num_shards));
 
       // note that the lock is not released. this is intentional, as it avoids
       // duplicating this work in other gateways

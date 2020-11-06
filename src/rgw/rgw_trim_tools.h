@@ -23,8 +23,8 @@ public:
   virtual ~RGWTrimSIPMgr() {}
 
   virtual RGWCoroutine *init_cr() = 0;
-  virtual RGWCoroutine *get_targets_info_cr(std::vector<std::string> *min_shard_markers,
-                                            std::vector<std::string> *min_source_pos,
+  virtual RGWCoroutine *get_targets_info_cr(std::vector<std::optional<std::string> > *min_shard_markers,
+                                            std::vector<std::optional<std::string> > *min_source_pos,
                                             std::set<std::string> *sip_targets,
                                             std::set<rgw_zone_id> *target_zones) = 0;
   virtual RGWCoroutine *set_min_source_pos_cr(int shard_id, const std::string& pos) = 0;

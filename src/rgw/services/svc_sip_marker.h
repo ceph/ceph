@@ -43,8 +43,8 @@ public:
 
   struct stage_shard_info {
     map<string, target_marker_info> targets;
-    std::string min_targets_pos;
-    std::string min_source_pos;
+    std::optional<std::string> min_targets_pos;
+    std::optional<std::string> min_source_pos;
 
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);

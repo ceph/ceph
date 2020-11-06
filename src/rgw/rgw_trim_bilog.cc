@@ -357,7 +357,7 @@ struct BucketTrimObserver {
 /// populate the status with the minimum stable marker of each shard
 template <typename Iter>
 int take_min_status(CephContext *cct, Iter first, Iter last,
-                    std::vector<std::string> *status)
+                    std::vector<std::optional<std::string> > *status)
 {
   for (auto peer = first; peer != last; ++peer) {
     if (peer->size() != status->size()) {
@@ -372,7 +372,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
         continue;
       }
       // always take the first marker, or any later marker that's smaller
-      if (peer == first || marker > shard.inc_marker->position) {
+      if (peer == first || !marker || marker > shard.inc_marker->position) {
         marker = std::move(shard.inc_marker.raw().position);
       }
     }
@@ -387,13 +387,13 @@ class BucketTrimShardCollectCR : public RGWShardCollectCR {
   const DoutPrefixProvider *dpp;
   rgw::sal::RadosStore* const store;
   const RGWBucketInfo& bucket_info;
-  const std::vector<std::string>& markers; //< shard markers to trim
+  const std::vector<std::optional<std::string> >& markers; //< shard markers to trim
   size_t i{0}; //< index of current shard marker
   std::shared_ptr<RGWTrimSIPMgr> sip_mgr;
  public:
   BucketTrimShardCollectCR(const DoutPrefixProvider *dpp,
                            rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
-                           const std::vector<std::string>& markers,
+                           const std::vector<std::optional<std::string> >& markers,
                            std::shared_ptr<RGWTrimSIPMgr> _sip_mgr)
     : RGWShardCollectCR(store->ctx(), MAX_CONCURRENT_SHARDS),
       dpp(dpp), store(store), bucket_info(bucket_info), markers(markers),
@@ -405,21 +405,28 @@ class BucketTrimShardCollectCR : public RGWShardCollectCR {
 bool BucketTrimShardCollectCR::spawn_next()
 {
   while (i < markers.size()) {
-    const auto& marker = markers[i];
+    const auto& opt_marker = markers[i];
     const auto shard_id = i++;
 
-    // skip empty markers
-    if (!marker.empty()) {
-      ldpp_dout(dpp, 10) << "trimming bilog shard " << shard_id
-          << " of " << bucket_info.bucket << " at marker " << marker << dendl;
-      spawn(new RGWSerialCR(store->ctx(),
-                            { new RGWRadosBILogTrimCR(dpp, store, bucket_info, shard_id,
-                                        std::string{}, marker),
-                              sip_mgr->set_min_source_pos_cr(shard_id, marker) }),
-            false);
-      return true;
+    if (!opt_marker ||
+        opt_marker->empty()) {
+      // skip empty markers
+      continue;
     }
+
+    auto& marker = *opt_marker;
+
+    ldout(cct, 10) << "trimming bilog shard " << shard_id
+      << " of " << bucket_info.bucket << " at marker " << marker << dendl;
+    spawn(new RGWSerialCR(store->ctx(),
+                          { new RGWRadosBILogTrimCR(store, bucket_info, shard_id,
+                                                    std::string{}, marker),
+                          sip_mgr->set_min_source_pos_cr(shard_id, marker) }),
+          false);
+
+    return true;
   }
+
   return false;
 }
 
@@ -440,8 +447,8 @@ class BucketTrimInstanceCR : public RGWCoroutine {
 
   using StatusShards = std::vector<rgw_bucket_shard_sync_info>;
   std::vector<StatusShards> peer_status; //< sync status for each peer
-  std::vector<std::string> min_markers; //< min marker per shard
-  std::vector<std::string> min_source_pos; //< last trim pos
+  std::vector<std::optional<std::string> > min_markers; //< min marker per shard
+  std::vector<std::optional<std::string> > min_source_pos; //< last trim pos
 
   std::shared_ptr<RGWTrimSIPMgr> sip_mgr;
   std::set<rgw_zone_id> sip_target_zones;
@@ -493,9 +500,11 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
     // initialize each shard with the maximum marker, which is only used when
     // there are no peers syncing from us
-    min_markers.assign(std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards),
-                       RGWSyncLogTrimCR::max_marker);
-    min_source_pos.resize(std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards));
+    {
+      auto num_shards = std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards);
+      min_markers.resize(num_shards);
+      min_source_pos.resize(num_shards);
+    }
 
     sip_mgr.reset(RGWTrimTools::get_trim_sip_mgr(store,
                                                  "bucket.inc",
@@ -586,7 +595,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       for (int i = 0; i < (int)min_markers.size(); ++i) {
         auto& marker = min_markers[i];
         if (marker <= min_source_pos[i]) {
-          marker.clear();
+          marker.reset();
         }
       }
     } else {

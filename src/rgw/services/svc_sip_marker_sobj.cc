@@ -182,7 +182,7 @@ public:
         result->modified = true;
       }
 
-      string min;
+      std::optional<string> min;
 
       if (sinfo.targets.size() > 0) {
         auto iter = sinfo.targets.begin();
@@ -198,7 +198,11 @@ public:
 
       if (sinfo.min_targets_pos != min) {
         result->modified |= true;
-        sinfo.min_targets_pos = std::move(min);
+        if (!sinfo.targets.empty()) {
+          sinfo.min_targets_pos = std::move(min);
+        } else {
+          sinfo.min_targets_pos.reset();
+        }
       }
 
       if (!result->modified) {
@@ -265,7 +269,7 @@ public:
         }
 
         if (sinfo.targets.empty()) {
-          sinfo.min_targets_pos.clear();
+          sinfo.min_targets_pos.reset();
         }
       }
 
