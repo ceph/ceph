@@ -5,6 +5,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+#ifndef CLS_CLIENT_HIDE_IOCTX
+
 namespace rgw::putobj {
 
 int create_etag_verifier(CephContext* cct, DataProcessor* filter,
@@ -183,3 +185,4 @@ void ETagVerifier_MPU::calculate_etag()
 }
 
 } // namespace rgw::putobj
+#endif

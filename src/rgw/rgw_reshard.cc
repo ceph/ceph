@@ -20,6 +20,8 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"
 
+#ifndef CLS_CLIENT_HIDE_IOCTX
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -1179,3 +1181,4 @@ void RGWReshard::ReshardWorker::stop()
   std::lock_guard l{lock};
   cond.notify_all();
 }
+#endif

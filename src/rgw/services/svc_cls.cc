@@ -15,6 +15,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+#ifndef CLS_CLIENT_HIDE_IOCTX
 static string log_lock_name = "rgw_log_lock";
 
 int RGWSI_Cls::do_start()
@@ -464,4 +465,4 @@ int RGWSI_Cls::Lock::unlock(const rgw_pool& pool,
   
   return l.unlock(&p.ioctx(), oid);
 }
-
+#endif

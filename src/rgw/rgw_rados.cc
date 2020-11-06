@@ -48,6 +48,8 @@
 #include "rgw_worker.h"
 #include "rgw_notify.h"
 
+#ifndef CLS_CLIENT_HIDE_IOCTX
+
 #undef fork // fails to compile RGWPeriod::fork() below
 
 #include "common/Clock.h"
@@ -9166,3 +9168,4 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   }
   return ret;
 }
+#endif
