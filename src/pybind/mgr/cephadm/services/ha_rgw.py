@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List, cast, Tuple
+from typing import List, cast, Tuple, Dict, Any
 
 from ceph.deployment.service_spec import HA_RGWSpec
 
@@ -31,26 +31,6 @@ class HAproxyService(CephService):
         host = daemon_spec.host
         spec = daemon_spec.spec
 
-        rgw_daemons = self.mgr.cache.get_daemons_by_type('rgw')
-        rgw_servers = []
-        for daemon in rgw_daemons:
-            rgw_servers.append(self.rgw_server(
-                daemon.hostname, self.mgr.inventory.get_addr(daemon.hostname)))
-
-        # virtual ip address cannot have netmask attached when passed to haproxy config
-        # since the port is added to the end and something like 123.123.123.10/24:8080 is invalid
-        virtual_ip_address = spec.virtual_ip_address
-        if "/" in str(spec.virtual_ip_address):
-            just_ip = str(spec.virtual_ip_address).split('/')[0]
-            virtual_ip_address = just_ip
-
-        ha_context = {'spec': spec, 'rgw_servers': rgw_servers,
-                      'virtual_ip_address': virtual_ip_address}
-
-        haproxy_conf = self.mgr.template.render('services/haproxy/haproxy.cfg.j2', ha_context)
-
-        daemon_spec.extra_files = {'haproxy.cfg': haproxy_conf}
-
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(daemon_id),
@@ -60,6 +40,44 @@ class HAproxyService(CephService):
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
         return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+
+        service_name: str = "HA_RGW." + daemon_id.split('.')[0]
+        if service_name in self.mgr.spec_store.specs:
+            spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
+
+            rgw_daemons = self.mgr.cache.get_daemons_by_type('rgw')
+            rgw_servers = []
+            for daemon in rgw_daemons:
+                rgw_servers.append(self.rgw_server(
+                    daemon.hostname, self.mgr.inventory.get_addr(daemon.hostname)))
+
+            # virtual ip address cannot have netmask attached when passed to haproxy config
+            # since the port is added to the end and something like 123.123.123.10/24:8080 is invalid
+            virtual_ip_address = spec.virtual_ip_address
+            if "/" in str(spec.virtual_ip_address):
+                just_ip = str(spec.virtual_ip_address).split('/')[0]
+                virtual_ip_address = just_ip
+
+            ha_context = {'spec': spec, 'rgw_servers': rgw_servers,
+                          'virtual_ip_address': virtual_ip_address}
+
+            haproxy_conf = self.mgr.template.render('services/haproxy/haproxy.cfg.j2', ha_context)
+
+            config_file = {
+                'files': {
+                    "haproxy.cfg": haproxy_conf,
+                }
+            }
+
+            return config_file, []
+        else:
+            config_file = {'files': {}}
+            return config_file, []
 
 
 class KeepAlivedService(CephService):
@@ -73,15 +91,6 @@ class KeepAlivedService(CephService):
         host = daemon_spec.host
         spec = daemon_spec.spec
 
-        ka_context = {'spec': spec, 'state': 'MASTER',
-                      'other_ips': [],
-                      'host_ip': self.mgr.inventory.get_addr(host)}
-
-        keepalive_conf = self.mgr.template.render(
-            'services/keepalived/keepalived.conf.j2', ka_context)
-
-        daemon_spec.extra_files = {'keepalived.conf': keepalive_conf}
-
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(daemon_id),
@@ -91,3 +100,30 @@ class KeepAlivedService(CephService):
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
         return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+
+        service_name: str = "HA_RGW." + daemon_id.split('.')[0]
+        if service_name in self.mgr.spec_store.specs:
+            spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
+
+            ka_context = {'spec': spec, 'state': 'MASTER',
+                          'other_ips': [],
+                          'host_ip': self.mgr.inventory.get_addr(host)}
+
+            keepalived_conf = self.mgr.template.render(
+                'services/keepalived/keepalived.conf.j2', ka_context)
+
+            config_file = {
+                'files': {
+                    "keepalived.conf": keepalived_conf,
+                }
+            }
+
+            return config_file, []
+        else:
+            config_file = {'files': {}}
+            return config_file, []
