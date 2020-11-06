@@ -283,6 +283,15 @@ private:
   /// returns true iff current segment has insufficient space
   bool needs_roll(segment_off_t length) const;
 
+  using read_segment_header_ertr = crimson::errorator<
+    crimson::ct_error::enoent,
+    crimson::ct_error::enodata,
+    crimson::ct_error::input_output_error
+    >;
+  using read_segment_header_ret = read_segment_header_ertr::future<
+    segment_header_t>;
+  read_segment_header_ret read_segment_header(segment_id_t segment);
+
   /// return ordered vector of segments to replay
   using replay_segments_t = std::vector<
     std::pair<journal_seq_t, segment_header_t>>;
