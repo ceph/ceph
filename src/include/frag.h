@@ -159,12 +159,14 @@ public:
     ceph::decode_raw(v, p);
     _enc = v;
   }
-  bool operator<(const frag_t& b) const
-  {
+  bool operator<(const frag_t& b) const {
     if (value() != b.value())
       return value() < b.value();
     else
       return bits() < b.bits();
+  }
+  bool operator<=(const frag_t& b) const {
+    return *this == b || *this < b;
   }
 private:
   _frag_t _enc = 0;
@@ -554,6 +556,7 @@ inline std::ostream& operator<<(std::ostream& out, const fragtree_t& ft)
  */
 class fragset_t {
   std::set<frag_t> _set;
+  bool simplified = true;
 
 public:
   const std::set<frag_t> &get() const { return _set; }
@@ -563,11 +566,53 @@ public:
   bool empty() const { return _set.empty(); }
 
   bool contains(frag_t f) const {
-    while (1) {
-      if (_set.count(f)) return true;
-      if (f.bits() == 0) return false;
+    if (simplified) {
+      auto it = _set.lower_bound(f);
+      if (it != _set.end() && *it == f)
+	return true;
+      if (it != _set.begin() && (--it)->contains(f))
+	return true;
+      return false;
+    }
+
+    while (true) {
+      if (_set.count(f))
+	return true;
+      if (f.is_root())
+	break;
       f = f.parent();
     }
+    return false;
+  }
+  bool contains(unsigned v) const {
+    return contains(frag_t(v, 24));
+  }
+
+  bool intersects(fragset_t& other) {
+    if (empty() || other.empty())
+      return false;
+
+    simplify();
+    other.simplify();
+
+    auto it = other.begin();
+    for (auto& fg : _set) {
+      for (;;) {
+	if (it == other.end())
+	  return false;
+	if (*it == fg)
+	  return true;
+	if (*it > fg) {
+	  if (fg.contains(*it))
+	    return true;
+	  break;
+	}
+	if (it->contains(fg))
+	  return true;
+	++it;
+      }
+    }
+    return false;
   }
 
   void clear() {
@@ -576,25 +621,102 @@ public:
 
   void insert_raw(frag_t f){
     _set.insert(f);
+    simplified = false;
   }
   void insert(frag_t f) {
-    _set.insert(f);
+    insert_raw(f);
     simplify();
   }
 
-  void simplify() {
-    auto it = _set.begin();
-    while (it != _set.end()) {
-      if (!it->is_root() &&
-	  _set.count(it->get_sibling())) {
-	_set.erase(it->get_sibling());
-	auto ret = _set.insert(it->parent());
+  void erase(frag_t f) {
+    simplify();
+
+    auto it = _set.lower_bound(f);
+    if (it != _set.end() && *it == f) {
+      _set.erase(it);
+      return;
+    }
+
+    if (it != _set.begin()) {
+      --it;
+      if (it->contains(f)) {
+	// split
+	auto l = it->left_child();
+	auto r = it->right_child();
 	_set.erase(it);
-	it = ret.first;
+	while (true) {
+	  if (l.contains(f)) {
+	    _set.insert(r);
+	  } else {
+	    _set.insert(l);
+	    l = r;
+	  }
+	  if (l == f)
+	    break;
+	  r = l.right_child();
+	  l = l.left_child();
+	}
+	return;
+      }
+      ++it;
+    }
+
+    // erase any children
+    if (it == _set.end())
+      return;
+    if (f.is_left()) {
+      auto sibling = f.get_sibling();
+      while (it != _set.end() && *it < sibling)
+	_set.erase(it++);
+    } else {
+      frag_t rightmost(f.value() | ~f.mask(), 24);
+      while (it != _set.end() && *it <= rightmost)
+	_set.erase(it++);
+    }
+  }
+
+  void simplify() {
+    if (simplified)
+      return;
+
+    // merge siblings and remove children
+    for (auto it = _set.begin(); it != _set.end(); ) {
+      if (it->is_root()) {
+	_set.erase(++it, _set.end());
+	return;
+      }
+
+      if (it->is_left()) {
+	frag_t sibling = it->get_sibling();
+	auto next = it;
+	++next;
+	// erase any children
+	while (next != _set.end() && *next < sibling)
+	  _set.erase(next++);
+	// merge?
+	if (next != _set.end() && *next == sibling) {
+	  while (true) {
+	    auto ret = _set.insert(it->parent());
+	    ceph_assert(ret.second);
+	    _set.erase(it, ++next);
+	    next = ret.first;
+	    if (next->is_left() || next == _set.begin())
+	      break;
+	    it = next;
+	    if ((--it)->get_sibling() != *next)
+	      break;
+	  }
+	}
+	it = next;
       } else {
+	// erase any children
+	frag_t rightmost(it->value() | ~it->mask(), 24);
 	++it;
+	while (it != _set.end() && *it <= rightmost)
+	  _set.erase(it++);
       }
     }
+    simplified = true;
   }
 
   void encode(ceph::buffer::list& bl) const {
