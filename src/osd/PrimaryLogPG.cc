@@ -10125,7 +10125,12 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi, bufferlist& bl, vector<pair<ui
   }
   while (cur_off < oi.size && cur_off < max_window_size) {
     bufferlist chunk_data;
-    // TODO: Do we need to support EC?
+    /**
+     * We disable EC pool as a base tier of distributed dedup.
+     * The reason why we disallow erasure code pool here is that the EC pool does not support objects_read_sync(). 
+     * Therefore, we should change the current implementation totally to make EC pool compatible. 
+     * As s result, we leave this as a future work.
+     */
     int r = pgbackend->objects_read_sync(
 	oi.soid, cur_off, max_window_size, 0, &chunk_data);
     if (r < 0) {
