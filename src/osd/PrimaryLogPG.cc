@@ -10184,13 +10184,6 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     // if any failure occurs, put a mark on the results to recognize the failure
     mop->results[0] = r;
   }
-  if (mop->results[0] < 0) {
-    // check if the previous op returns fail
-    if (mop->num_chunks == mop->results.size()) {
-      manifest_ops.erase(oid);
-    }
-    return;
-  }
   if (mop->num_chunks != mop->results.size()) {
     // there are on-going works
     return;
@@ -10204,9 +10197,11 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
   ceph_assert(obc->is_blocked());
   obc->stop_block();
   kick_object_context_blocked(obc);
-  if (r < 0) {
-    if (mop->op)
-      osd->reply_op_error(mop->op, r);
+  if (mop->results[0] < 0) {
+    // check if the previous op returns fail
+    ceph_assert(mop->num_chunks == mop->results.size());
+    manifest_ops.erase(oid);
+    osd->reply_op_error(mop->op, mop->results[0]);
     return;
   }
 
