@@ -1536,6 +1536,9 @@ namespace rgw {
   int RGWWriteRequest::exec_start() {
     struct req_state* state = get_state();
 
+    /* Object needs a bucket from this point */
+    state->object->set_bucket(state->bucket.get());
+
     auto compression_type =
       get_store()->svc()->zone->get_zone_params().get_compression_type(
 	state->bucket->get_placement_rule());
