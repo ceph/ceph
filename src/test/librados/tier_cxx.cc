@@ -5066,33 +5066,33 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
 	my_snaps));
 
   // make a dirty chunks
   {
     bufferlist bl;
     bl.append("Thbbe hi");
-    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
   }
 
   // and another
   my_snaps.resize(2);
   my_snaps[1] = my_snaps[0];
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
 	my_snaps));
 
   // make a dirty chunks
   {
     bufferlist bl;
     bl.append("Thcce hi");
-    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
   }
 
   //flush on oldest snap
-  ioctx.snap_set_read(my_snaps[1]);
+  cache_ioctx.snap_set_read(my_snaps[1]);
   // flush
   {
     ObjectReadOperation op;
@@ -5107,7 +5107,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
   }
 
   // flush on oldest snap
-  ioctx.snap_set_read(my_snaps[0]);
+  cache_ioctx.snap_set_read(my_snaps[0]);
   // flush
   {
     ObjectReadOperation op;
@@ -5121,7 +5121,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
     completion->release();
   }
 
-  ioctx.snap_set_read(librados::SNAP_HEAD);
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
   // flush
   {
     ObjectReadOperation op;
@@ -5161,6 +5161,70 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
       ASSERT_TRUE(0);
     }
     ASSERT_EQ(1u, refs.count());
+  }
+
+  bufferlist chunk2;
+  chunk2.substr_of(gbl, chunks[0].first, chunks[0].second);
+  // check chunk's refcount
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = chunk2.length();
+    sha1_gen.Update((const unsigned char *)chunk2.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+    ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_EQ(1u, refs.count());
+  }
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("ThDDe hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  bufferlist tmp;
+  tmp.append("Thcce hi");
+  gbl.begin(0).copy_in(tmp.length(), tmp);
+  bufferlist chunk3;
+  cdc->calc_chunks(gbl, &chunks);
+  chunk3.substr_of(gbl, chunks[0].first, chunks[0].second);
+  // check chunk's refcount
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = chunk2.length();
+    sha1_gen.Update((const unsigned char *)chunk2.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+    ASSERT_EQ(-ENOENT, ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t));
   }
 }
 
