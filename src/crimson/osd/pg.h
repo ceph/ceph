@@ -508,10 +508,6 @@ public:
   load_obc_ertr::future<crimson::osd::ObjectContextRef>
   load_head_obc(ObjectContextRef obc);
 
-  load_obc_ertr::future<ObjectContextRef> get_locked_obc(
-    Operation *op,
-    const hobject_t &oid,
-    RWState::State type);
 public:
   using with_obc_func_t = std::function<seastar::future<> (ObjectContextRef)>;
   load_obc_ertr::future<> with_locked_obc(
@@ -528,6 +524,11 @@ public:
   void dump_primary(Formatter*);
 
 private:
+  load_obc_ertr::future<ObjectContextRef> get_locked_obc(
+    Operation *op,
+    const hobject_t &oid,
+    RWState::State type);
+
   void do_peering_event(
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
