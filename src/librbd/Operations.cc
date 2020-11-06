@@ -538,14 +538,15 @@ int Operations<I>::rename(const char *dstname) {
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t request_id = ++m_async_request_seq;
     r = invoke_async_request("rename",
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
                              boost::bind(&Operations<I>::execute_rename, this,
                                          dstname, _1),
                              boost::bind(&ImageWatcher<I>::notify_rename,
-                                         m_image_ctx.image_watcher, dstname,
-                                         _1));
+                                         m_image_ctx.image_watcher, request_id,
+                                         dstname, _1));
     if (r < 0 && r != -EEXIST) {
       return r;
     }
@@ -915,6 +916,7 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
   m_image_ctx.image_lock.unlock_shared();
 
   if (proxy_op) {
+    uint64_t request_id = ++m_async_request_seq;
     auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
     if (cls::rbd::get_snap_namespace_type(snap_namespace) ==
         cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
@@ -922,9 +924,11 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
     }
     C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
       m_image_ctx, "snap_remove", request_type, true,
-      boost::bind(&Operations<I>::execute_snap_remove, this, snap_namespace, snap_name, _1),
-      boost::bind(&ImageWatcher<I>::notify_snap_remove, m_image_ctx.image_watcher,
-                  snap_namespace, snap_name, _1),
+      boost::bind(&Operations<I>::execute_snap_remove, this, snap_namespace,
+                  snap_name, _1),
+      boost::bind(&ImageWatcher<I>::notify_snap_remove,
+                  m_image_ctx.image_watcher, request_id, snap_namespace,
+                  snap_name, _1),
       {-ENOENT}, on_finish);
     req->send();
   } else {
@@ -1012,14 +1016,15 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t request_id = ++m_async_request_seq;
     r = invoke_async_request("snap_rename",
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
                              boost::bind(&Operations<I>::execute_snap_rename,
                                          this, snap_id, dstname, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_rename,
-                                         m_image_ctx.image_watcher, snap_id,
-                                         dstname, _1));
+                                         m_image_ctx.image_watcher, request_id,
+                                         snap_id, dstname, _1));
     if (r < 0 && r != -EEXIST) {
       return r;
     }
@@ -1113,13 +1118,14 @@ int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespac
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t request_id = ++m_async_request_seq;
     r = invoke_async_request("snap_protect",
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
                              boost::bind(&Operations<I>::execute_snap_protect,
                                          this, snap_namespace, snap_name, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_protect,
-                                         m_image_ctx.image_watcher,
+                                         m_image_ctx.image_watcher, request_id,
 					 snap_namespace, snap_name, _1));
     if (r < 0 && r != -EBUSY) {
       return r;
@@ -1210,13 +1216,14 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t request_id = ++m_async_request_seq;
     r = invoke_async_request("snap_unprotect",
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
                              boost::bind(&Operations<I>::execute_snap_unprotect,
                                          this, snap_namespace, snap_name, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_unprotect,
-                                         m_image_ctx.image_watcher,
+                                         m_image_ctx.image_watcher, request_id,
 					 snap_namespace, snap_name, _1));
     if (r < 0 && r != -EINVAL) {
       return r;
@@ -1410,14 +1417,15 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
 
     r = cond_ctx.wait();
   } else {
+    uint64_t request_id = ++m_async_request_seq;
     r = invoke_async_request("update_features",
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              false,
                              boost::bind(&Operations<I>::execute_update_features,
                                          this, features, enabled, _1, 0),
                              boost::bind(&ImageWatcher<I>::notify_update_features,
-                                         m_image_ctx.image_watcher, features,
-                                         enabled, _1));
+                                         m_image_ctx.image_watcher, request_id,
+                                         features, enabled, _1));
   }
   ldout(cct, 2) << "update_features finished" << dendl;
   return r;
@@ -1484,13 +1492,14 @@ int Operations<I>::metadata_set(const std::string &key,
     return -EROFS;
   }
 
+  uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("metadata_set",
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                            false,
                            boost::bind(&Operations<I>::execute_metadata_set,
                                        this, key, value, _1),
                            boost::bind(&ImageWatcher<I>::notify_metadata_set,
-                                       m_image_ctx.image_watcher,
+                                       m_image_ctx.image_watcher, request_id,
                                        key, value, _1));
 
   if (config_override && r >= 0) {
@@ -1543,13 +1552,15 @@ int Operations<I>::metadata_remove(const std::string &key) {
   if(r < 0)
     return r;
 
+  uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("metadata_remove",
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                            false,
                            boost::bind(&Operations<I>::execute_metadata_remove,
                                        this, key, _1),
                            boost::bind(&ImageWatcher<I>::notify_metadata_remove,
-                                       m_image_ctx.image_watcher, key, _1));
+                                       m_image_ctx.image_watcher, request_id,
+                                       key, _1));
   if (r == -ENOENT) {
     r = 0;
   }

@@ -201,7 +201,7 @@ void ImageWatcher<I>::notify_resize(uint64_t request_id, uint64_t size,
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
   notify_async_request(async_request_id,
-                       new ResizePayload(size, allow_shrink, async_request_id),
+                       new ResizePayload(async_request_id, size, allow_shrink),
                        prog_ctx, on_finish);
 }
 
@@ -225,51 +225,68 @@ void ImageWatcher<I>::notify_snap_create(uint64_t request_id,
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_rename(const snapid_t &src_snap_id,
+void ImageWatcher<I>::notify_snap_rename(uint64_t request_id,
+                                         const snapid_t &src_snap_id,
 				         const std::string &dst_snap_name,
 					 Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapRenamePayload(src_snap_id, dst_snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapRenamePayload(async_request_id, src_snap_id, dst_snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_remove(const cls::rbd::SnapshotNamespace &snap_namespace,
-					 const std::string &snap_name,
-                                         Context *on_finish) {
+void ImageWatcher<I>::notify_snap_remove(
+    uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
+    const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapRemovePayload(snap_namespace, snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapRemovePayload(async_request_id, snap_namespace, snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_protect(const cls::rbd::SnapshotNamespace &snap_namespace,
-					  const std::string &snap_name,
-                                          Context *on_finish) {
+void ImageWatcher<I>::notify_snap_protect(
+    uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
+    const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapProtectPayload(snap_namespace, snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapProtectPayload(async_request_id, snap_namespace, snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_unprotect(const cls::rbd::SnapshotNamespace &snap_namespace,
-					    const std::string &snap_name,
-                                            Context *on_finish) {
+void ImageWatcher<I>::notify_snap_unprotect(
+    uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
+    const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapUnprotectPayload(snap_namespace, snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapUnprotectPayload(async_request_id, snap_namespace, snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
@@ -288,23 +305,33 @@ void ImageWatcher<I>::notify_rebuild_object_map(uint64_t request_id,
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_rename(const std::string &image_name,
+void ImageWatcher<I>::notify_rename(uint64_t request_id,
+                                    const std::string &image_name,
                                     Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new RenamePayload(image_name), on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(async_request_id,
+                       new RenamePayload(async_request_id, image_name),
+                       m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_update_features(uint64_t features, bool enabled,
+void ImageWatcher<I>::notify_update_features(uint64_t request_id,
+                                             uint64_t features, bool enabled,
                                              Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new UpdateFeaturesPayload(features, enabled), on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(async_request_id,
+      new UpdateFeaturesPayload(async_request_id, features, enabled),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
@@ -443,27 +470,37 @@ void ImageWatcher<I>::notify_unquiesce(uint64_t request_id, Context *on_finish) 
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_metadata_set(const std::string &key,
+void ImageWatcher<I>::notify_metadata_set(uint64_t request_id,
+                                          const std::string &key,
                                           const std::string &value,
                                           Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new MetadataUpdatePayload(key,
-                    std::optional<std::string>{value}),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new MetadataUpdatePayload(async_request_id, key,
+                                std::optional<std::string>{value}),
+      m_no_op_prog_ctx,  on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_metadata_remove(const std::string &key,
+void ImageWatcher<I>::notify_metadata_remove(uint64_t request_id,
+                                             const std::string &key,
                                              Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new MetadataUpdatePayload(key, std::nullopt),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new MetadataUpdatePayload(async_request_id, key, std::nullopt),
+      m_no_op_prog_ctx,  on_finish);
 }
 
 template <typename I>
@@ -1099,12 +1136,8 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
         complete = true;
       } else {
         new_request = true;
-        prog_ctx = new NoOpProgressContext();
-        ctx = new LambdaContext(
-          [prog_ctx, on_finish=new C_ResponseMessage(ack_ctx)](int r) {
-            delete prog_ctx;
-            on_finish->complete(r);
-          });
+        prog_ctx = &m_no_op_prog_ctx;
+        ctx = new C_ResponseMessage(ack_ctx);
         complete = false;
       }
       if (r == 0 && new_request) {
@@ -1135,14 +1168,28 @@ bool ImageWatcher<I>::handle_payload(const SnapRenamePayload &payload,
     int r;
     if (m_image_ctx.exclusive_lock->accept_request(
           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_rename request: "
-			         << payload.snap_id << " to "
-			         << payload.snap_name << dendl;
+      bool new_request;
+      Context *ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, nullptr);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        complete = false;
+      }
+      if (r == 0 && new_request) {
+        ldout(m_image_ctx.cct, 10) << this << " remote snap_rename request: "
+                                   << payload.snap_id << " to "
+                                   << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_rename(payload.snap_id,
-                                                  payload.snap_name,
-                                                  new C_ResponseMessage(ack_ctx));
-      return false;
+        m_image_ctx.operations->execute_snap_rename(payload.snap_id,
+                                                    payload.snap_name, ctx);
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }
@@ -1162,13 +1209,27 @@ bool ImageWatcher<I>::handle_payload(const SnapRemovePayload &payload,
     }
     int r;
     if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
-			         << payload.snap_name << dendl;
+      bool new_request;
+      Context *ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, nullptr);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        complete = false;
+      }
+      if (r == 0 && new_request) {
+        ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
+                                   << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_remove(payload.snap_namespace,
-						  payload.snap_name,
-                                                  new C_ResponseMessage(ack_ctx));
-      return false;
+        m_image_ctx.operations->execute_snap_remove(payload.snap_namespace,
+                                                    payload.snap_name, ctx);
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }
@@ -1184,13 +1245,27 @@ bool ImageWatcher<I>::handle_payload(const SnapProtectPayload& payload,
     int r;
     if (m_image_ctx.exclusive_lock->accept_request(
           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
-                                 << payload.snap_name << dendl;
+      bool new_request;
+      Context *ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, nullptr);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        complete = false;
+      }
+      if (r == 0 && new_request) {      
+        ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
+                                   << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_protect(payload.snap_namespace,
-						   payload.snap_name,
-                                                   new C_ResponseMessage(ack_ctx));
-      return false;
+        m_image_ctx.operations->execute_snap_protect(payload.snap_namespace,
+                                                     payload.snap_name, ctx);
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }
@@ -1206,13 +1281,27 @@ bool ImageWatcher<I>::handle_payload(const SnapUnprotectPayload& payload,
     int r;
     if (m_image_ctx.exclusive_lock->accept_request(
           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
-                                 << payload.snap_name << dendl;
+      bool new_request;
+      Context *ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, nullptr);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        complete = false;
+      }
+      if (r == 0 && new_request) {      
+        ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
+                                   << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_unprotect(payload.snap_namespace,
-						     payload.snap_name,
-                                                     new C_ResponseMessage(ack_ctx));
-      return false;
+        m_image_ctx.operations->execute_snap_unprotect(payload.snap_namespace,
+                                                       payload.snap_name, ctx);
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }
@@ -1256,12 +1345,26 @@ bool ImageWatcher<I>::handle_payload(const RenamePayload& payload,
     int r;
     if (m_image_ctx.exclusive_lock->accept_request(
           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
-                                 << payload.image_name << dendl;
+      bool new_request;
+      Context *ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, nullptr);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        complete = false;
+      }
+      if (r == 0 && new_request) {      
+        ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
+                                   << payload.image_name << dendl;
 
-      m_image_ctx.operations->execute_rename(payload.image_name,
-                                             new C_ResponseMessage(ack_ctx));
-      return false;
+        m_image_ctx.operations->execute_rename(payload.image_name, ctx);
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }
@@ -1277,14 +1380,30 @@ bool ImageWatcher<I>::handle_payload(const UpdateFeaturesPayload& payload,
     int r;
     if (m_image_ctx.exclusive_lock->accept_request(
           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote update_features request: "
-                                 << payload.features << " "
-                                 << (payload.enabled ? "enabled" : "disabled")
-                                 << dendl;
+      bool new_request;
+      Context *ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, nullptr);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        complete = false;
+      }
+      if (r == 0 && new_request) {      
+        ldout(m_image_ctx.cct, 10) << this << " remote update_features request: "
+                                   << payload.features << " "
+                                   << (payload.enabled ? "enabled" : "disabled")
+                                   << dendl;
 
-      m_image_ctx.operations->execute_update_features(
-        payload.features, payload.enabled, new C_ResponseMessage(ack_ctx), 0);
-      return false;
+        m_image_ctx.operations->execute_update_features(payload.features,
+                                                        payload.enabled, ctx,
+                                                        0);
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }
@@ -1382,22 +1501,35 @@ bool ImageWatcher<I>::handle_payload(const MetadataUpdatePayload &payload,
     int r;
     if (m_image_ctx.exclusive_lock->accept_request(
           exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      if (payload.value) {
-        ldout(m_image_ctx.cct, 10) << this << " remote metadata_set request: key="
-                                   << payload.key << ", value="
-                                   << *payload.value << dendl;
-
-        m_image_ctx.operations->execute_metadata_set(payload.key, *payload.value,
-                                                     new C_ResponseMessage(ack_ctx));
-        return false;
+      bool new_request;
+      Context *ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, nullptr);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
       } else {
-        ldout(m_image_ctx.cct, 10) << this << " remote metadata_remove request: key="
-                                   << payload.key << dendl;
-
-        m_image_ctx.operations->execute_metadata_remove(payload.key,
-                                                        new C_ResponseMessage(ack_ctx));
-        return false;
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        complete = false;
       }
+      if (r == 0 && new_request) {      
+        if (payload.value) {
+          ldout(m_image_ctx.cct, 10) << this << " remote metadata_set request: "
+                                     << "key=" << payload.key << ", value="
+                                     << *payload.value << dendl;
+
+          m_image_ctx.operations->execute_metadata_set(payload.key,
+                                                       *payload.value, ctx);
+        } else {
+          ldout(m_image_ctx.cct, 10) << this << " remote metadata_remove request: "
+                                     << "key=" << payload.key << dendl;
+
+          m_image_ctx.operations->execute_metadata_remove(payload.key, ctx);
+        }
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }

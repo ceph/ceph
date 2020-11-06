@@ -168,15 +168,16 @@ void ResizePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void ResizePayload::dump(Formatter *f) const {
+  AsyncRequestPayloadBase::dump(f);
   f->dump_unsigned("size", size);
   f->dump_bool("allow_shrink", allow_shrink);
-  AsyncRequestPayloadBase::dump(f);
 }
 
 void SnapPayloadBase::encode(bufferlist &bl) const {
   using ceph::encode;
   encode(snap_name, bl);
   encode(snap_namespace, bl);
+  encode(async_request_id, bl);
 }
 
 void SnapPayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
@@ -185,9 +186,13 @@ void SnapPayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
   if (version >= 6) {
     decode(snap_namespace, iter);
   }
+  if (version >= 7) {
+    decode(async_request_id, iter);
+  }
 }
 
 void SnapPayloadBase::dump(Formatter *f) const {
+  AsyncRequestPayloadBase::dump(f);
   f->dump_string("snap_name", snap_name);
   snap_namespace.dump(f);
 }
@@ -195,7 +200,6 @@ void SnapPayloadBase::dump(Formatter *f) const {
 void SnapCreatePayload::encode(bufferlist &bl) const {
   using ceph::encode;
   SnapPayloadBase::encode(bl);
-  encode(async_request_id, bl);
   encode(flags, bl);
 }
 
@@ -206,15 +210,11 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
     decode(snap_namespace, iter);
   }
   if (version >= 7) {
-    decode(async_request_id, iter);
     decode(flags, iter);
   }
 }
 
 void SnapCreatePayload::dump(Formatter *f) const {
-  f->open_object_section("async_request_id");
-  async_request_id.dump(f);
-  f->close_section();
   SnapPayloadBase::dump(f);
   f->dump_unsigned("flags", flags);
 }
@@ -232,21 +232,26 @@ void SnapRenamePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void SnapRenamePayload::dump(Formatter *f) const {
-  f->dump_unsigned("src_snap_id", snap_id);
   SnapPayloadBase::dump(f);
+  f->dump_unsigned("src_snap_id", snap_id);
 }
 
 void RenamePayload::encode(bufferlist &bl) const {
   using ceph::encode;
   encode(image_name, bl);
+  encode(async_request_id, bl);
 }
 
 void RenamePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(image_name, iter);
+  if (version >= 7) {
+    decode(async_request_id, iter);
+  }
 }
 
 void RenamePayload::dump(Formatter *f) const {
+  AsyncRequestPayloadBase::dump(f);
   f->dump_string("image_name", image_name);
 }
 
@@ -254,15 +259,20 @@ void UpdateFeaturesPayload::encode(bufferlist &bl) const {
   using ceph::encode;
   encode(features, bl);
   encode(enabled, bl);
+  encode(async_request_id, bl);
 }
 
 void UpdateFeaturesPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(features, iter);
   decode(enabled, iter);
+  if (version >= 7) {
+    decode(async_request_id, iter);
+  }
 }
 
 void UpdateFeaturesPayload::dump(Formatter *f) const {
+  AsyncRequestPayloadBase::dump(f);
   f->dump_unsigned("features", features);
   f->dump_bool("enabled", enabled);
 }
@@ -288,15 +298,20 @@ void MetadataUpdatePayload::encode(bufferlist &bl) const {
   using ceph::encode;
   encode(key, bl);
   encode(value, bl);
+  encode(async_request_id, bl);
 }
 
 void MetadataUpdatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(key, iter);
   decode(value, iter);
+  if (version >= 7) {
+    decode(async_request_id, iter);
+  }
 }
 
 void MetadataUpdatePayload::dump(Formatter *f) const {
+  AsyncRequestPayloadBase::dump(f);
   f->dump_string("key", key);
   f->dump_string("value", *value);
 }
@@ -415,21 +430,26 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(new AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
   o.push_back(new NotifyMessage(new AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
   o.push_back(new NotifyMessage(new FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new ResizePayload(123, true, AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(new NotifyMessage(new ResizePayload(AsyncRequestId(ClientId(0, 1), 2), 123, true)));
   o.push_back(new NotifyMessage(new SnapCreatePayload(AsyncRequestId(ClientId(0, 1), 2),
                                                       cls::rbd::UserSnapshotNamespace(),
                                                       "foo", 1)));
-  o.push_back(new NotifyMessage(new SnapRemovePayload(cls::rbd::UserSnapshotNamespace(), "foo")));
-  o.push_back(new NotifyMessage(new SnapProtectPayload(cls::rbd::UserSnapshotNamespace(), "foo")));
-  o.push_back(new NotifyMessage(new SnapUnprotectPayload(cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(new NotifyMessage(new SnapRemovePayload(AsyncRequestId(ClientId(0, 1), 2),
+                                                      cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(new NotifyMessage(new SnapProtectPayload(AsyncRequestId(ClientId(0, 1), 2),
+                                                       cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(new NotifyMessage(new SnapUnprotectPayload(AsyncRequestId(ClientId(0, 1), 2),
+                                                         cls::rbd::UserSnapshotNamespace(), "foo")));
   o.push_back(new NotifyMessage(new RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new RenamePayload("foo")));
-  o.push_back(new NotifyMessage(new UpdateFeaturesPayload(1, true)));
+  o.push_back(new NotifyMessage(new RenamePayload(AsyncRequestId(ClientId(0, 1), 2), "foo")));
+  o.push_back(new NotifyMessage(new UpdateFeaturesPayload(AsyncRequestId(ClientId(0, 1), 2),
+                                                          1, true)));
   o.push_back(new NotifyMessage(new MigratePayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(new SparsifyPayload(AsyncRequestId(ClientId(0, 1), 2), 1)));
   o.push_back(new NotifyMessage(new QuiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(new UnquiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new MetadataUpdatePayload("foo", std::optional<std::string>{"xyz"})));
+  o.push_back(new NotifyMessage(new MetadataUpdatePayload(AsyncRequestId(ClientId(0, 1), 2),
+                                                          "foo", std::optional<std::string>{"xyz"})));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
