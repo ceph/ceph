@@ -117,16 +117,22 @@ from the default 3 to 4, expecting 2 copies in each site. OSDs will only
 be allowed to connect to monitors in the same data center.
 
 If all the OSDs and monitors from a data center become inaccessible
-at once, the surviving data center will enter a degraded stretch mode,
-reducing pool size to 2 and min_size to 1, issuing a warning, and
-going active by itself.
+at once, the surviving data center will enter a degraded stretch mode. This
+will issue a warning, reduce the min_size to 1, and allow
+the cluster to go active with data in the single remaining site. Note that
+we do not change the pool size, so you will also get warnings that the
+pools are too small -- but a special stretch mode flag will prevent the OSDs
+from creating extra copies in the remaining data center (so it will only keep
+2 copies, as before).
 
 When the missing data center comes back, the cluster will enter
-recovery stretch mode. It increases the pool size back to 4 and min_size to 2,
-but still only requires OSDs from the data center which was up the whole time.
-It continues issuing a warning. This mode then waits until all PGs are in
-a known state, and are neither degraded nor incomplete. At that point,
-it transitions back to regular stretch mode and the warning ends.
+recovery stretch mode. This changes the warning and allows peering, but
+still only requires OSDs from the data center which was up the whole time.
+When all PGs are in a known state, and are neither degraded nor incomplete,
+the cluster transitions back to regular stretch mode, ends the warning,
+restores min_size to its starting value (2) and requires both sites to peer,
+and stops requiring the always-alive site when peering (so that you can fail
+over to the other site, if necessary).
 
   
 Stretch Mode Limitations
