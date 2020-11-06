@@ -360,7 +360,7 @@ LBAInternalNode::merge_entry(
 
       c.cache.retire_extent(c.trans, l);
       c.cache.retire_extent(c.trans, r);
-      return split_ertr::make_ready_future<LBANodeRef>(replacement);
+      return merge_ertr::make_ready_future<LBANodeRef>(replacement);
     } else {
       logger().debug(
 	"LBAInternalEntry::merge_entry balanced l {} r {}",
@@ -384,7 +384,7 @@ LBAInternalNode::merge_entry(
 
       c.cache.retire_extent(c.trans, l);
       c.cache.retire_extent(c.trans, r);
-      return split_ertr::make_ready_future<LBANodeRef>(
+      return merge_ertr::make_ready_future<LBANodeRef>(
 	addr >= pivot ? replacement_r : replacement_l
       );
     }
