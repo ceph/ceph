@@ -10017,6 +10017,10 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
     // evicted 
     return 0;
   }
+  if (pool.info.get_fingerprint_type() == pg_pool_t::TYPE_FINGERPRINT_NONE) {
+    dout(0) << " fingerprint algorithm is not set " << dendl;
+    return 0;
+  } 
 
   /*
    * The operations to make dedup chunks are tracked by a ManifestOp.
@@ -10040,10 +10044,6 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
       bufferlist chunk;
       chunk.substr_of(bl, p.first, p.second);
       hobject_t target = get_fpoid_from_chunk(soid, chunk);
-      if (target == hobject_t()) {
-	dout(0) << " fingerprint oid is null " << dendl;
-	break;
-      }
 
       // skip if the same content exits in prev snap at same offset
       if (obc->ssc->snapset.clones.size()) {
