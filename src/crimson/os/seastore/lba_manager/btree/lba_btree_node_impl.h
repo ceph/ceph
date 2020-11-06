@@ -108,6 +108,11 @@ struct LBAInternalNode
     op_context_t c,
     laddr_t laddr,
     mutate_func_t &&f) final;
+  mutate_mapping_ret mutate_mapping_internal(
+    op_context_t c,
+    laddr_t laddr,
+    bool is_root,
+    mutate_func_t &&f) final;
 
   mutate_internal_address_ret mutate_internal_address(
     op_context_t c,
@@ -284,7 +289,8 @@ struct LBAInternalNode
     op_context_t c,
     laddr_t addr,
     internal_iterator_t,
-    LBANodeRef entry);
+    LBANodeRef entry,
+    bool is_root);
 
   /// returns iterator for subtree containing laddr
   internal_iterator_t get_containing_child(laddr_t laddr);
@@ -380,6 +386,11 @@ struct LBALeafNode
   mutate_mapping_ret mutate_mapping(
     op_context_t c,
     laddr_t laddr,
+    mutate_func_t &&f) final;
+  mutate_mapping_ret mutate_mapping_internal(
+    op_context_t c,
+    laddr_t laddr,
+    bool is_root,
     mutate_func_t &&f) final;
 
   mutate_internal_address_ret mutate_internal_address(
