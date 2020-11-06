@@ -11,7 +11,7 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, RGWSpec
+from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, RGWSpec, HA_RGWSpec
 
 import orchestrator
 from cephadm.schedule import HostAssignment
@@ -475,6 +475,9 @@ class CephadmServe:
         remove_daemon_hosts: Set[orchestrator.DaemonDescription] = ha.remove_daemon_hosts(hosts)
         self.log.debug('Hosts that will loose daemons: %s' % remove_daemon_hosts)
 
+        if daemon_type == 'HA_RGW':
+            spec = self.update_ha_rgw_definitive_hosts(spec, hosts, add_daemon_hosts)
+
         for host, network, name in add_daemon_hosts:
             daemon_id = self.mgr.get_unique_name(daemon_type, host, daemons,
                                                  prefix=spec.service_id,
@@ -496,13 +499,10 @@ class CephadmServe:
             try:
                 # HA_RGW needs to deploy 2 daemons
                 if daemon_type == 'HA_RGW':
-                    daemon_spec.daemon_type = 'haproxy'
-                    daemon_spec = self.mgr.cephadm_services['haproxy'].prepare_create(daemon_spec)
-                    self.mgr._create_daemon(daemon_spec)
-                    daemon_spec.daemon_type = 'keepalived'
-                    daemon_spec = self.mgr.cephadm_services['keepalived'].prepare_create(
-                        daemon_spec)
-                    self.mgr._create_daemon(daemon_spec)
+                    for dtype in ['haproxy', 'keepalived']:
+                        daemon_spec.daemon_type = dtype
+                        daemon_spec = self.mgr.cephadm_services[dtype].prepare_create(daemon_spec)
+                        self.mgr._create_daemon(daemon_spec)
                 else:
                     daemon_spec = self.mgr.cephadm_services[daemon_type].prepare_create(daemon_spec)
                     self.mgr._create_daemon(daemon_spec)
@@ -642,3 +642,19 @@ class CephadmServe:
                 image_info = digests[container_image_ref]
                 if image_info.repo_digest:
                     self.mgr.set_container_image(entity, image_info.repo_digest)
+
+    # HA_RGW needs definitve host list to create keepalived config files
+    # if definitive host list has changed, all HA_RGW daemons must get new
+    # config, including those that are already on the correct host and not
+    # going to be deployed
+    def update_ha_rgw_definitive_hosts(self, spec: ServiceSpec, hosts: List[HostPlacementSpec],
+                                       add_hosts: Set[HostPlacementSpec]) -> HA_RGWSpec:
+        spec = cast(HA_RGWSpec, spec)
+        if not (set(hosts) == set(spec.definitive_host_list)):
+            spec.definitive_host_list = hosts
+            ha_rgw_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+            for daemon in ha_rgw_daemons:
+                if daemon.hostname in [h.hostname for h in hosts] and daemon.hostname not in add_hosts:
+                    self.mgr.cache.schedule_daemon_action(
+                        daemon.hostname, daemon.name(), 'reconfig')
+        return spec

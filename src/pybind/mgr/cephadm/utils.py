@@ -2,6 +2,7 @@ import logging
 import re
 import json
 import datetime
+import socket
 from enum import Enum
 from functools import wraps
 from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING
@@ -97,3 +98,7 @@ def str_to_datetime(input: str) -> datetime.datetime:
 
 def datetime_to_str(dt: datetime.datetime) -> str:
     return dt.strftime(DATEFMT)
+
+
+def resolve_ip(hostname: str) -> str:
+    return socket.getaddrinfo(hostname, 2049, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]

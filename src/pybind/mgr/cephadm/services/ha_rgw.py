@@ -54,7 +54,7 @@ class HAproxyService(CephService):
             rgw_servers = []
             for daemon in rgw_daemons:
                 rgw_servers.append(self.rgw_server(
-                    daemon.hostname, self.mgr.inventory.get_addr(daemon.hostname)))
+                    daemon.name(), utils.resolve_ip(daemon.hostname)))
 
             # virtual ip address cannot have netmask attached when passed to haproxy config
             # since the port is added to the end and something like 123.123.123.10/24:8080 is invalid
@@ -110,9 +110,23 @@ class KeepAlivedService(CephService):
         if service_name in self.mgr.spec_store.specs:
             spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
 
-            ka_context = {'spec': spec, 'state': 'MASTER',
-                          'other_ips': [],
-                          'host_ip': self.mgr.inventory.get_addr(host)}
+            all_hosts = []
+            for h, network, name in spec.definitive_host_list:
+                all_hosts.append(h)
+
+            # set state. first host in placement is master all others backups
+            state = 'BACKUP'
+            if all_hosts[0] == host:
+                state = 'MASTER'
+
+            # remove host, daemon is being deployed on from all_hosts list for
+            # other_ips in conf file and converter to ips
+            all_hosts.remove(host)
+            other_ips = [utils.resolve_ip(h) for h in all_hosts]
+
+            ka_context = {'spec': spec, 'state': state,
+                          'other_ips': other_ips,
+                          'host_ip': utils.resolve_ip(host)}
 
             keepalived_conf = self.mgr.template.render(
                 'services/keepalived/keepalived.conf.j2', ka_context)

@@ -811,7 +811,10 @@ class HA_RGWSpec(ServiceSpec):
         self.ha_proxy_enable_prometheus_exporter = ha_proxy_enable_prometheus_exporter
         self.ha_proxy_monitor_uri = ha_proxy_monitor_uri
         self.keepalived_password = keepalived_password
-
+        # placeholder variable. Need definitive list of hosts this service will
+        # be placed on in order to generate keepalived config. Will be populated
+        # when applying spec
+        self.definitive_host_list = [] # type: List[HostPlacementSpec]
 
     def validate(self):
         super(HA_RGWSpec, self).validate()
