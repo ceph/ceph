@@ -84,6 +84,7 @@ public:
   }
 
   RGWCoroutine *get_targets_info_cr(std::vector<std::string> *min_shard_markers,
+                                    std::vector<std::string> *min_source_pos,
                                     std::set<string> *sip_targets,
                                     std::set<rgw_zone_id> *target_zones) override;
 
@@ -104,16 +105,19 @@ class RGWTrimGetSIPTargetsInfo : public RGWCoroutine
   int i;
 
   std::vector<std::string> *min_shard_markers;
+  std::vector<std::string> *min_source_pos;
   std::set<string> *sip_targets;
   std::set<rgw_zone_id> *target_zones;
 
 public:
   RGWTrimGetSIPTargetsInfo(RGWTrimSIPMgrImpl *_mgr,
                            std::vector<std::string> *_min_shard_markers,
+                           std::vector<std::string> *_min_source_pos,
                            std::set<string> *_sip_targets,
                            std::set<rgw_zone_id> *_target_zones) : RGWCoroutine(_mgr->ctx()),
                                                                    mgr(_mgr),
                                                                    min_shard_markers(_min_shard_markers),
+                                                                   min_source_pos(_min_source_pos),
                                                                    sip_targets(_sip_targets),
                                                                    target_zones(_target_zones) {}
 
@@ -164,6 +168,9 @@ int RGWTrimGetSIPTargetsInfo::operate()
       if (!info.min_targets_pos.empty()) {
         (*min_shard_markers)[i] = info.min_targets_pos;
       }
+      if (min_source_pos) {
+        (*min_source_pos)[i] = info.min_source_pos;
+      }
       for (auto& entry : info.targets) {
         if (sip_targets) {
           sip_targets->insert(entry.first);
@@ -186,11 +193,13 @@ int RGWTrimGetSIPTargetsInfo::operate()
 
 
 RGWCoroutine *RGWTrimSIPMgrImpl::get_targets_info_cr(std::vector<std::string> *min_shard_markers,
+                                                     std::vector<std::string> *min_source_pos,
                                                      std::set<string> *sip_targets,
                                                      std::set<rgw_zone_id> *target_zones)
 {
   return new RGWTrimGetSIPTargetsInfo(this,
                                       min_shard_markers,
+                                      min_source_pos,
                                       sip_targets,
                                       target_zones);
 }
