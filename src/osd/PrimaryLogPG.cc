@@ -10045,19 +10045,28 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
       chunk.substr_of(bl, p.first, p.second);
       hobject_t target = get_fpoid_from_chunk(soid, chunk);
 
+      chunk_info_t chunk_info(0, p.second, target);
+      // chunks issued here are different with chunk_map newly generated
+      // because the same chunks in previous snap will not be issued
+      // So, we need two data structures; the first is the issued chunk list to track
+      // issued operations, and the second is the new chunk_map to update chunk_map after 
+      // all operations are finished
+      mop->new_chunk_map[p.first] = chunk_info;
       // skip if the same content exits in prev snap at same offset
       if (obc->ssc->snapset.clones.size()) {
 	ObjectContextRef cobc = get_prev_clone_obc(obc);
 	if (cobc) {
-	  auto c = cobc->obs.oi.manifest.chunk_map.find(p.first);
-	  if (c != cobc->obs.oi.manifest.chunk_map.end()) {
-	    auto t = oi.manifest.chunk_map.find(p.first);
-	    if (t != oi.manifest.chunk_map.end()) {
-	      if (t->second == c->second) {
-		continue;
-	      }
-	    }
-	  }
+	  object_ref_delta_t refs;
+	  object_manifest_t set_chunk;
+	  set_chunk.chunk_map[p.first] = chunk_info;
+	  set_chunk.calc_refs_to_inc_on_set(
+	    &cobc->obs.oi.manifest,
+	    nullptr,
+	    refs);
+	  if (refs.is_empty()) {
+	    dout(15) << " found same chunk " << refs << dendl;
+	    continue;
+	  } 
 	}
       }
 	
@@ -10225,22 +10234,46 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     ctx->at_version = get_next_version();
     ctx->new_obs = obc->obs;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
-    for (auto p : mop->chunks) {
-      struct chunk_info_t info;
-      info.offset = 0;
-      info.length = p.second.second;
-      info.oid =  p.first;
-      ctx->new_obs.oi.manifest.chunk_map[p.second.first] = info;
-      // drop all references issued before
-      refs.dec_ref(p.first);
-    }
+
+    /* 
+    * Let's assume that there is a manifest snapshotted object, and we issue tier_flush() to head.
+    * head: [0, 2) aaa <-- tier_flush()
+    * 20:   [0, 2) ddd, [6, 2) bbb, [8, 2) ccc
+    * 
+    * In this case, if the new chunk_map is as follows,
+    * new_chunk_map : [0, 2) DDD, [6, 2) bbb, [8, 2) ccc
+    * we should drop aaa from head by using calc_refs_to_drop_on_removal().
+    * So, the precedure is 
+    * 	1. calc_refs_to_drop_on_removal()
+    * 	2. drop old references by dec_refcount()
+    * 	3. update new chunk_map
+    */
+
+    ObjectCleanRegions c_regions = ctx->clean_regions;
+    ObjectContextRef cobc = get_prev_clone_obc(obc);
+    c_regions.mark_fully_dirty(); 
+    // CDC was done on entire range of manifest object,
+    // so the first thing we should do here is to drop the reference to old chunks
+    ObjectContextRef obc_l, obc_g;
+    get_adjacent_clones(ctx->obs->oi, ctx.get(), obc_l, obc_g);
+    // clear all old references
+    ctx->obs->oi.manifest.calc_refs_to_drop_on_removal(
+      obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
+      obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
+      refs);
     if (!refs.is_empty()) {
       ctx->register_on_commit(
         [oid, this, refs](){
           dec_refcount(oid, refs);
         });
     }
-  
+
+    // clear all regions
+    ctx->new_obs.oi.manifest.chunk_map.clear();
+
+    // set new references
+    ctx->new_obs.oi.manifest.chunk_map = mop->new_chunk_map;
+
     finish_ctx(ctx.get(), pg_log_entry_t::CLEAN);
     simple_opc_submit(std::move(ctx));
   }
