@@ -144,6 +144,8 @@ struct LBANode : CachedExtent {
    * If it returns nullopt, removes the value.
    * Caller must already have merged if at_min_capacity().
    *
+   * Recursive calls use mutate_mapping_internal.
+   *
    * Precondition: !at_min_capacity()
    */
   using mutate_mapping_ertr = crimson::errorator<
@@ -158,6 +160,11 @@ struct LBANode : CachedExtent {
   virtual mutate_mapping_ret mutate_mapping(
     op_context_t c,
     laddr_t laddr,
+    mutate_func_t &&f) = 0;
+  virtual mutate_mapping_ret mutate_mapping_internal(
+    op_context_t c,
+    laddr_t laddr,
+    bool is_root,
     mutate_func_t &&f) = 0;
 
   /**
