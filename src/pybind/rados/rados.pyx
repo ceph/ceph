@@ -305,6 +305,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num)
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
+    void rados_write_op_omap_rm_range2(rados_write_op_t write_op, const char *key_begin, size_t key_begin_len, const char *key_end, size_t key_end_len)
     void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
     void rados_write_op_setxattr(rados_write_op_t write_op, const char *name, const char *value, size_t value_len)
     void rados_write_op_rmxattr(rados_write_op_t write_op, const char *name)
@@ -4050,6 +4051,26 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             rados_write_op_omap_clear(_write_op.write_op)
+
+    def remove_omap_range2(self, write_op: WriteOp, key_begin: str, key_end: str):
+        """
+        Remove key/value pairs from an object whose keys are in the range
+        [key_begin, key_end)
+        :param write_op: write operation object
+        :param key_begin: the lower bound of the key range to remove
+        :param key_end: the upper bound of the key range to remove
+        """
+        key_begin_raw = cstr(key_begin, 'key_begin')
+        key_end_raw = cstr(key_end, 'key_end')
+        cdef:
+            WriteOp _write_op = write_op
+            char* _key_begin = key_begin_raw
+            size_t key_begin_len = len(key_begin)
+            char* _key_end = key_end_raw
+            size_t key_end_len = len(key_end)
+        with nogil:
+            rados_write_op_omap_rm_range2(_write_op.write_op, _key_begin, key_begin_len,
+                                           _key_end, key_end_len)
 
     def lock_exclusive(self, key: str, name: str, cookie: str, desc: str = "",
                        duration: Optional[int] = None,
