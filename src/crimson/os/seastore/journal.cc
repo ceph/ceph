@@ -204,6 +204,45 @@ Journal::roll_journal_segment()
     );
 }
 
+Journal::read_segment_header_ret
+Journal::read_segment_header(segment_id_t segment)
+{
+  return segment_manager.read(paddr_t{segment, 0}, block_size
+  ).handle_error(
+    read_segment_header_ertr::pass_further{},
+    crimson::ct_error::assert_all{}
+  ).safe_then([=](bufferptr bptr) -> read_segment_header_ret {
+    logger().debug("segment {} bptr size {}", segment, bptr.length());
+
+    segment_header_t header;
+    bufferlist bl;
+    bl.push_back(bptr);
+
+    logger().debug(
+      "find_replay_segments: segment {} block crc {}",
+      segment,
+      bl.begin().crc32c(block_size, 0));
+
+    auto bp = bl.cbegin();
+    try {
+      decode(header, bp);
+    } catch (ceph::buffer::error &e) {
+      logger().debug(
+	"find_replay_segments: segment {} unable to decode "
+	"header, skipping",
+	segment);
+      return crimson::ct_error::enodata::make();
+    }
+    logger().debug(
+      "find_replay_segments: segment {} header {}",
+      segment,
+      header);
+    return read_segment_header_ret(
+      read_segment_header_ertr::ready_future_marker{},
+      header);
+  });
+}
+
 Journal::open_for_write_ret Journal::open_for_write()
 {
   return roll_journal_segment().safe_then([this](auto seq) {
@@ -227,38 +266,31 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	boost::make_counting_iterator(segment_id_t{0}),
 	boost::make_counting_iterator(segment_manager.get_num_segments()),
 	[this, &segments](auto i) {
-	  return segment_manager.read(paddr_t{i, 0}, block_size
-	  ).safe_then([this, &segments, i](bufferptr bptr) mutable {
-	    logger().debug("segment {} bptr size {}", i, bptr.length());
-	    segment_header_t header;
-	    bufferlist bl;
-	    bl.push_back(bptr);
-
-	    logger().debug(
-	      "find_replay_segments: segment {} block crc {}",
-	      i,
-	      bl.begin().crc32c(block_size, 0));
-
-	    auto bp = bl.cbegin();
-	    try {
-	      decode(header, bp);
-	    } catch (ceph::buffer::error &e) {
+	  return read_segment_header(i
+	  ).safe_then([this, &segments, i](auto header) mutable {
+	    if (generate_nonce(
+		  header.journal_segment_seq,
+		  segment_manager.get_meta()) != header.segment_nonce) {
 	      logger().debug(
-		"find_replay_segments: segment {} unable to decode "
-		"header, skipping",
-		i);
+		"find_replay_segments: nonce mismatch segment {} header {}",
+		i,
+		header);
+	      assert(0 == "impossible");
 	      return find_replay_segments_ertr::now();
 	    }
-	    logger().debug(
-	      "find_replay_segments: segment {} header {}",
-	      i,
-	      header);
+
 	    segments.emplace_back(i, std::move(header));
 	    return find_replay_segments_ertr::now();
 	  }).handle_error(
 	    crimson::ct_error::enoent::handle([i](auto) {
 	      logger().debug(
 		"find_replay_segments: segment {} not available for read",
+		i);
+	      return find_replay_segments_ertr::now();
+	    }),
+	    crimson::ct_error::enodata::handle([i](auto) {
+	      logger().debug(
+		"find_replay_segments: segment {} header undecodable",
 		i);
 	      return find_replay_segments_ertr::now();
 	    }),
