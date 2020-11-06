@@ -20,9 +20,6 @@
 #include "Monitor.h"
 #include "MonitorDBStore.h"
 
-class Monitor;
-class Paxos;
-
 /**
  * A Paxos Service is an abstraction that easily allows one to obtain an
  * association between a Monitor and a Paxos class, in order to implement any
