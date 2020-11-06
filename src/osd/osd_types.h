@@ -5571,6 +5571,8 @@ struct chunk_info_t {
   cflag_t flags;   // FLAG_*
 
   chunk_info_t() : offset(0), length(0), flags((cflag_t)0) { }
+  chunk_info_t(uint32_t offset, uint32_t length, hobject_t oid) : 
+    offset(offset), length(length), oid(oid), flags((cflag_t)0) { }
 
   static std::string get_flag_string(uint64_t flags) {
     std::string r;

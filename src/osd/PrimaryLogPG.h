@@ -265,6 +265,8 @@ public:
     std::map<uint64_t, ceph_tid_t> tids; 
     std::map<hobject_t, pair<uint64_t, uint64_t>> chunks;
     uint64_t num_chunks = 0;
+    std::map<uint64_t, chunk_info_t> new_chunk_map;
+    
 
     ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
       : cb(cb), objecter_tid(tid) {}
