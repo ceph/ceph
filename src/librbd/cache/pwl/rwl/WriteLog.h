@@ -4,7 +4,9 @@
 #ifndef CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 #define CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 
+#include <functional>
 #include <libpmemobj.h>
+#include <list>
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncOpTracker.h"
@@ -12,12 +14,11 @@
 #include "librbd/Utils.h"
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/Types.h"
+#include "librbd/cache/pwl/AbstractWriteLog.h"
+#include "librbd/cache/pwl/LogMap.h"
 #include "librbd/cache/pwl/LogOperation.h"
 #include "librbd/cache/pwl/Request.h"
-#include "librbd/cache/pwl/LogMap.h"
-#include "AbstractWriteLog.h"
-#include <functional>
-#include <list>
+#include "librbd/cache/pwl/rwl/Builder.h"
 
 class Context;
 class SafeTimer;
@@ -27,32 +28,37 @@ namespace librbd {
 struct ImageCtx;
 
 namespace cache {
-
 namespace pwl {
+namespace rwl {
 
 template <typename ImageCtxT>
-class ReplicatedWriteLog : public AbstractWriteLog<ImageCtxT> {
+class WriteLog : public AbstractWriteLog<ImageCtxT> {
 public:
-  ReplicatedWriteLog(
+  WriteLog(
       ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state,
       ImageWritebackInterface& image_writeback,
       plugin::Api<ImageCtxT>& plugin_api);
-  ~ReplicatedWriteLog();
-  ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
-  ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
+  ~WriteLog();
+  WriteLog(const WriteLog&) = delete;
+  WriteLog &operator=(const WriteLog&) = delete;
 
-private:
   using This = AbstractWriteLog<ImageCtxT>;
   using C_WriteRequestT = pwl::C_WriteRequest<This>;
+  using C_WriteSameRequestT = pwl::C_WriteSameRequest<This>;
+
+  void copy_bl_to_buffer(
+      WriteRequestResources *resources, std::unique_ptr<WriteLogOperationSet> &op_set) override;
+  void complete_user_request(Context *&user_req, int r) override;
+private:
   using C_BlockIORequestT = pwl::C_BlockIORequest<This>;
   using C_FlushRequestT = pwl::C_FlushRequest<This>;
   using C_DiscardRequestT = pwl::C_DiscardRequest<This>;
-  using C_WriteSameRequestT = pwl::C_WriteSameRequest<This>;
-  using C_CompAndWriteRequestT = pwl::C_CompAndWriteRequest<This>;
 
   PMEMobjpool *m_log_pool = nullptr;
+  Builder<This> *m_builderobj;
   const char* m_pwl_pool_layout_name;
 
+  Builder<This>* create_builder();
   void remove_pool_file();
   void load_existing_entries(pwl::DeferredContexts &later);
   void alloc_op_log_entries(pwl::GenericLogOperations &ops);
@@ -74,10 +80,9 @@ protected:
   using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
 
   void process_work() override;
-  void copy_pmem(C_BlockIORequestT *req) override;
   void schedule_append_ops(pwl::GenericLogOperations &ops) override;
   void append_scheduled_ops(void) override;
-  void reserve_pmem(C_BlockIORequestT *req, bool &alloc_succeeds, bool &no_space) override;
+  void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds, bool &no_space) override;
   bool retire_entries(const unsigned long int frees_per_tx) override;
   void persist_last_flushed_sync_gen() override;
   bool alloc_resources(C_BlockIORequestT *req) override;
@@ -89,13 +94,14 @@ protected:
   void initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;
   void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,
-      pwl::WriteLogPmemEntry *pmem_entry) override;
+      pwl::WriteLogCacheEntry *pmem_entry) override;
 };
 
+} // namespace rwl
 } // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::pwl::ReplicatedWriteLog<librbd::ImageCtx>;
+extern template class librbd::cache::pwl::rwl::WriteLog<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
