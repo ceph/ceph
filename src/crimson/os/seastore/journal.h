@@ -342,6 +342,7 @@ private:
   scan_segment_ret scan_segment(
     paddr_t addr,
     extent_len_t bytes_to_read,
+    segment_nonce_t nonce,
     delta_scan_handler_t *delta_handler,
     extent_handler_t *extent_info_handler
   );
@@ -350,6 +351,7 @@ private:
   replay_ertr::future<>
   replay_segment(
     journal_seq_t start,             ///< [in] starting addr, seq
+    segment_header_t header,         ///< [in] segment header
     delta_handler_t &delta_handler   ///< [in] processes deltas in order
   );
 

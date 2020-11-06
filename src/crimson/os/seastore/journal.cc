@@ -455,6 +455,7 @@ std::optional<std::vector<extent_info_t>> Journal::try_decode_extent_infos(
 Journal::replay_ertr::future<>
 Journal::replay_segment(
   journal_seq_t seq,
+  segment_header_t header,
   delta_handler_t &handler)
 {
   logger().debug("replay_segment: starting at {}", seq);
@@ -480,10 +481,11 @@ Journal::replay_segment(
 	    delta);
 	}
       }),
-    [this, seq](auto &dhandler) {
+    [=](auto &dhandler) {
       return scan_segment(
 	seq.offset,
 	segment_manager.get_segment_size(),
+	header.segment_nonce,
 	&dhandler,
 	nullptr).safe_then([](auto){});
     });
@@ -499,7 +501,7 @@ Journal::replay_ret Journal::replay(delta_handler_t &&delta_handler)
           logger().debug("replay: found {} segments", replay_segs.size());
           segments = std::move(replay_segs);
           return crimson::do_for_each(segments, [this, &handler](auto i) mutable {
-            return replay_segment(i.first, handler);
+            return replay_segment(i.first, i.second, handler);
           });
         });
     });
@@ -512,30 +514,38 @@ Journal::scan_extents_ret Journal::scan_extents(
   // Caller doesn't know addr of first record, so addr.offset == 0 is special
   if (addr.offset == 0) addr.offset = block_size;
 
-  return seastar::do_with(
-    scan_extents_ret_bare(),
-    [=](auto &ret) {
-      return seastar::do_with(
-	extent_handler_t([&ret](auto addr, const auto &info) mutable {
-	  ret.second.push_back(std::make_pair(addr, info));
-	  return scan_extents_ertr::now();
-	}),
-	[=, &ret](auto &handler) mutable {
-	  return scan_segment(
-	    addr,
-	    bytes_to_read,
-	    nullptr,
-	    &handler).safe_then([&ret](auto next) mutable {
-	      ret.first = next;
-	      return std::move(ret);
-	    });
-	});
-    });
+  return read_segment_header(addr.segment
+  ).handle_error(
+    scan_extents_ertr::pass_further{},
+    crimson::ct_error::assert_all{}
+  ).safe_then([=](auto header) {
+    return seastar::do_with(
+      scan_extents_ret_bare(),
+      [=](auto &ret) {
+	return seastar::do_with(
+	  extent_handler_t([&ret](auto addr, const auto &info) mutable {
+	    ret.second.push_back(std::make_pair(addr, info));
+	    return scan_extents_ertr::now();
+	  }),
+	  [=, &ret](auto &handler) mutable {
+	    return scan_segment(
+	      addr,
+	      bytes_to_read,
+	      header.segment_nonce,
+	      nullptr,
+	      &handler).safe_then([&ret](auto next) mutable {
+		ret.first = next;
+		return std::move(ret);
+	      });
+	  });
+      });
+  });
 }
 
 Journal::scan_segment_ret Journal::scan_segment(
   paddr_t addr,
   extent_len_t bytes_to_read,
+  segment_nonce_t nonce,
   delta_scan_handler_t *delta_handler,
   extent_handler_t *extent_info_handler)
 {
@@ -554,6 +564,15 @@ Journal::scan_segment_ret Journal::scan_segment(
 	      }
 
 	      auto &[header, bl] = *p;
+
+	      if (header.segment_nonce != nonce) {
+		logger().debug(
+		  "Journal::scan_segment: record offset {} nonce mismatch {} vs {}",
+		  current,
+		  nonce,
+		  header.segment_nonce);
+		return scan_segment_ertr::make_ready_future<bool>(true);
+	      }
 
 	      logger().debug(
 		"Journal::scan_segment: next record offset {} mdlength {} dlength {}",
