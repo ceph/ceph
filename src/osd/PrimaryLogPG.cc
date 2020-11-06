@@ -9989,9 +9989,9 @@ struct C_SetDedupChunks : public Context {
   ceph_tid_t tid;
   uint64_t offset;
   
-  C_SetDedupChunks(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
+  C_SetDedupChunks(PrimaryLogPG *p, hobject_t o, epoch_t lpr, uint64_t offset)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0), offset(0)
+      tid(0), offset(offset)
   {}
   void finish(int r) override {
     if (r == -ECANCELED)
@@ -10071,8 +10071,7 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
       obj_op.call("cas", "chunk_create_or_get_ref", t);
 
       // issue create_or_get_ref_op
-      C_SetDedupChunks *fin = new C_SetDedupChunks(this, soid, get_last_peering_reset());
-      fin->offset = p.first;
+      C_SetDedupChunks *fin = new C_SetDedupChunks(this, soid, get_last_peering_reset(), p.first);
       object_locator_t oloc(target);
       unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
 			CEPH_OSD_FLAG_RWORDERED;
