@@ -5164,6 +5164,83 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
   }
 }
 
+TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+
+  // create a new pool 
+  std::string temp_pool_name = get_temp_pool_name() + "-test-flush";
+  ASSERT_EQ(0, cluster.pool_create(temp_pool_name.c_str()));
+
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", temp_pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 8192),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+
+  // create object
+  bufferlist gbl;
+  {
+    //bufferlist bl;
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar", 0,
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // delete temp pool, so flushing chunk will fail
+  ASSERT_EQ(0, s_cluster.pool_delete(temp_pool_name.c_str()));
+
+  // flush to check if proper error is returned
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    completion->release();
+  }
+
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
