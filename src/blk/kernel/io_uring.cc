@@ -134,7 +134,7 @@ int ioring_queue_t::init(std::vector<int> &fds)
   if (ret < 0)
     return ret;
 
-  ret = io_uring_register(d->io_uring.ring_fd, IORING_REGISTER_FILES,
+  ret = io_uring_register_files(&d->io_uring,
 			  &fds[0], fds.size());
   if (ret < 0) {
     ret = -errno;
@@ -211,15 +211,12 @@ get_cqe:
 
 bool ioring_queue_t::supported()
 {
-  struct io_uring_params p;
-
-  memset(&p, 0, sizeof(p));
-  int fd = io_uring_setup(16, &p);
-  if (fd < 0)
+  struct io_uring ring;
+  int ret = io_uring_queue_init(16, &ring, 0);
+  if (ret) {
     return false;
-
-  close(fd);
-
+  }
+  io_uring_queue_exit(&ring);
   return true;
 }
 
