@@ -10019,7 +10019,7 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
   }
   if (pool.info.get_fingerprint_type() == pg_pool_t::TYPE_FINGERPRINT_NONE) {
     dout(0) << " fingerprint algorithm is not set " << dendl;
-    return 0;
+    return -EINVAL;
   } 
 
   /*
