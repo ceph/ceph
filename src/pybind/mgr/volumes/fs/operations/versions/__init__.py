@@ -46,8 +46,8 @@ class SubvolumeLoader(object):
         except KeyError:
             raise VolumeException(-errno.EINVAL, "subvolume class v{0} does not exist".format(version))
 
-    def get_subvolume_object_max(self, fs, vol_spec, group, subvolname):
-        return self._get_subvolume_version(self.max_version)(fs, vol_spec, group, subvolname)
+    def get_subvolume_object_max(self, mgr, fs, vol_spec, group, subvolname):
+        return self._get_subvolume_version(self.max_version)(mgr, fs, vol_spec, group, subvolname)
 
     def upgrade_to_v2_subvolume(self, subvolume):
         # legacy mode subvolumes cannot be upgraded to v2
@@ -58,7 +58,7 @@ class SubvolumeLoader(object):
         if version >= SubvolumeV2.version():
             return
 
-        v1_subvolume = self._get_subvolume_version(version)(subvolume.fs, subvolume.vol_spec, subvolume.group, subvolume.subvolname)
+        v1_subvolume = self._get_subvolume_version(version)(subvolume.mgr, subvolume.fs, subvolume.vol_spec, subvolume.group, subvolume.subvolname)
         try:
             v1_subvolume.open(SubvolumeOpType.SNAP_LIST)
         except VolumeException as ve:
@@ -89,17 +89,17 @@ class SubvolumeLoader(object):
         # legacy is only upgradable to v1
         subvolume.init_config(SubvolumeV1.version(), subvolume_type, qpath, initial_state)
 
-    def get_subvolume_object(self, fs, vol_spec, group, subvolname, upgrade=True):
-        subvolume = SubvolumeBase(fs, vol_spec, group, subvolname)
+    def get_subvolume_object(self, mgr, fs, vol_spec, group, subvolname, upgrade=True):
+        subvolume = SubvolumeBase(mgr, fs, vol_spec, group, subvolname)
         try:
             subvolume.discover()
             self.upgrade_to_v2_subvolume(subvolume)
             version = int(subvolume.metadata_mgr.get_global_option('version'))
-            return self._get_subvolume_version(version)(fs, vol_spec, group, subvolname, legacy=subvolume.legacy_mode)
+            return self._get_subvolume_version(version)(mgr, fs, vol_spec, group, subvolname, legacy=subvolume.legacy_mode)
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT and upgrade:
                 self.upgrade_legacy_subvolume(fs, subvolume)
-                return self.get_subvolume_object(fs, vol_spec, group, subvolname, upgrade=False)
+                return self.get_subvolume_object(mgr, fs, vol_spec, group, subvolname, upgrade=False)
             else:
                 # log the actual error and generalize error string returned to user
                 log.error("error accessing subvolume metadata for '{0}' ({1})".format(subvolname, me))
