@@ -95,7 +95,7 @@ protected:
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
-  ~MClientRequest() override {}
+  ~MClientRequest() final {}
 
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }

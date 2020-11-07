@@ -25,7 +25,7 @@ protected:
   MMonQuorumService(int type, int head)
     : Message{type, head, 1}
   {}
-  ~MMonQuorumService() override { }
+  ~MMonQuorumService() override {}
 
 public:
   void set_epoch(epoch_t e) {

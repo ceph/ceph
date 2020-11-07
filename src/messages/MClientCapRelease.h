@@ -61,7 +61,7 @@ private:
   {
     memset(&head, 0, sizeof(head));
   }
-  ~MClientCapRelease() override {}
+  ~MClientCapRelease() final {}
 };
 
 #endif

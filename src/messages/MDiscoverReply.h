@@ -141,7 +141,7 @@ protected:
   {
     header.tid = 0;
   }
-  ~MDiscoverReply() override {}
+  ~MDiscoverReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "discover_reply"; }

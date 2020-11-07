@@ -36,7 +36,7 @@ public:
   { }
 
 private:
-  ~MMonCommand() override {}
+  ~MMonCommand() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_command"; }

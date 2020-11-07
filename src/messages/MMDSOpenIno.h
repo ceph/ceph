@@ -32,7 +32,7 @@ protected:
     if (pa)
       ancestors = *pa;
   }
-  ~MMDSOpenIno() override {}
+  ~MMDSOpenIno() final {}
 
 public:
   std::string_view get_type_name() const override { return "openino"; }

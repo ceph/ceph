@@ -51,7 +51,7 @@ public:
   }
 
 private:
-  ~MOSDPGQuery2() override {}
+  ~MOSDPGQuery2() final {}
 
 public:
   std::string_view get_type_name() const override {

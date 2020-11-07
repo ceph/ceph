@@ -96,7 +96,7 @@ public:
 protected:
   MMDSResolve() : MMDSOp{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
  {}
-  ~MMDSResolve() override {}
+  ~MMDSResolve() final {}
 
 public:
   std::string_view get_type_name() const override { return "mds_resolve"; }

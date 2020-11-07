@@ -33,7 +33,7 @@ public:
     : MOSDPGTemp(0)
   {}
 private:
-  ~MOSDPGTemp() override {}
+  ~MOSDPGTemp() final {}
 
 public:
   void encode_payload(uint64_t features) override {

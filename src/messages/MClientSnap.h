@@ -32,7 +32,7 @@ protected:
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
-  ~MClientSnap() override {}
+  ~MClientSnap() final {}
 
 public:  
   std::string_view get_type_name() const override { return "client_snap"; }

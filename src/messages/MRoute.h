@@ -39,7 +39,7 @@ public:
       msg(m),
       send_osdmap_first(0) {}
 private:
-  ~MRoute() override {
+  ~MRoute() final {
     if (msg)
       msg->put();
   }

@@ -172,7 +172,7 @@ public:
     min_last_complete_ondisk = rollback_to;
   }
 private:
-  ~MOSDRepOp() override {}
+  ~MOSDRepOp() final {}
 
 public:
   std::string_view get_type_name() const override { return "osd_repop"; }

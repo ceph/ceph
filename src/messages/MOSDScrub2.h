@@ -25,7 +25,7 @@ public:
     Message{MSG_OSD_SCRUB2, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), epoch(e), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
-  ~MOSDScrub2() override {}
+  ~MOSDScrub2() final {}
 
 public:
   std::string_view get_type_name() const override { return "scrub2"; }

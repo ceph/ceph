@@ -28,7 +28,7 @@ protected:
     PaxosServiceMessage{MSG_REMOVE_SNAPS, 0} {
     snaps.swap(s);
   }
-  ~MRemoveSnaps() override {}
+  ~MRemoveSnaps() final {}
 
 public:
   std::string_view get_type_name() const override { return "remove_snaps"; }

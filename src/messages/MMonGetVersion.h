@@ -54,7 +54,7 @@ public:
   std::string what;
 
 private:
-  ~MMonGetVersion() override {}
+  ~MMonGetVersion() final {}
 };
 
 #endif

@@ -45,7 +45,7 @@ private:
       return_code(0),
       notifier_gid(n) { }
 private:
-  ~MWatchNotify() override {}
+  ~MWatchNotify() final {}
 
 public:
   void decode_payload() override {

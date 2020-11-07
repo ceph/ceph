@@ -57,7 +57,7 @@ private:
       flags(extra_flags),
       epoch(e), failed_for(duration) { }
 private:
-  ~MOSDFailure() override {}
+  ~MOSDFailure() final {}
 
 public:
   int get_target_osd() { return target_osd; }

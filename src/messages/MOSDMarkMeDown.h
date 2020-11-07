@@ -39,7 +39,7 @@ private:
       fsid(fs), target_osd(osd), target_addrs(av),
       epoch(e), request_ack(request_ack) {}
  private:
-  ~MOSDMarkMeDown() override {}
+  ~MOSDMarkMeDown() final {}
 
 public: 
   epoch_t get_epoch() const { return epoch; }

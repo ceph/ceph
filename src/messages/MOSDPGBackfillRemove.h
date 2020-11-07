@@ -49,7 +49,7 @@ public:
       map_epoch(map_epoch) {}
 
 private:
-  ~MOSDPGBackfillRemove() {}
+  ~MOSDPGBackfillRemove() final {}
 
 public:
   std::string_view get_type_name() const override { return "backfill_remove"; }

@@ -81,7 +81,7 @@ public:
   }
 
 private:
-  ~MOSDPGLog() override {}
+  ~MOSDPGLog() final {}
 
 public:
   std::string_view get_type_name() const override { return "PGlog"; }

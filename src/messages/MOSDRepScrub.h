@@ -72,7 +72,7 @@ public:
 
 
 private:
-  ~MOSDRepScrub() override {}
+  ~MOSDRepScrub() final {}
 
 public:
   std::string_view get_type_name() const override { return "replica scrub"; }

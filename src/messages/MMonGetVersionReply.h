@@ -60,7 +60,7 @@ public:
   version_t oldest_version = 0;
 
 private:
-  ~MMonGetVersionReply() override {}
+  ~MMonGetVersionReply() final {}
 };
 
 #endif

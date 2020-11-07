@@ -54,7 +54,7 @@ protected:
     SafeMessage{CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION},
     uuid(_uuid), flags(_flags) {}
 private:
-  ~MClientReclaim() override {}
+  ~MClientReclaim() final {}
 
   std::string uuid;
   uint32_t flags = 0;

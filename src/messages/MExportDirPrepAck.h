@@ -36,7 +36,7 @@ protected:
     MMDSOp{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), success(s) {
     set_tid(tid);
   }
-  ~MExportDirPrepAck() override {}
+  ~MExportDirPrepAck() final {}
 
 public:  
   bool is_success() const { return success; }

@@ -47,7 +47,7 @@ protected:
     dirfrag(df),
     dn(n),
     is_primary(p) {}
-  ~MDentryLink() override {}
+  ~MDentryLink() final {}
 
 public:
   std::string_view get_type_name() const override { return "dentry_link";}

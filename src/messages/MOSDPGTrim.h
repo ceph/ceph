@@ -51,7 +51,7 @@ public:
     MOSDPeeringOp{MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION},
     epoch(mv), pgid(p), trim_to(tt) { }
 private:
-  ~MOSDPGTrim() override {}
+  ~MOSDPGTrim() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_trim"; }

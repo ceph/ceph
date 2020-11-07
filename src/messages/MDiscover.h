@@ -64,7 +64,7 @@ protected:
     want(want_path_),
     want_base_dir(want_base_dir_),
     path_locked(path_locked_) { }
-  ~MDiscover() override {}
+  ~MDiscover() final {}
 
 public:
   std::string_view get_type_name() const override { return "Dis"; }

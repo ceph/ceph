@@ -25,7 +25,7 @@ private:
       fsid(fs), target_osd(osd),
       epoch(e) {}
  private:
-  ~MOSDMarkMeDead() override {}
+  ~MOSDMarkMeDead() final {}
 
 public:
   epoch_t get_epoch() const { return epoch; }

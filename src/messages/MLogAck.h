@@ -32,7 +32,7 @@ public:
   MLogAck() : Message{MSG_LOGACK} {}
   MLogAck(uuid_d& f, version_t l) : Message{MSG_LOGACK}, fsid(f), last(l) {}
 private:
-  ~MLogAck() override {}
+  ~MLogAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "log_ack"; }

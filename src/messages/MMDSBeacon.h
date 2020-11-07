@@ -218,7 +218,7 @@ protected:
     mds_features(feat) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
-  ~MMDSBeacon() override {}
+  ~MMDSBeacon() final {}
 
 public:
   const uuid_d& get_fsid() const { return fsid; }

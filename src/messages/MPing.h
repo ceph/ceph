@@ -22,7 +22,7 @@ class MPing : public Message {
 public:
   MPing() : Message{CEPH_MSG_PING} {}
 private:
-  ~MPing() override {}
+  ~MPing() final {}
 
 public:
   void decode_payload() override { }

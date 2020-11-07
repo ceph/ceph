@@ -24,7 +24,7 @@ public:
   MPGStatsAck() : Message{MSG_PGSTATSACK} {}
 
 private:
-  ~MPGStatsAck() override {}
+  ~MPGStatsAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_stats_ack"; }

@@ -20,7 +20,7 @@ protected:
   MMDSPing(version_t seq)
     : MMDSOp(MSG_MDS_PING, HEAD_VERSION, COMPAT_VERSION), seq(seq) {
   }
-  ~MMDSPing() { }
+  ~MMDSPing() final {}
 
 public:
   std::string_view get_type_name() const override {

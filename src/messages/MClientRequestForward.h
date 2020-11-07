@@ -34,7 +34,7 @@ protected:
     ceph_assert(client_must_resend);
     header.tid = t;
   }
-  ~MClientRequestForward() override {}
+  ~MClientRequestForward() final {}
 
 public:
   int get_dest_mds() const { return dest_mds; }

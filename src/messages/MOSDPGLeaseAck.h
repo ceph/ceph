@@ -41,7 +41,7 @@ public:
     spgid(p),
     lease_ack(lease_ack) { }
 private:
-  ~MOSDPGLeaseAck() override {}
+  ~MOSDPGLeaseAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_lease_ack"; }

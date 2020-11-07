@@ -32,7 +32,7 @@ public:
 protected:
   MExportCaps() :
     MMDSOp{MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MExportCaps() override {}
+  ~MExportCaps() final {}
 
 public:
   std::string_view get_type_name() const override { return "export_caps"; }

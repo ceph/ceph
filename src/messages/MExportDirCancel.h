@@ -33,7 +33,7 @@ protected:
     MMDSOp{MSG_MDS_EXPORTDIRCANCEL, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df) {
     set_tid(tid);
   }
-  ~MExportDirCancel() override {}
+  ~MExportDirCancel() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExCancel"; }
