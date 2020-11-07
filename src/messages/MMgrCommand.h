@@ -19,7 +19,7 @@ public:
       fsid(f) { }
 
 private:
-  ~MMgrCommand() override {}
+  ~MMgrCommand() final {}
 
 public:
   std::string_view get_type_name() const override { return "mgr_command"; }

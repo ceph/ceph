@@ -17,7 +17,7 @@ public:
       start(s),
       last(l) {}
 private:
-  ~MMonGetPurgedSnapsReply() override {}
+  ~MMonGetPurgedSnapsReply() final {}
 
 public:
   std::string_view get_type_name() const override {

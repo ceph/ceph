@@ -36,7 +36,7 @@ public:
       inc_first(0),
       inc_last(0) { }
 private:
-  ~MMonGetOSDMap() override {}
+  ~MMonGetOSDMap() final {}
 
 public:
   void request_full(epoch_t first, epoch_t last) {

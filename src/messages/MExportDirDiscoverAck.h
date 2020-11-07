@@ -38,7 +38,7 @@ protected:
     dirfrag(df), success(s) {
     set_tid(tid);
   }
-  ~MExportDirDiscoverAck() override {}
+  ~MExportDirDiscoverAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExDisA"; }

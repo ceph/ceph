@@ -31,7 +31,7 @@ protected:
     MMDSOp{MSG_MDS_EXPORTDIRACK}, dirfrag(df) {
     set_tid(tid);
   }
-  ~MExportDirAck() override {}
+  ~MExportDirAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExAck"; }

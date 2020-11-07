@@ -68,7 +68,7 @@ protected:
   MCacheExpire(int f) :
     MMDSOp{MSG_MDS_CACHEEXPIRE},
     from(f) { }
-  ~MCacheExpire() override {}
+  ~MCacheExpire() final {}
 
 public:
   std::string_view get_type_name() const override { return "cache_expire";}

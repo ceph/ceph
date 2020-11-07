@@ -21,7 +21,7 @@ protected:
   MClientMetrics(std::vector<ClientMetricMessage> updates)
     : SafeMessage(CEPH_MSG_CLIENT_METRICS, HEAD_VERSION, COMPAT_VERSION), updates(updates) {
   }
-  ~MClientMetrics() { }
+  ~MClientMetrics() final {}
 
 public:
   std::string_view get_type_name() const override {

@@ -89,7 +89,7 @@ private:
     : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MOSDPing() override {}
+  ~MOSDPing() final {}
 
 public:
   void decode_payload() override {

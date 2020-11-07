@@ -57,7 +57,7 @@ public:
   }
 
 protected:
-  ~MDirUpdate() {}
+  ~MDirUpdate() final {}
   MDirUpdate() : MMDSOp(MSG_MDS_DIRUPDATE, HEAD_VERSION, COMPAT_VERSION) {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,

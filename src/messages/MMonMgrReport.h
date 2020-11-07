@@ -36,7 +36,7 @@ public:
     : PaxosServiceMessage{MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MMonMgrReport() override {}
+  ~MMonMgrReport() final {}
 
 public:
   std::string_view get_type_name() const override { return "monmgrreport"; }

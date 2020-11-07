@@ -34,7 +34,7 @@ protected:
     MMDSOp{MSG_MDS_SNAPUPDATE}, ino(i), snap_op(op) {
       set_tid(tid);
     }
-  ~MMDSSnapUpdate() override {}
+  ~MMDSSnapUpdate() final {}
 
 public:
   std::string_view get_type_name() const override { return "snap_update"; }

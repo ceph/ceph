@@ -45,7 +45,7 @@ protected:
     mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
 
-  ~MMDSMap() override {}
+  ~MMDSMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "mdsmap"; }

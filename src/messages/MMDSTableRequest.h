@@ -33,7 +33,7 @@ protected:
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }
-  ~MMDSTableRequest() override {}
+  ~MMDSTableRequest() final {}
 
 public:
   std::string_view get_type_name() const override { return "mds_table_request"; }

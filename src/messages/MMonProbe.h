@@ -71,7 +71,7 @@ public:
       required_features(0),
       mon_release{mr} {}
 private:
-  ~MMonProbe() override {}
+  ~MMonProbe() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_probe"; }

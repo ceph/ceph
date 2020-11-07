@@ -23,7 +23,7 @@ public:
   MMonGlobalID() : PaxosServiceMessage{MSG_MON_GLOBAL_ID, 0}
   {}
 private:
-  ~MMonGlobalID() override {}
+  ~MMonGlobalID() final {}
 
 public:
   std::string_view get_type_name() const override { return "global_id"; }

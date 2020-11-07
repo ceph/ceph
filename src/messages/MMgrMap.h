@@ -32,7 +32,7 @@ private:
   MMgrMap(const MgrMap &map_) :
     Message{MSG_MGR_MAP}, map(map_)
   {}
-  ~MMgrMap() override {}
+  ~MMgrMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "mgrmap"; }

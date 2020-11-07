@@ -33,7 +33,7 @@ public:
 private:
   MClientReconnect() :
     SafeMessage{CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MClientReconnect() override {}
+  ~MClientReconnect() final {}
 
   size_t cap_size = 0;
   size_t realm_size = 0;

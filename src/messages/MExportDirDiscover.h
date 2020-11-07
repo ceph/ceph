@@ -43,7 +43,7 @@ protected:
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }
-  ~MExportDirDiscover() override {}
+  ~MExportDirDiscover() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExDis"; }

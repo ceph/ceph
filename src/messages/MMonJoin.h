@@ -33,7 +33,7 @@ public:
   { }
   
 private:
-  ~MMonJoin() override {}
+  ~MMonJoin() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_join"; }

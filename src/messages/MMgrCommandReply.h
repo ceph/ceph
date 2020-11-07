@@ -23,7 +23,7 @@ public:
     : Message{MSG_MGR_COMMAND_REPLY},
       r(_r), rs(s) { }
 private:
-  ~MMgrCommandReply() override {}
+  ~MMgrCommandReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "mgr_command_reply"; }
