@@ -3272,10 +3272,11 @@ void PrimaryLogPG::dec_refcount(const hobject_t& soid, const object_ref_delta_t&
 }
 
 
-void PrimaryLogPG::get_adjacent_clones(const object_info_t& oi, OpContext* ctx, 
+void PrimaryLogPG::get_adjacent_clones(ObjectContextRef src_obc, 
 				       ObjectContextRef& _l, ObjectContextRef& _g) 
 {
-  const SnapSet& snapset = ctx->obc->ssc->snapset;
+  const SnapSet& snapset = src_obc->ssc->snapset;
+  const object_info_t& oi = src_obc->obs.oi;
 
   auto get_context = [this, &oi, &snapset](auto iter)
     -> ObjectContextRef {
@@ -3307,7 +3308,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
 {
   object_ref_delta_t refs;
   ObjectContextRef obc_l, obc_g;
-  get_adjacent_clones(ctx->obs->oi, ctx, obc_l, obc_g);
+  get_adjacent_clones(ctx->obc, obc_l, obc_g);
   set_chunk.calc_refs_to_inc_on_set(
     obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
     obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
@@ -3379,7 +3380,7 @@ void PrimaryLogPG::dec_all_refcount_manifest(const object_info_t& oi, OpContext*
   if (oi.manifest.is_chunked()) {
     object_ref_delta_t refs;
     ObjectContextRef obc_l, obc_g;
-    get_adjacent_clones(oi, ctx, obc_l, obc_g);
+    get_adjacent_clones(ctx->obc, obc_l, obc_g);
     oi.manifest.calc_refs_to_drop_on_removal(
       obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
       obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
@@ -10053,22 +10054,19 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
       // all operations are finished
       mop->new_chunk_map[p.first] = chunk_info;
       // skip if the same content exits in prev snap at same offset
-      if (obc->ssc->snapset.clones.size()) {
-	ObjectContextRef cobc = get_prev_clone_obc(obc);
-	if (cobc) {
-	  object_ref_delta_t refs;
-	  object_manifest_t set_chunk;
-	  set_chunk.chunk_map[p.first] = chunk_info;
-	  set_chunk.calc_refs_to_inc_on_set(
-	    &cobc->obs.oi.manifest,
-	    nullptr,
-	    refs);
-	  if (refs.is_empty()) {
-	    dout(15) << " found same chunk " << refs << dendl;
-	    continue;
-	  } 
-	}
-      }
+      object_ref_delta_t refs;
+      ObjectContextRef obc_l, obc_g;
+      object_manifest_t set_chunk;
+      set_chunk.chunk_map[p.first] = chunk_info;
+      get_adjacent_clones(obc, obc_l, obc_g);
+      set_chunk.calc_refs_to_inc_on_set(
+	obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
+	obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
+	refs);
+      if (refs.is_empty()) {
+	dout(15) << " found same chunk " << refs << dendl;
+	continue;
+      } 
 	
       // make a create_or_get_ref op
       bufferlist t;
@@ -10260,7 +10258,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     // CDC was done on entire range of manifest object,
     // so the first thing we should do here is to drop the reference to old chunks
     ObjectContextRef obc_l, obc_g;
-    get_adjacent_clones(ctx->obs->oi, ctx.get(), obc_l, obc_g);
+    get_adjacent_clones(obc, obc_l, obc_g);
     // clear all old references
     ctx->obs->oi.manifest.calc_refs_to_drop_on_removal(
       obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
