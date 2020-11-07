@@ -41,7 +41,7 @@ def subvolume_purge(volume_client, volname, trashcan, subvolume_trash_entry, sho
     try:
         with open_volume(volume_client, volname) as fs_handle:
             with open_group(fs_handle, volume_client.volspec, groupname) as group:
-                with open_subvol(fs_handle, volume_client.volspec, group, subvolname, SubvolumeOpType.REMOVE) as subvolume:
+                with open_subvol(volume_client.mgr, fs_handle, volume_client.volspec, group, subvolname, SubvolumeOpType.REMOVE) as subvolume:
                     log.debug("subvolume.path={0}, purgeable={1}".format(subvolume.path, subvolume.purgeable))
                     if not subvolume.purgeable:
                         return
