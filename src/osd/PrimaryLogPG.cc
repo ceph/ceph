@@ -10233,7 +10233,6 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
       return;    
     }
 
-    object_ref_delta_t refs;
     ctx->at_version = get_next_version();
     ctx->new_obs = obc->obs;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
@@ -10244,11 +10243,11 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     * 20:   [0, 2) ddd, [6, 2) bbb, [8, 2) ccc
     * 
     * In this case, if the new chunk_map is as follows,
-    * new_chunk_map : [0, 2) DDD, [6, 2) bbb, [8, 2) ccc
+    * new_chunk_map : [0, 2) ddd, [6, 2) bbb, [8, 2) ccc
     * we should drop aaa from head by using calc_refs_to_drop_on_removal().
     * So, the precedure is 
     * 	1. calc_refs_to_drop_on_removal()
-    * 	2. drop old references by dec_refcount()
+    * 	2. register old references to drop after tier_flush() is committed
     * 	3. update new chunk_map
     */
 
@@ -10260,6 +10259,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     ObjectContextRef obc_l, obc_g;
     get_adjacent_clones(obc, obc_l, obc_g);
     // clear all old references
+    object_ref_delta_t refs;
     ctx->obs->oi.manifest.calc_refs_to_drop_on_removal(
       obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
       obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
