@@ -14,13 +14,12 @@ alerting:
 {% endif %}
 scrape_configs:
   - job_name: 'ceph'
+    honor_labels: true
     static_configs:
     - targets:
 {% for mgr in mgr_scrape_list %}
       - '{{ mgr }}'
 {% endfor %}
-      labels:
-        instance: 'ceph_cluster'
 {% if nodes %}
   - job_name: 'node'
     static_configs:
