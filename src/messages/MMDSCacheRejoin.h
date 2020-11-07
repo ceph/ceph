@@ -346,7 +346,7 @@ private:
 
   MMDSCacheRejoin(int o) : MMDSCacheRejoin() { op = o; }
   MMDSCacheRejoin() : MMDSOp{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MMDSCacheRejoin() override {}
+  ~MMDSCacheRejoin() final {}
 };
 
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)

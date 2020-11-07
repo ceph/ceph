@@ -40,7 +40,7 @@ public:
     Message{MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
-  ~MOSDScrub() override {}
+  ~MOSDScrub() final {}
 
 public:
   std::string_view get_type_name() const override { return "scrub"; }

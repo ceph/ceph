@@ -42,7 +42,7 @@ protected:
     MMDSOp(MSG_MDS_DENTRYUNLINK, HEAD_VERSION, COMPAT_VERSION),
     dirfrag(df),
     dn(n) {}
-  ~MDentryUnlink() override {}
+  ~MDentryUnlink() final {}
 
 public:
   std::string_view get_type_name() const override { return "dentry_unlink";}

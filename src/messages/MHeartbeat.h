@@ -40,7 +40,7 @@ protected:
       load(load),
       beat(beat)
   {}
-  ~MHeartbeat() override {}
+  ~MHeartbeat() final {}
 
 public:
   std::string_view get_type_name() const override { return "HB"; }

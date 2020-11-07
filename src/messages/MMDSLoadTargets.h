@@ -33,7 +33,7 @@ protected:
   MMDSLoadTargets(mds_gid_t g, std::set<mds_rank_t>& mds_targets) :
     PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
-  ~MMDSLoadTargets() override {}
+  ~MMDSLoadTargets() final {}
 
 public:
   std::string_view get_type_name() const override { return "mds_load_targets"; }

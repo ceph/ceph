@@ -39,7 +39,7 @@ public:
 
   MMonSubscribe() : Message{CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION} { }
 private:
-  ~MMonSubscribe() override {}
+  ~MMonSubscribe() final {}
 
 public:
   void sub_want(const char *w, version_t start, unsigned flags) {

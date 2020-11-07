@@ -36,7 +36,7 @@ public:
 private:
   FSMapUser fsmap;
 
-  ~MFSMapUser() override {}
+  ~MFSMapUser() final {}
 
 public:
   std::string_view get_type_name() const override { return "fsmap.user"; }

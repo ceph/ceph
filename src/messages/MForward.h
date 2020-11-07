@@ -55,7 +55,7 @@ public:
     msg = (PaxosServiceMessage*)m->get();
   }
 private:
-  ~MForward() override {
+  ~MForward() final {
     if (msg) {
       // message was unclaimed
       msg->put();

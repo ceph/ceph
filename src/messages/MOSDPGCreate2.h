@@ -25,7 +25,7 @@ public:
     : Message{MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION},
       epoch(e) { }
 private:
-  ~MOSDPGCreate2() override {}
+  ~MOSDPGCreate2() final {}
 
 public:
   std::string_view get_type_name() const override {

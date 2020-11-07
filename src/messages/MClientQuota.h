@@ -14,7 +14,7 @@ protected:
     SafeMessage{CEPH_MSG_CLIENT_QUOTA},
     ino(0)
   {}
-  ~MClientQuota() override {}
+  ~MClientQuota() final {}
 
 public:
   std::string_view get_type_name() const override { return "client_quota"; }

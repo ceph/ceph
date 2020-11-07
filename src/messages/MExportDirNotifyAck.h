@@ -36,7 +36,7 @@ protected:
     MMDSOp{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), new_auth(na) {
     set_tid(tid);
   }
-  ~MExportDirNotifyAck() override {}
+  ~MExportDirNotifyAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExNotA"; }

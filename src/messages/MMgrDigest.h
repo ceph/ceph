@@ -47,7 +47,7 @@ public:
 private:
   MMgrDigest() :
     Message{MSG_MGR_DIGEST} {}
-  ~MMgrDigest() override {}
+  ~MMgrDigest() final {}
 
   using RefCountedObject::put;
   using RefCountedObject::get;

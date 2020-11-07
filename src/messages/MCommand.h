@@ -31,7 +31,7 @@ public:
       fsid(f) { }
 
 private:
-  ~MCommand() override {}
+  ~MCommand() final {}
 
 public:
   std::string_view get_type_name() const override { return "command"; }

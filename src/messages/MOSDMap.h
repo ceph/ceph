@@ -64,7 +64,7 @@ public:
       fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:
-  ~MOSDMap() override {}
+  ~MOSDMap() final {}
 public:
   // marshalling
   void decode_payload() override {
