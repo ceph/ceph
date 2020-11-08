@@ -9,9 +9,12 @@
 #include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/Operations.h"
 #include "librbd/Watcher.h"
 #include "librbd/WatchNotifyTypes.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/internal.h"
+#include <functional>
 #include <set>
 #include <string>
 #include <utility>
@@ -240,6 +243,12 @@ private:
   void notify_quiesce(const watch_notify::AsyncRequestId &async_request_id,
                       size_t attempts, ProgressContext &prog_ctx,
                       Context *on_finish);
+
+  bool handle_operation_request(
+    const watch_notify::AsyncRequestId& async_request_id,
+    exclusive_lock::OperationRequestType request_type, Operation operation,
+    std::function<void(ProgressContext &prog_ctx, Context*)> execute,
+    C_NotifyAck *ack_ctx);
 
   bool handle_payload(const watch_notify::HeaderUpdatePayload& payload,
                       C_NotifyAck *ctx);
