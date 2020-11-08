@@ -2181,7 +2181,13 @@ int ECBackend::objects_read_sync(
   uint32_t op_flags,
   bufferlist *bl)
 {
-  return -EOPNOTSUPP;
+  return store->read(
+    ch,
+    ghobject_t(
+      hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    off,
+    len, *bl,
+    op_flags);
 }
 
 void ECBackend::objects_read_async(
