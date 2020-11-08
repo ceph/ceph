@@ -21,11 +21,9 @@
 
 #include "rgw_sal.h"
 
-#define dout_subsys ceph_subsys_rgw
 
 #define RGW_ORPHAN_INDEX_OID "orphan.index"
 #define RGW_ORPHAN_INDEX_PREFIX "orphan.scan"
-
 
 enum RGWOrphanSearchStageId {
   ORPHAN_SEARCH_STAGE_UNKNOWN = 0,

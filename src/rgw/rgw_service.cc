@@ -104,12 +104,12 @@ int RGWServices_Def::init(CephContext *cct,
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());
-  sysobj_core->core_init(rados.get(), zone.get());
+  sysobj_core->core_init(&rgwrados->neorados(), zone.get());
   if (have_cache) {
-    sysobj_cache->init(rados.get(), zone.get(), notify.get());
-    sysobj->init(rados.get(), sysobj_cache.get());
+    sysobj_cache->init(&rgwrados->neorados(), zone.get(), notify.get());
+    sysobj->init(&rgwrados->neorados(), sysobj_cache.get());
   } else {
-    sysobj->init(rados.get(), sysobj_core.get());
+    sysobj->init(&rgwrados->neorados(), sysobj_core.get());
   }
   user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
@@ -435,4 +435,3 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
 
   return 0;
 }
-

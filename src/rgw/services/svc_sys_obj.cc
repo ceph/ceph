@@ -111,19 +111,19 @@ int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
   return svc->set_attrs(obj, m, nullptr, objv_tracker, y);
 }
 
-int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, std::function<void(const string&)> cb)
+int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, std::function<void(const string&)> cb, optional_yield y)
 {
-  return core_svc->pool_list_prefixed_objs(pool, prefix, cb);
+  return core_svc->pool_list_prefixed_objs(pool, prefix, cb, y);
 }
 
-int RGWSI_SysObj::Pool::Op::init(const string& marker, const string& prefix)
+int RGWSI_SysObj::Pool::Op::init(const string& marker, const string& prefix, optional_yield y)
 {
-  return source.core_svc->pool_list_objects_init(source.pool, marker, prefix, &ctx);
+  return source.core_svc->pool_list_objects_init(source.pool, marker, prefix, &ctx, y);
 }
 
-int RGWSI_SysObj::Pool::Op::get_next(int max, vector<string> *oids, bool *is_truncated)
+int RGWSI_SysObj::Pool::Op::get_next(int max, vector<string> *oids, bool *is_truncated, optional_yield y)
 {
-  return source.core_svc->pool_list_objects_next(ctx, max, oids, is_truncated);
+  return source.core_svc->pool_list_objects_next(ctx, max, oids, is_truncated, y);
 }
 
 int RGWSI_SysObj::Pool::Op::get_marker(string *marker)

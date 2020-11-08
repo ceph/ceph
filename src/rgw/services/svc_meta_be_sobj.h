@@ -161,10 +161,10 @@ public:
                    RGWObjVersionTracker *objv_tracker,
                    optional_yield y) override;
 
-  int list_init(RGWSI_MetaBackend::Context *_ctx, const string& marker) override;
+  int list_init(RGWSI_MetaBackend::Context *_ctx, const string& marker, optional_yield y) override;
   int list_next(RGWSI_MetaBackend::Context *_ctx,
                 int max, list<string> *keys,
-                bool *truncated) override;
+                bool *truncated, optional_yield y) override;
   int list_get_marker(RGWSI_MetaBackend::Context *ctx,
                       string *marker) override;
 

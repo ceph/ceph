@@ -324,7 +324,7 @@ void RGWOp_Realm_List::execute(optional_yield y)
     RGWRealm realm(store->ctx(), store->svc()->sysobj);
     [[maybe_unused]] int ret = realm.read_default_id(default_id, y);
   }
-  op_ret = store->svc()->zone->list_realms(realms);
+  op_ret = store->svc()->zone->list_realms(realms, null_yield);
   if (op_ret < 0)
     lderr(store->ctx()) << "failed to list realms" << dendl;
 }

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "common/RWLock.h"
+
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_cache.h"
 
@@ -16,7 +18,7 @@ class RGWSI_SysObj_Cache_ASocketHook;
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
   friend class RGWSI_SysObj_Cache_CB;
-  friend class RGWServices_Def;
+  friend struct RGWServices_Def;
   friend class ASocketHandler;
 
   RGWSI_Notify *notify_svc{nullptr};
@@ -26,10 +28,10 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 
   void normalize_pool_and_obj(const rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 protected:
-  void init(RGWSI_RADOS *_rados_svc,
+  void init(nr::RADOS* _rados,
             RGWSI_Zone *_zone_svc,
             RGWSI_Notify *_notify_svc) {
-    core_init(_rados_svc, _zone_svc);
+    core_init(_rados, _zone_svc);
     notify_svc = _notify_svc;
   }
 
@@ -55,11 +57,11 @@ protected:
   int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest,
                optional_yield y) override;
 
-  int set_attrs(const rgw_raw_obj& obj, 
+  int set_attrs(const rgw_raw_obj& obj,
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist> *rmattrs,
                 RGWObjVersionTracker *objv_tracker,
-                optional_yield y);
+                optional_yield y) override;
 
   int remove(RGWSysObjectCtxBase& obj_ctx,
              RGWObjVersionTracker *objv_tracker,
@@ -79,7 +81,7 @@ protected:
                  const bufferlist& bl,
                  bool exclusive,
                  RGWObjVersionTracker *objv_tracker,
-                 optional_yield y);
+                 optional_yield y) override;
 
   int distribute_cache(const string& normal_name, const rgw_raw_obj& obj,
                        ObjectCacheInfo& obj_info, int op,

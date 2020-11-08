@@ -46,6 +46,8 @@
 #include "cls/version/cls_version_client.h"
 #include "osd/osd_types.h"
 
+#include "neorados/cls/version.h"
+
 #include "rgw_tools.h"
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
@@ -106,6 +108,8 @@ namespace ba = boost::asio;
 namespace bc = boost::container;
 namespace bs = boost::system;
 namespace ca = ceph::async;
+namespace nr = neorados;
+namespace nrcv = neorados::cls::version;
 
 using namespace librados;
 
@@ -180,6 +184,17 @@ void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation *op)
   cls_version_read(*op, &read_version);
 }
 
+void RGWObjVersionTracker::prepare_op_for_read(nr::ReadOp& op)
+{
+  obj_version *check_objv = version_for_check();
+
+  if (check_objv) {
+    nrcv::check(op, *check_objv, VER_COND_EQ);
+  }
+
+  nrcv::read(op, &read_version);
+}
+
 void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
 {
   obj_version *check_objv = version_for_check();
@@ -193,6 +208,22 @@ void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
     cls_version_set(*op, *modify_version);
   } else {
     cls_version_inc(*op);
+  }
+}
+
+void RGWObjVersionTracker::prepare_op_for_write(nr::WriteOp& op)
+{
+  obj_version *check_objv = version_for_check();
+  obj_version *modify_version = version_for_write();
+
+  if (check_objv) {
+    nrcv::check(op, *check_objv, VER_COND_EQ);
+  }
+
+  if (modify_version) {
+    nrcv::set(op, *modify_version);
+  } else {
+    nrcv::inc(op);
   }
 }
 

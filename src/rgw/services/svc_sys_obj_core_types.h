@@ -5,32 +5,33 @@
 
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_tools.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
 
 
-
 struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
-  RGWSI_RADOS::Obj rados_obj;
+  neo_obj_ref rados_obj;
   bool has_rados_obj{false};
   uint64_t last_ver{0};
 
   RGWSI_SysObj_Core_GetObjState() {}
 
-  int get_rados_obj(RGWSI_RADOS *rados_svc,
+  int get_rados_obj(nr::RADOS* rados,
                     RGWSI_Zone *zone_svc,
                     const rgw_raw_obj& obj,
-                    RGWSI_RADOS::Obj **pobj);
+                    neo_obj_ref** pobj,
+		    optional_yield y);
 };
 
 struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
-  RGWSI_RADOS::Pool pool;
-  RGWSI_RADOS::Pool::List op;
+  nr::RADOS* rados;
+  nr::IOContext pool;
+  nr::Cursor cursor = nr::Cursor::begin();
   RGWAccessListFilter filter;
 
-  RGWSI_SysObj_Core_PoolListImplInfo(std::string prefix)
-    : filter(RGWAccessListFilterPrefix(std::move(prefix))) {}
+  RGWSI_SysObj_Core_PoolListImplInfo(nr::RADOS* rados, std::string prefix)
+    : rados(rados), filter(RGWAccessListFilterPrefix(std::move(prefix))) {}
 };
 
 struct RGWSysObjState {
@@ -70,7 +71,6 @@ struct RGWSysObjState {
     objv_tracker = rhs.objv_tracker;
   }
 };
-
 
 class RGWSysObjectCtxBase {
   std::map<rgw_raw_obj, RGWSysObjState> objs_state;

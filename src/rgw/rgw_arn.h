@@ -5,7 +5,7 @@
 #include <string>
 #include <boost/optional.hpp>
 
-class rgw_obj;
+struct rgw_obj;
 class rgw_bucket;
 
 namespace rgw {

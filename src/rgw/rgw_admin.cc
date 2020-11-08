@@ -3984,7 +3984,7 @@ int main(int argc, const char **argv)
     case OPT::PERIOD_LIST:
       {
 	list<string> periods;
-	int ret = store->svc()->zone->list_periods(periods);
+	int ret = store->svc()->zone->list_periods(periods, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to list periods: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4211,7 +4211,7 @@ int main(int argc, const char **argv)
 	  cerr << "could not determine default realm: " << cpp_strerror(-ret) << std::endl;
 	}
 	list<string> realms;
-	ret = store->svc()->zone->list_realms(realms);
+	ret = store->svc()->zone->list_realms(realms, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to list realms: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4567,7 +4567,7 @@ int main(int argc, const char **argv)
 	}
 
 	list<string> zonegroups;
-	ret = store->svc()->zone->list_zonegroups(zonegroups);
+	ret = store->svc()->zone->list_zonegroups(zonegroups, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4991,7 +4991,7 @@ int main(int argc, const char **argv)
 	}
 
         list<string> zonegroups;
-	ret = store->svc()->zone->list_zonegroups(zonegroups);
+	ret = store->svc()->zone->list_zonegroups(zonegroups, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -5117,7 +5117,7 @@ int main(int argc, const char **argv)
     case OPT::ZONE_LIST:
       {
 	list<string> zones;
-	int ret = store->svc()->zone->list_zones(zones);
+	int ret = store->svc()->zone->list_zones(zones, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
