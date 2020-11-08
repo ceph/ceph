@@ -5458,24 +5458,29 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   } else if (pool.info.is_erasure()) {
     // The initialisation below is required to silence a false positive
     // -Wmaybe-uninitialized warning
-    std::optional<uint32_t> maybe_crc;
-    // If there is a data digest and it is possible we are reading
-    // entire object, pass the digest.  FillInVerifyExtent will
-    // will check the oi.size again.
-    if (oi.is_data_digest() && op.extent.offset == 0 &&
-        op.extent.length >= oi.size)
-      maybe_crc = oi.data_digest;
-    ctx->pending_async_reads.push_back(
-      make_pair(
-        boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-        make_pair(&osd_op.outdata,
-		  new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
-					 &osd_op.outdata, maybe_crc, oi.size,
-					 osd, soid, op.flags))));
-    dout(10) << " async_read noted for " << soid << dendl;
+    if(osd_op.op.op != CEPH_OSD_OP_SYNC_READ) {
+      std::optional<uint32_t> maybe_crc;
+      // If there is a data digest and it is possible we are reading
+      // entire object, pass the digest.  FillInVerifyExtent will
+      // will check the oi.size again.
+      if (oi.is_data_digest() && op.extent.offset == 0 &&
+          op.extent.length >= oi.size)
+        maybe_crc = oi.data_digest;
+      ctx->pending_async_reads.push_back(
+        make_pair(
+          boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+          make_pair(&osd_op.outdata,
+                   new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
+                                          &osd_op.outdata, maybe_crc, oi.size,
+                                          osd, soid, op.flags))));
+      dout(10) << " async_read noted for " << soid << dendl;
 
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
+      ctx->op_finishers[ctx->current_osd_subop_num].reset(
+        new ReadFinisher(osd_op));
+    } else {
+      result = pgbackend->objects_read_sync(
+      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -5706,8 +5711,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_SYNC_READ:
       if (pool.info.is_erasure()) {
-	result = -EOPNOTSUPP;
-	break;
+        result = do_read(ctx, osd_op);
+        break;
       }
       // fall through
     case CEPH_OSD_OP_READ:
