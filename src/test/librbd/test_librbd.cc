@@ -8781,6 +8781,156 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
   ASSERT_EQ(0, image.close());
 }
 
+TEST_F(TestLibRBD, ConcurentOperations)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  // Test creating/removing many snapshots simultaneously
+
+  std::vector<librbd::Image> images(10);
+  std::vector<librbd::RBD::AioCompletion *> comps;
+
+  for (auto &image : images) {
+    auto comp = new librbd::RBD::AioCompletion(NULL, NULL);
+    ASSERT_EQ(0, rbd.aio_open(ioctx, image, name.c_str(), NULL, comp));
+    comps.push_back(comp);
+  }
+
+  for (auto &comp : comps) {
+    ASSERT_EQ(0, comp->wait_for_complete());
+    ASSERT_EQ(1, comp->is_complete());
+    ASSERT_EQ(0, comp->get_return_value());
+    comp->release();
+  }
+  comps.clear();
+
+  std::vector<std::thread> threads;
+  int i = 0;
+  for (auto &image : images) {
+    std::string snap_name = "snap" + stringify(i++);
+    threads.emplace_back([&image, snap_name]() {
+      int r = image.snap_create(snap_name.c_str());
+      ceph_assert(r == 0);
+    });
+  }
+
+  for (auto &t : threads) {
+    t.join();
+  }
+  threads.clear();
+
+  i = 0;
+  for (auto &image : images) {
+    std::string snap_name = "snap" + stringify(i++);
+    threads.emplace_back([&image, snap_name](){
+      int r = image.snap_remove(snap_name.c_str());
+      ceph_assert(r == 0);
+    });
+  }
+
+  for (auto &t : threads) {
+    t.join();
+  }
+  threads.clear();
+
+  for (auto &image : images) {
+    auto comp = new librbd::RBD::AioCompletion(NULL, NULL);
+    ASSERT_EQ(0, image.aio_close(comp));
+    comps.push_back(comp);
+  }
+
+  for (auto &comp : comps) {
+    ASSERT_EQ(0, comp->wait_for_complete());
+    ASSERT_EQ(1, comp->is_complete());
+    ASSERT_EQ(0, comp->get_return_value());
+    comp->release();
+  }
+  comps.clear();
+
+  // Test shutdown
+  {
+    librbd::Image image1, image2, image3;
+    ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+    ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+    ASSERT_EQ(0, rbd.open(ioctx, image3, name.c_str(), NULL));
+
+    ASSERT_EQ(0, image1.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE));
+
+    struct Watcher : public librbd::QuiesceWatchCtx {
+      size_t count = 0;
+
+      ceph::mutex lock = ceph::make_mutex("lock");
+      ceph::condition_variable cv;
+
+      void handle_quiesce() override {
+        std::unique_lock locker(lock);
+        count++;
+        cv.notify_one();
+      }
+
+      void handle_unquiesce() override {
+      }
+
+      bool wait_for_quiesce(size_t c) {
+        std::unique_lock locker(lock);
+        return cv.wait_for(locker, seconds(60),
+                           [this, c]() { return count >= c; });
+      }
+    } watcher;
+    uint64_t handle;
+    ASSERT_EQ(0, image2.quiesce_watch(&watcher, &handle));
+
+    std::thread create_snap1([&image1]() {
+      int r = image1.snap_create("snap1");
+      ceph_assert(r == 0);
+      r = image1.close();
+      ceph_assert(r == 0);
+    });
+
+    ASSERT_TRUE(watcher.wait_for_quiesce(1));
+
+    std::thread create_snap2([&image2]() {
+      int r = image2.snap_create("snap2");
+      ceph_assert(r == 0);
+    });
+
+    std::thread create_snap3([&image3]() {
+      int r = image3.snap_create("snap3");
+      ceph_assert(r == 0);
+    });
+
+    image2.quiesce_complete(handle, 0);
+
+    ASSERT_TRUE(watcher.wait_for_quiesce(2));
+    image2.quiesce_complete(handle, 0);
+
+    create_snap1.join();
+
+    ASSERT_TRUE(watcher.wait_for_quiesce(3));
+    image2.quiesce_complete(handle, 0);
+
+    create_snap2.join();
+    create_snap3.join();
+
+    ASSERT_EQ(0, image2.quiesce_unwatch(handle));
+    ASSERT_EQ(0, image2.snap_remove("snap1"));
+    ASSERT_EQ(0, image2.snap_remove("snap2"));
+    ASSERT_EQ(0, image2.snap_remove("snap3"));
+  }
+
+  ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
+  ioctx.close();
+}
+
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
