@@ -684,8 +684,14 @@ bool HealthMonitor::check_leader_health()
 
   health_check_map_t next;
 
+  static utime_t old_version_first_time;
+
  // DAEMON_OLD_VERSION
   if (g_conf().get_val<bool>("mon_warn_on_older_version")) {
+    utime_t now = ceph_clock_now();
+    if (old_version_first_time == utime_t())
+      old_version_first_time = now;
+    if ((now - old_version_first_time) > g_conf().get_val<double>("mon_warn_older_version_delay")) {
   std::map<string, std::list<string> > all_versions;
   mon->get_all_versions(all_versions);
   if (all_versions.size() > 1) {
@@ -720,6 +726,9 @@ bool HealthMonitor::check_leader_health()
          << " running an older version of ceph: " << g.first;
       d.detail.push_back(ds.str());
     }
+  } else {
+    old_version_first_time = utime_t();
+  }
   }
   }
 
