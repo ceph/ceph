@@ -506,10 +506,7 @@ set(CEPH_TEST_TIMEOUT 3600 CACHE STRING
 
 # fio
 option(WITH_FIO "build with fio plugin enabled" OFF)
-option(WITH_SYSTEM_FIO "require and build with system fio" OFF)
-if(WITH_SYSTEM_FIO)
-  find_package(fio REQUIRED)
-elseif(WITH_FIO)
+if(WITH_FIO)
   if (NOT FIO_INCLUDE_DIR)
     # Use local external fio if include directory is not set
     set(FIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/src/fio)
