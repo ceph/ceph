@@ -13,10 +13,10 @@ from . import batch
 
 class LVM(object):
 
-    help = 'Use LVM and LVM-based technologies like dmcache to deploy OSDs'
+    help = 'Use LVM and LVM-based technologies to deploy OSDs'
 
     _help = dedent("""
-    Use LVM and LVM-based technologies like dmcache to deploy OSDs
+    Use LVM and LVM-based technologies to deploy OSDs
 
     {sub_help}
     """)
