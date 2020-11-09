@@ -1235,6 +1235,9 @@ void Monitor::bootstrap()
     dout(10) << "bootstrap -- finished compaction" << dendl;
   }
 
+  // stretch mode bits
+  set_elector_disallowed_leaders(false);
+
   // singleton monitor?
   if (monmap->size() == 1 && rank == 0) {
     win_standalone_election();
@@ -2578,7 +2581,7 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     f->dump_string("mon", *p);
   f->close_section(); // quorum_names
 
-  f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(*quorum.begin()));
+  f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(leader));
 
   if (!quorum.empty()) {
     f->dump_int(
@@ -2674,6 +2677,7 @@ void Monitor::get_mon_status(Formatter *f)
   f->close_section();
 
   f->dump_object("feature_map", session_map.feature_map);
+  f->dump_bool("stretch_mode", stretch_mode_engaged);
   f->close_section(); // mon_status
 }
 
@@ -6449,6 +6453,16 @@ void Monitor::notify_new_monmap()
     maybe_engage_stretch_mode();
   }
 
+  if (is_stretch_mode()) {
+    if (!monmap->stretch_marked_down_mons.empty()) {
+      set_degraded_stretch_mode();
+    }
+  }
+  set_elector_disallowed_leaders(true);
+}
+
+void Monitor::set_elector_disallowed_leaders(bool allow_election)
+{
   set<int> dl;
   for (auto name : monmap->disallowed_leaders) {
     dl.insert(monmap->get_rank(name));
@@ -6457,12 +6471,13 @@ void Monitor::notify_new_monmap()
     for (auto name : monmap->stretch_marked_down_mons) {
       dl.insert(monmap->get_rank(name));
     }
-    if (!monmap->stretch_marked_down_mons.empty()) {
-      set_degraded_stretch_mode();
-    }
     dl.insert(monmap->get_rank(monmap->tiebreaker_mon));
   }
-  elector.set_disallowed_leaders(dl);
+
+  bool disallowed_changed = elector.set_disallowed_leaders(dl);
+  if (disallowed_changed && allow_election) {
+    elector.call_election();
+  }
 }
 
 struct CMonEnableStretchMode : public Context {
