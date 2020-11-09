@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -17,7 +17,7 @@ import { TaskManagerService } from '../../../shared/services/task-manager.servic
   templateUrl: './rbd-snapshot-form-modal.component.html',
   styleUrls: ['./rbd-snapshot-form-modal.component.scss']
 })
-export class RbdSnapshotFormModalComponent implements OnInit {
+export class RbdSnapshotFormModalComponent {
   poolName: string;
   namespace: string;
   imageName: string;
@@ -29,7 +29,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
   action: string;
   resource: string;
 
-  public onSubmit: Subject<string>;
+  public onSubmit: Subject<string> = new Subject();
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -49,10 +49,6 @@ export class RbdSnapshotFormModalComponent implements OnInit {
         validators: [Validators.required]
       })
     });
-  }
-
-  ngOnInit() {
-    this.onSubmit = new Subject();
   }
 
   setSnapName(snapName: string) {
