@@ -5,6 +5,10 @@ function(build_fio)
   if(ALLOCATOR)
     set(FIO_EXTLIBS EXTLIBS=-l${ALLOCATOR})
   endif()
+
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
+
   ExternalProject_Add(fio_ext
     DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
     UPDATE_COMMAND "" # this disables rebuild on each run
@@ -15,6 +19,6 @@ function(build_fio)
     SOURCE_DIR ${CMAKE_BINARY_DIR}/src/fio
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
-    BUILD_COMMAND $(MAKE) fio EXTFLAGS=-Wno-format-truncation ${FIO_EXTLIBS}
+    BUILD_COMMAND ${make_cmd} fio EXTFLAGS=-Wno-format-truncation ${FIO_EXTLIBS}
     INSTALL_COMMAND cp <BINARY_DIR>/fio ${CMAKE_BINARY_DIR}/bin)
 endfunction()
