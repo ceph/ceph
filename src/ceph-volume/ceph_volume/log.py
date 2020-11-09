@@ -7,7 +7,7 @@ BASE_FORMAT = "[%(name)s][%(levelname)-6s] %(message)s"
 FILE_FORMAT = "[%(asctime)s]" + BASE_FORMAT
 
 
-def setup(name='ceph-volume.log', log_path=None):
+def setup(name='ceph-volume.log', log_path=None, log_level=None):
     log_path = log_path or conf.log_path
     # if a non-root user calls help or other no-sudo-required command the
     # logger will fail to write to /var/lib/ceph/ so this /tmp/ path is used as
@@ -16,8 +16,9 @@ def setup(name='ceph-volume.log', log_path=None):
     root_logger = logging.getLogger()
     # The default path is where all ceph log files are, and will get rotated by
     # Ceph's logrotate rules.
-
-    root_logger.setLevel(logging.DEBUG)
+    log_level = log_level or "DEBUG"
+    log_level = getattr(logging, log_level.upper())
+    root_logger.setLevel(log_level)
 
     try:
         fh = logging.FileHandler(log_path)
@@ -27,7 +28,7 @@ def setup(name='ceph-volume.log', log_path=None):
         conf.log_path = tmp_log_file
         fh = logging.FileHandler(tmp_log_file)
 
-    fh.setLevel(logging.DEBUG)
+    fh.setLevel(log_level)
     fh.setFormatter(logging.Formatter(FILE_FORMAT))
 
     root_logger.addHandler(fh)
