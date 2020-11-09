@@ -36,6 +36,8 @@ export class SmartListComponent implements OnInit, OnChanges {
 
   smartDataColumns: CdTableColumn[];
 
+  isEmpty = _.isEmpty;
+
   constructor(private osdService: OsdService, private hostService: HostService) {}
 
   isSmartError(data: any): data is SmartError {
@@ -143,10 +145,6 @@ smartmontools is required to successfully retrieve data.`;
         }
       });
     }
-  }
-
-  isEmpty(value: any) {
-    return _.isEmpty(value);
   }
 
   ngOnInit() {
