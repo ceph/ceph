@@ -157,16 +157,17 @@ download_liburing 0.7 8e2842cfe947f3a443af301bdd6d034455536c38a455c7a700d0c1ad16
                   https://git.kernel.dk/cgit/liburing/snapshot
 build_dashboard_frontend
 generate_rook_ceph_client
-tar --concatenate -f $outfile.all.tar $outfile.version.tar
-tar --concatenate -f $outfile.all.tar $outfile.boost.tar
-tar --concatenate -f $outfile.all.tar $outfile.liburing.tar
-tar --concatenate -f $outfile.all.tar $outfile.tar
-tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
-tar --concatenate -f $outfile.all.tar rook_ceph_client.tar
+for tarball in $outfile.version   \
+               $outfile.boost     \
+               $outfile.liburing  \
+               dashboard_frontend \
+               rook_ceph_client   \
+               $outfile; do
+    tar --concatenate -f $outfile.all.tar $tarball.tar
+    rm $tarball.tar
+done
 mv $outfile.all.tar $outfile.tar
 rm $outfile
-rm -f $outfile.version.tar
-rm -f $outfile.boost.tar
 
 echo "compressing..."
 bzip2 -9 $outfile.tar
