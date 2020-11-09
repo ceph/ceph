@@ -28,8 +28,8 @@ export class DocService {
     const sections = {
       iscsi: `${domain}ses-admin/#dashboard-iscsi-management`,
       prometheus: `${domain}ses-deployment/#deploy-cephadm-day2-service-monitoring`,
-      'nfs-ganesha': `${domain}ses-admin/#ceph-nfsganesha-config`,
-      'rgw-nfs': `${domain}ses-admin/#ceph-nfsganesha-config-service-rgw`,
+      'nfs-ganesha': `${domain}ses-admin/#cha-ceph-nfsganesha`,
+      'rgw-nfs': `${domain}ses-admin/#ganesha-rgw-supported-operations`,
       rgw: `${domain}ses-admin/#dashboard-ogw-enabling`,
       dashboard: `${domain}ses-admin/#dashboard-initial-configuration`,
       grafana: `${domain}ses-deployment/#deploy-cephadm-day2-service-monitoring`,
