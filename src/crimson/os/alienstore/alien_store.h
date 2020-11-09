@@ -111,7 +111,6 @@ public:
     CollectionRef ch,
     const ghobject_t& oid) final;
 
-  static void configure_thread_memory();
 private:
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
