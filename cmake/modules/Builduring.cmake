@@ -2,13 +2,21 @@ function(build_uring)
   include(FindMake)
   find_make("MAKE_EXECUTABLE" "make_cmd")
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/src/liburing/configure")
+    set(source_dir_args
+      SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/liburing")
+  else()
+    set(source_dir_args
+      SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
+      GIT_REPOSITORY https://git.kernel.dk/liburing
+      GIT_TAG "liburing-0.7"
+      GIT_SHALLOW TRUE
+      UPDATE_DISCONNECTED TRUE)
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(liburing_ext
-    GIT_REPOSITORY https://git.kernel.dk/liburing
-    GIT_TAG "liburing-0.7"
-    GIT_SHALLOW TRUE
-    UPDATE_DISCONNECTED TRUE
-    SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
+    ${source_dir_args}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
     BUILD_COMMAND env CC=${CMAKE_C_COMPILER} ${make_cmd} -C src -s
     BUILD_IN_SOURCE 1
