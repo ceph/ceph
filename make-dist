@@ -76,6 +76,25 @@ download_boost() {
     rm -rf src/boost
 }
 
+download_liburing() {
+    liburing_version=$1
+    shift
+    liburing_sha256=$1
+    shift
+    liburing_fname=liburing-${liburing_version}.tar.gz
+    download_from $liburing_fname $liburing_sha256 $*
+    tar xzf $liburing_fname -C src  \
+        --exclude=debian \
+        --exclude=examples \
+        --exclude=man \
+        --exclude=test
+    # normalize the names, liburing-0.7 if downloaded from git.kernel.dk,
+    # liburing-liburing-0.7 from github.com
+    mv src/liburing-* src/liburing
+    tar cf ${outfile}.liburing.tar ${outfile}/src/liburing
+    rm -rf src/liburing
+}
+
 build_dashboard_frontend() {
   CURR_DIR=`pwd`
   TEMP_DIR=`mktemp -d`
@@ -133,11 +152,14 @@ download_boost $boost_version 4eb3b8d442b426dc35346235c8733b5ae35ba431690e38c6a8
                https://dl.bintray.com/boostorg/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
-
+download_liburing 0.7 8e2842cfe947f3a443af301bdd6d034455536c38a455c7a700d0c1ad165a7543 \
+                  https://github.com/axboe/liburing/archive \
+                  https://git.kernel.dk/cgit/liburing/snapshot
 build_dashboard_frontend
 generate_rook_ceph_client
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar
+tar --concatenate -f $outfile.all.tar $outfile.liburing.tar
 tar --concatenate -f $outfile.all.tar $outfile.tar
 tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
 tar --concatenate -f $outfile.all.tar rook_ceph_client.tar
