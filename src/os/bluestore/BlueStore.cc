@@ -718,6 +718,16 @@ public:
   virtual void upper_bound(const ghobject_t &oid) = 0;
   virtual void next() = 0;
 
+  virtual int cmp(const ghobject_t &oid) const = 0;
+
+  bool is_ge(const ghobject_t &oid) const {
+    return cmp(oid) >= 0;
+  }
+
+  bool is_lt(const ghobject_t &oid) const {
+    return cmp(oid) < 0;
+  }
+
 protected:
   KeyValueDB::Iterator m_it;
 };
@@ -759,6 +769,15 @@ public:
 
     m_it->next();
     get_oid();
+  }
+
+  int cmp(const ghobject_t &oid) const override {
+    ceph_assert(valid());
+
+    string key;
+    get_object_key(m_cct, oid, &key);
+
+    return m_it->key().compare(key);
   }
 
 private:
@@ -834,6 +853,18 @@ public:
     if (m_chunk_iter == m_chunk.end()) {
       get_next_chunk();
     }
+  }
+
+  int cmp(const ghobject_t &oid) const override {
+    ceph_assert(valid());
+
+    if (this->oid() < oid) {
+      return -1;
+    }
+    if (this->oid() > oid) {
+      return 1;
+    }
+    return 0;
   }
 
 private:
@@ -10063,14 +10094,14 @@ int BlueStore::_collection_list(
   }
   dout(20) << __func__ << " pend " << pend << dendl;
   while (true) {
-    if (!it->valid() || it->oid() >= pend) {
+    if (!it->valid() || it->is_ge(pend)) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
 	dout(20) << __func__ << " oid " << it->oid() << " >= " << pend << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
-          if (it->valid() && it->oid() < coll_range_temp_end) {
+          if (it->valid() && it->is_lt(coll_range_temp_end)) {
             *pnext = it->oid();
             set_next = true;
           }
@@ -10086,7 +10117,7 @@ int BlueStore::_collection_list(
 	dout(30) << __func__ << " pend " << pend << dendl;
 	continue;
       }
-      if (it->valid() && it->oid() < coll_range_end) {
+      if (it->valid() && it->is_lt(coll_range_end)) {
         *pnext = it->oid();
         set_next = true;
       }
