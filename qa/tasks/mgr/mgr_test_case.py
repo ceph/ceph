@@ -1,6 +1,8 @@
 import json
 import logging
 
+from unittest import SkipTest
+
 from teuthology import misc
 from tasks.ceph_test_case import CephTestCase
 
@@ -99,7 +101,7 @@ class MgrTestCase(CephTestCase):
         assert cls.mgr_cluster is not None
 
         if len(cls.mgr_cluster.mgr_ids) < cls.MGRS_REQUIRED:
-            cls.skipTest(
+            raise SkipTest(
                 "Only have {0} manager daemons, {1} are required".format(
                     len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
 
