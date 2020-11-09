@@ -189,9 +189,9 @@ EventCenter::~EventCenter()
   //assert(time_events.empty());
 
   if (notify_receive_fd >= 0)
-    ::close(notify_receive_fd);
+    compat_closesocket(notify_receive_fd);
   if (notify_send_fd >= 0)
-    ::close(notify_send_fd);
+    compat_closesocket(notify_send_fd);
 
   delete driver;
   if (notify_handler)

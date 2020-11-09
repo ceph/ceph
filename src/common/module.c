@@ -82,11 +82,6 @@ int module_load(const char *module, const char *options)
 #else
 
 // We're stubbing out those functions, for now.
-static int run_command(const char *command)
-{
-	return -1;
-}
-
 int module_has_param(const char *module, const char *param)
 {
 	return -1;

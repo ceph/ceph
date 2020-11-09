@@ -1683,7 +1683,7 @@ void buffer::list::decode_base64(buffer::list& e)
 
 ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1743,7 +1743,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1797,9 +1797,20 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
   return ret;
 }
 
+ssize_t buffer::list::recv_fd(int fd, size_t len)
+{
+  auto bp = ptr_node::create(buffer::create(len));
+  ssize_t ret = safe_recv(fd, (void*)bp->c_str(), len);
+  if (ret >= 0) {
+    bp->set_length(ret);
+    push_back(std::move(bp));
+  }
+  return ret;
+}
+
 int buffer::list::write_file(const char *fn, int mode)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, mode));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC|O_BINARY, mode));
   if (fd < 0) {
     int err = errno;
     cerr << "bufferlist::write_file(" << fn << "): failed to open file: "
@@ -1914,6 +1925,10 @@ int buffer::list::write_fd(int fd) const
   return 0;
 }
 
+int buffer::list::send_fd(int fd) const {
+  return buffer::list::write_fd(fd);
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   iovec iov[IOV_MAX];
@@ -1957,11 +1972,37 @@ int buffer::list::write_fd(int fd) const
 
       written += r;
     }
+
+    left_pbrs--;
+    p++;
   }
 
   return 0;
-
 }
+
+int buffer::list::send_fd(int fd) const
+{
+  // There's no writev on Windows. WriteFileGather may be an option,
+  // but it has strict requirements in terms of buffer size and alignment.
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
+  while (left_pbrs) {
+    int written = 0;
+    while (written < p->length()) {
+      int r = ::send(fd, p->c_str(), p->length() - written, 0);
+      if (r < 0)
+        return -ceph_sock_errno();
+
+      written += r;
+    }
+
+    left_pbrs--;
+    p++;
+  }
+
+  return 0;
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   int r = ::lseek64(fd, offset, SEEK_SET);
