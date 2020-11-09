@@ -5,7 +5,6 @@
 
 #include "include/ceph_assert.h"
 #include "crimson/common/config_proxy.h"
-#include "crimson/os/alienstore/alien_store.h"
 
 using crimson::common::local_conf;
 
@@ -23,7 +22,6 @@ ThreadPool::ThreadPool(size_t n_threads,
       if (cpu_id >= 0) {
         pin(cpu_id);
       }
-      crimson::os::AlienStore::configure_thread_memory();
       loop(queue_max_wait);
     });
   }
