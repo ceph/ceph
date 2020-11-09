@@ -181,6 +181,7 @@ static EventSocket terminate_event_sock;
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg);
+static int netlink_disconnect(int index);
 static int netlink_resize(int nbd_index, uint64_t size);
 
 static int run_quiesce_hook(const std::string &quiesce_hook,
@@ -361,7 +362,7 @@ private:
         }
         r = -errno;
         derr << "failed to poll nbd: " << cpp_strerror(r) << dendl;
-        goto signal;
+        goto error;
       }
 
       if ((poll_fds[1].revents & POLLIN) != 0) {
@@ -378,7 +379,7 @@ private:
       if (r < 0) {
 	derr << "failed to read nbd request header: " << cpp_strerror(r)
 	     << dendl;
-	goto signal;
+	goto error;
       }
 
       if (ctx->request.magic != htonl(NBD_REQUEST_MAGIC)) {
@@ -409,7 +410,7 @@ private:
           if (r < 0) {
 	    derr << *ctx << ": failed to read nbd request data: "
 		 << cpp_strerror(r) << dendl;
-            goto signal;
+            goto error;
 	  }
           ctx->data.push_back(ptr);
           break;
@@ -437,6 +438,13 @@ private:
 	  derr << *pctx << ": invalid request command" << dendl;
           c->release();
           goto signal;
+      }
+    }
+error:
+    {
+      int r = netlink_disconnect(nbd_index);
+      if (r == 1) {
+        ioctl(nbd, NBD_DISCONNECT);
       }
     }
 signal:
