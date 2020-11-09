@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { BehaviorSubject } from 'rxjs';
 
+import { environment } from '../../../../environments/environment';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -51,5 +52,9 @@ describe('AboutComponent', () => {
 
   it('should get host', () => {
     expect(component.hostAddr).toBe('localhost:11000');
+  });
+
+  it('should display copyright', () => {
+    expect(component.projectConstants.copyright).toContain(environment.year);
   });
 });
