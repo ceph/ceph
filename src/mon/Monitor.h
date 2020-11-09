@@ -258,6 +258,7 @@ private:
 
   bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
   void disconnect_disallowed_stretch_sessions();
+  void set_elector_disallowed_leaders(bool allow_election);
 public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
@@ -583,7 +584,7 @@ public:
   epoch_t get_epoch();
   int get_leader() const { return leader; }
   std::string get_leader_name() {
-    return quorum.empty() ? std::string() : monmap->get_name(*quorum.begin());
+    return quorum.empty() ? std::string() : monmap->get_name(leader);
   }
   const std::set<int>& get_quorum() const { return quorum; }
   std::list<std::string> get_quorum_names() {
