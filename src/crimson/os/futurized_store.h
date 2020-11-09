@@ -4,9 +4,8 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 #include <map>
-#include <typeinfo>
+#include <optional>
 #include <vector>
 
 #include <seastar/core/future.hh>
