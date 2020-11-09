@@ -118,7 +118,7 @@ private:
     ::snprintf(fn, sizeof(fn),
 	       ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", name,
 	       getpid(), i++);
-    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC|O_BINARY, 0644);
     if (fd < 0) {
       return;
     }

@@ -5,6 +5,7 @@
 #include <openssl/err.h>
 #include <string.h>
 #include "include/ceph_assert.h"
+#include "include/compat.h"
 
 namespace librbd {
 namespace crypto {
@@ -46,7 +47,8 @@ int DataCryptor::init(const char* cipher_name, const unsigned char* key,
 
 DataCryptor::~DataCryptor() {
   if (m_key != nullptr) {
-    explicit_bzero(m_key, EVP_CIPHER_key_length(m_cipher));
+    ceph_memzero_s(m_key, EVP_CIPHER_key_length(m_cipher),
+                   EVP_CIPHER_key_length(m_cipher));
     delete m_key;
     m_key = nullptr;
   }

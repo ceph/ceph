@@ -49,8 +49,8 @@ public:
 };
 
 #else
-#include <sys/resource.h>
 #ifdef RLIMIT_CORE
+#include <sys/resource.h>
 #include <iostream>
 #include <sys/resource.h>
 #include "common/errno.h"

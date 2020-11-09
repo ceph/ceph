@@ -5,6 +5,7 @@
 #include <boost/lexical_cast.hpp>
 
 #include "librbd/Utils.h"
+#include "include/random.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
 #include "include/neorados/RADOS.hpp"
@@ -55,7 +56,7 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   librados::Rados rados(ioctx);
 
   uint64_t bid = rados.get_instance_id();
-  std::mt19937 generator{std::random_device{}()};
+  std::mt19937 generator{random_device_t{}()};
   std::uniform_int_distribution<uint32_t> distribution{0, 0xFFFFFFFF};
   uint32_t extra = distribution(generator);
 

@@ -445,7 +445,7 @@ static int dump_data(std::string const &filename, bufferlist const &data)
   if (filename == "-") {
     fd = STDOUT_FILENO;
   } else {
-    fd = TEMP_FAILURE_RETRY(::open(filename.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    fd = TEMP_FAILURE_RETRY(::open(filename.c_str(), O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0644));
     if (fd < 0) {
       int err = errno;
       cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
@@ -471,7 +471,7 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
   if (strcmp(outfile, "-") == 0) {
     fd = STDOUT_FILENO;
   } else {
-    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0644));
     if (fd < 0) {
       int err = errno;
       cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
@@ -568,7 +568,7 @@ static int do_put(IoCtx& io_ctx,
   int ret = 0;
   int fd = STDIN_FILENO;
   if (!stdio)
-    fd = open(infile, O_RDONLY);
+    fd = open(infile, O_RDONLY|O_BINARY);
   if (fd < 0) {
     cerr << "error reading input file " << infile << ": " << cpp_strerror(errno) << std::endl;
     return 1;
@@ -629,7 +629,7 @@ static int do_append(IoCtx& io_ctx,
   int ret = 0;
   int fd = STDIN_FILENO;
   if (!stdio)
-    fd = open(infile, O_RDONLY);
+    fd = open(infile, O_RDONLY|O_BINARY);
   if (fd < 0) {
     cerr << "error reading input file " << infile << ": " << cpp_strerror(errno) << std::endl;
     return 1;
@@ -3870,7 +3870,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (nargs.size() < 2 || std::string(nargs[1]) == "-") {
       file_fd = STDOUT_FILENO;
     } else {
-      file_fd = open(nargs[1], O_WRONLY|O_CREAT|O_TRUNC, 0666);
+      file_fd = open(nargs[1], O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0666);
       if (file_fd < 0) {
         cerr << "Error opening '" << nargs[1] << "': "
           << cpp_strerror(file_fd) << std::endl;
@@ -3919,7 +3919,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (filename == "-") {
       file_fd = STDIN_FILENO;
     } else {
-      file_fd = open(filename.c_str(), O_RDONLY);
+      file_fd = open(filename.c_str(), O_RDONLY|O_BINARY);
       if (file_fd < 0) {
         cerr << "Error opening '" << filename << "': "
           << cpp_strerror(file_fd) << std::endl;

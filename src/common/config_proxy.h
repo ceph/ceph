@@ -324,6 +324,9 @@ public:
   bool has_parse_error() const {
     return !config.parse_error.empty();
   }
+  std::string get_parse_error() {
+    return config.parse_error;
+  }
   void complain_about_parse_error(CephContext *cct) {
     return config.complain_about_parse_error(cct);
   }

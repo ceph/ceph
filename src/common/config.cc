@@ -60,9 +60,11 @@ using ceph::decode;
 using ceph::encode;
 using ceph::Formatter;
 
-static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, $home/.ceph/$cluster.conf, $cluster.conf"
+static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config,/etc/ceph/$cluster.conf,$home/.ceph/$cluster.conf,$cluster.conf"
 #if defined(__FreeBSD__)
-    ", /usr/local/etc/ceph/$cluster.conf"
+    ",/usr/local/etc/ceph/$cluster.conf"
+#elif defined(_WIN32)
+    ",$programdata/ceph/$cluster.conf"
 #endif
     ;
 
@@ -87,7 +89,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result)
 {
   list<string> ls;
-  get_str_list(filename_list, ls);
+  get_str_list(filename_list, ";,", ls);
 
   int ret = -ENOENT;
   list<string>::iterator iter;
@@ -440,7 +442,7 @@ md_config_t::get_conffile_paths(const ConfigValues& values,
   }
 
   std::list<std::string> paths;
-  get_str_list(conf_files_str, paths);
+  get_str_list(conf_files_str, ";,", paths);
   for (auto i = paths.begin(); i != paths.end(); ) {
     string& path = *i;
     if (path.find("$data_dir") != path.npos &&
@@ -461,7 +463,7 @@ std::string md_config_t::get_cluster_name(const char* conffile)
     // If cluster name is not set yet, use the prefix of the
     // basename of configuration file as cluster name.
     if (fs::path path{conffile}; path.extension() == ".conf") {
-      return path.stem();
+      return path.stem().string();
     } else {
       // If the configuration file does not follow $cluster.conf
       // convention, we do the last try and assign the cluster to
@@ -1223,7 +1225,10 @@ Option::value_t md_config_t::_expand_meta(
       } else if (var == "home") {
 	const char *home = getenv("HOME");
 	out = home ? std::string(home) : std::string();
-      } else {
+      } else if (var == "programdata") {
+        const char *home = getenv("ProgramData");
+        out = home ? std::string(home) : std::string();
+      }else {
 	if (var == "data_dir") {
 	  var = data_dir_option;
 	}
