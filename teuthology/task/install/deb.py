@@ -4,12 +4,32 @@ import os
 from io import StringIO
 
 from teuthology.orchestra import run
+from teuthology.contextutil import safe_while
 
 from teuthology.task.install.util import _get_builder_project, _get_local_dir
 
 
 log = logging.getLogger(__name__)
 
+def _retry_if_eagain_in_output(remote, args):
+    # wait at most 5 minutes
+    with safe_while(sleep=10, tries=30) as proceed:
+        while proceed():
+            stderr = StringIO()
+            try:
+                return remote.run(args=args, stderr=stderr)
+            except run.CommandFailedError:
+                if "could not get lock" in stderr.getvalue().lower():
+                    stdout = StringIO()
+                    args = ['sudo', 'fuser', '-v', '/var/lib/dpkg/lock-frontend']
+                    remote.run(args=args, stdout=stdout)
+                    log.info("The processes holding 'lock-frontend':\n{}".format(stdout.getvalue()))
+                    continue
+                else:
+                    raise
+
+def install_dep_packages(remote, args):
+    _retry_if_eagain_in_output(remote, args)
 
 def _update_package_list_and_install(ctx, remote, debs, config):
     """
@@ -71,11 +91,11 @@ def _update_package_list_and_install(ctx, remote, debs, config):
                 'Dpkg::Options::="--force-confold"'),
             'install',
         ]
-    remote.run(
+    install_dep_packages(remote,
         args=install_cmd + ['%s=%s' % (d, version) for d in debs],
     )
     if system_pkglist:
-        remote.run(
+        install_dep_packages(remote,
             args=install_cmd + system_pkglist,
         )
     ldir = _get_local_dir(config, remote)
@@ -195,7 +215,7 @@ def _upgrade_packages(ctx, config, remote, debs):
     builder.install_repo()
 
     remote.run(args=['sudo', 'apt-get', 'update'], check_status=False)
-    remote.run(
+    install_dep_packages(remote,
         args=[
             'sudo',
             'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
