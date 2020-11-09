@@ -103,6 +103,7 @@
     "ng-click-outside": "6.0.0",
     "ng2-charts": "2.3.0",
     "ngx-bootstrap": "5.5.0",
+    "ngx-pipe-function": "^1.0.0",
     "ngx-toastr": "11.3.3",
     "rxjs": "6.5.4",
     "simplebar-angular": "2.1.0",

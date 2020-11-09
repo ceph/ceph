@@ -6,6 +6,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import * as _ from 'lodash';
 import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -109,7 +110,13 @@ describe('OsdSmartListComponent', () => {
 
   configureTestBed({
     declarations: [SmartListComponent],
-    imports: [BrowserAnimationsModule, TabsModule, SharedModule, HttpClientTestingModule],
+    imports: [
+      BrowserAnimationsModule,
+      TabsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      NgxPipeFunctionModule
+    ],
     providers: [i18nProviders, TabsetComponent, TabsetConfig]
   });
 
