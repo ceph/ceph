@@ -5277,6 +5277,10 @@ void Monitor::handle_get_version(MonOpRequestRef op)
     svc = osdmon();
   } else if (m->what == "monmap") {
     svc = monmon();
+#if defined(WITH_CACHE_REPLICA)
+  } else if (m->what == "replicamap") {
+    svc = replicamon();
+#endif
   } else {
     derr << "invalid map type " << m->what << dendl;
   }
