@@ -19,7 +19,7 @@ UMOUNT_TIMEOUT = 300
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config=None):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config={}):
         super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
