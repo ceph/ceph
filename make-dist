@@ -27,6 +27,32 @@ if ! git submodule sync || ! git submodule update $force --init --recursive; the
     exit 1
 fi
 
+download_from() {
+    fname=$1
+    shift
+    sha256=$1
+    shift
+    set +e
+    while true; do
+        url_base=$1
+        shift
+        if [ -z $url_base ]; then
+            echo "Error: failed to download $name."
+            exit
+        fi
+        url=$url_base/$fname
+        wget -c --no-verbose -O $fname $url
+        if [ $? != 0 -o ! -e $fname ]; then
+            echo "Download of $url failed"
+        elif [ $(sha256sum $fname | awk '{print $1}') != $sha256 ]; then
+            echo "Error: failed to download $name: SHA256 mismatch."
+        else
+            break
+        fi
+    done
+    set -e
+}
+
 download_boost() {
     boost_version=$1
     shift
@@ -34,25 +60,7 @@ download_boost() {
     shift
     boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
     boost_fname=boost_${boost_version_underscore}.tar.bz2
-    set +e
-    while true; do
-        url_base=$1
-        shift
-        if [ -z $url_base ]; then
-            echo "Error: failed to download boost."
-            exit
-        fi
-        url=$url_base/$boost_fname
-        wget -c --no-verbose -O $boost_fname $url
-        if [ $? != 0 -o ! -e $boost_fname ]; then
-            echo "Download of $url failed"
-        elif [ $(sha256sum $boost_fname | awk '{print $1}') != $boost_sha256 ]; then
-            echo "Error: failed to download boost: SHA256 mismatch."
-        else
-            break
-        fi
-    done
-    set -e
+    download_from $boost_fname $boost_sha256 $*
     tar xjf $boost_fname -C src \
         --exclude="$boost_version_underscore/libs/*/doc" \
         --exclude="$boost_version_underscore/libs/*/example" \
