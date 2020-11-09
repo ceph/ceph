@@ -21,4 +21,9 @@ function(build_fio)
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
     BUILD_COMMAND ${make_cmd} fio EXTFLAGS=-Wno-format-truncation ${FIO_EXTLIBS}
     INSTALL_COMMAND cp <BINARY_DIR>/fio ${CMAKE_BINARY_DIR}/bin)
+
+  add_library(fio INTERFACE IMPORTED)
+  add_dependencies(fio fio_ext)
+  set_target_properties(fio PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_BINARY_DIR}/src/fio)
 endfunction()

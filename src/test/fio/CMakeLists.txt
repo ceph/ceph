@@ -1,10 +1,10 @@
 # ObjectStore
 add_library(fio_ceph_objectstore SHARED fio_ceph_objectstore.cc)
-target_include_directories(fio_ceph_objectstore SYSTEM PUBLIC ${FIO_INCLUDE_DIR})
+target_link_libraries(fio_ceph_objectstore fio)
 
 # Messenger
 add_library(fio_ceph_messenger SHARED fio_ceph_messenger.cc)
-target_include_directories(fio_ceph_messenger SYSTEM PUBLIC ${FIO_INCLUDE_DIR})
+target_link_libraries(fio_ceph_messenger fio)
 
 # prevent fio from adding 'typedef int bool' and gettid()
 if(HAVE_GETTID)
