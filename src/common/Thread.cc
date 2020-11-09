@@ -84,9 +84,6 @@ void *Thread::entry_wrapper()
     _set_affinity(cpuid);
 
   ceph_pthread_setname(pthread_self(), thread_name.c_str());
-#ifdef WITH_SEASTAR
-  crimson::os::AlienStore::configure_thread_memory();
-#endif
   return entry();
 }
 
