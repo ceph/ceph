@@ -6013,6 +6013,11 @@ def _parse_args(av):
 
 if __name__ == "__main__":
 
+    # root?
+    if os.geteuid() != 0:
+        sys.stderr.write('ERROR: cephadm should be run as root\n')
+        sys.exit(1)
+
     # Logger configuration
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
@@ -6032,11 +6037,6 @@ if __name__ == "__main__":
         for handler in logger.handlers:
           if handler.name == "console":
                handler.setLevel(logging.DEBUG)
-
-    # root?
-    if os.geteuid() != 0:
-        sys.stderr.write('ERROR: cephadm should be run as root\n')
-        sys.exit(1)
 
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
