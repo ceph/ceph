@@ -866,23 +866,9 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
 
   get_logshard_oid(logshard_num, &logshard_oid);
 
-  int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
+  cls_rgw_reshard_list_op();
 
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << " " 
-    << "marker=" << marker << " " << cpp_strerror(ret) << dendl;
-    if (ret == -ENOENT) {
-      *is_truncated = false;
-      ret = 0;
-    } else {
-      if (ret == -EACCES) {
-        lderr(store->ctx()) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
-                          << ". Fix the pool access permissions of your client" << dendl;
-      }
-    } 
-  }
 
-  return ret;
 }
 
 int RGWReshard::get(cls_rgw_reshard_entry& entry)
@@ -891,14 +877,7 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
 
   get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
 
-  int ret = cls_rgw_reshard_get(store->getRados()->reshard_pool_ctx, logshard_oid, entry);
-  if (ret < 0) {
-    if (ret != -ENOENT) {
-      lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
-	" bucket=" << entry.bucket_name << dendl;
-    }
-    return ret;
-  }
+  cls_rgw_reshard_get_op();
 
   return 0;
 }
@@ -923,11 +902,7 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
 
 int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
-  int ret = cls_rgw_clear_bucket_resharding(store->getRados()->reshard_pool_ctx, bucket_instance_oid);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to clear bucket resharding, bucket_instance_oid=" << bucket_instance_oid << dendl;
-    return ret;
-  }
+  cls_rgw_clear_bucket_resharding_op();
 
   return 0;
 }
@@ -940,7 +915,6 @@ int RGWReshardWait::wait(optional_yield y)
     return -ECANCELED;
   }
 
-#ifdef HAVE_BOOST_CONTEXT
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
@@ -958,7 +932,6 @@ int RGWReshardWait::wait(optional_yield y)
     waiters.erase(waiters.iterator_to(waiter));
     return -ec.value();
   }
-#endif
 
   cond.wait_for(lock, duration);
 

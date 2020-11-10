@@ -6694,15 +6694,8 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   constexpr int num_retries = 10;
   for (int i = 1; i <= num_retries; i++) { // nb: 1-based for loop
     auto& ref = bs->bucket_obj.get_ref();
-    ret = cls_rgw_get_bucket_resharding(ref.pool.ioctx(), ref.obj.oid, &entry);
-    if (ret == -ENOENT) {
-      return fetch_new_bucket_id("get_bucket_resharding_failed", new_bucket_id);
-    } else if (ret < 0) {
-      ldout(cct, 0) << __func__ <<
-	" ERROR: failed to get bucket resharding : " << cpp_strerror(-ret) <<
-	dendl;
-      return ret;
-    }
+    cls_rgw_get_bucket_resharding_op();
+
 
     if (!entry.resharding_in_progress()) {
       return fetch_new_bucket_id("get_bucket_resharding_succeeded",
@@ -8740,7 +8733,7 @@ int RGWRados::cls_obj_usage_log_read(const string& oid, const string& user, cons
 
   *is_truncated = false;
 
-  r = cls_rgw_usage_log_read(ref.pool.ioctx(), ref.obj.oid, user, bucket, start_epoch, end_epoch,
+  r = cls_obj_usage_log_read(ref.obj.oid, user, bucket, start_epoch, end_epoch,
 			     max_entries, read_iter, usage, is_truncated);
 
   return r;

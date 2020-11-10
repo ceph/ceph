@@ -407,13 +407,8 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
   for (auto i : bucket_objs) {
     cls_rgw_bucket_instance_entry entry;
 
-    int ret = cls_rgw_get_bucket_resharding(index_pool.ioctx(), i.second, &entry);
-    if (ret < 0 && ret != -ENOENT) {
-      lderr(cct) << "ERROR: " << __func__ << ": cls_rgw_get_bucket_resharding() returned ret=" << ret << dendl;
-      return ret;
-    }
-
-    status->push_back(entry);
+    cls_rgw_get_bucket_resharding_op();
+    
   }
 
   return 0;

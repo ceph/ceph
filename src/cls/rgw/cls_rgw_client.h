@@ -598,6 +598,7 @@ void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const std::vector<std
 
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
+
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_rgw_gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
                     std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker);
