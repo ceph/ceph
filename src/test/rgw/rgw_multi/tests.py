@@ -1204,6 +1204,7 @@ def test_multipart_object_sync():
     mp.upload_part_from_file(StringIO('d' * part_size), 4)
     mp.complete_upload()
 
+    zonegroup_meta_checkpoint(zonegroup)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_encrypted_object_sync():
