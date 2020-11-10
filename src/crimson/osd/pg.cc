@@ -807,6 +807,34 @@ PG::get_or_load_clone_obc(hobject_t oid, ObjectContextRef head)
   }
 }
 
+template<RWState::State State>
+seastar::future<>
+PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
+{
+  assert(oid.is_head());
+  auto [obc, existed] = shard_services.obc_registry.get_cached_obc(oid);
+  return obc->with_lock<State>(
+    [oid=std::move(oid), existed=existed, obc=std::move(obc),
+     func=std::move(func), this] {
+    auto loaded = seastar::make_ready_future<ObjectContextRef>(obc);
+    if (existed) {
+      logger().debug("with_head_obc: found {} in cache", oid);
+    } else {
+      logger().debug("with_head_obc: cache miss on {}", oid);
+      loaded = obc->with_promoted_lock<RWState::RWEXCL>([this, obc] {
+        return load_head_obc(obc);
+      });
+    }
+    return loaded.then([func = std::move(func)](auto obc) {
+      return func(std::move(obc));
+    });
+  });
+}
+
+// explicitly instantiate the used instantiations
+template seastar::future<>
+PG::with_head_obc<RWState::RWREAD>(hobject_t, with_obc_func_t&&);
+
 PG::load_obc_ertr::future<
   std::pair<crimson::osd::ObjectContextRef, bool>>
 PG::get_or_load_head_obc(hobject_t oid)
