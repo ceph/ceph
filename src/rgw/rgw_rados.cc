@@ -9148,6 +9148,10 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
       /* FIXME: what should happen now? Work out if there are any
        * non-bad ways this could happen (there probably are, but annoying
        * to handle!) */
+      // if we're here, then the operation is delete_obj that got interrupted
+      // AFTER removal of the underlying obj but BEFORE completing the BI op.
+      // as the obj is purged, cancelation is impossible -- all we can do is
+      // resuming the operation.
     }
     // encode a suggested removal of that key
     list_state.ver.epoch = io_ctx.get_last_version();
