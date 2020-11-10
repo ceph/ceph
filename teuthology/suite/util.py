@@ -25,6 +25,9 @@ from teuthology.task.install import get_flavor
 
 log = logging.getLogger(__name__)
 
+CONTAINER_DISTRO = 'centos/8'       # the one to check for build_complete
+CONTAINER_FLAVOR = 'basic'          # basic maps to default on shaman
+
 
 def fetch_repos(branch, test_name):
     """
@@ -271,6 +274,13 @@ def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
             sha1=hash,
         ),
     )
+
+    if bp.distro == CONTAINER_DISTRO and bp.flavor == CONTAINER_FLAVOR:
+        log.info('container build %s, checking for build_complete' % bp.distro)
+        if not bp.build_complete:
+            log.info('build not complete')
+            return None
+
     return bp.version
 
 
