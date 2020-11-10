@@ -77,8 +77,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
       if (recovery.obc)
 	recovery.obc->drop_recovery_read();
       recovering.erase(soid);
-      return seastar::make_exception_future<>(
-	  std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
+      return seastar::make_exception_future<>(e);
     });
   });
 }
@@ -135,15 +134,8 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
     return recovery_waiter.obc->wait_recovery_read();
   }, crimson::osd::PG::load_obc_ertr::all_same_way(
       [this, &recovery_waiter, soid](const std::error_code& e) {
-      auto [obc, existed] =
-	  shard_services.obc_registry.get_cached_obc(soid);
-      logger().debug("load_obc_for_recovery: load failure of obc: {}",
-	  obc->obs.oi.soid);
-      recovery_waiter.obc = obc;
-      // obc is loaded with excl lock
-      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-      ceph_assert_always(recovery_waiter.obc->get_recovery_read());
-      return seastar::make_ready_future<>();
+      logger().error("load_obc_for_recovery: load failure of obc: {}", soid);
+      return seastar::make_exception_future<>(e);
     })
   );
 }
