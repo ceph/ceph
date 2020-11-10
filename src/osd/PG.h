@@ -1057,11 +1057,6 @@ protected:
     const std::list<std::pair<ScrubMap::object, pg_shard_t> > &ok_peers,
     const std::set<pg_shard_t> &bad_peers);
 
-  /**
-   * return true if any inconsistency/missing is repaired, false otherwise
-   */
-  bool scrub_process_inconsistent();
-
   [[nodiscard]] bool ops_blocked_by_scrub() const;
   [[nodiscard]] Scrub::scrub_prio_t is_scrub_blocking_ops() const;
 

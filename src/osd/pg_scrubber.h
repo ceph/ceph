@@ -156,20 +156,12 @@ struct scrub_flags_t {
   bool check_repair{false};
 
   /// checked at the end of the scrub, to possibly initiate a deep-scrub
-  bool deep_scrub_on_error{false};  // RRR \todo handle the initialization of this one
-
-  /**
-   * the scrub session was originally marked 'must_scrub'. 'marked_must' is used
-   * when determining sleep time for the scrubbing process. RRR not in original code
-   */
-  bool marked_must{false};
+  bool deep_scrub_on_error{false};
 
   /**
    * scrub must not be aborted.
    * Set for explicitly requested scrubs, and for scrubs originated by the pairing
    * process with the 'repair' flag set (in the RequestScrub event).
-   *
-   * RRR \todo clarify why different from 'marked_must'
    */
   bool required{false};
 };
@@ -247,7 +239,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
    * Reserve local scrub resources (managed by the OSD)
    *
    * Fails if OSD's local-scrubs budget was exhausted
-   * \retval 'true' if local resources reserved.
+   * \returns were local resources reserved?
    */
   bool reserve_local() final;
 
@@ -348,7 +340,11 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void add_delayed_scheduling() final;
 
-  /// \retval 'true' if a request was sent to at least one replica
+  /**
+   * @returns have we asked at least one replica?
+   * 'false' means we are configured with no replicas, and
+   * should expect no maps to arrive.
+   */
   bool get_replicas_maps(bool replica_can_preempt) final;
 
   Scrub::FsmNext on_digest_updates() final;
@@ -436,7 +432,10 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void send_epoch_changed();
 
-  bool scrub_process_inconsistent();
+  /**
+   * return true if any inconsistency/missing is repaired, false otherwise
+   */
+  [[nodiscard]] bool scrub_process_inconsistent();
 
   bool m_needs_sleep{true};  ///< should we sleep before being rescheduled? always
 			     ///< 'true', unless we just got out of a sleep period
@@ -537,6 +536,12 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   std::list<Context*> m_callbacks;
 
+  /**
+   * send a replica (un)reservation request to the acting set
+   *
+   * @param opcode - one of MOSDScrubReserve::REQUEST
+   *                  or MOSDScrubReserve::RELEASE
+   */
   void message_all_replicas(int32_t opcode, std::string_view op_text);
 
   hobject_t m_max_end;	///< Largest end that may have been sent to replicas

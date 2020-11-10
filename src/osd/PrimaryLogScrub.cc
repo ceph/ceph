@@ -569,7 +569,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 }
 
 PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg)
-    : PgScrubber{static_cast<PG*>(pg)}, m_pl_pg{pg}, m_backend{m_pl_pg->get_pgbackend()}
+    : PgScrubber{pg}, m_pl_pg{pg}, m_backend{m_pl_pg->get_pgbackend()}
 {}
 
 void PrimaryLogScrub::_scrub_clear_state()

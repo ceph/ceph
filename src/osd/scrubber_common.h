@@ -18,8 +18,6 @@ namespace Scrub {
 /// high/low OP priority
 enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 
-///
-
 }  // namespace Scrub
 
 
@@ -28,7 +26,7 @@ enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 
 struct requested_scrub_t {
 
-  // flags to indicate explicitly requested scrubs (by admin)
+  // flags to indicate explicitly requested scrubs (by admin):
   // bool must_scrub, must_deep_scrub, must_repair, need_auto;
 
   /**
@@ -66,10 +64,12 @@ struct requested_scrub_t {
 
   /**
    * (An intermediary flag used by pg::sched_scrub() on the first time
-   * a planned scrub has all its resources)
+   * a planned scrub has all its resources). Determines whether the next
+   * repair/scrub will be 'deep'.
    *
-   * Set by is_time_for_deep(). Determines whether the next repair/scrub will
-   * be 'deep'.
+   * Note: 'dumped' by PgScrubber::dump() and such. In reality, being a
+   * temporary that is set and reset by the same operation, will never
+   * appear to be set
    */
   bool time_for_deep{false};
 
@@ -98,19 +98,6 @@ struct requested_scrub_t {
    * Otherwise - PG_STATE_FAILED_REPAIR will be asserted.
    */
   bool check_repair{false};
-
-  /*
-   * scrub_after_recovery is only set at the final stages of a scrub, if:
-   * - errors were found, and
-   * - not all of those errors were fixed during the scrub, and
-   * - PG_STATE_REPAIR is set (i.e. - RRR
-   * - the errors are not all unfixable
-   *
-   * the flag is checked at:
-   * - repair end - causing a 'queue_scrub'
-   * - RRR I do not understand the check at PrimaryLogPG::recover_missing()
-   */
-  // should really be in pg itself: bool scrub_after_recovery{false};
 };
 
 ostream& operator<<(ostream& out, const requested_scrub_t& sf);
