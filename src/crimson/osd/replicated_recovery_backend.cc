@@ -122,22 +122,11 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
   if (recovery_waiter.obc) {
     return seastar::now();
   }
-  return pg.get_or_load_head_obc(soid).safe_then(
-    [&recovery_waiter](auto p) {
-    auto& [obc, existed] = p;
+  return pg.with_head_obc<RWState::RWREAD>(soid, [&recovery_waiter](auto obc) {
     logger().debug("load_obc_for_recovery: loaded obc: {}", obc->obs.oi.soid);
     recovery_waiter.obc = obc;
-    if (!existed) {
-      // obc is loaded with excl lock
-      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-    }
     return recovery_waiter.obc->wait_recovery_read();
-  }, crimson::osd::PG::load_obc_ertr::all_same_way(
-      [this, &recovery_waiter, soid](const std::error_code& e) {
-      logger().error("load_obc_for_recovery: load failure of obc: {}", soid);
-      return seastar::make_exception_future<>(e);
-    })
-  );
+  });
 }
 
 seastar::future<> ReplicatedRecoveryBackend::push_delete(

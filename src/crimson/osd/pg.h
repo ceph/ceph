@@ -510,6 +510,10 @@ public:
 
 public:
   using with_obc_func_t = std::function<seastar::future<> (ObjectContextRef)>;
+
+  template<RWState::State State>
+  seastar::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
+
   load_obc_ertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
     const OpInfo &op_info,
