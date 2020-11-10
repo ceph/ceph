@@ -54,44 +54,44 @@ void RGWOp_SIP_GetStageStatus::execute() {
   auto sip = store->ctl()->si.mgr->find_sip(provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
-    http_ret = -ENOENT;
+    op_ret = -ENOENT;
     return;
   }
 
   auto opt_stage_id = s->info.args.get_std_optional("stage-id");
   if (!opt_stage_id) {
     ldout(s->cct,  5) << "ERROR: missing 'stage-id' param" << dendl;
-    http_ret = -EINVAL;
+    op_ret = -EINVAL;
     return;
   }
   auto& sid = *opt_stage_id;
 
   int shard_id;
-  http_ret = s->info.args.get_int("shard-id", &shard_id, 0);
-  if (http_ret < 0) {
-    ldout(s->cct, 5) << "ERROR: invalid 'shard-id' param: " << http_ret << dendl;
+  op_ret = s->info.args.get_int("shard-id", &shard_id, 0);
+  if (op_ret < 0) {
+    ldout(s->cct, 5) << "ERROR: invalid 'shard-id' param: " << op_ret << dendl;
     return;
   }
 
-  http_ret = sip->get_start_marker(sid, shard_id, &start_marker);
-  if (http_ret < 0) {
-    ldout(s->cct, 5) << "ERROR: sip->get_start_marker() returned error: ret=" << http_ret << dendl;
+  op_ret = sip->get_start_marker(sid, shard_id, &start_marker);
+  if (op_ret < 0) {
+    ldout(s->cct, 5) << "ERROR: sip->get_start_marker() returned error: ret=" << op_ret << dendl;
     return;
   }
 
-  http_ret = sip->get_cur_state(sid, shard_id, &cur_marker);
-  if (http_ret < 0) {
-    ldout(s->cct, 5) << "ERROR: sip->get_cur_state() returned error: ret=" << http_ret << dendl;
+  op_ret = sip->get_cur_state(sid, shard_id, &cur_marker);
+  if (op_ret < 0) {
+    ldout(s->cct, 5) << "ERROR: sip->get_cur_state() returned error: ret=" << op_ret << dendl;
     return;
   }
 }
 
 void RGWOp_SIP_GetStageStatus::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   {
@@ -146,9 +146,9 @@ void RGWOp_SIP_Fetch::execute() {
 
   stage_id = opt_stage_id.value_or(sip->get_first_stage());
 
-  http_ret = sip->fetch(stage_id, shard_id, marker, max_entries, &result);
-  if (http_ret < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to fetch entries: " << http_ret << dendl;
+  op_ret = sip->fetch(stage_id, shard_id, marker, max_entries, &result);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to fetch entries: " << op_ret << dendl;
     return;
   }
 }
