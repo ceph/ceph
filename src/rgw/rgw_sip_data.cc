@@ -152,9 +152,8 @@ int SIProvider_DataInc::do_fetch(int shard_id, std::string marker, int max, fetc
 
   bool truncated;
   do {
-    list<rgw_data_change_log_entry> entries;
-    int ret = data_log->list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(),
-                                     max, entries, m, &m, &truncated);
+    vector<rgw_data_change_log_entry> entries;
+    int ret = data_log->list_entries(shard_id, max, entries, m, &m, &truncated);
     if (ret == -ENOENT) {
       truncated = false;
       break;
