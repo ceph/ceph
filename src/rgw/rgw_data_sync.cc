@@ -3647,7 +3647,7 @@ protected:
 
     int r = type_handler->handle_entry(sid, fetched_entry, [&](SIProvider::EntryInfoBase& _info) {
       auto& info = static_cast<siprovider_bucket_entry_info&>(_info);
-      auto& le = info.entry;
+      auto& le = info.info;
 
       e.id = fetched_entry.key;
 
@@ -3656,15 +3656,17 @@ protected:
         return -EINVAL;
       }
       e.mtime = le.timestamp;
-      if (le.ver.pool < 0) {
-        e.versioned_epoch = le.ver.epoch;
-      }
-      e.op = le.op;
-      e.state = le.state;
-      e.tag = le.tag;
-      e.is_versioned = le.is_versioned();
+      e.versioned_epoch = le.versioned_epoch;
+      e.is_versioned = !(le.instance.empty() || le.instance == "null");
+      e.op = siprovider_bucket_entry_info::Info::from_sip_op(le.op, e.versioned_epoch);
+      e.state = (le.complete ? CLS_RGW_STATE_COMPLETE : CLS_RGW_STATE_PENDING_MODIFY);
+      e.tag = le.instance_tag;
       e.owner = rgw_bucket_entry_owner(le.owner, le.owner_display_name);
-      e.zones_trace = le.zones_trace;
+
+      for (auto& ste : le.sync_trace) {
+        rgw_zone_set_entry zse(ste);
+        e.zones_trace.insert(std::move(zse));
+      }
 
       return 0;
     });

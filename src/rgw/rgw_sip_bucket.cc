@@ -12,15 +12,108 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+void siprovider_bucket_entry_info::Info::dump(Formatter *f) const
+{
+  encode_json("object", object, f);
+  encode_json("instance", instance, f);
+  encode_json("timestamp", timestamp, f);
+  encode_json("versioned_epoch", versioned_epoch, f);
+  encode_json("op", op, f);
+  encode_json("owner", owner, f);
+  encode_json("owner_display_name", owner_display_name, f);
+  encode_json("instance_tag", instance_tag, f);
+  encode_json("complete", complete, f);
+  encode_json("sync_trace", sync_trace, f);
+}
+
+void siprovider_bucket_entry_info::Info::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("object", object, obj);
+  JSONDecoder::decode_json("instance", instance, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  JSONDecoder::decode_json("versioned_epoch", versioned_epoch, obj);
+  JSONDecoder::decode_json("op", op, obj);
+  JSONDecoder::decode_json("owner", owner, obj);
+  JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
+  JSONDecoder::decode_json("instance_tag", instance_tag, obj);
+  JSONDecoder::decode_json("complete", complete, true, obj); /* default_val = true */
+  JSONDecoder::decode_json("sync_trace", sync_trace, obj);
+}
+
 void siprovider_bucket_entry_info::dump(Formatter *f) const
 {
-  entry.dump(f);
+  info.dump(f);
 }
 
 void siprovider_bucket_entry_info::decode_json(JSONObj *obj)
 {
-  decode_json_obj(entry, obj);
+  info.decode_json(obj);
 }
+
+const std::string& siprovider_bucket_entry_info::Info::to_sip_op(RGWModifyOp rgw_op)
+{
+  switch (rgw_op) {
+    case CLS_RGW_OP_ADD:
+      return SIP_BUCKET_OP_CREATE_OBJ;
+      break;
+    case CLS_RGW_OP_DEL:
+    case CLS_RGW_OP_UNLINK_INSTANCE:
+      return SIP_BUCKET_OP_DELETE_OBJ;
+      break;
+    case CLS_RGW_OP_LINK_OLH:
+      return SIP_BUCKET_OP_SET_CURRENT;
+      break;
+    case CLS_RGW_OP_LINK_OLH_DM:
+      return SIP_BUCKET_OP_CREATE_DM;
+      break;
+    case CLS_RGW_OP_CANCEL:
+      return SIP_BUCKET_OP_CANCEL;
+      break;
+    case CLS_RGW_OP_SYNCSTOP:
+      return SIP_BUCKET_OP_SYNC_STOP;
+      break;
+    case CLS_RGW_OP_RESYNC:
+      return SIP_BUCKET_OP_SYNC_START;
+      break;
+    default:
+      break;
+  }
+
+  return SIP_BUCKET_OP_UNKNOWN;
+}
+
+RGWModifyOp siprovider_bucket_entry_info::Info::from_sip_op(const string& op, std::optional<uint64_t> versioned_epoch)
+{
+  if (op == SIP_BUCKET_OP_CREATE_OBJ) {
+    if (versioned_epoch) {
+      return CLS_RGW_OP_LINK_OLH;
+    }
+    return CLS_RGW_OP_ADD;
+  }
+  if (op == SIP_BUCKET_OP_DELETE_OBJ) {
+    if (versioned_epoch) {
+      return CLS_RGW_OP_UNLINK_INSTANCE;
+    }
+    return CLS_RGW_OP_DEL;
+  }
+  if (op == SIP_BUCKET_OP_SET_CURRENT) {
+    return CLS_RGW_OP_LINK_OLH;
+  }
+  if (op == SIP_BUCKET_OP_CREATE_DM) {
+    return CLS_RGW_OP_LINK_OLH_DM;
+  }
+  if (op == SIP_BUCKET_OP_CANCEL) {
+    return CLS_RGW_OP_CANCEL;
+  }
+  if (op == SIP_BUCKET_OP_SYNC_STOP) {
+    return CLS_RGW_OP_SYNCSTOP;
+  }
+  if (op == SIP_BUCKET_OP_SYNC_START) {
+    return CLS_RGW_OP_RESYNC;
+  }
+  return CLS_RGW_OP_UNKNOWN;
+}
+
 
 static inline string escape_str(const string& s)
 {
@@ -40,24 +133,28 @@ SIProvider::Entry SIProvider_BucketFull::create_entry(rgw_bucket_dir_entry& be) 
 
   siprovider_bucket_entry_info be_info;
 
-  auto& log_entry = be_info.entry;
+  auto& log_entry = be_info.info;
 
-  log_entry.id = e.key;
   log_entry.object = be.key.name;
   log_entry.instance = be.key.instance;
   log_entry.timestamp = be.meta.mtime;
+  if (be.ver.pool < 0) {
+    log_entry.versioned_epoch = be.ver.epoch;
+  }
 
-#warning FIXME link olh, olh_dm
-  log_entry.op = CLS_RGW_OP_ADD;
+  if (!be.is_delete_marker()) {
+    log_entry.op = SIP_BUCKET_OP_CREATE_OBJ;
+  } else {
+    log_entry.op = SIP_BUCKET_OP_CREATE_DM;
+  }
   log_entry.owner = be.meta.owner;
   log_entry.owner_display_name = be.meta.owner_display_name;
-  log_entry.tag = be.tag;
+  log_entry.instance_tag = be.tag;
+  log_entry.complete = true;
 
 #warning zones_trace
 
 #if 0
-  uint64_t index_ver;
-  uint16_t bilog_flags;
   rgw_zone_set zones_trace;
 #endif
 
@@ -73,8 +170,6 @@ int SIProvider_BucketFull::do_fetch(int shard_id, std::string marker, int max, f
     return -ERANGE;
   }
 
-  vector<rgw_bucket_dir_entry> objs;
-
   result->done = false;
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
@@ -87,20 +182,33 @@ int SIProvider_BucketFull::do_fetch(int shard_id, std::string marker, int max, f
   list_op.params.list_versions = true;
   list_op.params.allow_unordered = true; /* we'll be reading from a single shard */
 
-  bool is_truncated;
+  while (max > 0) {
+    vector<rgw_bucket_dir_entry> objs;
 
-  int ret = list_op.list_objects(max, &objs, nullptr, &is_truncated, null_yield);
-  if (ret < 0) {
-    ldout(cct, 5) << __func__ << "(): list_op.list_objects() returned ret=" << ret << dendl;
-    return ret;
+    bool is_truncated;
+
+    int ret = list_op.list_objects(max, &objs, nullptr, &is_truncated, null_yield);
+    if (ret < 0) {
+      ldout(cct, 5) << __func__ << "(): list_op.list_objects() returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    if (objs.empty()) {
+      break;
+    }
+
+    for (auto& o : objs) {
+      auto e = create_entry(o);
+      result->entries.push_back(e);
+    }
+
+    if (!is_truncated) {
+      break;
+    }
+
+    max -= result->entries.size();
+    result->more = is_truncated;
   }
-
-  for (auto& o : objs) {
-    auto e = create_entry(o);
-    result->entries.push_back(e);
-  }
-
-  result->more = is_truncated;
 
   return 0;
 }
@@ -139,7 +247,23 @@ SIProvider::Entry SIProvider_BucketInc::create_entry(rgw_bi_log_entry& be) const
   e.key = be.id;
 
   siprovider_bucket_entry_info bei;
-  bei.entry = be;
+
+  auto& log_entry = bei.info;
+
+  log_entry.object = be.object;
+  log_entry.instance = be.instance;
+  log_entry.timestamp = be.timestamp;
+  log_entry.versioned_epoch = be.ver.epoch;
+  log_entry.op = siprovider_bucket_entry_info::Info::to_sip_op(be.op);
+  log_entry.owner = be.owner;
+  log_entry.owner_display_name = be.owner_display_name;
+  log_entry.instance_tag = be.tag;
+  log_entry.complete = (be.state == CLS_RGW_STATE_COMPLETE);
+
+  for (auto& z : be.zones_trace.entries) {
+    log_entry.sync_trace.insert(z.to_str());
+  }
+
   bei.encode(e.data);
   return e;
 }
