@@ -24,3 +24,4 @@ tasks:
 - rgw-multisite-tests:
     config:
       reconfigure_delay: 60
+    args: ['-a', '!bucket_sync_disable'] # filter out disable/enable tests
