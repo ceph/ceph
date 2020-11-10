@@ -4055,6 +4055,22 @@ def list_daemons(detail=True, legacy_dir=None):
                                        err.startswith('%s, version ' % cmd):
                                         version = err.split(' ')[2]
                                         seen_versions[image_id] = version
+                                elif daemon_type == 'haproxy':
+                                    out, err, code = call(
+                                        [container_path, 'exec', container_id,
+                                         'haproxy', '-v'])
+                                    if not code and \
+                                       out.startswith('HA-Proxy version '):
+                                        version = out.split(' ')[2]
+                                        seen_versions[image_id] = version
+                                elif daemon_type == 'keepalived':
+                                    out, err, code = call(
+                                        [container_path, 'exec', container_id,
+                                         'keepalived', '--version'])
+                                    if not code and \
+                                       err.startswith('Keepalived '):
+                                        version = err.split(' ')[1]
+                                        seen_versions[image_id] = version
                                 elif daemon_type == CustomContainer.daemon_type:
                                     # Because a custom container can contain
                                     # everything, we do not know which command
