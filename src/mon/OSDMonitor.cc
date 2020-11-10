@@ -14300,7 +14300,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   if (retval == -1) {
     ss << dividing_bucket << " is not a valid crush bucket type";
     *errcode = -ENOENT;
-    ceph_assert(!commit || dividing_id != -1);
+    ceph_assert(!commit);
     return;
   }
   vector<int> subtrees;
