@@ -1099,6 +1099,7 @@ def test_set_bucket_policy():
         bucket.set_policy(policy)
         assert(bucket.get_policy().decode('ascii') == policy)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1113,6 +1114,7 @@ def test_bucket_sync_disable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_enable_right_after_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1147,6 +1149,7 @@ def test_bucket_sync_enable_right_after_disable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_disable_enable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
