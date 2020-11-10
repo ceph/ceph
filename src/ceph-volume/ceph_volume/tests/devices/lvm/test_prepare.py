@@ -8,7 +8,7 @@ class TestLVM(object):
     def test_main_spits_help_with_no_arguments(self, capsys):
         lvm.main.LVM([]).main()
         stdout, stderr = capsys.readouterr()
-        assert 'Use LVM and LVM-based technologies like dmcache to deploy' in stdout
+        assert 'Use LVM and LVM-based technologies to deploy' in stdout
 
     def test_main_shows_activate_subcommands(self, capsys):
         lvm.main.LVM([]).main()
