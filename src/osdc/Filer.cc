@@ -355,7 +355,8 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin, int err)
 		 << dendl;
 
   if (pr->num == 0 && pr->uncommitted == 0) {
-    pr->oncommit->complete(pr->err);
+    if (pr->oncommit)
+      pr->oncommit->complete(pr->err);
     prl.unlock();
     delete pr;
     return;
