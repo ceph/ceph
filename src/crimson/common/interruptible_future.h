@@ -6,6 +6,7 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/when_all.hh>
+#include <seastar/core/thread.hh>
 
 #include "crimson/common/errorator.h"
 
@@ -254,7 +255,15 @@ public:
 
   [[gnu::always_inline]]
   value_type&& get() {
-    return std::move(core_type::get());
+    if (core_type::available()) {
+      return core_type::get();
+    } else {
+      // destined to wait!
+      auto interruption_condition = interrupt_cond<InterruptCond>;
+      auto&& value = core_type::get();
+      interrupt_cond<InterruptCond> = interruption_condition;
+      return std::move(value);
+    }
   }
 
   using core_type::available;
@@ -1172,6 +1181,34 @@ public:
   static inline auto when_all_succeed(FutOrFuncs&&... fut_or_funcs) noexcept {
     return ::seastar::internal::when_all_succeed_impl(
 	futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs))...);
+  }
+
+  template <typename Func,
+	    typename Result = futurize_t<std::invoke_result_t<Func>>>
+  static inline Result async(Func&& func) {
+    return seastar::async([func=std::forward<Func>(func),
+			   interrupt_condition=interrupt_cond<InterruptCond>]() mutable {
+      return non_futurized_call_with_interruption(
+	  interrupt_condition, std::forward<Func>(func));
+    });
+  }
+
+  static void yield() {
+    assert(interrupt_cond<InterruptCond>);
+    auto interruption_condition = interrupt_cond<InterruptCond>;
+    interrupt_cond<InterruptCond>.release();
+    seastar::thread::yield();
+    interrupt_cond<InterruptCond> = interruption_condition;
+  }
+
+  static void maybe_yield() {
+    assert(interrupt_cond<InterruptCond>);
+    if (seastar::thread::should_yield()) {
+      auto interruption_condition = interrupt_cond<InterruptCond>;
+      interrupt_cond<InterruptCond>.release();
+      seastar::thread::yield();
+      interrupt_cond<InterruptCond> = interruption_condition;
+    }
   }
 private:
   // return true if an new interrupt condition is created and false otherwise
