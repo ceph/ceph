@@ -263,7 +263,7 @@ class CephService(CephadmService):
         """
         Map the daemon id to a cephx keyring entity name
         """
-        if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
+        if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi", 'haproxy', 'keepalived']:
             return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE == 'crash':
             if host == "":

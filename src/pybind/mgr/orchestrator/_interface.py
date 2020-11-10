@@ -22,7 +22,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec
+    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 
@@ -878,6 +878,7 @@ class Orchestrator(object):
             'prometheus': self.apply_prometheus,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
+            'HA_RGW': self.apply_ha_rgw,
             'host': self.add_host,
         }
 
@@ -1041,6 +1042,10 @@ class Orchestrator(object):
 
     def apply_rgw(self, spec: RGWSpec) -> Completion[str]:
         """Update RGW cluster"""
+        raise NotImplementedError()
+
+    def apply_ha_rgw(self, spec: HA_RGWSpec) -> Completion[str]:
+        """Update HA_RGW daemons"""
         raise NotImplementedError()
 
     def add_rbd_mirror(self, spec: ServiceSpec) -> Completion[List[str]]:
@@ -1251,6 +1256,8 @@ class DaemonDescription(object):
 
     def matches_service(self, service_name: Optional[str]) -> bool:
         if service_name:
+            if self.daemon_type in ['haproxy', 'keepalived']:
+                return ("HA_RGW." + self.daemon_id).startswith(service_name + '.')
             return self.name().startswith(service_name + '.')
         return False
 
@@ -1305,6 +1312,8 @@ class DaemonDescription(object):
 
     def service_name(self):
         if self.daemon_type in ServiceSpec.REQUIRES_SERVICE_ID:
+            if self.daemon_type in ['haproxy', 'keepalived']:
+                return f'HA_RGW.{self.service_id()}'
             return f'{self.daemon_type}.{self.service_id()}'
         return self.daemon_type
 

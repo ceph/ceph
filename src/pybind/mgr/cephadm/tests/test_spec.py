@@ -6,6 +6,8 @@ import json
 
 import pytest
 
+import yaml
+
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec, CustomContainerSpec, \
     HA_RGWSpec
@@ -636,8 +638,7 @@ def test_custom_container_spec_config_json():
         assert key not in config_json
 
 def test_HA_RGW_spec():
-    yaml_str =
-"""service_type: HA_RGW
+    yaml_str ="""service_type: HA_RGW
 service_id: haproxy_for_rgw
 placement:
   hosts:
@@ -658,7 +659,7 @@ spec:
 """
     yaml_file = yaml.safe_load(yaml_str)
     spec = ServiceSpec.from_json(yaml_file)
-    assert spec.servie_type == "HA_RGW"
+    assert spec.service_type == "HA_RGW"
     assert spec.service_id == "haproxy_for_rgw"
     assert spec.virtual_ip_interface == "eth0"
     assert spec.virtual_ip_address == "192.168.20.1/24"
