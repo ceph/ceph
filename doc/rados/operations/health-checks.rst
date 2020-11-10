@@ -28,14 +28,14 @@ Monitor
 DAEMON_OLD_VERSION
 __________________
 
-Warn if old version(s) of Ceph are running on any deamons.
-It will be a health error if multiple versions are detected.
-This condition must exists for over 1 week by default in order for the
+Warn if old version(s) of Ceph are running on any daemons.
+It will generate a health error if multiple versions are detected.
+This condition must exist for over mon_warn_older_version_delay (set to 1 week by default) in order for the
 health condition to be triggered.  This allows most upgrades to proceed
-without falsely see the warning.  If upgrade is paused for an extended
+without falsely seeing the warning.  If upgrade is paused for an extended
 time period, health mute can be used like this
 "ceph health mute DAEMON_OLD_VERSION --sticky".  In this case after
-upgrading has finish use "ceph health unmute DAEMON_OLD_VERSION".
+upgrade has finished use "ceph health unmute DAEMON_OLD_VERSION".
 
 MON_DOWN
 ________
