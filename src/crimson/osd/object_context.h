@@ -112,9 +112,9 @@ private:
   }
 
 public:
-  template<typename Func>
-  auto with_lock(RWState::State type, Func&& func) {
-    switch (type) {
+  template<RWState::State Type, typename Func>
+  auto with_lock(Func&& func) {
+    switch (Type) {
     case RWState::RWWRITE:
       return seastar::with_lock(lock.for_write(), std::forward<Func>(func));
     case RWState::RWREAD:
@@ -125,9 +125,9 @@ public:
       assert(0 == "noop");
     }
   }
-  template<typename Func>
-  auto with_promoted_lock(RWState::State type, Func&& func) {
-    switch (type) {
+  template<RWState::State Type, typename Func>
+  auto with_promoted_lock(Func&& func) {
+    switch (Type) {
     case RWState::RWWRITE:
       return seastar::with_lock(lock.excl_from_write(), std::forward<Func>(func));
     case RWState::RWREAD:
