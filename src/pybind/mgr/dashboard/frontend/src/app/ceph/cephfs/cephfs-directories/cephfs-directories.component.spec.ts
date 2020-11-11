@@ -936,7 +936,10 @@ describe('CephfsDirectoriesComponent', () => {
     });
 
     it('should test all quota table actions permission combinations', () => {
-      const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
+      const permissionHelper: PermissionHelper = new PermissionHelper(component.permission, {
+        single: { dirValue: 0 },
+        multiple: [{ dirValue: 0 }, {}]
+      });
       const tableActions = permissionHelper.setPermissionsAndGetActions(
         component.quota.tableActions
       );
