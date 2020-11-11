@@ -121,6 +121,8 @@ public:
       return seastar::with_lock(lock.for_read(), std::forward<Func>(func));
     case RWState::RWEXCL:
       return seastar::with_lock(lock.for_excl(), std::forward<Func>(func));
+    case RWState::RWNONE:
+      return seastar::futurize_invoke(func);
     default:
       assert(0 == "noop");
     }
