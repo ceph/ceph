@@ -74,7 +74,8 @@ class RGWStore : public DoutPrefixProvider {
     virtual RGWBucketList* list_buckets(void) = 0;
     virtual bool is_meta_master() = 0;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
-				  bufferlist& in_data, JSONParser *jp, req_info& info) = 0;
+					  bufferlist& in_data, JSONParser *jp, req_info& info,
+					  optional_yield y) = 0;
     virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) = 0;
     virtual const RGWZoneGroup& get_zonegroup() = 0;
