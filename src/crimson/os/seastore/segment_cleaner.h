@@ -396,7 +396,7 @@ public:
     }
 
     used_bytes += len;
-    auto ret = space_tracker->allocate(
+    [[maybe_unused]] auto ret = space_tracker->allocate(
       addr.segment,
       addr.offset,
       len);
@@ -412,7 +412,7 @@ public:
     used_bytes -= len;
     assert(addr.segment < segments.size());
 
-    auto ret = space_tracker->release(
+    [[maybe_unused]] auto ret = space_tracker->release(
       addr.segment,
       addr.offset,
       len);
