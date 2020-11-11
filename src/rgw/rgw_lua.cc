@@ -101,13 +101,14 @@ int write_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, opti
   ceph::encode(script, bl);
 
   const auto rc = rgw_put_system_obj(
-      obj_ctx, 
-      obj.pool, 
+      obj_ctx,
+      obj.pool,
       obj.oid,
       bl,
-      false, 
+      false,
       &objv_tracker,
-      real_time());
+      real_time(),
+      y);
 
   if (rc < 0) {
     return rc;
@@ -125,9 +126,10 @@ int delete_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, opt
 
   const auto rc = rgw_delete_system_obj(
       store->svc()->sysobj, 
-      obj.pool, 
+      obj.pool,
       obj.oid,
-      &objv_tracker);
+      &objv_tracker,
+      y);
 
   if (rc < 0 && rc != -ENOENT) {
     return rc;

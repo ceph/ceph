@@ -97,7 +97,7 @@ public:
   int read_history(RGWMetadataLogHistory *state, RGWObjVersionTracker *objv_tracker,optional_yield y) const;
   int write_history(const RGWMetadataLogHistory& state,
                     RGWObjVersionTracker *objv_tracker,
-                    bool exclusive = false);
+		    optional_yield y, bool exclusive = false);
 
   int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
 

@@ -174,13 +174,6 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
   return ret;
 }
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
-{
-  return rgw_put_system_obj(obj_ctx, pool, oid, data, exclusive,
-                            objv_tracker, set_mtime, null_yield, pattrs);
-}
-
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
@@ -234,14 +227,14 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
 }
 
 int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
-                          RGWObjVersionTracker *objv_tracker)
+                          RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(rgw_raw_obj{pool, oid});
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove(null_yield);
+               .remove(y);
 }
 
 thread_local bool is_asio_thread = false;
@@ -437,13 +430,13 @@ int RGWDataAccess::Bucket::finish_init()
   return 0;
 }
 
-int RGWDataAccess::Bucket::init()
+int RGWDataAccess::Bucket::init(optional_yield y)
 {
   int ret = sd->store->getRados()->get_bucket_info(sd->store->svc(),
 				       tenant, name,
 				       bucket_info,
 				       &mtime,
-                                       null_yield,
+                                       y,
 				       &attrs);
   if (ret < 0) {
     return ret;

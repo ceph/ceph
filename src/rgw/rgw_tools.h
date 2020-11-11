@@ -38,7 +38,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 
 extern const std::string MP_META_SUFFIX;
 
-static inline int rgw_shards_max()
+inline int rgw_shards_max()
 {
   return RGW_SHARDS_PRIME_1;
 }
@@ -53,7 +53,7 @@ static inline int rgw_shards_mod(unsigned hval, int max_shards)
 }
 
 // used for logging and tagging
-static inline int rgw_shard_id(const string& key, int max_shards)
+inline int rgw_shard_id(const string& key, int max_shards)
 {
   return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
 			max_shards);
@@ -72,15 +72,13 @@ int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 			    const string& str, uint32_t *perm);
 
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
 int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
-                          RGWObjVersionTracker *objv_tracker);
+                          RGWObjVersionTracker *objv_tracker, optional_yield y);
 
 const char *rgw_find_mime_by_ext(string& ext);
 
@@ -179,7 +177,7 @@ public:
                                        name(_name),
 				       bucket_id(_bucket_id) {}
     Bucket(RGWDataAccess *_sd) : sd(_sd) {}
-    int init();
+    int init(optional_yield y);
     int init(const RGWBucketInfo& _bucket_info, const map<string, bufferlist>& _attrs);
   public:
     int get_object(const rgw_obj_key& key,
@@ -237,9 +235,10 @@ public:
   int get_bucket(const string& tenant,
 		 const string name,
 		 const string bucket_id,
-		 BucketRef *bucket) {
+		 BucketRef *bucket,
+		 optional_yield y) {
     bucket->reset(new Bucket(this, tenant, name, bucket_id));
-    return (*bucket)->init();
+    return (*bucket)->init(y);
   }
 
   int get_bucket(const RGWBucketInfo& bucket_info,
