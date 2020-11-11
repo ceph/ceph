@@ -1025,7 +1025,8 @@ protected:
                                 const string_to_sign_t& string_to_sign,
                                 const signature_factory_t& signature_factory,
                                 const completer_factory_t& completer_factory,
-                                const req_state* s) const = 0;
+                                const req_state* s,
+				optional_yield y) const = 0;
 
 public:
   result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
@@ -1103,7 +1104,8 @@ protected:
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t&,
                         const completer_factory_t& completer_factory,
-                        const req_state* s) const override;
+                        const req_state* s,
+			optional_yield y) const override;
 public:
   LDAPEngine(CephContext* const cct,
              RGWCtl* const ctl,
@@ -1136,7 +1138,8 @@ class LocalEngine : public AWSEngine {
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
-                        const req_state* s) const override;
+                        const req_state* s,
+			optional_yield y) const override;
 public:
   LocalEngine(CephContext* const cct,
               RGWCtl* const ctl,
@@ -1176,7 +1179,8 @@ class STSEngine : public AWSEngine {
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
-                        const req_state* s) const override;
+                        const req_state* s,
+			optional_yield y) const override;
 public:
   STSEngine(CephContext* const cct,
               RGWCtl* const ctl,

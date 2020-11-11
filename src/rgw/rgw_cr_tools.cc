@@ -87,7 +87,7 @@ int RGWUserCreateCR::Request::_send_request()
   }
 
   RGWNullFlusher flusher;
-  return RGWUserAdminOp_User::create(store, op_state, flusher);
+  return RGWUserAdminOp_User::create(store, op_state, flusher, null_yield);
 }
 
 template<>
