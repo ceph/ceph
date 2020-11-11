@@ -310,11 +310,11 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
   }
 }
 
-int STSService::storeARN(string& arn)
+int STSService::storeARN(string& arn, optional_yield y)
 {
   int ret = 0;
   RGWUserInfo info;
-  if (ret = rgw_get_user_info_by_uid(store->ctl()->user, user_id, info); ret < 0) {
+  if (ret = rgw_get_user_info_by_uid(store->ctl()->user, user_id, info, y); ret < 0) {
     return -ERR_NO_SUCH_ENTITY;
   }
 
@@ -322,7 +322,7 @@ int STSService::storeARN(string& arn)
 
   RGWObjVersionTracker objv_tracker;
   if (ret = rgw_store_user_info(store->ctl()->user, info, &info, &objv_tracker, real_time(),
-          false); ret < 0) {
+				false, y); ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
   return ret;
@@ -391,7 +391,8 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRo
   return response;
 }
 
-AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
+AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req,
+					  optional_yield y)
 {
   AssumeRoleResponse response;
   response.packedPolicySize = 0;
@@ -437,7 +438,7 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
 
   //Save ARN with the user
   string arn = response.user.getARN();
-  response.retCode = storeARN(arn);
+  response.retCode = storeARN(arn, y);
   if (response.retCode < 0) {
     return response;
   }
