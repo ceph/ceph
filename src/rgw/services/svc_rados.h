@@ -31,7 +31,7 @@ class RGWSI_RADOS : public RGWServiceInstance
   librados::Rados rados;
   std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
-  int do_start() override;
+  int do_start(optional_yield) override;
 
 public:
   struct OpenParams {

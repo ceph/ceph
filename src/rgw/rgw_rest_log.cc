@@ -119,7 +119,7 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = store->svc()->mdlog->read_oldest_log_period();
+  period = store->svc()->mdlog->read_oldest_log_period(null_yield);
   op_ret = period.get_error();
 }
 

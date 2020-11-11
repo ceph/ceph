@@ -64,16 +64,16 @@ bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& sour
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
-int RGWSI_Zone::do_start()
+int RGWSI_Zone::do_start(optional_yield y)
 {
-  int ret = sysobj_svc->start();
+  int ret = sysobj_svc->start(y);
   if (ret < 0) {
     return ret;
   }
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
-  ret = rados_svc->start();
+  ret = rados_svc->start(y);
   if (ret < 0) {
     return ret;
   }
@@ -92,13 +92,13 @@ int RGWSI_Zone::do_start()
     ldout(cct, 20) << "current period " << current_period->get_id() << dendl;  
   }
 
-  ret = replace_region_with_zonegroup();
+  ret = replace_region_with_zonegroup(y);
   if (ret < 0) {
     lderr(cct) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  ret = convert_regionmap();
+  ret = convert_regionmap(y);
   if (ret < 0) {
     lderr(cct) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -170,7 +170,7 @@ int RGWSI_Zone::do_start()
 
   for (auto ziter : zonegroup->zones) {
     auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, ziter.second.id);
-    ret = zone_handler->init(null_yield);
+    ret = zone_handler->init(y);
     if (ret < 0) {
       lderr(cct) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;
       return ret;
@@ -189,7 +189,7 @@ int RGWSI_Zone::do_start()
                                &target_zones,
                                false); /* relaxed: also get all zones that we allow to sync to/from */
 
-  ret = sync_modules_svc->start();
+  ret = sync_modules_svc->start(y);
   if (ret < 0) {
     return ret;
   }
@@ -343,7 +343,7 @@ int RGWSI_Zone::list_periods(const string& current_period, list<string>& periods
  * backward compatability
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWSI_Zone::replace_region_with_zonegroup()
+int RGWSI_Zone::replace_region_with_zonegroup(optional_yield y)
 {
   /* copy default region */
   /* convert default region to default zonegroup */
@@ -360,7 +360,7 @@ int RGWSI_Zone::replace_region_with_zonegroup()
   RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
   RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
 
-  int ret = sysobj.rop().read(&bl, null_yield);
+  int ret = sysobj.rop().read(&bl, y);
   if (ret < 0 && ret !=  -ENOENT) {
     ldout(cct, 0) << __func__ << " failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
 		  << dendl;
@@ -584,7 +584,7 @@ int RGWSI_Zone::replace_region_with_zonegroup()
   /* mark as converted */
   ret = sysobj.wop()
               .set_exclusive(true)
-              .write(bl, null_yield);
+              .write(bl, y);
   if (ret < 0 ) {
     ldout(cct, 0) << __func__ << " failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
 		  << dendl;
@@ -762,7 +762,7 @@ int RGWSI_Zone::init_zg_from_local(bool *creating_defaults)
   return 0;
 }
 
-int RGWSI_Zone::convert_regionmap()
+int RGWSI_Zone::convert_regionmap(optional_yield y)
 {
   RGWZoneGroupMap zonegroupmap;
 
@@ -778,7 +778,7 @@ int RGWSI_Zone::convert_regionmap()
   RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
   RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
 
-  int ret = sysobj.rop().read(&bl, null_yield);
+  int ret = sysobj.rop().read(&bl, y);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   } else if (ret == -ENOENT) {
@@ -816,7 +816,7 @@ int RGWSI_Zone::convert_regionmap()
   current_period->set_bucket_quota(zonegroupmap.bucket_quota);
 
   // remove the region_map so we don't try to convert again
-  ret = sysobj.wop().remove(null_yield);
+  ret = sysobj.wop().remove(y);
   if (ret < 0) {
     ldout(cct, 0) << "Error could not remove " << sysobj.get_obj()
         << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
@@ -997,8 +997,9 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
 
 
 int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id,
-                                         const rgw_placement_rule& request_rule,
-                                         rgw_placement_rule *pselected_rule_name, RGWZonePlacementInfo *rule_info)
+					   const rgw_placement_rule& request_rule,
+					   rgw_placement_rule *pselected_rule_name, RGWZonePlacementInfo *rule_info,
+					   optional_yield y)
 {
   /* first check that zonegroup exists within current period. */
   RGWZoneGroup zonegroup;
@@ -1063,17 +1064,17 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
     *pselected_rule_name = rule;
   }
 
-  return select_bucket_location_by_rule(rule, rule_info);
+  return select_bucket_location_by_rule(rule, rule_info, y);
 }
 
-int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info)
+int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info, optional_yield y)
 {
   if (location_rule.name.empty()) {
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
     if (rule_info) {
-      return select_legacy_bucket_placement(rule_info);
+      return select_legacy_bucket_placement(rule_info, y);
     }
 
     return 0;
@@ -1110,11 +1111,12 @@ int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& locatio
 
 int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id,
                                         const rgw_placement_rule& placement_rule,
-                                        rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info)
+                                        rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info,
+					optional_yield y)
 {
   if (!zone_params->placement_pools.empty()) {
     return select_new_bucket_location(user_info, zonegroup_id, placement_rule,
-                                      pselected_rule, rule_info);
+                                      pselected_rule, rule_info, y);
   }
 
   if (pselected_rule) {
@@ -1122,13 +1124,14 @@ int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const stri
   }
 
   if (rule_info) {
-    return select_legacy_bucket_placement(rule_info);
+    return select_legacy_bucket_placement(rule_info, y);
   }
 
   return 0;
 }
 
-int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
+int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info,
+					       optional_yield y)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
@@ -1140,7 +1143,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.rop().read(&map_bl, null_yield);
+  int ret = sysobj.rop().read(&map_bl, y);
   if (ret < 0) {
     goto read_omap;
   }
@@ -1154,7 +1157,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
 
 read_omap:
   if (m.empty()) {
-    ret = sysobj.omap().get_all(&m, null_yield);
+    ret = sysobj.omap().get_all(&m, y);
 
     write_map = true;
   }
@@ -1168,7 +1171,7 @@ read_omap:
     ret = rados_svc->pool().create(pools, &retcodes);
     if (ret < 0)
       return ret;
-    ret = sysobj.omap().set(s, bl, null_yield);
+    ret = sysobj.omap().set(s, bl, y);
     if (ret < 0)
       return ret;
     m[s] = bl;
@@ -1177,7 +1180,7 @@ read_omap:
   if (write_map) {
     bufferlist new_bl;
     encode(m, new_bl);
-    ret = sysobj.wop().write(new_bl, null_yield);
+    ret = sysobj.wop().write(new_bl, y);
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
     }
@@ -1201,7 +1204,7 @@ read_omap:
   return 0;
 }
 
-int RGWSI_Zone::update_placement_map()
+int RGWSI_Zone::update_placement_map(optional_yield y)
 {
   bufferlist header;
   map<string, bufferlist> m;
@@ -1210,13 +1213,13 @@ int RGWSI_Zone::update_placement_map()
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.omap().get_all(&m, null_yield);
+  int ret = sysobj.omap().get_all(&m, y);
   if (ret < 0)
     return ret;
 
   bufferlist new_bl;
   encode(m, new_bl);
-  ret = sysobj.wop().write(new_bl, null_yield);
+  ret = sysobj.wop().write(new_bl, y);
   if (ret < 0) {
     ldout(cct, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
   }
@@ -1224,7 +1227,7 @@ int RGWSI_Zone::update_placement_map()
   return ret;
 }
 
-int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
+int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool, optional_yield y)
 {
   int ret = rados_svc->pool(new_pool).lookup();
   if (ret < 0) { // DNE, or something
@@ -1236,29 +1239,29 @@ int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
   auto sysobj = obj_ctx.get_obj(obj);
 
   bufferlist empty_bl;
-  ret = sysobj.omap().set(new_pool.to_str(), empty_bl, null_yield);
+  ret = sysobj.omap().set(new_pool.to_str(), empty_bl, y);
 
   // don't care about return value
-  update_placement_map();
+  update_placement_map(y);
 
   return ret;
 }
 
-int RGWSI_Zone::remove_bucket_placement(const rgw_pool& old_pool)
+int RGWSI_Zone::remove_bucket_placement(const rgw_pool& old_pool, optional_yield y)
 {
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.omap().del(old_pool.to_str(), null_yield);
+  int ret = sysobj.omap().del(old_pool.to_str(), y);
 
   // don't care about return value
-  update_placement_map();
+  update_placement_map(y);
 
   return ret;
 }
 
-int RGWSI_Zone::list_placement_set(set<rgw_pool>& names)
+int RGWSI_Zone::list_placement_set(set<rgw_pool>& names, optional_yield y)
 {
   bufferlist header;
   map<string, bufferlist> m;
@@ -1266,7 +1269,7 @@ int RGWSI_Zone::list_placement_set(set<rgw_pool>& names)
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.omap().get_all(&m, null_yield);
+  int ret = sysobj.omap().get_all(&m, y);
   if (ret < 0)
     return ret;
 

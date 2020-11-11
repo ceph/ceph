@@ -57,8 +57,10 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
-extern int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id);
-extern int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map);
+extern int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, optional_yield y);
+extern int rgw_user_get_all_buckets_stats(
+  rgw::sal::RGWRadosStore *store,const rgw_user& user_id,
+  map<string, cls_user_bucket_entry>& buckets_usage_map, optional_yield y);
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
@@ -626,11 +628,11 @@ private:
   /* API Contract Fulfillment */
   int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
-  int execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
+  int execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
 
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
-  int modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
+  int modify(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg, bool defer_save);
 public:
   explicit RGWSubUserPool(RGWUser *user);
 
@@ -640,7 +642,7 @@ public:
   /* API contracted methods */
   int add(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
-  int modify(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
+  int modify(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
   friend class RGWUser;
 };
@@ -692,8 +694,8 @@ private:
   int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg);
   int execute_remove(RGWUserAdminOpState& op_state, 
                     std::string *err_msg, optional_yield y);
-  int execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg);
-  int execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg);
+  int execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
+  int execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
 
 public:
   RGWUser();
@@ -717,12 +719,12 @@ public:
 
   int remove(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
-  int rename(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
+  int rename(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
   /* remove an already populated RGWUser */
   int remove(std::string *err_msg = NULL);
 
-  int modify(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
+  int modify(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
   /* retrieve info from an existing user in the RGW system */
   int info(RGWUserAdminOpState& op_state, RGWUserInfo& fetched_info, std::string *err_msg = NULL);
@@ -747,13 +749,14 @@ public:
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   static int info(rgw::sal::RGWRadosStore *store,
-                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
+		  optional_yield y);
 
   static int create(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   static int modify(rgw::sal::RGWRadosStore *store,
-                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
 
   static int remove(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
@@ -766,7 +769,8 @@ public:
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   static int modify(rgw::sal::RGWRadosStore *store,
-                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
+		    optional_yield y);
 
   static int remove(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
@@ -952,9 +956,10 @@ public:
 
   int add_bucket(const rgw_user& user,
                  const rgw_bucket& bucket,
-                 ceph::real_time creation_time);
+                 ceph::real_time creation_time,
+		 optional_yield y);
   int remove_bucket(const rgw_user& user,
-                    const rgw_bucket& bucket);
+                    const rgw_bucket& bucket, optional_yield y);
   int list_buckets(const rgw_user& user,
                    const string& marker,
                    const string& end_marker,
@@ -962,13 +967,16 @@ public:
                    bool need_stats,
                    RGWUserBuckets *buckets,
                    bool *is_truncated,
+		   optional_yield y,
                    uint64_t default_max = 1000);
 
   int flush_bucket_stats(const rgw_user& user,
-                         const RGWBucketEnt& ent);
-  int complete_flush_stats(const rgw_user& user);
-  int reset_stats(const rgw_user& user);
+                         const RGWBucketEnt& ent,
+			 optional_yield y);
+  int complete_flush_stats(const rgw_user& user, optional_yield y);
+  int reset_stats(const rgw_user& user, optional_yield y);
   int read_stats(const rgw_user& user, RGWStorageStats *stats,
+		 optional_yield y,
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
   int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);

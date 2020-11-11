@@ -48,7 +48,7 @@ void RGWOp_Bucket_Info::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_fetch_stats(fetch_stats);
 
-  op_ret = RGWBucketAdminOp::info(store, op_state, flusher);
+  op_ret = RGWBucketAdminOp::info(store, op_state, flusher, null_yield);
 }
 
 class RGWOp_Get_Policy : public RGWRESTOp {
