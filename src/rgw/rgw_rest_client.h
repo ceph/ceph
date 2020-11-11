@@ -63,8 +63,8 @@ public:
   RGWRESTSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
                        param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params) {}
 
-  int execute(RGWAccessKey& key, const char *method, const char *resource);
-  int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+  int execute(RGWAccessKey& key, const char *method, const char *resource, optional_yield y);
+  int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 };
 
 class RGWWriteDrainCB {

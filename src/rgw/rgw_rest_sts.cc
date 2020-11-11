@@ -132,7 +132,8 @@ WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& c
 
 //Offline validation of incoming Web Token which is a signed JWT (JSON Web Token)
 boost::optional<WebTokenEngine::token_t>
-WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s) const
+WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s,
+			     optional_yield y) const
 {
   WebTokenEngine::token_t t;
   try {
@@ -174,7 +175,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (decoded.has_algorithm()) {
       auto& algorithm = decoded.get_algorithm();
       try {
-        validate_signature(dpp, decoded, algorithm, t.iss, thumbprints, null_yield);
+        validate_signature(dpp, decoded, algorithm, t.iss, thumbprints, y);
       } catch (...) {
         throw -EACCES;
       }
@@ -334,7 +335,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   }
 
   try {
-    t = get_from_jwt(dpp, token, s);
+    t = get_from_jwt(dpp, token, s, y);
   }
   catch (...) {
     return result_t::deny(-EACCES);

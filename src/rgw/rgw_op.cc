@@ -1133,7 +1133,7 @@ void RGWPutBucketTags::execute(optional_yield y)
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
@@ -1159,7 +1159,7 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
 void RGWDeleteBucketTags::execute(optional_yield y)
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1207,7 +1207,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1245,7 +1245,7 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
 void RGWDeleteBucketReplication::execute(optional_yield y)
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2591,7 +2591,7 @@ void RGWSetBucketVersioning::execute(optional_yield y)
     }
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2667,7 +2667,7 @@ void RGWSetBucketWebsite::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2701,7 +2701,7 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
 {
   bufferlist in_data;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
       << "returned err=" << op_ret << dendl;
@@ -3333,7 +3333,7 @@ void RGWDeleteBucket::execute(optional_yield y)
   }
 
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), &ot.read_version, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), &ot.read_version, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       /* adjust error, we want to return with NoSuchBucket and not
@@ -5442,7 +5442,7 @@ void RGWPutACLs::execute(optional_yield y)
     if (s->canned_acl.empty()) {
       in_data.append(data);
     }
-    op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+    op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -5569,7 +5569,7 @@ void RGWPutLC::execute(optional_yield y)
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5585,7 +5585,7 @@ void RGWPutLC::execute(optional_yield y)
 void RGWDeleteLC::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5629,7 +5629,7 @@ void RGWPutCORS::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5651,7 +5651,7 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
 void RGWDeleteCORS::execute(optional_yield y)
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5761,7 +5761,7 @@ void RGWSetRequestPayment::pre_exec()
 void RGWSetRequestPayment::execute(optional_yield y)
 {
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -7534,7 +7534,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -7678,7 +7678,7 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -7997,7 +7997,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

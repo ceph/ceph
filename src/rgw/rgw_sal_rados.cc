@@ -153,7 +153,7 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
 
   if (forward_to_master) {
     bufferlist in_data;
-    ret = store->forward_request_to_master(owner, &ot.read_version, in_data, nullptr, *req_info);
+    ret = store->forward_request_to_master(owner, &ot.read_version, in_data, nullptr, *req_info, y);
     if (ret < 0) {
       if (ret == -ENOENT) {
 	/* adjust error, we want to return with NoSuchBucket and not
@@ -782,7 +782,8 @@ bool RGWRadosStore::is_meta_master()
 
 int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 					     bufferlist& in_data,
-					     JSONParser *jp, req_info& info)
+					     JSONParser *jp, req_info& info,
+					     optional_yield y)
 {
   if (is_meta_master()) {
     /* We're master, don't forward */
@@ -799,7 +800,7 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
   int ret = svc()->zone->get_master_conn()->forward(rgw_user(uid_str), info,
                                                     objv, MAX_REST_RESPONSE,
-						    &in_data, &response);
+						    &in_data, &response, y);
   if (ret < 0)
     return ret;
 
@@ -880,7 +881,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
   if (!svc()->zone->is_meta_master()) {
     JSONParser jp;
-    ret = forward_request_to_master(&u, NULL, in_data, &jp, req_info);
+    ret = forward_request_to_master(&u, NULL, in_data, &jp, req_info, y);
     if (ret < 0) {
       return ret;
     }
