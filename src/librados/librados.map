@@ -1,4 +1,14 @@
 LIBRADOS_PRIVATE {
+	global:
+		extern "C++" {
+			"guard variable for boost::asio::detail::call_stack<boost::asio::detail::strand_executor_service::strand_impl, unsigned char>::top_";
+			"guard variable for boost::asio::detail::call_stack<boost::asio::detail::strand_service::strand_impl, unsigned char>::top_";
+			"guard variable for boost::asio::detail::call_stack<boost::asio::detail::thread_context, boost::asio::detail::thread_info_base>::top_";
+			"boost::asio::detail::call_stack<boost::asio::detail::strand_executor_service::strand_impl, unsigned char>::top_";
+			"boost::asio::detail::call_stack<boost::asio::detail::strand_service::strand_impl, unsigned char>::top_";
+			"boost::asio::detail::call_stack<boost::asio::detail::thread_context, boost::asio::detail::thread_info_base>::top_";
+
+		};
 	local:	*;
 };
 
