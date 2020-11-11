@@ -9,6 +9,7 @@
 #include "librbd/image/DetachParentRequest.h"
 #include "librbd/Types.h"
 #include "librbd/io/ObjectRequest.h"
+#include "librbd/io/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include <boost/lambda/bind.hpp>
@@ -54,18 +55,13 @@ public:
       }
     }
 
-    bufferlist bl;
-    auto req = new io::ObjectWriteRequest<I>(&image_ctx, m_object_no, 0,
-                                             std::move(bl), m_io_context, 0, 0,
-                                             std::nullopt, {}, this);
-    if (!req->has_parent()) {
+    if (!io::util::trigger_copyup(
+            &image_ctx, m_object_no, m_io_context, this)) {
       // stop early if the parent went away - it just means
       // another flatten finished first or the image was resized
-      delete req;
       return 1;
     }
 
-    req->send();
     return 0;
   }
 
