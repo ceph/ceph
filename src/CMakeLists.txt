@@ -512,7 +512,9 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-find_package(Lua 5.3 REQUIRED)
+if(NOT WIN32)
+  find_package(Lua 5.3 REQUIRED)
+endif()
 
 # rados object classes
 add_subdirectory(cls)
@@ -585,10 +587,9 @@ endif()
 
 add_subdirectory(kv)
 add_subdirectory(os)
+
 if(NOT WIN32)
 add_subdirectory(blk)
-endif()
-
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
@@ -608,6 +609,8 @@ set_target_properties(ceph-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
   INSTALL_RPATH "")
 install(TARGETS ceph-osd DESTINATION bin)
+
+endif(NOT WIN32)
 
 if (WITH_CEPHFS)
   add_subdirectory(mds)
