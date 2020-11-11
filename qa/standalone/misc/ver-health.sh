@@ -37,6 +37,7 @@ function run() {
     done
 }
 
+# Test a single OSD with an old version and multiple OSDs with 2 different old versions
 function TEST_check_version_health_1() {
     local dir=$1
 
@@ -45,16 +46,12 @@ function TEST_check_version_health_1() {
     # setup
     setup $dir || return 1
 
-    # create a cluster with one monitor and three osds
+    # create a cluster with two monitors and three osds
     run_mon $dir a --public-addr=$CEPH_MON_A --mon_warn_older_version_delay=0.0 || return 1
     run_mon $dir b --public-addr=$CEPH_MON_B --mon_warn_older_version_delay=0.0 || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
-    run_mgr $dir x || return 1
-    run_mgr $dir y || return 1
-    run_mds $dir m || return 1
-    run_mds $dir n || return 1
 
     sleep 5
     ceph health detail
@@ -86,6 +83,7 @@ function TEST_check_version_health_1() {
     ceph health detail | grep -q "osd.0 is running an older version of ceph: 02.00.00-gversion-test" || return 1
 }
 
+# Test with 1 MON and 1 MDS with an older version, and add 2 OSDs with different versions
 function TEST_check_version_health_2() {
     local dir=$1
 
@@ -94,7 +92,7 @@ function TEST_check_version_health_2() {
     # setup
     setup $dir || return 1
 
-    # create a cluster with one monitor and three osds
+    # create a cluster with all daemon types
     run_mon $dir a --public-addr=$CEPH_MON_A --mon_warn_older_version_delay=0.0 || return 1
     run_mon $dir b --public-addr=$CEPH_MON_B --mon_warn_older_version_delay=0.0 || return 1
     run_osd $dir 0 || return 1
@@ -140,7 +138,7 @@ function TEST_check_version_health_2() {
     ceph health detail | grep -q "osd.0 is running an older version of ceph: 02.00.00-gversion-test" || return 1
 }
 
-# Verify delay handling
+# Verify delay handling with same setup as test 1
 function TEST_check_version_health_3() {
     local dir=$1
 
@@ -149,16 +147,12 @@ function TEST_check_version_health_3() {
     # setup
     setup $dir || return 1
 
-    # create a cluster with one monitor and three osds
+    # create a cluster with two monitors and three osds
     run_mon $dir a --public-addr=$CEPH_MON_A --mon_warn_older_version_delay=20.0 || return 1
     run_mon $dir b --public-addr=$CEPH_MON_B --mon_warn_older_version_delay=20.0 || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
-    run_mgr $dir x || return 1
-    run_mgr $dir y || return 1
-    run_mds $dir m || return 1
-    run_mds $dir n || return 1
 
     sleep 5
     ceph health detail
@@ -169,6 +163,7 @@ function TEST_check_version_health_3() {
     EXTRA_OPTS=" --debug_version_for_testing=01.00.00-gversion-test" activate_osd $dir 1
     sleep 5 # give kill time
 
+    # Wait 50% of 20 second delay config
     sleep 10
     # should not see this yet
     ceph health detail | grep DAEMON_OLD_VERSION && return 1
@@ -198,3 +193,7 @@ function TEST_check_version_health_3() {
 }
 
 main ver-health "$@"
+
+# Local Variables:
+# compile-command: "cd ../.. ; make -j4 && ../qa/run-standalone.sh ver-health.sh"
+# End:
