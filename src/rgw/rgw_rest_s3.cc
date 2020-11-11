@@ -4910,14 +4910,14 @@ int RGWHandler_REST_S3Website::init(rgw::sal::RGWRadosStore *store, req_state *s
   return RGWHandler_REST_S3::init(store, s, cio);
 }
 
-int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
+int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yield y) {
   *new_op = op;
   ldpp_dout(s, 10) << __func__ << " Starting retarget" << dendl;
 
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
 
-  int ret = store->get_bucket(nullptr, s->bucket_tenant, s->bucket_name, &s->bucket);
+  int ret = store->get_bucket(nullptr, s->bucket_tenant, s->bucket_name, &s->bucket, y);
   if (ret < 0) {
       // TODO-FUTURE: if the bucket does not exist, maybe expose it here?
       return -ERR_NO_SUCH_BUCKET;
@@ -5877,7 +5877,7 @@ rgw::auth::s3::STSEngine::authenticate(
   rgw::auth::RoleApplier::Role r;
   if (! token.roleId.empty()) {
     RGWRole role(s->cct, ctl, token.roleId);
-    if (role.get_by_id() < 0) {
+    if (role.get_by_id(y) < 0) {
       return result_t::deny(-EPERM);
     }
     r.id = token.roleId;

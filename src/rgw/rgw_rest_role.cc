@@ -27,7 +27,7 @@ int RGWRestRole::verify_permission(optional_yield y)
 
   string role_name = s->info.args.get("RoleName");
   RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
-  if (op_ret = role.get(); op_ret < 0) {
+  if (op_ret = role.get(y); op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_ROLE_FOUND;
     }
@@ -230,7 +230,7 @@ void RGWGetRole::execute(optional_yield y)
     return;
   }
   RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
-  op_ret = role.get();
+  op_ret = role.get(y);
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
@@ -322,7 +322,7 @@ void RGWListRoles::execute(optional_yield y)
     return;
   }
   vector<RGWRole> result;
-  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->get_tenant(), result);
+  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->get_tenant(), result, y);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");

@@ -5783,7 +5783,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get();
+      ret = role.get(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5811,7 +5811,7 @@ int main(int argc, const char **argv)
       }
 
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get();
+      ret = role.get(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5826,7 +5826,7 @@ int main(int argc, const char **argv)
   case OPT::ROLE_LIST:
     {
       vector<RGWRole> result;
-      ret = RGWRole::get_roles_by_path_prefix(store->getRados(), g_ceph_context, path_prefix, tenant, result);
+      ret = RGWRole::get_roles_by_path_prefix(store->getRados(), g_ceph_context, path_prefix, tenant, result, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5859,7 +5859,7 @@ int main(int argc, const char **argv)
       }
 
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get();
+      ret = role.get(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5878,7 +5878,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get();
+      ret = role.get(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5898,7 +5898,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      int ret = role.get();
+      int ret = role.get(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5922,7 +5922,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get();
+      ret = role.get(null_yield);
       if (ret < 0) {
         return -ret;
       }

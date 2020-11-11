@@ -84,7 +84,7 @@ int RGWRole::create(bool exclusive, optional_yield y)
   }
 
   /* check to see the name is not used */
-  ret = read_id(name, tenant, id);
+  ret = read_id(name, tenant, id, y);
   if (exclusive && ret == 0) {
     ldout(cct, 0) << "ERROR: name " << name << " already in use for role id "
                     << id << dendl;
@@ -171,12 +171,12 @@ int RGWRole::delete_obj(optional_yield y)
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().roles_pool;
 
-  int ret = read_name();
+  int ret = read_name(y);
   if (ret < 0) {
     return ret;
   }
 
-  ret = read_info();
+  ret = read_info(y);
   if (ret < 0) {
     return ret;
   }
@@ -211,14 +211,14 @@ int RGWRole::delete_obj(optional_yield y)
   return ret;
 }
 
-int RGWRole::get()
+int RGWRole::get(optional_yield y)
 {
-  int ret = read_name();
+  int ret = read_name(y);
   if (ret < 0) {
     return ret;
   }
 
-  ret = read_info();
+  ret = read_info(y);
   if (ret < 0) {
     return ret;
   }
@@ -226,9 +226,9 @@ int RGWRole::get()
   return 0;
 }
 
-int RGWRole::get_by_id()
+int RGWRole::get_by_id(optional_yield y)
 {
-  int ret = read_info();
+  int ret = read_info(y);
   if (ret < 0) {
     return ret;
   }
@@ -312,7 +312,7 @@ void RGWRole::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
 }
 
-int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
+int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id, optional_yield y)
 {
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().roles_pool;
@@ -320,7 +320,7 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
   bufferlist bl;
   auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y);
   if (ret < 0) {
     return ret;
   }
@@ -339,7 +339,7 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
   return 0;
 }
 
-int RGWRole::read_info()
+int RGWRole::read_info(optional_yield y)
 {
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().roles_pool;
@@ -347,7 +347,7 @@ int RGWRole::read_info()
   bufferlist bl;
   auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed reading role info from pool: " << pool.name <<
                   ": " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -367,7 +367,7 @@ int RGWRole::read_info()
   return 0;
 }
 
-int RGWRole::read_name()
+int RGWRole::read_name(optional_yield y)
 {
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().roles_pool;
@@ -375,7 +375,7 @@ int RGWRole::read_name()
   bufferlist bl;
   auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed reading role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
@@ -446,7 +446,8 @@ int RGWRole::get_roles_by_path_prefix(RGWRados *store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,
-                                      vector<RGWRole>& roles)
+                                      vector<RGWRole>& roles,
+				      optional_yield y)
 {
   auto pool = store->svc.zone->get_zone_params().roles_pool;
   string prefix;
@@ -492,7 +493,7 @@ int RGWRole::get_roles_by_path_prefix(RGWRados *store,
 
       RGWRole role(cct, store->pctl);
       role.set_id(id);
-      int ret = role.read_info();
+      int ret = role.read_info(y);
       if (ret < 0) {
         return ret;
       }

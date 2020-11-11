@@ -439,7 +439,7 @@ public:
     return website_handler->error_handler(err_no, error_content, y);
   }
 
-  int retarget(RGWOp* op, RGWOp** new_op) override {
+  int retarget(RGWOp* op, RGWOp** new_op, optional_yield) override {
     return website_handler->retarget_bucket(op, new_op);
   }
 
@@ -478,7 +478,7 @@ public:
     return website_handler->error_handler(err_no, error_content, y);
   }
 
-  int retarget(RGWOp* op, RGWOp** new_op) override {
+  int retarget(RGWOp* op, RGWOp** new_op, optional_yield) override {
     return website_handler->retarget_object(op, new_op);
   }
 

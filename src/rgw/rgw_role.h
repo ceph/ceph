@@ -13,7 +13,7 @@
 
 #include "rgw/rgw_rados.h"
 
-class RGWCtl;
+struct RGWCtl;
 
 class RGWRole
 {
@@ -42,9 +42,9 @@ class RGWRole
   int store_info(bool exclusive, optional_yield y);
   int store_name(bool exclusive, optional_yield y);
   int store_path(bool exclusive, optional_yield y);
-  int read_id(const string& role_name, const string& tenant, string& role_id);
-  int read_name();
-  int read_info();
+  int read_id(const string& role_name, const string& tenant, string& role_id, optional_yield y);
+  int read_name(optional_yield y);
+  int read_info(optional_yield y);
   bool validate_input();
   void extract_name_tenant(const std::string& str);
 
@@ -143,8 +143,8 @@ public:
 
   int create(bool exclusive, optional_yield y);
   int delete_obj(optional_yield y);
-  int get();
-  int get_by_id();
+  int get(optional_yield y);
+  int get_by_id(optional_yield y);
   int update(optional_yield y);
   void update_trust_policy(string& trust_policy);
   void set_perm_policy(const string& policy_name, const string& perm_policy);
@@ -161,7 +161,8 @@ public:
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,
-                                      vector<RGWRole>& roles);
+                                      vector<RGWRole>& roles,
+				      optional_yield y);
 };
 WRITE_CLASS_ENCODER(RGWRole)
 #endif /* CEPH_RGW_ROLE_H */

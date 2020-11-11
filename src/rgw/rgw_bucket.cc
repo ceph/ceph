@@ -1263,7 +1263,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdm
   std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(op_state.get_user_id());
 
   int ret = store->get_bucket(user.get(), user->get_tenant(), op_state.get_bucket_name(),
-			      &bucket);
+			      &bucket, y);
   if (ret < 0)
     return ret;
 

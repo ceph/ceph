@@ -276,13 +276,14 @@ int AssumeRoleRequest::validate_input() const
   return AssumeRoleRequestBase::validate_input();
 }
 
-std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
+std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn,
+						 optional_yield y)
 {
   if (auto r_arn = rgw::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
     RGWRole role(cct, store->getRados()->pctl, roleName, r_arn->account);
-    if (int ret = role.get(); ret < 0) {
+    if (int ret = role.get(y); ret < 0) {
       if (ret == -ENOENT) {
         ldout(cct, 0) << "Role doesn't exist: " << roleName << dendl;
         ret = -ERR_NO_ROLE_FOUND;

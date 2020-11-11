@@ -235,7 +235,7 @@ public:
   STSService(CephContext* cct, rgw::sal::RGWRadosStore *store, rgw_user user_id,
 	     rgw::auth::Identity* identity)
     : cct(cct), store(store), user_id(user_id), identity(identity) {}
-  std::tuple<int, RGWRole> getRoleInfo(const string& arn);
+  std::tuple<int, RGWRole> getRoleInfo(const string& arn, optional_yield y);
   AssumeRoleResponse assumeRole(AssumeRoleRequest& req, optional_yield y);
   GetSessionTokenResponse getSessionToken(GetSessionTokenRequest& req);
   AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req);
