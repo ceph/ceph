@@ -86,14 +86,15 @@ protected:
   RGWSI_SysObj *sysobj_svc{nullptr};
   RGWSI_Zone *zone_svc{nullptr};
 
-  int store_name(bool exclusive);
-  int store_info(bool exclusive);
-  int read_info(const std::string& obj_id, bool old_format = false);
-  int read_id(const std::string& obj_name, std::string& obj_id);
+  int store_name(bool exclusive, optional_yield y);
+  int store_info(bool exclusive, optional_yield y);
+  int read_info(const std::string& obj_id, optional_yield y, bool old_format = false);
+  int read_id(const std::string& obj_name, std::string& obj_id, optional_yield y);
   int read_default(RGWDefaultSystemMetaObjInfo& default_info,
-		   const std::string& oid);
+		   const std::string& oid,
+		   optional_yield y);
   /* read and use default id */
-  int use_default(bool old_format = false);
+  int use_default(optional_yield y, bool old_format = false);
 
 public:
   RGWSystemMetaObj() {}
@@ -130,17 +131,20 @@ public:
   }
 
   void reinit_instance(CephContext *_cct, RGWSI_SysObj *_sysobj_svc);
-  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true, bool old_format = false);
-  virtual int read_default_id(std::string& default_id, bool old_format = false);
-  virtual int set_as_default(bool exclusive = false);
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc,
+	   optional_yield y,
+	   bool setup_obj = true, bool old_format = false);
+  virtual int read_default_id(std::string& default_id, optional_yield y,
+			      bool old_format = false);
+  virtual int set_as_default(optional_yield y, bool exclusive = false);
   int delete_default();
-  virtual int create(bool exclusive = true);
-  int delete_obj(bool old_format = false);
-  int rename(const std::string& new_name);
-  int update() { return store_info(false);}
-  int update_name() { return store_name(false);}
-  int read();
-  int write(bool exclusive);
+  virtual int create(optional_yield y, bool exclusive = true);
+  int delete_obj(optional_yield y, bool old_format = false);
+  int rename(const std::string& new_name, optional_yield y);
+  int update(optional_yield y) { return store_info(false, y);}
+  int update_name(optional_yield y) { return store_name(false, y);}
+  int read(optional_yield y);
+  int write(bool exclusive, optional_yield y);
 
   virtual rgw_pool get_pool(CephContext *cct) const = 0;
   virtual const std::string get_default_oid(bool old_format = false) const = 0;
@@ -396,14 +400,14 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const std::string& get_info_oid_prefix(bool old_format = false) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
-  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true,
-	   bool old_format = false);
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y,
+	   bool setup_obj = true, bool old_format = false);
   using RGWSystemMetaObj::init;
-  int read_default_id(std::string& default_id, bool old_format = false) override;
-  int set_as_default(bool exclusive = false) override;
-  int create_default(bool old_format = false);
-  int create(bool exclusive = true) override;
-  int fix_pool_names();
+  int read_default_id(std::string& default_id, optional_yield y, bool old_format = false) override;
+  int set_as_default(optional_yield y, bool exclusive = false) override;
+  int create_default(optional_yield y, bool old_format = false);
+  int create(optional_yield y, bool exclusive = true) override;
+  int fix_pool_names(optional_yield y);
 
   const string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
@@ -756,11 +760,11 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
       realm_id(_realm_id) {}
 
   bool is_master_zonegroup() const { return is_master;}
-  void update_master(bool _is_master) {
+  void update_master(bool _is_master, optional_yield y) {
     is_master = _is_master;
-    post_process_params();
+    post_process_params(y);
   }
-  void post_process_params();
+  void post_process_params(optional_yield y);
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(5, 1, bl);
@@ -808,17 +812,18 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     DECODE_FINISH(bl);
   }
 
-  int read_default_id(std::string& default_id, bool old_format = false) override;
-  int set_as_default(bool exclusive = false) override;
-  int create_default(bool old_format = false);
+  int read_default_id(std::string& default_id, optional_yield y, bool old_format = false) override;
+  int set_as_default(optional_yield y, bool exclusive = false) override;
+  int create_default(optional_yield y, bool old_format = false);
   int equals(const std::string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                const list<std::string>& endpoints, const std::string *ptier_type,
                bool *psync_from_all, list<std::string>& sync_from,
                list<std::string>& sync_from_rm, std::string *predirect_zone,
-               std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr);
-  int remove_zone(const std::string& zone_id);
-  int rename_zone(const RGWZoneParams& zone_params);
+               std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr,
+	       optional_yield y);
+  int remove_zone(const std::string& zone_id, optional_yield y);
+  int rename_zone(const RGWZoneParams& zone_params, optional_yield y);
   rgw_pool get_pool(CephContext *cct) const override;
   const std::string get_default_oid(bool old_region_format = false) const override;
   const std::string& get_info_oid_prefix(bool old_region_format = false) const override;
@@ -883,8 +888,8 @@ struct RGWPeriodConfig
   // the period config must be stored in a local object outside of the period,
   // so that it can be used in a default configuration where no realm/period
   // exists
-  int read(RGWSI_SysObj *sysobj_svc, const std::string& realm_id);
-  int write(RGWSI_SysObj *sysobj_svc, const std::string& realm_id);
+  int read(RGWSI_SysObj *sysobj_svc, const std::string& realm_id, optional_yield y);
+  int write(RGWSI_SysObj *sysobj_svc, const std::string& realm_id, optional_yield y);
 
   static std::string get_oid(const std::string& realm_id);
   static rgw_pool get_pool(CephContext *cct);
@@ -920,7 +925,7 @@ struct RGWZoneGroupMap {
   RGWQuotaInfo user_quota;
 
   /* construct the map */
-  int read(CephContext *cct, RGWSI_SysObj *sysobj_svc);
+  int read(CephContext *cct, RGWSI_SysObj *sysobj_svc, optional_yield y);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -938,8 +943,8 @@ class RGWRealm : public RGWSystemMetaObj
   std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
-  int create_control(bool exclusive);
-  int delete_control();
+  int create_control(bool exclusive, optional_yield y);
+  int delete_control(optional_yield y);
 public:
   RGWRealm() {}
   RGWRealm(const std::string& _id, const std::string& _name = "") : RGWSystemMetaObj(_id, _name) {}
@@ -962,8 +967,8 @@ public:
     DECODE_FINISH(bl);
   }
 
-  int create(bool exclusive = true) override;
-  int delete_obj();
+  int create(optional_yield y, bool exclusive = true) override;
+  int delete_obj(optional_yield y);
   rgw_pool get_pool(CephContext *cct) const override;
   const std::string get_default_oid(bool old_format = false) const override;
   const std::string& get_names_oid_prefix() const override;
@@ -979,7 +984,7 @@ public:
   const std::string& get_current_period() const {
     return current_period;
   }
-  int set_current_period(RGWPeriod& period);
+  int set_current_period(RGWPeriod& period, optional_yield y);
   void clear_current_period_and_epoch() {
     current_period.clear();
     epoch = 0;
@@ -988,9 +993,9 @@ public:
 
   std::string get_control_oid() const;
   /// send a notify on the realm control object
-  int notify_zone(bufferlist& bl);
+  int notify_zone(bufferlist& bl, optional_yield y);
   /// notify the zone of a new period
-  int notify_new_period(const RGWPeriod& period);
+  int notify_new_period(const RGWPeriod& period, optional_yield y);
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
@@ -1054,10 +1059,11 @@ class RGWPeriod
   CephContext *cct{nullptr};
   RGWSI_SysObj *sysobj_svc{nullptr};
 
-  int read_info();
+  int read_info(optional_yield y);
   int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info,
+			optional_yield y,
                         RGWObjVersionTracker *objv = nullptr);
-  int use_latest_epoch();
+  int use_latest_epoch(optional_yield y);
   int use_current_period();
 
   const std::string get_period_oid() const;
@@ -1113,7 +1119,7 @@ public:
     realm_id = _realm_id;
   }
 
-  int reflect();
+  int reflect(optional_yield y);
 
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const std::string& zonegroup_id) const;
@@ -1139,28 +1145,30 @@ public:
     return false;
   }
 
-  int get_latest_epoch(epoch_t& epoch);
-  int set_latest_epoch(epoch_t epoch, bool exclusive = false,
+  int get_latest_epoch(epoch_t& epoch, optional_yield y);
+  int set_latest_epoch(optional_yield y,
+		       epoch_t epoch, bool exclusive = false,
                        RGWObjVersionTracker *objv = nullptr);
   // update latest_epoch if the given epoch is higher, else return -EEXIST
-  int update_latest_epoch(epoch_t epoch);
+  int update_latest_epoch(epoch_t epoch, optional_yield y);
 
-  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const std::string &period_realm_id, const std::string &period_realm_name = "",
-	   bool setup_obj = true);
-  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true);  
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const std::string &period_realm_id, optional_yield y,
+	   const std::string &period_realm_name = "", bool setup_obj = true);
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y, bool setup_obj = true);  
 
-  int create(bool exclusive = true);
-  int delete_obj();
-  int store_info(bool exclusive);
-  int add_zonegroup(const RGWZoneGroup& zonegroup);
+  int create(optional_yield y, bool exclusive = true);
+  int delete_obj(optional_yield y);
+  int store_info(bool exclusive, optional_yield y);
+  int add_zonegroup(const RGWZoneGroup& zonegroup, optional_yield y);
 
   void fork();
-  int update();
+  int update(optional_yield y);
 
   // commit a staging period; only for use on master zone
   int commit(rgw::sal::RGWRadosStore *store,
              RGWRealm& realm, const RGWPeriod &current_period,
-             std::ostream& error_stream, bool force_if_stale = false);
+             std::ostream& error_stream, optional_yield y,
+	     bool force_if_stale = false);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

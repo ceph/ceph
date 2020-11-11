@@ -63,12 +63,13 @@ int pull_period(RGWRESTConn* conn, const std::string& period_id,
 
 } // anonymous namespace
 
-int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
+int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period,
+			  optional_yield y)
 {
   // try to read the period from rados
   period.set_id(period_id);
   period.set_epoch(0);
-  int r = period.init(cct, svc.sysobj);
+  int r = period.init(cct, svc.sysobj, y);
   if (r < 0) {
     if (svc.zone->is_meta_master()) {
       // can't pull if we're the master
@@ -86,7 +87,7 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
       return r;
     }
     // write the period to rados
-    r = period.store_info(true);
+    r = period.store_info(true, y);
     if (r == -EEXIST) {
       r = 0;
     } else if (r < 0) {
@@ -94,7 +95,7 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
       return r;
     }
     // update latest epoch
-    r = period.update_latest_epoch(period.get_epoch());
+    r = period.update_latest_epoch(period.get_epoch(), y);
     if (r == -EEXIST) {
       // already have this epoch (or a more recent one)
       return 0;
@@ -106,7 +107,7 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
     }
     // reflect period objects if this is the latest version
     if (svc.zone->get_realm().get_current_period() == period_id) {
-      r = period.reflect();
+      r = period.reflect(y);
       if (r < 0) {
         return r;
       }

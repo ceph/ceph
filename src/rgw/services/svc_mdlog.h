@@ -75,7 +75,7 @@ public:
 
   // traverse all the way back to the beginning of the period history, and
   // return a cursor to the first period in a fully attached history
-  RGWPeriodHistory::Cursor find_oldest_period();
+  RGWPeriodHistory::Cursor find_oldest_period(optional_yield y);
 
   /// initialize the oldest log period if it doesn't exist, and attach it to
   /// our current history
@@ -107,7 +107,7 @@ public:
     return period_history.get();
   }
 
-  int pull_period(const std::string& period_id, RGWPeriod& period);
+  int pull_period(const std::string& period_id, RGWPeriod& period, optional_yield y);
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);

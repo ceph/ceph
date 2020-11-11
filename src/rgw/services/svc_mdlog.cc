@@ -243,7 +243,7 @@ class TrimHistoryCR : public RGWCoroutine {
 
 // traverse all the way back to the beginning of the period history, and
 // return a cursor to the first period in a fully attached history
-Cursor RGWSI_MDLog::find_oldest_period()
+Cursor RGWSI_MDLog::find_oldest_period(optional_yield y)
 {
   auto cursor = period_history->get_current();
 
@@ -259,7 +259,7 @@ Cursor RGWSI_MDLog::find_oldest_period()
       }
       // pull the predecessor and add it to our history
       RGWPeriod period;
-      int r = period_puller->pull(predecessor, period);
+      int r = period_puller->pull(predecessor, period, y);
       if (r < 0) {
         return cursor;
       }
@@ -287,7 +287,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
   if (ret == -ENOENT) {
     // initialize the mdlog history and write it
     ldout(cct, 10) << "initializing mdlog history" << dendl;
-    auto cursor = find_oldest_period();
+    auto cursor = find_oldest_period(y);
     if (!cursor) {
       return cursor;
     }
@@ -314,7 +314,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
   if (cursor) {
     return cursor;
   } else {
-    cursor = find_oldest_period();
+    cursor = find_oldest_period(y);
     state.oldest_realm_epoch = cursor.get_epoch();
     state.oldest_period_id = cursor.get_period().get_id();
     ldout(cct, 10) << "rewriting mdlog history" << dendl;
@@ -329,7 +329,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
 
   // pull the oldest period by id
   RGWPeriod period;
-  ret = period_puller->pull(state.oldest_period_id, period);
+  ret = period_puller->pull(state.oldest_period_id, period, y);
   if (ret < 0) {
     ldout(cct, 1) << "failed to read period id=" << state.oldest_period_id
         << " for mdlog history: " << cpp_strerror(ret) << dendl;
@@ -343,7 +343,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
     return Cursor{-EINVAL};
   }
   // attach the period to our history
-  return period_history->attach(std::move(period));
+  return period_history->attach(std::move(period), y);
 }
 
 Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y) const
@@ -396,8 +396,9 @@ int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
   return current_log->get_shard_id(hash_key, shard_id);
 }
 
-int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period)
+int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period,
+			     optional_yield y)
 {
-  return period_puller->pull(period_id, period);
+  return period_puller->pull(period_id, period, y);
 }
 
