@@ -9,4 +9,4 @@ execnet
 remoto
 Jinja2
 pyfakefs
-
+urllib3==1.25.11
