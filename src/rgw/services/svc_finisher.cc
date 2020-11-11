@@ -5,7 +5,7 @@
 
 #include "svc_finisher.h"
 
-int RGWSI_Finisher::do_start()
+int RGWSI_Finisher::do_start(optional_yield)
 {
   finisher = new Finisher(cct);
   finisher->start();

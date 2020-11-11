@@ -43,7 +43,7 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
 
   std::unique_ptr<RGWSI_Bucket_Sync_SObj_HintIndexManager> hint_index_mgr;
 
-  int do_start() override;
+  int do_start(optional_yield) override;
 
   struct optional_zone_bucket {
     optional<rgw_zone_id> zone;

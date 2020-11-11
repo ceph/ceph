@@ -22,6 +22,9 @@
 
 #include <atomic>
 
+#include "rgw/rgw_basic_types.h"
+#include "common/async/yield_context.h"
+
 static inline int64_t rgw_rounded_kb(int64_t bytes)
 {
   return (bytes + 1023) / 1024;
@@ -105,7 +108,7 @@ public:
   }
   virtual int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, uint64_t size) = 0;
+			  uint64_t num_objs, uint64_t size, optional_yield y) = 0;
 
   virtual void check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
 				   uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) = 0;

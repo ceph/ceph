@@ -69,7 +69,8 @@ class RGWStore : public DoutPrefixProvider {
 			    bool obj_lock_enabled,
 			    bool *existed,
 			    req_info& req_info,
-			    std::unique_ptr<RGWBucket>* bucket) = 0;
+			    std::unique_ptr<RGWBucket>* bucket,
+			    optional_yield y) = 0;
     virtual RGWBucketList* list_buckets(void) = 0;
     virtual bool is_meta_master() = 0;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
@@ -95,7 +96,8 @@ class RGWUser {
     virtual ~RGWUser() = default;
 
     virtual int list_buckets(const std::string& marker, const std::string& end_marker,
-			     uint64_t max, bool need_stats, RGWBucketList& buckets) = 0;
+			     uint64_t max, bool need_stats, RGWBucketList& buckets,
+			     optional_yield y) = 0;
     virtual RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time) = 0;
     friend class RGWBucket;
     virtual std::string& get_display_name() { return info.display_name; }
@@ -194,7 +196,7 @@ class RGWBucket {
 				 std::string *max_marker = nullptr,
 				 bool *syncstopped = nullptr) = 0;
     virtual int read_bucket_stats(optional_yield y) = 0;
-    virtual int sync_user_stats() = 0;
+    virtual int sync_user_stats(optional_yield y) = 0;
     virtual int update_container_stats(void) = 0;
     virtual int check_bucket_shards(void) = 0;
     virtual int link(RGWUser* new_user, optional_yield y) = 0;
@@ -203,7 +205,7 @@ class RGWBucket {
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) = 0;
     virtual bool is_owner(RGWUser* user) = 0;
     virtual int check_empty(optional_yield y) = 0;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) = 0;
+    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) = 0;
     virtual int try_refresh_info(ceph::real_time *pmtime) = 0;
     virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,

@@ -7,7 +7,7 @@
 
 #include "rgw/rgw_zone.h"
 
-int RGWSI_ZoneUtils::do_start()
+int RGWSI_ZoneUtils::do_start(optional_yield)
 {
   init_unique_trans_id_deps();
 
