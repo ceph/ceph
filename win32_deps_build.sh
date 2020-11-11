@@ -24,8 +24,8 @@ curlSrcDir="${depsSrcDir}/curl"
 curlDir="${depsToolsetDir}/curl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://dl.bintray.com/boostorg/release/1.70.0/source/boost_1_70_0.tar.gz"
-boostSrcDir="${depsSrcDir}/boost_1_70_0"
+boostUrl="https://dl.bintray.com/boostorg/release/1.73.0/source/boost_1_73_0.tar.gz"
+boostSrcDir="${depsSrcDir}/boost_1_73_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
@@ -256,6 +256,45 @@ patch -N boost/asio/detail/config.hpp <<EOL
 +#  endif // !defined(BOOST_ASIO_WINDOWS_RUNTIME)
  # endif // !defined(BOOST_ASIO_DISABLE_LOCAL_SOCKETS)
  #endif // !defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
+EOL
+
+# TODO: drop this when switching to Boost>=1.75, it's unreleased as of 1.74.
+patch -N boost/process/detail/windows/handle_workaround.hpp <<EOL
+--- boost/process/detail/windows/handle_workaround.hpp
++++ boost/process/detail/windows/handle_workaround.hpp.new
+@@ -198,20 +198,20 @@ typedef struct _OBJECT_TYPE_INFORMATION_ {
+ 
+ 
+ /*
+-__kernel_entry NTSTATUS NtQuerySystemInformation(
++NTSTATUS NtQuerySystemInformation(
+   IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
+   OUT PVOID                   SystemInformation,
+   IN ULONG                    SystemInformationLength,
+   OUT PULONG                  ReturnLength
+ );
+  */
+-typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_system_query_information_p )(
++typedef ::boost::winapi::NTSTATUS_ (*nt_system_query_information_p )(
+         SYSTEM_INFORMATION_CLASS_,
+         void *,
+         ::boost::winapi::ULONG_,
+         ::boost::winapi::PULONG_);
+ /*
+-__kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
++NTSYSCALLAPI NTSTATUS NtQueryObject(
+   HANDLE                   Handle,
+   OBJECT_INFORMATION_CLASS ObjectInformationClass,
+   PVOID                    ObjectInformation,
+@@ -220,7 +220,7 @@ __kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
+ );
+  */
+ 
+-typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_query_object_p )(
++typedef ::boost::winapi::NTSTATUS_ (*nt_query_object_p )(
+         ::boost::winapi::HANDLE_,
+         OBJECT_INFORMATION_CLASS_,
+         void *,
 EOL
 
 ./bootstrap.sh
