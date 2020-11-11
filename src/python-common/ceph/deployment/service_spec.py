@@ -827,6 +827,11 @@ class HA_RGWSpec(ServiceSpec):
         self.ha_proxy_ssl_options = ha_proxy_ssl_options
         self.haproxy_container_image = haproxy_container_image
         self.keepalived_container_image = keepalived_container_image
+        self.ha_proxy_frontend_ssl_certificate = ha_proxy_frontend_ssl_certificate
+        self.ha_proxy_frontend_ssl_port = ha_proxy_frontend_ssl_port
+        self.ha_proxy_ssl_dh_param = ha_proxy_ssl_dh_param
+        self.ha_proxy_ssl_ciphers = ha_proxy_ssl_ciphers
+        self.ha_proxy_ssl_options = ha_proxy_ssl_options
         # placeholder variable. Need definitive list of hosts this service will
         # be placed on in order to generate keepalived config. Will be populated
         # when applying spec
