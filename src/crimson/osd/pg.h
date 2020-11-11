@@ -496,10 +496,6 @@ public:
 
   using load_obc_ertr = crimson::errorator<
     crimson::ct_error::object_corrupted>;
-  load_obc_ertr::future<
-    std::pair<crimson::osd::ObjectContextRef, bool>>
-  get_or_load_clone_obc(
-    hobject_t oid, crimson::osd::ObjectContextRef head_obc);
 
   load_obc_ertr::future<crimson::osd::ObjectContextRef>
   load_head_obc(ObjectContextRef obc);
@@ -524,6 +520,9 @@ public:
   void dump_primary(Formatter*);
 
 private:
+  template<RWState::State State>
+  seastar::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
+
   load_obc_ertr::future<ObjectContextRef> get_locked_obc(
     Operation *op,
     const hobject_t &oid,
