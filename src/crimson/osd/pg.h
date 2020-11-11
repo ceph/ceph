@@ -501,10 +501,6 @@ public:
   get_or_load_clone_obc(
     hobject_t oid, crimson::osd::ObjectContextRef head_obc);
 
-  load_obc_ertr::future<
-    std::pair<crimson::osd::ObjectContextRef, bool>>
-  get_or_load_head_obc(hobject_t oid);
-
   load_obc_ertr::future<crimson::osd::ObjectContextRef>
   load_head_obc(ObjectContextRef obc);
 

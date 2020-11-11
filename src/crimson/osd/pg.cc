@@ -838,41 +838,6 @@ PG::with_head_obc<RWState::RWREAD>(hobject_t, with_obc_func_t&&);
 template seastar::future<>
 PG::with_head_obc<RWState::RWNONE>(hobject_t, with_obc_func_t&&);
 
-PG::load_obc_ertr::future<
-  std::pair<crimson::osd::ObjectContextRef, bool>>
-PG::get_or_load_head_obc(hobject_t oid)
-{
-  if (__builtin_expect(stopping, false)) {
-    throw crimson::common::system_shutdown_exception();
-  }
-
-  ceph_assert(oid.is_head());
-  auto [obc, existed] = shard_services.obc_registry.get_cached_obc(oid);
-  if (existed) {
-    logger().debug(
-      "{}: found {} in cache",
-      __func__,
-      oid);
-    return load_obc_ertr::make_ready_future<
-      std::pair<crimson::osd::ObjectContextRef, bool>>(
-	std::make_pair(std::move(obc), true)
-      );
-  } else {
-    logger().debug(
-      "{}: cache miss on {}",
-      __func__,
-      oid);
-    bool got = obc->maybe_get_excl();
-    ceph_assert(got);
-    return load_head_obc(obc).safe_then([](auto obc) {
-      return load_obc_ertr::make_ready_future<
-        std::pair<crimson::osd::ObjectContextRef, bool>>(
-          std::make_pair(std::move(obc), false)
-        );
-    });
-  }
-}
-
 PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
 PG::load_head_obc(ObjectContextRef obc)
 {
