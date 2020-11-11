@@ -45,9 +45,18 @@ export function configureTestBed(configuration: any, entryComponents?: any) {
 export class PermissionHelper {
   tac: TableActionsComponent;
   permission: Permission;
+  selection: { single: object; multiple: object[] };
 
-  constructor(permission: Permission) {
+  /**
+   * @param permission The permissions used by this test.
+   * @param selection The selection used by this test. Configure this if
+   *   the table actions require a more complex selection object to perform
+   *   a correct test run.
+   *   Defaults to `{ single: {}, multiple: [{}, {}] }`.
+   */
+  constructor(permission: Permission, selection?: { single: object; multiple: object[] }) {
     this.permission = permission;
+    this.selection = _.defaultTo(selection, { single: {}, multiple: [{}, {}] });
   }
 
   setPermissionsAndGetActions(tableActions: CdTableAction[]): any {
@@ -91,11 +100,13 @@ export class PermissionHelper {
   testScenarios() {
     const result: any = {};
     // 'multiple selections'
-    result.multiple = this.testScenario([{}, {}]);
+    result.multiple = this.testScenario(this.selection.multiple);
     // 'select executing item'
-    result.executing = this.testScenario([{ cdExecuting: 'someAction' }]);
+    result.executing = this.testScenario([
+      _.merge({ cdExecuting: 'someAction' }, this.selection.single)
+    ]);
     // 'select non-executing item'
-    result.single = this.testScenario([{}]);
+    result.single = this.testScenario([this.selection.single]);
     // 'no selection'
     result.no = this.testScenario([]);
 
@@ -104,12 +115,13 @@ export class PermissionHelper {
 
   private testScenario(selection: object[]) {
     this.setSelection(selection);
-    const btn = this.tac.getCurrentButton();
-    return btn ? btn.name : '';
+    const action: CdTableAction = this.tac.currentAction;
+    return action ? action.name : '';
   }
 
   setSelection(selection: object[]) {
     this.tac.selection.selected = selection;
+    this.tac.onSelectionChange();
   }
 }
 
@@ -638,7 +650,7 @@ export class TableActionHelper {
     const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
     const toClassName = TestBed.inject(TableActionsComponent).toClassName;
     const getActionElement = (action: CdTableAction) =>
-      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action.name)}`));
+      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action)}`));
 
     const actions = {};
     tableActions.forEach((action) => {

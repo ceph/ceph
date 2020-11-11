@@ -201,13 +201,14 @@ export class RbdTrashListComponent implements OnInit {
     const namespace = this.selection.first().namespace;
     const imageId = this.selection.first().id;
     const expiresAt = this.selection.first().deferment_end_time;
+    const isExpired = moment().isAfter(expiresAt);
     const imageIdSpec = new ImageSpec(poolName, namespace, imageId);
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'RBD',
       itemNames: [imageIdSpec],
       bodyTemplate: this.deleteTpl,
-      bodyContext: { $implicit: expiresAt },
+      bodyContext: { expiresAt, isExpired },
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('rbd/trash/remove', {
@@ -216,10 +217,6 @@ export class RbdTrashListComponent implements OnInit {
           call: this.rbdService.removeTrash(imageIdSpec, true)
         })
     });
-  }
-
-  isExpired(expiresAt: string): boolean {
-    return moment().isAfter(expiresAt);
   }
 
   purgeModal() {

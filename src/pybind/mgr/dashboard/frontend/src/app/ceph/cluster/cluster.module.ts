@@ -13,6 +13,7 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -70,7 +71,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     CephSharedModule,
     NgbDatepickerModule,
     NgbPopoverModule,
-    NgbDropdownModule
+    NgbDropdownModule,
+    NgxPipeFunctionModule
   ],
   declarations: [
     HostsComponent,
