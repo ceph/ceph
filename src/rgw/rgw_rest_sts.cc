@@ -362,7 +362,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
   sts = std::move(_sts);
 
   string rArn = s->info.args.get("RoleArn");
-  const auto& [ret, role] = sts.getRoleInfo(rArn);
+  const auto& [ret, role] = sts.getRoleInfo(rArn, y);
   if (ret < 0) {
     ldout(s->cct, 0) << "failed to get role info using role arn: " << rArn << dendl;
     return ret;

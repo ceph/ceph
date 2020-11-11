@@ -139,14 +139,14 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
 
   // if we deleted children above we will force delete, as any that
   // remain is detrius from a prior bug
-  ret = store->getRados()->delete_bucket(info, ot, null_yield, !delete_children);
+  ret = store->getRados()->delete_bucket(info, ot, y, !delete_children);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;
     return ret;
   }
 
-  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, null_yield, false);
+  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, y, false);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
@@ -331,7 +331,7 @@ int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
   acls = acl;
   acl.encode(aclbl);
 
-  return store->ctl()->bucket->set_acl(acl.get_owner(), info.bucket, info, aclbl, null_yield);
+  return store->ctl()->bucket->set_acl(acl.get_owner(), info.bucket, info, aclbl, y);
 }
 
 std::unique_ptr<RGWObject> RGWRadosBucket::get_object(const rgw_obj_key& k)
@@ -694,13 +694,13 @@ int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB 
   return parent_op.iterate(ofs, end, cb, y);
 }
 
-int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket)
+int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y)
 {
   int ret;
   RGWBucket* bp;
 
   bp = new RGWRadosBucket(this, b, u);
-  ret = bp->get_bucket_info(null_yield);
+  ret = bp->get_bucket_info(y);
   if (ret < 0) {
     delete bp;
     return ret;
@@ -721,14 +721,14 @@ int RGWRadosStore::get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_pt
   return 0;
 }
 
-int RGWRadosStore::get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket)
+int RGWRadosStore::get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket, optional_yield y)
 {
   rgw_bucket b;
 
   b.tenant = tenant;
   b.name = name;
 
-  return get_bucket(u, b, bucket);
+  return get_bucket(u, b, bucket, y);
 }
 
 static int decode_policy(CephContext *cct,
@@ -752,9 +752,10 @@ static int decode_policy(CephContext *cct,
 }
 
 static int rgw_op_get_bucket_policy_from_attr(RGWRadosStore *store,
-				       RGWUser& user,
-				       RGWAttrs& bucket_attrs,
-				       RGWAccessControlPolicy *policy)
+					      RGWUser& user,
+					      RGWAttrs& bucket_attrs,
+					      RGWAccessControlPolicy *policy,
+					      optional_yield y)
 {
   auto aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -765,7 +766,7 @@ static int rgw_op_get_bucket_policy_from_attr(RGWRadosStore *store,
   } else {
     ldout(store->ctx(), 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     /* object exists, but policy is broken */
-    int r = user.load_by_id(null_yield);
+    int r = user.load_by_id(y);
     if (r < 0)
       return r;
 
@@ -852,7 +853,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
   obj_version objv, *pobjv = NULL;
 
   /* If it exists, look it up; otherwise create it */
-  ret = get_bucket(&u, b, &bucket);
+  ret = get_bucket(&u, b, &bucket, y);
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
@@ -866,7 +867,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
     // don't allow changes to the acl policy
     int r = rgw_op_get_bucket_policy_from_attr(this, u, bucket->get_attrs(),
-					       &old_policy);
+					       &old_policy, y);
     if (r >= 0 && old_policy != policy) {
       bucket_out->swap(bucket);
       return -EEXIST;

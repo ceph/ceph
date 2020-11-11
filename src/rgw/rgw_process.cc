@@ -106,7 +106,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
    */
   if (! skip_retarget) {
     ldpp_dout(op, 2) << "recalculating target" << dendl;
-    ret = handler->retarget(op, &op);
+    ret = handler->retarget(op, &op, y);
     if (ret < 0) {
       return ret;
     }
