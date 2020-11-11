@@ -101,7 +101,7 @@ public:
     return 0;
   }
 
-  virtual int retarget(RGWOp* op, RGWOp** new_op) {
+  virtual int retarget(RGWOp* op, RGWOp** new_op, optional_yield) {
     *new_op = op;
     return 0;
   }

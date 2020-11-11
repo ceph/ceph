@@ -53,9 +53,9 @@ class RGWStore : public DoutPrefixProvider {
 
     virtual std::unique_ptr<RGWUser> get_user(const rgw_user& u) = 0;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) = 0;
-    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket) = 0;
+    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) = 0;
-    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) = 0;
+    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
                             const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,

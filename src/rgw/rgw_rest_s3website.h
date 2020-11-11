@@ -21,7 +21,7 @@ class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
   std::string original_object_name; // object name before retarget()
   bool web_dir() const;
 protected:
-  int retarget(RGWOp *op, RGWOp **new_op) override;
+  int retarget(RGWOp *op, RGWOp **new_op, optional_yield y) override;
   // TODO: this should be virtual I think, and ensure that it's always
   // overridden, but that conflates that op_get/op_head are defined in this
   // class and call this; and don't need to be overridden later.
