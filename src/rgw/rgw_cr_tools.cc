@@ -139,7 +139,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   bucket_owner.set_name(user_info->display_name);
   if (bucket_exists) {
     ret = rgw_op_get_bucket_policy_from_attr(cct, store, bucket_info,
-                                             bucket_attrs, &old_policy);
+                                             bucket_attrs, &old_policy, null_yield);
     if (ret >= 0)  {
       if (old_policy.get_owner().get_id().compare(user) != 0) {
         return -EEXIST;

@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "common/ceph_json.h"
 #include "common/ceph_context.h"
 
 class RGWCtl;
