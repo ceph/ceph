@@ -65,8 +65,8 @@ class RGWSI_Zone : public RGWServiceInstance
   void shutdown() override;
 
   int replace_region_with_zonegroup(optional_yield y);
-  int init_zg_from_period(bool *initialized);
-  int init_zg_from_local(bool *creating_defaults);
+  int init_zg_from_period(bool *initialized, optional_yield y);
+  int init_zg_from_local(bool *creating_defaults, optional_yield y);
   int convert_regionmap(optional_yield y);
 
   int update_placement_map(optional_yield y);
@@ -151,5 +151,5 @@ public:
   int list_zones(list<string>& zones);
   int list_realms(list<string>& realms);
   int list_periods(list<string>& periods);
-  int list_periods(const string& current_period, list<string>& periods);
+  int list_periods(const string& current_period, list<string>& periods, optional_yield y);
 };

@@ -517,7 +517,7 @@ public:
   }
 
   int process() override {
-    sync.run();
+    sync.run(null_yield);
     return 0;
   }
 };
