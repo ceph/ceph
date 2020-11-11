@@ -2325,7 +2325,7 @@ void RGWListBuckets::execute()
       read_count = max_buckets;
     }
 
-    op_ret = s->user->list_buckets(marker, end_marker, read_count, should_get_stats(), buckets);
+    op_ret = s->user->list_buckets(marker, end_marker, read_count, should_get_stats(), buckets, null_yield);
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -2428,19 +2428,19 @@ void RGWGetUsage::execute()
     }    
   }
 
-  op_ret = rgw_user_sync_all_stats(store, s->user->get_id());
+  op_ret = rgw_user_sync_all_stats(store, s->user->get_id(), null_yield);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to sync user stats" << dendl;
     return;
   }
 
-  op_ret = rgw_user_get_all_buckets_stats(store, s->user->get_id(), buckets_usage);
+  op_ret = rgw_user_get_all_buckets_stats(store, s->user->get_id(), buckets_usage, null_yield);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get user's buckets stats" << dendl;
     return;
   }
 
-  op_ret = store->ctl()->user->read_stats(s->user->get_id(), &stats);
+  op_ret = store->ctl()->user->read_stats(s->user->get_id(), &stats, null_yield);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: can't read user header"  << dendl;
     return;
@@ -2469,7 +2469,7 @@ void RGWStatAccount::execute()
 
     lastmarker = nullptr;
     op_ret = rgw_read_user_buckets(store, s->user->get_id(), buckets, marker,
-				   string(), max_buckets, true);
+				   string(), max_buckets, true, null_yield);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
@@ -2870,7 +2870,7 @@ int RGWCreateBucket::verify_permission()
     string marker;
     op_ret = rgw_read_user_buckets(store, s->user->get_id(), buckets,
 				   marker, string(), s->user->get_max_buckets(),
-				   false);
+				   false, null_yield);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -3179,7 +3179,7 @@ void RGWCreateBucket::execute()
 				info.swift_ver_location,
 				pquota_info, policy, attrs, info, ep_objv,
 				true, obj_lock_enabled, &s->bucket_exists, s->info,
-				&s->bucket);
+				&s->bucket, null_yield);
 
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
@@ -3317,7 +3317,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = s->bucket->sync_user_stats();
+  op_ret = s->bucket->sync_user_stats(null_yield);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -3768,7 +3768,7 @@ void RGWPutObj::execute()
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->content_length);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->content_length, null_yield);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
@@ -3978,7 +3978,7 @@ void RGWPutObj::execute()
     return;
   }
 
-  op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size);
+  op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size, null_yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
@@ -4162,7 +4162,7 @@ void RGWPostObj::execute()
     ceph::buffer::list bl, aclbl;
     int len = 0;
 
-    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->content_length);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->content_length, null_yield);
     if (op_ret < 0) {
       return;
     }
@@ -4267,7 +4267,7 @@ void RGWPostObj::execute()
     s->object->set_obj_size(ofs);
 
 
-    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size, null_yield);
     if (op_ret < 0) {
       return;
     }
@@ -5174,7 +5174,7 @@ void RGWCopyObj::execute()
     }
     // enforce quota against the destination bucket owner
     op_ret = dest_bucket->check_quota(user_quota, bucket_quota,
-				      astate->accounted_size);
+				      astate->accounted_size, null_yield);
     if (op_ret < 0) {
       return;
     }
@@ -6827,7 +6827,7 @@ int RGWBulkUploadOp::handle_dir_verify_permission()
     std::string marker;
     op_ret = rgw_read_user_buckets(store, s->user->get_user(), buckets,
                                    marker, std::string(), s->user->get_max_buckets(),
-                                   false);
+                                   false, null_yield);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -6910,7 +6910,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
                                 pquota_info, policy, attrs,
                                 out_info, ep_objv,
                                 true, false, &bucket_exists,
-				info, &bucket);
+				info, &bucket, null_yield);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret
@@ -7028,7 +7028,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = bucket->check_quota(user_quota, bucket_quota, size);
+  op_ret = bucket->check_quota(user_quota, bucket_quota, size, null_yield);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -7108,7 +7108,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = bucket->check_quota(user_quota, bucket_quota, size);
+  op_ret = bucket->check_quota(user_quota, bucket_quota, size, null_yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "quota exceeded for path=" << path << dendl;
     return op_ret;

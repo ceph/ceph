@@ -39,7 +39,8 @@
 namespace rgw::sal {
 
 int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
-			       uint64_t max, bool need_stats, RGWBucketList &buckets)
+			       uint64_t max, bool need_stats, RGWBucketList &buckets,
+			       optional_yield y)
 {
   RGWUserBuckets ulist;
   bool is_truncated = false;
@@ -47,7 +48,7 @@ int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
 
   buckets.clear();
   ret = store->ctl()->user->list_buckets(info.user_id, marker, end_marker, max,
-					 need_stats, &ulist, &is_truncated);
+					 need_stats, &ulist, &is_truncated, y);
   if (ret < 0)
     return ret;
 
@@ -129,8 +130,8 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
     }
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
-  if ( ret < 0) {
+  ret = store->ctl()->bucket->sync_user_stats(info.owner, info, y);
+  if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
 
@@ -213,9 +214,9 @@ int RGWRadosBucket::read_bucket_stats(optional_yield y)
       return ret;
 }
 
-int RGWRadosBucket::sync_user_stats()
+int RGWRadosBucket::sync_user_stats(optional_yield y)
 {
-      return store->ctl()->bucket->sync_user_stats(owner->get_id(), info);
+  return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, y);
 }
 
 int RGWRadosBucket::update_container_stats(void)
@@ -295,10 +296,11 @@ int RGWRadosBucket::check_empty(optional_yield y)
   return store->getRados()->check_bucket_empty(info, y);
 }
 
-int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)
+int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+				optional_yield y, bool check_size_only)
 {
     return store->getRados()->check_quota(owner->get_user(), get_key(),
-					  user_quota, bucket_quota, obj_size, check_size_only);
+					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 
 int RGWRadosBucket::set_instance_attrs(RGWAttrs& attrs, optional_yield y)
@@ -837,7 +839,8 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 bool obj_lock_enabled,
 				 bool *existed,
 				 req_info& req_info,
-				 std::unique_ptr<RGWBucket>* bucket_out)
+				 std::unique_ptr<RGWBucket>* bucket_out,
+				 optional_yield y)
 {
   int ret;
   bufferlist in_data;
@@ -909,8 +912,8 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
   if (*existed) {
     rgw_placement_rule selected_placement_rule;
     ret = svc()->zone->select_bucket_placement(u.get_info(),
-					    zid, placement_rule,
-					    &selected_placement_rule, nullptr);
+					       zid, placement_rule,
+					       &selected_placement_rule, nullptr, y);
     if (selected_placement_rule != info.placement_rule) {
       ret = -EEXIST;
       bucket_out->swap(bucket);
@@ -922,7 +925,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				    zid, placement_rule, swift_ver_location,
 				    pquota_info, attrs,
 				    info, pobjv, &ep_objv, creation_time,
-				    pmaster_bucket, pmaster_num_shards, exclusive);
+				    pmaster_bucket, pmaster_num_shards, y, exclusive);
     if (ret == -EEXIST) {
       *existed = true;
       ret = 0;

@@ -159,7 +159,7 @@ RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
   return notify_objs[i];
 }
 
-int RGWSI_Notify::init_watch()
+int RGWSI_Notify::init_watch(optional_yield y)
 {
   num_watchers = cct->_conf->rgw_num_control_oids;
 
@@ -194,7 +194,7 @@ int RGWSI_Notify::init_watch()
 
     librados::ObjectWriteOperation op;
     op.create(false);
-    r = notify_obj.operate(&op, null_yield);
+    r = notify_obj.operate(&op, y);
     if (r < 0 && r != -EEXIST) {
       ldout(cct, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
       return r;
@@ -237,27 +237,27 @@ void RGWSI_Notify::finalize_watch()
   delete[] watchers;
 }
 
-int RGWSI_Notify::do_start()
+int RGWSI_Notify::do_start(optional_yield y)
 {
-  int r = zone_svc->start();
+  int r = zone_svc->start(y);
   if (r < 0) {
     return r;
   }
 
   assert(zone_svc->is_started()); /* otherwise there's an ordering problem */
 
-  r = rados_svc->start();
+  r = rados_svc->start(y);
   if (r < 0) {
     return r;
   }
-  r = finisher_svc->start();
+  r = finisher_svc->start(y);
   if (r < 0) {
     return r;
   }
 
   control_pool = zone_svc->get_zone_params().control_pool;
 
-  int ret = init_watch();
+  int ret = init_watch(y);
   if (ret < 0) {
     lderr(cct) << "ERROR: failed to initialize watch: " << cpp_strerror(-ret) << dendl;
     return ret;
