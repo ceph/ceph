@@ -484,7 +484,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     return (ecpControl.valid || ecpControl.disabled) && ecp ? pgs / (ecp.k + ecp.m) : 0;
   }
 
-  private alignPgs(pgs = this.form.getValue('pgNum')) {
+  alignPgs(pgs = this.form.getValue('pgNum')) {
     this.setPgs(Math.round(this.calculatePgPower(pgs < 1 ? 1 : pgs)));
   }
 

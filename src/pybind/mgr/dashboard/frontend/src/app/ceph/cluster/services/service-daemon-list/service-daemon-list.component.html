@@ -11,7 +11,7 @@
 <ng-template #statusTpl
              let-row="row">
   <span class="badge"
-        [ngClass]="getStatusClass(row.status)">
+        [ngClass]="row | pipeFunction:getStatusClass">
     {{ row.status_desc }}
   </span>
 </ng-template>
