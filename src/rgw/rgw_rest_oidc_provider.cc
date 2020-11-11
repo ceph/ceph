@@ -123,7 +123,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_url,
                             s->user->get_tenant(), client_ids, thumbprints);
-  op_ret = provider.create(true);
+  op_ret = provider.create(true, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("CreateOpenIDConnectProviderResponse");
@@ -141,8 +141,8 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
-  op_ret = provider.delete_obj();
-  
+  op_ret = provider.delete_obj(y);
+
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
   }

@@ -46,6 +46,7 @@ bool topics_has_endpoint_secret(const rgw_pubsub_user_topics& topics) {
     }
     return false;
 }
+
 void RGWPSCreateTopicOp::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -53,7 +54,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   }
 
   ups.emplace(store, s->owner.get_id());
-  op_ret = ups->create_topic(topic_name, dest, topic_arn, opaque_data);
+  op_ret = ups->create_topic(topic_name, dest, topic_arn, opaque_data, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -103,7 +104,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     return;
   }
   ups.emplace(store, s->owner.get_id());
-  op_ret = ups->remove_topic(topic_name);
+  op_ret = ups->remove_topic(topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
     return;
@@ -118,7 +119,7 @@ void RGWPSCreateSubOp::execute(optional_yield y) {
   }
   ups.emplace(store, s->owner.get_id());
   auto sub = ups->get_sub(sub_name);
-  op_ret = sub->subscribe(topic_name, dest);
+  op_ret = sub->subscribe(topic_name, dest, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
@@ -153,7 +154,7 @@ void RGWPSDeleteSubOp::execute(optional_yield y) {
   }
   ups.emplace(store, s->owner.get_id());
   auto sub = ups->get_sub(sub_name);
-  op_ret = sub->unsubscribe(topic_name);
+  op_ret = sub->unsubscribe(topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;

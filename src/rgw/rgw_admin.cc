@@ -5755,7 +5755,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, path, assume_role_doc, tenant);
-      ret = role.create(true);
+      ret = role.create(true, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5769,7 +5769,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.delete_obj();
+      ret = role.delete_obj(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5816,7 +5816,7 @@ int main(int argc, const char **argv)
         return -ret;
       }
       role.update_trust_policy(assume_role_doc);
-      ret = role.update();
+      ret = role.update(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5864,7 +5864,7 @@ int main(int argc, const char **argv)
         return -ret;
       }
       role.set_perm_policy(policy_name, perm_policy_doc);
-      ret = role.update();
+      ret = role.update(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5930,7 +5930,7 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      ret = role.update();
+      ret = role.update(null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -6654,7 +6654,7 @@ next:
     RGWDataAccess::BucketRef b;
     RGWDataAccess::ObjectRef obj;
 
-    int ret = data_access.get_bucket(tenant, bucket_name, bucket_id, &b);
+    int ret = data_access.get_bucket(tenant, bucket_name, bucket_id, &b, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed to init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9185,7 +9185,7 @@ next:
     RGWUserInfo& user_info = user_op.get_user_info();
     RGWUserPubSub ups(store, user_info.user_id);
 
-    ret = ups.remove_topic(topic_name);
+    ret = ups.remove_topic(topic_name, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not remove topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9237,7 +9237,7 @@ next:
     RGWUserPubSub ups(store, user_info.user_id);
 
     auto sub = ups.get_sub(sub_name);
-    ret = sub->unsubscribe(topic_name);
+    ret = sub->unsubscribe(topic_name, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not get subscription info: " << cpp_strerror(-ret) << std::endl;
       return -ret;

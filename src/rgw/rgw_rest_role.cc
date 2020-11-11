@@ -132,7 +132,7 @@ void RGWCreateRole::execute(optional_yield y)
   }
   RGWRole role(s->cct, store->getRados()->pctl, role_name, role_path, trust_policy,
                 s->user->get_tenant(), max_session_duration);
-  op_ret = role.create(true);
+  op_ret = role.create(true, y);
 
   if (op_ret == -EEXIST) {
     op_ret = -ERR_ROLE_EXISTS;
@@ -171,7 +171,7 @@ void RGWDeleteRole::execute(optional_yield y)
     return;
   }
 
-  op_ret = _role.delete_obj();
+  op_ret = _role.delete_obj(y);
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
@@ -279,7 +279,7 @@ void RGWModifyRole::execute(optional_yield y)
   }
 
   _role.update_trust_policy(trust_policy);
-  op_ret = _role.update();
+  op_ret = _role.update(y);
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -371,7 +371,7 @@ void RGWPutRolePolicy::execute(optional_yield y)
   }
 
   _role.set_perm_policy(policy_name, perm_policy);
-  op_ret = _role.update();
+  op_ret = _role.update(y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("PutRolePolicyResponse");
@@ -479,7 +479,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
   }
 
   if (op_ret == 0) {
-    op_ret = _role.update();
+    op_ret = _role.update(y);
   }
 
   s->formatter->open_object_section("DeleteRolePoliciesResponse");
