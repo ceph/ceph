@@ -8,6 +8,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common/async/yield_context.h"
 #include "rgw_realm_reloader.h"
 
 namespace rgw {
@@ -28,7 +29,7 @@ using RGWZonesNeedPeriod = RGWPeriod;
 class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
-  explicit RGWPeriodPusher(rgw::sal::RGWRadosStore* store);
+  explicit RGWPeriodPusher(rgw::sal::RGWRadosStore* store, optional_yield y);
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones
