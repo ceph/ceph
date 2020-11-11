@@ -835,6 +835,9 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
 template seastar::future<>
 PG::with_head_obc<RWState::RWREAD>(hobject_t, with_obc_func_t&&);
 
+template seastar::future<>
+PG::with_head_obc<RWState::RWNONE>(hobject_t, with_obc_func_t&&);
+
 PG::load_obc_ertr::future<
   std::pair<crimson::osd::ObjectContextRef, bool>>
 PG::get_or_load_head_obc(hobject_t oid)
