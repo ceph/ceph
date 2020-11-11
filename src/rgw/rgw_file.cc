@@ -1555,7 +1555,7 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = get_params();
+    op_ret = get_params(null_yield);
     if (op_ret < 0)
       goto done;
 

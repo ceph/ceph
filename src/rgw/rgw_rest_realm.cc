@@ -24,7 +24,7 @@ class RGWOp_Period_Base : public RGWRESTOp {
   RGWPeriod period;
   std::ostringstream error_stream;
  public:
-  int verify_permission() override { return 0; }
+  int verify_permission(optional_yield) override { return 0; }
   void send_response() override;
 };
 
@@ -51,17 +51,17 @@ void RGWOp_Period_Base::send_response()
 // GET /admin/realm/period
 class RGWOp_Period_Get : public RGWOp_Period_Base {
  public:
-  void execute() override;
+  void execute(optional_yield y) override;
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
   const char* name() const override { return "get_period"; }
 };
 
-void RGWOp_Period_Get::execute()
+void RGWOp_Period_Get::execute(optional_yield y)
 {
   string realm_id, realm_name, period_id;
   epoch_t epoch = 0;
@@ -81,17 +81,17 @@ void RGWOp_Period_Get::execute()
 // POST /admin/realm/period
 class RGWOp_Period_Post : public RGWOp_Period_Base {
  public:
-  void execute() override;
+  void execute(optional_yield y) override;
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_WRITE);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
   const char* name() const override { return "post_period"; }
 };
 
-void RGWOp_Period_Post::execute()
+void RGWOp_Period_Post::execute(optional_yield y)
 {
   auto cct = store->ctx();
 
@@ -263,15 +263,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "get_realm"; }
 };
 
-void RGWOp_Realm_Get::execute()
+void RGWOp_Realm_Get::execute(optional_yield y)
 {
   string id;
   RESTArgs::get_string(s, "id", id, &id);
@@ -309,15 +309,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "list_realms"; }
 };
 
-void RGWOp_Realm_List::execute()
+void RGWOp_Realm_List::execute(optional_yield y)
 {
   {
     // read default realm

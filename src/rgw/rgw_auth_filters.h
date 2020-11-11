@@ -9,8 +9,10 @@
 #include <boost/logic/tribool.hpp>
 #include <boost/optional.hpp>
 
+#include "rgw_service.h"
 #include "rgw_common.h"
 #include "rgw_auth.h"
+#include "rgw_user.h"
 
 namespace rgw {
 namespace auth {

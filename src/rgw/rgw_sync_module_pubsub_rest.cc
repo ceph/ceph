@@ -120,11 +120,11 @@ public:
 // ceph specifc topics handler factory
 class RGWHandler_REST_PSTopic : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
@@ -273,11 +273,11 @@ public:
 // subscriptions handler factory
 class RGWHandler_REST_PSSub : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
   bool supports_quota() override {
@@ -369,10 +369,10 @@ private:
 
 public:
   const char* name() const override { return "pubsub_notification_create"; }
-  void execute() override;
+  void execute(optional_yield y) override;
 };
 
-void RGWPSCreateNotif_ObjStore::execute()
+void RGWPSCreateNotif_ObjStore::execute(optional_yield y)
 {
   ups.emplace(store, s->owner.get_id());
 
@@ -401,11 +401,11 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   const char* name() const override { return "pubsub_notification_delete"; }
 };
 
-void RGWPSDeleteNotif_ObjStore::execute() {
+void RGWPSDeleteNotif_ObjStore::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -431,7 +431,7 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
@@ -448,7 +448,7 @@ public:
   const char* name() const override { return "pubsub_notifications_list"; }
 };
 
-void RGWPSListNotifs_ObjStore::execute()
+void RGWPSListNotifs_ObjStore::execute(optional_yield y)
 {
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
@@ -462,11 +462,11 @@ void RGWPSListNotifs_ObjStore::execute()
 // ceph specific notification handler factory
 class RGWHandler_REST_PSNotifs : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, optional_yield) override {
     return 0;
   }
   bool supports_quota() override {

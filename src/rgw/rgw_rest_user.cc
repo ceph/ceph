@@ -26,12 +26,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "list_user"; }
 };
 
-void RGWOp_User_List::execute()
+void RGWOp_User_List::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state;
 
@@ -54,12 +54,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_user_info"; }
 };
 
-void RGWOp_User_Info::execute()
+void RGWOp_User_Info::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state;
 
@@ -89,7 +89,7 @@ void RGWOp_User_Info::execute()
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_sync_stats(sync_stats);
 
-  op_ret = RGWUserAdminOp_User::info(store, op_state, flusher, null_yield);
+  op_ret = RGWUserAdminOp_User::info(store, op_state, flusher, y);
 }
 
 class RGWOp_User_Create : public RGWRESTOp {
@@ -101,12 +101,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "create_user"; }
 };
 
-void RGWOp_User_Create::execute()
+void RGWOp_User_Create::execute(optional_yield y)
 {
   std::string uid_str;
   std::string display_name;
@@ -242,12 +242,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "modify_user"; }
 };
 
-void RGWOp_User_Modify::execute()
+void RGWOp_User_Modify::execute(optional_yield y)
 {
   std::string uid_str;
   std::string display_name;
@@ -372,7 +372,7 @@ void RGWOp_User_Modify::execute()
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_User::modify(store, op_state, flusher, null_yield);
+  op_ret = RGWUserAdminOp_User::modify(store, op_state, flusher, y);
 }
 
 class RGWOp_User_Remove : public RGWRESTOp {
@@ -384,12 +384,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_user"; }
 };
 
-void RGWOp_User_Remove::execute()
+void RGWOp_User_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   bool purge_data;
@@ -425,12 +425,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "create_subuser"; }
 };
 
-void RGWOp_Subuser_Create::execute()
+void RGWOp_Subuser_Create::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -501,12 +501,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "modify_subuser"; }
 };
 
-void RGWOp_Subuser_Modify::execute()
+void RGWOp_Subuser_Modify::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -556,7 +556,7 @@ void RGWOp_Subuser_Modify::execute()
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Subuser::modify(store, op_state, flusher, null_yield);
+  op_ret = RGWUserAdminOp_Subuser::modify(store, op_state, flusher, y);
 }
 
 class RGWOp_Subuser_Remove : public RGWRESTOp {
@@ -568,12 +568,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_subuser"; }
 };
 
-void RGWOp_Subuser_Remove::execute()
+void RGWOp_Subuser_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -611,12 +611,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "create_access_key"; }
 };
 
-void RGWOp_Key_Create::execute()
+void RGWOp_Key_Create::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -667,12 +667,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_access_key"; }
 };
 
-void RGWOp_Key_Remove::execute()
+void RGWOp_Key_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   std::string subuser;
@@ -714,12 +714,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "add_user_caps"; }
 };
 
-void RGWOp_Caps_Add::execute()
+void RGWOp_Caps_Add::execute(optional_yield y)
 {
   std::string uid_str;
   std::string caps;
@@ -752,12 +752,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_user_caps"; }
 };
 
-void RGWOp_Caps_Remove::execute()
+void RGWOp_Caps_Remove::execute(optional_yield y)
 {
   std::string uid_str;
   std::string caps;
@@ -809,13 +809,13 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_quota_info"; }
 };
 
 
-void RGWOp_Quota_Info::execute()
+void RGWOp_Quota_Info::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state;
 
@@ -881,7 +881,7 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "set_quota_info"; }
 };
@@ -934,7 +934,7 @@ public:
  *
  */
 
-void RGWOp_Quota_Set::execute()
+void RGWOp_Quota_Set::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state;
 
@@ -1051,7 +1051,7 @@ void RGWOp_Quota_Set::execute()
   }
 
   string err;
-  op_ret = user.modify(op_state, null_yield, &err);
+  op_ret = user.modify(op_state, y, &err);
   if (op_ret < 0) {
     ldout(store->ctx(), 20) << "failed updating user info: " << op_ret << ": " << err << dendl;
     return;
