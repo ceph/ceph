@@ -561,7 +561,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
 
   STS::AssumeRoleRequest req(s->cct, duration, externalId, policy, roleArn,
                         roleSessionName, serialNumber, tokenCode);
-  STS::AssumeRoleResponse response = sts.assumeRole(req);
+  STS::AssumeRoleResponse response = sts.assumeRole(req, y);
   op_ret = std::move(response.retCode);
   //Dump the output
   if (op_ret == 0) {

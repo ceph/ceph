@@ -5565,11 +5565,11 @@ AWSEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
     return authenticate(dpp,
                         auth_data.access_key_id,
 		        auth_data.client_signature,
-            auth_data.session_token,
+			auth_data.session_token,
 			auth_data.string_to_sign,
                         auth_data.signature_factory,
 			auth_data.completer_factory,
-			s);
+			s, y);
   }
 }
 
@@ -5643,7 +5643,8 @@ rgw::auth::s3::LDAPEngine::authenticate(
   const string_to_sign_t& string_to_sign,
   const signature_factory_t&,
   const completer_factory_t& completer_factory,
-  const req_state* const s) const
+  const req_state* const s,
+  optional_yield y) const
 {
   /* boost filters and/or string_ref may throw on invalid input */
   rgw::RGWToken base64_token;
@@ -5695,13 +5696,14 @@ rgw::auth::s3::LocalEngine::authenticate(
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
-  const req_state* const s) const
+  const req_state* const s,
+  optional_yield y) const
 {
   /* get the user info */
   RGWUserInfo user_info;
   /* TODO(rzarzynski): we need to have string-view taking variant. */
   const std::string access_key_id(_access_key_id);
-  if (rgw_get_user_info_by_access_key(ctl->user, access_key_id, user_info) < 0) {
+  if (rgw_get_user_info_by_access_key(ctl->user, access_key_id, user_info, y) < 0) {
       ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
@@ -5816,7 +5818,8 @@ rgw::auth::s3::STSEngine::authenticate(
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
-  const req_state* const s) const
+  const req_state* const s,
+  optional_yield y) const
 {
   if (! s->info.args.exists("x-amz-security-token") &&
       ! s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN") &&
@@ -5894,7 +5897,7 @@ rgw::auth::s3::STSEngine::authenticate(
 
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
-    int ret = rgw_get_user_info_by_uid(ctl->user, token.user, user_info, NULL);
+    int ret = rgw_get_user_info_by_uid(ctl->user, token.user, user_info, y, NULL);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
