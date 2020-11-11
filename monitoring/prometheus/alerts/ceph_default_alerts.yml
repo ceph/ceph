@@ -164,28 +164,46 @@ groups:
           description: >
             Root volume (OSD and MON store) is dangerously full: {{ $value | humanize }}% free.
 
-      # alert on nic packet errors and drops rates > 1 packet/s
+      # alert on nic packet errors and drops rates > 1% packets/s
       - alert: network packets dropped
-        expr: irate(node_network_receive_drop_total{device!="lo"}[5m]) + irate(node_network_transmit_drop_total{device!="lo"}[5m]) > 1
+        expr: |
+          (
+            increase(node_network_receive_drop_total{device!="lo"}[1m]) +
+            increase(node_network_transmit_drop_total{device!="lo"}[1m])
+          ) / (
+            increase(node_network_receive_packets_total{device!="lo"}[1m]) +
+            increase(node_network_transmit_packets_total{device!="lo"}[1m])
+          ) >= 0.0001 or (
+            increase(node_network_receive_drop_total{device!="lo"}[1m]) +
+            increase(node_network_transmit_drop_total{device!="lo"}[1m])
+          ) >= 10
         labels:
           severity: warning
           type: ceph_default
         annotations:
           description: >
-            Node {{ $labels.instance }} experiences packet drop > 1
-            packet/s on interface {{ $labels.device }}.
+            Node {{ $labels.instance }} experiences packet drop > 0.01% or >
+            10 packets/s on interface {{ $labels.device }}.
 
       - alert: network packet errors
         expr: |
-          irate(node_network_receive_errs_total{device!="lo"}[5m]) +
-          irate(node_network_transmit_errs_total{device!="lo"}[5m]) > 1
+          (
+            increase(node_network_receive_errs_total{device!="lo"}[1m]) +
+            increase(node_network_transmit_errs_total{device!="lo"}[1m])
+          ) / (
+            increase(node_network_receive_packets_total{device!="lo"}[1m]) +
+            increase(node_network_transmit_packets_total{device!="lo"}[1m])
+          ) >= 0.0001 or (
+            increase(node_network_receive_errs_total{device!="lo"}[1m]) +
+            increase(node_network_transmit_errs_total{device!="lo"}[1m])
+          ) >= 10
         labels:
           severity: warning
           type: ceph_default
         annotations:
           description: >
-            Node {{ $labels.instance }} experiences packet errors > 1
-            packet/s on interface {{ $labels.device }}.
+            Node {{ $labels.instance }} experiences packet errors > 0.01% or
+            > 10 packets/s on interface {{ $labels.device }}.
 
       - alert: storage filling up
         expr: |
