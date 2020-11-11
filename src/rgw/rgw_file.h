@@ -64,16 +64,16 @@ namespace rgw {
   class RGWFileHandle;
   class RGWWriteRequest;
 
-  static inline bool operator <(const struct timespec& lhs,
-				const struct timespec& rhs) {
+  inline bool operator <(const struct timespec& lhs,
+			 const struct timespec& rhs) {
     if (lhs.tv_sec == rhs.tv_sec)
       return lhs.tv_nsec < rhs.tv_nsec;
     else
       return lhs.tv_sec < rhs.tv_sec;
   }
 
-  static inline bool operator ==(const struct timespec& lhs,
-				 const struct timespec& rhs) {
+  inline bool operator ==(const struct timespec& lhs,
+			  const struct timespec& rhs) {
     return ((lhs.tv_sec == rhs.tv_sec) &&
 	    (lhs.tv_nsec == rhs.tv_nsec));
   }
@@ -809,11 +809,11 @@ namespace rgw {
 
   WRITE_CLASS_ENCODER(RGWFileHandle);
 
-  static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
+  inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
     return static_cast<RGWFileHandle*>(fh->fh_private);
   }
 
-  static inline enum rgw_fh_type fh_type_of(uint32_t flags) {
+  inline enum rgw_fh_type fh_type_of(uint32_t flags) {
     enum rgw_fh_type fh_type;
     switch(flags & RGW_LOOKUP_TYPE_FLAGS)
     {
@@ -1370,7 +1370,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     limit = -1; /* no limit */
     return 0;
   }
@@ -1546,7 +1546,7 @@ public:
 	       RGW_LOOKUP_FLAG_FILE);
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     max = default_max;
     return 0;
   }
@@ -1716,7 +1716,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     max = default_max;
     return 0;
   }
@@ -1762,7 +1762,7 @@ public:
 
   bool only_bucket() override { return false; }
 
-  int read_permissions(RGWOp* op_obj) override {
+  int read_permissions(RGWOp* op_obj, optional_yield) override {
     /* we ARE a 'create bucket' request (cf. rgw_rest.cc, ll. 1305-6) */
     return 0;
   }
@@ -1795,7 +1795,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     struct req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -1917,7 +1917,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     struct req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -2008,7 +2008,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     return 0;
   }
 
@@ -2035,7 +2035,7 @@ public:
     return 0;
   }
 
-  int send_response_data_error() override {
+  int send_response_data_error(optional_yield) override {
     /* S3 implementation just sends nothing--there is no side effect
      * to simulate here */
     return 0;
@@ -2167,7 +2167,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     return 0;
   }
 
@@ -2178,13 +2178,13 @@ public:
     return 0;
   }
 
-  int send_response_data_error() override {
+  int send_response_data_error(optional_yield) override {
     /* NOP */
     return 0;
   }
 
-  void execute() override {
-    RGWGetObj::execute();
+  void execute(optional_yield y) override {
+    RGWGetObj::execute(y);
     _size = get_state()->obj_size;
   }
 
@@ -2317,7 +2317,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     max = default_max;
     return 0;
   }
@@ -2437,7 +2437,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     struct req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -2550,7 +2550,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     struct req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -2607,7 +2607,7 @@ public:
     return 0;
   }
 
-  int get_params() override {
+  int get_params(optional_yield) override {
     return 0;
   }
 
@@ -2646,7 +2646,7 @@ public:
     return 0;
   }
 
-  int get_params() override { return 0; }
+  int get_params(optional_yield) override { return 0; }
   bool only_bucket() override { return false; }
   void send_response() override {
     stats_req.kb = stats_op.kb;

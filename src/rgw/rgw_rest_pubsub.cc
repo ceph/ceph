@@ -349,12 +349,12 @@ RGWOp* RGWHandler_REST_PSTopic_AWS::op_post() {
   return nullptr;
 }
 
-int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp) {
+int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp, optional_yield y) {
   /*if (s->info.args.exists("Action") && s->info.args.get("Action").find("Topic") != std::string::npos) {
       // TODO: some topic specific authorization
       return 0;
   }*/
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
+  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
 
@@ -443,10 +443,10 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
 
 public:
   const char* name() const override { return "pubsub_notification_create_s3"; }
-  void execute() override;
+  void execute(optional_yield) override;
 };
 
-void RGWPSCreateNotif_ObjStore_S3::execute() {
+void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
   op_ret = get_params_from_body();
   if (op_ret < 0) {
     return;
@@ -585,11 +585,11 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   const char* name() const override { return "pubsub_notification_delete_s3"; }
 };
 
-void RGWPSDeleteNotif_ObjStore_S3::execute() {
+void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -676,7 +676,7 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
@@ -693,7 +693,7 @@ public:
   const char* name() const override { return "pubsub_notifications_get_s3"; }
 };
 
-void RGWPSListNotifs_ObjStore_S3::execute() {
+void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);

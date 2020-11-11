@@ -28,7 +28,7 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
                                         const uint64_t max_len,
                                         const bool allow_chunked=true);
 
-static inline std::string_view rgw_sanitized_hdrval(ceph::buffer::list& raw)
+inline std::string_view rgw_sanitized_hdrval(ceph::buffer::list& raw)
 {
   /* std::string and thus std::string_view ARE OBLIGED to carry multiple
    * 0x00 and count them to the length of a string. We need to take that
@@ -167,7 +167,7 @@ public:
     sent_header = false;
   }
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWGetObjTags_ObjStore : public RGWGetObjTags {
@@ -261,7 +261,7 @@ public:
   ~RGWPutObj_ObjStore() override {}
 
   int verify_params() override;
-  int get_params() override;
+  int get_params(optional_yield y) override;
   int get_data(bufferlist& bl) override;
 };
 
@@ -306,7 +306,7 @@ protected:
 
   int read_form_part_header(struct post_form_part *part, bool& done);
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 
   static int parse_part_field(const std::string& line,
                               std::string& field_name, /* out */
@@ -392,7 +392,7 @@ public:
   RGWPutACLs_ObjStore() {}
   ~RGWPutACLs_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWGetLC_ObjStore : public RGWGetLC {
@@ -406,7 +406,7 @@ public:
   RGWPutLC_ObjStore() {}
   ~RGWPutLC_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWDeleteLC_ObjStore : public RGWDeleteLC {
@@ -451,7 +451,7 @@ public:
   RGWCompleteMultipart_ObjStore() {}
   ~RGWCompleteMultipart_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWAbortMultipart_ObjStore : public RGWAbortMultipart {
@@ -465,7 +465,7 @@ public:
   RGWListMultipart_ObjStore() {}
   ~RGWListMultipart_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWListBucketMultiparts_ObjStore : public RGWListBucketMultiparts {
@@ -473,7 +473,7 @@ public:
   RGWListBucketMultiparts_ObjStore() {}
   ~RGWListBucketMultiparts_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWBulkDelete_ObjStore : public RGWBulkDelete {
@@ -493,7 +493,7 @@ public:
   RGWDeleteMultiObj_ObjStore() {}
   ~RGWDeleteMultiObj_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWInfo_ObjStore : public RGWInfo {
@@ -506,7 +506,7 @@ class RGWPutBucketObjectLock_ObjStore : public RGWPutBucketObjectLock {
 public:
   RGWPutBucketObjectLock_ObjStore() = default;
   ~RGWPutBucketObjectLock_ObjStore() = default;
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWGetBucketObjectLock_ObjStore : public RGWGetBucketObjectLock {
@@ -531,7 +531,7 @@ class RGWPutObjLegalHold_ObjStore : public RGWPutObjLegalHold {
 public:
   RGWPutObjLegalHold_ObjStore() = default;
   ~RGWPutObjLegalHold_ObjStore() override = default;
-  int get_params() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWGetObjLegalHold_ObjStore : public RGWGetObjLegalHold {
@@ -552,7 +552,7 @@ public:
   void send_response() override;
   virtual int check_caps(const RGWUserCaps& caps)
     { return -EPERM; } /* should to be implemented! */
-  int verify_permission() override;
+  int verify_permission(optional_yield y) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
 
@@ -582,8 +582,8 @@ public:
   static int validate_object_name(const string& object);
   static int reallocate_formatter(struct req_state *s, int type);
 
-  int init_permissions(RGWOp* op) override;
-  int read_permissions(RGWOp* op) override;
+  int init_permissions(RGWOp* op, optional_yield y) override;
+  int read_permissions(RGWOp* op, optional_yield y) override;
 
   virtual RGWOp* get_op(void);
   virtual void put_op(RGWOp* op);
@@ -741,10 +741,10 @@ extern void dump_header(struct req_state* s,
                         const utime_t& val);
 
 template <class... Args>
-static inline void dump_header_prefixed(struct req_state* s,
-                                        const std::string_view& name_prefix,
-                                        const std::string_view& name,
-                                        Args&&... args) {
+inline void dump_header_prefixed(struct req_state* s,
+				 const std::string_view& name_prefix,
+				 const std::string_view& name,
+				 Args&&... args) {
   char full_name_buf[name_prefix.size() + name.size() + 1];
   const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
                             static_cast<int>(name_prefix.length()),
@@ -756,11 +756,11 @@ static inline void dump_header_prefixed(struct req_state* s,
 }
 
 template <class... Args>
-static inline void dump_header_infixed(struct req_state* s,
-                                       const std::string_view& prefix,
-                                       const std::string_view& infix,
-                                       const std::string_view& sufix,
-                                       Args&&... args) {
+inline void dump_header_infixed(struct req_state* s,
+				const std::string_view& prefix,
+				const std::string_view& infix,
+				const std::string_view& sufix,
+				Args&&... args) {
   char full_name_buf[prefix.size() + infix.size() + sufix.size() + 1];
   const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s%.*s",
                             static_cast<int>(prefix.length()),
@@ -774,9 +774,9 @@ static inline void dump_header_infixed(struct req_state* s,
 }
 
 template <class... Args>
-static inline void dump_header_quoted(struct req_state* s,
-                                      const std::string_view& name,
-                                      const std::string_view& val) {
+inline void dump_header_quoted(struct req_state* s,
+			       const std::string_view& name,
+			       const std::string_view& val) {
   /* We need two extra bytes for quotes. */
   char qvalbuf[val.size() + 2 + 1];
   const auto len = snprintf(qvalbuf, sizeof(qvalbuf), "\"%.*s\"",
@@ -785,15 +785,15 @@ static inline void dump_header_quoted(struct req_state* s,
 }
 
 template <class ValueT>
-static inline void dump_header_if_nonempty(struct req_state* s,
-                                           const std::string_view& name,
-                                           const ValueT& value) {
+inline void dump_header_if_nonempty(struct req_state* s,
+				    const std::string_view& name,
+				    const ValueT& value) {
   if (name.length() > 0 && value.length() > 0) {
     return dump_header(s, name, value);
   }
 }
 
-static inline std::string compute_domain_uri(const struct req_state *s) {
+inline std::string compute_domain_uri(const struct req_state *s) {
   std::string uri = (!s->info.domain.empty()) ? s->info.domain :
     [&s]() -> std::string {
     RGWEnv const &env(*(s->info.env));
@@ -818,7 +818,7 @@ extern void dump_epoch_header(struct req_state *s, const char *name, real_time t
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
 extern void dump_last_modified(struct req_state *s, real_time t);
 extern void abort_early(struct req_state* s, RGWOp* op, int err,
-			RGWHandler* handler);
+			RGWHandler* handler, optional_yield y);
 extern void dump_range(struct req_state* s, uint64_t ofs, uint64_t end,
 		       uint64_t total_size);
 extern void dump_continue(struct req_state *s);
