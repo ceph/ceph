@@ -92,7 +92,7 @@ int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
 
 int RGWSI_MDLog::write_history(const RGWMetadataLogHistory& state,
                                RGWObjVersionTracker *objv_tracker,
-                               bool exclusive)
+                               optional_yield y, bool exclusive)
 {
   bufferlist bl;
   state.encode(bl);
@@ -101,7 +101,7 @@ int RGWSI_MDLog::write_history(const RGWMetadataLogHistory& state,
   const auto& oid = RGWMetadataLogHistory::oid;
   auto obj_ctx = svc.sysobj->init_obj_ctx();
   return rgw_put_system_obj(obj_ctx, pool, oid, bl,
-                            exclusive, objv_tracker, real_time{});
+                            exclusive, objv_tracker, real_time{}, y);
 }
 
 namespace mdlog {
@@ -296,7 +296,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
     state.oldest_period_id = cursor.get_period().get_id();
 
     constexpr bool exclusive = true; // don't overwrite
-    int ret = write_history(state, &objv, exclusive);
+    int ret = write_history(state, &objv, y, exclusive);
     if (ret < 0 && ret != -EEXIST) {
       ldout(cct, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;
@@ -318,7 +318,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
     state.oldest_realm_epoch = cursor.get_epoch();
     state.oldest_period_id = cursor.get_period().get_id();
     ldout(cct, 10) << "rewriting mdlog history" << dendl;
-    ret = write_history(state, &objv);
+    ret = write_history(state, &objv, y);
     if (ret < 0 && ret != -ECANCELED) {
     ldout(cct, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;

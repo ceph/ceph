@@ -377,7 +377,7 @@ void RGWPSCreateNotif_ObjStore::execute(optional_yield y)
   ups.emplace(store, s->owner.get_id());
 
   auto b = ups->get_bucket(bucket_info.bucket);
-  op_ret = b->create_notification(topic_name, events);
+  op_ret = b->create_notification(topic_name, events, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create notification for topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -413,7 +413,7 @@ void RGWPSDeleteNotif_ObjStore::execute(optional_yield y) {
 
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
-  op_ret = b->remove_notification(topic_name);
+  op_ret = b->remove_notification(topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove notification from topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
