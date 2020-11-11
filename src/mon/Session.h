@@ -162,6 +162,9 @@ struct MonSessionMap {
   }
 
   void add_session(MonSession *s) {
+    s->session_timeout = ceph_clock_now();
+    s->session_timeout += g_conf()->mon_session_timeout;
+
     sessions.push_back(&s->item);
     s->get();
     if (s->name.is_osd() &&
