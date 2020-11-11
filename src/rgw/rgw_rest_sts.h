@@ -34,7 +34,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::string get_role_tenant(const string& role_arn) const;
 
   boost::optional<WebTokenEngine::token_t>
-  get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s) const;
+  get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
   void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const;
 

@@ -253,7 +253,8 @@ class RGWRadosStore : public RGWStore {
     virtual RGWBucketList* list_buckets(void) { return new RGWBucketList(); }
     virtual bool is_meta_master() override;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
-				  bufferlist& in_data, JSONParser *jp, req_info& info) override;
+					  bufferlist& in_data, JSONParser *jp, req_info& info,
+					  optional_yield y) override;
     virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) override;
     virtual const RGWZoneGroup& get_zonegroup() override;
