@@ -539,11 +539,12 @@ def ceph_mons(ctx, config):
                             break
 
         # refresh our (final) ceph.conf file
+        bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
         log.info('Generating final ceph.conf file...')
         r = _shell(
             ctx=ctx,
             cluster_name=cluster_name,
-            remote=remote,
+            remote=bootstrap_remote,
             args=[
                 'ceph', 'config', 'generate-minimal-conf',
             ],
