@@ -4079,7 +4079,7 @@ void RGWPutObj::execute(optional_yield y)
   {
     torrent.init(s, store);
     torrent.set_create_date(mtime);
-    op_ret =  torrent.complete();
+    op_ret =  torrent.complete(y);
     if (0 != op_ret)
     {
       ldpp_dout(this, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
