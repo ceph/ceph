@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/migration/ImageDispatch.h"
@@ -71,6 +72,7 @@ void OpenSourceImageRequest<I>::open_source() {
   if (r < 0) {
     lderr(cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
                << dendl;
+    (*m_src_image_ctx)->state->close();
     finish(r);
     return;
   }
@@ -80,6 +82,7 @@ void OpenSourceImageRequest<I>::open_source() {
   if (r < 0) {
     lderr(cct) << "failed to build migration format handler: "
                << cpp_strerror(r) << dendl;
+    (*m_src_image_ctx)->state->close();
     finish(r);
     return;
   }
@@ -116,9 +119,9 @@ void OpenSourceImageRequest<I>::finish(int r) {
   ldout(cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    delete *m_src_image_ctx;
     *m_src_image_ctx = nullptr;
   }
+
   m_on_finish->complete(r);
   delete this;
 }
