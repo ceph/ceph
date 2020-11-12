@@ -16,9 +16,10 @@
 #define CEPH_COMMON_VERSION_H
 
 #include <string>
+#include "common/ceph_context.h"
 
 // Return a string describing the Ceph version
-const char *ceph_version_to_str(void);
+const char *ceph_version_to_str(CephContext *cct);
 
 // Return a string with the Ceph release
 const char *ceph_release_to_str(void);

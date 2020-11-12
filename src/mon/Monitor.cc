@@ -3638,7 +3638,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
     f->open_object_section("report");
     f->dump_stream("cluster_fingerprint") << fingerprint;
-    f->dump_string("version", ceph_version_to_str());
+    f->dump_string("version", ceph_version_to_str(cct));
     f->dump_string("commit", git_version_to_str());
     f->dump_stream("timestamp") << ceph_clock_now();
 
@@ -5357,6 +5357,29 @@ void Monitor::count_metadata(const string& field, Formatter *f)
     f->dump_int(p.first.c_str(), p.second);
   }
   f->close_section();
+}
+
+void Monitor::get_all_versions(std::map<string, list<string> > &versions)
+{
+  // mon
+  get_versions(versions);
+  // osd
+  osdmon()->get_versions(versions);
+  // mgr
+  mgrmon()->get_versions(versions);
+  // mds
+  mdsmon()->get_versions(versions);
+  dout(20) << __func__ << " all versions=" << versions << dendl;
+}
+
+void Monitor::get_versions(std::map<string, list<string> > &versions)
+{
+  int i = 0;
+  for (auto& [rank, metadata] : mon_metadata) {
+    auto q = metadata.find("ceph_version_short");
+    versions[q->second].push_back(string("mon.") + monmap->get_name(rank));
+    i = i + 1;
+  }
 }
 
 int Monitor::print_nodes(Formatter *f, ostream& err)
