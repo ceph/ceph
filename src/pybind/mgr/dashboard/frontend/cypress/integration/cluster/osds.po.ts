@@ -9,7 +9,7 @@ export class OSDsPageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    id: 4,
+    id: 3,
     status: 5
   };
 

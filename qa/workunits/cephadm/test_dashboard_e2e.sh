@@ -47,7 +47,7 @@ EOF
 cypress_run () {
     local specs="$1"
     local timeout="$2"
-    local override_config="ignoreTestFiles=*.po.ts,testFiles=${specs}"
+    local override_config="ignoreTestFiles=*.po.ts,retries=0,testFiles=${specs}"
 
     if [ x"$timeout" != "x" ]; then
         override_config="${override_config},defaultCommandTimeout=${timeout}"
