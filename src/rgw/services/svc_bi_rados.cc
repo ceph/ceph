@@ -13,7 +13,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-#ifndef CLS_CLIENT_HIDE_IOCTX
 static string dir_oid_prefix = ".dir.";
 
 RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_BucketIndex(cct)
@@ -446,4 +445,3 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
 
   return 0;
 }
-#endif

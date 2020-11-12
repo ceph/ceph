@@ -22,7 +22,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-#ifndef CLS_CLIENT_HIDE_IOCTX
 using namespace librados;
 
 static string gc_oid_prefix = "gc";
@@ -727,4 +726,3 @@ void RGWGC::GCWorker::stop()
   std::lock_guard l{lock};
   cond.notify_all();
 }
-#endif

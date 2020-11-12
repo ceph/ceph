@@ -5,7 +5,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-#ifndef CLS_CLIENT_HIDE_IOCTX
 
 namespace rgw::putobj {
 
@@ -185,4 +184,3 @@ void ETagVerifier_MPU::calculate_etag()
 }
 
 } // namespace rgw::putobj
-#endif

@@ -43,7 +43,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-#ifndef CLS_CLIENT_HIDE_IOCTX
 
 const char* LC_STATUS[] = {
       "UNINITIAL",
@@ -2278,4 +2277,3 @@ bool s3_multipart_abort_header(
 }
 
 } /* namespace rgw::lc */
-#endif
