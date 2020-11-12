@@ -6,10 +6,7 @@
 #include "common/errno.h"
 #include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Utils.h"
 #include "librbd/asio/Utils.h"
-#include "librbd/io/AioCompletion.h"
-#include "librbd/io/ReadResult.h"
 #include "librbd/migration/HttpClient.h"
 #include <boost/beast/http.hpp>
 
@@ -74,72 +71,9 @@ void HttpStream<I>::get_size(uint64_t* size, Context* on_finish) {
 template <typename I>
 void HttpStream<I>::read(io::Extents&& byte_extents, bufferlist* data,
                          Context* on_finish) {
-  using HttpRequest = boost::beast::http::request<
-    boost::beast::http::empty_body>;
+  ldout(m_cct, 20) << "byte_extents=" << byte_extents << dendl;
 
-  ldout(m_cct, 20) << dendl;
-
-  auto aio_comp = io::AioCompletion::create_and_start(
-    on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_READ);
-  aio_comp->set_request_count(byte_extents.size());
-
-  // utilize ReadResult to assemble multiple byte extents into a single bl
-  // since boost::beast doesn't support multipart responses out-of-the-box
-  io::ReadResult read_result{data};
-  aio_comp->read_result = std::move(read_result);
-  aio_comp->read_result.set_image_extents(byte_extents);
-
-  // issue a range get request for each extent
-  uint64_t buffer_offset = 0;
-  for (auto [byte_offset, byte_length] : byte_extents) {
-    auto ctx = new io::ReadResult::C_ImageReadRequest(
-      aio_comp, buffer_offset, {{byte_offset, byte_length}});
-    buffer_offset += byte_length;
-
-    HttpRequest req;
-    req.method(boost::beast::http::verb::get);
-
-    std::stringstream range;
-    ceph_assert(byte_length > 0);
-    range << "bytes=" << byte_offset << "-" << (byte_offset + byte_length - 1);
-    req.set(boost::beast::http::field::range, range.str());
-
-    m_http_client->issue(std::move(req),
-      [this, byte_offset=byte_offset, byte_length=byte_length, ctx](int r, HttpResponse&& response) {
-        handle_read(r, std::move(response), byte_offset, byte_length, &ctx->bl,
-                    ctx);
-     });
-  }
-}
-
-template <typename I>
-void HttpStream<I>::handle_read(int r, HttpResponse&& response,
-                                uint64_t byte_offset, uint64_t byte_length,
-                                bufferlist* data, Context* on_finish) {
-  ldout(m_cct, 20) << "bytes=" << byte_offset << "~" << byte_length << ", "
-                   << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to read requested byte range: "
-                 << cpp_strerror(r) << dendl;
-    on_finish->complete(r);
-    return;
-  } else if (response.result() != boost::beast::http::status::partial_content) {
-    lderr(m_cct) << "failed to retrieve requested byte range: HTTP "
-                 << response.result() << dendl;
-    on_finish->complete(-EIO);
-    return;
-  } else if (byte_length != response.body().size()) {
-    lderr(m_cct) << "unexpected short range read: "
-                 << "wanted=" << byte_length << ", "
-                 << "received=" << response.body().size() << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  data->clear();
-  data->append(response.body());
-  on_finish->complete(data->length());
+  m_http_client->read(std::move(byte_extents), data, on_finish);
 }
 
 } // namespace migration

@@ -21,6 +21,14 @@ struct MockTestImageCtx : public MockImageCtx {
 };
 
 } // anonymous namespace
+
+namespace util {
+
+inline ImageCtx *get_image_ctx(MockTestImageCtx *image_ctx) {
+  return image_ctx->image_ctx;
+}
+
+} // namespace util
 } // namespace librbd
 
 #include "librbd/migration/HttpClient.cc"
@@ -804,6 +812,56 @@ TEST_F(TestMockMigrationHttpClient, GetSizeError) {
   client_write_response(socket, expected_res);
 
   ASSERT_EQ(-EIO, ctx2.wait());
+
+  C_SaferCond ctx3;
+  http_client.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationHttpClient, Read) {
+  MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
+  MockHttpClient http_client(&mock_test_image_ctx,
+                             get_local_url(URL_SCHEME_HTTP));
+
+  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  C_SaferCond on_connect_ctx;
+  client_accept(&socket, false, &on_connect_ctx);
+
+  C_SaferCond ctx1;
+  http_client.open(&ctx1);
+  ASSERT_EQ(0, on_connect_ctx.wait());
+  ASSERT_EQ(0, ctx1.wait());
+
+  bufferlist bl;
+  C_SaferCond ctx2;
+  http_client.read({{0, 128}, {256, 64}}, &bl, &ctx2);
+
+  HttpRequest expected_req1;
+  expected_req1.method(boost::beast::http::verb::get);
+  expected_req1.set(boost::beast::http::field::range, "bytes=0-127");
+  client_read_request(socket, expected_req1);
+
+  HttpRequest expected_req2;
+  expected_req2.method(boost::beast::http::verb::get);
+  expected_req2.set(boost::beast::http::field::range, "bytes=256-319");
+  client_read_request(socket, expected_req2);
+
+  HttpResponse expected_res1;
+  expected_res1.result(boost::beast::http::status::partial_content);
+  expected_res1.body() = std::string(128, '1');
+  client_write_response(socket, expected_res1);
+
+  HttpResponse expected_res2;
+  expected_res2.result(boost::beast::http::status::partial_content);
+  expected_res2.body() = std::string(64, '2');
+  client_write_response(socket, expected_res2);
+
+  ASSERT_EQ(192, ctx2.wait());
+
+  bufferlist expect_bl;
+  expect_bl.append(std::string(128, '1'));
+  expect_bl.append(std::string(64, '2'));
+  ASSERT_EQ(expect_bl, bl);
 
   C_SaferCond ctx3;
   http_client.close(&ctx3);

@@ -35,30 +35,9 @@ struct HttpClient<MockTestImageCtx> {
   MOCK_METHOD1(open, void(Context*));
   MOCK_METHOD1(close, void(Context*));
   MOCK_METHOD2(get_size, void(uint64_t*, Context*));
-
-  MOCK_METHOD3(issue, void(const boost::beast::http::request<
-                             boost::beast::http::empty_body>&,
-                           boost::beast::http::response<
-                             boost::beast::http::string_body>*,
-                           Context*));
-
-  template <class Body, typename Completion>
-  void issue(boost::beast::http::request<Body>&& request,
-             Completion&& completion) {
-    struct ContextImpl : public Context {
-      boost::beast::http::response<boost::beast::http::string_body> res;
-      Completion completion;
-
-      ContextImpl(Completion&& completion) : completion(std::move(completion)) {
-      }
-
-      void finish(int r) override {
-        completion(r, std::move(res));
-      }
-    };
-
-    auto ctx = new ContextImpl(std::move(completion));
-    issue(request, &ctx->res, ctx);
+  MOCK_METHOD3(do_read, void(const io::Extents&, bufferlist*, Context*));
+  void read(io::Extents&& extents, bufferlist* bl, Context* ctx) {
+    do_read(extents, bl, ctx);
   }
 
   HttpClient() {
@@ -69,14 +48,6 @@ struct HttpClient<MockTestImageCtx> {
 HttpClient<MockTestImageCtx>* HttpClient<MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace migration
-
-namespace util {
-
-inline ImageCtx *get_image_ctx(MockTestImageCtx *image_ctx) {
-  return image_ctx->image_ctx;
-}
-
-} // namespace util
 } // namespace librbd
 
 #include "librbd/migration/HttpStream.cc"
@@ -87,6 +58,7 @@ namespace migration {
 using ::testing::_;
 using ::testing::Invoke;
 using ::testing::InSequence;
+using ::testing::WithArgs;
 
 class TestMockMigrationHttpStream : public TestMockFixture {
 public:
@@ -120,29 +92,18 @@ public:
       }));
   }
 
-  void expect_read(MockHttpClient& mock_http_client, io::Extent byte_extent,
-                   const std::string& data, int r) {
-    std::stringstream byte_range;
-    byte_range << byte_extent.first << "-"
-               << (byte_extent.first + byte_extent.second - 1);
-
-    EXPECT_CALL(mock_http_client, issue(_, _, _))
-      .WillOnce(Invoke(
-        [data, r, byte_range=byte_range.str()]
-        (const boost::beast::http::request<
-           boost::beast::http::empty_body>& request,
-         boost::beast::http::response<
-           boost::beast::http::string_body>* response, Context* ctx) {
-        ASSERT_EQ("bytes=" + byte_range,
-                  request[boost::beast::http::field::range]);
-
-        response->result(boost::beast::http::status::partial_content);
-        response->set(boost::beast::http::field::content_range,
-                      "bytes " + byte_range + "/*");
-        response->body() = data;
-        response->prepare_payload();
-        ctx->complete(r);
-      }));
+  void expect_read(MockHttpClient& mock_http_client, io::Extents byte_extents,
+                   const bufferlist& bl, int r) {
+    uint64_t len = 0;
+    for (auto [_, byte_len] : byte_extents) {
+      len += byte_len;
+    }
+    EXPECT_CALL(mock_http_client, do_read(byte_extents, _, _))
+      .WillOnce(WithArgs<1, 2>(Invoke(
+        [len, bl, r](bufferlist* out_bl, Context* ctx) {
+          *out_bl = bl;
+          ctx->complete(r < 0 ? r : len);
+        })));
   }
 
   json_spirit::mObject json_object;
@@ -206,8 +167,9 @@ TEST_F(TestMockMigrationHttpStream, Read) {
   auto mock_http_client = new MockHttpClient();
   expect_open(*mock_http_client, 0);
 
-  expect_read(*mock_http_client, {0, 128}, std::string(128, '1'), 0);
-  expect_read(*mock_http_client, {256, 64}, std::string(64, '2'), 0);
+  bufferlist expect_bl;
+  expect_bl.append(std::string(192, '1'));
+  expect_read(*mock_http_client, {{0, 128}, {256, 64}}, expect_bl, 0);
 
   expect_close(*mock_http_client, 0);
 
@@ -221,10 +183,6 @@ TEST_F(TestMockMigrationHttpStream, Read) {
   bufferlist bl;
   mock_http_stream.read({{0, 128}, {256, 64}}, &bl, &ctx2);
   ASSERT_EQ(192, ctx2.wait());
-
-  bufferlist expect_bl;
-  expect_bl.append(std::string(128, '1'));
-  expect_bl.append(std::string(64, '2'));
   ASSERT_EQ(expect_bl, bl);
 
   C_SaferCond ctx3;

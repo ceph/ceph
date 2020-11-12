@@ -58,8 +58,6 @@ private:
 
   std::unique_ptr<HttpClient<ImageCtxT>> m_http_client;
 
-  void handle_read(int r, HttpResponse&& response, uint64_t byte_offset,
-                   uint64_t byte_length, bufferlist* data, Context* on_finish);
 };
 
 } // namespace migration
