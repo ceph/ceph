@@ -1510,31 +1510,22 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
     // make sure our last_cap_id is MAX over all issued caps
     if (p.second.capinfo.cap_id > mdcache->last_cap_id)
       mdcache->last_cap_id = p.second.capinfo.cap_id;
-    
+
+    mds_rank_t auth = MDS_RANK_NONE;
+    if (MDS_INO_IS_MDSDIR(p.first))
+      auth = MDS_INO_MDSDIR_OWNER(p.first);
+    else if (MDS_INO_IS_STRAY(p.first))
+      auth = MDS_INO_STRAY_OWNER(p.first);
+    if (auth != MDS_RANK_NONE && auth != mds->get_nodeid()) {
+      mdcache->rejoin_export_caps(p.first, from, p.second, auth, true);
+      continue;
+    }
+
     CInode *in = mdcache->get_inode(p.first);
     if (in && in->state_test(CInode::STATE_PURGING))
       continue;
-    if (in && in->is_auth()) {
-      // we recovered it, and it's ours.  take note.
-      dout(15) << "open cap realm " << inodeno_t(p.second.capinfo.snaprealm)
-	       << " on " << *in << dendl;
-      in->reconnect_cap(from, p.second, session);
-      mdcache->add_reconnected_cap(from, p.first, p.second);
-      recover_filelocks(in, p.second.flockbl, m->get_orig_source().num());
-      continue;
-    }
-      
-    if (in && !in->is_auth()) {
-      // not mine.
-      dout(10) << "non-auth " << *in << ", will pass off to authority" << dendl;
-      // add to cap export list.
-      mdcache->rejoin_export_caps(p.first, from, p.second,
-				  in->authority().first, true);
-    } else {
-      // don't know if the inode is mine
-      dout(10) << "missing ino " << p.first << ", will load later" << dendl;
-      mdcache->rejoin_recovered_caps(p.first, from, p.second, MDS_RANK_NONE);
-    }
+    dout(15) << " recovered cap on " << p.first << dendl;
+    mdcache->rejoin_recovered_caps(p.first, from, p.second, MDS_RANK_NONE);
   }
 
   reconnect_last_seen = clock::now();
@@ -1722,28 +1713,6 @@ void Server::reconnect_tick()
     reconnect_evicting = true;
   } else {
     reconnect_gather_finish();
-  }
-}
-
-void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
-{
-  if (!locks.length()) return;
-  int numlocks;
-  ceph_filelock lock;
-  auto p = locks.cbegin();
-  decode(numlocks, p);
-  for (int i = 0; i < numlocks; ++i) {
-    decode(lock, p);
-    lock.client = client;
-    in->get_fcntl_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock>(lock.start, lock));
-    ++in->get_fcntl_lock_state()->client_held_lock_counts[client];
-  }
-  decode(numlocks, p);
-  for (int i = 0; i < numlocks; ++i) {
-    decode(lock, p);
-    lock.client = client;
-    in->get_flock_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock> (lock.start, lock));
-    ++in->get_flock_lock_state()->client_held_lock_counts[client];
   }
 }
 

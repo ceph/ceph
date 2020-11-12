@@ -716,7 +716,7 @@ void StrayManager::truncate(CDentry *dn)
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
   ceph_assert(!dn->is_replicated());
 
-  const SnapRealm *realm = in->find_snaprealm();
+  SnapRealm *realm = in->find_snaprealm();
   ceph_assert(realm);
   dout(10) << " realm " << *realm << dendl;
   const SnapContext *snapc = &realm->get_snap_context();

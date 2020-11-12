@@ -2018,16 +2018,18 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   // purge stale snaps?
   bool force_dirty = false;
-  const set<snapid_t> *snaps = NULL;
-  SnapRealm *realm = inode->find_snaprealm();
-  if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
-    snaps = &realm->get_snaps();
-    dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
-	     << " < " << realm->get_last_destroyed()
-	     << ", snap purge based on " << *snaps << dendl;
-    if (get_num_snap_items() == 0) {
-      const_cast<snapid_t&>(fnode->snap_purged_thru) = realm->get_last_destroyed();
-      force_dirty = true;
+  const set<snapid_t> *snaps = nullptr;
+  if (!mdcache->mds->is_rejoin()) {
+    SnapRealm *realm = inode->find_snaprealm();
+    if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
+      snaps = &realm->get_snaps();
+      dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
+	<< " < " << realm->get_last_destroyed()
+	<< ", snap purge based on " << *snaps << dendl;
+      if (get_num_snap_items() == 0) {
+	const_cast<snapid_t&>(fnode->snap_purged_thru) = realm->get_last_destroyed();
+	force_dirty = true;
+      }
     }
   }
 

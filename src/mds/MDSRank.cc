@@ -2116,13 +2116,13 @@ void MDSRank::boot_create()
   // open new journal segment, but do not journal subtree map (yet)
   mdlog->prepare_new_segment();
 
+  dout(3) << "boot_create creating mydir hierarchy" << dendl;
+  mdcache->create_mydir_hierarchy(fin.get());
+
   if (whoami == mdsmap->get_root()) {
     dout(3) << "boot_create creating fresh hierarchy" << dendl;
     mdcache->create_empty_hierarchy(fin.get());
   }
-
-  dout(3) << "boot_create creating mydir hierarchy" << dendl;
-  mdcache->create_mydir_hierarchy(fin.get());
 
   dout(3) << "boot_create creating global snaprealm" << dendl;
   mdcache->create_global_snaprealm();

@@ -3131,6 +3131,9 @@ void CInode::close_snaprealm(bool nojoin)
 
 SnapRealm *CInode::find_snaprealm() const
 {
+  if (!mdcache->is_subtrees_connected())
+    return nullptr;
+
   const CInode *cur = this;
   while (!cur->snaprealm) {
     const CDentry *pdn = cur->get_oldest_parent_dn();
@@ -3476,6 +3479,28 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
 {
   for (const auto &p : client_caps) {
     cl[p.first] = p.second.make_export();
+  }
+}
+
+void CInode::reconnect_filelocks(client_t client, const bufferlist& flockbl)
+{
+  using ceph::decode;
+  int numlocks;
+  ceph_filelock lock;
+  auto p = flockbl.cbegin();
+  decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    decode(lock, p);
+    lock.client = client.v;
+    get_fcntl_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock>(lock.start, lock));
+    ++get_fcntl_lock_state()->client_held_lock_counts[client.v];
+  }
+  decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    decode(lock, p);
+    lock.client = client.v;
+    get_flock_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock> (lock.start, lock));
+    ++get_flock_lock_state()->client_held_lock_counts[client.v];
   }
 }
 

@@ -5253,9 +5253,8 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
     auto p = cap_imports.find(ino);
     ceph_assert(p != cap_imports.end());
     for (auto q = p->second.begin(); q != p->second.end(); ++q) {
-      ceph_assert(q->second.count(MDS_RANK_NONE));
       ceph_assert(q->second.size() == 1);
-      rejoin_export_caps(p->first, q->first, q->second[MDS_RANK_NONE], ret);
+      rejoin_export_caps(p->first, q->first, q->second.at(MDS_RANK_NONE), ret);
     }
     cap_imports.erase(p);
   }
@@ -5299,9 +5298,8 @@ void MDCache::rejoin_prefetch_ino_finish(inodeno_t ino, int ret)
       cap_imports_missing.insert(ino);
     } else if (ret != mds->get_nodeid()) {
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
-	ceph_assert(q->second.count(MDS_RANK_NONE));
 	ceph_assert(q->second.size() == 1);
-	rejoin_export_caps(p->first, q->first, q->second[MDS_RANK_NONE], ret);
+	rejoin_export_caps(p->first, q->first, q->second.at(MDS_RANK_NONE), ret);
       }
       cap_imports.erase(p);
     }
@@ -5325,19 +5323,29 @@ bool MDCache::process_imported_caps()
     return true;
   }
 
-  for (auto& p : cap_imports) {
-    CInode *in = get_inode(p.first);
+  for (auto p = cap_imports.begin(); p != cap_imports.end(); ) {
+    inodeno_t ino = p->first;
+    CInode *in = get_inode(ino);
     if (in) {
-      ceph_assert(in->is_auth());
-      cap_imports_missing.erase(p.first);
+      if (in->is_auth()) {
+	++p;
+      } else {
+	for (auto& q : p->second) {
+	  ceph_assert(q.second.size() == 1);
+	  rejoin_export_caps(ino, q.first, q.second.at(MDS_RANK_NONE), in->authority().first);
+	}
+	cap_imports.erase(p++);
+      }
       continue;
     }
-    if (cap_imports_missing.count(p.first) > 0)
+    if (cap_imports_missing.count(ino) > 0) {
+      ++p;
       continue;
+    }
 
     uint64_t parent_ino = 0;
     std::string_view d_name;
-    for (auto& q : p.second) {
+    for (auto& q : p->second) {
       for (auto& r : q.second) {
 	auto &icr = r.second;
 	if (icr.capinfo.pathbase &&
@@ -5352,15 +5360,17 @@ bool MDCache::process_imported_caps()
 	break;
     }
 
-    dout(10) << "  opening missing ino " << p.first << dendl;
+    ++p;
+
+    dout(10) << "  opening missing ino " << ino << dendl;
     cap_imports_num_opening++;
-    auto fin = new C_MDC_RejoinOpenInoFinish(this, p.first);
+    auto fin = new C_MDC_RejoinOpenInoFinish(this, ino);
     if (parent_ino) {
       vector<inode_backpointer_t> ancestors;
       ancestors.push_back(inode_backpointer_t(parent_ino, string{d_name}, 0));
-      open_ino(p.first, (int64_t)-1, fin, false, false, &ancestors);
+      open_ino(ino, (int64_t)-1, fin, false, false, &ancestors);
     } else {
-      open_ino(p.first, (int64_t)-1, fin, false);
+      open_ino(ino, (int64_t)-1, fin, false);
     }
     if (!(cap_imports_num_opening % 1000))
       mds->heartbeat_reset();
@@ -5451,6 +5461,8 @@ bool MDCache::process_imported_caps()
 
 	  Capability *cap = in->reconnect_cap(q->first, r->second, session);
 	  add_reconnected_cap(q->first, in->ino(), r->second);
+	  if (r->second.flockbl.length())
+	    in->reconnect_filelocks(q->first, r->second.flockbl);
 	  if (r->first >= 0) {
 	    if (cap->get_last_seq() == 0) // don't increase mseq if cap already exists
 	      cap->inc_mseq();
@@ -9065,14 +9077,19 @@ void MDCache::handle_open_ino(const cref_t<MMDSOpenIno> &m, int err)
     reply = make_message<MMDSOpenInoReply>(m->get_tid(), ino, mds_rank_t(0));
     if (in->is_auth()) {
       touch_inode(in);
+      CInode *cur = in;
       while (1) {
-	CDentry *pdn = in->get_parent_dn();
+	CDentry *pdn = cur->get_parent_dn();
 	if (!pdn)
 	  break;
+	if (cur != in && !pdn->is_auth() && !pdn->lock.can_read(-1)) {
+	  reply->hint = pdn->authority().first;
+	  break;
+	}
 	CInode *diri = pdn->get_dir()->get_inode();
 	reply->ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->get_name(),
-						       in->get_version()));
-	in = diri;
+						       cur->get_version()));
+	cur = diri;
       }
     } else {
       reply->hint = in->authority().first;
@@ -9123,7 +9140,8 @@ void MDCache::handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m)
 	if (!diri || diri->is_unconnected()) {
 	  open_ino(base_ino, mds->mdsmap->get_metadata_pool(),
 		   new C_MDC_OpenInoParentOpened(this, ino, base_ino),
-		   info.want_replica, !subtrees_connected);
+		   info.want_replica, !subtrees_connected,
+		   nullptr, m->hint);
 	  return;
 	}
       }
