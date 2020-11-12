@@ -2129,9 +2129,15 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
     if not reconfig:
         if daemon_type == CephadmDaemon.daemon_type:
             port = next(iter(ports), None)  # get first tcp port provided or None
-            config_js = get_parm(args.config_json)  # type: Dict[str, str]
-            cephadmd = CephadmDaemon(fsid, daemon_id, port)
-            cephadmd.deploy_daemon_unit(config_js)
+
+            if args.config_json == '-':
+                config_js = get_parm('-')
+            else:
+                config_js = get_parm(args.config_json)
+            assert isinstance(config_js, dict)
+
+            cephadm_exporter = CephadmDaemon(fsid, daemon_id, port)
+            cephadm_exporter.deploy_daemon_unit(config_js)
         else:
             if c:
                 deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
@@ -3224,6 +3230,36 @@ def command_bootstrap():
     if args.container_init:
         cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(args.container_init), '--force'])
 
+    if args.with_exporter:
+        cli(['config-key', 'set', 'mgr/cephadm/exporter_enabled', 'true'])
+        if args.exporter_config:
+            logger.info("Applying custom SSL/port settings for the cephadm exporter")
+            # validated within the parser, so we can just apply to the store
+
+            # create a tmp file wwrite the config to itthen set it
+            with tempfile.NamedTemporaryFile(buffering=0) as tmp:
+                tmp.write(json.dumps({
+                    CephadmDaemon.crt_name: args.exporter_config[CephadmDaemon.crt_name],
+                    CephadmDaemon.key_name: args.exporter_config[CephadmDaemon.key_name]
+                }))
+                mounts = {
+                    tmp.name: '/tmp/exporter_tls.json:z'
+                }
+                cli(["cephadm", "set-exporter-tls", "-i", "/tmp/exporter_tls.json"], extra_mounts=mounts)
+
+            cli(["cephadm", "set-exporter-config", f"token='{args.exporter_config[CephadmDaemon.token_name]}'"])
+            port = args.exporter_config.get('port', CephadmDaemon.default_port)
+            cli(["cephadm", "set-exporter-config", f"port={str(port)}"])
+        else:
+            # generate a default SSL configuration for the exporter(s)
+            logger.info("Generating a default self-signed SSL cert/key for the cephadm exporter")
+            cli(['cephadm', 'generate-exporter-config'])
+        #
+        # deploy the service (commented out until the cephadm changes are in the ceph container build)
+        # logger.info('Deploying cephadm exporter service with default placement...')
+        # cli(['orch', 'apply', 'cephadm-exporter'])
+
+
     if not args.skip_dashboard:
         # Configure SSL port (cephadm only allows to configure dashboard SSL port)
         # if the user does not want to use SSL he can change this setting once the cluster is up
@@ -3467,8 +3503,12 @@ def command_deploy():
         uid = os.getuid()
         gid = os.getgid()
         config_js = get_parm(args.config_json)  # type: Dict[str, str]
-        if not CephadmDaemon.valid_config(config_js):
-            return
+        if not daemon_ports:
+            logger.info("cephadm-exporter will use default port ({})".format(CephadmDaemon.default_port))
+            daemon_ports =[CephadmDaemon.default_port]
+           
+        CephadmDaemon.validate_config(config_js)
+        
         deploy_daemon(args.fsid, daemon_type, daemon_id, None,
                       uid, gid, ports=daemon_ports)
     
@@ -4542,6 +4582,10 @@ class CustomValidation(argparse.Action):
         if self.dest == "name":
             self._check_name(values)
             setattr(namespace, self.dest, values)
+        elif self.dest == 'exporter_config':
+            cfg = get_parm(values)
+            CephadmDaemon.validate_config(cfg)
+            setattr(namespace, self.dest, cfg)
 
 ##################################
 
@@ -5665,7 +5709,7 @@ td,th {{
 
 class CephadmDaemon():
 
-    daemon_type = "cephadm"
+    daemon_type = "cephadm-exporter"
     default_port = 9443
     bin_name = 'cephadm'
     key_name = "key"
@@ -5694,15 +5738,30 @@ class CephadmDaemon():
         self.token = read_file([os.path.join(self.daemon_path, CephadmDaemon.token_name)])
 
     @classmethod
-    def valid_config(cls, config):
+    def validate_config(cls, config):
         reqs = ", ".join(CephadmDaemon.config_requirements)
-        if not config:
-            logger.error("Missing parameter: --config-json must supply {}.".format(reqs))
-            return False
-        elif not all(k_name in config for k_name in CephadmDaemon.config_requirements):
-            logger.error("Incomplete configuration: --config-json must contain the following fields: {}".format(reqs))
-            return False
-        return True
+        errors = []
+
+        if not config or not all(k_name in config for k_name in CephadmDaemon.config_requirements):
+            raise Error("config must contain the following fields : {}".format(reqs))
+        
+        if not isinstance(config[CephadmDaemon.crt_name], str) or not isinstance(config[CephadmDaemon.key_name], str):
+            errors.append("crt and key fields must be 'str' types")
+
+        token = config[CephadmDaemon.token_name]
+        if len(token) < 8 or not isinstance(token, str):
+            errors.append("token must be of type 'str' and more than 8 characters long")
+
+        if 'port' in config:
+            try:
+                p = int(config['port'])
+                if p <= 1024:
+                    raise ValueError
+            except (TypeError, ValueError):
+                errors.append("port must be an integer > 1024")
+        
+        if errors:
+            raise Error("Exporter config error(s): {}".format(", ".join(errors)))
 
     @property
     def port_active(self):
@@ -5734,16 +5793,16 @@ class CephadmDaemon():
         return os.path.join(
             args.data_dir,
             self.fsid,
-            f'cephadm.{self.daemon_id}'
+            f'{self.daemon_type}.{self.daemon_id}'
         )
 
     @property
     def binary_path(self):
         return os.path.join(
-            self.daemon_path,
+            args.data_dir,
+            self.fsid,
             CephadmDaemon.bin_name
         )
-                    
 
     def _scrape_host_facts(self, refresh_interval=10):
         ctr = 0
@@ -5989,21 +6048,26 @@ WantedBy=ceph-{fsid}.target
     def deploy_daemon_unit(self, config=None):
         """deploy a specific unit file for cephadm
 
-        the normal deploy_daemon_units doesn't apply for this
+        The normal deploy_daemon_units doesn't apply for this
         daemon since it's not a container, so we just create a
         simple service definition and add it to the fsid's target
         """
         if not config:
             raise Error("Attempting to deploy cephadm daemon without a config")
-        
+        assert isinstance(config, dict)
+
         # Create the required config files in the daemons dir, with restricted permissions
         for filename in config:
             with open(os.open(os.path.join(self.daemon_path, filename), os.O_CREAT | os.O_WRONLY, mode=0o640), "w") as f:
                 f.write(config[filename])
 
-        shutil.copy(__file__,
-                    self.binary_path)
-        
+        # When __file__ is <stdin> we're being invoked over remoto via the orchestrator, so
+        # we pick up the file from where the orchestrator placed it - otherwise we'll 
+        # copy it to the binary location for this cluster
+        if not __file__ == '<stdin>':
+            shutil.copy(__file__,
+                        self.binary_path)
+
         with open(os.path.join(self.daemon_path, 'unit.run'), "w") as f:
             f.write(self.unit_run)
 
@@ -6482,6 +6546,14 @@ def _get_parser():
         '--container-init',
         action='store_true',
         help='Run podman/docker with `--init`')
+    parser_bootstrap.add_argument(
+        '--with-exporter',
+        action='store_true',
+        help='Do not automatically deploy cephadm metadata exporter (https) to each node')
+    parser_bootstrap.add_argument(
+        '--exporter-config',
+        action=CustomValidation,
+        help='Configuration information in JSON format, providing SSL configuration settings')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
@@ -6613,7 +6685,7 @@ def _get_parser():
     parser_exporter.add_argument(
         '--port',
         type=int,
-        default=CephadmDaemon.default_port,
+        default=int(CephadmDaemon.default_port),
         help='port number for the cephadm exporter service')
     parser_exporter.add_argument(
         '--id',
