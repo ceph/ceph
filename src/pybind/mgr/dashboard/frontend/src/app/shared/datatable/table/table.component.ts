@@ -26,15 +26,15 @@ import {
 import _ from 'lodash';
 import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
 
-import { TableStatus } from '../../../shared/classes/table-status';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CellTemplate } from '../../enum/cell-template.enum';
-import { CdTableColumn } from '../../models/cd-table-column';
-import { CdTableColumnFilter } from '../../models/cd-table-column-filter';
-import { CdTableColumnFiltersChange } from '../../models/cd-table-column-filters-change';
-import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../models/cd-table-selection';
-import { CdUserConfig } from '../../models/cd-user-config';
+import { TableStatus } from '~/app/shared/classes/table-status';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { CdUserConfig } from '~/app/shared/models/cd-user-config';
 
 @Component({
   selector: 'cd-table',

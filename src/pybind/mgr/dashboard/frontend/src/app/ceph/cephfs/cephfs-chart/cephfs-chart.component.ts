@@ -4,7 +4,7 @@ import { ChartDataSets, ChartOptions, ChartPoint, ChartType } from 'chart.js';
 import _ from 'lodash';
 import moment from 'moment';
 
-import { ChartTooltip } from '../../../shared/models/chart-tooltip';
+import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
 
 @Component({
   selector: 'cd-cephfs-chart',

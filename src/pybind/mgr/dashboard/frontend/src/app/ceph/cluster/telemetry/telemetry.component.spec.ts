@@ -4,15 +4,15 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { DownloadButtonComponent } from 'app/shared/components/download-button/download-button.component';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { MgrModuleService } from '../../../shared/api/mgr-module.service';
-import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
-import { SharedModule } from '../../../shared/shared.module';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { DownloadButtonComponent } from '~/app/shared/components/download-button/download-button.component';
+import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TelemetryComponent } from './telemetry.component';
 
 describe('TelemetryComponent', () => {

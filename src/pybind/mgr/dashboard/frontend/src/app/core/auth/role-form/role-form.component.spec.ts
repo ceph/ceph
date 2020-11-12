@@ -8,13 +8,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
-import { RoleService } from '../../../shared/api/role.service';
-import { ScopeService } from '../../../shared/api/scope.service';
-import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { RoleService } from '~/app/shared/api/role.service';
+import { ScopeService } from '~/app/shared/api/scope.service';
+import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RoleFormComponent } from './role-form.component';
 import { RoleFormModel } from './role-form.model';
 

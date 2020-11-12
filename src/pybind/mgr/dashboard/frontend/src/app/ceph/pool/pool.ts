@@ -1,4 +1,4 @@
-import { ExecutingTask } from '../../shared/models/executing-task';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { PoolStats } from './pool-stat';
 
 export class Pool {

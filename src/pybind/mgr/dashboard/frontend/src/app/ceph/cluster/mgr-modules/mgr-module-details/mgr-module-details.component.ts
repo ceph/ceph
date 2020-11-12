@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 
 @Component({
   selector: 'cd-mgr-module-details',

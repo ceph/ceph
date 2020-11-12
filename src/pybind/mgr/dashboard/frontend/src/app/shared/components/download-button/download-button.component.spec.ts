@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { TextToDownloadService } from '../../services/text-to-download.service';
+import { TextToDownloadService } from '~/app/shared/services/text-to-download.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { DownloadButtonComponent } from './download-button.component';
 
 describe('DownloadButtonComponent', () => {

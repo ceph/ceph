@@ -6,14 +6,14 @@ import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
 
-import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   AlertmanagerSilenceMatcher,
   AlertmanagerSilenceMatcherMatch
-} from '../../../../shared/models/alertmanager-silence';
-import { PrometheusRule } from '../../../../shared/models/prometheus-alerts';
-import { PrometheusSilenceMatcherService } from '../../../../shared/services/prometheus-silence-matcher.service';
+} from '~/app/shared/models/alertmanager-silence';
+import { PrometheusRule } from '~/app/shared/models/prometheus-alerts';
+import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 
 @Component({
   selector: 'cd-silence-matcher-modal',

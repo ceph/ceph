@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 
-import { Permissions } from '../../../../shared/models/permissions';
+import { Permissions } from '~/app/shared/models/permissions';
 
 @Component({
   selector: 'cd-host-details',

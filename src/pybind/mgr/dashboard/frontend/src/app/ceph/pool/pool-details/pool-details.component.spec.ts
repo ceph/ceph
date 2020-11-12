@@ -6,10 +6,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, Mocks, TabHelper } from '../../../../testing/unit-test-helper';
-import { Permissions } from '../../../shared/models/permissions';
-import { SharedModule } from '../../../shared/shared.module';
-import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
+import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
+import { Permissions } from '~/app/shared/models/permissions';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, Mocks, TabHelper } from '~/testing/unit-test-helper';
 import { PoolDetailsComponent } from './pool-details.component';
 
 describe('PoolDetailsComponent', () => {

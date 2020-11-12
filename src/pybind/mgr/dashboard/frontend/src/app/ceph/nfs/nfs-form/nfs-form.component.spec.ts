@@ -7,10 +7,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
-import { SharedModule } from '../../../shared/shared.module';
+import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { ActivatedRouteStub } from '~/testing/activated-route-stub';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from './nfs-form.component';
 

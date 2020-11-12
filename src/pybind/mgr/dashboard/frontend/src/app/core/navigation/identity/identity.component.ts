@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 
-import { AuthService } from '../../../shared/api/auth.service';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { AuthService } from '~/app/shared/api/auth.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-identity',

@@ -4,12 +4,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { CdNotification, CdNotificationConfig } from '../../../shared/models/cd-notification';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { CdNotification, CdNotificationConfig } from '~/app/shared/models/cd-notification';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { NotificationsComponent } from './notifications.component';
 
 describe('NotificationsComponent', () => {

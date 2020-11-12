@@ -6,12 +6,12 @@ import { NgbActiveModal, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { OsdService } from '../../../../shared/api/osd.service';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { Flag } from '../../../../shared/models/flag';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { SharedModule } from '../../../../shared/shared.module';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { Flag } from '~/app/shared/models/flag';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdFlagsIndivModalComponent } from './osd-flags-indiv-modal.component';
 
 describe('OsdFlagsIndivModalComponent', () => {

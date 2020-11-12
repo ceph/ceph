@@ -7,10 +7,10 @@ import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, FormHelper } from '../../../../../testing/unit-test-helper';
-import { CephServiceService } from '../../../../shared/api/ceph-service.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { SharedModule } from '../../../../shared/shared.module';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 
 describe('ServiceFormComponent', () => {

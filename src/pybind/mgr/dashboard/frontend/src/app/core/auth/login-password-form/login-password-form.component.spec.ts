@@ -6,12 +6,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
-import { AuthService } from '../../../shared/api/auth.service';
-import { ComponentsModule } from '../../../shared/components/components.module';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { AuthService } from '~/app/shared/api/auth.service';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { LoginPasswordFormComponent } from './login-password-form.component';
 
 describe('LoginPasswordFormComponent', () => {

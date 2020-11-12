@@ -16,26 +16,26 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { NotFoundComponent } from '~/app/core/not-found/not-found.component';
+import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
+import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { SelectBadgesComponent } from '~/app/shared/components/select-badges/select-badges.component';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { Permission } from '~/app/shared/models/permissions';
+import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
   Mocks,
   modalServiceShow
-} from '../../../../testing/unit-test-helper';
-import { NotFoundComponent } from '../../../core/not-found/not-found.component';
-import { CrushRuleService } from '../../../shared/api/crush-rule.service';
-import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
-import { PoolService } from '../../../shared/api/pool.service';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { SelectBadgesComponent } from '../../../shared/components/select-badges/select-badges.component';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
-import { Permission } from '../../../shared/models/permissions';
-import { PoolFormInfo } from '../../../shared/models/pool-form-info';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+} from '~/testing/unit-test-helper';
 import { Pool } from '../pool';
 import { PoolModule } from '../pool.module';
 import { PoolFormComponent } from './pool-form.component';

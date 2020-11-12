@@ -1,4 +1,4 @@
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { DimlessBinaryPipe } from '../pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../pipes/dimless.pipe';
 import { FormatterService } from './formatter.service';

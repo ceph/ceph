@@ -1,4 +1,4 @@
-import styles from '../../../styles.scss';
+import styles from '~/styles.scss';
 import { HealthColorPipe } from './health-color.pipe';
 
 describe('HealthColorPipe', () => {

@@ -3,13 +3,13 @@ import { Component, ViewChild } from '@angular/core';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
-import { ConfigOptionComponent } from '../../../../shared/components/config-option/config-option.component';
-import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { Permissions } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { ConfigOptionComponent } from '~/app/shared/components/config-option/config-option.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { OsdPgScrubModalOptions } from './osd-pg-scrub-modal.options';
 
 @Component({

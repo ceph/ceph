@@ -9,27 +9,23 @@ import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bo
 import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  modalServiceShow,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { FormModalComponent } from '../../../shared/components/form-modal/form-modal.component';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import {
   CephfsDir,
   CephfsQuotas,
   CephfsSnapshot
-} from '../../../shared/models/cephfs-directory-models';
-import { ModalService } from '../../../shared/services/modal.service';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SharedModule } from '../../../shared/shared.module';
+} from '~/app/shared/models/cephfs-directory-models';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, modalServiceShow, PermissionHelper } from '~/testing/unit-test-helper';
 import { CephfsDirectoriesComponent } from './cephfs-directories.component';
 
 describe('CephfsDirectoriesComponent', () => {

@@ -4,13 +4,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import _ from 'lodash';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { CoreModule } from '../../../../core/core.module';
-import { CephServiceService } from '../../../../shared/api/ceph-service.service';
-import { HostService } from '../../../../shared/api/host.service';
-import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
-import { SharedModule } from '../../../../shared/shared.module';
-import { CephModule } from '../../../ceph.module';
+import { CephModule } from '~/app/ceph/ceph.module';
+import { CoreModule } from '~/app/core/core.module';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { HostService } from '~/app/shared/api/host.service';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ServiceDaemonListComponent } from './service-daemon-list.component';
 
 describe('ServiceDaemonListComponent', () => {

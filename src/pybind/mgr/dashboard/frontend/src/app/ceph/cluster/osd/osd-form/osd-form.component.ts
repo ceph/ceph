@@ -4,16 +4,16 @@ import { Router } from '@angular/router';
 
 import _ from 'lodash';
 
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';
-import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdForm } from '../../../../shared/forms/cd-form';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { SubmitButtonComponent } from '~/app/shared/components/submit-button/submit-button.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';

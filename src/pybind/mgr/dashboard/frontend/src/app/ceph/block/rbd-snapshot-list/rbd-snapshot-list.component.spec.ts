@@ -8,26 +8,22 @@ import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
-import { RbdService } from '../../../shared/api/rbd.service';
-import { ComponentsModule } from '../../../shared/components/components.module';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { DataTableModule } from '../../../shared/datatable/datatable.module';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { Permissions } from '../../../shared/models/permissions';
-import { PipesModule } from '../../../shared/pipes/pipes.module';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { Permissions } from '~/app/shared/models/permissions';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';

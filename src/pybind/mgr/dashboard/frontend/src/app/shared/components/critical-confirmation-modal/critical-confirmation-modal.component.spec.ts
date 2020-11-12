@@ -5,9 +5,9 @@ import { NgForm, ReactiveFormsModule } from '@angular/forms';
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
-import { configureTestBed, modalServiceShow } from '../../../../testing/unit-test-helper';
-import { DirectivesModule } from '../../directives/directives.module';
-import { ModalService } from '../../services/modal.service';
+import { DirectivesModule } from '~/app/shared/directives/directives.module';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';

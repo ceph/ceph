@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf, Subscriber, Subscription } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
 import { Summary } from '../models/summary.model';
 import { AuthStorageService } from './auth-storage.service';

@@ -10,27 +10,27 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { EMPTY, of } from 'rxjs';
 
+import { CephModule } from '~/app/ceph/ceph.module';
+import { PerformanceCounterModule } from '~/app/ceph/performance-counter/performance-counter.module';
+import { CoreModule } from '~/app/core/core.module';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import {
   configureTestBed,
   OrchestratorHelper,
   PermissionHelper,
   TableActionHelper
-} from '../../../../../testing/unit-test-helper';
-import { CoreModule } from '../../../../core/core.module';
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { OsdService } from '../../../../shared/api/osd.service';
-import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
-import { Permissions } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { CephModule } from '../../../ceph.module';
-import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
+} from '~/testing/unit-test-helper';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdListComponent } from './osd-list.component';
 
