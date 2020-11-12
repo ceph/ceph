@@ -30,5 +30,9 @@ std::string crimson::dmclock::format_time(const Time& time, unsigned modulo) {
 
 
 void crimson::dmclock::debugger() {
+#ifndef _WIN32
   raise(SIGCONT);
+#else
+  DebugBreak();
+#endif
 }
