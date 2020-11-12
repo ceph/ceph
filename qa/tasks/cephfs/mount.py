@@ -1104,6 +1104,9 @@ class CephFSMount(object):
     def get_osd_epoch(self):
         raise NotImplementedError()
 
+    def get_op_read_count(self):
+        raise NotImplementedError()
+
     def lstat(self, fs_path, follow_symlinks=False, wait=True):
         return self.stat(fs_path, follow_symlinks=False, wait=True)
 

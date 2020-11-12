@@ -511,3 +511,6 @@ print(_find_admin_socket("{client_name}"))
 
     def set_cache_size(self, size):
         return self.admin_socket(['config', 'set', 'client_cache_size', str(size)])
+
+    def get_op_read_count(self):
+        return self.admin_socket(['perf', 'dump', 'objecter'])['objecter']['osdop_read']
