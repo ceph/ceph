@@ -4023,9 +4023,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description("Enabled buffered IO for bluefs reads.")
-    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold blocks from the compressed SST files itself, they can be read from page cache instead of from the disk.  This option previously was enabled by default, however in some test cases it appears to cause excessive swap utilization by the linux kernel and a large negative performance impact after several hours of run time.  Please exercise caution when enabling."),
+    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold blocks from the compressed SST files itself, they can be read from page cache instead of from the disk."),
 
     Option("bluefs_sync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
