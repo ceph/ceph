@@ -159,6 +159,8 @@ class CephFS(RESTController):
                 info = mdsmap['info']['gid_{0}'.format(gid)]
                 dns = mgr.get_latest("mds", info['name'], "mds_mem.dn")
                 inos = mgr.get_latest("mds", info['name'], "mds_mem.ino")
+                dirs = mgr.get_latest("mds", info['name'], "mds_mem.dir")
+                caps = mgr.get_latest("mds", info['name'], "mds_mem.cap")
 
                 if rank == 0:
                     client_count = mgr.get_latest("mds", info['name'],
@@ -193,7 +195,9 @@ class CephFS(RESTController):
                         "mds": info['name'],
                         "activity": activity,
                         "dns": dns,
-                        "inos": inos
+                        "inos": inos,
+                        "dirs": dirs,
+                        "caps": caps
                     }
                 )
 
@@ -205,7 +209,9 @@ class CephFS(RESTController):
                         "mds": "",
                         "activity": 0.0,
                         "dns": 0,
-                        "inos": 0
+                        "inos": 0,
+                        "dirs": 0,
+                        "caps": 0
                     }
                 )
 
@@ -217,6 +223,8 @@ class CephFS(RESTController):
 
             inos = mgr.get_latest("mds", daemon_info['name'], "mds_mem.ino")
             dns = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dn")
+            dirs = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dir")
+            caps = mgr.get_latest("mds", daemon_info['name'], "mds_mem.cap")
 
             activity = CephService.get_rate(
                 "mds", daemon_info['name'], "mds_log.replay")
@@ -228,7 +236,9 @@ class CephFS(RESTController):
                     "mds": daemon_info['name'],
                     "activity": activity,
                     "dns": dns,
-                    "inos": inos
+                    "inos": inos,
+                    "dirs": dirs,
+                    "caps": caps
                 }
             )
 
