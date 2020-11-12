@@ -1746,6 +1746,16 @@ To check that the host is reachable:
                 if spec.ports:
                     ports.extend(spec.ports)
 
+            if daemon_spec.daemon_type == 'haproxy':
+                haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                if haspec.haproxy_container_image:
+                    image = haspec.haproxy_container_image
+
+            if daemon_spec.daemon_type == 'keepalived':
+                haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                if haspec.keepalived_container_image:
+                    image = haspec.keepalived_container_image
+
             cephadm_config, deps = self.cephadm_services[daemon_spec.daemon_type].generate_config(
                 daemon_spec)
 
