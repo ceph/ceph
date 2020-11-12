@@ -36,6 +36,8 @@
 #endif
 
 #include "osd/PG.h"
+#include "osd/scrub_machine.h"
+#include "osd/pg_scrubber.h"
 
 #include "include/types.h"
 #include "include/compat.h"
@@ -1739,6 +1741,32 @@ void OSDService::queue_for_snap_trim(PG *pg)
       pg->get_osdmap_epoch()));
 }
 
+template <class MSG_TYPE>
+void OSDService::queue_scrub_event_msg(PG* pg,
+				       Scrub::scrub_prio_t with_priority,
+				       unsigned int qu_priority)
+{
+  const auto epoch = pg->get_osdmap_epoch();
+  auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
+  dout(15) << "queue a scrub event (" << *msg << ") for " << *pg << ". Epoch: " << epoch << dendl;
+
+  enqueue_back(OpSchedulerItem(
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
+    pg->scrub_requeue_priority(with_priority, qu_priority), ceph_clock_now(), 0, epoch));
+}
+
+template <class MSG_TYPE>
+void OSDService::queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  const auto epoch = pg->get_osdmap_epoch();
+  auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
+  dout(15) << "queue a scrub event (" << *msg << ") for " << *pg << ". Epoch: " << epoch << dendl;
+
+  enqueue_back(OpSchedulerItem(
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
+    pg->scrub_requeue_priority(with_priority), ceph_clock_now(), 0, epoch));
+}
+
 void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
 {
   unsigned scrub_queue_priority = pg->scrubber.priority;
@@ -1754,6 +1782,18 @@ void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
       ceph_clock_now(),
       0,
       epoch));
+}
+
+void OSDService::queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  // Resulting scrub event: 'RemotesReserved'
+  queue_scrub_event_msg<PGScrubResourcesOK>(pg, with_priority);
+}
+
+void OSDService::queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority)
+{
+  // Resulting scrub event: 'ReservationFailure'
+  queue_scrub_event_msg<PGScrubDenied>(pg, with_priority);
 }
 
 void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)

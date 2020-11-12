@@ -603,6 +603,13 @@ public:
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
+
+  /// queue the message (-> event) that all replicas reserved scrub resources for us
+  void queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// queue the message (-> event) that some replicas denied our scrub resources request
+  void queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority);
+
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
   bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
@@ -610,6 +617,15 @@ private:
   // -- pg recovery and associated throttling --
   ceph::mutex recovery_lock = ceph::make_mutex("OSDService::recovery_lock");
   std::list<std::pair<epoch_t, PGRef> > awaiting_throttle;
+
+  /// queue a scrub-related message for a PG
+  template<class MSG_TYPE>
+  void queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority, unsigned int qu_priority);
+
+  /// An alternative version of queue_scrub_event_msg(), in which the queuing priority is
+  /// provided by the executing scrub (i.e. taken from PgScrubber::m_flags)
+  template<class MSG_TYPE>
+  void queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority);
 
   utime_t defer_recovery_until;
   uint64_t recovery_ops_active;

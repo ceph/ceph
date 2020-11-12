@@ -24,6 +24,7 @@
 #include "OSD.h"
 #include "OpRequest.h"
 #include "ScrubStore.h"
+#include "pg_scrubber.h"
 #include "Session.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
@@ -486,6 +487,20 @@ bool PG::queue_scrub()
   }
   requeue_scrub();
   return true;
+}
+
+void PG::scrub_send_resources_granted(epoch_t epoch_queued,
+				      [[maybe_unused]] ThreadPool::TPHandle& handle)
+{
+  dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
+  //m_scrubber->send_remotes_reserved();
+}
+
+void PG::scrub_send_resources_denied(epoch_t epoch_queued,
+				     [[maybe_unused]] ThreadPool::TPHandle& handle)
+{
+  dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
+  //m_scrubber->send_reservation_failure();
 }
 
 unsigned PG::get_scrub_priority()
@@ -1344,6 +1359,16 @@ void PG::requeue_map_waiters()
   }
 }
 
+
+unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const
+{
+  return 0; // next commit: m_scrubber->scrub_requeue_priority(with_priority);
+}
+
+unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const
+{
+  return 0; // next commit: m_scrubber->scrub_requeue_priority(with_priority, suggested_priority);
+}
 
 // ==========================================================================================
 // SCRUB
