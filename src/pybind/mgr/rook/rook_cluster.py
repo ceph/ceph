@@ -319,6 +319,7 @@ class RookCluster(object):
         pods = [i for i in self.rook_pods.items if predicate(i)]
 
         pods_summary = []
+        prefix = 'sha256:'
 
         for p in pods:
             d = p.to_dict()
@@ -329,12 +330,16 @@ class RookCluster(object):
                 image_name = c['image']
                 break
 
+            image_id = d['status']['container_statuses'][0]['image_id']
+            image_id = image_id.split(prefix)[1] if prefix in image_id else image_id
+
             s = {
                 "name": d['metadata']['name'],
                 "hostname": d['spec']['node_name'],
                 "labels": d['metadata']['labels'],
                 'phase': d['status']['phase'],
                 'container_image_name': image_name,
+                'container_image_id': image_id,
                 'refreshed': refreshed,
                 # these may get set below...
                 'started': None,

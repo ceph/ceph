@@ -397,6 +397,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if service_name is not None and service_name != sd.service_name():
                 continue
             sd.container_image_name = p['container_image_name']
+            sd.container_image_id = p['container_image_id']
             sd.created = p['created']
             sd.last_configured = p['created']
             sd.last_deployed = p['created']
