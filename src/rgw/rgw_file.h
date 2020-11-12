@@ -1975,7 +1975,9 @@ public:
     RGWGetObj::get_data = true; // XXX
     RGWGetObj::partial_content = true;
     RGWGetObj::ofs = off;
-    RGWGetObj::end = off + len;
+    RGWGetObj::end = off + len - 1;
+    RGWGetObj::prefetch.off = off;
+    RGWGetObj::prefetch.len = len;
   }
 
   bool only_bucket() override { return false; }
