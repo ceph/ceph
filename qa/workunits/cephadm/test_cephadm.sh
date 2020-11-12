@@ -293,12 +293,6 @@ $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       ceph -s -f json-pretty \
     | jq '.mgrmap.num_standbys' | grep -q 1
 
-# deploy cephadm in exporter mode - query the API later in the test
-# to give the daemon time to scan
-$CEPHADM deploy --name cephadm.x \
-      --fsid $FSID \
-      --tcp-ports 5003
-
 # add osd.{1,2,..}
 dd if=/dev/zero of=$TMPDIR/$OSD_IMAGE_NAME bs=1 count=0 seek=$OSD_IMAGE_SIZE
 loop_dev=$($SUDO losetup -f)
@@ -338,23 +332,6 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
           --config $CONFIG \
           --osd-fsid $osd_fsid
 done
-
-# now check the output from the cephadm exporter is json for all the 
-# supported endpoints
-cond="curl 'http://localhost:5003/v1/metadata/health' | jq -e '.tasks.daemons == \"active\" and .tasks.host == \"active\" and .tasks.disks == \"active\"'"
-is_available "cephadm exporter health" "$cond" 3
-cond="curl 'http://localhost:5003/v1/metadata/host' | jq -e '.data'"
-is_available "cephadm exporter host output" "$cond" 3
-cond="curl 'http://localhost:5003/v1/metadata/daemons' | jq -e '.data'"
-is_available "cephadm exporter list-daemons output" "$cond" 3
-cond="curl 'http://localhost:5003/v1/metadata/disks' | jq -e '.data'"
-is_available "cephadm exporter ceph-volume output" "$cond" 5
-
-http_status=$(curl -i 'http://localhost:5003/badurl' | head -n 1| cut -d$' ' -f2)
-(("$http_status" == "404"))
-
-cond="curl 'http://localhost:5003' | grep ^'<!DOCTYPE html>'"
-is_available "cephadm exporter default HTML page" "$cond" 1
 
 # add node-exporter
 ${CEPHADM//--image $IMAGE_MASTER/} deploy \
