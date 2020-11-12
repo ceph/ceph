@@ -631,7 +631,9 @@ public:
     } else {
       f->open_object_section("version");
       if (command == "version") {
-	f->dump_string("version", ceph_version_to_str());
+#ifndef WITH_ALIEN
+	f->dump_string("version", ceph_version_to_str(nullptr));
+#endif
 	f->dump_string("release", ceph_release_to_str());
 	f->dump_string("release_type", ceph_release_type());
       } else if (command == "git_version") {

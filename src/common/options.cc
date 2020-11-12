@@ -2228,6 +2228,16 @@ std::vector<Option> get_global_options() {
 		     "only be rejected later, when they are used.")
     .set_flag(Option::FLAG_RUNTIME),
 
+    Option("mon_warn_on_older_version", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("issue DAEMON_OLD_VERSION health warning if daemons are not all running the same version"),
+
+    Option("mon_warn_older_version_delay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(7_day)
+    .add_service("mon")
+    .set_description("issue DAEMON_OLD_VERSION health warning after this amount of time has elapsed"),
+
     // PAXOS
 
     Option("paxos_stash_full_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -8794,6 +8804,10 @@ std::vector<Option> get_mds_client_options() {
     .set_min(1)
     .set_description("Size of thread pool for ASIO completions")
     .add_tag("client"),
+
+    Option("debug_version_for_testing", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .set_description("Override ceph_version_short for testing"),
 
     Option("client_shutdown_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_RUNTIME)
