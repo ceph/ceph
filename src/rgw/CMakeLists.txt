@@ -169,6 +169,7 @@ endif()
 
 add_library(rgw_common OBJECT ${librgw_common_srcs})
 
+target_compile_definitions(rgw_common PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
