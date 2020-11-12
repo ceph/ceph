@@ -1,5 +1,8 @@
 {
-  "rulesDirectory": ["node_modules/codelyzer"],
+  "rulesDirectory": [
+    "node_modules/codelyzer",
+    "node_modules/tslint-microsoft-contrib"
+  ],
   "rules": {
     "no-consecutive-blank-lines": true,
     "arrow-return-shorthand": true,
@@ -41,6 +44,7 @@
     "no-inferrable-types": [true, "ignore-params"],
     "no-misused-new": true,
     "no-non-null-assertion": true,
+    "no-relative-imports": [true, "allow-siblings"],
     "no-shadowed-variable": true,
     "no-string-literal": false,
     "no-string-throw": true,
