@@ -325,6 +325,51 @@ public:
   }
 };
 
+class PGScrubItem : public PGOpQueueable {
+ protected:
+  epoch_t epoch_queued;
+  std::string_view message_name;
+  PGScrubItem(spg_t pg, epoch_t epoch_queued, std::string_view derivative_name)
+      : PGOpQueueable{pg}, epoch_queued{epoch_queued}, message_name{derivative_name}
+  {}
+  op_type_t get_op_type() const final { return op_type_t::bg_scrub; }
+  std::ostream& print(std::ostream& rhs) const final
+  {
+    return rhs << message_name << "(pgid=" << get_pgid()
+	       << "epoch_queued=" << epoch_queued << ")";
+  }
+  void run(OSD* osd,
+	   OSDShard* sdata,
+	   PGRef& pg,
+	   ThreadPool::TPHandle& handle) override = 0;
+  op_scheduler_class get_scheduler_class() const final
+  {
+    return op_scheduler_class::background_best_effort;
+  }
+};
+
+/**
+ *  all replicas have granted our scrub resources request
+ */
+class PGScrubResourcesOK : public PGScrubItem {
+ public:
+  PGScrubResourcesOK(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubResourcesOK"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
+/**
+ *  scrub resources requests denied by replica(s)
+ */
+class PGScrubDenied : public PGScrubItem {
+ public:
+  PGScrubDenied(spg_t pg, epoch_t epoch_queued)
+      : PGScrubItem{pg, epoch_queued, "PGScrubDenied"}
+  {}
+  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
+};
+
 class PGRecovery : public PGOpQueueable {
   epoch_t epoch_queued;
   uint64_t reserved_pushes;

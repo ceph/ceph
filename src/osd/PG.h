@@ -40,6 +40,7 @@
 #include "PeeringState.h"
 #include "recovery_types.h"
 #include "MissingLoc.h"
+#include "scrubber_common.h"
 
 #include "mgr/OSDPerfMetricTypes.h"
 
@@ -68,6 +69,9 @@ class DynamicPerfStats;
 
 namespace Scrub {
   class Store;
+  class ReplicaReservations;
+  class LocalReservation;
+  class ReservedByRemotePrimary;
 }
 
 #ifdef PG_DEBUG_REFS
@@ -164,10 +168,15 @@ class PGRecoveryStats {
 class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend struct NamedState;
   friend class PeeringState;
+  friend class Scrub::ReplicaReservations;
+  friend class Scrub::LocalReservation;  // dout()-only friendship
+  friend class Scrub::ReservedByRemotePrimary;  //  dout()-only friendship
 
 public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
+  /// flags detailing scheduling/operation characteristics of the next scrub 
+  requested_scrub_t m_planned_scrub;
 
 public:
   // -- members --
@@ -365,6 +374,10 @@ public:
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
 
+  /// Queues a PGScrubResourcesOK message. Will translate into 'RemotesReserved' FSM event
+  void scrub_send_resources_granted(epoch_t queued, ThreadPool::TPHandle &handle);
+  void scrub_send_resources_denied(epoch_t queued, ThreadPool::TPHandle &handle);
+
   bool is_scrub_registered();
   void reg_next_scrub();
   void unreg_next_scrub();
@@ -516,6 +529,9 @@ public:
   }
   bool sched_scrub();
 
+  unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const;
+  /// the version that refers to flags_.priority
+  unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const;
   virtual void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle
