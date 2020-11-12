@@ -708,7 +708,7 @@ protected:
       return;
     }
     if (hint != 0) {
-      last_pos = (hint / d) < l2.size() ? p2align(hint, d) : 0;
+      last_pos = (hint / (d * l2_granularity)) < l2.size() ? p2align(hint / l2_granularity, d) : 0;
     }
     auto l2_pos = last_pos;
     auto last_pos0 = last_pos;
