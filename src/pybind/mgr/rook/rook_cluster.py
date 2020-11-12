@@ -197,7 +197,7 @@ class RookCluster(object):
         self.rook_pods = KubernetesResource(self.coreV1_api.list_namespaced_pod,
                                             namespace=self.rook_env.namespace,
                                             label_selector="rook_cluster={0}".format(
-                                                self.rook_env.cluster_name))
+                                                self.rook_env.namespace))
         self.nodes = KubernetesResource(self.coreV1_api.list_node)
 
     def rook_url(self, path):
@@ -284,7 +284,7 @@ class RookCluster(object):
                         rook_cluster=rook
         And MDS containers additionally have `rook_filesystem` label
 
-        Label filter is rook_cluster=<cluster name>
+        Label filter is rook_cluster=<cluster namespace>
                         rook_file_system=<self.fs_name>
         """
         def predicate(item):
