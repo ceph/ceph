@@ -286,3 +286,10 @@ class KernelMount(CephFSMount):
         epoch, barrier = int(first_line_tokens[1]), int(first_line_tokens[3])
 
         return epoch, barrier
+
+    def get_op_read_count(self):
+        buf = self.read_debug_file("metrics")
+        if buf is None:
+            return 0
+        else:
+            return int(re.findall(r'read.*', buf)[0].split()[1])
