@@ -891,9 +891,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd_state.first);
       }
-      if (osd_state.second & CEPH_OSD_EXISTS) {
-	// could be created *or* destroyed, but we can safely drop it
-	osd_epochs.erase(osd_state.first);
+      if (osd_state.second & CEPH_OSD_OUT) {
+        // could be marked in *or* out, but we can safely drop it
+        osd_epochs.erase(osd_state.first);
       }
     }
   }
@@ -2294,8 +2294,7 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   // also scan osd epochs
   // don't trim past the oldest reported osd epoch
   for (auto [osd, epoch] : osd_epochs) {
-    if (epoch < floor &&
-        osdmap.is_in(osd)) {
+    if (epoch < floor) {
       floor = epoch;
     }
   }
