@@ -902,6 +902,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void clear_client_caps_after_export();
   void export_client_caps(std::map<client_t,Capability::Export>& cl);
 
+  void reconnect_filelocks(client_t client, bufferlist& locks);
+
   // caps allowed
   int get_caps_liked() const;
   int get_caps_allowed_ever() const;

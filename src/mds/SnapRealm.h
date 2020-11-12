@@ -41,17 +41,17 @@ public:
     return !srnode.past_parent_snaps.empty();
   }
 
-  void build_snap_set() const;
+  void build_snap_set();
   void get_snap_info(std::map<snapid_t, const SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  const ceph::buffer::list& get_snap_trace() const;
-  void build_snap_trace() const;
+  const ceph::buffer::list& get_snap_trace();
+  void build_snap_trace();
 
   std::string_view get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(std::string_view name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  const std::set<snapid_t>& get_snaps() const;
-  const SnapContext& get_snap_context() const;
+  const std::set<snapid_t>& get_snaps();
+  const SnapContext& get_snap_context();
   void invalidate_cached_snaps() {
     cached_seq = 0;
   }
@@ -131,19 +131,19 @@ public:
   std::map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
 
 protected:
-  void check_cache() const;
+  void check_cache();
 
 private:
   bool global;
 
   // cache
-  mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
-  mutable snapid_t cached_last_created;  // max last_created over all past+present parents
-  mutable snapid_t cached_last_destroyed;
-  mutable std::set<snapid_t> cached_snaps;
-  mutable SnapContext cached_snap_context;
-  mutable ceph::buffer::list cached_snap_trace;
-  mutable inodeno_t cached_subvolume_ino = 0;
+  snapid_t cached_seq;           // max seq over self and all past+present parents.
+  snapid_t cached_last_created;  // max last_created over all past+present parents
+  snapid_t cached_last_destroyed;
+  std::set<snapid_t> cached_snaps;
+  SnapContext cached_snap_context;
+  ceph::buffer::list cached_snap_trace;
+  inodeno_t cached_subvolume_ino = 0;
 };
 
 std::ostream& operator<<(std::ostream& out, const SnapRealm &realm);
