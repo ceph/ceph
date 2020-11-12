@@ -5,12 +5,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { ComponentsModule } from '../../components/components.module';
-import { CellTemplate } from '../../enum/cell-template.enum';
-import { CdTableColumn } from '../../models/cd-table-column';
-import { CdDatePipe } from '../../pipes/cd-date.pipe';
-import { PipesModule } from '../../pipes/pipes.module';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TableComponent } from '../table/table.component';
 import { TableKeyValueComponent } from './table-key-value.component';
 

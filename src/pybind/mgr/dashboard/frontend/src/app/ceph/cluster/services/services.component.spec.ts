@@ -6,15 +6,15 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { CoreModule } from '../../../core/core.module';
-import { CephServiceService } from '../../../shared/api/ceph-service.service';
-import { OrchestratorService } from '../../../shared/api/orchestrator.service';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { Permissions } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SharedModule } from '../../../shared/shared.module';
-import { CephModule } from '../../ceph.module';
+import { CephModule } from '~/app/ceph/ceph.module';
+import { CoreModule } from '~/app/core/core.module';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ServicesComponent } from './services.component';
 
 describe('ServicesComponent', () => {

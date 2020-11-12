@@ -7,12 +7,12 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
-import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { SharedModule } from '../../../../shared/shared.module';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { MgrModuleDetailsComponent } from '../mgr-module-details/mgr-module-details.component';
 import { MgrModuleListComponent } from './mgr-module-list.component';
 

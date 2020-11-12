@@ -7,16 +7,16 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
-import { OrchestratorStatus } from '../../../../shared/models/orchestrator.interface';
-import { Permissions } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { SharedModule } from '../../../../shared/shared.module';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { InventoryDevicesComponent } from './inventory-devices.component';
 
 describe('InventoryDevicesComponent', () => {

@@ -5,8 +5,8 @@ import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
-import { InventoryDevice } from '../../ceph/cluster/inventory/inventory-devices/inventory-device.model';
-import { InventoryHost } from '../../ceph/cluster/inventory/inventory-host.model';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryHost } from '~/app/ceph/cluster/inventory/inventory-host.model';
 import { OrchestratorFeature } from '../models/orchestrator.enum';
 import { OrchestratorStatus } from '../models/orchestrator.interface';
 

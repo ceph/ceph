@@ -3,17 +3,17 @@ import { Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
-import { CrushNodeSelectionClass } from '../../../shared/classes/crush.node.selection.class';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { CrushNode } from '../../../shared/models/crush-node';
-import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
+import { CrushNodeSelectionClass } from '~/app/shared/classes/crush.node.selection.class';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CrushNode } from '~/app/shared/models/crush-node';
+import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-erasure-code-profile-form-modal',

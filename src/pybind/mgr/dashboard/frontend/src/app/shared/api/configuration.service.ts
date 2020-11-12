@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { ConfigFormCreateRequestModel } from '../../ceph/cluster/configuration/configuration-form/configuration-form-create-request.model';
+import { ConfigFormCreateRequestModel } from '~/app/ceph/cluster/configuration/configuration-form/configuration-form-create-request.model';
 
 @Injectable({
   providedIn: 'root'

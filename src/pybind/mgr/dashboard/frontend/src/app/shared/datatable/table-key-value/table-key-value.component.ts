@@ -10,9 +10,9 @@ import {
 
 import _ from 'lodash';
 
-import { CellTemplate } from '../../enum/cell-template.enum';
-import { CdTableColumn } from '../../models/cd-table-column';
-import { CdDatePipe } from '../../pipes/cd-date.pipe';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { TableComponent } from '../table/table.component';
 
 interface KeyValueItem {

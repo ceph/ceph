@@ -6,10 +6,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { SettingsService } from '../../api/settings.service';
-import { CephReleaseNamePipe } from '../../pipes/ceph-release-name.pipe';
+import { SettingsService } from '~/app/shared/api/settings.service';
+import { CephReleaseNamePipe } from '~/app/shared/pipes/ceph-release-name.pipe';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { DocComponent } from '../doc/doc.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';

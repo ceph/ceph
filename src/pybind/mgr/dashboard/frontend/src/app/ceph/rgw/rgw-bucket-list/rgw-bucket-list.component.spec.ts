@@ -6,10 +6,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
-import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { SharedModule } from '../../../shared/shared.module';
+import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { RgwBucketDetailsComponent } from '../rgw-bucket-details/rgw-bucket-details.component';
 import { RgwBucketListComponent } from './rgw-bucket-list.component';
 

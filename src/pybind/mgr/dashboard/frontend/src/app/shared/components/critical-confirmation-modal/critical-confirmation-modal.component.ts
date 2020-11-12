@@ -4,7 +4,7 @@ import { FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
 
-import { CdFormGroup } from '../../forms/cd-form-group';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 
 @Component({

@@ -10,22 +10,22 @@ import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
+import { NotFoundComponent } from '~/app/core/not-found/not-found.component';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { AlertmanagerSilence } from '~/app/shared/models/alertmanager-silence';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
   PrometheusHelper
-} from '../../../../../testing/unit-test-helper';
-import { NotFoundComponent } from '../../../../core/not-found/not-found.component';
-import { PrometheusService } from '../../../../shared/api/prometheus.service';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { AlertmanagerSilence } from '../../../../shared/models/alertmanager-silence';
-import { Permission } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { SharedModule } from '../../../../shared/shared.module';
+} from '~/testing/unit-test-helper';
 import { SilenceFormComponent } from './silence-form.component';
 
 describe('SilenceFormComponent', () => {

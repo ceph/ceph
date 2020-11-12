@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-import { Permissions } from '../../src/app/shared/models/permissions';
+import { Permissions } from '~/app/shared/models/permissions';
 
 let auth: any;
 

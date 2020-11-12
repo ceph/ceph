@@ -1,8 +1,8 @@
 import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { SettingsService } from '../../api/settings.service';
+import { SettingsService } from '~/app/shared/api/settings.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-grafana',

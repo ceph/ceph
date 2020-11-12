@@ -1,16 +1,16 @@
 import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { PrometheusService } from '../../../../shared/api/prometheus.service';
-import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { Permission } from '../../../../shared/models/permissions';
-import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
-import { URLBuilderService } from '../../../../shared/services/url-builder.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { PrometheusListHelper } from '../prometheus-list-helper';
 
 const BASE_URL = 'silences'; // as only silence actions can be used

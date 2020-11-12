@@ -1,4 +1,4 @@
-import { RbdConfigurationEntry } from '../../../shared/models/configuration';
+import { RbdConfigurationEntry } from '~/app/shared/models/configuration';
 
 export class RbdFormModel {
   name: string;

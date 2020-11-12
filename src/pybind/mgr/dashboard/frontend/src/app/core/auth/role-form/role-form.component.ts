@@ -5,15 +5,15 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
-import { RoleService } from '../../../shared/api/role.service';
-import { ScopeService } from '../../../shared/api/scope.service';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { CdForm } from '../../../shared/forms/cd-form';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { RoleService } from '~/app/shared/api/role.service';
+import { ScopeService } from '~/app/shared/api/scope.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { RoleFormMode } from './role-form-mode.enum';
 import { RoleFormModel } from './role-form.model';
 

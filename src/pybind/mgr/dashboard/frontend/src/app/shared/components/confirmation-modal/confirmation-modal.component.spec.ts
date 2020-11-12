@@ -6,8 +6,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, FixtureHelper } from '../../../../testing/unit-test-helper';
-import { ModalService } from '../../services/modal.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { configureTestBed, FixtureHelper } from '~/testing/unit-test-helper';
 import { BackButtonComponent } from '../back-button/back-button.component';
 import { ModalComponent } from '../modal/modal.component';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';

@@ -6,9 +6,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { SharedModule } from '../../../shared/shared.module';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { RoleDetailsComponent } from '../role-details/role-details.component';
 import { UserTabsComponent } from '../user-tabs/user-tabs.component';
 import { RoleListComponent } from './role-list.component';

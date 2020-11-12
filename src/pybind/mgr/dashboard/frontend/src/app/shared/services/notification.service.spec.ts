@@ -4,7 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import _ from 'lodash';
 import { ToastrService } from 'ngx-toastr';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';

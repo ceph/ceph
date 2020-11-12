@@ -4,13 +4,13 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { IscsiComponent } from './iscsi.component';
 
 describe('IscsiComponent', () => {

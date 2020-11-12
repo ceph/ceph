@@ -3,7 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { AuthGuardService } from './auth-guard.service';
 import { AuthStorageService } from './auth-storage.service';
 

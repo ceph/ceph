@@ -5,28 +5,25 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 import moment from 'moment';
 
-import { PrometheusService } from '../../../../shared/api/prometheus.service';
-import {
-  ActionLabelsI18n,
-  SucceededActionLabelsI18n
-} from '../../../../shared/constants/app.constants';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../../shared/forms/cd-validators';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import {
   AlertmanagerSilence,
   AlertmanagerSilenceMatcher,
   AlertmanagerSilenceMatcherMatch
-} from '../../../../shared/models/alertmanager-silence';
-import { Permission } from '../../../../shared/models/permissions';
-import { AlertmanagerAlert, PrometheusRule } from '../../../../shared/models/prometheus-alerts';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { PrometheusSilenceMatcherService } from '../../../../shared/services/prometheus-silence-matcher.service';
-import { TimeDiffService } from '../../../../shared/services/time-diff.service';
+} from '~/app/shared/models/alertmanager-silence';
+import { Permission } from '~/app/shared/models/permissions';
+import { AlertmanagerAlert, PrometheusRule } from '~/app/shared/models/prometheus-alerts';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
+import { TimeDiffService } from '~/app/shared/services/time-diff.service';
 import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
 
 @Component({

@@ -6,22 +6,22 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { CephModule } from '~/app/ceph/ceph.module';
+import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
+import { CoreModule } from '~/app/core/core.module';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import {
   configureTestBed,
   OrchestratorHelper,
   TableActionHelper
-} from '../../../../testing/unit-test-helper';
-import { CoreModule } from '../../../core/core.module';
-import { HostService } from '../../../shared/api/host.service';
-import { OrchestratorService } from '../../../shared/api/orchestrator.service';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { OrchestratorFeature } from '../../../shared/models/orchestrator.enum';
-import { Permissions } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SharedModule } from '../../../shared/shared.module';
-import { CephModule } from '../../ceph.module';
-import { CephSharedModule } from '../../shared/ceph-shared.module';
+} from '~/testing/unit-test-helper';
 import { HostsComponent } from './hosts.component';
 
 describe('HostsComponent', () => {

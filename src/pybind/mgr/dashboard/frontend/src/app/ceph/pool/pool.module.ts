@@ -5,8 +5,8 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
-import { SharedModule } from '../../shared/shared.module';
+import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SharedModule } from '~/app/shared/shared.module';
 import { BlockModule } from '../block/block.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { CrushRuleFormModalComponent } from './crush-rule-form-modal/crush-rule-form-modal.component';

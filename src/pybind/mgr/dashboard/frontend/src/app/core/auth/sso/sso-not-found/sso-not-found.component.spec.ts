@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SsoNotFoundComponent } from './sso-not-found.component';
 
 describe('SsoNotFoundComponent', () => {

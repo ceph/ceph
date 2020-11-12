@@ -3,19 +3,19 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
-import styles from '../../../../styles.scss';
-import { HealthService } from '../../../shared/api/health.service';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { Permissions } from '../../../shared/models/permissions';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
+import { HealthService } from '~/app/shared/api/health.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { Permissions } from '~/app/shared/models/permissions';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
   FeatureTogglesMap$,
   FeatureTogglesService
-} from '../../../shared/services/feature-toggles.service';
-import { RefreshIntervalService } from '../../../shared/services/refresh-interval.service';
-import { PgCategoryService } from '../../shared/pg-category.service';
+} from '~/app/shared/services/feature-toggles.service';
+import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
+import styles from '~/styles.scss';
 
 @Component({
   selector: 'cd-health',

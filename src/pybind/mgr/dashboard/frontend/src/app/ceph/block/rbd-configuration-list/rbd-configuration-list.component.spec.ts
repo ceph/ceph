@@ -7,13 +7,13 @@ import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap'
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { ChartsModule } from 'ng2-charts';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { ComponentsModule } from '../../../shared/components/components.module';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { RbdConfigurationEntry } from '../../../shared/models/configuration';
-import { PipesModule } from '../../../shared/pipes/pipes.module';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { RbdConfigurationService } from '../../../shared/services/rbd-configuration.service';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { RbdConfigurationEntry } from '~/app/shared/models/configuration';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdConfigurationListComponent } from './rbd-configuration-list.component';
 
 describe('RbdConfigurationListComponent', () => {

@@ -7,19 +7,15 @@ import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
-import { RbdService } from '../../../shared/api/rbd.service';
-import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';

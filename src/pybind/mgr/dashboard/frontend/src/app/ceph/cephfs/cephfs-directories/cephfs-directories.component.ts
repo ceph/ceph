@@ -12,29 +12,29 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import moment from 'moment';
 
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { FormModalComponent } from '../../../shared/components/form-modal/form-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { CdFormModalFieldConfig } from '../../../shared/models/cd-form-modal-field-config';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdFormModalFieldConfig } from '~/app/shared/models/cd-form-modal-field-config';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import {
   CephfsDir,
   CephfsQuotas,
   CephfsSnapshot
-} from '../../../shared/models/cephfs-directory-models';
-import { Permission } from '../../../shared/models/permissions';
-import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { NotificationService } from '../../../shared/services/notification.service';
+} from '~/app/shared/models/cephfs-directory-models';
+import { Permission } from '~/app/shared/models/permissions';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 class QuotaSetting {
   row: {

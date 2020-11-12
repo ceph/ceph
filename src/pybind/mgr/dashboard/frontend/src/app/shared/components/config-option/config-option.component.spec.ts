@@ -6,9 +6,9 @@ import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { ConfigurationService } from '../../api/configuration.service';
-import { CdFormGroup } from '../../forms/cd-form-group';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { HelperComponent } from '../helper/helper.component';
 import { ConfigOptionComponent } from './config-option.component';
 
