@@ -327,7 +327,14 @@ def configure(ctx, config):
             properties = properties['vault_%s' % ctx.vault.engine]
             s3tests_conf['DEFAULT']['kms_keyid'] = properties['key_path']
             s3tests_conf['DEFAULT']['kms_keyid2'] = properties['key_path2']
-
+        elif hasattr(ctx.rgw, 'pykmip_role'):
+            keys=[]
+            for name in (x['Name'] for x in ctx.pykmip.keys[ctx.rgw.pykmip_role]):
+                p=name.partition('-')
+                keys.append(p[2] if p[2] else p[0])
+            keys.extend(['testkey-1', 'testkey-2'])
+            s3tests_conf['DEFAULT']['kms_keyid'] = properties.get('kms_key', keys[0])
+            s3tests_conf['DEFAULT']['kms_keyid2'] = properties.get('kms_key2', keys[1])
         else:
             # Fallback scenario where it's the local (ceph.conf) kms being tested
             s3tests_conf['DEFAULT']['kms_keyid'] = 'testkey-1'

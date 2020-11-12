@@ -146,6 +146,7 @@ def start_rgw(ctx, config, clients):
         elif pykmip_role is not None:
             if not hasattr(ctx, 'pykmip'):
                 raise ConfigError('rgw must run after the pykmip task')
+            ctx.rgw.pykmip_role = pykmip_role
             rgw_cmd.extend([
                 '--rgw_crypt_kmip_addr', "{}:{}".format(*ctx.pykmip.endpoints[pykmip_role]),
             ])
