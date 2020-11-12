@@ -326,6 +326,7 @@ def main(args):
     suite_path = args["--suite-path"]
     os_type = args["--os-type"]
     os_version = args["--os-version"]
+    interactive_on_error = args["--interactive-on-error"]
 
     set_up_logging(verbose, archive)
 
@@ -388,6 +389,9 @@ def main(args):
     if config.get('use_shaman') is not None:
         teuth_config.use_shaman = config['use_shaman']
 
+    #could be refactored for setting and unsetting in hackish way
+    if interactive_on_error:
+       config['interactive-on-error'] = True
     # create a FakeNamespace instance that mimics the old argparse way of doing
     # things we do this so we can pass it to run_tasks without porting those
     # tasks to the new way of doing things right now

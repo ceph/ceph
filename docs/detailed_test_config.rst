@@ -239,6 +239,9 @@ chance to inspect the system -- both through Teuthology and via extra
 SSH connections -- and the cleanup completes only when you choose so.
 Just exit the interactive Python session to continue the cleanup.
 
+You can enable interactive-on-error with the ``teuthology`` command option
+``--interactive-on-error``
+
 Interactive task facilities
 ===========================
 
