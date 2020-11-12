@@ -27,6 +27,7 @@ public:
   int init();
   void ms_fast_dispatch(Message *m) override;
   bool ms_dispatch(Message *m) override;
+  void update_state_from_replicadaemon_map(ReplicaDaemonMap& replicadaemon_map_ref);
 
 protected:
   std::string name;

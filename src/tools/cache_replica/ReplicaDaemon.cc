@@ -9,6 +9,7 @@
 
 #include "include/ceph_assert.h"
 #include "ReplicaDaemon.h"
+#include "messages/MReplicaDaemonMap.h"
 
 #define FN_NAME (__CEPH_ASSERT_FUNCTION == nullptr ? __func__ : __CEPH_ASSERT_FUNCTION)
 #define dout_context g_ceph_context
@@ -72,10 +73,51 @@ void ReplicaDaemon::ms_fast_dispatch(Message *m)
   derr << "TODO: deal with received message" << dendl;
 }
 
-//parent implement: ceph_abort
+void ReplicaDaemon::update_state_from_replicadaemon_map(ReplicaDaemonMap& replicadaemon_map_ref)
+{
+  const auto& replicadaemons_state = replicadaemon_map_ref.get_replicadaemons_stateref();
+  for(auto& replicadaemon_state: replicadaemons_state) {
+    if (!self_state.replica_route_addr.legacy_equals(replicadaemon_state.replica_route_addr)) {
+      continue;
+    }
+    if (replicadaemon_state.daemon_status == STATE_ACTIVE) {
+      switch(self_state.daemon_status) {
+      case STATE_BOOTING:
+        self_state.daemon_status = STATE_ACTIVE;
+        break;
+      default:
+        // nothing
+        break;
+      }
+      continue;
+    }
+    if (replicadaemon_state.daemon_status == STATE_DOWN) {
+      switch(self_state.daemon_status) {
+      case STATE_STOPPING:
+        self_state.daemon_status = STATE_DOWN;
+        break;
+      default:
+        // nothing
+        break;
+      }
+      continue;
+    }
+  }
+}
+
 bool ReplicaDaemon::ms_dispatch(Message *m)
 {
-  derr << "TODO: deal with received message" << dendl;
+  switch (m->get_type()) {
+  case CEPH_MSG_REPLICADAEMON_MAP:
+    {
+    auto replicadaemon_map_msg = static_cast<MReplicaDaemonMap*>(m);
+    auto replicadaemon_map_ref = replicadaemon_map_msg->get_map();
+    update_state_from_replicadaemon_map(replicadaemon_map_ref);
+    }
+    break;
+  default:
+    ceph_abort();
+  }
   return true;
 }
 
