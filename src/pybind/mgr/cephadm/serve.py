@@ -500,7 +500,7 @@ class CephadmServe:
             except (RuntimeError, OrchestratorError) as e:
                 self.mgr.events.for_service(spec, 'ERROR',
                                             f"Failed while placing {daemon_type}.{daemon_id}"
-                                            "on {host}: {e}")
+                                            f"on {host}: {e}")
                 # only return "no change" if no one else has already succeeded.
                 # later successes will also change to True
                 if r is None:
