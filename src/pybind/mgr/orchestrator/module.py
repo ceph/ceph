@@ -809,7 +809,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add',
-        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus|cephadm-exporter,req=false '
         'name=placement,type=CephString,req=false',
         'Add daemon(s)')
     def _daemon_add_misc(self,
@@ -854,6 +854,8 @@ Usage:
             completion = self.add_nfs(spec)
         elif daemon_type == 'iscsi':
             completion = self.add_iscsi(spec)
+        elif daemon_type == 'cephadm-exporter':
+            completion = self.add_cephadm_exporter(spec)
         else:
             raise OrchestratorValidationError(f'unknown daemon type `{daemon_type}`')
 
@@ -1048,7 +1050,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply',
-        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus|cephadm-exporter,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
         'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
