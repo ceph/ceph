@@ -2,8 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <ostream>
-#include <cxxabi.h>
 #include <string.h>
+
+#include <boost/stacktrace.hpp>
 
 #include "BackTrace.h"
 #include "common/version.h"
@@ -11,20 +12,23 @@
 
 namespace ceph {
 
+BackTrace::BackTrace(int s)
+  : bt{s, max}
+{}
+
 void BackTrace::print(std::ostream& out) const
 {
   out << " " << pretty_version_to_str() << std::endl;
-  for (size_t i = skip; i < size; i++) {
-    out << " " << (i-skip+1) << ": " << demangle(strings[i]) << std::endl;
+  for (size_t i = 0; i < bt.size(); i++) {
+    out << " " << i << ": " << bt[i].name() << std::endl;
   }
 }
 
 void BackTrace::dump(Formatter *f) const
 {
   f->open_array_section("backtrace");
-  for (size_t i = skip; i < size; i++) {
-    //      out << " " << (i-skip+1) << ": " << strings[i] << std::endl;
-    f->dump_string("frame", demangle(strings[i]));
+  for (auto& frame : bt) {
+    f->dump_string("frame", frame.name());
   }
   f->close_section();
 }
