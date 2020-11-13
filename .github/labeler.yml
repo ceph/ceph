@@ -9,3 +9,16 @@ dashboard:
 
 CI:
   - .github/**
+
+rbd:
+  - doc/rbd/**
+  - qa/suites/rbd/**
+  - qa/workunits/rbd/**
+  - src/include/rbd/**
+  - src/librbd/**
+  - src/pybind/rbd/**
+  - src/test/librbd/**
+  - src/test/rbd_mirror/**
+  - src/tools/rbd/**
+  - src/tools/rbd_mirror/**
+  - src/tools/rbd_nbd/**
