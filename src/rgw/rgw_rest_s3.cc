@@ -4594,8 +4594,12 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::RGWRadosStore *store,
   if (s->init_state.url_bucket.empty()) {
     // Save bucket to tide us over until token is parsed.
     s->init_state.url_bucket = first;
+    string encoded_obj_str;
     if (pos >= 0) {
-      string encoded_obj_str = req.substr(pos+1);
+      encoded_obj_str = req.substr(pos+1);
+    }
+
+    if (!encoded_obj_str.empty()) {
       if (s->bucket) {
 	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
       } else {
@@ -4862,7 +4866,10 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::RGWRadosStore *store,
 }
 
 bool RGWHandler_REST_S3Website::web_dir() const {
-  std::string subdir_name = url_decode(s->object->get_name());
+  std::string subdir_name;
+  if (!rgw::sal::RGWObject::empty(s->object.get())) {
+    subdir_name = url_decode(s->object->get_name());
+  }
 
   if (subdir_name.empty()) {
     return false;
@@ -4922,14 +4929,18 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   }
 
   rgw_obj_key new_obj;
-  bool get_res = s->bucket->get_info().website_conf.get_effective_key(s->object->get_name(), &new_obj.name, web_dir());
+  string key_name;
+  if (!rgw::sal::RGWObject::empty(s->object.get())) {
+    key_name = s->object->get_name();
+  }
+  bool get_res = s->bucket->get_info().website_conf.get_effective_key(key_name, &new_obj.name, web_dir());
   if (!get_res) {
     s->err.message = "The IndexDocument Suffix is not configurated or not well formed!";
     ldpp_dout(s, 5) << s->err.message << dendl;
     return -EINVAL;
   }
 
-  ldpp_dout(s, 10) << "retarget get_effective_key " << s->object->get_key() << " -> "
+  ldpp_dout(s, 10) << "retarget get_effective_key " << s->object << " -> "
 		    << new_obj << dendl;
 
   RGWBWRoutingRule rrule;
@@ -4941,7 +4952,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
     const string& protocol =
       (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
     int redirect_code = 0;
-    rrule.apply_rule(protocol, hostname, s->object->get_name(), &s->redirect,
+    rrule.apply_rule(protocol, hostname, key_name, &s->redirect,
 		    &redirect_code);
     // APply a custom HTTP response code
     if (redirect_code > 0)
@@ -4958,6 +4969,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
    */
 
   s->object = store->get_object(new_obj);
+  s->object->set_bucket(s->bucket.get());
 
   return 0;
 }
