@@ -739,10 +739,15 @@ int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, const RGWRemoteCtl::
 
   tn = sync_env.sync_tracer->add_node(sync_env.sync_tracer->root_node, "data");
 
-  int ret = http_manager.start();
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
-    return ret;
+  int ret;
+
+  /* init() might be called multiple times, if it failed to complete initialization */
+  if (!http_manager.is_started()) {
+    ret = http_manager.start();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+      return ret;
+    }
   }
 
   ret = run(sc.dsi.full->init_cr(tn));
@@ -6268,10 +6273,14 @@ RGWCoroutine *RGWRemoteBucketManager::run_sync_cr(int num)
 
 int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
 {
-  int ret = http_manager.start();
-  if (ret < 0) {
-    ldpp_dout(this, 0) << "failed in http_manager.start() ret=" << ret << dendl;
-    return ret;
+  int ret;
+
+  if (!http_manager.is_started()) {
+    ret = http_manager.start();
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+      return ret;
+    }
   }
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);

@@ -1064,7 +1064,7 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client)
 
   register_request(req_data);
 
-  if (!is_started) {
+  if (!state.is_started) {
     ret = link_request(req_data);
     if (ret < 0) {
       req_data->put();
@@ -1084,7 +1084,7 @@ int RGWHTTPManager::remove_request(RGWHTTPClient *client)
 {
   rgw_http_req_data *req_data = client->get_req_data();
 
-  if (!is_started) {
+  if (!state.is_started) {
     unlink_request(req_data);
     return 0;
   }
@@ -1099,21 +1099,21 @@ int RGWHTTPManager::remove_request(RGWHTTPClient *client)
   return 0;
 }
 
-int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetState state)
+int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetState req_state)
 {
   rgw_http_req_data *req_data = client->get_req_data();
 
   ceph_assert(ceph_mutex_is_locked(req_data->lock));
 
   /* can only do that if threaded */
-  if (!is_started) {
+  if (!state.is_started) {
     return -EINVAL;
   }
 
   bool suggested_wr_paused = req_data->write_paused;
   bool suggested_rd_paused = req_data->read_paused;
 
-  switch (state) {
+  switch (req_state) {
     case SET_WRITE_PAUSED:
       suggested_wr_paused = true;
       break;
@@ -1182,7 +1182,7 @@ int RGWHTTPManager::start()
                  thread_pipe[1], thread_pipe[0]);
 #endif
 
-  is_started = true;
+  state.is_started = true;
   reqs_thread = new ReqsThread(this);
   reqs_thread->create("http_manager");
   return 0;
@@ -1196,7 +1196,7 @@ void RGWHTTPManager::stop()
 
   is_stopped = true;
 
-  if (is_started) {
+  if (state.is_started) {
     going_down = true;
     signal_thread();
     reqs_thread->join();
