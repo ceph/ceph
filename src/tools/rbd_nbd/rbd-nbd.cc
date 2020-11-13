@@ -1159,7 +1159,6 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     global_init_postfork_start(g_ceph_context);
   }
 
-  g_ceph_context->_conf.finalize_reexpand_meta();
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 

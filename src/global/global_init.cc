@@ -480,6 +480,9 @@ int reopen_as_null(CephContext *cct, int fd)
 
 void global_init_postfork_start(CephContext *cct)
 {
+  // reexpand the meta in child process
+  cct->_conf.finalize_reexpand_meta();
+
   // restart log thread
   cct->_log->start();
   cct->notify_post_fork();
