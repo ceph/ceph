@@ -1,10 +1,11 @@
 dashboard:
-  - /src/pybind/mgr/dashboard/**
-  - /qa/suites/rados/dashboard/**
-  - /qa/tasks/mgr/test_dashboard.py
-  - /qa/tasks/mgr/dashboard/**
-  - /monitoring/**
-  - /doc/mgr/dashboard.rst
+  - src/pybind/mgr/dashboard/**
+  - qa/suites/rados/dashboard/**
+  - qa/tasks/mgr/test_dashboard.py
+  - qa/tasks/mgr/dashboard/**
+  - monitoring/**
+  - doc/mgr/dashboard.rst
+  - doc/dev/developer_guide/dash-devel.rst
 
 CI:
-  - /.github/**
+  - .github/**
