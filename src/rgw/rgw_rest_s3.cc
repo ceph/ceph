@@ -5305,7 +5305,10 @@ gen_v4_signature(const DoutPrefixProvider *dpp,
   for (auto& entry : sig_info.extra_headers) {
     result[entry.first] = entry.second;
   }
-  result["x-amz-content-sha256"] = "UNSIGNED-PAYLOAD";
+  auto& payload_hash = result["x-amz-content-sha256"];
+  if (payload_hash.empty()) {
+    payload_hash = AWS4_UNSIGNED_PAYLOAD_HASH;
+  }
   string auth_header = string("AWS4-HMAC-SHA256 Credential=").append(sig_info.access_key_id) + "/";
   auth_header.append(sig_info.scope + ",SignedHeaders=")
              .append(sig_info.signed_headers + ",Signature=")
