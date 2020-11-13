@@ -91,10 +91,6 @@ WRITE_RAW_ENCODER(ceph_le64)
 WRITE_RAW_ENCODER(ceph_le32)
 WRITE_RAW_ENCODER(ceph_le16)
 
-// FIXME: we need to choose some portable floating point encoding here
-WRITE_RAW_ENCODER(float)
-WRITE_RAW_ENCODER(double)
-
 inline void encode(const bool &v, bufferlist& bl) {
   __u8 vv = v;
   encode_raw(vv, bl);
@@ -127,6 +123,37 @@ WRITE_INTTYPE_ENCODER(uint32_t, le32)
 WRITE_INTTYPE_ENCODER(int32_t, le32)
 WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
+
+// -----------------------------------
+// float types
+//
+// NOTE: The following code assumes all supported platforms use IEEE binary32
+// as float and IEEE binary64 as double floating-point format.  The assumption
+// is verified by the assertions below.
+//
+// Under this assumption, we can use raw encoding of floating-point types
+// on little-endian machines, but we still need to perform a byte swap
+// on big-endian machines to ensure cross-architecture compatibility.
+// To achive that, we reinterpret the values as integers first, which are
+// byte-swapped via the ceph_le types as above.  The extra conversions
+// are optimized away on little-endian machines by the compiler.
+#define WRITE_FLTTYPE_ENCODER(type, itype, etype)			\
+  static_assert(sizeof(type) == sizeof(itype));				\
+  static_assert(std::numeric_limits<type>::is_iec559,			\
+	      "floating-point type not using IEEE754 format");		\
+  inline void encode(type v, ::ceph::bufferlist& bl, uint64_t features=0) { \
+    ceph_##etype e;							\
+    e = *reinterpret_cast<itype *>(&v);					\
+    ::ceph::encode_raw(e, bl);						\
+  }									\
+  inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) {	\
+    ceph_##etype e;							\
+    ::ceph::decode_raw(e, p);						\
+    *reinterpret_cast<itype *>(&v) = e;					\
+  }
+
+WRITE_FLTTYPE_ENCODER(float, uint32_t, le32)
+WRITE_FLTTYPE_ENCODER(double, uint64_t, le64)
 
 // see denc.h for ENCODE_DUMP_PATH discussion and definition.
 #ifdef ENCODE_DUMP_PATH

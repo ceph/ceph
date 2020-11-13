@@ -32,20 +32,25 @@ class DeepCopyRequest : public RefCountedObject {
 public:
   static DeepCopyRequest* create(ImageCtxT *src_image_ctx,
                                  ImageCtxT *dst_image_ctx,
-                                 librados::snap_t snap_id_start,
-                                 librados::snap_t snap_id_end, bool flatten,
+                                 librados::snap_t src_snap_id_start,
+                                 librados::snap_t src_snap_id_end,
+                                 librados::snap_t dst_snap_id_start,
+                                 bool flatten,
                                  const deep_copy::ObjectNumber &object_number,
                                  ContextWQ *work_queue,
                                  SnapSeqs *snap_seqs,
                                  ProgressContext *prog_ctx,
                                  Context *on_finish) {
-    return new DeepCopyRequest(src_image_ctx, dst_image_ctx, snap_id_start,
-                               snap_id_end, flatten, object_number, work_queue,
-                               snap_seqs, prog_ctx, on_finish);
+    return new DeepCopyRequest(src_image_ctx, dst_image_ctx, src_snap_id_start,
+                               src_snap_id_end, dst_snap_id_start, flatten,
+                               object_number, work_queue, snap_seqs, prog_ctx,
+                               on_finish);
   }
 
   DeepCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
-                  librados::snap_t snap_id_start, librados::snap_t snap_id_end,
+                  librados::snap_t src_snap_id_start,
+                  librados::snap_t src_snap_id_end,
+                  librados::snap_t dst_snap_id_start,
                   bool flatten, const deep_copy::ObjectNumber &object_number,
                   ContextWQ *work_queue, SnapSeqs *snap_seqs,
                   ProgressContext *prog_ctx, Context *on_finish);
@@ -86,8 +91,9 @@ private:
 
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
-  librados::snap_t m_snap_id_start;
-  librados::snap_t m_snap_id_end;
+  librados::snap_t m_src_snap_id_start;
+  librados::snap_t m_src_snap_id_end;
+  librados::snap_t m_dst_snap_id_start;
   bool m_flatten;
   deep_copy::ObjectNumber m_object_number;
   ContextWQ *m_work_queue;

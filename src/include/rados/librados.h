@@ -49,6 +49,7 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 #define LIBRADOS_SUPPORTS_SERVICES 1
+#define LIBRADOS_SUPPORTS_GETADDRS 1
 #define LIBRADOS_SUPPORTS_APP_METADATA 1
 
 /* RADOS lock flags
@@ -3627,6 +3628,15 @@ CEPH_RADOS_API int rados_break_lock(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
 				       char *client_address,
 				       uint32_t expire_seconds);
+
+/**
+ * Gets addresses of the RADOS session, suitable for blacklisting.
+ *
+ * @param cluster cluster handle
+ * @param addrs the output string.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_getaddrs(rados_t cluster, char** addrs);
 
 CEPH_RADOS_API void rados_set_osdmap_full_try(rados_ioctx_t io);
 

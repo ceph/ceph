@@ -1115,6 +1115,8 @@ public:
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
 
+    std::array<std::pair<ghobject_t, mono_clock::time_point>, 64> dumped_onodes;
+
     static Cache *create(CephContext* cct, string type, PerfCounters *logger);
 
     Cache(CephContext* cct) : cct(cct), logger(nullptr) {}
@@ -2377,7 +2379,7 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max, bool legacy, vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
@@ -2597,6 +2599,13 @@ public:
 		      const ghobject_t& end,
 		      int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
+
+  int collection_list_legacy(CollectionHandle &c,
+                             const ghobject_t& start,
+                             const ghobject_t& end,
+                             int max,
+                             vector<ghobject_t> *ls,
+                             ghobject_t *next) override;
 
   int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid

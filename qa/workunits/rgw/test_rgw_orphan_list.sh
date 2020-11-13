@@ -56,9 +56,8 @@ uninstall_awscli() {
     cd "$here"
 }
 
-sudo dnf install -y s3cmd
-
-sudo yum install python3-setuptools
+sudo yum -y install s3cmd
+sudo yum -y install python3-setuptools
 sudo yum -y install python3-pip
 sudo pip3 install --upgrade setuptools
 sudo pip3 install python-swiftclient

@@ -39,7 +39,7 @@ class PyModuleRegistry;
 
 class ActivePyModules
 {
-  std::map<std::string, std::unique_ptr<ActivePyModule>> modules;
+  std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
   std::map<std::string, std::string> store_cache;
   DaemonStateIndex &daemon_state;

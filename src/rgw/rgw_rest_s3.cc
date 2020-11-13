@@ -1139,7 +1139,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextContinuationToken", next_marker.name);
   }
-  s->formatter->dump_int("KeyCount",objs.size());
+  s->formatter->dump_int("KeyCount", objs.size() + common_prefixes.size());
   if (start_after_exist) {
     s->formatter->dump_string("StartAfter", startAfter);
   }
@@ -1183,6 +1183,8 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
 
 void RGWGetBucketVersioning_ObjStore_S3::send_response()
 {
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
@@ -4097,7 +4099,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   if (subdir_name.empty()) {
     return false;
-  } else if (subdir_name.back() == '/') {
+  } else if (subdir_name.back() == '/' && subdir_name.size() > 1) {
     subdir_name.pop_back();
   }
 

@@ -258,7 +258,7 @@ scrubbing operations.
               Already running scrubs will be continued. This might be useful to reduce
               load on busy clusters.
 :Type: Boolean
-:Default: ``true``
+:Default: ``false``
 
 
 ``osd scrub thread timeout``
@@ -400,7 +400,7 @@ Operations
 
 :Type: String
 :Valid Choices: prio, wpq, mclock_opclass, mclock_client
-:Default: ``prio``
+:Default: ``wpq``
 
 
 ``osd op queue cut off``

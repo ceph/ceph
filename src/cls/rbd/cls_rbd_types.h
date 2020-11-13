@@ -700,6 +700,7 @@ enum MigrationState {
   MIGRATION_STATE_PREPARED = 2,
   MIGRATION_STATE_EXECUTING = 3,
   MIGRATION_STATE_EXECUTED = 4,
+  MIGRATION_STATE_ABORTING = 5,
 };
 
 inline void encode(const MigrationState &state, bufferlist& bl) {

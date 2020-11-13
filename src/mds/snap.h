@@ -87,12 +87,17 @@ struct sr_t {
 
   __u32 flags;
   enum {
-    PARENT_GLOBAL = 1 << 0,
+    PARENT_GLOBAL	= 1 << 0,
+    SUBVOLUME		= 1 << 1,
   };
 
   void mark_parent_global() { flags |= PARENT_GLOBAL; }
   void clear_parent_global() { flags &= ~PARENT_GLOBAL; }
   bool is_parent_global() const { return flags & PARENT_GLOBAL; }
+
+  void mark_subvolume() { flags |= SUBVOLUME; }
+  void clear_subvolume() { flags &= ~SUBVOLUME; }
+  bool is_subvolume() const { return flags & SUBVOLUME; }
 
   sr_t()
     : seq(0), created(0),

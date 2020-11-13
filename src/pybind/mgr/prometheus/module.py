@@ -62,7 +62,8 @@ def health_status_to_number(status):
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
 DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
-           'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
+           'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
+           'compress_bytes_used', 'compress_under_bytes']
 
 OSD_POOL_STATS = ('recovering_objects_per_sec', 'recovering_bytes_per_sec',
                   'recovering_keys_per_sec', 'num_objects_recovered',
@@ -499,7 +500,7 @@ class Module(MgrModule):
             host_version = servers.get((id_, 'mon'), ('', ''))
             self.metrics['mon_metadata'].set(1, (
                 'mon.{}'.format(id_), host_version[0],
-                mon['public_addr'].split(':')[0], rank,
+                mon['public_addr'].rsplit(':', 1)[0], rank,
                 host_version[1]
             ))
             in_quorum = int(rank in mon_status['quorum'])
@@ -604,8 +605,8 @@ class Module(MgrModule):
             # id can be used to link osd metrics and metadata
             id_ = osd['osd']
             # collect osd metadata
-            p_addr = osd['public_addr'].split(':')[0]
-            c_addr = osd['cluster_addr'].split(':')[0]
+            p_addr = osd['public_addr'].rsplit(':', 1)[0]
+            c_addr = osd['cluster_addr'].rsplit(':', 1)[0]
             if p_addr == "-" or c_addr == "-":
                 self.log.info(
                     "Missing address metadata for osd {0}, skipping occupation"
@@ -736,21 +737,44 @@ class Module(MgrModule):
 
         # Parse rbd_stats_pools option, which is a comma or space separated
         # list of pool[/namespace] entries. If no namespace is specifed the
-        # stats are collected for every namespace in the pool.
+        # stats are collected for every namespace in the pool. The wildcard
+        # '*' can be used to indicate all pools or namespaces
         pools_string = self.get_localized_module_option('rbd_stats_pools', '')
-        pools = {}
-        for p in [x for x in re.split('[\s,]+', pools_string) if x]:
-            s = p.split('/', 2)
+        pool_keys = []
+        for x in re.split('[\s,]+', pools_string):
+            if not x:
+                continue
+
+            s = x.split('/', 2)
             pool_name = s[0]
-            if len(s) == 1:
+            namespace_name = None
+            if len(s) == 2:
+                namespace_name = s[1]
+
+            if pool_name == "*":
+                # collect for all pools
+                osd_map = self.get('osd_map')
+                for pool in osd_map['pools']:
+                    if 'rbd' not in pool.get('application_metadata', {}):
+                        continue
+                    pool_keys.append((pool['pool_name'], namespace_name))
+            else:
+                pool_keys.append((pool_name, namespace_name))
+
+        pools = {}
+        for pool_key in pool_keys:
+            pool_name = pool_key[0]
+            namespace_name = pool_key[1]
+            if not namespace_name or namespace_name == "*":
                 # empty set means collect for all namespaces
                 pools[pool_name] = set()
                 continue
+
             if pool_name not in pools:
                 pools[pool_name] = set()
             elif not pools[pool_name]:
                 continue
-            pools[pool_name].add(s[1])
+            pools[pool_name].add(namespace_name)
 
         rbd_stats_pools = {}
         for pool_id in list(self.rbd_stats['pools']):

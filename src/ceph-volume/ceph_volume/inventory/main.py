@@ -31,11 +31,24 @@ class Inventory(object):
             default='plain',
             help='Output format',
         )
+        parser.add_argument(
+            '--filter-for-batch',
+            action='store_true',
+            help=('Filter devices unsuitable to pass to an OSD service spec, '
+                  'no effect when <path> is passed'),
+            default=False,
+        )
         self.args = parser.parse_args(self.argv)
         if self.args.path:
             self.format_report(Device(self.args.path))
         else:
-            self.format_report(Devices())
+            self.format_report(Devices(filter_for_batch=self.args.filter_for_batch))
+
+    def get_report(self):
+        if self.args.path:
+            return Device(self.args.path).json_report()
+        else:
+            return Devices(filter_for_batch=self.args.filter_for_batch).json_report()
 
     def format_report(self, inventory):
         if self.args.format == 'json':

@@ -257,8 +257,9 @@ private:
   void apply();
   int get_parent_info(uint64_t snap_id, ParentImageInfo *parent_md,
                       MigrationInfo *migration_info);
-  bool get_migration_info(ParentImageInfo *parent_md,
-                          MigrationInfo *migration_info);
+  int get_migration_info(ParentImageInfo *parent_md,
+                         MigrationInfo *migration_info,
+                         bool* migration_info_valid);
 };
 
 } // namespace image

@@ -150,6 +150,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_cluster_stat(rados_t cluster, rados_cluster_stat_t *result)
     int rados_cluster_fsid(rados_t cluster, char *buf, size_t len)
     int rados_blacklist_add(rados_t cluster, char *client_address, uint32_t expire_seconds)
+    int rados_getaddrs(rados_t cluster, char** addrs)
     int rados_application_enable(rados_ioctx_t io, const char *app_name,
                                  int force)
     void rados_set_osdmap_full_try(rados_ioctx_t io)
@@ -677,6 +678,26 @@ cdef class Rados(object):
         if conf:
             for key, value in conf.items():
                 self.conf_set(key, value)
+
+    def get_addrs(self):
+        """
+        Get associated client addresses with this RADOS session.
+        """
+        self.require_state("configuring", "connected")
+
+        cdef:
+            char* addrs = NULL
+
+        try:
+
+            with nogil:
+                ret = rados_getaddrs(self.cluster, &addrs)
+            if ret:
+                raise make_ex(ret, "error calling getaddrs")
+
+            return decode_cstr(addrs)
+        finally:
+            free(addrs)
 
     def require_state(self, *args):
         """

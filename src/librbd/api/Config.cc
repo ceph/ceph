@@ -34,7 +34,8 @@ static std::set<std::string> EXCLUDE_OPTIONS {
     "rbd_tracing",
     "rbd_validate_names",
     "rbd_validate_pool",
-    "rbd_mirror_pool_replayers_refresh_interval"
+    "rbd_mirror_pool_replayers_refresh_interval",
+    "rbd_config_pool_override_update_timestamp"
   };
 static std::set<std::string> EXCLUDE_IMAGE_OPTIONS {
     "rbd_default_clone_format",

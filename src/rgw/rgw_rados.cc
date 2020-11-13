@@ -187,6 +187,20 @@ void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
   }
 }
 
+void RGWObjVersionTracker::apply_write()
+{
+  const bool checked = (read_version.ver != 0);
+  const bool incremented = (write_version.ver == 0);
+
+  if (checked && incremented) {
+    // apply cls_version_inc() so our next operation can recheck it
+    ++read_version.ver;
+  } else {
+    read_version = write_version;
+  }
+  write_version = obj_version();
+}
+
 void RGWObjManifest::obj_iterator::operator++()
 {
   if (manifest->explicit_objs) {
@@ -2424,12 +2438,15 @@ int RGWRados::Bucket::List::list_objects_ordered(
 
   // use a local marker; either the marker will have a previous entry
   // or it will be empty; either way it's OK to copy
-  rgw_obj_key marker_obj(params.marker.name, params.marker.instance, params.marker.ns);
+  rgw_obj_key marker_obj(params.marker.name,
+			 params.marker.instance,
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
-  rgw_obj_key end_marker_obj(params.end_marker.name, params.end_marker.instance,
-                             params.end_marker.ns);
+  rgw_obj_key end_marker_obj(params.end_marker.name,
+			     params.end_marker.instance,
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
@@ -2466,6 +2483,15 @@ int RGWRados::Bucket::List::list_objects_ordered(
       break;
     }
     prev_marker = cur_marker;
+
+    if (skip_after_delim > cur_marker.name) {
+      cur_marker = skip_after_delim;
+
+      ldout(cct, 20) << "setting cur_marker="
+		     << cur_marker.name
+		     << "[" << cur_marker.instance << "]"
+		     << dendl;
+    }
 
     std::map<string, rgw_bucket_dir_entry> ent_map;
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
@@ -2551,6 +2577,11 @@ int RGWRados::Bucket::List::list_objects_ordered(
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
+            skip_after_delim = obj.name.substr(0, delim_pos);
+            skip_after_delim.append(after_delim_s);
+
+            ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
+
             count++;
           }
 
@@ -2569,24 +2600,6 @@ int RGWRados::Bucket::List::list_objects_ordered(
       result->emplace_back(std::move(entry));
       count++;
     } // eiter for loop
-
-    if (!params.delim.empty()) {
-      int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
-      if (marker_delim_pos >= 0) {
-        skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
-        skip_after_delim.append(after_delim_s);
-
-        ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
-
-        if (skip_after_delim > cur_marker.name) {
-          cur_marker = skip_after_delim;
-          ldout(cct, 20) << "setting cur_marker="
-                         << cur_marker.name
-                         << "[" << cur_marker.instance << "]"
-                         << dendl;
-        }
-      }
-    }
 
     ldout(cct, 20) << "RGWRados::Bucket::List::" << __func__ <<
       " INFO end of outer loop, truncated=" << truncated <<
@@ -2658,13 +2671,13 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
   // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.marker.ns);
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-			     params.end_marker.ns);
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
@@ -10031,7 +10044,7 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bu
   }
 
   if (need_resharding) {
-    ldout(cct, 20) << __func__ << " bucket " << bucket.name << " need resharding " <<
+    ldout(cct, 1) << __func__ << " bucket " << bucket.name << " need resharding " <<
       " old num shards " << bucket_info.num_shards << " new num shards " << suggested_num_shards <<
       dendl;
     return add_bucket_to_reshard(bucket_info, suggested_num_shards);

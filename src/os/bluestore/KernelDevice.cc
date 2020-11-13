@@ -59,12 +59,36 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
 int KernelDevice::_lock()
 {
   dout(10) << __func__ << " " << fd_directs[WRITE_LIFE_NOT_SET] << dendl;
-  int r = ::flock(fd_directs[WRITE_LIFE_NOT_SET], LOCK_EX | LOCK_NB);
-  if (r < 0) {
-    derr << __func__ << " flock failed on " << path << dendl;
-    return -errno;
+  // When the block changes, systemd-udevd will open the block,
+  // read some information and close it. Then a failure occurs here.
+  // So we need to try again here.
+  int fd = fd_directs[WRITE_LIFE_NOT_SET];
+  uint64_t nr_tries = 0;
+  for (;;) {
+    struct flock fl = { F_WRLCK,
+                        SEEK_SET };
+    int r = ::fcntl(fd, F_OFD_SETLK, &fl);
+    if (r < 0) {
+      if (errno == EINVAL) {
+        r = ::flock(fd, LOCK_EX | LOCK_NB);
+      }
+    }
+    if (r == 0) {
+      return 0;
+    }
+    if (errno != EAGAIN) {
+      return -errno;
+    }
+    dout(1) << __func__ << " flock busy on " << path << dendl;
+    if (const uint64_t max_retry =
+	cct->_conf.get_val<uint64_t>("bdev_flock_retry");
+        max_retry > 0 && nr_tries++ == max_retry) {
+      return -EAGAIN;
+    }
+    double retry_interval =
+      cct->_conf.get_val<double>("bdev_flock_retry_interval");
+    std::this_thread::sleep_for(ceph::make_timespan(retry_interval));
   }
-  return 0;
 }
 
 int KernelDevice::open(const string& p)

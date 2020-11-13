@@ -65,6 +65,11 @@ configuration, they may need to be stored locally on the node and set
 in a local configuration file.  These options include:
 
   - ``mon_host``, the list of monitors for the cluster
+  - ``mon_host_override``, the list of monitors for the cluster to
+    **initially** contact when beginning a new instance of communication with the
+    Ceph cluster.  This overrides the known monitor list derived from MonMap
+    updates sent to older Ceph instances (like librados cluster handles).  It is
+    expected this option is primarily useful for debugging.
   - ``mon_dns_serv_name`` (default: `ceph-mon`), the name of the DNS
     SRV record to check to identify the cluster monitors via DNS
   - ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and

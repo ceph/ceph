@@ -1201,10 +1201,19 @@ namespace rgw {
     return dar;
   } /* RGWFileHandle::decode_attrs */
 
-  bool RGWFileHandle::reclaim() {
+  bool RGWFileHandle::reclaim(const cohort::lru::ObjectFactory* newobj_fac) {
     lsubdout(fs->get_context(), rgw, 17)
       << __func__ << " " << *this
       << dendl;
+    auto factory = dynamic_cast<const RGWFileHandle::Factory*>(newobj_fac);
+    if (factory == nullptr) {
+      return false;
+    }
+    /* make sure the reclaiming object is the same partiton with newobject factory,
+     * then we can recycle the object, and replace with newobject */
+    if (!fs->fh_cache.is_same_partition(factory->fhk.fh_hk.object, fh.fh_hk.object)) {
+      return false;
+    }
     /* in the non-delete case, handle may still be in handle table */
     if (fh_hook.is_linked()) {
       /* in this case, we are being called from a context which holds

@@ -1491,7 +1491,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, const s
   string max_marker;
   int ret = store->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
-    cerr << "error getting bucket stats ret=" << ret << std::endl;
+    cerr << "error getting bucket stats bucket=" << bucket.name << " ret=" << ret << std::endl;
     return ret;
   }
 

@@ -13,7 +13,7 @@ tier. So the cache tier and the backing storage tier are completely transparent
 to Ceph clients.
 
 
-.. ditaa:: 
+.. ditaa::
            +-------------+
            | Ceph Client |
            +------+------+

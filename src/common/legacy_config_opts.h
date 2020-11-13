@@ -96,6 +96,7 @@ OPTION(xio_max_send_inline, OPT_INT) // xio maximum threshold to send inline
 
 OPTION(compressor_zlib_isal, OPT_BOOL)
 OPTION(compressor_zlib_level, OPT_INT) //regular zlib compression level, not applicable to isa-l optimized version
+OPTION(compressor_zstd_level, OPT_INT) //regular zstd compression level
 
 OPTION(qat_compressor_enabled, OPT_BOOL)
 
@@ -951,6 +952,8 @@ OPTION(bluefs_buffered_io, OPT_BOOL)
 OPTION(bluefs_sync_write, OPT_BOOL)
 OPTION(bluefs_allocator, OPT_STR)     // stupid | bitmap
 OPTION(bluefs_preextend_wal_files, OPT_BOOL)  // this *requires* that rocksdb has recycling enabled
+OPTION(bluefs_replay_recovery, OPT_BOOL)
+OPTION(bluefs_replay_recovery_disable_compact, OPT_BOOL)
 
 OPTION(bluestore_bluefs, OPT_BOOL)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL) // mirror to normal Env for debug
@@ -1071,6 +1074,7 @@ OPTION(bluestore_default_buffered_write, OPT_BOOL)
 OPTION(bluestore_debug_misc, OPT_BOOL)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL)
 OPTION(bluestore_debug_small_allocations, OPT_INT)
+OPTION(bluestore_debug_too_many_blobs_threshold, OPT_INT)
 OPTION(bluestore_debug_freelist, OPT_BOOL)
 OPTION(bluestore_debug_prefill, OPT_FLOAT)
 OPTION(bluestore_debug_prefragment_max, OPT_INT)

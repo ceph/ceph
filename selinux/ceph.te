@@ -13,6 +13,7 @@ require {
 	type urandom_device_t;
 	type setfiles_t;
 	type nvme_device_t;
+	type targetd_etc_rw_t;
 	type httpd_config_t;
 	type proc_kcore_t;
 	type amqp_port_t;
@@ -21,7 +22,7 @@ require {
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
 	class dir { add_name create getattr open read remove_name rmdir search write };
-	class file { create getattr open read rename unlink write };
+	class file { create getattr open read rename unlink write ioctl };
 	class blk_file { getattr ioctl open read write };
 	class capability2 block_suspend;
 	class process2 { nnp_transition nosuid_transition };
@@ -143,7 +144,7 @@ allow ceph_t sysfs_t:file { read getattr open };
 allow ceph_t sysfs_t:lnk_file { read getattr };
 
 allow ceph_t configfs_t:dir { add_name create getattr open read remove_name rmdir search write };
-allow ceph_t configfs_t:file { getattr open read write };
+allow ceph_t configfs_t:file { getattr open read write ioctl };
 allow ceph_t configfs_t:lnk_file { create getattr read unlink };
 
 
@@ -159,6 +160,8 @@ allow init_t ceph_t:process2 { nnp_transition nosuid_transition };
 allow ceph_t httpd_config_t:dir search;
 
 allow ceph_t proc_kcore_t:file getattr;
+
+allow ceph_t targetd_etc_rw_t:dir { getattr search };
 
 fsadm_manage_pid(ceph_t)
 

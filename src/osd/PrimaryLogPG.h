@@ -410,6 +410,9 @@ public:
   void inc_osd_stat_repaired() override {
     osd->inc_osd_stat_repaired();
   }
+  void set_osd_stat_repaired(int64_t count) override {
+    osd->set_osd_stat_repaired(count);
+  }
   bool pg_is_remote_backfilling() override {
     return is_remote_backfilling();
   }
@@ -496,6 +499,9 @@ public:
   }
   pg_shard_t primary_shard() const override {
     return primary;
+  }
+  uint64_t min_upacting_features() const override {
+    return get_min_upacting_features();
   }
 
   void send_message_osd_cluster(

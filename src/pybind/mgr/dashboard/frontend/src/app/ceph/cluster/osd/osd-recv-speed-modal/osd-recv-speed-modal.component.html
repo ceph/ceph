@@ -6,7 +6,8 @@
     <form class="form-horizontal"
           #formDir="ngForm"
           [formGroup]="osdRecvSpeedForm"
-          novalidate>
+          novalidate
+          cdFormScope="osd">
       <div class="modal-body">
         <!-- Priority -->
         <div class="form-group"

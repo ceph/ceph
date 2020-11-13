@@ -274,7 +274,7 @@ public:
 
   // link
   void handle_client_link(MDRequestRef& mdr);
-  void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti);
+  void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
   void _link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
 			  version_t, version_t, bool);
 
@@ -351,7 +351,7 @@ public:
 
 private:
   void reply_client_request(MDRequestRef& mdr, const MClientReply::ref &reply);
-  void flush_session(Session *session, MDSGatherBuilder *gather);
+  void flush_session(Session *session, MDSGatherBuilder& gather);
 
   DecayCounter recall_throttle;
   time last_recall_state;

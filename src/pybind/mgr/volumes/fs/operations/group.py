@@ -176,3 +176,11 @@ def open_group(fs, vol_spec, groupname):
         else:
             raise VolumeException(-e.args[0], e.args[1])
     yield group
+
+@contextmanager
+def open_group_unique(fs, vol_spec, groupname, c_group, c_groupname):
+    if groupname == c_groupname:
+        yield c_group
+    else:
+        with open_group(fs, vol_spec, groupname) as group:
+            yield group

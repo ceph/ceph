@@ -16,6 +16,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { ListPipe } from '../../../shared/pipes/list.pipe';
 import { NotAvailablePipe } from '../../../shared/pipes/not-available.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -58,6 +59,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private i18n: I18n,
     private iscsiService: IscsiService,
+    private listPipe: ListPipe,
     private taskListService: TaskListService,
     private cephReleaseNamePipe: CephReleaseNamePipe,
     private notAvailablePipe: NotAvailablePipe,
@@ -105,11 +107,13 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
       {
         name: this.i18n('Portals'),
         prop: 'cdPortals',
+        pipe: this.listPipe,
         flexGrow: 2
       },
       {
         name: this.i18n('Images'),
         prop: 'cdImages',
+        pipe: this.listPipe,
         flexGrow: 2
       },
       {

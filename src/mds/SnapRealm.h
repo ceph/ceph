@@ -33,6 +33,7 @@ protected:
   mutable set<snapid_t> cached_snaps;
   mutable SnapContext cached_snap_context;
   mutable bufferlist cached_snap_trace;
+  mutable inodeno_t cached_subvolume_ino = 0;
 
   void check_cache() const;
 
@@ -131,6 +132,11 @@ public:
     const set<snapid_t>& s = get_snaps();
     set<snapid_t>::const_iterator p = s.lower_bound(first);
     return (p != s.end() && *p <= last);
+  }
+
+  inodeno_t get_subvolume_ino() {
+    check_cache();
+    return cached_subvolume_ino;
   }
 
   void adjust_parent();

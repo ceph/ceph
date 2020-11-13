@@ -92,6 +92,9 @@ private:
                    const librbd::snap_info_t &src_snap,
                    const librbd::linked_image_spec_t &child_image,
                    bool migration_abort, bool reattach_child);
+
+  int revert_data(ImageCtxT* src_image_ctx, ImageCtxT* dst_image_ctx,
+                  ProgressContext *prog_ctx);
 };
 
 } // namespace api

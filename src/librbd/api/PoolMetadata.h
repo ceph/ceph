@@ -8,6 +8,7 @@
 #include "include/rados/librados_fwd.hpp"
 
 #include <map>
+#include <string>
 
 namespace librbd {
 

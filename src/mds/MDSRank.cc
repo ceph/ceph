@@ -148,26 +148,25 @@ private:
     dout(20) << __func__ << dendl;
 
     // Attach contexts to wait for all expiring segments to expire
-    MDSGatherBuilder *expiry_gather = new MDSGatherBuilder(g_ceph_context);
+    MDSGatherBuilder expiry_gather(g_ceph_context);
 
     const auto &expiring_segments = mdlog->get_expiring_segments();
     for (auto p : expiring_segments) {
-      p->wait_for_expiry(expiry_gather->new_sub());
+      p->wait_for_expiry(expiry_gather.new_sub());
     }
-    dout(5) << __func__ << ": waiting for " << expiry_gather->num_subs_created()
+    dout(5) << __func__ << ": waiting for " << expiry_gather.num_subs_created()
             << " segments to expire" << dendl;
 
-    if (!expiry_gather->has_subs()) {
+    if (!expiry_gather.has_subs()) {
       trim_segments();
-      delete expiry_gather;
       return;
     }
 
     Context *ctx = new FunctionContext([this](int r) {
         handle_expire_segments(r);
       });
-    expiry_gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
-    expiry_gather->activate();
+    expiry_gather.set_finisher(new MDSInternalContextWrapper(mds, ctx));
+    expiry_gather.activate();
   }
 
   void handle_expire_segments(int r) {
@@ -329,9 +328,9 @@ private:
     auto now = mono_clock::now();
     auto duration = std::chrono::duration<double>(now-recall_start).count();
 
-    MDSGatherBuilder *gather = new MDSGatherBuilder(g_ceph_context);
+    MDSGatherBuilder gather(g_ceph_context);
     auto flags = Server::RecallFlags::STEADY|Server::RecallFlags::TRIM;
-    auto [throttled, count] = server->recall_client_state(gather, flags);
+    auto [throttled, count] = server->recall_client_state(&gather, flags);
     dout(10) << __func__
              << (throttled ? " (throttled)" : "")
              << " recalled " << count << " caps" << dendl;
@@ -343,17 +342,16 @@ private:
           recall_client_state();
       }));
       ctx->start_timer();
-      gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
-      gather->activate();
+      gather.set_finisher(new MDSInternalContextWrapper(mds, ctx));
+      gather.activate();
       mdlog->flush(); /* use down-time to incrementally flush log */
       do_trim(); /* use down-time to incrementally trim cache */
     } else {
-      if (!gather->has_subs()) {
-        delete gather;
+      if (!gather.has_subs()) {
         return handle_recall_client_state(0);
       } else if (recall_timeout > 0 && duration > recall_timeout) {
-        gather->set_finisher(new C_MDSInternalNoop);
-        gather->activate();
+        gather.set_finisher(new C_MDSInternalNoop);
+        gather.activate();
         return handle_recall_client_state(-ETIMEDOUT);
       } else {
         uint64_t remaining = (recall_timeout == 0 ? 0 : recall_timeout-duration);
@@ -363,8 +361,8 @@ private:
             }));
 
         ctx->start_timer();
-        gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
-        gather->activate();
+        gather.set_finisher(new MDSInternalContextWrapper(mds, ctx));
+        gather.activate();
       }
     }
   }
@@ -1030,6 +1028,10 @@ bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
   if (is_stale_message(m)) {
     return true;
   }
+  // do not proceed if this message cannot be handled
+  if (!is_valid_message(m)) {
+    return false;
+  }
 
   if (beacon.is_laggy()) {
     dout(5) << " laggy, deferring " << *m << dendl;
@@ -1038,10 +1040,7 @@ bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
     dout(5) << " there are deferred messages, deferring " << *m << dendl;
     waiting_for_nolaggy.push_back(m);
   } else {
-    if (!handle_deferrable_message(m)) {
-      return false;
-    }
-
+    handle_message(m);
     heartbeat_reset();
   }
 
@@ -1158,10 +1157,45 @@ void MDSRank::update_mlogger()
   }
 }
 
+// message types that the mds can handle
+bool MDSRank::is_valid_message(const Message::const_ref &m) {
+  int port = m->get_type() & 0xff00;
+  int type = m->get_type();
+
+  if (port == MDS_PORT_CACHE ||
+      port == MDS_PORT_MIGRATOR ||
+      type == CEPH_MSG_CLIENT_SESSION ||
+      type == CEPH_MSG_CLIENT_RECONNECT ||
+      type == CEPH_MSG_CLIENT_RECLAIM ||
+      type == CEPH_MSG_CLIENT_REQUEST ||
+      type == MSG_MDS_SLAVE_REQUEST ||
+      type == MSG_MDS_HEARTBEAT ||
+      type == MSG_MDS_TABLE_REQUEST ||
+      type == MSG_MDS_LOCK ||
+      type == MSG_MDS_INODEFILECAPS ||
+      type == CEPH_MSG_CLIENT_CAPS ||
+      type == CEPH_MSG_CLIENT_CAPRELEASE ||
+      type == CEPH_MSG_CLIENT_LEASE) {
+    return true;
+  }
+
+  return false;
+}
+
 /*
  * lower priority messages we defer if we seem laggy
  */
-bool MDSRank::handle_deferrable_message(const Message::const_ref &m)
+
+#define ALLOW_MESSAGES_FROM(peers)                                      \
+  do {                                                                  \
+    if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
+      dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
+              << " allowing=" << #peers << " message=" << *m << dendl;  \
+      return;                                                           \
+    }                                                                   \
+  } while (0)
+
+void MDSRank::handle_message(const Message::const_ref &m)
 {
   int port = m->get_type() & 0xff00;
 
@@ -1225,11 +1259,9 @@ bool MDSRank::handle_deferrable_message(const Message::const_ref &m)
       break;
 
     default:
-      return false;
+      derr << "unrecognized message " << *m << dendl;
     }
   }
-
-  return true;
 }
 
 /**
@@ -1265,9 +1297,8 @@ void MDSRank::_advance_queues()
 
     if (!is_stale_message(old)) {
       dout(7) << " processing laggy deferred " << *old << dendl;
-      if (!handle_deferrable_message(old)) {
-        dout(0) << "unrecognized message " << *old << dendl;
-      }
+      ceph_assert(is_valid_message(old));
+      handle_message(old);
     }
 
     heartbeat_reset();
@@ -1683,8 +1714,6 @@ void MDSRank::replay_start()
   if (is_standby_replay())
     standby_replaying = true;
 
-  calc_recovery_set();
-
   // Check if we need to wait for a newer OSD map before starting
   Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL));
   bool const ready = objecter->wait_for_map(
@@ -1853,6 +1882,8 @@ void MDSRank::resolve_start()
 
   reopen_log();
 
+  calc_recovery_set();
+
   mdcache->resolve_start(new C_MDS_VoidFn(this, &MDSRank::resolve_done));
   finish_contexts(g_ceph_context, waiting_for_resolve);
 }
@@ -1918,9 +1949,7 @@ void MDSRank::rejoin_done()
 
   if (mdcache->is_any_uncommitted_fragment()) {
     dout(1) << " waiting for uncommitted fragments" << dendl;
-    MDSGatherBuilder gather(g_ceph_context, new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
-    mdcache->wait_for_uncommitted_fragments(gather.get());
-    gather.activate();
+    mdcache->wait_for_uncommitted_fragments(new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
     return;
   }
 

@@ -270,6 +270,7 @@ typedef enum {
   RBD_IMAGE_MIGRATION_STATE_PREPARED = 2,
   RBD_IMAGE_MIGRATION_STATE_EXECUTING = 3,
   RBD_IMAGE_MIGRATION_STATE_EXECUTED = 4,
+  RBD_IMAGE_MIGRATION_STATE_ABORTING = 5,
 } rbd_image_migration_state_t;
 
 typedef struct {
@@ -979,7 +980,7 @@ CEPH_RBD_API ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
                                    const char *buf, size_t data_len,
                                    int op_flags);
 CEPH_RBD_API ssize_t rbd_write_zeroes(rbd_image_t image, uint64_t ofs,
-                                      uint64_t len, int zero_flags,
+                                      size_t len, int zero_flags,
                                       int op_flags);
 CEPH_RBD_API ssize_t rbd_compare_and_write(rbd_image_t image, uint64_t ofs,
                                            size_t len, const char *cmp_buf,

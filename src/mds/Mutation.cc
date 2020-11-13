@@ -366,6 +366,7 @@ MClientRequest::const_ref MDRequestImpl::release_client_request()
   msg_lock.lock();
   MClientRequest::const_ref req;
   req.swap(client_request);
+  client_request = req;
   msg_lock.unlock();
   return req;
 }

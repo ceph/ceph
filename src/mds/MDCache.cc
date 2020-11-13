@@ -6706,9 +6706,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
       if (!diri->is_auth()) {
 	if (dir->get_num_ref() > 1)  // only subtree pin
 	  continue;
-	list<CDir*> ls;
-	diri->get_subtree_dirfrags(ls);
-	if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
+	if (diri->get_num_ref() > diri->get_num_subtree_roots())
 	  continue;
 
 	// don't trim subtree root if its auth MDS is recovering.
@@ -9418,7 +9416,9 @@ void MDCache::request_finish(MDRequestRef& mdr)
 
 void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 {
-  mdr->mark_event("forwarding request");
+  CachedStackStringStream css;
+  *css << "forwarding request to mds." << who;
+  mdr->mark_event(css->strv());
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
@@ -11676,6 +11676,8 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
     CDir *dir = *p;
     dout(10) << " storing result frag " << *dir << dendl;
 
+    dir->mark_new(mdr->ls);
+
     // freeze and store them too
     dir->auth_pin(this);
     dir->state_set(CDir::STATE_FRAGMENTING);
@@ -11985,10 +11987,13 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& 
   }
 }
 
-void MDCache::wait_for_uncommitted_fragments(MDSGather *gather)
+void MDCache::wait_for_uncommitted_fragments(MDSContext* finisher)
 {
-  for (auto& p : uncommitted_fragments)
-    p.second.waiters.push_back(gather->new_sub());
+  MDSGatherBuilder gather(g_ceph_context, finisher);
+  for (auto& p : uncommitted_fragments) {
+    p.second.waiters.push_back(gather.new_sub());
+  }
+  gather.activate();
 }
 
 void MDCache::rollback_uncommitted_fragments()

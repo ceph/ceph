@@ -47,6 +47,8 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
   static ObjectCopyRequest* s_instance;
   static ObjectCopyRequest* create(librbd::MockImageCtx* parent_image_ctx,
                                    librbd::MockTestImageCtx* image_ctx,
+                                   librados::snap_t src_snap_id_start,
+                                   librados::snap_t dst_snap_id_start,
                                    const SnapMap &snap_map,
                                    uint64_t object_number, bool flatten,
                                    Context *on_finish) {

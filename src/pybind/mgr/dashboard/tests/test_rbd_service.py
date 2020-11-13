@@ -27,7 +27,7 @@ class RbdServiceTest(unittest.TestCase):
         get.return_value = {
             'by_pool': {
                 '1': {'active+clean': 32},
-                '2': {'unknown': 32},
+                '2': {'creating+incomplete': 32},
             }
         }
         config_list.return_value = [1, 2, 3]

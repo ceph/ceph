@@ -982,6 +982,13 @@ void OSDService::inc_osd_stat_repaired()
   return;
 }
 
+void OSDService::set_osd_stat_repaired(int64_t count)
+{
+  std::lock_guard l(stat_lock);
+  osd_stat.num_shards_repaired = count;
+  return;
+}
+
 float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 				         uint64_t adjust_used)
 {
@@ -6750,6 +6757,10 @@ COMMAND("cluster_log " \
 	"name=message,type=CephString,n=N",
 	"log a message to the cluster log",
 	"osd", "rw")
+COMMAND("clear_shards_repaired " \
+	"name=count,type=CephInt,req=false",
+	"clear num_shards_repaired to clear health warning",
+	"osd", "rw")
 COMMAND("bench " \
 	"name=count,type=CephInt,req=false " \
 	"name=size,type=CephInt,req=false " \
@@ -6967,6 +6978,11 @@ int OSD::_do_command(
       goto out;
     }
     clog->do_log(level, message);
+  }
+  else if (prefix == "clear_shards_repaired") {
+    int64_t count;
+    cmd_getval(cct, cmdmap, "count", count, (int64_t) 0);
+    service.set_osd_stat_repaired(count);
   }
 
   // either 'pg <pgid> <command>' or

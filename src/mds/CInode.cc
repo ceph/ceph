@@ -544,18 +544,20 @@ void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
   }
 }
 
-void CInode::record_snaprealm_parent_dentry(sr_t *new_snap, SnapRealm *newparent,
+void CInode::record_snaprealm_parent_dentry(sr_t *new_snap, SnapRealm *oldparent,
 					    CDentry *dn, bool primary_dn)
 {
   ceph_assert(new_snap->is_parent_global());
-  SnapRealm *oldparent = dn->get_dir()->inode->find_snaprealm();
+
+  if (!oldparent)
+    oldparent = dn->get_dir()->inode->find_snaprealm();
   auto& snaps = oldparent->get_snaps();
 
   if (!primary_dn) {
     auto p = snaps.lower_bound(dn->first);
     if (p != snaps.end())
       new_snap->past_parent_snaps.insert(p, snaps.end());
-  } else if (newparent != oldparent) {
+  } else {
     // 'last_destroyed' is used as 'current_parent_since'
     auto p = snaps.lower_bound(new_snap->last_destroyed);
     if (p != snaps.end())
