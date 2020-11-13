@@ -16,7 +16,8 @@ void siprovider_bucket_entry_info::Info::dump(Formatter *f) const
 {
   encode_json("object", object, f);
   encode_json("instance", instance, f);
-  encode_json("timestamp", timestamp, f);
+  utime_t ut(timestamp);
+  ut.gmtime_nsec(f->dump_stream("timestamp"));
   encode_json("versioned_epoch", versioned_epoch, f);
   encode_json("op", op, f);
   encode_json("owner", owner, f);
