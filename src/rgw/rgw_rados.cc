@@ -7179,6 +7179,19 @@ struct BILogUpdateBatchFIFO {
     encode(entry, bl);
     fifo->push(std::move(bl), null_yield /* FIXME */);
   }
+
+  void add_maybe_flush(RGWModifyOp op,
+                       const rgw_bucket_dir_entry& list_state,
+                       rgw_zone_set zones_trace) {
+    rgw_bi_log_entry entry;
+    entry.object = list_state.key.name;
+    entry.instance = list_state.key.instance;
+    entry.timestamp = list_state.meta.mtime;
+    entry.op = op;
+    entry.state = CLS_RGW_STATE_COMPLETE;
+    entry.tag = list_state.tag;
+    entry.zones_trace = std::move(zones_trace);
+  }
 };
 
 BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(CephContext* const cct,
@@ -7216,6 +7229,12 @@ struct BILogNopHandler {
                        const bool delete_marker,
                        const rgw_bucket_olh_log_bi_log_entry&) {
     ldout(cct, 20) << __PRETTY_FUNCTION__ << ": the OLH-specific variant" << dendl;
+    /* NOP */
+  }
+
+  void add_maybe_flush(RGWModifyOp op,
+                       const rgw_bucket_dir_entry& list_state,
+                       rgw_zone_set) {
     /* NOP */
   }
 };
@@ -8905,22 +8924,22 @@ uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 }
 
 
-int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
-                                      RGWBucketInfo& bucket_info,
-                                      const rgw::bucket_index_layout_generation& idx_layout,
-                                      const int shard_id,
-				      const rgw_obj_index_key& start_after,
-				      const std::string& prefix,
-				      const std::string& delimiter,
-				      const uint32_t num_entries,
-				      const bool list_versions,
-				      const uint16_t expansion_factor,
-				      ent_map_t& m,
-				      bool* is_truncated,
-				      bool* cls_filtered,
-				      rgw_obj_index_key* last_entry,
-                                      optional_yield y,
-				      RGWBucketListNameFilter force_check_filter)
+template <class BILogHandlerT>
+int RGWRados::_do_cls_bucket_list_ordered(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
+					  const int shard_id,
+					  const rgw_obj_index_key& start_after,
+					  const string& prefix,
+					  const string& delimiter,
+					  const uint32_t num_entries,
+					  const bool list_versions,
+					  const uint16_t expansion_factor,
+					  ent_map_t& m,
+					  bool* is_truncated,
+					  bool* cls_filtered,
+					  rgw_obj_index_key *last_entry,
+					  optional_yield y,
+					  check_filter_t force_check_filter,
+					  BILogHandlerT&& bilog_handler)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
 
@@ -9108,7 +9127,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 	" calling check_disk_state bucket=" << bucket_info.bucket <<
 	" entry=" << dirent.key << dendl_bitx;
       r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent,
-			   updates[tracker.oid_name], y);
+			   updates[tracker.oid_name], y, bilog_handler);
       if (r < 0 && r != -ENOENT) {
 	ldpp_dout(dpp, 0) << __func__ <<
 	  ": check_disk_state for \"" << dirent.key <<
@@ -9218,6 +9237,39 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   return 0;
 } // RGWRados::cls_bucket_list_ordered
 
+int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
+				      const int shard_id,
+				      const rgw_obj_index_key& start_after,
+				      const string& prefix,
+				      const string& delimiter,
+				      const uint32_t num_entries,
+				      const bool list_versions,
+				      const uint16_t expansion_factor,
+				      ent_map_t& m,
+				      bool* is_truncated,
+				      bool* cls_filtered,
+				      rgw_obj_index_key *last_entry,
+                                      optional_yield y,
+				      check_filter_t force_check_filter)
+{
+  return with_bilog<void>([&, this] (auto bilog_handler) {
+    return _do_cls_bucket_list_ordered(bucket_info,
+				       shard_id,
+                                       start_after,
+                                       prefix,
+                                       delimiter,
+                                       num_entries,
+                                       list_versions,
+                                       expansion_factor,
+                                       m,
+                                       is_truncated,
+                                       cls_filtered,
+                                       last_entry,
+                                       std::move(y),
+				       std::move(force_check_filter),
+                                       std::move(bilog_handler));
+  }, bucket_info);
+}
 
 // A helper function to retrieve the hash source from an incomplete
 // multipart entry by removing everything from the second to last
@@ -9236,19 +9288,20 @@ static int parse_index_hash_source(const std::string& oid_wo_ns, std::string *in
 }
 
 
-int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
-                                        RGWBucketInfo& bucket_info,
-                                        const rgw::bucket_index_layout_generation& idx_layout,
-                                        int shard_id,
-					const rgw_obj_index_key& start_after,
-					const std::string& prefix,
-					uint32_t num_entries,
-					bool list_versions,
-					std::vector<rgw_bucket_dir_entry>& ent_list,
-					bool *is_truncated,
-					rgw_obj_index_key *last_entry,
-                                        optional_yield y,
-					RGWBucketListNameFilter force_check_filter) {
+template <class BILogHandlerT>
+int RGWRados::_do_cls_bucket_list_unordered(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout,
+					    int shard_id,
+					    const rgw_obj_index_key& start_after,
+					    const string& prefix,
+					    uint32_t num_entries,
+					    bool list_versions,
+					    std::vector<rgw_bucket_dir_entry>& ent_list,
+					    bool *is_truncated,
+					    rgw_obj_index_key *last_entry,
+                                            optional_yield y,
+					    check_filter_t force_check_filter,
+					    BILogHandlerT&& bilog_handler)
+{
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
 
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": " << bucket_info.bucket <<
@@ -9359,10 +9412,11 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	 * and if the tags are old we need to do cleanup as well. */
 	librados::IoCtx sub_ctx;
 	sub_ctx.dup(ioctx);
-	ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
-	  ": calling check_disk_state bucket=" << bucket_info.bucket <<
-	  " entry=" << dirent.key << dendl_bitx;
-	r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent, updates[oid], y);
+        ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
+          ": calling check_disk_state bucket=" << bucket_info.bucket <<
+          " entry=" << dirent.key << dendl_bitx;
+	r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent,
+			     updates[oid], y, bilog_handler);
 	if (r < 0 && r != -ENOENT) {
 	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	    ": error in check_disk_state, r=" << r << dendl;
@@ -9427,8 +9481,35 @@ check_updates:
 
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;
   return 0;
-} // RGWRados::cls_bucket_list_unordered
+} // RGWRados::_do_cls_bucket_list_unordered
 
+int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
+					int shard_id,
+					const rgw_obj_index_key& start_after,
+					const string& prefix,
+					uint32_t num_entries,
+					bool list_versions,
+					std::vector<rgw_bucket_dir_entry>& ent_list,
+					bool *is_truncated,
+					rgw_obj_index_key *last_entry,
+					optional_yield y,
+					check_filter_t force_check_filter)
+{
+  return with_bilog<void>([&, this] (auto bilog_handler) {
+    return _do_cls_bucket_list_unordered(bucket_info,
+					 shard_id,
+					 start_after,
+					 prefix,
+					 num_entries,
+					 list_versions,
+					 ent_list,
+					 is_truncated,
+					 last_entry,
+					 std::move(y),
+					 std::move(force_check_filter),
+					 std::move(bilog_handler));
+  }, bucket_info);
+}
 
 int RGWRados::cls_obj_usage_log_add(const DoutPrefixProvider *dpp, const string& oid,
 				    rgw_usage_log_info& info)
@@ -9592,13 +9673,14 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
   return r;
 }
 
-int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
-                               librados::IoCtx io_ctx,
-                               RGWBucketInfo& bucket_info,
+template <class BILogHandlerT>
+int RGWRados::check_disk_state(const DoutPrefixProvider *dpp, librados::IoCtx io_ctx,
+                               const RGWBucketInfo& bucket_info,
                                rgw_bucket_dir_entry& list_state,
                                rgw_bucket_dir_entry& object,
                                bufferlist& suggested_updates,
-                               optional_yield y)
+                               optional_yield y,
+                               BILogHandlerT& bilog_handler)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket=" <<
@@ -9650,6 +9732,13 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
       // is already deleted as the `astate` testified.
       cls_rgw_encode_suggestion(CEPH_RGW_REMOVE | suggest_flag, list_state,
                                 suggested_updates);
+      if (suggest_flag) {
+        bilog_handler.add_maybe_flush(CLS_RGW_OP_ADD,
+                                      list_state,
+                                      get_zones_trace(svc.zone->get_zone(),
+                                                      bucket_info.bucket,
+                                                      nullptr));
+      }
     } else {
       cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
     }
@@ -9751,6 +9840,16 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.owner_display_name = owner.get_display_name();
 
   list_state.exists = true;
+  if (suggest_flag) {
+    bilog_handler.add_maybe_flush(CLS_RGW_OP_ADD,
+                                  list_state,
+                                  get_zones_trace(svc.zone->get_zone(),
+                                                  bucket_info.bucket,
+                                                  nullptr));
+  }
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
+  return 0;
+}
 
   ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
     ": encoding update of " << list_state.key << " on suggested_updates" << dendl_bitx;
