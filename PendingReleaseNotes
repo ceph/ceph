@@ -1,5 +1,9 @@
 >=16.0.0
 --------
+* $pid expansion in config paths like `admin_socket` will now properly expand
+  to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
+  `ceph-fuse`/`rbd-nbd` expanded `$pid` with the actual daemon pid.
+
 * The allowable options for some "radosgw-admin" commands have been changed.
 
   * "mdlog-list", "datalog-list", "sync-error-list" no longer accepts
