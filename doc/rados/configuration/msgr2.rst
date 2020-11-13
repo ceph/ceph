@@ -22,6 +22,8 @@ By default, monitors now bind to the new IANA-assigned port ``3300``
 (ce4h or 0xce4) for the new v2 protocol, while also binding to the
 old default port ``6789`` for the legacy v1 protocol.
 
+.. _address_formats:
+
 Address formats
 ---------------
 
@@ -35,8 +37,8 @@ Starting with nautilus, we now have three different address types:
 * **v1**: ``v1:1.2.3.4:578/89012`` identifies a daemon binding to a
   port speaking the legacy v1 protocol.  Any address that was
   previously shown with any prefix is now shown as a ``v1:`` address.
-* **TYPE_ANY** addresses identify a client that can speak either
-  version of the protocol.  Prior to nautilus, clients would appear as
+* **TYPE_ANY** ``any:1.2.3.4:578/89012`` identifies a client that can
+  speak either version of the protocol. Prior to nautilus, clients would appear as
   ``1.2.3.4:0/123456``, where the port of 0 indicates they are clients
   and do not accept incoming connections.  Starting with Nautilus,
   these clients are now internally represented by a **TYPE_ANY**
