@@ -2248,13 +2248,14 @@ void OSDMonitor::share_map_with_random_osd()
 version_t OSDMonitor::get_trim_to() const
 {
   if (mon->get_quorum().empty()) {
-    dout(10) << __func__ << ": quorum not formed" << dendl;
+    dout(10) << __func__ << " quorum not formed, trim_to = 0" << dendl;
     return 0;
   }
 
   {
     std::lock_guard<std::mutex> l(creating_pgs_lock);
     if (!creating_pgs.pgs.empty()) {
+      dout(10) << __func__ << " pgs creating, trim_to = 0" << dendl;
       return 0;
     }
   }
@@ -2262,8 +2263,8 @@ version_t OSDMonitor::get_trim_to() const
   if (g_conf().get_val<bool>("mon_debug_block_osdmap_trim")) {
     dout(0) << __func__
             << " blocking osdmap trim"
-               " ('mon_debug_block_osdmap_trim' set to 'true')"
-            << dendl;
+            << " ('mon_debug_block_osdmap_trim' set to 'true')"
+            << " trim_to = 0" << dendl;
     return 0;
   }
 
@@ -2273,7 +2274,8 @@ version_t OSDMonitor::get_trim_to() const
     if (g_conf()->mon_osd_force_trim_to > 0 &&
 	g_conf()->mon_osd_force_trim_to < (int)get_last_committed()) {
       floor = g_conf()->mon_osd_force_trim_to;
-      dout(10) << " explicit mon_osd_force_trim_to = " << floor << dendl;
+      dout(10) << __func__
+               << " explicit mon_osd_force_trim_to = " << floor << dendl;
     }
     unsigned min = g_conf()->mon_min_osdmap_epochs;
     if (floor + min > get_last_committed()) {
@@ -2282,9 +2284,12 @@ version_t OSDMonitor::get_trim_to() const
       else
 	floor = 0;
     }
-    if (floor > get_first_committed())
+    if (floor > get_first_committed()) {
+      dout(10) << __func__ << " trim_to = " << floor << dendl;
       return floor;
+    }
   }
+  dout(10) << __func__ << " trim_to = 0" << dendl;
   return 0;
 }
 
