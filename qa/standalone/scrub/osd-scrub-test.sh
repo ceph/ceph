@@ -187,7 +187,7 @@ function TEST_interval_changes() {
     teardown $dir || return 1
 }
 
-function TEST_scrub_extented_sleep() {
+function TEST_scrub_extended_sleep() {
     local dir=$1
     local poolname=test
     local OSDS=3
@@ -195,16 +195,29 @@ function TEST_scrub_extented_sleep() {
 
     TESTDATA="testdata.$$"
 
+    DAY=$(date +%w)
+    # Handle wrap
+    if [ "$DAY" -ge "4" ];
+    then
+      DAY="0"
+    fi
+    # Start after 2 days in case we are near midnight
+    DAY_START=$(expr $DAY + 2)
+    DAY_END=$(expr $DAY + 3)
+
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=3 || return 1
     run_mgr $dir x || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
       run_osd $dir $osd --osd_scrub_sleep=0 \
-                        --osd_scrub_extended_sleep=10 \
+                        --osd_scrub_extended_sleep=20 \
                         --bluestore_cache_autotune=false \
 	                --osd_deep_scrub_randomize_ratio=0.0 \
-	                --osd_scrub_interval_randomize_ratio=0 || return 1
+	                --osd_scrub_interval_randomize_ratio=0 \
+			--osd_scrub_begin_week_day=$DAY_START \
+			--osd_scrub_end_week_day=$DAY_END \
+			|| return 1
     done
 
     # Create a pool with a single pg
@@ -217,13 +230,50 @@ function TEST_scrub_extented_sleep() {
     local last_scrub=$(get_last_scrub_stamp $pgid)
     ceph tell $pgid scrub || return 1
 
-    # Due to the long delay, the scrub should not be done within 3 seconds
-    for ((i=0; i < 3; i++)); do
+    # Allow scrub to start extended sleep
+    PASSED="false"
+    for ((i=0; i < 15; i++)); do
+      if grep -q "scrub state.*, sleeping" $dir/osd.${primary}.log
+      then
+	PASSED="true"
+        break
+      fi
+      sleep 1
+    done
+
+    # Check that extended sleep was triggered
+    if [ $PASSED = "false" ];
+    then
+      return 1
+    fi
+
+    # release scrub to run after extended sleep finishes
+    ceph tell osd.$primary config set osd_scrub_begin_week_day 0
+    ceph tell osd.$primary config set osd_scrub_end_week_day 0
+
+    # Due to extended sleep, the scrub should not be done within 20 seconds
+    # but test up to 10 seconds and make sure it happens by 25 seconds.
+    count=0
+    PASSED="false"
+    for ((i=0; i < 25; i++)); do
+	count=$(expr $count + 1)
         if test "$(get_last_scrub_stamp $pgid)" '>' "$last_scrub" ; then
-            return 1
+	    # Did scrub run too soon?
+	    if [ $count -lt "10" ];
+	    then
+              return 1
+            fi
+	    PASSED="true"
+	    break
         fi
         sleep 1
     done
+
+    # Make sure scrub eventually ran
+    if [ $PASSED = "false" ];
+    then
+      return 1
+    fi
 
     teardown $dir || return 1
 }
