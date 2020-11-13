@@ -462,8 +462,27 @@ private:
     }
     response = std::move(m_parser->release());
 
+    // basic response code handling in a common location
+    int r = 0;
+    auto result = response.result();
+    if (result == boost::beast::http::status::not_found) {
+      lderr(cct) << "requested resource does not exist" << dendl;
+      r = -ENOENT;
+    } else if (result == boost::beast::http::status::forbidden) {
+      lderr(cct) << "permission denied attempting to access resource" << dendl;
+      r = -EACCES;
+    } else if (boost::beast::http::to_status_class(result) !=
+                 boost::beast::http::status_class::successful) {
+      lderr(cct) << "failed to retrieve size: HTTP " << result << dendl;
+      r = -EIO;
+    }
+
     bool need_eof = response.need_eof();
-    work->complete(0, std::move(response));
+    if (r < 0) {
+      work->complete(r, {});
+    } else {
+      work->complete(0, std::move(response));
+    }
 
     if (need_eof) {
       ldout(cct, 20) << "reset required for non-pipelined response: "
@@ -793,17 +812,6 @@ void HttpClient<I>::handle_get_size(int r, Response&& response, uint64_t* size,
   if (r < 0) {
     lderr(m_cct) << "failed to retrieve size: " << cpp_strerror(r) << dendl;
     on_finish->complete(r);
-    return;
-  } else if (response.result() == boost::beast::http::status::not_found) {
-    lderr(m_cct) << "failed to retrieve size: " << cpp_strerror(-ENOENT)
-                 << dendl;
-    on_finish->complete(-ENOENT);
-    return;
-  } else if (boost::beast::http::to_status_class(response.result()) !=
-               boost::beast::http::status_class::successful) {
-    lderr(m_cct) << "failed to retrieve size: HTTP " << response.result()
-                 << dendl;
-    on_finish->complete(-EIO);
     return;
   } else if (!response.has_content_length()) {
     lderr(m_cct) << "failed to retrieve size: missing content-length" << dendl;
