@@ -9635,18 +9635,23 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
 
   list_state.pending_map.clear(); // we don't need this and it inflates size
   if (!list_state.is_delete_marker() && !astate->exists) {
-    ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": disk state exists" << dendl_bitx;
-      /* object doesn't exist right now -- hopefully because it's
-       * marked as !exists and got deleted */
+    /* object doesn't exist right now -- hopefully because it's
+     * marked as !exists and got deleted */
+
+    // encode a suggested removal of that key
+    list_state.ver.epoch = io_ctx.get_last_version();
+    list_state.ver.pool = io_ctx.get_id();
     if (list_state.exists) {
-      ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": index list state exists" << dendl_bitx;
-      /* FIXME: what should happen now? Work out if there are any
-       * non-bad ways this could happen (there probably are, but annoying
-       * to handle!) */
       // if we're here, then the operation is delete_obj that got interrupted
       // AFTER removal of the underlying obj but BEFORE completing the BI op.
       // as the obj is purged, cancelation is impossible -- all we can do is
       // resuming the operation.
+      // "Resuming" means also taking care of the BILog entry. The head object
+      // is already deleted as the `astate` testified.
+      cls_rgw_encode_suggestion(CEPH_RGW_REMOVE | suggest_flag, list_state,
+                                suggested_updates);
+    } else {
+      cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
     }
 
     // encode a suggested removal of that key
