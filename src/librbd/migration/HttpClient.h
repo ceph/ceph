@@ -7,6 +7,7 @@
 #include "include/common_fwd.h"
 #include "include/int_types.h"
 #include "librbd/io/Types.h"
+#include "librbd/migration/HttpProcessorInterface.h"
 #include "librbd/migration/Types.h"
 #include <boost/asio/io_context_strand.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -18,6 +19,7 @@
 #include <boost/beast/http/string_body.hpp>
 #include <boost/beast/http/write.hpp>
 #include <boost/beast/ssl/ssl_stream.hpp>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,6 +41,8 @@ public:
   using Request = boost::beast::http::request<EmptyBody>;
   using Response = boost::beast::http::response<StringBody>;
 
+  using RequestPreprocessor = std::function<void(Request&)>;
+
   static HttpClient* create(ImageCtxT* image_ctx, const std::string& url) {
     return new HttpClient(image_ctx, url);
   }
@@ -59,16 +63,23 @@ public:
     m_ignore_self_signed_cert = ignore;
   }
 
+  void set_http_processor(HttpProcessorInterface* http_processor) {
+    m_http_processor = http_processor;
+  }
+
   template <class Body, typename Completion>
   void issue(boost::beast::http::request<Body>&& request,
              Completion&& completion) {
     struct WorkImpl : Work {
+      HttpClient* http_client;
       boost::beast::http::request<Body> request;
       Completion completion;
 
-      WorkImpl(boost::beast::http::request<Body>&& request,
+      WorkImpl(HttpClient* http_client,
+               boost::beast::http::request<Body>&& request,
                Completion&& completion)
-        : request(std::move(request)), completion(std::move(completion)) {
+        : http_client(http_client), request(std::move(request)),
+          completion(std::move(completion)) {
       }
       WorkImpl(const WorkImpl&) = delete;
       WorkImpl& operator=(const WorkImpl&) = delete;
@@ -85,31 +96,40 @@ public:
         completion(r, std::move(response));
       }
 
-      void operator()(
-          HttpSessionInterface* http_session,
-          boost::beast::tcp_stream& stream) override {
+      void operator()(boost::beast::tcp_stream& stream) override {
+        preprocess_request();
+
         boost::beast::http::async_write(
           stream, request,
-          [http_session, work=this->shared_from_this()]
+          [http_session=http_client->m_http_session.get(),
+           work=this->shared_from_this()]
           (boost::beast::error_code ec, std::size_t) mutable {
             http_session->handle_issue(ec, std::move(work));
           });
       }
 
       void operator()(
-          HttpSessionInterface* http_session,
           boost::beast::ssl_stream<boost::beast::tcp_stream>& stream) override {
+        preprocess_request();
+
         boost::beast::http::async_write(
           stream, request,
-          [http_session, work=this->shared_from_this()]
+          [http_session=http_client->m_http_session.get(),
+           work=this->shared_from_this()]
           (boost::beast::error_code ec, std::size_t) mutable {
             http_session->handle_issue(ec, std::move(work));
           });
+      }
+
+      void preprocess_request() {
+        if (http_client->m_http_processor) {
+          http_client->m_http_processor->process_request(request);
+        }
       }
     };
 
     initialize_default_fields(request);
-    issue(std::make_shared<WorkImpl>(std::move(request),
+    issue(std::make_shared<WorkImpl>(this, std::move(request),
                                      std::move(completion)));
   }
 
@@ -131,11 +151,8 @@ private:
     virtual bool need_eof() const = 0;
     virtual bool header_only() const = 0;
     virtual void complete(int r, Response&&) = 0;
+    virtual void operator()(boost::beast::tcp_stream& stream) = 0;
     virtual void operator()(
-        HttpSessionInterface* http_session,
-        boost::beast::tcp_stream& stream) = 0;
-    virtual void operator()(
-        HttpSessionInterface* http_session,
         boost::beast::ssl_stream<boost::beast::tcp_stream>& stream) = 0;
   };
 
@@ -152,6 +169,8 @@ private:
   UrlSpec m_url_spec;
 
   bool m_ignore_self_signed_cert = false;
+
+  HttpProcessorInterface* m_http_processor = nullptr;
 
   boost::asio::io_context::strand m_strand;
 

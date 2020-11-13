@@ -110,7 +110,7 @@ public:
     ldout(cct, 20) << "work=" << work.get() << dendl;
 
     ++m_in_flight_requests;
-    (*work)(this, derived().stream());
+    (*work)(derived().stream());
   }
 
   void handle_issue(boost::system::error_code ec,
@@ -776,7 +776,7 @@ template <typename I>
 void HttpClient<I>::get_size(uint64_t* size, Context* on_finish) {
   ldout(m_cct, 10) << dendl;
 
-  boost::beast::http::request<EmptyBody> req;
+  Request req;
   req.method(boost::beast::http::verb::head);
 
   issue(

@@ -35,8 +35,6 @@ inline ImageCtx *get_image_ctx(MockTestImageCtx *image_ctx) {
 
 using EmptyHttpRequest = boost::beast::http::request<
   boost::beast::http::empty_body>;
-using HttpRequest = boost::beast::http::request<
-  boost::beast::http::string_body>;
 using HttpResponse = boost::beast::http::response<
   boost::beast::http::string_body>;
 
@@ -457,11 +455,11 @@ TEST_F(TestMockMigrationHttpClient, IssueSendFailed) {
   client_accept(&socket, false, &on_connect_ctx2);
 
   // send request via closed connection
-  HttpRequest req;
+  EmptyHttpRequest req;
   req.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx2;
-  http_client.issue(HttpRequest{req},
+  http_client.issue(EmptyHttpRequest{req},
     [&ctx2](int r, HttpResponse&&) mutable {
       ctx2.complete(r);
     });
@@ -494,11 +492,11 @@ TEST_F(TestMockMigrationHttpClient, IssueReceiveFailed) {
   ASSERT_EQ(0, ctx1.wait());
 
   // send request via closed connection
-  HttpRequest req;
+  EmptyHttpRequest req;
   req.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx2;
-  http_client.issue(HttpRequest{req},
+  http_client.issue(EmptyHttpRequest{req},
     [&ctx2](int r, HttpResponse&&) mutable {
       ctx2.complete(r);
     });
@@ -544,17 +542,17 @@ TEST_F(TestMockMigrationHttpClient, IssueResetFailed) {
   ASSERT_EQ(0, ctx1.wait());
 
   // send requests then close connection
-  HttpRequest req;
+  EmptyHttpRequest req;
   req.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx2;
-  http_client.issue(HttpRequest{req},
+  http_client.issue(EmptyHttpRequest{req},
     [&ctx2](int r, HttpResponse&&) mutable {
       ctx2.complete(r);
     });
 
   C_SaferCond ctx3;
-  http_client.issue(HttpRequest{req},
+  http_client.issue(EmptyHttpRequest{req},
     [&ctx3](int r, HttpResponse&&) mutable {
       ctx3.complete(r);
     });
@@ -577,7 +575,7 @@ TEST_F(TestMockMigrationHttpClient, IssueResetFailed) {
   client_accept(&socket, false, &on_connect_ctx2);
 
   C_SaferCond ctx4;
-  http_client.issue(HttpRequest{req},
+  http_client.issue(EmptyHttpRequest{req},
     [&ctx4](int r, HttpResponse&&) mutable {
       ctx4.complete(r);
     });
@@ -610,23 +608,23 @@ TEST_F(TestMockMigrationHttpClient, IssuePipelined) {
   ASSERT_EQ(0, ctx1.wait());
 
   // issue two pipelined (concurrent) get requests
-  HttpRequest req1;
+  EmptyHttpRequest req1;
   req1.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx2;
   HttpResponse res1;
-  http_client.issue(HttpRequest{req1},
+  http_client.issue(EmptyHttpRequest{req1},
     [&ctx2, &res1](int r, HttpResponse&& response) mutable {
       res1 = std::move(response);
       ctx2.complete(r);
     });
 
-  HttpRequest req2;
+  EmptyHttpRequest req2;
   req2.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx3;
   HttpResponse res2;
-  http_client.issue(HttpRequest{req2},
+  http_client.issue(EmptyHttpRequest{req2},
     [&ctx3, &res2](int r, HttpResponse&& response) mutable {
       res2 = std::move(response);
       ctx3.complete(r);
@@ -668,7 +666,7 @@ TEST_F(TestMockMigrationHttpClient, IssuePipelinedRestart) {
   ASSERT_EQ(0, ctx1.wait());
 
   // issue two pipelined (concurrent) get requests
-  HttpRequest req1;
+  EmptyHttpRequest req1;
   req1.keep_alive(false);
   req1.method(boost::beast::http::verb::get);
 
@@ -677,18 +675,18 @@ TEST_F(TestMockMigrationHttpClient, IssuePipelinedRestart) {
 
   C_SaferCond ctx2;
   HttpResponse res1;
-  http_client.issue(HttpRequest{req1},
+  http_client.issue(EmptyHttpRequest{req1},
     [&ctx2, &res1](int r, HttpResponse&& response) mutable {
       res1 = std::move(response);
       ctx2.complete(r);
     });
 
-  HttpRequest req2;
+  EmptyHttpRequest req2;
   req2.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx3;
   HttpResponse res2;
-  http_client.issue(HttpRequest{req2},
+  http_client.issue(EmptyHttpRequest{req2},
     [&ctx3, &res2](int r, HttpResponse&& response) mutable {
       res2 = std::move(response);
       ctx3.complete(r);
@@ -734,11 +732,11 @@ TEST_F(TestMockMigrationHttpClient, ShutdownInFlight) {
   ASSERT_EQ(0, on_connect_ctx.wait());
   ASSERT_EQ(0, ctx1.wait());
 
-  HttpRequest req;
+  EmptyHttpRequest req;
   req.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx2;
-  http_client.issue(HttpRequest{req},
+  http_client.issue(EmptyHttpRequest{req},
     [&ctx2](int r, HttpResponse&&) mutable {
       ctx2.complete(r);
     });
@@ -769,7 +767,7 @@ TEST_F(TestMockMigrationHttpClient, GetSize) {
   C_SaferCond ctx2;
   http_client.get_size(&size, &ctx2);
 
-  HttpRequest expected_req;
+  EmptyHttpRequest expected_req;
   expected_req.method(boost::beast::http::verb::head);
   client_read_request(socket, expected_req);
 
@@ -803,7 +801,7 @@ TEST_F(TestMockMigrationHttpClient, GetSizeError) {
   C_SaferCond ctx2;
   http_client.get_size(&size, &ctx2);
 
-  HttpRequest expected_req;
+  EmptyHttpRequest expected_req;
   expected_req.method(boost::beast::http::verb::head);
   client_read_request(socket, expected_req);
 
@@ -836,12 +834,12 @@ TEST_F(TestMockMigrationHttpClient, Read) {
   C_SaferCond ctx2;
   http_client.read({{0, 128}, {256, 64}}, &bl, &ctx2);
 
-  HttpRequest expected_req1;
+  EmptyHttpRequest expected_req1;
   expected_req1.method(boost::beast::http::verb::get);
   expected_req1.set(boost::beast::http::field::range, "bytes=0-127");
   client_read_request(socket, expected_req1);
 
-  HttpRequest expected_req2;
+  EmptyHttpRequest expected_req2;
   expected_req2.method(boost::beast::http::verb::get);
   expected_req2.set(boost::beast::http::field::range, "bytes=256-319");
   client_read_request(socket, expected_req2);
