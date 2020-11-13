@@ -135,7 +135,7 @@ changing the default location. Create the default directory on your OSD host.
 The ``osd data`` path ideally leads to a mount point with a hard disk that is
 separate from the hard disk storing and running the operating system and
 daemons. If the OSD is for a disk other than the OS disk, prepare it for
-use with Ceph, and mount it to the directory you just created::
+use with Ceph, and mount it to the directory you just created
 
 .. prompt:: bash $
 
