@@ -167,9 +167,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   {
-    g_ceph_context->_conf.finalize_reexpand_meta();
     common_init_finish(g_ceph_context);
-   
+
     init_async_signal_handler();
     register_async_signal_handler(SIGHUP, sighup_handler);
 

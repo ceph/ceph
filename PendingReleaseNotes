@@ -1,5 +1,8 @@
-15.2.6
+15.2.8
 ------
+* $pid expansion in config paths like `admin_socket` will now properly expand
+  to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
+  `ceph-fuse`/`rbd-nbd` expanded `$pid` with the actual daemon pid.
 
 * ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
   a number of bugs and improves usability in terms of size specification and
