@@ -221,25 +221,22 @@ Refer to the chapters on testing for details.
 Notes on PR make check test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The GitHub :ref:`make-check` test is driven by a Jenkins instance.
+The GitHub :ref:`make check<make-check>` test is driven by a Jenkins instance.
 
-Jenkins merges the PR branch into the latest version of the base branch before
-starting the build, so you don't have to rebase the PR to pick up any fixes.
+Jenkins merges your PR branch into the latest version of the base branch before
+starting the build. This means that you don't have to rebase the PR to pick up any fixes.
 
 You can trigger the PR tests at any time by adding a comment to the PR - the
 comment should contain the string "test this please". Since a human subscribed
 to the PR might interpret that as a request for him or her to test the PR,
-it's good to write the request as "Jenkins, test this please".
+we recommend that you address Jenkins directly in the request; for example, write "jenkins retest this please".
 
-The :ref:`make-check` log is the place to go if there is a failure and you're not
-sure what caused it. To reach it, first click on "details" (next to the :ref:`make-check`
-test in the PR) to get into the Jenkins web GUI, and then click on
-"Console Output" (on the left).
+If there is a build failure and you aren't sure what caused it, check the :ref:`make check<make-check>` log. To access it, first click on "details" (next
+to the :ref:`make check<make-check>` test in the PR) to enter the Jenkins
+web GUI. Then click on "Console Output" (on the left).
 
 Jenkins is set up to grep the log for strings known to have been associated
-with :ref:`make-check` failures in the past. However, there is no guarantee that
-the strings are associated with any given :ref:`make-check` failure. You have to
-dig into the log to be sure.
+with :ref:`make check<make-check>` failures in the past. However, there is no guarantee that the known strings are associated with any given :ref:`make check<make-check>` failure. You'll have to dig into the log to determine the cause of the failure.
 
 Integration tests AKA ceph-qa-suite
 -----------------------------------
