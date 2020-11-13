@@ -182,9 +182,9 @@ Cleaning the Source Tree
 
   make clean
   
-.. note:: The following command will nuke everything in the source tree that
-          isn't tracked by git, so make sure to backup any log files or conf 
-          options.
+.. note:: The following commands will remove everything in the source tree 
+          that isn't tracked by git. Make sure to back up your log files 
+          and configuration options before running these commands.
 
 .. prompt:: bash $
 
@@ -222,7 +222,7 @@ configuration file ``ccache.conf``::
 
 Now, set the environment variable ``SOURCE_DATE_EPOCH`` to a fixed value (a
 UNIX timestamp) and set ``ENABLE_GIT_VERSION`` to ``OFF`` when running
-``cmake``
+``cmake``:
 
 .. prompt:: bash $
 
