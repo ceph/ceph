@@ -1341,6 +1341,22 @@ public:
 
   using check_filter_t = bool (*)(const std::string&);
 
+  template <class BILogHandlerT>
+  int _do_cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
+				  const int shard_id,
+				  const rgw_obj_index_key& start_after,
+				  const string& prefix,
+				  const string& delimiter,
+				  const uint32_t num_entries,
+				  const bool list_versions,
+				  const uint16_t exp_factor, // 0 means ignore
+				  ent_map_t& m,
+				  bool* is_truncated,
+				  bool* cls_filtered,
+				  rgw_obj_index_key *last_entry,
+				  optional_yield y,
+				  check_filter_t force_check_filter,
+				  BILogHandlerT&& bilog_handler);
   int cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 			      const int shard_id,
 			      const rgw_obj_index_key& start_after,
@@ -1355,6 +1371,19 @@ public:
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
 			      check_filter_t force_check_filter = nullptr);
+  template <class BILogHandlerT>
+  int _do_cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
+				    int shard_id,
+				    const rgw_obj_index_key& start_after,
+				    const string& prefix,
+				    uint32_t num_entries,
+				    bool list_versions,
+				    vector<rgw_bucket_dir_entry>& ent_list,
+				    bool *is_truncated,
+				    rgw_obj_index_key *last_entry,
+				    optional_yield y,
+				    check_filter_t,
+				    BILogHandlerT&& bilog_handler);
   int cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 				int shard_id,
 				const rgw_obj_index_key& start_after,
@@ -1456,12 +1485,14 @@ public:
    * and -errno on other failures. (-ENOENT is not a failure, and it
    * will encode that info as a suggested update.)
    */
+  template <class BILogHandlerT>
   int check_disk_state(librados::IoCtx io_ctx,
                        const RGWBucketInfo& bucket_info,
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,
-                       optional_yield y);
+                       optional_yield y,
+                       BILogHandlerT& bilog_handler);
 
   /**
    * Init pool iteration
