@@ -346,6 +346,11 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 
   string region = region_from_api_name(cct, host, api_name);
 
+  const char *maybe_payload_hash = info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+  if (maybe_payload_hash) {
+    new_env.set("HTTP_X_AMZ_CONTENT_SHA256", maybe_payload_hash);
+  }
+
   int ret = sign_request(this, key, region, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
