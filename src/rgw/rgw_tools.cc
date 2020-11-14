@@ -181,6 +181,20 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                             objv_tracker, set_mtime, null_yield, pattrs);
 }
 
+int rgw_stat_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool,
+			const string& key, RGWObjVersionTracker *objv_tracker,
+			real_time *pmtime, optional_yield y,
+			map<string, bufferlist> *pattrs)
+{
+  rgw_raw_obj obj(pool, key);
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.rop()
+               .set_attrs(pattrs)
+               .set_last_mod(pmtime)
+               .stat(y);
+}
+
+
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,

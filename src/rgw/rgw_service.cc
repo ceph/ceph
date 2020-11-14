@@ -26,6 +26,7 @@
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_sys_obj_core.h"
 #include "services/svc_user_rados.h"
+#include "services/svc_role_rados.h"
 
 #include "common/errno.h"
 
@@ -34,6 +35,7 @@
 #include "rgw_metadata.h"
 #include "rgw_otp.h"
 #include "rgw_user.h"
+#include "rgw_role.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -71,6 +73,7 @@ int RGWServices_Def::init(CephContext *cct,
   sysobj = std::make_unique<RGWSI_SysObj>(cct);
   sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
   user_rados = std::make_unique<RGWSI_User_RADOS>(cct);
+  role_rados = std::make_unique<RGWSI_Role_RADOS>(cct);
 
   if (have_cache) {
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(cct);
@@ -110,6 +113,7 @@ int RGWServices_Def::init(CephContext *cct,
   }
   user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
+  role_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
 
   can_shutdown = true;
 
@@ -241,6 +245,12 @@ int RGWServices_Def::init(CephContext *cct,
       ldout(cct, 0) << "ERROR: failed to start otp service (" << cpp_strerror(-r) << dendl;
       return r;
     }
+
+    r = role_rados->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start role_rados service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
   }
 
   /* cache or core services will be started by sysobj */
@@ -310,6 +320,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   cache = _svc.sysobj_cache.get();
   core = _svc.sysobj_core.get();
   user = _svc.user_rados.get();
+  role = _svc.role_rados.get();
 
   return 0;
 }
@@ -355,6 +366,7 @@ int RGWCtlDef::init(RGWServices& svc)
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
+  meta.role = std::make_unique<RGWRoleMetadataHandler>(svc.role);
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
@@ -362,6 +374,7 @@ int RGWCtlDef::init(RGWServices& svc)
                                 svc.bucket_sync,
                                 svc.bi));
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
+  role = std::make_unique<RGWRoleCtl>(svc.role, static_cast<RGWRoleMetadataHandler*>(meta.role.get()));
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
@@ -399,10 +412,12 @@ int RGWCtl::init(RGWServices *_svc)
   meta.bucket = _ctl.meta.bucket.get();
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
   meta.otp = _ctl.meta.otp.get();
+  meta.role = _ctl.meta.role.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
   otp = _ctl.otp.get();
+  role = _ctl.role.get();
 
   r = meta.user->attach(meta.mgr);
   if (r < 0) {
@@ -428,6 +443,11 @@ int RGWCtl::init(RGWServices *_svc)
     return r;
   }
 
+  r = meta.role->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
   return 0;
 }
 

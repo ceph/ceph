@@ -26,7 +26,7 @@ int RGWRestRole::verify_permission()
   }
 
   string role_name = s->info.args.get("RoleName");
-  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
+  RGWRole role(s->cct, store->ctl()->role, role_name, s->user->get_tenant());
   if (op_ret = role.get(); op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_ROLE_FOUND;
@@ -130,7 +130,7 @@ void RGWCreateRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store->getRados()->pctl, role_name, role_path, trust_policy,
+  RGWRole role(s->cct, store->ctl()->role, role_name, role_path, trust_policy,
                 s->user->get_tenant(), max_session_duration);
   op_ret = role.create(true);
 
@@ -142,7 +142,7 @@ void RGWCreateRole::execute()
     s->formatter->open_object_section("CreateRoleResponse");
     s->formatter->open_object_section("CreateRoleResult");
     s->formatter->open_object_section("Role");
-    role.dump(s->formatter);
+    role.get_info().dump(s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
@@ -229,7 +229,7 @@ void RGWGetRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
+  RGWRole role(s->cct, store->ctl()->role, role_name, s->user->get_tenant());
   op_ret = role.get();
 
   if (op_ret == -ENOENT) {
@@ -246,7 +246,7 @@ void RGWGetRole::execute()
     s->formatter->close_section();
     s->formatter->open_object_section("GetRoleResult");
     s->formatter->open_object_section("Role");
-    role.dump(s->formatter);
+    role.get_info().dump(s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
     s->formatter->close_section();
@@ -321,8 +321,11 @@ void RGWListRoles::execute()
   if (op_ret < 0) {
     return;
   }
-  vector<RGWRole> result;
-  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->get_tenant(), result);
+  vector<RGWRoleInfo> result;
+  op_ret = store->ctl()->role->list_roles_by_path_prefix(path_prefix,
+                                                         s->user->get_tenant(),
+                                                         result,
+                                                         s->yield);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
