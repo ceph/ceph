@@ -837,7 +837,8 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 bool obj_lock_enabled,
 				 bool *existed,
 				 req_info& req_info,
-				 std::unique_ptr<RGWBucket>* bucket_out)
+				 std::unique_ptr<RGWBucket>* bucket_out,
+         string& err_mesg)
 {
   int ret;
   bufferlist in_data;
