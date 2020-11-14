@@ -30,6 +30,21 @@ void cls_user_set_buckets_op::generate_test_instances(list<cls_user_set_buckets_
   ls.push_back(op);
 }
 
+void cls_user_init_bucket_count_op::dump(Formatter *f) const
+{
+  encode_json("calculated_bucket_count", calculated_bucket_count, f);
+  encode_json("current_bucket_count", current_bucket_count, f);
+}
+
+void cls_user_init_bucket_count_op::generate_test_instances(list<cls_user_init_bucket_count_op*>& ls)
+{
+  ls.push_back(new cls_user_init_bucket_count_op);
+  cls_user_init_bucket_count_op *op = new cls_user_init_bucket_count_op;
+  op->calculated_bucket_count = 123;
+  op->current_bucket_count = -1;
+  ls.push_back(op);
+}
+
 void cls_user_remove_bucket_op::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
