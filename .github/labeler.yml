@@ -1,3 +1,9 @@
+crimson:
+  - doc/dev/crimson/**
+  - src/crimson/**
+  - src/test/crimson/**
+  - qa/suites/crimson-rados/**
+
 dashboard:
   - src/pybind/mgr/dashboard/**
   - qa/suites/rados/dashboard/**
