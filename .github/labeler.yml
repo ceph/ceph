@@ -7,6 +7,44 @@ dashboard:
   - doc/mgr/dashboard.rst
   - doc/dev/developer_guide/dash-devel.rst
 
+cephfs:
+  - doc/cephfs/**
+  - doc/man/8/ceph-fuse.rst
+  - doc/man/8/ceph-mds.rst
+  - doc/man/8/ceph-syn.rst
+  - doc/man/8/mount.ceph.rst
+  - doc/man/8/mount.fuse.ceph.rst
+  - qa/suites/fs/**
+  - qa/suites/multimds/**
+  - qa/tasks/ceph_fuse.py
+  - qa/tasks/cephfs/**
+  - qa/tasks/cephfs_test_runner.py
+  - qa/tasks/fs.py
+  - qa/tasks/kclient.py
+  - qa/tasks/mds_creation_failure.py
+  - qa/tasks/mds_thrash.py
+  - src/ceph_fuse.cc
+  - src/ceph_mds.cc
+  - src/ceph_syn.cc
+  - src/client/**
+  - src/include/ceph_fs.h
+  - src/include/ceph_fuse.h
+  - src/include/cephfs/**
+  - src/include/filepath.h
+  - src/include/frag.h
+  - src/include/fs_types.h
+  - src/libcephfs.cc
+  - src/mds/**
+  - src/pybind/ceph_volume_client.py
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/mds_autoscaler/**
+  - src/pybind/mgr/status/**
+  - src/pybind/mgr/volumes/**
+  - src/test/fs/**
+  - src/test/libcephfs/**
+  - src/tools/cephfs/**
+  - src/tools/cephfs_mirror/**
+
 CI:
   - .github/**
 
