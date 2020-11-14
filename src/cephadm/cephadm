@@ -197,7 +197,10 @@ class Monitoring(object):
             "image": "docker.io/prom/alertmanager:v0.20.0",
             "cpus": "2",
             "memory": "2GB",
-            "args": [],
+            "args": [
+               "--web.listen-address=:{}".format(port_map['alertmanager'][0]),
+               "--cluster.listen-address=:{}".format(port_map['alertmanager'][1]),
+            ],
             "config-json-files": [
                 "alertmanager.yml",
             ],
