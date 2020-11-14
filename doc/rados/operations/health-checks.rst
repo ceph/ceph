@@ -1048,7 +1048,10 @@ PG_NOT_SCRUBBED
 _______________
 
 One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
-within every ``osd_scrub_max_interval``, and this warning triggers when
+within every configured interval specified by
+:ref:`osd_scrub_max_interval <osd_scrub_max_interval>` globally. This
+interval can be overriden on per-pool basis with
+:ref:`scrub_max_interval <scrub_max_interval>`. The warning triggers when
 ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
 scrub since it was due.
 

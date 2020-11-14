@@ -311,6 +311,7 @@ scrubbing operations.
 :Type: Float
 :Default: Once per day. ``24*60*60``
 
+.. _osd_scrub_max_interval:
 
 ``osd scrub max interval``
 
