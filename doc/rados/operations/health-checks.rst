@@ -1047,10 +1047,10 @@ The location of an OSD can be found with::
 PG_NOT_SCRUBBED
 _______________
 
-One or more PGs has not been scrubbed recently.  PGs are normally
-scrubbed every ``mon_scrub_interval`` seconds, and this warning
-triggers when ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed
-without a scrub since it was due.
+One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
+within every ``osd_scrub_max_interval``, and this warning triggers when
+``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
+scrub since it was due.
 
 PGs will not scrub if they are not flagged as *clean*, which may
 happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
