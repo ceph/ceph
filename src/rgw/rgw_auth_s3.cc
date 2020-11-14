@@ -221,6 +221,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
         return false;
       }
       *header_time = utime_t(internal_timegm(&t), 0);
+      *header_time -= t.tm_gmtoff;
     }
   }
 
