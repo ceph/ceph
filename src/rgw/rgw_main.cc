@@ -52,6 +52,10 @@
 
 #include "services/svc_zone.h"
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+#include "rgw_s3_mirror.h"
+#endif
+
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
@@ -513,6 +517,13 @@ int radosgw_Main(int argc, const char **argv)
     fe_def_map[config->get_framework()].reset(config);
   }
 
+#ifdef WITH_RADOSGW_S3_MIRROR
+  if (g_conf()->mirror_s3_endpoint.compare("") != 0) {
+    S3Mirror::init(g_ceph_context, store, g_conf()->mirror_s3_endpoint, g_conf()->mirror_s3_access_id,
+                    g_conf()->mirror_s3_access_key, g_conf()->mirror_s3_bucket);
+  }
+#endif
+
   int fe_count = 0;
 
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
@@ -659,6 +670,9 @@ int radosgw_Main(int argc, const char **argv)
   g_conf().remove_observer(&implicit_tenant_context);
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_S3_MIRROR
+  S3Mirror::shutdown();
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();

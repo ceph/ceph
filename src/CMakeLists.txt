@@ -32,6 +32,9 @@ add_definitions(
 if(LINUX)
   add_definitions("-D_GNU_SOURCE")
 endif()
+if(WITH_RADOSGW_S3_MIRROR)
+  add_definitions("-DWITH_RADOSGW_S3_MIRROR")
+endif()
 
 add_compile_options(
   -Wall
@@ -945,4 +948,3 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
-
