@@ -47,6 +47,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <thread>
 
 using std::set;
 using std::map;
@@ -243,6 +244,7 @@ public:
   template <typename T> friend class RWRef;
 
   using Dispatcher::cct;
+  using clock = ceph::coarse_mono_clock;
 
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in);
 
@@ -737,7 +739,9 @@ public:
   void renew_caps();
   void renew_caps(MetaSession *session);
   void flush_cap_releases();
+  void renew_and_flush_cap_releases();
   void tick();
+  void start_tick_thread();
 
   void inc_dentry_nr() {
     ++dentry_nr;
@@ -767,10 +771,14 @@ public:
 
   xlist<Inode*> &get_dirty_list() { return dirty_list; }
 
-  /* timer_lock for 'timer' and 'tick_event' */
+  /* timer_lock for 'timer' */
   ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
-  Context *tick_event = nullptr;
   SafeTimer timer;
+
+  /* tick thread */
+  std::thread upkeeper;
+  ceph::condition_variable upkeep_cond;
+  bool tick_thread_stopped = false;
 
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
