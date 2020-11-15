@@ -24,7 +24,7 @@ class RGWOp_Period_Base : public RGWRESTOp {
   RGWPeriod period;
   std::ostringstream error_stream;
  public:
-  int verify_permission() override { return 0; }
+  int verify_permission(optional_yield) override { return 0; }
   void send_response() override;
 };
 
@@ -51,17 +51,17 @@ void RGWOp_Period_Base::send_response()
 // GET /admin/realm/period
 class RGWOp_Period_Get : public RGWOp_Period_Base {
  public:
-  void execute() override;
+  void execute(optional_yield y) override;
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
   const char* name() const override { return "get_period"; }
 };
 
-void RGWOp_Period_Get::execute()
+void RGWOp_Period_Get::execute(optional_yield y)
 {
   string realm_id, realm_name, period_id;
   epoch_t epoch = 0;
@@ -73,7 +73,7 @@ void RGWOp_Period_Get::execute()
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  op_ret = period.init(store->ctx(), store->svc()->sysobj, realm_id, realm_name);
+  op_ret = period.init(store->ctx(), store->svc()->sysobj, realm_id, y, realm_name);
   if (op_ret < 0)
     ldout(store->ctx(), 5) << "failed to read period" << dendl;
 }
@@ -81,22 +81,22 @@ void RGWOp_Period_Get::execute()
 // POST /admin/realm/period
 class RGWOp_Period_Post : public RGWOp_Period_Base {
  public:
-  void execute() override;
+  void execute(optional_yield y) override;
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_WRITE);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
   const char* name() const override { return "post_period"; }
 };
 
-void RGWOp_Period_Post::execute()
+void RGWOp_Period_Post::execute(optional_yield y)
 {
   auto cct = store->ctx();
 
   // initialize the period without reading from rados
-  period.init(cct, store->svc()->sysobj, false);
+  period.init(cct, store->svc()->sysobj, y, false);
 
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
@@ -119,7 +119,7 @@ void RGWOp_Period_Post::execute()
   // period that we haven't restarted with yet. we also don't want to modify
   // the objects in use by RGWRados
   RGWRealm realm(period.get_realm());
-  op_ret = realm.init(cct, store->svc()->sysobj);
+  op_ret = realm.init(cct, store->svc()->sysobj, y);
   if (op_ret < 0) {
     lderr(cct) << "failed to read current realm: "
         << cpp_strerror(-op_ret) << dendl;
@@ -127,7 +127,7 @@ void RGWOp_Period_Post::execute()
   }
 
   RGWPeriod current_period;
-  op_ret = current_period.init(cct, store->svc()->sysobj, realm.get_id());
+  op_ret = current_period.init(cct, store->svc()->sysobj, realm.get_id(), y);
   if (op_ret < 0) {
     lderr(cct) << "failed to read current period: "
         << cpp_strerror(-op_ret) << dendl;
@@ -136,7 +136,7 @@ void RGWOp_Period_Post::execute()
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    op_ret = period.commit(store, realm, current_period, error_stream);
+    op_ret = period.commit(store, realm, current_period, error_stream, y);
     if (op_ret < 0) {
       lderr(cct) << "master zone failed to commit period" << dendl;
     }
@@ -152,13 +152,13 @@ void RGWOp_Period_Post::execute()
   }
 
   // write the period to rados
-  op_ret = period.store_info(false);
+  op_ret = period.store_info(false, y);
   if (op_ret < 0) {
     lderr(cct) << "failed to store period " << period.get_id() << dendl;
     return;
   }
   // set as latest epoch
-  op_ret = period.update_latest_epoch(period.get_epoch());
+  op_ret = period.update_latest_epoch(period.get_epoch(), y);
   if (op_ret == -EEXIST) {
     // already have this epoch (or a more recent one)
     ldout(cct, 4) << "already have epoch >= " << period.get_epoch()
@@ -193,7 +193,7 @@ void RGWOp_Period_Post::execute()
       return;
     }
     // attach a copy of the period into the period history
-    auto cursor = period_history->attach(RGWPeriod{period});
+    auto cursor = period_history->attach(RGWPeriod{period}, y);
     if (!cursor) {
       // we're missing some history between the new period and current_period
       op_ret = cursor.get_error();
@@ -211,7 +211,7 @@ void RGWOp_Period_Post::execute()
       return;
     }
     // set as current period
-    op_ret = realm.set_current_period(period);
+    op_ret = realm.set_current_period(period, y);
     if (op_ret < 0) {
       lderr(cct) << "failed to update realm's current period" << dendl;
       return;
@@ -219,11 +219,11 @@ void RGWOp_Period_Post::execute()
     ldout(cct, 4) << "period " << period.get_id()
         << " is newer than current period " << current_period.get_id()
         << ", updating realm's current period and notifying zone" << dendl;
-    realm.notify_new_period(period);
+    realm.notify_new_period(period, y);
     return;
   }
   // reflect the period into our local objects
-  op_ret = period.reflect();
+  op_ret = period.reflect(y);
   if (op_ret < 0) {
     lderr(cct) << "failed to update local objects: "
         << cpp_strerror(-op_ret) << dendl;
@@ -232,7 +232,7 @@ void RGWOp_Period_Post::execute()
   ldout(cct, 4) << "period epoch " << period.get_epoch()
       << " is newer than current epoch " << current_period.get_epoch()
       << ", updating period's latest epoch and notifying zone" << dendl;
-  realm.notify_new_period(period);
+  realm.notify_new_period(period, y);
   // update the period history
   period_history->insert(RGWPeriod{period});
 }
@@ -263,15 +263,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "get_realm"; }
 };
 
-void RGWOp_Realm_Get::execute()
+void RGWOp_Realm_Get::execute(optional_yield y)
 {
   string id;
   RESTArgs::get_string(s, "id", id, &id);
@@ -280,7 +280,7 @@ void RGWOp_Realm_Get::execute()
 
   // read realm
   realm.reset(new RGWRealm(id, name));
-  op_ret = realm->init(g_ceph_context, store->svc()->sysobj);
+  op_ret = realm->init(g_ceph_context, store->svc()->sysobj, y);
   if (op_ret < 0)
     lderr(store->ctx()) << "failed to read realm id=" << id
         << " name=" << name << dendl;
@@ -309,20 +309,20 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "list_realms"; }
 };
 
-void RGWOp_Realm_List::execute()
+void RGWOp_Realm_List::execute(optional_yield y)
 {
   {
     // read default realm
     RGWRealm realm(store->ctx(), store->svc()->sysobj);
-    [[maybe_unused]] int ret = realm.read_default_id(default_id);
+    [[maybe_unused]] int ret = realm.read_default_id(default_id, y);
   }
   op_ret = store->svc()->zone->list_realms(realms);
   if (op_ret < 0)

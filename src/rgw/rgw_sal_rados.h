@@ -33,7 +33,8 @@ class RGWRadosUser : public RGWUser {
     RGWRadosUser() {}
 
     int list_buckets(const std::string& marker, const std::string& end_marker,
-				uint64_t max, bool need_stats, RGWBucketList& buckets);
+		     uint64_t max, bool need_stats, RGWBucketList& buckets,
+		     optional_yield y) override;
     RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time);
 
     /* Placeholders */
@@ -194,7 +195,7 @@ class RGWRadosBucket : public RGWBucket {
 				 std::string *max_marker = nullptr,
 				 bool *syncstopped = nullptr) override;
     virtual int read_bucket_stats(optional_yield y) override;
-    virtual int sync_user_stats() override;
+    virtual int sync_user_stats(optional_yield y) override;
     virtual int update_container_stats(void) override;
     virtual int check_bucket_shards(void) override;
     virtual int link(RGWUser* new_user, optional_yield y) override;
@@ -203,7 +204,7 @@ class RGWRadosBucket : public RGWBucket {
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(RGWUser* user) override;
     virtual int check_empty(optional_yield y) override;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) override;
+    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
     virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(ceph::real_time *pmtime) override;
     virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -231,9 +232,9 @@ class RGWRadosStore : public RGWStore {
 
     virtual std::unique_ptr<RGWUser> get_user(const rgw_user& u);
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) override;
-    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket) override;
+    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y) override;
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) override;
-    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) override;
+    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket, optional_yield y) override;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
                             const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
@@ -247,11 +248,13 @@ class RGWRadosStore : public RGWStore {
 			    bool obj_lock_enabled,
 			    bool *existed,
 			    req_info& req_info,
-			    std::unique_ptr<RGWBucket>* bucket);
+			    std::unique_ptr<RGWBucket>* bucket,
+			    optional_yield y);
     virtual RGWBucketList* list_buckets(void) { return new RGWBucketList(); }
     virtual bool is_meta_master() override;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
-				  bufferlist& in_data, JSONParser *jp, req_info& info) override;
+					  bufferlist& in_data, JSONParser *jp, req_info& info,
+					  optional_yield y) override;
     virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) override;
     virtual const RGWZoneGroup& get_zonegroup() override;

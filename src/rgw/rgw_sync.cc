@@ -2088,7 +2088,8 @@ int RGWRemoteMetaLog::store_sync_info(const rgw_meta_sync_info& sync_info)
 
 // return a cursor to the period at our sync position
 static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
-                                              const rgw_meta_sync_info& info)
+                                              const rgw_meta_sync_info& info,
+					      optional_yield y)
 {
   if (info.period.empty()) {
     // return an empty cursor with error=0
@@ -2111,14 +2112,14 @@ static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->svc()->mdlog->pull_period(info.period, period);
+  int r = store->svc()->mdlog->pull_period(info.period, period, y);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
     return RGWPeriodHistory::Cursor{r};
   }
   // attach the period to our history
-  cursor = store->svc()->mdlog->get_period_history()->attach(std::move(period));
+  cursor = store->svc()->mdlog->get_period_history()->attach(std::move(period), y);
   if (!cursor) {
     r = cursor.get_error();
     lderr(store->ctx()) << "ERROR: failed to read period history back to "
@@ -2127,7 +2128,7 @@ static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
   return cursor;
 }
 
-int RGWRemoteMetaLog::run_sync()
+int RGWRemoteMetaLog::run_sync(optional_yield y)
 {
   if (store->svc()->zone->is_meta_master()) {
     return 0;
@@ -2249,7 +2250,7 @@ int RGWRemoteMetaLog::run_sync()
       case rgw_meta_sync_info::StateSync:
         tn->log(20, "sync");
         // find our position in the period history (if any)
-        cursor = get_period_at(store, sync_status.sync_info);
+        cursor = get_period_at(store, sync_status.sync_info, y);
         r = cursor.get_error();
         if (r < 0) {
           return r;

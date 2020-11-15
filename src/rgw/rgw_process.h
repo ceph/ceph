@@ -191,6 +191,7 @@ extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
                                      RGWRequest* req,
                                      req_state* s,
+				     optional_yield y,
                                      bool skip_retarget = false);
 
 #if defined(def_dout_subsys)

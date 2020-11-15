@@ -21,7 +21,7 @@ class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
   std::string original_object_name; // object name before retarget()
   bool web_dir() const;
 protected:
-  int retarget(RGWOp *op, RGWOp **new_op) override;
+  int retarget(RGWOp *op, RGWOp **new_op, optional_yield y) override;
   // TODO: this should be virtual I think, and ensure that it's always
   // overridden, but that conflates that op_get/op_head are defined in this
   // class and call this; and don't need to be overridden later.
@@ -35,13 +35,13 @@ protected:
   RGWOp *op_copy() override { return NULL; }
   RGWOp *op_options() override { return NULL; }
 
-  int serve_errordoc(int http_ret, const string &errordoc_key);
+  int serve_errordoc(int http_ret, const string &errordoc_key, optional_yield y);
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_S3Website() override = default;
 
   int init(rgw::sal::RGWRadosStore *store, req_state *s, rgw::io::BasicClient* cio) override;
-  int error_handler(int err_no, string *error_content) override;
+  int error_handler(int err_no, string *error_content, optional_yield y) override;
 };
 
 class RGWHandler_REST_Service_S3Website : public RGWHandler_REST_S3Website {
@@ -81,11 +81,11 @@ public:
   RGWGetObj_ObjStore_S3Website() : is_errordoc_request(false) {}
   explicit RGWGetObj_ObjStore_S3Website(bool is_errordoc_request) : is_errordoc_request(false) { this->is_errordoc_request = is_errordoc_request; }
   ~RGWGetObj_ObjStore_S3Website() override {}
-  int send_response_data_error() override;
+  int send_response_data_error(optional_yield y) override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   // We override RGWGetObj_ObjStore::get_params here, to allow ignoring all
   // conditional params for error pages.
-  int get_params() override {
+  int get_params(optional_yield y) override {
       if (is_errordoc_request) {
         range_str = NULL;
         if_mod = NULL;
@@ -94,7 +94,7 @@ public:
         if_nomatch = NULL;
         return 0;
       } else {
-        return RGWGetObj_ObjStore_S3::get_params();
+        return RGWGetObj_ObjStore_S3::get_params(y);
       }
   }
 };

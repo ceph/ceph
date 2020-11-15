@@ -39,7 +39,8 @@
 namespace rgw::sal {
 
 int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
-			       uint64_t max, bool need_stats, RGWBucketList &buckets)
+			       uint64_t max, bool need_stats, RGWBucketList &buckets,
+			       optional_yield y)
 {
   RGWUserBuckets ulist;
   bool is_truncated = false;
@@ -47,7 +48,7 @@ int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
 
   buckets.clear();
   ret = store->ctl()->user->list_buckets(info.user_id, marker, end_marker, max,
-					 need_stats, &ulist, &is_truncated);
+					 need_stats, &ulist, &is_truncated, y);
   if (ret < 0)
     return ret;
 
@@ -129,8 +130,8 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
     }
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
-  if ( ret < 0) {
+  ret = store->ctl()->bucket->sync_user_stats(info.owner, info, y);
+  if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
 
@@ -138,21 +139,21 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
 
   // if we deleted children above we will force delete, as any that
   // remain is detrius from a prior bug
-  ret = store->getRados()->delete_bucket(info, ot, null_yield, !delete_children);
+  ret = store->getRados()->delete_bucket(info, ot, y, !delete_children);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;
     return ret;
   }
 
-  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, null_yield, false);
+  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, y, false);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
 
   if (forward_to_master) {
     bufferlist in_data;
-    ret = store->forward_request_to_master(owner, &ot.read_version, in_data, nullptr, *req_info);
+    ret = store->forward_request_to_master(owner, &ot.read_version, in_data, nullptr, *req_info, y);
     if (ret < 0) {
       if (ret == -ENOENT) {
 	/* adjust error, we want to return with NoSuchBucket and not
@@ -213,9 +214,9 @@ int RGWRadosBucket::read_bucket_stats(optional_yield y)
       return ret;
 }
 
-int RGWRadosBucket::sync_user_stats()
+int RGWRadosBucket::sync_user_stats(optional_yield y)
 {
-      return store->ctl()->bucket->sync_user_stats(owner->get_id(), info);
+  return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, y);
 }
 
 int RGWRadosBucket::update_container_stats(void)
@@ -295,10 +296,11 @@ int RGWRadosBucket::check_empty(optional_yield y)
   return store->getRados()->check_bucket_empty(info, y);
 }
 
-int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)
+int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+				optional_yield y, bool check_size_only)
 {
     return store->getRados()->check_quota(owner->get_user(), get_key(),
-					  user_quota, bucket_quota, obj_size, check_size_only);
+					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 
 int RGWRadosBucket::set_instance_attrs(RGWAttrs& attrs, optional_yield y)
@@ -329,7 +331,7 @@ int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
   acls = acl;
   acl.encode(aclbl);
 
-  return store->ctl()->bucket->set_acl(acl.get_owner(), info.bucket, info, aclbl, null_yield);
+  return store->ctl()->bucket->set_acl(acl.get_owner(), info.bucket, info, aclbl, y);
 }
 
 std::unique_ptr<RGWObject> RGWRadosBucket::get_object(const rgw_obj_key& k)
@@ -692,13 +694,13 @@ int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB 
   return parent_op.iterate(ofs, end, cb, y);
 }
 
-int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket)
+int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y)
 {
   int ret;
   RGWBucket* bp;
 
   bp = new RGWRadosBucket(this, b, u);
-  ret = bp->get_bucket_info(null_yield);
+  ret = bp->get_bucket_info(y);
   if (ret < 0) {
     delete bp;
     return ret;
@@ -719,14 +721,14 @@ int RGWRadosStore::get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_pt
   return 0;
 }
 
-int RGWRadosStore::get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket)
+int RGWRadosStore::get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket, optional_yield y)
 {
   rgw_bucket b;
 
   b.tenant = tenant;
   b.name = name;
 
-  return get_bucket(u, b, bucket);
+  return get_bucket(u, b, bucket, y);
 }
 
 static int decode_policy(CephContext *cct,
@@ -750,9 +752,10 @@ static int decode_policy(CephContext *cct,
 }
 
 static int rgw_op_get_bucket_policy_from_attr(RGWRadosStore *store,
-				       RGWUser& user,
-				       RGWAttrs& bucket_attrs,
-				       RGWAccessControlPolicy *policy)
+					      RGWUser& user,
+					      RGWAttrs& bucket_attrs,
+					      RGWAccessControlPolicy *policy,
+					      optional_yield y)
 {
   auto aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -763,7 +766,7 @@ static int rgw_op_get_bucket_policy_from_attr(RGWRadosStore *store,
   } else {
     ldout(store->ctx(), 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     /* object exists, but policy is broken */
-    int r = user.load_by_id(null_yield);
+    int r = user.load_by_id(y);
     if (r < 0)
       return r;
 
@@ -779,7 +782,8 @@ bool RGWRadosStore::is_meta_master()
 
 int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 					     bufferlist& in_data,
-					     JSONParser *jp, req_info& info)
+					     JSONParser *jp, req_info& info,
+					     optional_yield y)
 {
   if (is_meta_master()) {
     /* We're master, don't forward */
@@ -796,7 +800,7 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
   int ret = svc()->zone->get_master_conn()->forward(rgw_user(uid_str), info,
                                                     objv, MAX_REST_RESPONSE,
-						    &in_data, &response);
+						    &in_data, &response, y);
   if (ret < 0)
     return ret;
 
@@ -837,7 +841,8 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 bool obj_lock_enabled,
 				 bool *existed,
 				 req_info& req_info,
-				 std::unique_ptr<RGWBucket>* bucket_out)
+				 std::unique_ptr<RGWBucket>* bucket_out,
+				 optional_yield y)
 {
   int ret;
   bufferlist in_data;
@@ -849,7 +854,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
   obj_version objv, *pobjv = NULL;
 
   /* If it exists, look it up; otherwise create it */
-  ret = get_bucket(&u, b, &bucket);
+  ret = get_bucket(&u, b, &bucket, y);
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
@@ -863,7 +868,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
     // don't allow changes to the acl policy
     int r = rgw_op_get_bucket_policy_from_attr(this, u, bucket->get_attrs(),
-					       &old_policy);
+					       &old_policy, y);
     if (r >= 0 && old_policy != policy) {
       bucket_out->swap(bucket);
       return -EEXIST;
@@ -876,7 +881,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
   if (!svc()->zone->is_meta_master()) {
     JSONParser jp;
-    ret = forward_request_to_master(&u, NULL, in_data, &jp, req_info);
+    ret = forward_request_to_master(&u, NULL, in_data, &jp, req_info, y);
     if (ret < 0) {
       return ret;
     }
@@ -909,8 +914,8 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
   if (*existed) {
     rgw_placement_rule selected_placement_rule;
     ret = svc()->zone->select_bucket_placement(u.get_info(),
-					    zid, placement_rule,
-					    &selected_placement_rule, nullptr);
+					       zid, placement_rule,
+					       &selected_placement_rule, nullptr, y);
     if (selected_placement_rule != info.placement_rule) {
       ret = -EEXIST;
       bucket_out->swap(bucket);
@@ -922,7 +927,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				    zid, placement_rule, swift_ver_location,
 				    pquota_info, attrs,
 				    info, pobjv, &ep_objv, creation_time,
-				    pmaster_bucket, pmaster_num_shards, exclusive);
+				    pmaster_bucket, pmaster_num_shards, y, exclusive);
     if (ret == -EEXIST) {
       *existed = true;
       ret = 0;

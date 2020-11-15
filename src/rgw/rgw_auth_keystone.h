@@ -66,7 +66,8 @@ public:
     return "rgw::auth::keystone::TokenEngine";
   }
 
-  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
+			optional_yield y) const override {
     return authenticate(dpp, extractor->get_token(s), s);
   }
 }; /* class TokenEngine */
@@ -157,7 +158,8 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
-                        const req_state* s) const override;
+                        const req_state* s,
+			optional_yield y) const override;
   std::pair<boost::optional<std::string>, int> get_secret_from_keystone(const DoutPrefixProvider* dpp,
                                                                         const std::string& user_id,
                                                                         const std::string_view& access_key_id) const;
