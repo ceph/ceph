@@ -44,7 +44,7 @@ protected:
     base(i), ack(a), old_auth(oa), new_auth(na) {
     set_tid(tid);
   }
-  ~MExportDirNotify() override {}
+  ~MExportDirNotify() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExNot"; }

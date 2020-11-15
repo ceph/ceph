@@ -53,7 +53,7 @@ private:
     : Message{MSG_MON_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MMonPing() override {}
+  ~MMonPing() final {}
 
 public:
   void decode_payload() override {

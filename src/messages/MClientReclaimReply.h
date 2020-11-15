@@ -59,7 +59,7 @@ protected:
     result(r), epoch(e) {}
 
 private:
-  ~MClientReclaimReply() override {}
+  ~MClientReclaimReply() final {}
 
   int32_t result;
   epoch_t epoch;

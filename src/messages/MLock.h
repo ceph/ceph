@@ -63,7 +63,7 @@ protected:
     lock->get_parent()->set_object_info(object_info);
     lockdata = std::move(bl);
   }
-  ~MLock() override {}
+  ~MLock() final {}
   
 public:
   std::string_view get_type_name() const override { return "ILock"; }

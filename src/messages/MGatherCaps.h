@@ -14,7 +14,7 @@ public:
 protected:
   MGatherCaps() :
     MMDSOp{MSG_MDS_GATHERCAPS, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MGatherCaps() override {}
+  ~MGatherCaps() final {}
 
 public:
   std::string_view get_type_name() const override { return "gather_caps"; }

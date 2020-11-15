@@ -36,7 +36,7 @@ protected:
     this->ino = ino;
     this->caps = caps;
   }
-  ~MInodeFileCaps() override {}
+  ~MInodeFileCaps() final {}
 
 public:
   std::string_view get_type_name() const override { return "inode_file_caps";}

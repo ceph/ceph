@@ -37,7 +37,7 @@ public:
 private:
   FSMap fsmap;
 
-  ~MFSMap() override {}
+  ~MFSMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "fsmap"; }

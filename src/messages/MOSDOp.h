@@ -193,7 +193,7 @@ public:
     reqid.inc = inc;
   }
 private:
-  ~MOSDOp() override {}
+  ~MOSDOp() final {}
 
 public:
   void set_mtime(utime_t mt) { mtime = mt; }

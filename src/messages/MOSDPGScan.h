@@ -100,7 +100,7 @@ public:
       begin(be), end(en) {
   }
 private:
-  ~MOSDPGScan() override {}
+  ~MOSDPGScan() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_scan"; }

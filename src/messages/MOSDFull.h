@@ -17,7 +17,7 @@ public:
   uint32_t state = 0;
 
 private:
-  ~MOSDFull() {}
+  ~MOSDFull() final {}
 
 public:
   MOSDFull(epoch_t e, unsigned s)

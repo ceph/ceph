@@ -58,7 +58,7 @@ public:
   {}
 
 private:
-  ~MOSDPGRecoveryDelete() {}
+  ~MOSDPGRecoveryDelete() final {}
 
 public:
   std::string_view get_type_name() const { return "recovery_delete"; }

@@ -108,7 +108,7 @@ public:
   }
 
 private:
-  ~MMgrBeacon() override {}
+  ~MMgrBeacon() final {}
 
 public:
 

@@ -49,7 +49,7 @@ private:
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGQuery() override {}
+  ~MOSDPGQuery() final {}
 
 public:  
   std::string_view get_type_name() const override { return "pg_query"; }

@@ -165,7 +165,7 @@ public:
     }
   }
 private:
-  ~MOSDOpReply() override {}
+  ~MOSDOpReply() final {}
 
 public:
   void encode_payload(uint64_t features) override {

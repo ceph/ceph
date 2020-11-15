@@ -49,7 +49,7 @@ public:
       from(from) {}
 
 private:
-  ~MOSDRepScrubMap() {}
+  ~MOSDRepScrubMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "rep_scrubmap"; }

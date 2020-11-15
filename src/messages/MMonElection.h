@@ -72,7 +72,7 @@ public:
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
   }
 private:
-  ~MMonElection() override {}
+  ~MMonElection() final {}
 
 public:
   std::string_view get_type_name() const override { return "election"; }
