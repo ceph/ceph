@@ -141,12 +141,12 @@ public:
     es_module = static_cast<RGWElasticSyncModuleInstance *>(sync_module_ref.get());
   }
 
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   virtual int get_params() = 0;
   void pre_exec() override;
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "metadata_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
@@ -158,7 +158,7 @@ void RGWMetadataSearchOp::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWMetadataSearchOp::execute()
+void RGWMetadataSearchOp::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -248,7 +248,7 @@ void RGWMetadataSearchOp::execute()
   ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
   auto& extra_headers = es_module->get_request_headers();
   op_ret = conn->get_resource(resource, &params, &extra_headers,
-                              out, &in, nullptr, null_yield);
+                              out, &in, nullptr, y);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;

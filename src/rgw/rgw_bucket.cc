@@ -157,10 +157,11 @@ int rgw_read_user_buckets(rgw::sal::RGWRadosStore * store,
                           const string& marker,
                           const string& end_marker,
                           uint64_t max,
-                          bool need_stats)
+                          bool need_stats,
+			  optional_yield y)
 {
   rgw::sal::RGWRadosUser user(store, user_id);
-  return user.list_buckets(marker, end_marker, max, need_stats, buckets);
+  return user.list_buckets(marker, end_marker, max, need_stats, buckets, y);
 }
 
 int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id)
@@ -258,7 +259,8 @@ static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
 }
 
 void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_user& user_id,
-				   bool fix)
+				   bool fix,
+				   optional_yield y)
 {
   rgw::sal::RGWBucketList user_buckets;
   rgw::sal::RGWRadosUser user(store, user_id);
@@ -269,7 +271,7 @@ void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_use
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
-    int ret = user.list_buckets(marker, string(), max_entries, false, user_buckets);
+    int ret = user.list_buckets(marker, string(), max_entries, false, user_buckets, y);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "failed to read user buckets: "
 			     << cpp_strerror(-ret) << dendl;
@@ -475,7 +477,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
     return ret;
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
+  ret = store->ctl()->bucket->sync_user_stats(info.owner, info, y);
   if (ret < 0) {
      dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -1261,7 +1263,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdm
   std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(op_state.get_user_id());
 
   int ret = store->get_bucket(user.get(), user->get_tenant(), op_state.get_bucket_name(),
-			      &bucket);
+			      &bucket, y);
   if (ret < 0)
     return ret;
 
@@ -1372,7 +1374,7 @@ static int bucket_stats(rgw::sal::RGWRadosStore *store,
 int RGWBucketAdminOp::limit_check(rgw::sal::RGWRadosStore *store,
 				  RGWBucketAdminOpState& op_state,
 				  const std::list<std::string>& user_ids,
-				  RGWFormatterFlusher& flusher,
+				  RGWFormatterFlusher& flusher, optional_yield y,
 				  bool warnings_only)
 {
   int ret = 0;
@@ -1403,7 +1405,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::RGWRadosStore *store,
     do {
       rgw::sal::RGWRadosUser user(store, rgw_user(user_id));
 
-      ret = user.list_buckets(marker, string(), max_entries, false, buckets);
+      ret = user.list_buckets(marker, string(), max_entries, false, buckets, y);
 
       if (ret < 0)
         return ret;
@@ -1488,7 +1490,8 @@ int RGWBucketAdminOp::limit_check(rgw::sal::RGWRadosStore *store,
 
 int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store,
 			   RGWBucketAdminOpState& op_state,
-			   RGWFormatterFlusher& flusher)
+			   RGWFormatterFlusher& flusher,
+			   optional_yield y)
 {
   RGWBucket bucket;
   int ret = 0;
@@ -1521,7 +1524,7 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store,
 
     do {
       ret = user.list_buckets(marker, empty_end_marker, max_entries,
-			      no_need_stats, buckets);
+			      no_need_stats, buckets, y);
       if (ret < 0) {
         return ret;
       }
@@ -2570,7 +2573,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
     bci.info.bucket.tenant = tenant_name;
     // if the sync module never writes data, don't require the zone to specify all placement targets
     if (bihandler->svc.zone->sync_module_supports_writes()) {
-      ret = bihandler->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+      ret = bihandler->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info, y);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
@@ -2969,8 +2972,8 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               rgw_ep_info *pinfo)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_link_bucket(ctx, user_id, bucket, creation_time, y,
-                          update_entrypoint, pinfo);
+    return do_link_bucket(ctx, user_id, bucket, creation_time,
+                          update_entrypoint, pinfo, y);
   });
 }
 
@@ -2978,9 +2981,9 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                  const rgw_user& user_id,
                                  const rgw_bucket& bucket,
                                  ceph::real_time creation_time,
-				 optional_yield y,
                                  bool update_entrypoint,
-                                 rgw_ep_info *pinfo)
+                                 rgw_ep_info *pinfo,
+				 optional_yield y)
 {
   int ret;
 
@@ -3009,7 +3012,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     }
   }
 
-  ret = ctl.user->add_bucket(user_id, bucket, creation_time);
+  ret = ctl.user->add_bucket(user_id, bucket, creation_time, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
@@ -3033,7 +3036,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   return 0;
 
 done_err:
-  int r = do_unlink_bucket(ctx, user_id, bucket, y, true);
+  int r = do_unlink_bucket(ctx, user_id, bucket, true, y);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed unlinking bucket on error cleanup: "
                            << cpp_strerror(-r) << dendl;
@@ -3044,17 +3047,17 @@ done_err:
 int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_unlink_bucket(ctx, user_id, bucket, y, update_entrypoint);
+    return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y);
   });
 }
 
 int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                    const rgw_user& user_id,
                                    const rgw_bucket& bucket,
-				   optional_yield y,
-                                   bool update_entrypoint)
+                                   bool update_entrypoint,
+				   optional_yield y)
 {
-  int ret = ctl.user->remove_bucket(user_id, bucket);
+  int ret = ctl.user->remove_bucket(user_id, bucket, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3218,6 +3221,7 @@ int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
 
 int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
                                   const RGWBucketInfo& bucket_info,
+				  optional_yield y,
                                   RGWBucketEnt* pent)
 {
   RGWBucketEnt ent;
@@ -3230,7 +3234,7 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
     return r;
   }
 
-  return ctl.user->flush_bucket_stats(user_id, *pent);
+  return ctl.user->flush_bucket_stats(user_id, *pent, y);
 }
 
 int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,

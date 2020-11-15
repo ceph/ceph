@@ -27,7 +27,8 @@
 const string RGWOIDCProvider::oidc_url_oid_prefix = "oidc_url.";
 const string RGWOIDCProvider::oidc_arn_prefix = "arn:aws:iam::";
 
-int RGWOIDCProvider::store_url(const string& url, bool exclusive)
+int RGWOIDCProvider::store_url(const string& url, bool exclusive,
+			       optional_yield y)
 {
   using ceph::encode;
   string oid = tenant + get_url_oid_prefix() + url;
@@ -38,7 +39,7 @@ int RGWOIDCProvider::store_url(const string& url, bool exclusive)
   encode(*this, bl);
   auto obj_ctx = svc->sysobj->init_obj_ctx();
   return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().oidc_pool, oid,
-                            bl, exclusive, NULL, real_time(), NULL);
+                            bl, exclusive, NULL, real_time(), y);
 }
 
 int RGWOIDCProvider::get_tenant_url_from_arn(string& tenant, string& url)
@@ -56,7 +57,7 @@ int RGWOIDCProvider::get_tenant_url_from_arn(string& tenant, string& url)
   return 0;
 }
 
-int RGWOIDCProvider::create(bool exclusive)
+int RGWOIDCProvider::create(bool exclusive, optional_yield y)
 {
   int ret;
 
@@ -97,7 +98,7 @@ int RGWOIDCProvider::create(bool exclusive)
   auto svc = ctl->svc;
 
   auto& pool = svc->zone->get_zone_params().oidc_pool;
-  ret = store_url(idp_url, exclusive);
+  ret = store_url(idp_url, exclusive, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
                   << provider_url << ": " << cpp_strerror(-ret) << dendl;
@@ -107,7 +108,7 @@ int RGWOIDCProvider::create(bool exclusive)
   return 0;
 }
 
-int RGWOIDCProvider::delete_obj()
+int RGWOIDCProvider::delete_obj(optional_yield y)
 {
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().oidc_pool;
@@ -127,7 +128,7 @@ int RGWOIDCProvider::delete_obj()
 
   // Delete url
   string oid = tenant + get_url_oid_prefix() + url;
-  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
+  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
                   << provider_url << ": " << cpp_strerror(-ret) << dendl;

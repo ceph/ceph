@@ -16,7 +16,7 @@ void RGWSI_SyncModules::init(RGWSI_Zone *zone_svc)
   rgw_register_sync_modules(sync_modules_manager);
 }
 
-int RGWSI_SyncModules::do_start()
+int RGWSI_SyncModules::do_start(optional_yield)
 {
   auto& zone_public_config = svc.zone->get_zone();
 
