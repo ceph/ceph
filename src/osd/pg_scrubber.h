@@ -131,5 +131,96 @@ class MapsCollectionStatus {
   friend ostream& operator<<(ostream& out, const MapsCollectionStatus& sf);
 };
 
-
 }  // namespace Scrub
+
+// an almost-empty PgScrubber for this commit:
+class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
+
+  /**
+   * the 'preemption' "state-machine".
+   * Note: I was considering an orthogonal sub-machine implementation, but as
+   * the state diagram is extremely simple, the added complexity wasn't justified.
+   */
+  class preemption_data_t : public Scrub::preemption_t {
+   public:
+    preemption_data_t(PG* pg);	// the PG access is used for conf access (and logs)
+
+    [[nodiscard]] bool is_preemptable() const final { return m_preemptable; }
+
+    bool do_preempt() final
+    {
+      if (m_preempted || !m_preemptable)
+	return false;
+
+      std::lock_guard<std::mutex> lk{m_preemption_lock};
+      if (!m_preemptable)
+	return false;
+
+      m_preempted = true;
+      return true;
+    }
+
+    /// same as 'do_preempt()' but w/o checks (as once a replica
+    /// was preempted, we cannot continue)
+    void replica_preempted() { m_preempted = true; }
+
+    void enable_preemption()
+    {
+      std::lock_guard<std::mutex> lk{m_preemption_lock};
+      if (are_preemptions_left() && !m_preempted) {
+	m_preemptable = true;
+      }
+    }
+
+    /// used by a replica to set preemptability state according to the Primary's request
+    void force_preemptability(bool is_allowed)
+    {
+      // note: no need to lock for a replica
+      m_preempted = false;
+      m_preemptable = is_allowed;
+    }
+
+    bool disable_and_test() final
+    {
+      std::lock_guard<std::mutex> lk{m_preemption_lock};
+      m_preemptable = false;
+      return m_preempted;
+    }
+
+    [[nodiscard]] bool was_preempted() const { return m_preempted; }
+
+    [[nodiscard]] size_t chunk_divisor() const { return m_size_divisor; }
+
+    void reset();
+
+    void adjust_parameters() final
+    {
+      std::lock_guard<std::mutex> lk{m_preemption_lock};
+
+      if (m_preempted) {
+	m_preempted = false;
+	m_preemptable = adjust_left();
+      } else {
+	m_preemptable = are_preemptions_left();
+      }
+    }
+
+   private:
+    PG* m_pg;
+    mutable std::mutex m_preemption_lock;
+    bool m_preemptable{false};
+    bool m_preempted{false};
+    int m_left;
+    size_t m_size_divisor{1};
+    bool are_preemptions_left() const { return m_left > 0; }
+
+    bool adjust_left()
+    {
+      if (m_left > 0) {
+	--m_left;
+	m_size_divisor *= 2;
+      }
+      return m_left > 0;
+    }
+  };
+};
