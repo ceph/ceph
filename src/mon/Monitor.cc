@@ -870,7 +870,14 @@ int Monitor::preinit()
                                      admin_hook,
                                     "show recent slow ops");
   ceph_assert(r == 0);
-
+  r = admin_socket->register_commmand("connection scores dump", "connection scores dump",
+				      admin_hook,
+				      "show the scores used in connectivity-based elections");
+  ceph_assert(r == 0);
+  r = admin_socket->register_commmand("connection scores reset", "connection scores reset",
+				      admin_hook,
+				      "show the scores used in connectivity-based elections");
+  ceph_assert(r == 0);
   lock.Lock();
 
   // add ourselves as a conf observer
