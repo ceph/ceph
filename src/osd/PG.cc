@@ -13,10 +13,7 @@
  */
 
 #include "PG.h"
-// #include "msg/Messenger.h"
 #include "messages/MOSDRepScrub.h"
-// #include "common/cmdparse.h"
-// #include "common/ceph_context.h"
 
 #include "common/errno.h"
 #include "common/ceph_releases.h"
@@ -33,7 +30,6 @@
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGNotify.h"
-// #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
@@ -522,7 +518,7 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 {
   dout(10) << "finish_recovery_op " << soid
 #ifdef DEBUG_RECOVERY_OIDS
-	   << " (" << recovering_oids << ")" 
+	   << " (" << recovering_oids << ")"
 #endif
 	   << dendl;
   ceph_assert(recovery_ops_active > 0);
@@ -724,7 +720,7 @@ void PG::rm_backoff(const ceph::ref_t<Backoff>& b)
   }
 }
 
-void PG::clear_recovery_state() 
+void PG::clear_recovery_state()
 {
   dout(10) << "clear_recovery_state" << dendl;
 
@@ -1164,16 +1160,14 @@ void PG::update_snap_map(
   const vector<pg_log_entry_t> &log_entries,
   ObjectStore::Transaction &t)
 {
-  for (vector<pg_log_entry_t>::const_iterator i = log_entries.begin();
-       i != log_entries.end();
-       ++i) {
+  for (auto i = log_entries.cbegin(); i != log_entries.cend(); ++i) {
     OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
     if (i->soid.snap < CEPH_MAXSNAP) {
       if (i->is_delete()) {
 	int r = snap_mapper.remove_oid(
 	  i->soid,
 	  &_t);
-	if (r != 0)
+	if (r)
 	  derr << __func__ << " remove_oid " << i->soid << " failed with " << r << dendl;
         // On removal tolerate missing key corruption
         ceph_assert(r == 0 || r == -ENOENT);
@@ -2257,7 +2251,6 @@ void PG::start_flush_on_transaction(ObjectStore::Transaction &t)
 
 bool PG::try_flush_or_schedule_async()
 {
-  
   Context *c = new QueuePeeringEvt(
     this, get_osdmap_epoch(), PeeringState::IntervalFlush());
   if (!ch->flush_commit(c)) {
@@ -2318,8 +2311,6 @@ ostream& operator<<(ostream& out, const PG& pg)
   }
 
   out << "]";
-
-
   return out;
 }
 
