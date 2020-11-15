@@ -574,6 +574,11 @@ public:
   OstreamTemp clog_error() override { return osd->clog->error(); }
   OstreamTemp clog_warn() override { return osd->clog->warn(); }
 
+  /**
+   * a scrub-map arrived from a replica
+   */
+  void do_replica_scrub_map(OpRequestRef op);
+
   struct watch_disconnect_t {
     uint64_t cookie;
     entity_name_t name;
@@ -912,49 +917,10 @@ protected:
    * Releases locks
    *
    * @param manager [in] manager with locks to release
+   * 
+   * (moved to .cc due to scrubber access)
    */
-  void release_object_locks(
-    ObcLockManager &lock_manager) {
-    std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > to_req;
-    bool requeue_recovery = false;
-    bool requeue_snaptrim = false;
-    lock_manager.put_locks(
-      &to_req,
-      &requeue_recovery,
-      &requeue_snaptrim);
-    if (requeue_recovery)
-      queue_recovery();
-    if (requeue_snaptrim)
-      snap_trimmer_machine.process_event(TrimWriteUnblocked());
-
-    if (!to_req.empty()) {
-      // requeue at front of scrub blocking queue if we are blocked by scrub
-      for (auto &&p: to_req) {
-	if (write_blocked_by_scrub(p.first->obs.oi.soid.get_head())) {
-          for (auto& op : p.second) {
-            op->mark_delayed("waiting for scrub");
-          }
-
-	  waiting_for_scrub.splice(
-	    waiting_for_scrub.begin(),
-	    p.second,
-	    p.second.begin(),
-	    p.second.end());
-	} else if (is_laggy()) {
-          for (auto& op : p.second) {
-            op->mark_delayed("waiting for readable");
-          }
-	  waiting_for_readable.splice(
-	    waiting_for_readable.begin(),
-	    p.second,
-	    p.second.begin(),
-	    p.second.end());
-	} else {
-	  requeue_ops(p.second);
-	}
-      }
-    }
-  }
+  void release_object_locks(ObcLockManager &lock_manager);
 
   // replica ops
   // [primary|tail]
@@ -1964,9 +1930,7 @@ public:
   void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;
   bool check_failsafe_full() override;
-  bool maybe_preempt_replica_scrub(const hobject_t& oid) override {
-    return write_blocked_by_scrub(oid);
-  }
+  bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
   int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);
 
   // attr cache handling
