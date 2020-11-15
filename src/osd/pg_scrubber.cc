@@ -325,7 +325,7 @@ bool PgScrubber::is_scrub_registered() const
 void PgScrubber::reg_next_scrub(const requested_scrub_t& request_flags)
 {
   if (!is_primary()) {
-    dout(20) << __func__ << ": not a primary!" << dendl;
+    // normal. No warning is required.
     return;
   }
 
@@ -375,18 +375,6 @@ void PgScrubber::unreg_next_scrub()
   }
 }
 
-/// debug/development temporary code:
-void PgScrubber::debug_dump_reservations(std::string_view header_txt) const
-{
-  std::string format;
-  auto f = Formatter::create(format, "json-pretty", "json-pretty");
-  m_osds->dump_scrub_reservations(f);
-  std::stringstream o;
-  f->flush(o);
-  dout(20) << header_txt << o.str() << dendl;
-  delete f;
-}
-
 void PgScrubber::scrub_requested(scrub_level_t scrub_level,
 				 scrub_type_t scrub_type,
 				 requested_scrub_t& req_flags)
@@ -395,8 +383,6 @@ void PgScrubber::scrub_requested(scrub_level_t scrub_level,
 	   << (scrub_type == scrub_type_t::do_repair ? " repair-scrub " : " not-repair ")
 	   << " prev stamp: " << m_scrub_reg_stamp << " " << is_scrub_registered()
 	   << dendl;
-
-  debug_dump_reservations(" before_unreg ");
 
   unreg_next_scrub();
 
@@ -409,24 +395,18 @@ void PgScrubber::scrub_requested(scrub_level_t scrub_level,
   req_flags.req_scrub = true;
 
   dout(20) << __func__ << " pg(" << m_pg_id << ") planned:" << req_flags << dendl;
-  debug_dump_reservations(" before_reg ");
 
   reg_next_scrub(req_flags);
-
-  debug_dump_reservations(" after_reg ");
 }
 
 void PgScrubber::request_rescrubbing(requested_scrub_t& req_flags)
 {
   dout(10) << __func__ << " existing-" << m_scrub_reg_stamp << " ## "
 	   << is_scrub_registered() << dendl;
-  debug_dump_reservations(" auto-scrub before ");
 
   unreg_next_scrub();
   req_flags.need_auto = true;
   reg_next_scrub(req_flags);
-
-  debug_dump_reservations(" auto-scrub after ");
 }
 
 bool PgScrubber::reserve_local()
@@ -469,7 +449,6 @@ void PgScrubber::set_subset_last_update(eversion_t e)
  * - setting tentative range based on conf and divisor
  * - requesting a partial list of elements from the backend;
  * - handling some head/clones issues
- * - ...
  *
  * The selected range is set directly into 'm_start' and 'm_end'
  */
@@ -499,8 +478,6 @@ bool PgScrubber::select_range()
 
   int max_idx = std::max<int64_t>(min_idx, m_pg->get_cct()->_conf->osd_scrub_chunk_max /
 					     preemption_data.chunk_divisor());
-
-  // why mixing 'int' and int64_t? RRR
 
   dout(10) << __func__ << " Min: " << min_idx << " Max: " << max_idx
 	   << " Div: " << preemption_data.chunk_divisor() << dendl;
@@ -560,10 +537,9 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
     return false;
   }
 
-  dout(10) << __func__ << " " << soid << " can preempt? "
-	   << preemption_data.is_preemptable() << dendl;
-  dout(10) << __func__ << " " << soid << " already? " << preemption_data.was_preempted()
-	   << dendl;
+  dout(20) << __func__ << " " << soid << " can preempt? "
+	   << preemption_data.is_preemptable() << " already preempted? "
+	   << preemption_data.was_preempted() << dendl;
 
   if (preemption_data.is_preemptable()) {
 
@@ -1189,8 +1165,6 @@ void PgScrubber::scrub_compare_maps()
 
   if (m_pg->recovery_state.get_acting().size() > 1) {
 
-    // RRR add a comment here
-
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
 
     // Map from object with errors to good peer
@@ -1395,8 +1369,7 @@ void PgScrubber::clear_scrub_reservations()
 
 void PgScrubber::message_all_replicas(int32_t opcode, std::string_view op_text)
 {
-  ceph_assert(m_pg->recovery_state.get_backfill_targets()
-		.empty());  // RRR ask: (the code was copied as is) Why checking here?
+  ceph_assert(m_pg->recovery_state.get_backfill_targets().empty());
 
   std::vector<std::pair<int, Message*>> messages;
   messages.reserve(m_pg->get_actingset().size());

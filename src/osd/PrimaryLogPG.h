@@ -58,6 +58,7 @@ struct inconsistent_snapset_wrapper;
 class PrimaryLogPG : public PG, public PGBackend::Listener {
   friend class OSD;
   friend class Watch;
+  friend class PrimaryLogScrub;
 
 public:
   MEMPOOL_CLASS_HELPERS();
@@ -367,8 +368,8 @@ public:
     return gen_prefix(out);
   }
 
-  const std::map<hobject_t, std::set<pg_shard_t>>
-    &get_missing_loc_shards() const override {
+  const HobjToShardSetMapping& get_missing_loc_shards() const override
+  {
     return recovery_state.get_missing_loc().get_missing_locs();
   }
   const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
@@ -1391,14 +1392,6 @@ protected:
   // -- scrub --
   bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) override;
-  void scrub_snapshot_metadata(
-    ScrubMap &map,
-    const std::map<hobject_t,
-                   std::pair<std::optional<uint32_t>,
-                        std::optional<uint32_t>>> &missing_digest) override;
-  void _scrub_clear_state() override;
-  void _scrub_finish() override;
-  object_stat_collection_t scrub_cstat;
 
   void _split_into(pg_t child_pgid, PG *child,
                    unsigned split_bits) override;
@@ -1554,22 +1547,6 @@ private:
     pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
     return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
   }
-  void log_missing(unsigned missing,
-			const std::optional<hobject_t> &head,
-			LogChannelRef clog,
-			const spg_t &pgid,
-			const char *func,
-			const char *mode,
-			bool allow_incomplete_clones);
-  unsigned process_clones_to(const std::optional<hobject_t> &head,
-    const std::optional<SnapSet> &snapset,
-    LogChannelRef clog,
-    const spg_t &pgid,
-    const char *mode,
-    bool allow_incomplete_clones,
-    std::optional<snapid_t> target,
-    std::vector<snapid_t>::reverse_iterator *curclone,
-    inconsistent_snapset_wrapper &snap_error);
 
 public:
   coll_t get_coll() {
@@ -1623,12 +1600,7 @@ private:
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
-    bool permit_trim() {
-      return
-	pg->is_clean() &&
-	!pg->scrubber.active &&
-	!pg->snap_trimq.empty();
-    }
+    bool permit_trim();
     bool can_trim() {
       return
 	permit_trim() &&
