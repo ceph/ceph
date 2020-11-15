@@ -288,6 +288,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_aio_read(rados_ioctx_t io, const char * oid, rados_completion_t completion, char * buf, size_t len, uint64_t off)
     int rados_aio_flush(rados_ioctx_t io)
     int rados_aio_cmpext(rados_ioctx_t io, const char *o, rados_completion_t completion,  const char *cmp_buf, size_t cmp_len, uint64_t off)
+    int rados_aio_rmxattr(rados_ioctx_t io, const char *o, rados_completion_t completion, const char *name)
     
     int rados_aio_get_return_value(rados_completion_t c)
     int rados_aio_wait_for_complete_and_cb(rados_completion_t c)
@@ -2690,6 +2691,37 @@ cdef class Ioctx(object):
         if ret < 0:
             completion._cleanup()
             raise make_ex(ret, "failed to compare %s" % object_name)
+        return completion
+
+    def aio_rmxattr(self, object_name: str, xattr_name: str,
+                    oncomplete: Optional[Callable] = None) -> Completion:
+        """
+        Asynchronously delete an extended attribute from an object
+
+        :param object_name: the name of the object to remove xattr from
+        :param xattr_name: which extended attribute to remove
+        :param oncomplete: what to do when the rmxattr completes
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+        object_name_raw = cstr(object_name, 'object_name')
+        xattr_name_raw = cstr(xattr_name , 'xattr_name')
+
+        cdef:
+            Completion completion
+            char* _object_name = object_name_raw
+            char* _xattr_name = xattr_name_raw
+
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_rmxattr(self.io, _object_name,
+                                    completion.rados_comp, _xattr_name)
+
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to remove xattr %r" % xattr_name)
         return completion
 
     def aio_read(self, object_name: str, length: int, offset: int,
