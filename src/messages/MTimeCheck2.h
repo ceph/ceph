@@ -40,7 +40,7 @@ public:
   { }
 
 private:
-  ~MTimeCheck2() override { }
+  ~MTimeCheck2() final { }
 
 public:
   std::string_view get_type_name() const override { return "time_check2"; }

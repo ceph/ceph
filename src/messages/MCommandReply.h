@@ -35,7 +35,7 @@ public:
     : Message{MSG_COMMAND_REPLY},
       r(_r), rs(s) { }
 private:
-  ~MCommandReply() override {}
+  ~MCommandReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "command_reply"; }

@@ -28,7 +28,7 @@ public:
 
 protected:
   MMDSResolveAck() : MMDSOp{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MMDSResolveAck() override {}
+  ~MMDSResolveAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "resolve_ack"; }

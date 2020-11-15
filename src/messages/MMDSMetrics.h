@@ -22,7 +22,7 @@ protected:
     : MMDSOp(MSG_MDS_METRICS, HEAD_VERSION, COMPAT_VERSION),
       metrics_message(metrics_message) {
   }
-  ~MMDSMetrics() { }
+  ~MMDSMetrics() final {}
 
 public:
   std::string_view get_type_name() const override {

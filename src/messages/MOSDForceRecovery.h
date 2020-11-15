@@ -48,7 +48,7 @@ public:
     Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
-  ~MOSDForceRecovery() {}
+  ~MOSDForceRecovery() final {}
 
 public:
   std::string_view get_type_name() const { return "force_recovery"; }

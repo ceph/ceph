@@ -35,7 +35,7 @@ public:
       result_bl = *bl;
   }
 private:
-  ~MAuthReply() override {}
+  ~MAuthReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "auth_reply"; }

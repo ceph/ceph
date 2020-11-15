@@ -28,7 +28,7 @@ public:
 protected:
   MMDSFindInoReply() : MMDSOp{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSFindInoReply(ceph_tid_t t) : MMDSOp{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION}, tid(t) {}
-  ~MMDSFindInoReply() override {}
+  ~MMDSFindInoReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "findinoreply"; }

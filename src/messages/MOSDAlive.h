@@ -26,7 +26,7 @@ public:
   MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage{MSG_OSD_ALIVE, h}, want(w) {}
   MOSDAlive() : MOSDAlive{0, 0} {}
 private:
-  ~MOSDAlive() override {}
+  ~MOSDAlive() final {}
 
 public:
   void encode_payload(uint64_t features) override {

@@ -320,7 +320,7 @@ protected:
     head.result = result;
     head.safe = 1;
   }
-  ~MClientReply() override {}
+  ~MClientReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "creply"; }

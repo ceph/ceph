@@ -52,7 +52,7 @@ private:
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGNotify() override {}
+  ~MOSDPGNotify() final {}
 
 public:  
   std::string_view get_type_name() const override { return "PGnot"; }
