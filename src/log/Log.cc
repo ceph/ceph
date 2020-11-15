@@ -322,7 +322,7 @@ void Log::_log_message(std::string_view s, bool crash)
       std::cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
-    syslog(LOG_USER|LOG_INFO, "%.*s", s.size(), s.data());
+    syslog(LOG_USER|LOG_INFO, "%.*s", static_cast<int>s.size(), s.data());
   }
 
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {
@@ -372,7 +372,7 @@ void Log::dump_recent()
   {
     char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
     ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
-    _log_message(fmt::format("  {} / {}", pthread_id, pthread_name), true);
+    _log_message(fmt::format("  {} / {}", static_cast<void*>pthread_id, pthread_name), true);
   }
 
   _log_message(fmt::format("  max_recent {:9}", m_max_recent), true);
