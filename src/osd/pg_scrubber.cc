@@ -58,6 +58,26 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
   return out;
 }
 
+// ///////////////////// preemption_data_t //////////////////////////////////
+
+PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}
+{
+  m_left = static_cast<int>(
+    m_pg->get_cct()->_conf.get_val<uint64_t>("osd_scrub_max_preemptions"));
+}
+
+void PgScrubber::preemption_data_t::reset()
+{
+  std::lock_guard<std::mutex> lk{m_preemption_lock};
+
+  m_preemptable = false;
+  m_preempted = false;
+  m_left =
+    static_cast<int>(m_pg->cct->_conf.get_val<uint64_t>("osd_scrub_max_preemptions"));
+  m_size_divisor = 1;
+}
+
+
 // ///////////////////// ReplicaReservations //////////////////////////////////
 namespace Scrub {
 
@@ -66,7 +86,7 @@ void ReplicaReservations::release_replica(pg_shard_t peer, epoch_t epoch)
   dout(15) << __func__ << " <ReplicaReservations> release-> " << peer << dendl;
 
   auto m = new MOSDScrubReserve(spg_t(m_pg->info.pgid.pgid, peer.shard), epoch,
-				    MOSDScrubReserve::RELEASE, m_pg->pg_whoami);
+				MOSDScrubReserve::RELEASE, m_pg->pg_whoami);
   m_osds->send_message_osd_cluster(peer.osd, m, epoch);
 }
 
@@ -89,7 +109,7 @@ ReplicaReservations::ReplicaReservations(PG* pg, pg_shard_t whoami)
       if (p == whoami)
 	continue;
       auto m = new MOSDScrubReserve(spg_t(m_pg->info.pgid.pgid, p.shard), epoch,
-					MOSDScrubReserve::REQUEST, m_pg->pg_whoami);
+				    MOSDScrubReserve::REQUEST, m_pg->pg_whoami);
       m_osds->send_message_osd_cluster(p.osd, m, epoch);
       m_waited_for_peers.push_back(p);
       dout(10) << __func__ << " <ReplicaReservations> reserve<-> " << p.osd << dendl;
