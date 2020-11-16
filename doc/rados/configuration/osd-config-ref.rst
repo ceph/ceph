@@ -1104,7 +1104,7 @@ Miscellaneous
               when osd data is on HDD and osd journal is on SSD.
 
 :Type: Float
-:Default: ``2``
+:Default: ``1``
 
 
 ``osd command max records``
