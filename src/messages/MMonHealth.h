@@ -18,7 +18,7 @@
 #include "messages/MMonQuorumService.h"
 #include "mon/mon_types.h"
 
-class MMonHealth : public MMonQuorumService {
+class MMonHealth final : public MMonQuorumService {
 public:
   static constexpr int HEAD_VERSION = 1;
 

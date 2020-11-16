@@ -24,7 +24,7 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 
-class MForward : public Message {
+class MForward final : public Message {
 public:
   uint64_t tid;
   uint8_t client_type;

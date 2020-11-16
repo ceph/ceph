@@ -7,7 +7,7 @@
 #include "messages/MMDSOp.h"
 #include "mds/MDSPerfMetricTypes.h"
 
-class MMDSMetrics : public MMDSOp {
+class MMDSMetrics final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

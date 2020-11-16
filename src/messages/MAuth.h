@@ -23,7 +23,7 @@
 #include "msg/MessageRef.h"
 #include "messages/PaxosServiceMessage.h"
 
-class MAuth : public PaxosServiceMessage {
+class MAuth final : public PaxosServiceMessage {
 public:
   __u32 protocol;
   ceph::buffer::list auth_payload;

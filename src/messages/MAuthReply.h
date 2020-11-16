@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "common/errno.h"
 
-class MAuthReply : public Message {
+class MAuthReply final : public Message {
 public:
   __u32 protocol;
   errorcode32_t result;

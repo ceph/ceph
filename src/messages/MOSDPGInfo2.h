@@ -6,7 +6,7 @@
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPGInfo2 : public MOSDPeeringOp {
+class MOSDPGInfo2 final : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

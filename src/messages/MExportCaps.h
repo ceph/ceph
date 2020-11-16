@@ -18,7 +18,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MExportCaps : public MMDSOp {
+class MExportCaps final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;

@@ -20,7 +20,7 @@
 #include "msg/Message.h"
 
 
-class MOSDPGRemove : public Message {
+class MOSDPGRemove final : public Message {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
