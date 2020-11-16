@@ -2499,10 +2499,7 @@ public:
 
     // in ctr this is not a virtual call
     // invoking this classes's header_init()
-    int ret = RGWWriteRequest::header_init();
-    if (ret == 0) {
-      ret = init_from_header(store, get_state());
-    }
+    (void) RGWWriteRequest::header_init();
     op = this;
   }
 
