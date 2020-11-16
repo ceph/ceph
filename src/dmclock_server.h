@@ -1639,7 +1639,7 @@ namespace crimson {
 				      time,
 				      cost);
         if (r == 0) {
-	  schedule_request();
+	  (void) schedule_request();
         }
 #ifdef PROFILE
 	add_request_timer.stop();
@@ -1653,7 +1653,7 @@ namespace crimson {
 #ifdef PROFILE
 	request_complete_timer.start();
 #endif
-	schedule_request();
+	(void) schedule_request();
 #ifdef PROFILE
 	request_complete_timer.stop();
 #endif
@@ -1738,11 +1738,11 @@ namespace crimson {
 
 
       // data_mtx should be held when called
-      void schedule_request() {
+      typename super::NextReqType schedule_request() {
 	typename super::NextReq next_req = next_request();
 	switch (next_req.type) {
 	case super::NextReqType::none:
-	  return;
+	  break;
 	case super::NextReqType::future:
 	  sched_at(next_req.when_ready);
 	  break;
@@ -1752,6 +1752,7 @@ namespace crimson {
 	default:
 	  assert(false);
 	}
+	return next_req.type;
       }
 
 
@@ -1777,9 +1778,12 @@ namespace crimson {
 
 	    l.unlock();
 	    if (!this->finishing) {
-	      typename super::DataGuard g(this->data_mtx);
-	      schedule_request();
-	    }
+	      do {
+ 	        typename super::DataGuard g(this->data_mtx);
+ 	        if (schedule_request() == super::NextReqType::future)
+ 	          break;
+	      } while (!this->empty());
+ 	    }
 	    l.lock();
 	  }
 	}
