@@ -270,6 +270,60 @@ namespace crimson {
     } // TEST
 
 
+    TEST(dmclock_server, schedule_req_pushprio_queue) {
+      struct MyReq {
+        int id;
+
+        MyReq(int _id) :
+          id(_id)
+        {
+          // empty
+        }
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PushPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
+      ClientId client1 = 17;
+      ClientId client2 = 34;
+      ClientId client3 = 48;
+
+      dmc::ClientInfo ci(1.0, 1.0, 1.0);
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+        return &ci;
+      };
+      auto server_ready_f = [] () -> bool { return true; };
+      auto submit_req_f = [] (const ClientId& c,
+                              std::unique_ptr<MyReq> req,
+                              dmc::PhaseType phase,
+                              uint64_t req_cost) {
+        // empty; do nothing
+      };
+
+      Queue pq(client_info_f,
+               server_ready_f,
+               submit_req_f,
+               std::chrono::seconds(3),
+               std::chrono::seconds(5),
+               std::chrono::seconds(2),
+               AtLimit::Wait);
+
+      dmc::ReqParams req_params(1, 1);
+
+      // Create a reference to a request
+      MyReqRef rr1 = MyReqRef(new MyReq(11));
+
+      // Exercise different versions of add_request()
+      EXPECT_EQ(0, pq.add_request(std::move(rr1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(22), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(33), client3, req_params));
+
+      std::this_thread::sleep_for(std::chrono::seconds(4));
+
+      ASSERT_TRUE(pq.request_count() == 0);
+    } // TEST
+
+
     TEST(dmclock_server, delayed_tag_calc) {
       using ClientId = int;
       constexpr ClientId client1 = 17;
