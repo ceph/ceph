@@ -330,6 +330,16 @@ void Log::_log_message(std::string_view s, bool crash)
   }
 }
 
+template<typename T>
+static uint64_t tid_to_int(T tid)
+{
+  if constexpr (std::is_pointer_v<T>) {
+    return reinterpret_cast<std::uintptr_t>(tid);
+  } else {
+    return tid;
+  }
+}
+
 void Log::dump_recent()
 {
   std::scoped_lock lock1(m_flush_mutex);
@@ -372,7 +382,8 @@ void Log::dump_recent()
   {
     char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
     ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
-    _log_message(fmt::format("  {} / {}", pthread_id, pthread_name), true);
+    _log_message(fmt::format("  {} / {}",
+			     tid_to_int(pthread_id), pthread_name), true);
   }
 
   _log_message(fmt::format("  max_recent {:9}", m_max_recent), true);
