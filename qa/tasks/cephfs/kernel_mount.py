@@ -196,7 +196,10 @@ class KernelMount(CephFSMount):
             ))
             raise
 
-    def _read_debug_file(self, filename):
+    def read_debug_file(self, filename):
+        """
+        Read the debug file "filename", return None if the file doesn't exist.
+        """
         debug_dir = self._find_debug_dir()
 
         pyscript = dedent("""
@@ -205,10 +208,17 @@ class KernelMount(CephFSMount):
             print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
-        output = self.client_remote.sh([
-            'sudo', 'python3', '-c', pyscript
-        ], timeout=(5*60))
-        return output
+        stderr = StringIO()
+        try:
+            output = self.client_remote.sh([
+                'sudo', 'python3', '-c', pyscript
+            ], stderr=stderr, timeout=(5*60))
+
+            return output
+        except CommandFailedError:
+            if 'no such file or directory' in stderr.getvalue().lower():
+                return None
+            raise
 
     def get_global_id(self):
         """
@@ -217,7 +227,9 @@ class KernelMount(CephFSMount):
 
         assert self.mounted
 
-        mds_sessions = self._read_debug_file("mds_sessions")
+        mds_sessions = self.read_debug_file("mds_sessions")
+        assert mds_sessions 
+
         lines = mds_sessions.split("\n")
         return int(lines[0].split()[1])
 
@@ -225,7 +237,9 @@ class KernelMount(CephFSMount):
         """
         Return 2-tuple of osd_epoch, osd_epoch_barrier
         """
-        osd_map = self._read_debug_file("osdmap")
+        osd_map = self.read_debug_file("osdmap")
+        assert osd_map
+
         lines = osd_map.split("\n")
         first_line_tokens = lines[0].split()
         epoch, barrier = int(first_line_tokens[1]), int(first_line_tokens[3])
