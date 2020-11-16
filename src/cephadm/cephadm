@@ -7209,6 +7209,15 @@ def _get_parser():
         help='daemon identifer for the exporter')
     parser_exporter.set_defaults(func=command_exporter)
 
+    parser_verify_prereqs = subparsers.add_parser(
+        'verify-prereqs',
+        help='verify system prerequisites for a given service are met on this host')
+    parser_verify_prereqs.set_defaults(func=command_verify_prereqs)
+    parser_verify_prereqs.add_argument(
+        '--service-type',
+        required=True,
+        help='service type of service to whose prereqs will be checked')
+
     return parser
 
 
