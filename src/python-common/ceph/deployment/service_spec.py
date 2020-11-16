@@ -796,6 +796,8 @@ class HA_RGWSpec(ServiceSpec):
                  ha_proxy_enable_prometheus_exporter: Optional[bool] = None,
                  ha_proxy_monitor_uri: Optional[str] = None,
                  keepalived_password: Optional[str] = None,
+                 haproxy_container_image: Optional[str] = None,
+                 keepalived_container_image: Optional[str] = None,
                  ):
         assert service_type == 'HA_RGW'
         super(HA_RGWSpec, self).__init__('HA_RGW', service_id=service_id,
@@ -811,6 +813,8 @@ class HA_RGWSpec(ServiceSpec):
         self.ha_proxy_enable_prometheus_exporter = ha_proxy_enable_prometheus_exporter
         self.ha_proxy_monitor_uri = ha_proxy_monitor_uri
         self.keepalived_password = keepalived_password
+        self.haproxy_container_image = haproxy_container_image
+        self.keepalived_container_image = keepalived_container_image
         # placeholder variable. Need definitive list of hosts this service will
         # be placed on in order to generate keepalived config. Will be populated
         # when applying spec
