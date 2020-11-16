@@ -20,7 +20,7 @@
 #include "mds/SimpleLock.h"
 #include "messages/MMDSOp.h"
 
-class MLock : public MMDSOp {
+class MLock final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

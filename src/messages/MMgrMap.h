@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 #include "mon/MgrMap.h"
 
-class MMgrMap : public Message {
+class MMgrMap final : public Message {
 protected:
   MgrMap map;
 

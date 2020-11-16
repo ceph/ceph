@@ -20,7 +20,7 @@
 #include "msg/Message.h"
 #include "include/encoding.h"
 
-class MRoute : public Message {
+class MRoute final : public Message {
 public:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;

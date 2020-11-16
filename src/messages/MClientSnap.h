@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MClientSnap : public SafeMessage {
+class MClientSnap final : public SafeMessage {
 public:
   ceph_mds_snap_head head;
   ceph::buffer::list bl;

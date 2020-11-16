@@ -23,7 +23,7 @@
 #include <map>
 using std::map;
 
-class MMDSLoadTargets : public PaxosServiceMessage {
+class MMDSLoadTargets final : public PaxosServiceMessage {
 public:
   mds_gid_t global_id;
   std::set<mds_rank_t> targets;

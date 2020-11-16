@@ -23,7 +23,7 @@
 
 #include "msg/Message.h"
 
-class MLogAck : public Message {
+class MLogAck final : public Message {
 public:
   uuid_d fsid;
   version_t last = 0;

@@ -14,7 +14,7 @@
 
 #pragma once
 
-class MTimeCheck2 : public Message {
+class MTimeCheck2 final : public Message {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

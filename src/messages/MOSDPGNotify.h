@@ -23,7 +23,7 @@
  * PGNotify - notify primary of my PGs and versions.
  */
 
-class MOSDPGNotify : public Message {
+class MOSDPGNotify final : public Message {
 private:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 6;

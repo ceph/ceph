@@ -7,7 +7,7 @@
 
 #include "msg/Message.h"
 
-class MMgrCommand : public Message {
+class MMgrCommand final : public Message {
 public:
   uuid_d fsid;
   std::vector<std::string> cmd;

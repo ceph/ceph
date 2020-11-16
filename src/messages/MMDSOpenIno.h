@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MMDSOpenIno : public MMDSOp {
+class MMDSOpenIno final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:

@@ -3,7 +3,7 @@
 
 #include "msg/Message.h"
 
-class MClientQuota : public SafeMessage {
+class MClientQuota final : public SafeMessage {
 public:
   inodeno_t ino;
   nest_info_t rstat;

@@ -23,7 +23,7 @@
  * PGQuery - query another OSD as to the contents of their PGs
  */
 
-class MOSDPGQuery : public Message {
+class MOSDPGQuery final : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;

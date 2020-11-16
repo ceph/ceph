@@ -20,7 +20,7 @@
 #include "mds/FSMap.h"
 #include "include/ceph_features.h"
 
-class MFSMap : public Message {
+class MFSMap final : public Message {
 public:
   epoch_t epoch;
 

@@ -19,7 +19,7 @@
 #include "messages/MMDSOp.h"
 
 
-class MMDSResolveAck : public MMDSOp {
+class MMDSResolveAck final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:

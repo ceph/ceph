@@ -20,7 +20,7 @@
 
 #include <deque>
 
-class MLog : public PaxosServiceMessage {
+class MLog final : public PaxosServiceMessage {
 public:
   uuid_d fsid;
   std::deque<LogEntry> entries;

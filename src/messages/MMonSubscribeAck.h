@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMonSubscribeAck : public Message {
+class MMonSubscribeAck final : public Message {
 public:
   __u32 interval;
   uuid_d fsid;

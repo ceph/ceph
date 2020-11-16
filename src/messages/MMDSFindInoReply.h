@@ -18,7 +18,7 @@
 #include "include/filepath.h"
 #include "messages/MMDSOp.h"
 
-class MMDSFindInoReply : public MMDSOp {
+class MMDSFindInoReply final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:

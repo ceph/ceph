@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MMDSSnapUpdate : public MMDSOp {
+class MMDSSnapUpdate final : public MMDSOp {
 private:
   inodeno_t ino;
   __s16 snap_op;

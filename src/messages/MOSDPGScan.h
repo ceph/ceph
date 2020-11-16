@@ -17,7 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGScan : public MOSDFastDispatchOp {
+class MOSDPGScan final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;

@@ -20,7 +20,7 @@
 #include "msg/Message.h"
 #include "MCommand.h"
 
-class MCommandReply : public Message {
+class MCommandReply final : public Message {
 public:
   errorcode32_t r;
   std::string rs;
