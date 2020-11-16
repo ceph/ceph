@@ -796,6 +796,11 @@ class HA_RGWSpec(ServiceSpec):
                  ha_proxy_enable_prometheus_exporter: Optional[bool] = None,
                  ha_proxy_monitor_uri: Optional[str] = None,
                  keepalived_password: Optional[str] = None,
+                 ha_proxy_frontend_ssl_certificate: Optional[str] = None,
+                 ha_proxy_frontend_ssl_port: Optional[int] = None,
+                 ha_proxy_ssl_dh_param: Optional[str] = None,
+                 ha_proxy_ssl_ciphers: Optional[List[str]] = None,
+                 ha_proxy_ssl_options: Optional[List[str]] = None,
                  haproxy_container_image: Optional[str] = None,
                  keepalived_container_image: Optional[str] = None,
                  ):
@@ -813,6 +818,11 @@ class HA_RGWSpec(ServiceSpec):
         self.ha_proxy_enable_prometheus_exporter = ha_proxy_enable_prometheus_exporter
         self.ha_proxy_monitor_uri = ha_proxy_monitor_uri
         self.keepalived_password = keepalived_password
+        self.ha_proxy_frontend_ssl_certificate = ha_proxy_frontend_ssl_certificate
+        self.ha_proxy_frontend_ssl_port = ha_proxy_frontend_ssl_port
+        self.ha_proxy_ssl_dh_param = ha_proxy_ssl_dh_param
+        self.ha_proxy_ssl_ciphers = ha_proxy_ssl_ciphers
+        self.ha_proxy_ssl_options = ha_proxy_ssl_options
         self.haproxy_container_image = haproxy_container_image
         self.keepalived_container_image = keepalived_container_image
         # placeholder variable. Need definitive list of hosts this service will
@@ -829,7 +839,7 @@ class HA_RGWSpec(ServiceSpec):
         if not self.virtual_ip_address:
             raise ServiceSpecValidationError(
                 'Cannot add HA_RGW: No Virtual IP Address specified')
-        if not self.frontend_port:
+        if not self.frontend_port and not self.ha_proxy_frontend_ssl_certificate:
             raise ServiceSpecValidationError(
                 'Cannot add HA_RGW: No Frontend Port specified')
         if not self.ha_proxy_port:
@@ -853,6 +863,10 @@ class HA_RGWSpec(ServiceSpec):
         if not self.keepalived_password:
             raise ServiceSpecValidationError(
                 'Cannot add HA_RGW: No Keepalived Password specified')
+        if self.ha_proxy_frontend_ssl_certificate:
+            if not self.ha_proxy_frontend_ssl_port:
+                raise ServiceSpecValidationError(
+                    'Cannot add HA_RGW: Specified Ha Proxy Frontend SSL Certificate but no SSL Port')
 
 
 class CustomContainerSpec(ServiceSpec):
