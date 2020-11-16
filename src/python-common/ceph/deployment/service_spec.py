@@ -803,6 +803,7 @@ class HA_RGWSpec(ServiceSpec):
                  ha_proxy_ssl_options: Optional[List[str]] = None,
                  haproxy_container_image: Optional[str] = None,
                  keepalived_container_image: Optional[str] = None,
+                 definitive_host_list: Optional[List[HostPlacementSpec]] = None
                  ):
         assert service_type == 'HA_RGW'
         super(HA_RGWSpec, self).__init__('HA_RGW', service_id=service_id,
