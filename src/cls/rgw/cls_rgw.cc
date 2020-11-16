@@ -3026,16 +3026,18 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       return 0;
     }
 
-    if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
+    ret = usage_record_decode(iter->second, e);
+    if (ret < 0) {
+        return ret;
+    }
+    rgw_user* puser = (e.payer.empty() ? &e.owner : &e.payer);  // copy from rgw_user_usage_log_add
+
+    if (by_user && user_key != puser->to_str()) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
       *truncated = false;
       key_iter = key;
       return 0;
     }
-
-    ret = usage_record_decode(iter->second, e);
-    if (ret < 0)
-      return ret;
 
     if (!bucket.empty() && bucket.compare(e.bucket))
       continue;
