@@ -15,9 +15,9 @@ template bool librbd::io::util::trigger_copyup(
         MockImageCtx *image_ctx, uint64_t object_no, IOContext io_context,
         Context* on_finish);
 
-#include "librbd/io/ObjectRequest.cc"
 template class librbd::io::ObjectWriteRequest<librbd::MockImageCtx>;
 template class librbd::io::AbstractObjectWriteRequest<librbd::MockImageCtx>;
+#include "librbd/io/ObjectRequest.cc"
 
 namespace librbd {
 
