@@ -4,6 +4,7 @@ rgw multisite testing
 import logging
 import nose.core
 import nose.config
+from nose.plugins.manager import DefaultPluginManager
 
 from teuthology.exceptions import ConfigError
 from teuthology.task import Task
@@ -63,6 +64,7 @@ class RGWMultisiteTests(Task):
 
         # run nose tests in the rgw_multi.tests module
         conf = nose.config.Config(stream=get_log_stream(), verbosity=2)
+        conf.plugins = DefaultPluginManager() # overrides default = NoPlugins()
         error_msg = ''
         result = nose.run(defaultTest=tests.__name__, argv=argv, config=conf)
         if not result:
