@@ -316,15 +316,15 @@ ghobject_t PG::do_delete_work(ceph::os::Transaction &t,
   return _next;
 }
 
-void PG::scrub_requested(bool deep, bool repair, bool need_auto)
+void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {
   // TODO: should update the stats upon finishing the scrub
-  peering_state.update_stats([deep, this](auto& history, auto& stats) {
+  peering_state.update_stats([scrub_level, this](auto& history, auto& stats) {
     const utime_t now = ceph_clock_now();
     history.last_scrub = peering_state.get_info().last_update;
     history.last_scrub_stamp = now;
     history.last_clean_scrub_stamp = now;
-    if (deep) {
+    if (scrub_level == scrub_level_t::deep) {
       history.last_deep_scrub = history.last_scrub;
       history.last_deep_scrub_stamp = now;
     }
