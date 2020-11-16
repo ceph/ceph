@@ -12,6 +12,8 @@ from mgr_module import CommandResult
 from datetime import datetime, timedelta
 from threading import Lock, Condition, Thread
 
+PERF_STATS_VERSION = 1
+
 QUERY_IDS = "query_ids"
 GLOBAL_QUERY_ID = "global_query_id"
 QUERY_LAST_REQUEST = "last_time_stamp"
@@ -391,6 +393,7 @@ class FSPerfStats(object):
     def generate_report(self, user_query):
         result = {} # type: Dict
         # start with counter info -- metrics that are global and per mds
+        result["version"] = PERF_STATS_VERSION
         result["global_counters"] = MDS_GLOBAL_PERF_QUERY_COUNTERS
         result["counters"] = MDS_PERF_QUERY_COUNTERS
 
