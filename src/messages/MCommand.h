@@ -19,7 +19,7 @@
 
 #include "msg/Message.h"
 
-class MCommand : public Message {
+class MCommand final : public Message {
 public:
   uuid_d fsid;
   std::vector<std::string> cmd;

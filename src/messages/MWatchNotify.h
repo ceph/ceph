@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 
-class MWatchNotify : public Message {
+class MWatchNotify final : public Message {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;

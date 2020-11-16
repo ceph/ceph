@@ -9,7 +9,7 @@
  * instruct an OSD to scrub some or all pg(s)
  */
 
-class MOSDScrub2 : public Message {
+class MOSDScrub2 final : public Message {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

@@ -21,7 +21,7 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonProbe : public Message {
+class MMonProbe final : public Message {
 public:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 5;

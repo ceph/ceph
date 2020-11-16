@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "mon/ConnectionTracker.h"
 
-class MMonPing : public Message {
+class MMonPing final : public Message {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

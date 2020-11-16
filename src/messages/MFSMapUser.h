@@ -19,7 +19,7 @@
 #include "mds/FSMapUser.h"
 #include "include/ceph_features.h"
 
-class MFSMapUser : public Message {
+class MFSMapUser final : public Message {
 public:
   epoch_t epoch;
 

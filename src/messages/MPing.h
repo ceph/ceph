@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MPing : public Message {
+class MPing final : public Message {
 public:
   MPing() : Message{CEPH_MSG_PING} {}
 private:

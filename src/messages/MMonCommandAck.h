@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MMonCommandAck : public PaxosServiceMessage {
+class MMonCommandAck final : public PaxosServiceMessage {
 public:
   std::vector<std::string> cmd;
   errorcode32_t r;

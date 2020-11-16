@@ -19,7 +19,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDAlive : public PaxosServiceMessage {
+class MOSDAlive final : public PaxosServiceMessage {
 public:
   epoch_t want = 0;
 

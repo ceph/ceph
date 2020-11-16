@@ -19,7 +19,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDPGTemp : public PaxosServiceMessage {
+class MOSDPGTemp final : public PaxosServiceMessage {
 public:
   epoch_t map_epoch = 0;
   std::map<pg_t, std::vector<int32_t> > pg_temp;

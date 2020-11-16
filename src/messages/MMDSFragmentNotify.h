@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MMDSFragmentNotify : public MMDSOp {
+class MMDSFragmentNotify final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;

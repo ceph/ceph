@@ -21,7 +21,7 @@
 #include "include/types.h"
 #include "osd/osd_types.h"
 
-class MOSDBoot : public PaxosServiceMessage {
+class MOSDBoot final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 7;

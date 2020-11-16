@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MClientSession : public SafeMessage {
+class MClientSession final : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;

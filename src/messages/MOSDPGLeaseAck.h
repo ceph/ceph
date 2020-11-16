@@ -6,7 +6,7 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDPGLeaseAck : public MOSDPeeringOp {
+class MOSDPGLeaseAck final : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

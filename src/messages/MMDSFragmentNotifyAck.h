@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MMDSFragmentNotifyAck : public MMDSOp {
+class MMDSFragmentNotifyAck final : public MMDSOp {
 private:
   dirfrag_t base_dirfrag;
   int8_t bits = 0;

@@ -48,7 +48,7 @@
 
 // metadata ops.
 
-class MClientRequest : public MMDSOp {
+class MClientRequest final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;

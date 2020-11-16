@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MMonGlobalID : public PaxosServiceMessage {
+class MMonGlobalID final : public PaxosServiceMessage {
 public:
   uint64_t old_max_id = 0;
   MMonGlobalID() : PaxosServiceMessage{MSG_MON_GLOBAL_ID, 0}

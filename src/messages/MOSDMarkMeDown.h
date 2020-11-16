@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDMarkMeDown : public PaxosServiceMessage {
+class MOSDMarkMeDown final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
