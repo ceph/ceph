@@ -1,3 +1,31 @@
+pybind:
+  - src/pybind/cephfs/*
+  - src/pybind/mgr/*
+  - src/pybind/rados/*
+  - src/pybind/rbd/*
+  - src/pybind/rgw/*
+  - src/pybind/*
+
+common:
+  - src/common
+  - src/global
+  - src/log
+
+core:
+  - src/blk/**
+  - src/crush/*
+  - src/librados/**
+  - src/mgr/**
+  - src/mon/**
+  - src/os/**
+  - src/osd/**
+
+crimson:
+  - doc/dev/crimson/**
+  - src/crimson/**
+  - src/test/crimson/**
+  - qa/suites/crimson-rados/**
+
 dashboard:
   - src/pybind/mgr/dashboard/**
   - qa/suites/rados/dashboard/**
