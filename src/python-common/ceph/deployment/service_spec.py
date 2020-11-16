@@ -801,6 +801,8 @@ class HA_RGWSpec(ServiceSpec):
                  ha_proxy_ssl_dh_param: Optional[str] = None,
                  ha_proxy_ssl_ciphers: Optional[List[str]] = None,
                  ha_proxy_ssl_options: Optional[List[str]] = None,
+                 haproxy_container_image: Optional[str] = None,
+                 keepalived_container_image: Optional[str] = None,
                  ):
         assert service_type == 'HA_RGW'
         super(HA_RGWSpec, self).__init__('HA_RGW', service_id=service_id,
@@ -821,6 +823,8 @@ class HA_RGWSpec(ServiceSpec):
         self.ha_proxy_ssl_dh_param = ha_proxy_ssl_dh_param
         self.ha_proxy_ssl_ciphers = ha_proxy_ssl_ciphers
         self.ha_proxy_ssl_options = ha_proxy_ssl_options
+        self.haproxy_container_image = haproxy_container_image
+        self.keepalived_container_image = keepalived_container_image
         # placeholder variable. Need definitive list of hosts this service will
         # be placed on in order to generate keepalived config. Will be populated
         # when applying spec
