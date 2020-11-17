@@ -16,7 +16,7 @@
 #ifndef CEPH_MGETPOOLSTATSREPLY_H
 #define CEPH_MGETPOOLSTATSREPLY_H
 
-class MGetPoolStatsReply : public PaxosServiceMessage {
+class MGetPoolStatsReply final : public PaxosServiceMessage {
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 

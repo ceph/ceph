@@ -20,7 +20,7 @@
 #include "common/DecayCounter.h"
 #include "messages/MMDSOp.h"
 
-class MHeartbeat : public MMDSOp {
+class MHeartbeat final : public MMDSOp {
 private:
   mds_load_t load;
   __s32 beat = 0;

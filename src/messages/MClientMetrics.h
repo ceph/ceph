@@ -9,7 +9,7 @@
 #include "msg/Message.h"
 #include "include/cephfs/metrics/Types.h"
 
-class MClientMetrics : public SafeMessage {
+class MClientMetrics final : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

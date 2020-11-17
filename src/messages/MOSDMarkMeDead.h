@@ -5,7 +5,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDMarkMeDead : public PaxosServiceMessage {
+class MOSDMarkMeDead final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

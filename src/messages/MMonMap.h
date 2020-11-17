@@ -21,7 +21,7 @@
 #include "msg/MessageRef.h"
 #include "mon/MonMap.h"
 
-class MMonMap : public Message {
+class MMonMap final : public Message {
 public:
   ceph::buffer::list monmapbl;
 

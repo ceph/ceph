@@ -18,7 +18,7 @@
 #include "MExportDir.h"
 #include "messages/MMDSOp.h"
 
-class MExportDirAck : public MMDSOp {
+class MExportDirAck final : public MMDSOp {
 public:
   dirfrag_t dirfrag;
   ceph::buffer::list imported_caps;

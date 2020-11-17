@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MExportDirFinish : public MMDSOp {
+class MExportDirFinish final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

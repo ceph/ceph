@@ -17,7 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGBackfill : public MOSDFastDispatchOp {
+class MOSDPGBackfill final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;

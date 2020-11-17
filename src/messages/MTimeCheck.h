@@ -15,7 +15,7 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
-class MTimeCheck : public Message {
+class MTimeCheck final : public Message {
 public:
   static constexpr int HEAD_VERSION = 1;
 

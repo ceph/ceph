@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "messages/MMDSOp.h"
 
-class MMDSPeerRequest : public MMDSOp {
+class MMDSPeerRequest final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:

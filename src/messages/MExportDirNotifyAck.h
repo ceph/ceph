@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MExportDirNotifyAck : public MMDSOp {
+class MExportDirNotifyAck final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

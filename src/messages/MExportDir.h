@@ -18,7 +18,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MExportDir : public MMDSOp {
+class MExportDir final : public MMDSOp {
 public:
   dirfrag_t dirfrag;
   ceph::buffer::list export_data;

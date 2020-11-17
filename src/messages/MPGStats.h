@@ -18,7 +18,7 @@
 #include "osd/osd_types.h"
 #include "messages/PaxosServiceMessage.h"
 
-class MPGStats : public PaxosServiceMessage {
+class MPGStats final : public PaxosServiceMessage {
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 

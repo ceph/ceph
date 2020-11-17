@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
 
-class MClientCaps : public SafeMessage {
+class MClientCaps final : public SafeMessage {
 private:
 
   static constexpr int HEAD_VERSION = 11;

@@ -20,7 +20,7 @@
 #include <vector>
 #include <string>
 
-class MMonCommand : public PaxosServiceMessage {
+class MMonCommand final : public PaxosServiceMessage {
 public:
   // weird note: prior to octopus, MgrClient would leave fsid blank when
   // sending commands to the mgr.  Starting with octopus, this is either

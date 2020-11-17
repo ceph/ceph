@@ -6,7 +6,7 @@
 #include "msg/Message.h"
 #include "mgr/ServiceMap.h"
 
-class MServiceMap : public Message {
+class MServiceMap final : public Message {
 public:
   ServiceMap service_map;
 

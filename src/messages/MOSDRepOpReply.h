@@ -27,7 +27,7 @@
  *
  */
 
-class MOSDRepOpReply : public MOSDFastDispatchOp {
+class MOSDRepOpReply final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;

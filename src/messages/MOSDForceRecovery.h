@@ -31,7 +31,7 @@ static const int OFR_BACKFILL = 2;
 // cancel priority boost, requeue if necessary
 static const int OFR_CANCEL = 4;
 
-class MOSDForceRecovery : public Message {
+class MOSDForceRecovery final : public Message {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;

@@ -22,7 +22,7 @@
  * The mgr digest is a way for the mgr to subscribe to things
  * other than the cluster maps, which are needed by 
  */
-class MMgrDigest : public Message {
+class MMgrDigest final : public Message {
 public:
   ceph::buffer::list mon_status_json;
   ceph::buffer::list health_json;

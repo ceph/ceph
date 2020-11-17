@@ -8,7 +8,7 @@
 #include "msg/Message.h"
 #include "MMgrCommand.h"
 
-class MMgrCommandReply : public Message {
+class MMgrCommandReply final : public Message {
 public:
   errorcode32_t r;
   std::string rs;

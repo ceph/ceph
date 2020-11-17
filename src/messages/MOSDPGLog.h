@@ -19,7 +19,7 @@
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPGLog : public MOSDPeeringOp {
+class MOSDPGLog final : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 5;

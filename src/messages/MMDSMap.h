@@ -20,7 +20,7 @@
 #include "mds/MDSMap.h"
 #include "include/ceph_features.h"
 
-class MMDSMap : public SafeMessage {
+class MMDSMap final : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;

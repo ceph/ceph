@@ -7,7 +7,7 @@
 #include "messages/PaxosServiceMessage.h"
 #include "mon/health_check.h"
 
-class MMonHealthChecks : public PaxosServiceMessage {
+class MMonHealthChecks final : public PaxosServiceMessage {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

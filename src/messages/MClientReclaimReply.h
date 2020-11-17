@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientReclaimReply: public SafeMessage {
+class MClientReclaimReply final : public SafeMessage {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

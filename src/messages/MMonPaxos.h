@@ -20,7 +20,7 @@
 #include "mon/mon_types.h"
 #include "include/ceph_features.h"
 
-class MMonPaxos : public Message {
+class MMonPaxos final : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 3;

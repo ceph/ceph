@@ -20,7 +20,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MDentryLink : public MMDSOp {
+class MDentryLink final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

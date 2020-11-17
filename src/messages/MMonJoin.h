@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MMonJoin : public PaxosServiceMessage {
+class MMonJoin final : public PaxosServiceMessage {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;

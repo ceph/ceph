@@ -21,7 +21,7 @@
 #include "mon/health_check.h"
 #include "mon/PGMap.h"
 
-class MMonMgrReport : public PaxosServiceMessage {
+class MMonMgrReport final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;

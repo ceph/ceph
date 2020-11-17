@@ -19,7 +19,7 @@
 #include "mds/Capability.h"
 #include "messages/MMDSOp.h"
 
-class MMDSResolve : public MMDSOp {
+class MMDSResolve final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 

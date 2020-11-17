@@ -20,7 +20,7 @@
 #include "include/ceph_features.h"
 
 
-class MClientReconnect : public SafeMessage {
+class MClientReconnect final : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;

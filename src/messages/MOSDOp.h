@@ -34,7 +34,7 @@ class MOSDOpReply;
 
 namespace _mosdop {
 template<typename V>
-class MOSDOp : public MOSDFastDispatchOp {
+class MOSDOp final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 3;
