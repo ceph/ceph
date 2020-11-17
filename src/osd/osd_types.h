@@ -5542,6 +5542,7 @@ public:
 
   auto begin() const { return ref_delta.begin(); }
   auto end() const { return ref_delta.end(); }
+  auto find(hobject_t &key) const { return ref_delta.find(key); }
 
   bool operator==(const object_ref_delta_t &rhs) const {
     return ref_delta == rhs.ref_delta;
@@ -5686,7 +5687,8 @@ struct object_manifest_t {
   void calc_refs_to_inc_on_set(
     const object_manifest_t* g, ///< [in] manifest for clone > *this
     const object_manifest_t* l, ///< [in] manifest for clone < *this
-    object_ref_delta_t &delta    ///< [out] set of refs to drop
+    object_ref_delta_t &delta,   ///< [out] set of refs to drop
+    uint64_t start = 0           ///< [in] start position
   ) const;
 
   /**

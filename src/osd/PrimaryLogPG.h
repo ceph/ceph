@@ -265,7 +265,7 @@ public:
     std::map<uint64_t, ceph_tid_t> tids; 
     std::map<hobject_t, pair<uint64_t, uint64_t>> chunks;
     uint64_t num_chunks = 0;
-    std::map<uint64_t, chunk_info_t> new_chunk_map;
+    object_manifest_t new_manifest;
     
 
     ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
@@ -1511,7 +1511,8 @@ protected:
 			   ObjectContextRef& _l, ObjectContextRef& _g);
   bool inc_refcount_by_set(OpContext* ctx, object_manifest_t& tgt,
 			   OSDOp& osd_op);
-  int do_cdc(const object_info_t& oi, bufferlist& bl, vector<pair<uint64_t, uint64_t>>& chunks);
+  int do_cdc(const object_info_t& oi, uint64_t off, std::map<uint64_t, chunk_info_t>& chunk_map,
+	     std::map<uint64_t, bufferlist>& chunks);
   int start_dedup(OpRequestRef op, ObjectContextRef obc);
   hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
   void finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);

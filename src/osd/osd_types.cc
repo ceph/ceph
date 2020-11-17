@@ -5928,10 +5928,11 @@ std::ostream& operator<<(std::ostream& out, const object_ref_delta_t & ci)
 void object_manifest_t::calc_refs_to_inc_on_set(
   const object_manifest_t* _g,
   const object_manifest_t* _l,
-  object_ref_delta_t &refs) const
+  object_ref_delta_t &refs,
+  uint64_t start) const
 {
   /* avoid to increment the same reference on adjacent clones */
-  auto iter = chunk_map.begin();
+  auto iter = start ? chunk_map.find(start) : chunk_map.begin();
   auto find_chunk = [](decltype(iter) &i, const object_manifest_t* cur)
     -> bool {
     if (cur) {
