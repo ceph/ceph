@@ -144,8 +144,7 @@ private:
     assert (!done ||
             stages_in_flight.size() == stages_processing.size());
 
-    if (done ||
-        (reported_done && stages_processing.empty())) {
+    if ((done || reported_done) && stages_processing.empty()) {
       _done();
       delete this;
     }

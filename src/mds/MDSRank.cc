@@ -757,6 +757,9 @@ void MDSRankDispatcher::tick()
 	set_mdsmap_multimds_snaps_allowed();
       }
     }
+
+    if (whoami == 0)
+      scrubstack->advance_scrub_status();
   }
 
   if (is_active() || is_stopping()) {
@@ -1171,6 +1174,8 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
       type == MSG_MDS_TABLE_REQUEST ||
       type == MSG_MDS_LOCK ||
       type == MSG_MDS_INODEFILECAPS ||
+      type == MSG_MDS_SCRUB ||
+      type == MSG_MDS_SCRUB_STATS ||
       type == CEPH_MSG_CLIENT_CAPS ||
       type == CEPH_MSG_CLIENT_CAPRELEASE ||
       type == CEPH_MSG_CLIENT_LEASE) {
@@ -1254,6 +1259,12 @@ void MDSRank::handle_message(const cref_t<Message> &m)
     case CEPH_MSG_CLIENT_LEASE:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_CLIENT);
       locker->dispatch(m);
+      break;
+
+    case MSG_MDS_SCRUB:
+    case MSG_MDS_SCRUB_STATS:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
+      scrubstack->dispatch(m);
       break;
 
     default:
@@ -2467,13 +2478,8 @@ void MDSRankDispatcher::handle_mds_map(
   if (mdsmap->get_inline_data_enabled() && !oldmap.get_inline_data_enabled())
     dout(0) << "WARNING: inline_data support has been deprecated and will be removed in a future release" << dendl;
 
-  if (scrubstack->is_scrubbing()) {
-    if (mdsmap->get_max_mds() > 1) {
-      auto c = new C_MDSInternalNoop;
-      scrubstack->scrub_abort(c);
-    }
-  }
   mdcache->handle_mdsmap(*mdsmap, oldmap);
+
   if (metric_aggregator != nullptr) {
     metric_aggregator->notify_mdsmap(*mdsmap);
   }
@@ -2504,6 +2510,8 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
     snapserver->handle_mds_failure_or_stop(who);
 
   snapclient->handle_mds_failure(who);
+
+  scrubstack->handle_mds_failure(who);
 }
 
 void MDSRankDispatcher::handle_asok_command(
@@ -2605,19 +2613,18 @@ void MDSRankDispatcher::handle_asok_command(
     r = config_client(client_id, !got_value, option, value, *css);
   } else if (command == "scrub start" ||
 	     command == "scrub_start") {
+    if (whoami != 0) {
+      *css << "Not rank 0";
+      r = -EXDEV;
+      goto out;
+    }
+
     string path;
     string tag;
     vector<string> scrubop_vec;
     cmd_getval(cmdmap, "scrubops", scrubop_vec);
     cmd_getval(cmdmap, "path", path);
     cmd_getval(cmdmap, "tag", tag);
-
-    /* Multiple MDS scrub is not currently supported. See also: https://tracker.ceph.com/issues/12274 */
-    if (mdsmap->get_max_mds() > 1) {
-      *css << "Scrub is not currently supported for multiple active MDS. Please reduce max_mds to 1 and then scrub.";
-      r = -EINVAL;
-      goto out;
-    }
 
     finisher->queue(
       new LambdaContext(
@@ -2632,6 +2639,12 @@ void MDSRankDispatcher::handle_asok_command(
 	}));
     return;
   } else if (command == "scrub abort") {
+    if (whoami != 0) {
+      *css << "Not rank 0";
+      r = -EXDEV;
+      goto out;
+    }
+
     finisher->queue(
       new LambdaContext(
 	[this, on_finish, f](int r) {
@@ -2648,6 +2661,12 @@ void MDSRankDispatcher::handle_asok_command(
 	}));
     return;
   } else if (command == "scrub pause") {
+    if (whoami != 0) {
+      *css << "Not rank 0";
+      r = -EXDEV;
+      goto out;
+    }
+
     finisher->queue(
       new LambdaContext(
 	[this, on_finish, f](int r) {
@@ -2664,10 +2683,20 @@ void MDSRankDispatcher::handle_asok_command(
 	}));
     return;
   } else if (command == "scrub resume") {
+    if (whoami != 0) {
+      *css << "Not rank 0";
+      r = -EXDEV;
+      goto out;
+    }
     command_scrub_resume(f);
   } else if (command == "scrub status") {
     command_scrub_status(f);
   } else if (command == "tag path") {
+    if (whoami != 0) {
+      *css << "Not rank 0";
+      r = -EXDEV;
+      goto out;
+    }
     string path;
     cmd_getval(cmdmap, "path", path);
     string tag;
