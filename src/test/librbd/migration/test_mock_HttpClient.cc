@@ -68,7 +68,7 @@ public:
 
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
 
-    create_acceptor();
+    create_acceptor(false);
   }
 
   void TearDown() override {
@@ -77,10 +77,10 @@ public:
     TestMockFixture::TearDown();
   }
 
-  void create_acceptor() {
+  void create_acceptor(bool reuse) {
     m_acceptor.emplace(*m_image_ctx->asio_engine,
                        boost::asio::ip::tcp::endpoint(
-                         boost::asio::ip::tcp::v4(), m_server_port));
+                         boost::asio::ip::tcp::v4(), m_server_port), reuse);
     m_server_port = m_acceptor->local_endpoint().port();
   }
 
@@ -111,7 +111,7 @@ public:
         if (close) {
           in_socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
         } else {
-          ASSERT_EQ(0, ec.value());
+          ASSERT_FALSE(ec) << "Unexpected error: " << ec;
           *socket = std::move(in_socket);
         }
         on_connect->complete(0);
@@ -124,7 +124,7 @@ public:
     boost::beast::http::request<Body> req;
     boost::beast::error_code ec;
     boost::beast::http::read(socket, m_buffer, req, ec);
-    ASSERT_FALSE(ec);
+    ASSERT_FALSE(ec) << "Unexpected errror: " << ec;
 
     expected_req.target("/target");
     ASSERT_EQ(expected_req, req);
@@ -140,14 +140,16 @@ public:
 
     boost::beast::error_code ec;
     boost::beast::http::write(socket, expected_res, ec);
-    ASSERT_FALSE(ec);
+    ASSERT_FALSE(ec) << "Unexpected errror: " << ec;
   }
 
   template <typename Stream>
-  void client_ssl_handshake(Stream& stream, Context* on_handshake) {
+  void client_ssl_handshake(Stream& stream, bool ignore_failure,
+                            Context* on_handshake) {
     stream.async_handshake(
       boost::asio::ssl::stream_base::server,
-      [on_handshake](auto ec) {
+      [ignore_failure, on_handshake](auto ec) {
+        ASSERT_FALSE(!ignore_failure && ec) << "Unexpected error: " << ec;
         on_handshake->complete(-ec.value());
       });
   }
@@ -156,6 +158,7 @@ public:
   void client_ssl_shutdown(Stream& stream, Context* on_shutdown) {
     stream.async_shutdown(
       [on_shutdown](auto ec) {
+        ASSERT_FALSE(ec) << "Unexpected error: " << ec;
         on_shutdown->complete(-ec.value());
       });
   }
@@ -282,7 +285,7 @@ TEST_F(TestMockMigrationHttpClient, OpenCloseHttps) {
     std::move(socket), ssl_context};
 
   C_SaferCond on_ssl_handshake_ctx;
-  client_ssl_handshake(ssl_stream, &on_ssl_handshake_ctx);
+  client_ssl_handshake(ssl_stream, false, &on_ssl_handshake_ctx);
   ASSERT_EQ(0, on_ssl_handshake_ctx.wait());
 
   ASSERT_EQ(0, ctx1.wait());
@@ -316,7 +319,7 @@ TEST_F(TestMockMigrationHttpClient, OpenHttpsHandshakeFail) {
     std::move(socket), ssl_context};
 
   C_SaferCond on_ssl_handshake_ctx;
-  client_ssl_handshake(ssl_stream, &on_ssl_handshake_ctx);
+  client_ssl_handshake(ssl_stream, true, &on_ssl_handshake_ctx);
   ASSERT_NE(0, on_ssl_handshake_ctx.wait());
   ASSERT_NE(0, ctx1.wait());
 }
@@ -340,11 +343,9 @@ TEST_F(TestMockMigrationHttpClient, OpenResolveFail) {
 }
 
 TEST_F(TestMockMigrationHttpClient, OpenConnectFail) {
-  m_acceptor.reset();
-
   MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
   MockHttpClient http_client(&mock_test_image_ctx,
-                             get_local_url(URL_SCHEME_HTTP));
+                             "http://localhost:2/");
 
   C_SaferCond ctx1;
   http_client.open(&ctx1);
@@ -402,12 +403,12 @@ TEST_F(TestMockMigrationHttpClient, IssueGet) {
   ASSERT_EQ(0, on_connect_ctx.wait());
   ASSERT_EQ(0, ctx1.wait());
 
-  HttpRequest req;
+  EmptyHttpRequest req;
   req.method(boost::beast::http::verb::get);
 
   C_SaferCond ctx2;
   HttpResponse res;
-  http_client.issue(HttpRequest{req},
+  http_client.issue(EmptyHttpRequest{req},
     [&ctx2, &res](int r, HttpResponse&& response) mutable {
       res = std::move(response);
       ctx2.complete(r);
@@ -471,9 +472,9 @@ TEST_F(TestMockMigrationHttpClient, IssueSendFailed) {
 }
 
 TEST_F(TestMockMigrationHttpClient, IssueReceiveFailed) {
-  boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
+  boost::asio::ip::tcp::socket socket1(*m_image_ctx->asio_engine);
   C_SaferCond on_connect_ctx1;
-  client_accept(&socket, false, &on_connect_ctx1);
+  client_accept(&socket1, false, &on_connect_ctx1);
 
   MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
   MockHttpClient http_client(&mock_test_image_ctx,
@@ -494,20 +495,22 @@ TEST_F(TestMockMigrationHttpClient, IssueReceiveFailed) {
       ctx2.complete(r);
     });
 
-  C_SaferCond on_connect_ctx2;
-  client_accept(&socket, false, &on_connect_ctx2);
-
   // close connection to client after reading request
-  client_read_request(socket, req);
+  client_read_request(socket1, req);
+
+  C_SaferCond on_connect_ctx2;
+  boost::asio::ip::tcp::socket socket2(*m_image_ctx->asio_engine);
+  client_accept(&socket2, false, &on_connect_ctx2);
+
   boost::system::error_code ec;
-  socket.close(ec);
+  socket1.close(ec);
+  ASSERT_EQ(0, on_connect_ctx2.wait());
 
   // connection will be reset and request retried
-  ASSERT_EQ(0, on_connect_ctx2.wait());
   HttpResponse expected_res;
   expected_res.body() = "test";
-  client_read_request(socket, req);
-  client_write_response(socket, expected_res);
+  client_read_request(socket2, req);
+  client_write_response(socket2, expected_res);
   ASSERT_EQ(0, ctx2.wait());
 
   C_SaferCond ctx3;
@@ -516,6 +519,9 @@ TEST_F(TestMockMigrationHttpClient, IssueReceiveFailed) {
 }
 
 TEST_F(TestMockMigrationHttpClient, IssueResetFailed) {
+  m_server_port = 0;
+  create_acceptor(true);
+
   boost::asio::ip::tcp::socket socket(*m_image_ctx->asio_engine);
   C_SaferCond on_connect_ctx1;
   client_accept(&socket, false, &on_connect_ctx1);
@@ -557,7 +563,7 @@ TEST_F(TestMockMigrationHttpClient, IssueResetFailed) {
   ASSERT_EQ(-ECONNREFUSED, ctx3.wait());
 
   // additional request will retry the failed connection
-  create_acceptor();
+  create_acceptor(true);
 
   C_SaferCond on_connect_ctx2;
   client_accept(&socket, false, &on_connect_ctx2);
