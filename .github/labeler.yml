@@ -11,14 +11,23 @@ common:
   - src/global
   - src/log
 
+bluestore:
+  - src/bluestore/**
+
 core:
   - src/blk/**
   - src/crush/*
+  - src/erasure-code/**
   - src/librados/**
+  - src/kv/**
   - src/mgr/**
+  - src/msg/**
   - src/mon/**
   - src/os/**
   - src/osd/**
+  - src/tools/rados/**
+  - qa/suites/rados/**
+  - doc/rados/**
 
 crimson:
   - doc/dev/crimson/**
