@@ -110,3 +110,7 @@ rbd:
   - src/tools/rbd/**
   - src/tools/rbd_mirror/**
   - src/tools/rbd_nbd/**
+
+ceph-volume:
+  - src/ceph-volume/**
+  - doc/ceph-volume/**
