@@ -277,10 +277,9 @@
                                   class="btn btn-default"
                                   [cdPasswordButton]="'password' + ii">
                           </button>
-                          <button type="button"
-                                  class="btn btn-default"
-                                  [cdCopy2ClipboardButton]="'password' + ii">
-                          </button>
+                          <copy-2-clipboard-button
+                                  source="'password' + ii">
+                          </copy-2-clipboard-button>
                         </span>
                       </div>
                       <span class="help-block"
@@ -337,10 +336,9 @@
                                   class="btn btn-default"
                                   [cdPasswordButton]="'mutual_password' + ii">
                           </button>
-                          <button type="button"
-                                  class="btn btn-default"
-                                  [cdCopy2ClipboardButton]="'mutual_password' + ii">
-                          </button>
+                          <copy-2-clipboard-button
+                                  source="'mutual_password' + ii">
+                          </copy-2-clipboard-button>
                         </span>
                       </div>
                       <span class="help-block"

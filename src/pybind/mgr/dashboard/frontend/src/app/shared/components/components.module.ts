@@ -14,6 +14,7 @@ import { PipesModule } from '../pipes/pipes.module';
 import { BackButtonComponent } from './back-button/back-button.component';
 import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
+import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
 import { ErrorPanelComponent } from './error-panel/error-panel.component';
 import { GrafanaComponent } from './grafana/grafana.component';
@@ -65,7 +66,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     SelectComponent,
     BackButtonComponent,
     RefreshSelectorComponent,
-    ConfigOptionComponent
+    ConfigOptionComponent,
+    Copy2ClipboardButtonComponent
   ],
   providers: [],
   exports: [
@@ -85,7 +87,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     GrafanaComponent,
     SelectComponent,
     RefreshSelectorComponent,
-    ConfigOptionComponent
+    ConfigOptionComponent,
+    Copy2ClipboardButtonComponent
   ],
   entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]
 })
