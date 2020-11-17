@@ -14,6 +14,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
 import secrets
 from mgr_util import create_self_signed_cert, ServerConfigException, verify_tls
+import collections
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
+ExporterConfig = collections.namedtuple('ExporterConfig', 'crt key token port')
 
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
@@ -773,36 +775,36 @@ class CrashService(CephService):
         return daemon_spec
 
 
-class CephadmExporter(CephService):
+class CephadmExporter(CephadmService):
     TYPE = 'cephadm-exporter'
+
+    def _fetch_config(self) -> ExporterConfig:
+        return ExporterConfig(
+            crt=self.mgr._get_exporter_option('crt'),
+            key=self.mgr._get_exporter_option('key'),
+            token=self.mgr._get_exporter_option('token'),
+            port=self.mgr._get_exporter_option('port'))
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
 
-        crt = self.mgr._get_exporter_option('crt')
-        key = self.mgr._get_exporter_option('key')
-        token = self.mgr._get_exporter_option('token')
-
-        if crt and key:
+        cfg = self._fetch_config()
+        if cfg.crt and cfg.key:
             try:
-                verify_tls(crt, key)
+                verify_tls(cfg.crt, cfg.key)
             except ServerConfigException:
                 raise OrchestratorError(f"Exporter's crt and key settings are invalid")
+            if not cfg.token:
+                raise OrchestratorError(
+                    "Missing exporter token setting. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-token'")
         else:
-            raise OrchestratorError(
-                "Missing exporter TLS configuration. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-tls'")
-
-        if not token:
-            raise OrchestratorError(
-                "Missing exporter token setting. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-token'")
+            logger.info("Using default TLS configuration for cephadm-exporter")
+            self.mgr._generate_exporter_config()
+            cfg = self._fetch_config()
 
         if not daemon_spec.ports:
-            port = self.mgr.get_store("exporter_port")
-            if not port:
-                port = '9443'
-                self.mgr.set_store("exporter_port", port)
+            daemon_spec.ports = [cfg.port]
 
-            daemon_spec.ports = [port]
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
@@ -810,27 +812,25 @@ class CephadmExporter(CephService):
         assert daemon_spec.spec
         deps: List[str] = []
 
-        crt = self.mgr._get_exporter_option('crt')
-        key = self.mgr._get_exporter_option('key')
-        token = self.mgr._get_exporter_option('token')
+        cfg = self._fetch_config()
 
-        if crt and key:
+        if cfg.crt and cfg.key:
             try:
-                verify_tls(crt, key)
+                verify_tls(cfg.crt, cfg.key)
             except ServerConfigException:
                 raise OrchestratorError(f"Exporter's crt and key settings are invalid")
+            if not cfg.token:
+                raise OrchestratorError(
+                    "Missing exporter token setting. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-token'")
         else:
-            raise OrchestratorError(
-                "Missing exporter TLS configuration. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-tls'")
-
-        if not token:
-            raise OrchestratorError(
-                "Missing exporter token setting. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-token'")
+            logger.info("Using default TLS configuration for cephadm-exporter")
+            self.mgr._generate_exporter_config()
+            cfg = self._fetch_config()
 
         config = {
-            "crt": crt,
-            "key": key,
-            "token": token
+            "crt": cfg.crt,
+            "key": cfg.key,
+            "token": cfg.token
         }
         return config, deps
 
