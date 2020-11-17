@@ -66,11 +66,11 @@ def build_initial_config(ctx, config):
 
     return conf
 
-def update_info_yaml(archive_dir, key, value):
+def update_archive_setting(ctx, key, value):
     """
     Add logs directory to job's info log file
     """
-    with open(os.path.join(archive_dir, 'info.yaml'), 'r+') as info_file:
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
         if 'archive' in info_yaml:
@@ -168,8 +168,7 @@ def ceph_log(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
-    if ctx.archive is not None:
-        update_info_yaml(ctx.archive, 'log', '/var/log/ceph')
+    update_archive_setting(ctx, 'log', '/var/log/ceph')
 
 
     try:
@@ -262,8 +261,7 @@ def ceph_crash(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
-    if ctx.archive is not None:
-        update_info_yaml(ctx.archive, 'crash', '/var/lib/ceph/crash')
+    update_archive_setting(ctx, 'crash', '/var/lib/ceph/crash')
 
     try:
         yield
