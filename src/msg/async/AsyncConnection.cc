@@ -384,8 +384,10 @@ void AsyncConnection::process() {
       // clear timer (if any) since we are connecting/re-connecting
       if (last_tick_id) {
         center->delete_time_event(last_tick_id);
-        last_tick_id = 0;
       }
+      last_connect_started = ceph::coarse_mono_clock::now();
+      last_tick_id = center->create_time_event(
+          connect_timeout_us, tick_handler);
 
       if (cs) {
         center->delete_file_event(cs.fd(), EVENT_READABLE | EVENT_WRITABLE);
@@ -432,11 +434,6 @@ void AsyncConnection::process() {
       ldout(async_msgr->cct, 10)
           << __func__ << " connect successfully, ready to send banner" << dendl;
       state = STATE_CONNECTION_ESTABLISHED;
-      ceph_assert(last_tick_id == 0);
-      // exclude TCP nonblock connect time
-      last_connect_started = ceph::coarse_mono_clock::now();
-      last_tick_id = center->create_time_event(
-        connect_timeout_us, tick_handler);
       break;
     }
 
