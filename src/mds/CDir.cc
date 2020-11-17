@@ -1548,10 +1548,10 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
       pdir && pdir->inode->is_stray() && !inode->snaprealm) {
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
     if (get_version() == 0) {
-      ceph_assert(inode->is_auth());
       auto _fnode = allocate_fnode();
       _fnode->version = 1;
       reset_fnode(std::move(_fnode));
+      update_projected_version();
 
       if (is_rejoin_undef()) {
 	ceph_assert(mdcache->mds->is_rejoin());

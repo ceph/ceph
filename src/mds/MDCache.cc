@@ -12302,7 +12302,8 @@ void MDCache::rollback_uncommitted_fragments()
 	dirfrag_rollback rollback;
 	decode(rollback, bp);
 
-	dir->fnode = rollback.fnode;
+	dir->reset_fnode(std::move(rollback.fnode));
+	dir->update_projected_version();
 
 	dir->mark_dirty(mut->ls);
 
