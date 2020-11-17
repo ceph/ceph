@@ -1876,19 +1876,12 @@ To check that the host is reachable:
 
             if daemon_spec.daemon_type == 'cephadm-exporter':
                 if not reconfig:
-                    # Use tee (from coreutils) to create a copy of cephadm on the target
-                    self.log.info(f"Deploying cephadm binary to {daemon_spec.host}")
-                    with self._remote_connection(daemon_spec.host) as tpl:
-                        conn, _connr = tpl
-                        _out, err, code = remoto.process.check(
-                            conn,
-                            ['tee', '-', '/var/lib/ceph/{}/cephadm'.format(self._cluster_fsid)],
-                            stdin=self._cephadm.encode('utf-8'))
-                        if code:
-                            # creation of the file failed on the target, so abort the deploy
-                            msg = f"Unable to deploy the cephadm binary to {daemon_spec.host}"
-                            self.log.warning(msg)
-                            return msg
+                    assert daemon_spec.host
+                    deploy_ok = self._deploy_cephadm_binary(daemon_spec.host)
+                    if not deploy_ok:
+                        msg = f"Unable to deploy the cephadm binary to {daemon_spec.host}"
+                        self.log.warning(msg)
+                        return msg
 
             cephadm_config, deps = self.cephadm_services[daemon_spec.daemon_type].generate_config(
                 daemon_spec)
@@ -1955,6 +1948,17 @@ To check that the host is reachable:
                 self.events.for_daemon(
                     daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
             return msg
+
+    def _deploy_cephadm_binary(self, host: str) -> bool:
+        # Use tee (from coreutils) to create a copy of cephadm on the target machine
+        self.log.info(f"Deploying cephadm binary to {host}")
+        with self._remote_connection(host) as tpl:
+            conn, _connr = tpl
+            _out, _err, code = remoto.process.check(
+                conn,
+                ['tee', '-', '/var/lib/ceph/{}/cephadm'.format(self._cluster_fsid)],
+                stdin=self._cephadm.encode('utf-8'))
+        return code == 0
 
     @forall_hosts
     def _remove_daemons(self, name, host) -> str:
@@ -2266,8 +2270,7 @@ To check that the host is reachable:
         # type: (ServiceSpec) -> List[str]
         return self._add_daemon('cephadm-exporter',
                                 spec,
-                                self.cephadm_exporter_service.prepare_create,
-                                self.cephadm_exporter_service.generate_config)
+                                self.cephadm_exporter_service.prepare_create)
 
     @trivial_completion
     def apply_cephadm_exporter(self, spec) -> str:
