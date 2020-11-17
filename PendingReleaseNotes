@@ -183,6 +183,9 @@
     ceph daemon <mds of rank 0> scrub_path / force recursive repair
     ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
 
+* CephFS: Scrub is supported in multiple active mds setup. MDS rank 0 handles
+  scrub commands, and forward scrub to other mds if nessesary.
+
 * The following librados API calls have changed:
 
   - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.
