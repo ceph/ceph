@@ -196,7 +196,8 @@ public:
   friend struct CopyFromFinisher;
   friend class PromoteCallback;
   friend struct PromoteFinisher;
-
+  friend class C_gather;
+  
   struct ProxyReadOp {
     OpRequestRef op;
     hobject_t soid;
@@ -1532,6 +1533,8 @@ public:
   int do_tmapup_slow(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op, ceph::buffer::list& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
+  int cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> *src_objs, const std::string& pool,
+		 const char *cls, const char *method, bufferlist& inbl);
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
