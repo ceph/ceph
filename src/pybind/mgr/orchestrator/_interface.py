@@ -880,6 +880,7 @@ class Orchestrator(object):
             'rgw': self.apply_rgw,
             'HA_RGW': self.apply_ha_rgw,
             'host': self.add_host,
+            'cephadm-exporter': self.apply_cephadm_exporter,
         }
 
         def merge(ls, r):
