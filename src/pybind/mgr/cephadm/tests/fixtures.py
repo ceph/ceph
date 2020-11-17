@@ -147,3 +147,9 @@ def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, h
     yield [dd.name() for dd in own_dds]
 
     assert_rm_service(cephadm_module, spec.service_name())
+
+
+def _deploy_cephadm_binary(host):
+    def foo(*args, **kwargs):
+        return True
+    return foo
