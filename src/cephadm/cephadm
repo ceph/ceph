@@ -6000,7 +6000,6 @@ class CephadmDaemon():
                     if not worker.is_alive():
                         logger.warning(f"{worker.name} thread not running")
                         stop_time = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-                        error_msg = f"{worker.name} stopped at {stop_time}"
                         self.cephadm_cache.update_health(worker.name, "inactive", f"{worker.name} stopped at {stop_time}")
 
             time.sleep(CephadmDaemon.loop_delay)
