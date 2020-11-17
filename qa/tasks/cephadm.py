@@ -66,6 +66,19 @@ def build_initial_config(ctx, config):
 
     return conf
 
+def update_info_yaml(archive_dir, key, value):
+    """
+    Add logs directory to job's info log file
+    """
+    with open(os.path.join(archive_dir, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' in info_yaml:
+            info_yaml['archive'][key] = value
+        else:
+            info_yaml['archive'] = {key: value}
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
 @contextlib.contextmanager
 def normalize_hostnames(ctx):
     """
