@@ -374,14 +374,23 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                             placement=PlacementSpec(count=active),
                             ),
                         size=active,
-                        container_image_name=image_name,
                         last_refresh=now,
                         )
 
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
                 continue
-            spec[dd.service_name()].running += 1
+            service = spec[dd.service_name()]
+            service.running += 1
+            if not service.container_image_id:
+                service.container_image_id = dd.container_image_id
+            if not service.container_image_name:
+                service.container_image_name = dd.container_image_name
+            if not service.last_refresh or not dd.last_refresh or dd.last_refresh < service.last_refresh:
+                service.last_refresh = dd.last_refresh
+            if not service.created or dd.created < service.created:
+                service.created = dd.created
+
         return [v for k, v in spec.items()]
 
     @deferred_read
