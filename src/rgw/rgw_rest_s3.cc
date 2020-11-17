@@ -1477,7 +1477,13 @@ int RGWListBucket_ObjStore_S3::get_params()
     marker = s->info.args.get("marker");
   } else {
     marker.name = s->info.args.get("key-marker");
-    marker.instance = s->info.args.get("version-id-marker");
+    auto ver = s->info.args.get_optional("version-id-marker");
+    if (ver) {
+      marker.instance = *ver;
+    } else {
+      // compares larger than anything from gen_rand_obj_instance_name()
+      marker.instance = std::string{32, '~'};
+    }
   }
   return 0;
 }
@@ -1538,7 +1544,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   }
   RGWListBucket_ObjStore_S3::send_common_versioned_response();
   s->formatter->dump_string("KeyMarker", marker.name);
-  s->formatter->dump_string("VersionIdMarker", marker.instance);
+  s->formatter->dump_string("VersionIdMarker", marker.instance == std::string{32, '~'} ? "" : marker.instance);
   if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextKeyMarker", next_marker.name);
     if (next_marker.instance.empty()) {
