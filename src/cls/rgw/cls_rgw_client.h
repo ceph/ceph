@@ -602,7 +602,8 @@ void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const std::vector<std
 int cls_rgw_gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
                     std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker);
 #endif
-
+void cls_rgw_gc_list(librados::ObjectReadOperation& op, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
+                    std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker);
 /* lifecycle */
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
@@ -629,6 +630,8 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const std::string& oid, std::s
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_reshard_entry& entry);
 #endif
 
+void cls_rgw_get_bucket_resharding(librados::ObjectWriteOperation& op, const std::string& oid,
+                                  cls_rgw_bucket_instance_entry *entry);
 /* resharding attribute on bucket index shard headers */
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err);
 // these overloads which call io_ctx.operate() should not be called in the rgw.

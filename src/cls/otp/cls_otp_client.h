@@ -33,6 +33,10 @@ namespace rados {
         static int get_current_time(librados::IoCtx& ioctx, const std::string& oid,
                                     ceph::real_time *result);
 #endif
+	static void check(CephContext *cct, librados::ObjectReadOperation *op, const std::string& oid,
+                         const std::string& id, const std::string& val, otp_check_t *result);
+	static void get_current_time(librados::ObjectReadOperation *op, const std::string& oid,
+                                    ceph::real_time *result);
       };
 
       class TOTPConfig {

@@ -63,10 +63,8 @@ int RGWSI_Cls::MFA::check_mfa(const rgw_user& user, const string& otp_id, const 
   }
 
   rados::cls::otp::otp_check_t result;
-
-  r = rados::cls::otp::OTP::check(cct, ref.pool.ioctx(), ref.obj.oid, otp_id, pin, &result);
-  if (r < 0)
-    return r;
+  librados::ObjectReadOperation op;
+  rados::cls::otp::OTP::check(cct, &op, ref.obj.oid, otp_id, pin, &result);
 
   ldout(cct, 20) << "OTP check, otp_id=" << otp_id << " result=" << (int)result.result << dendl;
 
@@ -187,11 +185,9 @@ int RGWSI_Cls::MFA::otp_get_current_time(const rgw_user& user, ceph::real_time *
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_current_time(ref.pool.ioctx(), ref.obj.oid, result);
-  if (r < 0) {
-    return r;
-  }
-
+  librados::ObjectReadOperation op;
+  rados::cls::otp::OTP::get_current_time(&op, ref.obj.oid, result);
+  
   return 0;
 }
 

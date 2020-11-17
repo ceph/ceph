@@ -780,6 +780,18 @@ void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, 
   op.exec(RGW_CLASS, RGW_GC_DEFER_ENTRY, in);
 }
 
+void cls_rgw_gc_list(librados::ObjectReadOperation& op, string& oid, string& marker, uint32_t max, bool expired_only,
+                    list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+{
+  bufferlist in, out;
+  cls_rgw_gc_list_op call;
+  call.marker = marker;
+  call.max = max;
+  call.expired_only = expired_only;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_GC_LIST, in, out);
+}
+
 int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
                     list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
 {
@@ -1037,27 +1049,14 @@ int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
   return io_ctx.exec(oid, RGW_CLASS, RGW_CLEAR_BUCKET_RESHARDING, in, out);
 }
 
-int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
-				  cls_rgw_bucket_instance_entry *entry)
+
+void cls_rgw_get_bucket_resharding(librados::ObjectWriteOperation& op, const std::string& oid,
+                                  cls_rgw_bucket_instance_entry *entry)
 {
   bufferlist in, out;
   cls_rgw_get_bucket_resharding_op call;
   encode(call, in);
-  int r= io_ctx.exec(oid, RGW_CLASS, RGW_GET_BUCKET_RESHARDING, in, out);
-  if (r < 0)
-    return r;
-
-  cls_rgw_get_bucket_resharding_ret op_ret;
-  auto iter = out.cbegin();
-  try {
-    decode(op_ret, iter);
-  } catch (ceph::buffer::error& err) {
-    return -EIO;
-  }
-
-  *entry = op_ret.new_instance;
-
-  return 0;
+  op.exec(oid, RGW_CLASS, RGW_GET_BUCKET_RESHARDING, in, out);
 }
 
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
