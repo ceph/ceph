@@ -3223,6 +3223,28 @@ struct C_SetManifestRefCountDone : public Context {
   }
 };
 
+struct C_SetDedupChunks : public Context {
+  PrimaryLogPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  ceph_tid_t tid;
+  uint64_t offset;
+  
+  C_SetDedupChunks(PrimaryLogPG *p, hobject_t o, epoch_t lpr, uint64_t offset)
+    : pg(p), oid(o), last_peering_reset(lpr),
+      tid(0), offset(offset)
+  {}
+  void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
+    std::scoped_lock locker{*pg};
+    if (last_peering_reset != pg->get_last_peering_reset()) {
+      return;
+    }
+    pg->finish_set_dedup(oid, r, tid, offset);
+  }
+};
+
 void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
 {
   dout(10) << __func__ << dendl;
@@ -3264,7 +3286,7 @@ void PrimaryLogPG::dec_refcount(const hobject_t& soid, const object_ref_delta_t&
     while (dec_ref_count < 0) {
       dout(10) << __func__ << ": decrement reference on offset oid: " << p->first << dendl;
       refcount_manifest(soid, p->first, 
-			refcount_t::DECREMENT_REF, NULL);
+			refcount_t::DECREMENT_REF, NULL, std::nullopt);
       dec_ref_count++;
     }
   }
@@ -3325,14 +3347,14 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
        */
       RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
       refcount_manifest(ctx->obs->oi.soid, p->first,
-	  refcount_t::INCREMENT_REF, fin);
+	  refcount_t::INCREMENT_REF, fin, std::nullopt);
       return true;
     } else if (inc_ref_count < 0) {
       hobject_t src = ctx->obs->oi.soid;
       hobject_t tgt = p->first;
       ctx->register_on_commit(
 	  [src, tgt, this](){
-	    refcount_manifest(src, tgt, refcount_t::DECREMENT_REF, NULL);
+	    refcount_manifest(src, tgt, refcount_t::DECREMENT_REF, NULL, std::nullopt);
 	  });
       return false;
     }
@@ -3397,38 +3419,51 @@ void PrimaryLogPG::dec_all_refcount_manifest(const object_info_t& oi, OpContext*
     ctx->register_on_commit(
       [oi, this](){
 	refcount_manifest(oi.soid, oi.manifest.redirect_target, 
-			  refcount_t::DECREMENT_REF, NULL);
+			  refcount_t::DECREMENT_REF, NULL, std::nullopt);
       });
   } 
 }
 
-void PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type, 
-				     RefCountCallback* cb)
+ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
+                                     Context *cb, std::optional<bufferlist> chunk)
 {
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
-                   CEPH_OSD_FLAG_RWORDERED;                      
+                   CEPH_OSD_FLAG_RWORDERED;
 
-  dout(10) << __func__ << " Start refcount from " << src_soid 
-	   << " to " << tgt_soid << dendl;
-    
+  dout(10) << __func__ << " Start refcount from " << src_soid
+           << " to " << tgt_soid << dendl;
+
   ObjectOperation obj_op;
   bufferlist in;
-  if (type == refcount_t::INCREMENT_REF) {             
+  if (type == refcount_t::INCREMENT_REF) {
     cls_cas_chunk_get_ref_op call;
     call.source = src_soid.get_head();
-    ::encode(call, in);                             
+    ::encode(call, in);
     obj_op.call("cas", "chunk_get_ref", in);
-  } else if (type == refcount_t::DECREMENT_REF) {                    
+  } else if (type == refcount_t::DECREMENT_REF) {
     cls_cas_chunk_put_ref_op call;
     call.source = src_soid.get_head();
-    ::encode(call, in);          
+    ::encode(call, in);
     obj_op.call("cas", "chunk_put_ref", in);
-  }                                                     
-  
-  Context *c = nullptr;
+  } else if (type == refcount_t::CREATE_OR_GET_REF) {
+    cls_cas_chunk_create_or_get_ref_op get_call;
+    get_call.source = src_soid.get_head();
+    ceph_assert(chunk);
+    get_call.data = move(*chunk);
+    ::encode(get_call, in);
+    obj_op.call("cas", "chunk_create_or_get_ref", in);
+  } else {
+    ceph_assert(0 == "unrecognized type");
+  }
+
+  Context *c = nullptr, *fin = nullptr;
   if (cb) {
-    C_SetManifestRefCountDone *fin =
-      new C_SetManifestRefCountDone(cb, src_soid);
+    if (type == refcount_t::INCREMENT_REF ||
+        type == refcount_t::DECREMENT_REF) {
+      fin = new C_SetManifestRefCountDone(static_cast<RefCountCallback*>(cb), src_soid);
+    } else if (type == refcount_t::CREATE_OR_GET_REF) {
+      fin = cb;
+    }
     c = new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard()));
   }
 
@@ -3440,10 +3475,14 @@ void PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, ref
     ceph::real_clock::from_ceph_timespec(src_obc->obs.oi.mtime),
     flags, c);
   if (cb) {
-    manifest_ops[src_soid] = std::make_shared<ManifestOp>(cb, tid);
-    src_obc->start_block();
+    if (type == refcount_t::INCREMENT_REF ||
+        type == refcount_t::DECREMENT_REF) {
+      manifest_ops[src_soid] = std::make_shared<ManifestOp>(static_cast<RefCountCallback*>(cb), tid);
+      src_obc->start_block();
+    }
   }
-}  
+  return tid;
+}
 
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 					 uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
@@ -6784,7 +6823,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    new SetManifestFinisher(osd_op));
 	  RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
 	  refcount_manifest(ctx->obc->obs.oi.soid, target, 
-			    refcount_t::INCREMENT_REF, fin);
+			    refcount_t::INCREMENT_REF, fin, std::nullopt);
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -9982,29 +10021,6 @@ struct C_Flush : public Context {
   }
 };
 
-struct C_SetDedupChunks : public Context {
-  PrimaryLogPGRef pg;
-  hobject_t oid;
-  epoch_t last_peering_reset;
-  ceph_tid_t tid;
-  uint64_t offset;
-  
-  C_SetDedupChunks(PrimaryLogPG *p, hobject_t o, epoch_t lpr, uint64_t offset)
-    : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0), offset(offset)
-  {}
-  void finish(int r) override {
-    if (r == -ECANCELED)
-      return;
-    std::scoped_lock locker{*pg};
-    if (last_peering_reset != pg->get_last_peering_reset()) {
-      return;
-    }
-    pg->finish_set_dedup(oid, r, tid, offset);
-  }
-};
-
-
 int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
 {
   bufferlist bl;
@@ -10059,29 +10075,14 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
       if (refs.find(target) == refs.end()) {
 	continue;
       }
-      // make a create_or_get_ref op
-      bufferlist t;
-      ObjectOperation obj_op;
-      cls_cas_chunk_create_or_get_ref_op get_call;
-      get_call.source = soid.get_head();
-      get_call.data = chunks[p.first];
-      ::encode(get_call, t);
-      obj_op.call("cas", "chunk_create_or_get_ref", t);
-
-      // issue create_or_get_ref_op
       C_SetDedupChunks *fin = new C_SetDedupChunks(this, soid, get_last_peering_reset(), p.first);
-      object_locator_t oloc(target);
-      unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
-			CEPH_OSD_FLAG_RWORDERED;
-      ceph_tid_t tid = osd->objecter->mutate(
-	  target.oid, oloc, obj_op, SnapContext(),
-	  ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
-	  flags, new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())));
-      fin->tid = tid;
-      mop->tids[p.first] = tid;
+      ceph_tid_t tid = refcount_manifest(soid, target, refcount_t::CREATE_OR_GET_REF, 
+			      fin, move(chunks[p.first]));
       mop->chunks[target] = make_pair(p.first, p.second.length());
       mop->num_chunks++;
-      dout(10) << __func__ << " oid: " << soid << " tid: " << tid 
+      mop->tids[p.first] = tid;
+      fin->tid = tid;
+      dout(10) << __func__ << " oid: " << soid << " tid: " << tid
 	      << " target: " << target << " offset: " << p.first
 	      << " length: " << p.second.length() << dendl;
     }
