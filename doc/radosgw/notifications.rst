@@ -12,8 +12,8 @@ Currently, notifications could be sent to: HTTP, AMQP0.9.1 and Kafka endpoints.
 Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint,
 the `PubSub Module`_ should be used instead of the bucket notification mechanism.
 
-A user can create different topics. A topic entity is defined by its user and its name. A
-user can only manage its own topics, and can only associate them with buckets it owns.
+A user can create different topics. A topic entity is defined by its name and is per tenant. A
+user can only associate its topics (via notification configuration) with buckets it owns.
 
 In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
@@ -50,25 +50,25 @@ In this case, the only latency added to the original operation is of committing 
 Topic Management via CLI
 ------------------------
 
-Configuration of all topics of a user could be fetched using the following command:
+Configuration of all topics, associated with a tenant, could be fetched using the following command:
 
 ::
 
-   # radosgw-admin topic list --uid={user-id}
+   # radosgw-admin topic list [--tenant={tenant}]
 
 
 Configuration of a specific topic could be fetched using:
 
 ::
 
-   # radosgw-admin topic get --uid={user-id} --topic={topic-name}
+   # radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
 And removed using:
 
 ::
 
-   # radosgw-admin topic rm --uid={user-id} --topic={topic-name}
+   # radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
 
 Notification Performance Stats
@@ -318,7 +318,7 @@ The response will have the following format:
 List Topics
 ```````````
 
-List all topics that user defined.
+List all topics associated with a tenant.
 
 ::
 
