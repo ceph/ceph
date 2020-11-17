@@ -1,11 +1,17 @@
 Testing - unit tests
 ====================
 
-Ceph has two types of tests: unit tests (also called ``make check`` tests) and
-integration tests. Strictly speaking, the ``make check`` tests are not "unit
-tests", but rather tests that can be run easily on a single build machine
-after compiling Ceph from source, whereas integration tests require packages
-and multi-machine clusters to run.
+Ceph has two types of tests: 
+
+#. unit tests (also called ``make check`` tests)
+#. integration tests. 
+   
+What are here called ``make check`` tests are not, strictly speaking, "unit
+tests". They are tests that can be easily run on a single-build machine
+after Ceph has been compiled from source. Such ``make check`` tests do
+not require packages or a multi-machine cluster.
+
+Integration tests, however, require packages and multi-machine clusters.
 
 .. _make-check:
 
