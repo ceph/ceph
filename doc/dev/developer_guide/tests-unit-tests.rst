@@ -12,33 +12,36 @@ and multi-machine clusters to run.
 What does "make check" mean?
 ----------------------------
 
-After compiling Ceph, the code can be run through a battery of tests covering
-various aspects of Ceph. For historical reasons, this battery of tests is
-often referred to as ``make check`` even though the actual command used to run
-the tests is now ``ctest``. For inclusion in this battery of tests, a test
-must:
+After Ceph has been compiled, its code can be run through a battery of
+tests that cover various aspects of Ceph. For historical reasons, this
+battery of tests is often referred to as ``make check`` even though the
+actual command used to run the tests is now ``ctest``. In order to be
+included in this battery of tests, a test must:
 
 * bind ports that do not conflict with other tests
 * not require root access
 * not require more than one machine to run
 * complete within a few minutes
 
-For simplicity, we will refer to this class of tests as "make check tests" or
-"unit tests", to distinguish them from the more complex "integration tests"
-that are run via the `teuthology framework`_.
+For the sake of simplicity, this class of tests is referred to as "make
+check tests" or "unit tests". This is meant to distinguish these tests from
+the more complex "integration tests" that are run via the `teuthology
+framework`_.
 
-While it is possible to run ``ctest`` directly, it can be tricky to correctly
-set up your environment. Fortunately, a script is provided to make it easier
-run the unit tests on your code. It can be run from the top-level directory of
-the Ceph source tree by doing::
+While it is possible to run ``ctest`` directly, it can be tricky to
+correctly set up your environment for it. Fortunately, a script is provided
+to make it easier to run the unit tests on your code. This script can be
+run from the top-level directory of the Ceph source tree by running the
+following command:
 
-    $ ./run-make-check.sh
+.. prompt:: bash $
 
+   ./run-make-check.sh
 
 You will need a minimum of 8GB of RAM and 32GB of free disk space for this
 command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
-minutes to three hours to complete, but it's worth the wait.
+minutes to three hours to complete.
 
 How unit tests are declared
 ---------------------------
