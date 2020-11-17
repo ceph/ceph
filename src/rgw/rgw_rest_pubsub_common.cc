@@ -40,7 +40,7 @@ bool topic_has_endpoint_secret(const rgw_pubsub_topic_subs& topic) {
     return topic.topic.dest.stored_secret;
 }
 
-bool topics_has_endpoint_secret(const rgw_pubsub_user_topics& topics) {
+bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
     for (const auto& topic : topics.topics) {
         if (topic_has_endpoint_secret(topic.second)) return true;
     }
@@ -53,8 +53,8 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
     return;
   }
 
-  ups.emplace(store, s->owner.get_id());
-  op_ret = ups->create_topic(topic_name, dest, topic_arn, opaque_data, y);
+  ps.emplace(store, s->owner.get_id().tenant);
+  op_ret = ps->create_topic(topic_name, dest, topic_arn, opaque_data, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -63,8 +63,8 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
 }
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
-  ups.emplace(store, s->owner.get_id());
-  op_ret = ups->get_user_topics(&result);
+  ps.emplace(store, s->owner.get_id().tenant);
+  op_ret = ps->get_topics(&result);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
@@ -84,8 +84,8 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ups.emplace(store, s->owner.get_id());
-  op_ret = ups->get_topic(topic_name, &result);
+  ps.emplace(store, s->owner.get_id().tenant);
+  op_ret = ps->get_topic(topic_name, &result);
   if (topic_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
     ldout(s->cct, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
@@ -103,8 +103,8 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ups.emplace(store, s->owner.get_id());
-  op_ret = ups->remove_topic(topic_name, y);
+  ps.emplace(store, s->owner.get_id().tenant);
+  op_ret = ps->remove_topic(topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
     return;
@@ -117,8 +117,8 @@ void RGWPSCreateSubOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ups.emplace(store, s->owner.get_id());
-  auto sub = ups->get_sub(sub_name);
+  ps.emplace(store, s->owner.get_id().tenant);
+  auto sub = ps->get_sub(sub_name);
   op_ret = sub->subscribe(topic_name, dest, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
@@ -132,8 +132,8 @@ void RGWPSGetSubOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ups.emplace(store, s->owner.get_id());
-  auto sub = ups->get_sub(sub_name);
+  ps.emplace(store, s->owner.get_id().tenant);
+  auto sub = ps->get_sub(sub_name);
   op_ret = sub->get_conf(&result);
   if (subscription_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
     ldout(s->cct, 1) << "subscription '" << sub_name << "' contain secret and cannot be sent over insecure transport" << dendl;
@@ -152,8 +152,8 @@ void RGWPSDeleteSubOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ups.emplace(store, s->owner.get_id());
-  auto sub = ups->get_sub(sub_name);
+  ps.emplace(store, s->owner.get_id().tenant);
+  auto sub = ps->get_sub(sub_name);
   op_ret = sub->unsubscribe(topic_name, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
@@ -167,8 +167,8 @@ void RGWPSAckSubEventOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ups.emplace(store, s->owner.get_id());
-  auto sub = ups->get_sub_with_events(sub_name);
+  ps.emplace(store, s->owner.get_id().tenant);
+  auto sub = ps->get_sub_with_events(sub_name);
   op_ret = sub->remove_event(event_id);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
@@ -182,8 +182,8 @@ void RGWPSPullSubEventsOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  ups.emplace(store, s->owner.get_id());
-  sub = ups->get_sub_with_events(sub_name);
+  ps.emplace(store, s->owner.get_id().tenant);
+  sub = ps->get_sub_with_events(sub_name);
   if (!sub) {
     op_ret = -ENOENT;
     ldout(s->cct, 1) << "failed to get subscription '" << sub_name << "' for events, ret=" << op_ret << dendl;
