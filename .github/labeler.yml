@@ -11,6 +11,11 @@ common:
   - src/global
   - src/log
 
+cephadm:
+  - src/cephadm/**
+  - src/pybind/mgr/cephadm/**
+  - qa/suites/rados/cephadm/**
+
 bluestore:
   - src/bluestore/**
 
