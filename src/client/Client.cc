@@ -6524,13 +6524,6 @@ void Client::start_tick_thread()
       auto t_interval = clock::duration(cct->_conf.get_val<sec>("client_tick_interval"));
       auto d_interval = clock::duration(cct->_conf.get_val<sec>("client_debug_inject_tick_delay"));
 
-      // Clear the debug inject tick delay
-      if (unlikely(d_interval.count() > 0)) {
-        ldout(cct, 20) << "clear debug inject tick delay: " << d_interval << dendl;
-        ceph_assert(0 == cct->_conf.set_val("client_debug_inject_tick_delay", "0"));
-        cct->_conf.apply_changes(nullptr);
-      }
-
       auto interval = std::max(t_interval, d_interval);
       if (likely(since >= interval)) {
         tick();
