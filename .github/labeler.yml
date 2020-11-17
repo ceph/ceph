@@ -11,14 +11,28 @@ common:
   - src/global
   - src/log
 
+cephadm:
+  - src/cephadm/**
+  - src/pybind/mgr/cephadm/**
+  - qa/suites/rados/cephadm/**
+
+bluestore:
+  - src/bluestore/**
+
 core:
   - src/blk/**
   - src/crush/*
+  - src/erasure-code/**
   - src/librados/**
+  - src/kv/**
   - src/mgr/**
+  - src/msg/**
   - src/mon/**
   - src/os/**
   - src/osd/**
+  - src/tools/rados/**
+  - qa/suites/rados/**
+  - doc/rados/**
 
 crimson:
   - doc/dev/crimson/**
