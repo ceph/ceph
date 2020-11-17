@@ -650,8 +650,8 @@ bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, const rgw:
 int publish_reserve(EventType event_type,
       reservation_t& res) 
 {
-  RGWUserPubSub ps_user(res.store, res.s->user->get_id());
-  RGWUserPubSub::Bucket ps_bucket(&ps_user, res.s->bucket->get_key());
+  RGWPubSub ps(res.store, res.s->user->get_id().tenant);
+  RGWPubSub::Bucket ps_bucket(&ps, res.s->bucket->get_key());
   rgw_pubsub_bucket_topics bucket_topics;
   auto rc = ps_bucket.get_topics(&bucket_topics);
   if (rc < 0) {
