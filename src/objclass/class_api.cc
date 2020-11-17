@@ -8,6 +8,7 @@
 #include "common/debug.h"
 
 #include "objclass/objclass.h"
+#include "osd/PrimaryLogPG.h"
 #include "osd/ClassHandler.h"
 
 #include "auth/Crypto.h"
@@ -164,4 +165,38 @@ int cls_log(int level, const char *format, ...)
      }
      size *= 2;
    }
+}
+
+struct GatherFinisher : public PrimaryLogPG::OpFinisher {
+  std::map<std::string, bufferlist*> *src_objs;
+  GatherFinisher(std::map<std::string, bufferlist*> *so) : src_objs(so) {}
+  int execute() override {
+    return 0;
+  }
+};
+
+int cls_cxx_gather(cls_method_context_t hctx, std::map<std::string, bufferlist*> *src_objs, const std::string& pool,
+		   const char *cls, const char *method, bufferlist& inbl)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
+  (*pctx)->op_finishers[(*pctx)->current_osd_subop_num].reset(new GatherFinisher(src_objs));
+  return (*pctx)->pg->cls_gather(*pctx, src_objs, pool, cls, method, inbl);
+}
+
+std::map<std::string, bufferlist*> *cls_cxx_get_gathered_data(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
+  PrimaryLogPG::OpFinisher* op_finisher = nullptr;
+  {
+    auto op_finisher_it = (*pctx)->op_finishers.find((*pctx)->current_osd_subop_num);
+    if (op_finisher_it != (*pctx)->op_finishers.end()) {
+      op_finisher = op_finisher_it->second.get();
+    }
+  }
+  if (op_finisher == NULL) {
+    return NULL;
+  } else {
+    GatherFinisher *gf = (GatherFinisher*)op_finisher;
+    return gf->src_objs;
+  }
 }

@@ -10078,6 +10078,55 @@ void PrimaryLogPG::cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
+struct C_gather : public Context {
+  PrimaryLogPGRef pg;
+  PrimaryLogPG::OpContext *ctx;
+  C_gather(PrimaryLogPG *pg_, PrimaryLogPG::OpContext *ctx_) : pg(pg_), ctx(ctx_) {}
+  void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
+    // TODO: check errors
+    pg->lock();
+    pg->execute_ctx(ctx);
+    pg->unlock();
+  }
+};
+
+int PrimaryLogPG::cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> *src_objs, const std::string& pool,
+			     const char *cls, const char *method, bufferlist& inbl)
+{
+  OpRequestRef op = ctx->op;
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  object_locator_t oloc = m->get_object_locator();
+
+  ObjectState& obs = ctx->new_obs;
+  object_info_t& oi = obs.oi;
+  const hobject_t& soid = oi.soid;
+
+  ObjectContextRef obc = get_object_context(soid, false);
+  C_GatherBuilder gather(cct);
+
+  for (std::map<std::string, bufferlist*>::iterator it = src_objs->begin(); it != src_objs->end(); it++) {
+    std::string oid = it->first;
+    it->second = new bufferlist;
+    ObjectOperation obj_op;
+    obj_op.call(cls, method, inbl);
+    int64_t ret = osd->objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name), pool);
+    uint32_t flags = 0;
+    ceph_tid_t tid = osd->objecter->read(
+					 object_t(oid), oloc, obj_op,
+					 m->get_snapid(), it->second,
+					 flags, gather.new_sub());
+    dout(10) << __func__ << " src=" << oid << ", tgt=" << soid << dendl;
+  }
+
+  C_gather *fin = new C_gather(this, ctx);
+  gather.set_finisher(new C_OnFinisher(fin,
+				       osd->get_objecter_finisher(get_pg_shard())));
+  gather.activate();
+
+  return -EINPROGRESS;
+}
 
 // ========================================================================
 // flush
