@@ -879,6 +879,7 @@ class Orchestrator(object):
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'host': self.add_host,
+            'cephadm-exporter': self.apply_cephadm_exporter,
         }
 
         def merge(ls, r):
