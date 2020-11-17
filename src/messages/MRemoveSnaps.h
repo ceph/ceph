@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MRemoveSnaps : public PaxosServiceMessage {
+class MRemoveSnaps final : public PaxosServiceMessage {
 public:
   std::map<int32_t, std::vector<snapid_t>> snaps;
 

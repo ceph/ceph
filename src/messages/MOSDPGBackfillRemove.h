@@ -21,7 +21,7 @@
  * instruct non-primary to remove some objects during backfill
  */
 
-class MOSDPGBackfillRemove : public MOSDFastDispatchOp {
+class MOSDPGBackfillRemove final : public MOSDFastDispatchOp {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

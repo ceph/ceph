@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientRequestForward : public SafeMessage {
+class MClientRequestForward final : public SafeMessage {
 private:
   int32_t dest_mds;
   int32_t num_fwd;

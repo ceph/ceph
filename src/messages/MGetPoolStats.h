@@ -18,7 +18,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MGetPoolStats : public PaxosServiceMessage {
+class MGetPoolStats final : public PaxosServiceMessage {
 public:
   uuid_d fsid;
   std::vector<std::string> pools;

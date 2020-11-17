@@ -19,7 +19,7 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-class MOSDFailure : public PaxosServiceMessage {
+class MOSDFailure final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;

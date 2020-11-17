@@ -7,7 +7,7 @@
 #include "osd/osd_types.h"
 #include "include/types.h"
 
-class MMonGetPurgedSnapsReply : public PaxosServiceMessage {
+class MMonGetPurgedSnapsReply final : public PaxosServiceMessage {
 public:
   epoch_t start, last;
   std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;

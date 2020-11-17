@@ -22,7 +22,7 @@
 #include <string>
 
 
-class MDiscover : public MMDSOp {
+class MDiscover final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;

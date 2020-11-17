@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "messages/MMDSOp.h"
 
-class MCacheExpire : public MMDSOp {
+class MCacheExpire final : public MMDSOp {
 private:
   __s32 from;
 

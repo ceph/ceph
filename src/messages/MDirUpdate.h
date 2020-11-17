@@ -18,7 +18,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MDirUpdate : public MMDSOp {
+class MDirUpdate final : public MMDSOp {
 public:
   mds_rank_t get_source_mds() const { return from_mds; }
   dirfrag_t get_dirfrag() const { return dirfrag; }

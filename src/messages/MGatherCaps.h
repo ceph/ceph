@@ -4,7 +4,7 @@
 #include "messages/MMDSOp.h"
 
 
-class MGatherCaps : public MMDSOp {
+class MGatherCaps final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 

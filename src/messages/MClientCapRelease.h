@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 
 
-class MClientCapRelease : public SafeMessage {
+class MClientCapRelease final : public SafeMessage {
  public:
   std::string_view get_type_name() const override { return "client_cap_release";}
   void print(std::ostream& out) const override {

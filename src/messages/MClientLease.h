@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MClientLease : public SafeMessage {
+class MClientLease final : public SafeMessage {
 public:
   struct ceph_mds_lease h;
   std::string dname;

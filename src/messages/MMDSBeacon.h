@@ -183,7 +183,7 @@ struct MDSHealth
 WRITE_CLASS_ENCODER(MDSHealth)
 
 
-class MMDSBeacon : public PaxosServiceMessage {
+class MMDSBeacon final : public PaxosServiceMessage {
 private:
 
   static constexpr int HEAD_VERSION = 8;
