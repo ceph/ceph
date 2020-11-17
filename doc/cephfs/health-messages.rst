@@ -60,9 +60,9 @@ performance issues::
   $ ceph health detail
   HEALTH_WARN 1 MDSs report slow metadata IOs; 1 MDSs report slow requests
   MDS_SLOW_METADATA_IO 1 MDSs report slow metadata IOs
-     mdsfs-01(mds.0): 3 slow metadata IOs are blocked > 30 secs, oldest blocked for 51123 secs
+     mds.fs-01(mds.0): 3 slow metadata IOs are blocked > 30 secs, oldest blocked for 51123 secs
   MDS_SLOW_REQUEST 1 MDSs report slow requests
-     mdsfs-01(mds.0): 5 slow requests are blocked > 30 secs
+     mds.fs-01(mds.0): 5 slow requests are blocked > 30 secs
 
 Where, for intance, ``MDS_SLOW_REQUEST`` is the unique code representing the
 condition where requests are taking long time to complete. And the following
