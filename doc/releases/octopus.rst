@@ -1,3 +1,21 @@
+v15.2.6 Octopus
+===============
+
+This is the 6th backport release in the Octopus series. This release fixes
+a security flaw affecting Messenger v1 & v2. We recommend users to update to
+this release.
+
+Notable Changes
+---------------
+
+* CVE 2020-25660: CEPHX_V2 replay attack protection lost, for Messenger v1 & v2 (Ilya Dryomov)
+
+Changelog
+---------
+
+* mon/MonClient: bring back CEPHX_V2 authorizer challenges (Ilya Dryomov)
+
+
 v15.2.5 Octopus
 ===============
 
