@@ -1,3 +1,16 @@
+documentation:
+  - AUTHORS
+  - CONTRIBUTING.rst
+  - COPYING*
+  - CodingStyle
+  - PendingReleaseNotes
+  - README.*
+  - SubmittingPatches*
+  - doc/**
+  - doc_deps.deb.txt
+  - man/**
+  - "**/*.+(rst|md)"
+
 pybind:
   - src/pybind/cephfs/*
   - src/pybind/mgr/*
