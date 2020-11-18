@@ -67,6 +67,21 @@ class RGWRadosObject : public RGWObject {
       virtual int get_attr(const char *name, bufferlist& dest, optional_yield y) override;
     };
 
+    struct RadosWriteOp : public WriteOp {
+    private:
+      RGWRadosObject* source;
+      RGWObjectCtx* rctx;
+      RGWRados::Object op_target;
+      RGWRados::Object::Write parent_op;
+
+    public:
+      RadosWriteOp(RGWRadosObject* _source, RGWObjectCtx* _rctx);
+
+      virtual int prepare(optional_yield y) override;
+      virtual int write_meta(uint64_t size, uint64_t accounted_size, optional_yield y) override;
+      //virtual int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive) override;
+    };
+
     RGWRadosObject() = default;
 
     RGWRadosObject(RGWRadosStore *_st, const rgw_obj_key& _k)
@@ -115,12 +130,14 @@ class RGWRadosObject : public RGWObject {
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
+    virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) override;
     virtual std::unique_ptr<RGWObject> clone() {
       return std::unique_ptr<RGWObject>(new RGWRadosObject(*this));
     }
 
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) override;
+    virtual std::unique_ptr<WriteOp> get_write_op(RGWObjectCtx *) override;
 
     /* OMAP */
     virtual int omap_get_vals_by_keys(const std::string& oid,
@@ -211,7 +228,7 @@ class RGWRadosBucket : public RGWBucket {
 			   bool *is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual std::unique_ptr<RGWBucket> clone() {
-      return std::unique_ptr<RGWBucket>(new RGWRadosBucket(*this));
+      return std::move(std::unique_ptr<RGWBucket>(new RGWRadosBucket(*this)));
     }
 
     friend class RGWRadosStore;

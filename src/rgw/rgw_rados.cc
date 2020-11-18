@@ -3764,7 +3764,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                RGWObjCategory category,
                std::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
@@ -4147,7 +4147,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
 	       real_time delete_at,
@@ -4434,7 +4434,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                rgw::sal::RGWObject* dest_obj,
 	       real_time *mtime,
 	       real_time set_mtime,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
@@ -4516,7 +4516,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              const DoutPrefixProvider *dpp,
                              optional_yield y)
 {
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   real_time read_mtime;
   uint64_t obj_size;
 
