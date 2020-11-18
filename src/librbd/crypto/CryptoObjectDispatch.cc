@@ -77,8 +77,8 @@ struct C_AlignedObjectReadRequest : public Context {
         for (auto& extent: *extents) {
           auto crypto_ret = crypto->decrypt_aligned_extent(
                   extent,
-                  Striper::get_file_offset(
-                          cct, &image_ctx->layout, object_no, extent.offset));
+                  io::util::get_file_offset(
+                          image_ctx, object_no, extent.offset));
           if (crypto_ret != 0) {
             ceph_assert(crypto_ret < 0);
             r = crypto_ret;
@@ -483,9 +483,7 @@ bool CryptoObjectDispatch<I>::write(
   if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(
             &data,
-            Striper::get_file_offset(
-                    m_image_ctx->cct, &m_image_ctx->layout, object_no,
-                    object_off));
+            io::util::get_file_offset(m_image_ctx, object_no, object_off));
     *dispatch_result = r == 0 ? io::DISPATCH_RESULT_CONTINUE
                               : io::DISPATCH_RESULT_COMPLETE;
     on_dispatched->complete(r);

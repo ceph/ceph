@@ -8,6 +8,7 @@
 #include "test/librbd/mock/cache/MockImageCache.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ObjectDispatchSpec.h"
+#include "librbd/io/Utils.h"
 
 namespace librbd {
 namespace {
@@ -52,6 +53,27 @@ inline ImageCtx *get_image_ctx(MockTestImageCtx *image_ctx) {
 
 namespace librbd {
 namespace io {
+
+namespace util {
+
+template<>
+void file_to_extents(
+        MockTestImageCtx *image_ctx, uint64_t offset, uint64_t length,
+        uint64_t buffer_offset,
+        striper::LightweightObjectExtents *object_extents) {
+  Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
+                           0, buffer_offset, object_extents);
+}
+
+template <> void extent_to_file(
+        MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
+        uint64_t length,
+        std::vector<std::pair<uint64_t, uint64_t> >& extents) {
+  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
+                          offset, length, extents);
+}
+
+} // namespace util
 
 using ::testing::_;
 using ::testing::InSequence;
