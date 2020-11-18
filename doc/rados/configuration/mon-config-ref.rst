@@ -467,6 +467,8 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 .. index:: Ceph Storage Cluster; capacity planning, Ceph Monitor; capacity planning
 
+.. _storage-capacity:
+
 Storage Capacity
 ----------------
 
