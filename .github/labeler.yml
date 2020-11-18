@@ -30,7 +30,7 @@ cephadm:
   - qa/suites/rados/cephadm/**
 
 bluestore:
-  - src/bluestore/**
+  - src/os/bluestore/**
 
 core:
   - src/blk/**
