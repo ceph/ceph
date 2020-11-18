@@ -278,8 +278,14 @@ void ObjectCopyRequest<I>::process_copyup() {
 
   // let dispatch layers have a chance to process the data but
   // assume that the dispatch layer will only touch the sparse bufferlist
-  m_dst_image_ctx->io_object_dispatcher->prepare_copyup(
+  auto r = m_dst_image_ctx->io_object_dispatcher->prepare_copyup(
     m_dst_object_number, &m_snapshot_sparse_bufferlist);
+  if (r < 0) {
+    lderr(m_cct) << "failed to prepare copyup data: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
 
   send_write_object();
 }
