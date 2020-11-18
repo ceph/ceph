@@ -303,7 +303,7 @@ class CephService(object):
                         CephService._get_smart_data_by_device(device))
         else:
             msg = '[SMART] could not retrieve device list from daemon with type %s and ' +\
-                'with ID %d'
+                'with ID %s'
             logger.debug(msg, daemon_type, daemon_id)
         return smart_data
 
