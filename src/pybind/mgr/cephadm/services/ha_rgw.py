@@ -6,7 +6,7 @@ from ceph.deployment.service_spec import HA_RGWSpec
 
 from orchestrator import DaemonDescription, OrchestratorError
 from .cephadmservice import CephadmDaemonSpec, CephService
-from .. import utils
+from ..utils import CephadmNoImage, cephadmNoImage, resolve_ip
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,15 @@ class HAproxyService(CephService):
         host = daemon_spec.host
         spec = daemon_spec.spec
 
+        out, err, code = self.mgr._run_cephadm(host, cephadmNoImage, 'verify-prereqs',
+                                               ['--service-type', 'haproxy'],
+                                               no_fsid=True, error_ok=True)
+
+        if code:
+            raise OrchestratorError(
+                'HAproxy failed prereqs check with code: %d, stderr:%s' % (
+                    code, '\n'.join(err)))
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(daemon_id),
@@ -54,7 +63,7 @@ class HAproxyService(CephService):
             rgw_servers = []
             for daemon in rgw_daemons:
                 rgw_servers.append(self.rgw_server(
-                    daemon.name(), utils.resolve_ip(daemon.hostname)))
+                    daemon.name(), resolve_ip(daemon.hostname)))
 
             # virtual ip address cannot have netmask attached when passed to haproxy config
             # since the port is added to the end and something like 123.123.123.10/24:8080 is invalid
@@ -91,6 +100,15 @@ class KeepAlivedService(CephService):
         host = daemon_spec.host
         spec = daemon_spec.spec
 
+        out, err, code = self.mgr._run_cephadm(host, cephadmNoImage, 'verify-prereqs',
+                                               ['--service-type', 'keepalived'],
+                                               no_fsid=True, error_ok=True)
+
+        if code:
+            raise OrchestratorError(
+                'Keepalived failed prereqs check with code: %d, stderr:%s' % (
+                    code, '\n'.join(err)))
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(daemon_id),
@@ -122,11 +140,11 @@ class KeepAlivedService(CephService):
             # remove host, daemon is being deployed on from all_hosts list for
             # other_ips in conf file and converter to ips
             all_hosts.remove(host)
-            other_ips = [utils.resolve_ip(h) for h in all_hosts]
+            other_ips = [resolve_ip(h) for h in all_hosts]
 
             ka_context = {'spec': spec, 'state': state,
                           'other_ips': other_ips,
-                          'host_ip': utils.resolve_ip(host)}
+                          'host_ip': resolve_ip(host)}
 
             keepalived_conf = self.mgr.template.render(
                 'services/keepalived/keepalived.conf.j2', ka_context)
