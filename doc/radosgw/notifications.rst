@@ -139,10 +139,68 @@ The topic ARN in the response will have the following format:
 
    arn:aws:sns:<zone-group>:<tenant>:<topic>
 
+Get Topic Attributes
+````````````````````
+
+Returns information about a specific topic. This includes push-endpoint information, if provided.
+
+::
+
+   POST
+
+   Action=GetTopicAttributes
+   &TopicArn=<topic-arn>
+
+Response will have the following format:
+
+::
+
+    <GetTopicAttributesResponse>
+        <GetTopicAttributesRersult>
+            <Attributes>
+                <entry>
+                    <key>User</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>Name</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>EndPoint</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>TopicArn</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>OpaqueData</key>
+                    <value></value>
+                </entry> 
+            </Attributes>
+        </GetTopicAttributesResult>
+        <ResponseMetadata>
+            <RequestId></RequestId>
+        </ResponseMetadata>
+    </GetTopicAttributesResponse>
+
+- User: name of the user that created the topic
+- Name: name of the topic
+- EndPoint: JSON formatted endpoint parameters, including:
+   - EndpointAddress: the push-endpoint URL
+   - EndpointArgs: the push-endpoint args
+   - EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
+   - HasStoredSecret: "true" if if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
+   - Persistent: "true" is topic is persistent
+- TopicArn: topic ARN
+- OpaqueData: the opaque data set on the topic
+
 Get Topic Information
 `````````````````````
 
 Returns information about specific topic. This includes push-endpoint information, if provided.
+Note that this API is now deprecated in favor of the AWS compliant `GetTopicAttributes` API.
 
 ::
 
@@ -164,6 +222,8 @@ Response will have the following format:
                     <EndpointAddress></EndpointAddress>
                     <EndpointArgs></EndpointArgs>
                     <EndpointTopic></EndpointTopic>
+                    <HasStoredSecret></HasStoredSecret>
+                    <Persistent></Persistent>
                 </EndPoint>
                 <TopicArn></TopicArn>
                 <OpaqueData></OpaqueData>
@@ -177,10 +237,12 @@ Response will have the following format:
 - User: name of the user that created the topic
 - Name: name of the topic
 - EndpointAddress: the push-endpoint URL
-- if endpoint URL contain user/password information, request must be made over HTTPS. If not, topic get request will be rejected.
 - EndpointArgs: the push-endpoint args
-- EndpointTopic: the topic name that should be sent to the endpoint (mat be different than the above topic name)
+- EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
+- HasStoredSecret: "true" if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
+- Persistent: "true" is topic is persistent
 - TopicArn: topic ARN
+- OpaqueData: the opaque data set on the topic
 
 Delete Topic
 ````````````

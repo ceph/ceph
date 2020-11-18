@@ -19,6 +19,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+static const char* AWS_SNS_NS("https://sns.amazonaws.com/doc/2010-03-31/");
 
 // command (AWS compliant): 
 // POST
@@ -76,14 +77,14 @@ public:
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("CreateTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+    f->open_object_section_in_ns("CreateTopicResponse", AWS_SNS_NS);
     f->open_object_section("CreateTopicResult");
     encode_xml("TopicArn", topic_arn, f); 
-    f->close_section();
+    f->close_section(); // CreateTopicResult
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
-    f->close_section();
-    f->close_section();
+    f->close_section(); // ResponseMetadata
+    f->close_section(); // CreateTopicResponse
     rgw_flush_formatter_and_reset(s, f);
   }
 };
@@ -105,14 +106,14 @@ public:
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("ListTopicsResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+    f->open_object_section_in_ns("ListTopicsResponse", AWS_SNS_NS);
     f->open_object_section("ListTopicsResult");
     encode_xml("Topics", result, f); 
-    f->close_section();
+    f->close_section(); // ListTopicsResult
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
-    f->close_section();
-    f->close_section();
+    f->close_section(); // ResponseMetadat
+    f->close_section(); // ListTopicsResponse
     rgw_flush_formatter_and_reset(s, f);
   }
 };
@@ -160,6 +161,47 @@ public:
 
 // command (AWS compliant): 
 // POST
+// Action=GetTopicAttributes&TopicArn=<topic-arn>
+class RGWPSGetTopicAttributes_ObjStore_AWS : public RGWPSGetTopicOp {
+public:
+  int get_params() override {
+    const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
+
+    if (!topic_arn || topic_arn->resource.empty()) {
+        ldout(s->cct, 1) << "GetTopicAttribute Action 'TopicArn' argument is missing or invalid" << dendl;
+        return -EINVAL;
+    }
+
+    topic_name = topic_arn->resource;
+    return 0;
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/xml");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    const auto f = s->formatter;
+    f->open_object_section_in_ns("GetTopicAttributesResponse", AWS_SNS_NS);
+    f->open_object_section("GetTopicAttributesResult");
+    result.topic.dump_xml_as_attributes(f);
+    f->close_section(); // GetTopicAttributesResult
+    f->open_object_section("ResponseMetadata");
+    encode_xml("RequestId", s->req_id, f); 
+    f->close_section(); // ResponseMetadata
+    f->close_section(); // GetTopicAttributesResponse
+    rgw_flush_formatter_and_reset(s, f);
+  }
+};
+
+// command (AWS compliant): 
+// POST
 // Action=DeleteTopic&TopicArn=<topic-arn>
 class RGWPSDeleteTopic_ObjStore_AWS : public RGWPSDeleteTopicOp {
 public:
@@ -187,11 +229,11 @@ public:
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("DeleteTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+    f->open_object_section_in_ns("DeleteTopicResponse", AWS_SNS_NS);
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
-    f->close_section();
-    f->close_section();
+    f->close_section(); // ResponseMetadata
+    f->close_section(); // DeleteTopicResponse
     rgw_flush_formatter_and_reset(s, f);
   }
 };
@@ -321,16 +363,14 @@ RGWOp* RGWHandler_REST_PSTopic_AWS::op_post() {
       return new RGWPSListTopics_ObjStore_AWS();
     if (action.compare("GetTopic") == 0)
       return new RGWPSGetTopic_ObjStore_AWS();
+    if (action.compare("GetTopicAttributes") == 0)
+      return new RGWPSGetTopicAttributes_ObjStore_AWS();
   }
 
   return nullptr;
 }
 
 int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp) {
-  /*if (s->info.args.exists("Action") && s->info.args.get("Action").find("Topic") != std::string::npos) {
-      // TODO: some topic specific authorization
-      return 0;
-  }*/
   return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
 }
 

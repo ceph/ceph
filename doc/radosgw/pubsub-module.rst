@@ -221,7 +221,9 @@ Response will have the following format (JSON):
                "oid_prefix":"",
                "push_endpoint":"",
                "push_endpoint_args":"",
-               "push_endpoint_topic":""
+               "push_endpoint_topic":"",
+               "stored_secret":"",
+               "persistent":""
            },
            "arn":""
            "opaqueData":""
