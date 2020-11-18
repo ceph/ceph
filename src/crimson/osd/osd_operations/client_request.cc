@@ -76,7 +76,7 @@ seastar::future<> ClientRequest::start()
 	  handle.enter(pp(pg).await_map)
 	).then([this, &pg]() mutable {
 	  return with_blocking_future(
-	    pg.osdmap_gate.wait_for_map(m->get_map_epoch()));
+	    pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
 	}).then([this, &pg](auto map) mutable {
 	  return with_blocking_future(
 	    handle.enter(pp(pg).wait_for_active));
