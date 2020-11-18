@@ -5,8 +5,6 @@ expect_failure() {
 }
 set -e
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
-
 mkdir -p d1/d2
 mkdir -p d1/d3
 mkdir d1/.snap/foo

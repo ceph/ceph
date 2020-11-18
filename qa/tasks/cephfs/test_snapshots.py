@@ -1,3 +1,4 @@
+import errno
 import logging
 import signal
 from textwrap import dedent
@@ -37,6 +38,25 @@ class TestSnapshots(CephFSTestCase):
 
     def _get_pending_snap_destroy(self, rank=0, status=None):
         return self._get_snapserver_dump(rank,status=status)["pending_destroy"]
+
+    def test_allow_new_snaps_config(self):
+        """
+        Check whether 'allow_new_snaps' setting works
+        """
+        self.mount_a.run_shell(["mkdir", "test-allow-snaps"])
+
+        self.fs.set_allow_new_snaps(False);
+        try:
+            self.mount_a.run_shell(["mkdir", "test-allow-snaps/.snap/snap00"])
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM, "expected EPERM")
+        else:
+            self.fail("expected snap creatiion to fail")
+
+        self.fs.set_allow_new_snaps(True);
+        self.mount_a.run_shell(["mkdir", "test-allow-snaps/.snap/snap00"])
+        self.mount_a.run_shell(["rmdir", "test-allow-snaps/.snap/snap00"])
+        self.mount_a.run_shell(["rmdir", "test-allow-snaps"])
 
     def test_kill_mdstable(self):
         """
