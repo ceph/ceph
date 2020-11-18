@@ -278,6 +278,15 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
         result = cd.dict_get_join({'a': 1}, 'a')
         assert result == 1
 
+    def test_last_local_images(self):
+        out = '''
+docker.io/ceph/daemon-base@
+docker.io/ceph/ceph:v15.2.5
+docker.io/ceph/daemon-base:octopus
+        '''
+        image = cd._filter_last_local_ceph_image(out)
+        assert image == 'docker.io/ceph/ceph:v15.2.5'
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
