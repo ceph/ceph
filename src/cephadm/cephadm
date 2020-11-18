@@ -1409,13 +1409,16 @@ def get_last_local_ceph_image():
         [container_path, 'images',
          '--filter', 'label=ceph=True',
          '--filter', 'dangling=false',
-         '--format', '{{.Repository}} {{.Tag}}'])
-    for line in out.splitlines():
-        if len(line.split()) == 2:
-            repository, tag = line.split()
-            r = '{}:{}'.format(repository, tag)
-            logger.info('Using recent ceph image %s' % r)
-            return r
+         '--format', '{{.Repository}}@{{.Digest}}'])
+    return _filter_last_local_ceph_image(out)
+
+
+def _filter_last_local_ceph_image(out):
+    # str -> Optional[str]
+    for image in out.splitlines():
+        if image and not image.endswith('@'):
+            logger.info('Using recent ceph image %s' % image)
+            return image
     return None
 
 
