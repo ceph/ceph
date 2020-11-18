@@ -38,3 +38,4 @@ versions of Ceph.
     DriveGroups <drivegroups>
     troubleshooting
     concepts
+    Cephadm Feature Planning <../dev/cephadm/index>
