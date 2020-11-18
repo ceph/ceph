@@ -75,6 +75,8 @@ void decode(bucket_index_layout_generation& l, bufferlist::const_iterator& bl);
 enum class BucketLogType : uint8_t {
   // colocated with bucket index, so the log layout matches the index layout
   InIndex,
+  // located externally to bucket index, in a cls_fifo instance
+  FIFO
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type)
@@ -82,6 +84,8 @@ inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type
   switch (log_type) {
     case BucketLogType::InIndex:
       return out << "InIndex";
+    case BucketLogType::FIFO:
+      return out << "FIFO";
     default:
       return out << "Unknown";
   }
