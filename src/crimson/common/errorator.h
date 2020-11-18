@@ -686,7 +686,7 @@ private:
     template<typename AsyncAction>
     friend inline auto ::crimson::do_until(AsyncAction action);
 
-    template <class...>
+    template <typename Result>
     friend class ::seastar::future;
 
     // let seastar::do_with_impl to up-cast us to seastar::future.
