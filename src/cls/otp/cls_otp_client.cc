@@ -68,7 +68,7 @@ namespace rados {
         bufferlist in;
         bufferlist out;
         encode(op, in);
-        rados_op->exec(oid, "otp", "otp_check", in, out);
+        rados_op->exec(oid, "otp", "otp_check", in);
         
 
         cls_otp_get_result_op op2;
@@ -76,7 +76,7 @@ namespace rados {
         bufferlist in2;
         bufferlist out2;
         encode(op2, in2);
-        rados_op->exec(oid, "otp", "otp_get_result", in, out);
+        rados_op->exec(oid, "otp", "otp_get_result", in);
         
 
         auto iter = out.cbegin();
