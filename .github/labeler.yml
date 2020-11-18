@@ -44,7 +44,13 @@ core:
   - src/os/**
   - src/osd/**
   - src/tools/rados/**
+  - qa/standalone/**
   - qa/suites/rados/**
+  - qa/workunits/erasure-code/**
+  - qa/workunits/mon/**
+  - qa/workunits/mgr/**
+  - qa/workunits/objectstore/**
+  - qa/workunits/rados/**
   - doc/rados/**
 
 crimson:
@@ -119,3 +125,7 @@ rbd:
 ceph-volume:
   - src/ceph-volume/**
   - doc/ceph-volume/**
+
+tests:
+  - qa/tasks/**
+  - qa/workunits/**
