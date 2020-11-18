@@ -90,6 +90,7 @@ Administration
     CephFS Quotas <quota>
     Health messages <health-messages>
     Upgrading old file systems <upgrading>
+    CephFS Top Utility <cephfs-top>
 
 
 .. raw:: html
