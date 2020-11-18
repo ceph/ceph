@@ -8053,7 +8053,9 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& buc
   if (!pending_entries.empty()) {
     ldpp_dout(dpp, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj->get_bucket() << dendl;
 
-    int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, get_bilog_handler(bucket_info));
+    int ret = with_bilog<void>([&, this] (auto bilog_handler) {
+      return update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, bilog_handler);
+    }, bucket_info);
     if (ret < 0) {
       if (ret == -ECANCELED) {
         // In this context, ECANCELED means that the OLH tag changed in either the bucket index entry or the OLH object.
