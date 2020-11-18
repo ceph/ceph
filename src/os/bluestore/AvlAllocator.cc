@@ -36,8 +36,8 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
 				     uint64_t align)
 {
   const auto compare = t.key_comp();
-  for (auto rs = t.lower_bound(range_t{*cursor, size}, compare);
-       rs != t.end(); ++rs) {
+  auto rs_start = t.lower_bound(range_t{*cursor, size}, compare);
+  for (auto rs = rs_start; rs != t.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
       *cursor = offset + size;
@@ -48,7 +48,7 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
    * If we know we've searched the whole tree (*cursor == 0), give up.
    * Otherwise, reset the cursor to the beginning and try again.
    */
-   if (*cursor == 0) {
+   if (*cursor == 0 || rs_start == t.begin()) {
      return -1ULL;
    }
    *cursor = 0;
