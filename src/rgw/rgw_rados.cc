@@ -7735,12 +7735,6 @@ int RGWRados::remove_olh_pending_entries(const RGWBucketInfo& bucket_info, RGWOb
   return 0;
 }
 
-static auto get_bilog_handler(CephContext* const cct,
-                              const RGWBucketInfo& bucket_info)
-{
-  return BILogNopHandler{cct};
-}
-
 int RGWRados::follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target)
 {
   map<string, bufferlist> pending_entries;
@@ -7759,7 +7753,9 @@ int RGWRados::follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx
   if (!pending_entries.empty()) {
     ldout(cct, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
 
-    int ret = update_olh(obj_ctx, state, bucket_info, olh_obj, get_bilog_handler(cct, bucket_info));
+    int ret = with_bilog<void>([&, this] (auto bilog_handler) {
+      return update_olh(obj_ctx, state, bucket_info, olh_obj, bilog_handler);
+    }, bucket_info);
     if (ret < 0) {
       return ret;
     }
