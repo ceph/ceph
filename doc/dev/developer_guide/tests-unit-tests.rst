@@ -61,8 +61,8 @@ in the ``./src`` directory. The ``add_ceph_test`` and
 Some unit tests are scripts and other unit tests are binaries that are
 compiled during the build process.  
 
-* - ``add_ceph_test`` function - used to declare unit test scripts 
-* - ``add_ceph_unittest`` function - used for unit test binaries
+* ``add_ceph_test`` function - used to declare unit test scripts 
+* ``add_ceph_unittest`` function - used for unit test binaries
 
 Unit testing of CLI tools
 -------------------------
