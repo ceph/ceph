@@ -73,6 +73,17 @@ class StateMachineRenderer(object):
         self.subgraphnum = 0
         self.clusterlabel = {}
 
+        self.color_idx = 0
+        self.color_palette = [
+            "#000000",  # black
+            "#1e90ff",  # dodgerblue
+            "#ff0000",  # red
+            "#0000ff",  # blue
+            "#ffa500",  # orange
+            "#40e0d0",  # turquoise
+            "#c71585",  # mediumvioletred
+        ]
+
     def __str__(self):
         return "-------------------\n\nstates: %s\n\n machines: %s\n\n edges: %s\n\n context %s\n\n state_contents %s\n\n--------------------" % (
             self.states,
@@ -81,6 +92,13 @@ class StateMachineRenderer(object):
             self.context,
             self.state_contents
             )
+
+    def __next_color(self):
+        color = self.color_palette[self.color_idx]
+        self.color_idx += 1
+        if self.color_idx == len(self.color_palette):
+            self.color_idx = 0
+        return color
 
     def read_input(self, input_lines):
         previous_line = None
@@ -174,7 +192,12 @@ class StateMachineRenderer(object):
             yield "subgraph cluster%s {" % (str(self.subgraphnum),)
             self.subgraphnum += 1
             yield """\tlabel = "%s";""" % (state,)
-            yield """\tcolor = "blue";"""
+            yield """\tcolor = "black";"""
+
+            if state in self.machines.values():
+                yield """\tstyle = "filled";"""
+                yield """\tfillcolor = "lightgrey";"""
+
             for j in self.state_contents[state]:
                 for i in self.emit_state(j):
                     yield "\t"+i
@@ -183,7 +206,7 @@ class StateMachineRenderer(object):
             found = False
             for (k, v) in self.machines.items():
                 if v == state:
-                    yield state+"[shape=Mdiamond];"
+                    yield state+"[shape=Mdiamond style=filled fillcolor=lightgrey];"
                     found = True
                     break
             if not found:
@@ -197,7 +220,10 @@ class StateMachineRenderer(object):
             retval += "]"
             return retval
         for (fro, to) in self.edges[event]:
-            appendix = ['label="%s"' % (event,)]
+            color = self.__next_color()
+            appendix = ['label="%s"' % (event,),
+                        'color="%s"' % (color,),
+                        'fontcolor="%s"' % (color,)]
             if fro in self.machines.keys():
                 appendix.append("ltail=%s" % (self.clusterlabel[fro],))
                 while fro in self.machines.keys():
