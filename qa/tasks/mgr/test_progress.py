@@ -187,9 +187,10 @@ class TestProgress(MgrTestCase):
                 'osd', 'out', str(osd_id))
 
         # Wait for a progress event to pop up
-        self.wait_until_equal(lambda: len(self._all_events()), 1,
-                              timeout=self.EVENT_CREATION_PERIOD)
-        ev = self._all_events()[0]
+        self.wait_until_equal(lambda: self._osd_in_out_events_count('out'), 1,
+                              timeout=self.EVENT_CREATION_PERIOD*2,
+                              period=1)
+        ev = self._get_osd_in_out_events('out')[0]
         log.info(json.dumps(ev, indent=1))
         self.assertIn("Rebalancing after osd.0 marked out", ev['message'])
         return ev
@@ -204,8 +205,9 @@ class TestProgress(MgrTestCase):
                              timeout=self.EVENT_CREATION_PERIOD)
         try:
             # Wait for progress event marked in to pop up
-            self.wait_until_equal(lambda: len(self._events_in_progress()), 1,
-                                  timeout=self.EVENT_CREATION_PERIOD)
+            self.wait_until_equal(lambda: self._osd_in_out_events_count('in'), 1,
+                                  timeout=self.EVENT_CREATION_PERIOD*2,
+                                  period=1)
         except RuntimeError as ex:
             if not "Timed out after" in str(ex):
                 raise ex
@@ -213,7 +215,7 @@ class TestProgress(MgrTestCase):
             log.info("There was no PGs affected by osd being marked in")
             return None
 
-        new_event = self._events_in_progress()[0]
+        new_event = self._get_osd_in_out_events('in')[0]
         return new_event
 
     def _no_events_anywhere(self):
