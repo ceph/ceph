@@ -43,13 +43,17 @@ minutes to three hours to complete, but it's worth the wait.
 How unit tests are declared
 ---------------------------
 
-Unit tests are declared in the ``CMakeLists.txt`` files (multiple files under
-``./src``) using the ``add_ceph_test`` or ``add_ceph_unittest`` CMake
-functions, which are themselves defined in
-``./cmake/modules/AddCephTest.cmake``. Some unit tests are scripts, while
-others are binaries that are compiled during the build process.  The
-``add_ceph_test`` function is used to declare unit test scripts, while
-``add_ceph_unittest`` is used for unit test binaries.
+Unit tests are declared in the ``CMakeLists.txt`` file, which is found
+in the ``./src`` directory. The ``add_ceph_test`` and 
+``add_ceph_unittest`` CMake functions are used to declare unit tests.
+``add_ceph_test`` and ``add_ceph_unittest`` are themselves defined in
+``./cmake/modules/AddCephTest.cmake``. 
+
+Some unit tests are scripts and other unit tests are binaries that are
+compiled during the build process.  
+
+* - ``add_ceph_test`` function - used to declare unit test scripts 
+* - ``add_ceph_unittest`` function - used for unit test binaries
 
 Unit testing of CLI tools
 -------------------------
