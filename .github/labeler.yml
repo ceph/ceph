@@ -25,7 +25,7 @@ common:
   - src/log
 
 bluestore:
-  - src/bluestore/**
+  - src/os/bluestore/**
 
 core:
   - src/blk/**
