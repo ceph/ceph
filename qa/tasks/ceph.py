@@ -73,8 +73,8 @@ def generate_caps(type_):
         yield capability
 
 
-def update_archive_setting(ctx, key, value):
-    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+def update_archive_setting(archive_dir, key, value):
+    with open(os.path.join(archive_dir, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
         if 'archive' in info_yaml:
@@ -90,8 +90,9 @@ def ceph_crash(ctx, config):
     Gather crash dumps from /var/lib/ceph/crash
     """
 
-    # Add crash directory to job's archive
-    update_archive_setting(ctx, 'crash', '/var/lib/ceph/crash')
+    if ctx.archive is not None:
+        # Add crash directory to job's archive
+        update_archive_setting(ctx.archive, 'crash', '/var/lib/ceph/crash')
 
     try:
         yield
@@ -163,7 +164,8 @@ def ceph_log(ctx, config):
     )
 
     # Add logs directory to job's info log file
-    update_archive_setting(ctx, 'log', '/var/log/ceph')
+    if ctx.archive is not None:
+        update_archive_setting(ctx.archive, 'log', '/var/log/ceph')
 
     class Rotater(object):
         stop_event = gevent.event.Event()
@@ -228,24 +230,10 @@ def ceph_log(ctx, config):
 
             for remote in ctx.cluster.remotes.keys():
                 remote.write_file(remote_logrotate_conf, BytesIO(conf.encode()))
-                remote.run(
-                    args=[
-                        'sudo',
-                        'mv',
-                        remote_logrotate_conf,
-                        '/etc/logrotate.d/ceph-test.conf',
-                        run.Raw('&&'),
-                        'sudo',
-                        'chmod',
-                        '0644',
-                        '/etc/logrotate.d/ceph-test.conf',
-                        run.Raw('&&'),
-                        'sudo',
-                        'chown',
-                        'root.root',
-                        '/etc/logrotate.d/ceph-test.conf'
-                    ]
-                )
+                remote.sh(
+                    f'sudo mv {remote_logrotate_conf} /etc/logrotate.d/ceph-test.conf && '
+                    'sudo chmod 0644 /etc/logrotate.d/ceph-test.conf && '
+                    'sudo chown root.root /etc/logrotate.d/ceph-test.conf')
                 remote.chcon('/etc/logrotate.d/ceph-test.conf',
                              'system_u:object_r:etc_t:s0')
 
@@ -262,35 +250,15 @@ def ceph_log(ctx, config):
         if ctx.config.get('log-rotate'):
             log.info('Shutting down logrotate')
             logrotater.end()
-            ctx.cluster.run(
-                args=['sudo', 'rm', '/etc/logrotate.d/ceph-test.conf'
-                      ]
-            )
+            ctx.cluster.sh('sudo rm /etc/logrotate.d/ceph-test.conf')
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             # and logs
             log.info('Compressing logs...')
-            run.wait(
-                ctx.cluster.run(
-                    args=[
-                        'sudo',
-                        'find',
-                        '/var/log/ceph',
-                        '-name',
-                        '*.log',
-                        '-print0',
-                        run.Raw('|'),
-                        'sudo',
-                        'xargs',
-                        '-0',
-                        '--no-run-if-empty',
-                        '--',
-                        'gzip',
-                        '--',
-                    ],
-                    wait=False,
-                ),
-            )
+            ctx.cluster.sh(
+                'sudo find /var/log/ceph -name *.log -print0 | '
+                'sudo xargs -0 --no-run-if-empty -- gzip --',
+                wait=False)
 
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
