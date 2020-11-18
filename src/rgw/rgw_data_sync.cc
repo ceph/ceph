@@ -1433,11 +1433,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   static constexpr int max_error_entries = DATA_SYNC_MAX_ERR_ENTRIES;
 
   ceph::coarse_real_time error_retry_time;
-
-#define RETRY_BACKOFF_SECS_MIN 60
-#define RETRY_BACKOFF_SECS_DEFAULT 60
-#define RETRY_BACKOFF_SECS_MAX 600
-  uint32_t retry_backoff_secs = RETRY_BACKOFF_SECS_DEFAULT;
+  static constexpr uint32_t retry_backoff_secs = 60;
 
   RGWSyncTraceNodeRef tn;
 
@@ -1691,15 +1687,6 @@ public:
                                     entry_timestamp, true), false);
           }
           if (!omapvals->more) {
-            if (error_marker.empty() && error_entries.empty()) {
-              /* the retry repo is empty, we back off a bit before calling it again */
-              retry_backoff_secs *= 2;
-              if (retry_backoff_secs > RETRY_BACKOFF_SECS_MAX) {
-                retry_backoff_secs = RETRY_BACKOFF_SECS_MAX;
-              }
-            } else {
-              retry_backoff_secs = RETRY_BACKOFF_SECS_DEFAULT;
-            }
             error_retry_time = ceph::coarse_real_clock::now() + make_timespan(retry_backoff_secs);
             error_marker.clear();
           }
