@@ -11,6 +11,7 @@ function(build_uring)
       GIT_REPOSITORY https://git.kernel.dk/liburing
       GIT_TAG "liburing-0.7"
       GIT_SHALLOW TRUE
+      GIT_CONFIG advice.detachedHead=false
       UPDATE_DISCONNECTED TRUE)
   endif()
 
