@@ -4745,6 +4745,14 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 512),
 	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo-chunk", bl, bl.length(), 0));
+  }
 
   // flush
   {
@@ -4760,14 +4768,18 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   }
 
   cdc = CDC::create("fastcdc", cbits(512)-1);
-  cdc->calc_chunks(gbl, &chunks);
-  chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  chunks.clear();
+  bufferlist chunk_target;
+  chunk_target.substr_of(gbl, 512, 512); // calculate based on window size
+  cdc->calc_chunks(chunk_target, &chunks);
+  bufferlist chunk_512;
+  chunk_512.substr_of(gbl, chunks[0].first + 512, chunks[0].second);
   {
     unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
     char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
     SHA1 sha1_gen;
-    int size = chunk.length();
-    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    int size = chunk_512.length();
+    sha1_gen.Update((const unsigned char *)chunk_512.c_str(), size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
     tgt_oid = string(p_str);
@@ -4777,7 +4789,7 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   {
     bufferlist test_bl;
     ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
-    ASSERT_EQ(test_bl[1], chunk[1]);
+    ASSERT_EQ(test_bl[1], chunk_512[1]);
   }
 
   ASSERT_EQ(0, cluster.mon_command(
@@ -4786,7 +4798,15 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 16384),
 	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
 
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo-chunk", bl, bl.length(), 0));
+    gbl.begin(0).copy_in(bl.length(), bl);
+  }
   // flush
   {
     ObjectReadOperation op;
@@ -4801,14 +4821,16 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   }
 
   cdc = CDC::create("fastcdc", cbits(16384)-1);
+  chunks.clear();
   cdc->calc_chunks(gbl, &chunks);
-  chunk.substr_of(gbl, chunks[0].first, chunks[0].second);
+  bufferlist chunk_16384;
+  chunk_16384.substr_of(gbl, chunks[0].first, chunks[0].second);
   {
     unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
     char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
     SHA1 sha1_gen;
-    int size = chunk.length();
-    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    int size = chunk_16384.length();
+    sha1_gen.Update((const unsigned char *)chunk_16384.c_str(), size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
     tgt_oid = string(p_str);
@@ -4817,7 +4839,79 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   {
     bufferlist test_bl;
     ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
-    ASSERT_EQ(test_bl[0], chunk[0]);
+    ASSERT_EQ(test_bl[0], chunk_16384[0]);
+  }
+
+  // less than object size
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 4096),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // make a dirty chunks
+  // a chunk_info is deleted by write, which converts the manifest object to non-manifest object
+  {
+    bufferlist bl;
+    bl.append("hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo-chunk", bl, bl.length(), 0));
+  }
+
+  // reset set-chunk
+  {
+    bufferlist bl;
+    bl.append("DDse chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar-chunk", &op));
+  }
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar-chunk", 0,
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo-chunk", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  cdc = CDC::create("fastcdc", cbits(1024)-1);
+  chunks.clear();
+  cdc->calc_chunks(gbl, &chunks);
+  bufferlist small_chunk;
+  small_chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = small_chunk.length();
+    sha1_gen.Update((const unsigned char *)small_chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[0], small_chunk[0]);
   }
 
 }
