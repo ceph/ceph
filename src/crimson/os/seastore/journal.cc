@@ -157,8 +157,7 @@ Journal::roll_journal_segment()
 
   return (current_journal_segment ?
 	  current_journal_segment->close() :
-	  Segment::close_ertr::now()).safe_then(
-    [this, old_segment_id] {
+	  Segment::close_ertr::now()).safe_then([this] {
       return segment_provider->get_segment();
     }).safe_then([this](auto segment) {
       return segment_manager.open(segment);
@@ -508,7 +507,7 @@ Journal::scan_segment_ret Journal::scan_segment(
 		[=, &current](auto &header, auto &bl) {
 		  return scan_segment_ertr::now(
 		  ).safe_then(
-		    [=, &current, &header, &bl]()
+		    [=, &header, &bl]()
 		    -> scan_segment_ertr::future<> {
 		    if (!delta_handler) {
 		      return scan_segment_ertr::now();
@@ -579,7 +578,7 @@ Journal::scan_segment_ret Journal::scan_segment(
 		  }
 		});
 	    });
-	}).safe_then([this, &current] {
+	}).safe_then([&current] {
 	  return scan_segment_ertr::make_ready_future<paddr_t>(current);
 	});
     });
