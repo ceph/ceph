@@ -586,6 +586,10 @@ int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, const std::string& oid, cons
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
 #endif
 
+void cls_rgw_usage_log_read(librados::ObjectReadOperation& op, const std::string& oid, const std::string& user, const std::string& bucket,
+                           uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, std::string& read_iter,
+			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
+
 void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, const std::string& user, const std::string& bucket, uint64_t start_epoch, uint64_t end_epoch);
 
 void cls_rgw_usage_log_clear(librados::ObjectWriteOperation& op);
@@ -604,6 +608,16 @@ int cls_rgw_gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& mark
 #endif
 void cls_rgw_gc_list(librados::ObjectReadOperation& op, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
                     std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker);
+
+void cls_rgw_lc_get_head(librados::ObjectReadOperation& op, const std::string& oid, cls_rgw_lc_obj_head& head);
+void cls_rgw_lc_put_head(librados::ObjectWriteOperation& op, const std::string& oid, cls_rgw_lc_obj_head& head);
+void cls_rgw_lc_get_next_entry(librados::ObjectReadOperation& op, const std::string& oid, string& marker, cls_rgw_lc_entry& entry);
+void cls_rgw_lc_rm_entry(librados::ObjectWriteOperation& op, const std::string& oid, const cls_rgw_lc_entry& entry);
+void cls_rgw_lc_set_entry(librados::ObjectWriteOperation& op, const std::string& oid, const cls_rgw_lc_entry& entry);
+void cls_rgw_lc_get_entry(librados::ObjectReadOperation& op, const std::string& oid, const std::string& marker, cls_rgw_lc_entry& entry);
+void cls_rgw_lc_list(librados::ObjectReadOperation& op, const std::string& oid,
+		    const std::string& marker, uint32_t max_entries,
+                    vector<cls_rgw_lc_entry>& entries);
 /* lifecycle */
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
@@ -622,6 +636,9 @@ int cls_rgw_lc_list(librados::IoCtx& io_ctx, const std::string& oid,
 /* resharding */
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);
+void cls_rgw_reshard_list(librados::ObjectReadOperation& op, const std::string& oid, std::string& marker, uint32_t max,
+                         std::list<cls_rgw_reshard_entry>& entries, bool* is_truncated);
+void cls_rgw_reshard_get(librados::ObjectReadOperation& op, const std::string& oid, cls_rgw_reshard_entry& entry);
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
 #ifndef CLS_CLIENT_HIDE_IOCTX
@@ -630,8 +647,9 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const std::string& oid, std::s
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_reshard_entry& entry);
 #endif
 
-void cls_rgw_get_bucket_resharding(librados::ObjectWriteOperation& op, const std::string& oid,
+void cls_rgw_get_bucket_resharding(librados::ObjectReadOperation& op, const std::string& oid,
                                   cls_rgw_bucket_instance_entry *entry);
+void cls_rgw_clear_bucket_resharding(librados::ObjectWriteOperation& op, const std::string& oid);
 /* resharding attribute on bucket index shard headers */
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err);
 // these overloads which call io_ctx.operate() should not be called in the rgw.

@@ -406,7 +406,7 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
 
   for (auto i : bucket_objs) {
     cls_rgw_bucket_instance_entry entry;
-    librados::ObjectWriteOperation op;
+    librados::ObjectReadOperation op;
     cls_rgw_get_bucket_resharding(op, i.second, &entry);
 
     status->push_back(entry);

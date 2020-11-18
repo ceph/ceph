@@ -313,22 +313,17 @@ int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
 
 #define MAX_LC_LIST_ENTRIES 100
   do {
-    int ret = cls_rgw_lc_list(store->getRados()->lc_pool_ctx, obj_names[index],
+    librados::ObjectReadOperation op;
+    cls_rgw_lc_list(op, obj_names[index],
 			      marker, MAX_LC_LIST_ENTRIES, entries);
-    if (ret < 0)
-      return ret;
 
     for (auto& entry : entries) {
       entry.start_time = ceph_clock_now();
       entry.status = lc_uninitial; // lc_uninitial? really?
-      ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx,
+      librados::ObjectWriteOperation op;
+      cls_rgw_lc_set_entry(op,
 				 obj_names[index], entry);
-      if (ret < 0) {
-        ldpp_dout(this, 0)
-	  << "RGWLC::bucket_lc_prepare() failed to set entry on "
-	  << obj_names[index] << dendl;
-        return ret;
-      }
+ 
     }
 
     if (! entries.empty()) {
@@ -1596,26 +1591,19 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       return 0;
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() lock " << obj_names[index]
 			<< dendl;
+    librados::ObjectWriteOperation op;
     if (result ==  -ENOENT) {
-      ret = cls_rgw_lc_rm_entry(store->getRados()->lc_pool_ctx,
+      cls_rgw_lc_rm_entry(op,
 				obj_names[index],  entry);
-      if (ret < 0) {
-        ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to remove entry "
-            << obj_names[index] << dendl;
-      }
       goto clean;
     } else if (result < 0) {
       entry.status = lc_failed;
     } else {
       entry.status = lc_complete;
     }
-
-    ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx,
+    
+    cls_rgw_lc_set_entry(op,
 			       obj_names[index],  entry);
-    if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
-          << obj_names[index] << dendl;
-    }
 clean:
     l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() unlock "
@@ -1631,18 +1619,10 @@ int RGWLC::list_lc_progress(string& marker, uint32_t max_entries,
   progress_map.clear();
   for(; index < max_objs; index++, marker="") {
     vector<cls_rgw_lc_entry> entries;
-    int ret =
-      cls_rgw_lc_list(store->getRados()->lc_pool_ctx, obj_names[index], marker,
+    librados::ObjectReadOperation op;
+    cls_rgw_lc_list(op, obj_names[index], marker,
 		      max_entries, entries);
-    if (ret < 0) {
-      if (ret == -ENOENT) {
-        ldpp_dout(this, 10) << __func__ << "() ignoring unfound lc object="
-                             << obj_names[index] << dendl;
-        continue;
-      } else {
-        return ret;
-      }
-    }
+
     progress_map.reserve(progress_map.size() + entries.size());
     progress_map.insert(progress_map.end(), entries.begin(), entries.end());
 
@@ -1740,18 +1720,13 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     }
     if (ret < 0)
       return 0;
-
     cls_rgw_lc_obj_head head;
-    ret = cls_rgw_lc_get_head(store->getRados()->lc_pool_ctx, obj_names[index],
+    librados::ObjectReadOperation op;
+    cls_rgw_lc_get_head(op, obj_names[index],
 			      head);
-    if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to get obj head "
-          << obj_names[index] << ", ret=" << ret << dendl;
-      goto exit;
-    }
 
     if (! (cct->_conf->rgw_lc_lock_max_time == 9969)) {
-      ret = cls_rgw_lc_get_entry(store->getRados()->lc_pool_ctx,
+      cls_rgw_lc_get_entry(op,
 				 obj_names[index], head.marker, entry);
       if (ret >= 0) {
 	if (entry.status == lc_processing) {
@@ -1783,8 +1758,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       goto exit;
       }
     }
-
-    ret = cls_rgw_lc_get_next_entry(store->getRados()->lc_pool_ctx,
+    cls_rgw_lc_get_next_entry(op,
 				    obj_names[index], head.marker, entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj entry "
@@ -1801,16 +1775,12 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	    << dendl;
 
     entry.status = lc_processing;
-    ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx,
+    librados::ObjectWriteOperation opec;
+    cls_rgw_lc_set_entry(opec,
 			       obj_names[index], entry);
-    if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to set obj entry "
-	      << obj_names[index] << entry.bucket << entry.status << dendl;
-      goto exit;
-    }
 
     head.marker = entry.bucket;
-    ret = cls_rgw_lc_put_head(store->getRados()->lc_pool_ctx,
+    cls_rgw_lc_put_head(opec,
 			      obj_names[index],  head);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
@@ -1987,31 +1957,13 @@ static int guard_lc_modify(rgw::sal::RGWRadosStore* store,
   l.set_duration(time);
   l.set_cookie(cookie);
 
-  librados::IoCtx *ctx = store->getRados()->get_lc_pool_ctx();
-  int ret;
+  librados::ObjectWriteOperation *ioctx;
 
   do {
-    ret = l.lock_exclusive(ctx, oid);
-    if (ret == -EBUSY || ret == -EEXIST) {
-      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", sleep 5, try again" << dendl;
-      sleep(5); // XXX: return retryable error
-      continue;
-    }
-    if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", ret=" << ret << dendl;
-      break;
-    }
-    ret = f(ctx, oid, entry);
-    if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to set entry on "
-          << oid << ", ret=" << ret << dendl;
-    }
-    break;
+    l.lock_exclusive(ioctx);
   } while(true);
-  l.unlock(ctx, oid);
-  return ret;
+  l.unlock(ioctx);
+  return 0;
 }
 
 int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
@@ -2033,10 +1985,10 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
   rgw_bucket& bucket = bucket_info.bucket;
 
 
-  ret = guard_lc_modify(store, bucket, cookie,
-			[&](librados::IoCtx *ctx, const string& oid,
+  guard_lc_modify(store, bucket, cookie,
+			[&](librados::ObjectWriteOperation *ioctx, const string& oid,
 			    const cls_rgw_lc_entry& entry) {
-    return cls_rgw_lc_set_entry(*ctx, oid, entry);
+    return cls_rgw_lc_set_entry(*ioctx, oid, entry);
   });
 
   return ret;
@@ -2060,10 +2012,10 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
   }
 
 
-  ret = guard_lc_modify(store, bucket, cookie,
-			[&](librados::IoCtx *ctx, const string& oid,
+  guard_lc_modify(store, bucket, cookie,
+			[&](librados::ObjectWriteOperation *ioctx, const string& oid,
 			    const cls_rgw_lc_entry& entry) {
-    return cls_rgw_lc_rm_entry(*ctx, oid, entry);
+    return cls_rgw_lc_rm_entry(*ioctx, oid, entry);
   });
 
   return ret;
@@ -2097,32 +2049,27 @@ int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
   // 3. entry exists matching the current bucket id which was after a reshard (needs to be updated to the marker)
   // We are not dropping the old marker here as that would be caught by the next LC process update
   auto lc_pool_ctx = store->getRados()->get_lc_pool_ctx();
-  int ret = cls_rgw_lc_get_entry(*lc_pool_ctx,
+  librados::ObjectReadOperation op;
+  cls_rgw_lc_get_entry(op,
 				 lc_oid, shard_name, entry);
-  if (ret == 0) {
-    ldout(store->ctx(), 5) << "Entry already exists, nothing to do" << dendl;
-    return ret; // entry is already existing correctly set to marker
-  }
-  ldout(store->ctx(), 5) << "cls_rgw_lc_get_entry errored ret code=" << ret << dendl;
-  if (ret == -ENOENT) {
-    ldout(store->ctx(), 1) << "No entry for bucket=" << bucket_info.bucket.name
-			   << " creating " << dendl;
-    // TODO: we have too many ppl making cookies like this!
-    char cookie_buf[COOKIE_LEN + 1];
-    gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
-    std::string cookie = cookie_buf;
 
-    ret = guard_lc_modify(
-      store, bucket_info.bucket, cookie,
-      [&lc_pool_ctx, &lc_oid](librados::IoCtx* ctx,
+
+  ldout(store->ctx(), 1) << "No entry for bucket=" << bucket_info.bucket.name
+			   << " creating " << dendl;
+  // TODO: we have too many ppl making cookies like this!
+  char cookie_buf[COOKIE_LEN + 1];
+  gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
+  std::string cookie = cookie_buf;
+
+  guard_lc_modify(
+    store, bucket_info.bucket, cookie,
+    [&lc_pool_ctx, &lc_oid](librados::ObjectWriteOperation *ioctx,
 			      const string& oid,
 			      const cls_rgw_lc_entry& entry) {
-	return cls_rgw_lc_set_entry(*lc_pool_ctx, lc_oid, entry);
+        return cls_rgw_lc_set_entry(*ioctx, lc_oid, entry);
       });
 
-  }
-
-  return ret;
+  return 0;
 }
 
 std::string s3_expiration_header(
