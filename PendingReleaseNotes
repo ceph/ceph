@@ -33,6 +33,8 @@
 
 * MGR: progress module can now be turned on/off, using the commands:
   ``ceph progress on`` and ``ceph progress off``.
+* An AWS-compliant API: "GetTopicAttributes" was added to replace the existing "GetTopic" API. The new API
+  should be used to fetch information about topics used for bucket notifications.
 
 >=15.0.0
 --------
