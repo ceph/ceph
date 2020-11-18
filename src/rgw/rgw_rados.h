@@ -1121,7 +1121,7 @@ public:
                        const char *if_nomatch,
                        AttrsMod attrs_mod,
                        bool copy_if_newer,
-                       map<string, bufferlist>& attrs,
+                       rgw::sal::RGWAttrs& attrs,
                        RGWObjCategory category,
                        std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,

@@ -338,6 +338,39 @@ class RGWObject {
       virtual int get_attr(const char *name, bufferlist& dest, optional_yield y) = 0;
     };
 
+    struct WriteOp {
+      struct Params {
+	bool versioning_disabled{false};
+	ceph::real_time* mtime{nullptr};
+	RGWAttrs* rmattrs{nullptr};
+	const bufferlist* data{nullptr};
+	RGWObjManifest* manifest{nullptr};
+	const string* ptag{nullptr};
+	list<rgw_obj_index_key>* remove_objs{nullptr};
+	ceph::real_time set_mtime;
+	ACLOwner owner;
+	RGWObjCategory category{RGWObjCategory::Main};
+	int flags{0};
+	const char* if_match{nullptr};
+	const char* if_nomatch{nullptr};
+	std::optional<uint64_t> olh_epoch;
+	ceph::real_time delete_at;
+	bool canceled{false};
+	const string* user_data{nullptr};
+	rgw_zone_set* zones_trace{nullptr};
+	bool modify_tail{false};
+	bool completeMultipart{false};
+	bool appendable{false};
+	RGWAttrs* attrs{nullptr};
+      } params;
+
+      virtual ~WriteOp() = default;
+
+      virtual int prepare(optional_yield y) = 0;
+      virtual int write_meta(uint64_t size, uint64_t accounted_size, optional_yield y) = 0;
+      //virtual int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive) = 0;
+    };
+
     RGWObject()
       : key(),
       bucket(nullptr),
@@ -414,7 +447,8 @@ class RGWObject {
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
 
     /* OPs */
-    virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) = 0;
+    virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx*) = 0;
+    virtual std::unique_ptr<WriteOp> get_write_op(RGWObjectCtx*) = 0;
 
     /* OMAP */
     virtual int omap_get_vals_by_keys(const std::string& oid,
@@ -434,6 +468,7 @@ class RGWObject {
       return obj;
     }
     virtual void gen_rand_obj_instance_name() = 0;
+    virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) = 0;
 
     /* dang - This is temporary, until the API is completed */
     rgw_obj_key& get_key() { return key; }

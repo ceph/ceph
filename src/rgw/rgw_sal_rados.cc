@@ -33,6 +33,7 @@
 #include "rgw_rest_conn.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
+#include "services/svc_tier_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -530,6 +531,13 @@ void RGWRadosObject::gen_rand_obj_instance_name()
   store->getRados()->gen_rand_obj_instance_name(&key);
 }
 
+void RGWRadosObject::raw_obj_to_obj(const rgw_raw_obj& raw_obj)
+{
+  rgw_obj tobj = get_obj();
+  RGWSI_Tier_RADOS::raw_obj_to_obj(get_bucket()->get_key(), raw_obj, &tobj);
+  set_key(tobj.key);
+}
+
 int RGWRadosObject::omap_get_vals_by_keys(const std::string& oid,
 					  const std::set<std::string>& keys,
 					  RGWAttrs *vals)
@@ -692,6 +700,56 @@ int RGWRadosObject::copy_object(RGWObjectCtx& obj_ctx,
 int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y)
 {
   return parent_op.iterate(ofs, end, cb, y);
+}
+
+std::unique_ptr<RGWObject::WriteOp> RGWRadosObject::get_write_op(RGWObjectCtx* ctx)
+{
+  return std::unique_ptr<RGWObject::WriteOp>(new RGWRadosObject::RadosWriteOp(this, ctx));
+}
+
+RGWRadosObject::RadosWriteOp::RadosWriteOp(RGWRadosObject* _source, RGWObjectCtx* _rctx) :
+	source(_source),
+	rctx(_rctx),
+	op_target(_source->store->getRados(),
+		  _source->get_bucket()->get_info(),
+		  *static_cast<RGWObjectCtx *>(rctx),
+		  _source->get_obj()),
+	parent_op(&op_target)
+{ }
+
+int RGWRadosObject::RadosWriteOp::prepare(optional_yield y)
+{
+  op_target.set_versioning_disabled(params.versioning_disabled);
+  parent_op.meta.mtime = params.mtime;
+  parent_op.meta.rmattrs = params.rmattrs;
+  parent_op.meta.data = params.data;
+  parent_op.meta.manifest = params.manifest;
+  parent_op.meta.ptag = params.ptag;
+  parent_op.meta.remove_objs = params.remove_objs;
+  parent_op.meta.set_mtime = params.set_mtime;
+  parent_op.meta.owner = params.owner.get_id();
+  parent_op.meta.category = params.category;
+  parent_op.meta.flags = params.flags;
+  parent_op.meta.if_match = params.if_match;
+  parent_op.meta.if_nomatch = params.if_nomatch;
+  parent_op.meta.olh_epoch = params.olh_epoch;
+  parent_op.meta.delete_at = params.delete_at;
+  parent_op.meta.canceled = params.canceled;
+  parent_op.meta.user_data = params.user_data;
+  parent_op.meta.zones_trace = params.zones_trace;
+  parent_op.meta.modify_tail = params.modify_tail;
+  parent_op.meta.completeMultipart = params.completeMultipart;
+  parent_op.meta.appendable = params.appendable;
+
+  return 0;
+}
+
+int RGWRadosObject::RadosWriteOp::write_meta(uint64_t size, uint64_t accounted_size, optional_yield y)
+{
+  int ret = parent_op.write_meta(size, accounted_size, *params.attrs, y);
+  params.canceled = parent_op.meta.canceled;
+
+  return ret;
 }
 
 int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y)

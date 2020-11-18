@@ -1135,7 +1135,7 @@ protected:
   std::unique_ptr <RGWObjTags> obj_tags;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;

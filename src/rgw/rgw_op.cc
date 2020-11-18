@@ -5823,8 +5823,7 @@ void RGWInitMultipart::pre_exec()
 void RGWInitMultipart::execute(optional_yield y)
 {
   bufferlist aclbl;
-  map<string, bufferlist> attrs;
-  rgw_obj obj;
+  rgw::sal::RGWAttrs attrs;
 
   if (get_params(y) < 0)
     return;
@@ -5857,6 +5856,7 @@ void RGWInitMultipart::execute(optional_yield y)
 
   do {
     char buf[33];
+    std::unique_ptr<rgw::sal::RGWObject> obj;
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
     upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
     upload_id.append(buf);
@@ -5865,29 +5865,30 @@ void RGWInitMultipart::execute(optional_yield y)
     RGWMPObj mp(s->object->get_name(), upload_id);
     tmp_obj_name = mp.get_meta();
 
-    obj.init_ns(s->bucket->get_key(), tmp_obj_name, mp_ns);
+    obj = s->bucket->get_object(rgw_obj_key(tmp_obj_name, string(), mp_ns));
     // the meta object will be indexed with 0 size, we c
-    obj.set_in_extra_data(true);
-    obj.index_hash_source = s->object->get_name();
+    obj->set_in_extra_data(true);
+    obj->set_hash_source(s->object->get_name());
 
-    RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-    op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
+    std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = obj->get_write_op(s->obj_ctx);
 
-    RGWRados::Object::Write obj_op(&op_target);
-
-    obj_op.meta.owner = s->owner.get_id();
-    obj_op.meta.category = RGWObjCategory::MultiMeta;
-    obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
-    obj_op.meta.mtime = &mtime;
+    obj_op->params.versioning_disabled = true; /* no versioning for multipart meta */
+    obj_op->params.owner = s->owner;
+    obj_op->params.category = RGWObjCategory::MultiMeta;
+    obj_op->params.flags = PUT_OBJ_CREATE_EXCL;
+    obj_op->params.mtime = &mtime;
+    obj_op->params.attrs = &attrs;
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = s->dest_placement;
 
     bufferlist bl;
     encode(upload_info, bl);
-    obj_op.meta.data = &bl;
+    obj_op->params.data = &bl;
 
-    op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield);
+    op_ret = obj_op->prepare(s->yield);
+
+    op_ret = obj_op->write_meta(bl.length(), 0, s->yield);
   } while (op_ret == -EEXIST);
   
   // send request to notification manager
@@ -5944,14 +5945,14 @@ void RGWCompleteMultipart::execute(optional_yield y)
   string meta_oid;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   off_t ofs = 0;
   MD5 hash;
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
   bufferlist etag_bl;
   std::unique_ptr<rgw::sal::RGWObject> meta_obj;
-  rgw_obj target_obj;
+  std::unique_ptr<rgw::sal::RGWObject> target_obj;
   RGWMPObj mp;
   RGWObjManifest manifest;
   uint64_t olh_epoch = 0;
@@ -6172,33 +6173,37 @@ void RGWCompleteMultipart::execute(optional_yield y)
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  target_obj.init(s->bucket->get_key(), s->object->get_name());
+  target_obj = s->bucket->get_object(rgw_obj_key(s->object->get_name()));
   if (versioned_object) {
     if (!version_id.empty()) {
-      target_obj.key.set_instance(version_id);
+      target_obj->set_instance(version_id);
     } else {
-      store->getRados()->gen_rand_obj_instance_name(&target_obj);
-      version_id = target_obj.key.get_instance();
+      target_obj->gen_rand_obj_instance_name();
+      version_id = target_obj->get_instance();
     }
   }
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  obj_ctx.set_atomic(target_obj);
+  target_obj->set_atomic(&obj_ctx);
 
-  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), target_obj);
-  RGWRados::Object::Write obj_op(&op_target);
+  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = target_obj->get_write_op(&obj_ctx);
 
-  obj_op.meta.manifest = &manifest;
-  obj_op.meta.remove_objs = &remove_objs;
+  obj_op->params.manifest = &manifest;
+  obj_op->params.remove_objs = &remove_objs;
 
-  obj_op.meta.ptag = &s->req_id; /* use req_id as operation tag */
-  obj_op.meta.owner = s->owner.get_id();
-  obj_op.meta.flags = PUT_OBJ_CREATE;
-  obj_op.meta.modify_tail = true;
-  obj_op.meta.completeMultipart = true;
-  obj_op.meta.olh_epoch = olh_epoch;
-  op_ret = obj_op.write_meta(ofs, accounted_size, attrs, s->yield);
+  obj_op->params.ptag = &s->req_id; /* use req_id as operation tag */
+  obj_op->params.owner = s->owner;
+  obj_op->params.flags = PUT_OBJ_CREATE;
+  obj_op->params.modify_tail = true;
+  obj_op->params.completeMultipart = true;
+  obj_op->params.olh_epoch = olh_epoch;
+  obj_op->params.attrs = &attrs;
+  op_ret = obj_op->prepare(s->yield);
+  if (op_ret < 0)
+    return;
+
+  op_ret = obj_op->write_meta(ofs, accounted_size, s->yield);
   if (op_ret < 0)
     return;
 
