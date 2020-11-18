@@ -2,8 +2,6 @@
 
 set -e
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
-
 #
 # make sure we keep an existing dn's seq
 #
