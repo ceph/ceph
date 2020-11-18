@@ -2164,6 +2164,8 @@ public:
     return 0;
   }
 
+  bool prefetch_data() override { return false; }
+
 }; /* RGWReadRequest */
 
 /*
