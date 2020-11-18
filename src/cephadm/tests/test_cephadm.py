@@ -278,6 +278,10 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
         result = cd.dict_get_join({'a': 1}, 'a')
         assert result == 1
 
+    def test_filter_last_local_images(self):
+        assert cd._filter_last_local_images("""<none> <none>
+registry.suse.com/ses/7/ceph/ceph latest""") == 'registry.suse.com/ses/7/ceph/ceph:latest'
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
