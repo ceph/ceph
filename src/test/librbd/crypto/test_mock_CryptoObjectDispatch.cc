@@ -677,5 +677,62 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, WriteSame) {
   ASSERT_EQ(0, dispatched_cond.wait());
 }
 
+TEST_F(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
+  char* data = (char*)"0123456789";
+  io::SnapshotSparseBufferlist snapshot_sparse_bufferlist;
+  auto& snap1 = snapshot_sparse_bufferlist[0];
+  auto& snap2 = snapshot_sparse_bufferlist[1];
+
+  snap1.insert(0, 1, {io::SPARSE_EXTENT_STATE_DATA, 1,
+                      ceph::bufferlist::static_from_mem(data + 1, 1)});
+  snap1.insert(8191, 1, {io::SPARSE_EXTENT_STATE_DATA, 1,
+                         ceph::bufferlist::static_from_mem(data + 2, 1)});
+  snap1.insert(8193, 3, {io::SPARSE_EXTENT_STATE_DATA, 3,
+                         ceph::bufferlist::static_from_mem(data + 3, 3)});
+
+  snap2.insert(0, 2, {io::SPARSE_EXTENT_STATE_ZEROED, 2});
+  snap2.insert(8191, 3, {io::SPARSE_EXTENT_STATE_DATA, 3,
+                         ceph::bufferlist::static_from_mem(data + 6, 3)});
+  snap2.insert(16384, 1, {io::SPARSE_EXTENT_STATE_DATA, 1,
+                          ceph::bufferlist::static_from_mem(data + 9, 1)});
+
+  expect_get_object_size();
+  expect_encrypt(6);
+  ASSERT_EQ(0, mock_crypto_object_dispatch->prepare_copyup(
+          0, &snapshot_sparse_bufferlist));
+
+  ASSERT_EQ(2, snapshot_sparse_bufferlist.size());
+
+  auto& snap1_result = snapshot_sparse_bufferlist[0];
+  auto& snap2_result = snapshot_sparse_bufferlist[1];
+
+  auto it = snap1_result.begin();
+  ASSERT_NE(it, snap1_result.end());
+  ASSERT_EQ(0, it.get_off());
+  ASSERT_EQ(4096 * 3, it.get_len());
+
+  ASSERT_TRUE(it.get_val().bl.to_str() ==
+    std::string("1") + std::string(4095, '\0') +
+    std::string(4095, '\0') + std::string("2") +
+    std::string(1, '\0') + std::string("345") + std::string(4092, '\0'));
+  ASSERT_EQ(++it, snap1_result.end());
+
+  it = snap2_result.begin();
+  ASSERT_NE(it, snap2_result.end());
+  ASSERT_EQ(0, it.get_off());
+  ASSERT_EQ(4096 * 3, it.get_len());
+  ASSERT_TRUE(it.get_val().bl.to_str() ==
+    std::string(4096, '\0') +
+    std::string(4095, '\0') + std::string("6") +
+    std::string("7845") + std::string(4092, '\0'));
+
+  ASSERT_NE(++it, snap2_result.end());
+  ASSERT_EQ(16384, it.get_off());
+  ASSERT_EQ(4096, it.get_len());
+  ASSERT_TRUE(it.get_val().bl.to_str() ==
+    std::string("9") + std::string(4095, '\0'));
+  ASSERT_EQ(++it, snap2_result.end());
+}
+
 } // namespace io
 } // namespace librbd

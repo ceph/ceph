@@ -210,7 +210,16 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   m_lock.lock();
   disable_append_requests();
 
-  prepare_copyup_data();
+  r = prepare_copyup_data();
+  if (r < 0) {
+    m_lock.unlock();
+    m_image_ctx->image_lock.unlock_shared();
+
+    lderr(m_image_ctx->cct) << "failed to prepare copyup data: "
+                            << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
 
   m_copyup_is_zero = m_copyup_data.is_zero();
   m_copyup_required = is_copyup_required();
@@ -676,7 +685,7 @@ void CopyupRequest<I>::convert_copyup_extent_map() {
 }
 
 template <typename I>
-void CopyupRequest<I>::prepare_copyup_data() {
+int CopyupRequest<I>::prepare_copyup_data() {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx->image_lock));
   auto cct = m_image_ctx->cct;
 
@@ -733,8 +742,11 @@ void CopyupRequest<I>::prepare_copyup_data() {
   }
 
   // Let dispatch layers have a chance to process the data
-  m_image_ctx->io_object_dispatcher->prepare_copyup(
+  auto r = m_image_ctx->io_object_dispatcher->prepare_copyup(
     m_object_no, &snapshot_sparse_bufferlist);
+  if (r < 0) {
+    return r;
+  }
 
   // Convert sparse extents back to extent map
   m_copyup_data.clear();
@@ -747,6 +759,8 @@ void CopyupRequest<I>::prepare_copyup_data() {
       m_copyup_data.append(sbe.bl);
     }
   }
+
+  return 0;
 }
 
 } // namespace io
