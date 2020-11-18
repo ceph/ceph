@@ -888,7 +888,7 @@ int RGWGetObj::verify_permission(optional_yield y)
 {
   s->object->set_atomic(s->obj_ctx);
 
-  if (get_data) {
+  if (prefetch_data()) {
     s->object->set_prefetch_data(s->obj_ctx);
   }
 
