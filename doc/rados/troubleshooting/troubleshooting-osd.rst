@@ -236,6 +236,8 @@ unexpected error), search the archives and tracker as above, and
 report it to the `ceph-devel`_ email list if there's no clear fix or
 existing bug.
 
+.. _no-free-drive-space:
+
 No Free Drive Space
 -------------------
 
@@ -255,7 +257,7 @@ allocates to them.  This utilization can be displayed for each OSD with ::
 
 Overall cluster / pool fullness can be checked with ::
 
-	ceph df 
+	ceph df
 
 Pay close attention to the **most full** OSDs, not the percentage of raw space
 used as reported by ``ceph df``.  It only takes one outlier OSD filling up to
@@ -505,7 +507,7 @@ Events from the OSD as it processes ops:
 - ``waiting for \*``: The op is waiting for some other work to complete before it
   can proceed (e.g. a new OSDMap; for its object target to scrub; for the PG to
   finish peering; all as specified in the message).
-- ``started``: The op has been accepted as something the OSD should do and 
+- ``started``: The op has been accepted as something the OSD should do and
   is now being performed.
 - ``waiting for subops from``: The op has been sent to replica OSDs.
 

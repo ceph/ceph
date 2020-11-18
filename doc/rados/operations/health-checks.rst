@@ -981,8 +981,9 @@ Setting the quota value to 0 will disable the quota.
 POOL_NEAR_FULL
 ______________
 
-One or more pools is approaching is quota.  The threshold to trigger
-this warning condition is controlled by the
+One or more pools is approaching a configured fullness threshold.
+
+One threshold that can trigger this warning condition is the
 ``mon_pool_quota_warn_threshold`` configuration option.
 
 Pool quotas can be adjusted up or down (or removed) with::
@@ -991,6 +992,11 @@ Pool quotas can be adjusted up or down (or removed) with::
   ceph osd pool set-quota <pool> max_objects <objects>
 
 Setting the quota value to 0 will disable the quota.
+
+Other thresholds that can trigger the above two warning conditions are
+``mon_osd_nearfull_ratio`` and ``mon_osd_full_ratio``.  Visit the
+:ref:`storage-capacity` and :ref:`no-free-drive-space` documents for details
+and resolution.
 
 OBJECT_MISPLACED
 ________________
@@ -1100,8 +1106,6 @@ also indicate some other performance issue with the OSDs.
 The exact size of the snapshot trim queue is reported by the
 ``snaptrimq_len`` field of ``ceph pg ls -f json-detail``.
 
-
-
 Miscellaneous
 -------------
 
@@ -1195,7 +1199,6 @@ Alternatively, the capabilities for the user can be updated with::
 
 For more information about auth capabilities, see :ref:`user-management`.
 
-
 OSD_NO_DOWN_OUT_INTERVAL
 ________________________
 
@@ -1212,3 +1215,4 @@ This warning can silenced by setting the
 ``mon_warn_on_osd_down_out_interval_zero`` to false::
 
   ceph config global mon mon_warn_on_osd_down_out_interval_zero false
+
