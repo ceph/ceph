@@ -496,41 +496,21 @@ public:
 
   using load_obc_ertr = crimson::errorator<
     crimson::ct_error::object_corrupted>;
-  load_obc_ertr::future<
-    std::pair<crimson::osd::ObjectContextRef, bool>>
-  get_or_load_clone_obc(
-    hobject_t oid, crimson::osd::ObjectContextRef head_obc);
-
-  load_obc_ertr::future<
-    std::pair<crimson::osd::ObjectContextRef, bool>>
-  get_or_load_head_obc(hobject_t oid);
 
   load_obc_ertr::future<crimson::osd::ObjectContextRef>
   load_head_obc(ObjectContextRef obc);
 
-  load_obc_ertr::future<ObjectContextRef> get_locked_obc(
-    Operation *op,
-    const hobject_t &oid,
-    RWState::State type);
 public:
-  template <typename F>
-  auto with_locked_obc(
+  using with_obc_func_t = std::function<seastar::future<> (ObjectContextRef)>;
+
+  template<RWState::State State>
+  seastar::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
+
+  load_obc_ertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
     const OpInfo &op_info,
     Operation *op,
-    F &&f) {
-    if (__builtin_expect(stopping, false)) {
-      throw crimson::common::system_shutdown_exception();
-    }
-    RWState::State type = get_lock_type(op_info);
-    return get_locked_obc(op, get_oid(*m), type)
-      .safe_then([f=std::forward<F>(f), type=type](auto obc) {
-	return f(obc).finally([obc, type=type] {
-	  obc->put_lock_type(type);
-	  return load_obc_ertr::now();
-	});
-      });
-  }
+    with_obc_func_t&& f);
 
   seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
   void handle_rep_op_reply(crimson::net::Connection* conn,
@@ -540,6 +520,14 @@ public:
   void dump_primary(Formatter*);
 
 private:
+  template<RWState::State State>
+  seastar::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
+
+  load_obc_ertr::future<ObjectContextRef> get_locked_obc(
+    Operation *op,
+    const hobject_t &oid,
+    RWState::State type);
+
   void do_peering_event(
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
