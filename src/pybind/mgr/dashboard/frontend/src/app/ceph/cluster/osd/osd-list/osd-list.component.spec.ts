@@ -256,6 +256,15 @@ describe('OsdListComponent', () => {
       component.getOsdList();
       expect(component.osds[0].cdClusterFlags).toStrictEqual([]);
     });
+
+    it('should have custom attribute "cdExecuting"', () => {
+      osds[1].operational_status = 'unmanaged';
+      osds[2].operational_status = 'deleting';
+      component.getOsdList();
+      expect(component.osds[0].cdExecuting).toBeUndefined();
+      expect(component.osds[1].cdExecuting).toBeUndefined();
+      expect(component.osds[2].cdExecuting).toBe('deleting');
+    });
   });
 
   describe('show osd actions as defined', () => {
@@ -519,6 +528,7 @@ describe('OsdListComponent', () => {
     beforeEach(() => {
       component.permissions = fakeAuthStorageService.getPermissions();
       spyOn(osdService, 'getList').and.callFake(() => of(fakeOsds));
+      spyOn(osdService, 'getFlags').and.callFake(() => of([]));
     });
 
     const testTableActions = async (
@@ -556,6 +566,20 @@ describe('OsdListComponent', () => {
           expectResults: {
             Create: { disabled: false, disableDesc: '' },
             Delete: { disabled: false, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[1], // Select a row that is not managed.
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[2], // Select a row that is being deleted.
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: true, disableDesc: '' }
           }
         }
       ];
