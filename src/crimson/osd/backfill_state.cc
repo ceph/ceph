@@ -328,7 +328,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
 					    backfill_state().peer_backfill_info);
-      backfill_state().backfill_info.pop_front();
+      primary_bi.pop_front();
     }
   }
 
