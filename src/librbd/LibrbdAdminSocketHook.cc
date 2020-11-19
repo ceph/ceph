@@ -55,16 +55,16 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
   command = "rbd cache flush " + imagename;
 
   r = admin_socket->register_command(command, this,
-				     "flush rbd image " + imagename +
-				     " cache");
+                                     "flush rbd image " + imagename +
+                                     " cache");
   if (r == 0) {
     commands[command] = new FlushCacheCommand(ictx);
   }
 
   command = "rbd cache invalidate " + imagename;
   r = admin_socket->register_command(command, this,
-				     "invalidate rbd image " + imagename + 
-				     " cache");
+                                     "invalidate rbd image " + imagename + 
+                                     " cache");
   if (r == 0) {
     commands[command] = new InvalidateCacheCommand(ictx);
   }
@@ -79,10 +79,10 @@ LibrbdAdminSocketHook::~LibrbdAdminSocketHook() {
 }
 
 int LibrbdAdminSocketHook::call(std::string_view command,
-				const cmdmap_t& cmdmap,
-				Formatter *f,
-				std::ostream& errss,
-				bufferlist& out) {
+                                const cmdmap_t& cmdmap,
+                                Formatter *f,
+                                std::ostream& errss,
+                                bufferlist& out) {
   Commands::const_iterator i = commands.find(command);
   ceph_assert(i != commands.end());
   return i->second->call(f);

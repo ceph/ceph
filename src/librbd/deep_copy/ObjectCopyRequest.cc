@@ -436,7 +436,7 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
 
 template <typename I>
 Context *ObjectCopyRequest<I>::start_lock_op(ceph::shared_mutex &owner_lock,
-					     int* r) {
+                                             int* r) {
   ceph_assert(ceph_mutex_is_locked(m_dst_image_ctx->owner_lock));
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
     return new LambdaContext([](int r) {});

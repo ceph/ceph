@@ -69,7 +69,7 @@ Context *RemoveRequest<I>::handle_remove_object_map(int *result) {
 
     if (*result < 0 && *result != -ENOENT) {
       lderr(cct) << "failed to remove object map: " << cpp_strerror(*result)
-		 << dendl;
+                 << dendl;
       m_error_result = *result;
     }
     if (m_ref_counter > 0) {

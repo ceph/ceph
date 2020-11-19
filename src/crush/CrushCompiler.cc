@@ -159,8 +159,8 @@ int CrushCompiler::decompile_bucket_impl(int i, ostream &out)
  * arise through user error.
  */
 int CrushCompiler::decompile_bucket(int cur,
-				    std::map<int, dcb_state_t>& dcb_states,
-				    ostream &out)
+                                    std::map<int, dcb_state_t>& dcb_states,
+                                    ostream &out)
 {
   if ((cur == 0) || (!crush.bucket_exists(cur)))
     return 0;
@@ -180,12 +180,12 @@ int CrushCompiler::decompile_bucket(int cur,
   }
   else if (c->second == DCB_STATE_IN_PROGRESS) {
     err << "decompile_crush_bucket: logic error: tried to decompile "
-	"a bucket that is already being decompiled" << std::endl;
+        "a bucket that is already being decompiled" << std::endl;
     return -EBADE;
   }
   else {
     err << "decompile_crush_bucket: logic error: illegal bucket state! "
-	 << c->second << std::endl;
+         << c->second << std::endl;
     return -EBADE;
   }
 
@@ -196,18 +196,18 @@ int CrushCompiler::decompile_bucket(int cur,
     if (d == dcb_states.end()) {
       int ret = decompile_bucket(item, dcb_states, out);
       if (ret)
-	return ret;
+        return ret;
     }
     else if (d->second == DCB_STATE_IN_PROGRESS) {
       err << "decompile_crush_bucket: error: while trying to output bucket "
-	   << cur << ", we found out that it contains one of the buckets that "
-	   << "contain it. This is not allowed. The buckets must form a "
-	   <<  "directed acyclic graph." << std::endl;
+           << cur << ", we found out that it contains one of the buckets that "
+           << "contain it. This is not allowed. The buckets must form a "
+           <<  "directed acyclic graph." << std::endl;
       return -EINVAL;
     }
     else if (d->second != DCB_STATE_DONE) {
       err << "decompile_crush_bucket: logic error: illegal bucket state "
-	   << d->second << std::endl;
+           << d->second << std::endl;
       return -EBADE;
     }
   }
@@ -320,7 +320,7 @@ int CrushCompiler::decompile(ostream &out)
     out << "tunable straw_calc_version " << crush.get_straw_calc_version() << "\n";
   if (crush.get_allowed_bucket_algs() != CRUSH_LEGACY_ALLOWED_BUCKET_ALGS)
     out << "tunable allowed_bucket_algs " << crush.get_allowed_bucket_algs()
-	<< "\n";
+        << "\n";
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
@@ -382,80 +382,80 @@ int CrushCompiler::decompile(ostream &out)
     for (int j=0; j<crush.get_rule_len(i); j++) {
       switch (crush.get_rule_op(i, j)) {
       case CRUSH_RULE_NOOP:
-	out << "\tstep noop\n";
-	break;
+        out << "\tstep noop\n";
+        break;
       case CRUSH_RULE_TAKE:
-	out << "\tstep take ";
-	{
+        out << "\tstep take ";
+        {
           int step_item = crush.get_rule_arg1(i, j);
           int original_item;
           int c;
           int res = crush.split_id_class(step_item, &original_item, &c);
           if (res < 0)
             return res;
-	  if (c >= 0)
+          if (c >= 0)
             step_item = original_item;
           print_item_name(out, step_item, crush);
-	  if (c >= 0)
-	    print_class(out, c, crush);
-	}
-	out << "\n";
-	break;
+          if (c >= 0)
+            print_class(out, c, crush);
+        }
+        out << "\n";
+        break;
       case CRUSH_RULE_EMIT:
-	out << "\tstep emit\n";
-	break;
+        out << "\tstep emit\n";
+        break;
       case CRUSH_RULE_SET_CHOOSE_TRIES:
-	out << "\tstep set_choose_tries " << crush.get_rule_arg1(i, j)
-	    << "\n";
-	break;
+        out << "\tstep set_choose_tries " << crush.get_rule_arg1(i, j)
+            << "\n";
+        break;
       case CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES:
-	out << "\tstep set_choose_local_tries " << crush.get_rule_arg1(i, j)
-	    << "\n";
-	break;
+        out << "\tstep set_choose_local_tries " << crush.get_rule_arg1(i, j)
+            << "\n";
+        break;
       case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES:
-	out << "\tstep set_choose_local_fallback_tries " << crush.get_rule_arg1(i, j)
-	    << "\n";
-	break;
+        out << "\tstep set_choose_local_fallback_tries " << crush.get_rule_arg1(i, j)
+            << "\n";
+        break;
       case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
-	out << "\tstep set_chooseleaf_tries " << crush.get_rule_arg1(i, j)
-	    << "\n";
-	break;
+        out << "\tstep set_chooseleaf_tries " << crush.get_rule_arg1(i, j)
+            << "\n";
+        break;
       case CRUSH_RULE_SET_CHOOSELEAF_VARY_R:
-	out << "\tstep set_chooseleaf_vary_r " << crush.get_rule_arg1(i, j)
-	    << "\n";
-	break;
+        out << "\tstep set_chooseleaf_vary_r " << crush.get_rule_arg1(i, j)
+            << "\n";
+        break;
       case CRUSH_RULE_SET_CHOOSELEAF_STABLE:
-	out << "\tstep set_chooseleaf_stable " << crush.get_rule_arg1(i, j)
-	    << "\n";
-	break;
+        out << "\tstep set_chooseleaf_stable " << crush.get_rule_arg1(i, j)
+            << "\n";
+        break;
       case CRUSH_RULE_CHOOSE_FIRSTN:
-	out << "\tstep choose firstn "
-	    << crush.get_rule_arg1(i, j) 
-	    << " type ";
-	print_type_name(out, crush.get_rule_arg2(i, j), crush);
-	out << "\n";
-	break;
+        out << "\tstep choose firstn "
+            << crush.get_rule_arg1(i, j) 
+            << " type ";
+        print_type_name(out, crush.get_rule_arg2(i, j), crush);
+        out << "\n";
+        break;
       case CRUSH_RULE_CHOOSE_INDEP:
-	out << "\tstep choose indep "
-	    << crush.get_rule_arg1(i, j) 
-	    << " type ";
-	print_type_name(out, crush.get_rule_arg2(i, j), crush);
-	out << "\n";
-	break;
+        out << "\tstep choose indep "
+            << crush.get_rule_arg1(i, j) 
+            << " type ";
+        print_type_name(out, crush.get_rule_arg2(i, j), crush);
+        out << "\n";
+        break;
       case CRUSH_RULE_CHOOSELEAF_FIRSTN:
-	out << "\tstep chooseleaf firstn "
-	    << crush.get_rule_arg1(i, j) 
-	    << " type ";
-	print_type_name(out, crush.get_rule_arg2(i, j), crush);
-	out << "\n";
-	break;
+        out << "\tstep chooseleaf firstn "
+            << crush.get_rule_arg1(i, j) 
+            << " type ";
+        print_type_name(out, crush.get_rule_arg2(i, j), crush);
+        out << "\n";
+        break;
       case CRUSH_RULE_CHOOSELEAF_INDEP:
-	out << "\tstep chooseleaf indep "
-	    << crush.get_rule_arg1(i, j) 
-	    << " type ";
-	print_type_name(out, crush.get_rule_arg2(i, j), crush);
-	out << "\n";
-	break;
+        out << "\tstep chooseleaf indep "
+            << crush.get_rule_arg1(i, j) 
+            << " type ";
+        print_type_name(out, crush.get_rule_arg2(i, j), crush);
+        out << "\n";
+        break;
       }
     }
     out << "}\n";
@@ -616,40 +616,40 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     } else if (tag == "alg") {
       string a = string_node(sub->children[1]);
       if (a == "uniform")
-	alg = CRUSH_BUCKET_UNIFORM;
+        alg = CRUSH_BUCKET_UNIFORM;
       else if (a == "list")
-	alg = CRUSH_BUCKET_LIST;
+        alg = CRUSH_BUCKET_LIST;
       else if (a == "tree")
-	alg = CRUSH_BUCKET_TREE;
+        alg = CRUSH_BUCKET_TREE;
       else if (a == "straw")
-	alg = CRUSH_BUCKET_STRAW;
+        alg = CRUSH_BUCKET_STRAW;
       else if (a == "straw2")
-	alg = CRUSH_BUCKET_STRAW2;
+        alg = CRUSH_BUCKET_STRAW2;
       else {
-	err << "unknown bucket alg '" << a << "'" << std::endl << std::endl;
-	return -EINVAL;
+        err << "unknown bucket alg '" << a << "'" << std::endl << std::endl;
+        return -EINVAL;
       }
     }
     else if (tag == "hash") {
       string a = string_node(sub->children[1]);
       if (a == "rjenkins1")
-	hash = CRUSH_HASH_RJENKINS1;
+        hash = CRUSH_HASH_RJENKINS1;
       else
-	hash = atoi(a.c_str());
+        hash = atoi(a.c_str());
     }
     else if (tag == "item") {
       // first, just determine which item pos's are already used
       size++;
       for (unsigned q = 2; q < sub->children.size(); q++) {
-	string tag = string_node(sub->children[q++]);
-	if (tag == "pos") {
-	  int pos = int_node(sub->children[q]);
-	  if (used_items.count(pos)) {
-	    err << "item '" << string_node(sub->children[1]) << "' in bucket '" << name << "' has explicit pos " << pos << ", which is occupied" << std::endl;
-	    return -1;
-	  }
-	  used_items.insert(pos);
-	}
+        string tag = string_node(sub->children[q++]);
+        if (tag == "pos") {
+          int pos = int_node(sub->children[q]);
+          if (used_items.count(pos)) {
+            err << "item '" << string_node(sub->children[1]) << "' in bucket '" << name << "' has explicit pos " << pos << ", which is occupied" << std::endl;
+            return -1;
+          }
+          used_items.insert(pos);
+        }
       }
     }
     else ceph_abort();
@@ -672,57 +672,57 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
       string iname = string_node(sub->children[1]);
       if (!item_id.count(iname)) {
-	err << "item '" << iname << "' in bucket '" << name << "' is not defined" << std::endl;
-	return -1;
+        err << "item '" << iname << "' in bucket '" << name << "' is not defined" << std::endl;
+        return -1;
       }
       int itemid = item_id[iname];
 
       unsigned weight = 0x10000;
       if (item_weight.count(itemid))
-	weight = item_weight[itemid];
+        weight = item_weight[itemid];
 
       int pos = -1;
       for (unsigned q = 2; q < sub->children.size(); q++) {
-	string tag = string_node(sub->children[q++]);
-	if (tag == "weight") {
-	  weight = float_node(sub->children[q]) * (float)0x10000;
-	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {
-	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000 << std::endl;
-	    return -ERANGE;
-	  }
-	  else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {
-	    err << "bucket weight limited to " << CRUSH_MAX_BUCKET_WEIGHT / 0x10000
-	        << " to prevent overflow" << std::endl;
-	    return -ERANGE;
-	  }
-	}
-	else if (tag == "pos") 
-	  pos = int_node(sub->children[q]);
-	else
-	  ceph_abort();
+        string tag = string_node(sub->children[q++]);
+        if (tag == "weight") {
+          weight = float_node(sub->children[q]) * (float)0x10000;
+          if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {
+            err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000 << std::endl;
+            return -ERANGE;
+          }
+          else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {
+            err << "bucket weight limited to " << CRUSH_MAX_BUCKET_WEIGHT / 0x10000
+                << " to prevent overflow" << std::endl;
+            return -ERANGE;
+          }
+        }
+        else if (tag == "pos") 
+          pos = int_node(sub->children[q]);
+        else
+          ceph_abort();
 
       }
       if (alg == CRUSH_BUCKET_UNIFORM) {
-	if (!have_uniform_weight) {
-	  have_uniform_weight = true;
-	  uniform_weight = weight;
-	} else {
-	  if (uniform_weight != weight) {
-	    err << "item '" << iname << "' in uniform bucket '" << name << "' has weight " << weight
-		<< " but previous item(s) have weight " << (float)uniform_weight/(float)0x10000
-		<< "; uniform bucket items must all have identical weights." << std::endl;
-	    return -1;
-	  }
-	}
+        if (!have_uniform_weight) {
+          have_uniform_weight = true;
+          uniform_weight = weight;
+        } else {
+          if (uniform_weight != weight) {
+            err << "item '" << iname << "' in uniform bucket '" << name << "' has weight " << weight
+                << " but previous item(s) have weight " << (float)uniform_weight/(float)0x10000
+                << "; uniform bucket items must all have identical weights." << std::endl;
+            return -1;
+          }
+        }
       }
 
       if (pos >= size) {
-	err << "item '" << iname << "' in bucket '" << name << "' has pos " << pos << " >= size " << size << std::endl;
-	return -1;
+        err << "item '" << iname << "' in bucket '" << name << "' has pos " << pos << " >= size " << size << std::endl;
+        return -1;
       }
       if (pos < 0) {
-	while (used_items.count(curpos)) curpos++;
-	pos = curpos++;
+        while (used_items.count(curpos)) curpos++;
+        pos = curpos++;
       }
       //err << " item " << iname << " (" << itemid << ") pos " << pos << " weight " << weight << std::endl;
       items[pos] = itemid;
@@ -746,7 +746,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     class_bucket[id][i.first] = i.second;
 
   if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
-		   << (float)bucketweight / (float)0x10000 << std::endl;
+                   << (float)bucketweight / (float)0x10000 << std::endl;
   id_item[id] = name;
   item_id[name] = id;
   item_weight[id] = bucketweight;
@@ -806,7 +806,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
   int r = crush.add_rule(ruleno, steps, type, minsize, maxsize);
   if (r != ruleno) {
     err << "unable to add rule id " << ruleno << " for rule '" << rname
-	<< "'" << std::endl;
+        << "'" << std::endl;
     return -1;
   }
   if (rname.length()) {
@@ -821,11 +821,11 @@ int CrushCompiler::parse_rule(iter_t const& i)
     switch (stepid) {
     case crush_grammar::_step_take: 
       {
-	string item = string_node(s->children[1]);
-	if (!item_id.count(item)) {
-	  err << "in rule '" << rname << "' item '" << item << "' not defined" << std::endl;
-	  return -1;
-	}
+        string item = string_node(s->children[1]);
+        if (!item_id.count(item)) {
+          err << "in rule '" << rname << "' item '" << item << "' not defined" << std::endl;
+          return -1;
+        }
         int id = item_id[item];
         int c = -1;
         string class_name;
@@ -854,75 +854,75 @@ int CrushCompiler::parse_rule(iter_t const& i)
             err << " remapped to " << crush.get_item_name(id) << std::endl;
         }
 
-	crush.set_rule_step_take(ruleno, step++, id);
+        crush.set_rule_step_take(ruleno, step++, id);
       }
       break;
 
     case crush_grammar::_step_set_choose_tries:
       {
-	int val = int_node(s->children[1]);
-	crush.set_rule_step_set_choose_tries(ruleno, step++, val);
+        int val = int_node(s->children[1]);
+        crush.set_rule_step_set_choose_tries(ruleno, step++, val);
       }
       break;
 
     case crush_grammar::_step_set_choose_local_tries:
       {
-	int val = int_node(s->children[1]);
-	crush.set_rule_step_set_choose_local_tries(ruleno, step++, val);
+        int val = int_node(s->children[1]);
+        crush.set_rule_step_set_choose_local_tries(ruleno, step++, val);
       }
       break;
 
     case crush_grammar::_step_set_choose_local_fallback_tries:
       {
-	int val = int_node(s->children[1]);
-	crush.set_rule_step_set_choose_local_fallback_tries(ruleno, step++, val);
+        int val = int_node(s->children[1]);
+        crush.set_rule_step_set_choose_local_fallback_tries(ruleno, step++, val);
       }
       break;
 
     case crush_grammar::_step_set_chooseleaf_tries:
       {
-	int val = int_node(s->children[1]);
-	crush.set_rule_step_set_chooseleaf_tries(ruleno, step++, val);
+        int val = int_node(s->children[1]);
+        crush.set_rule_step_set_chooseleaf_tries(ruleno, step++, val);
       }
       break;
 
     case crush_grammar::_step_set_chooseleaf_vary_r:
       {
-	int val = int_node(s->children[1]);
-	crush.set_rule_step_set_chooseleaf_vary_r(ruleno, step++, val);
+        int val = int_node(s->children[1]);
+        crush.set_rule_step_set_chooseleaf_vary_r(ruleno, step++, val);
       }
       break;
 
     case crush_grammar::_step_set_chooseleaf_stable:
       {
-	int val = int_node(s->children[1]);
-	crush.set_rule_step_set_chooseleaf_stable(ruleno, step++, val);
+        int val = int_node(s->children[1]);
+        crush.set_rule_step_set_chooseleaf_stable(ruleno, step++, val);
       }
       break;
 
     case crush_grammar::_step_choose:
     case crush_grammar::_step_chooseleaf:
       {
-	string type = string_node(s->children[4]);
-	if (!type_id.count(type)) {
-	  err << "in rule '" << rname << "' type '" << type << "' not defined" << std::endl;
-	  return -1;
-	}
-	string choose = string_node(s->children[0]);
-	string mode = string_node(s->children[1]);
-	if (choose == "choose") {
-	  if (mode == "firstn")
-	    crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	  else if (mode == "indep")
-	    crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	  else ceph_abort();
-	} else if (choose == "chooseleaf") {
-	  if (mode == "firstn") 
-	    crush.set_rule_step_choose_leaf_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	  else if (mode == "indep")
-	    crush.set_rule_step_choose_leaf_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	  else ceph_abort();
-	} else ceph_abort();
+        string type = string_node(s->children[4]);
+        if (!type_id.count(type)) {
+          err << "in rule '" << rname << "' type '" << type << "' not defined" << std::endl;
+          return -1;
+        }
+        string choose = string_node(s->children[0]);
+        string mode = string_node(s->children[1]);
+        if (choose == "choose") {
+          if (mode == "firstn")
+            crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
+          else if (mode == "indep")
+            crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
+          else ceph_abort();
+        } else if (choose == "chooseleaf") {
+          if (mode == "firstn") 
+            crush.set_rule_step_choose_leaf_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
+          else if (mode == "indep")
+            crush.set_rule_step_choose_leaf_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
+          else ceph_abort();
+        } else ceph_abort();
       }
       break;
 
@@ -1064,15 +1064,15 @@ void CrushCompiler::find_used_bucket_ids(iter_t const& i)
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     if ((int)p->value.id().to_long() == crush_grammar::_bucket) {
       for (iter_t firstline = p->children.begin() + 3;
-	   firstline != p->children.end();
-	   ++firstline) {
-	string tag = string_node(firstline->children[0]);
-	if (tag != "id") {
-	  break;
-	}
-	int id = int_node(firstline->children[1]);
-	//err << "saw bucket id " << id << std::endl;
-	id_item[id] = string();
+           firstline != p->children.end();
+           ++firstline) {
+        string tag = string_node(firstline->children[0]);
+        if (tag != "id") {
+          break;
+        }
+        int id = int_node(firstline->children[1]);
+        //err << "saw bucket id " << id << std::endl;
+        id_item[id] = string();
       }
     }
   }
@@ -1096,15 +1096,15 @@ int CrushCompiler::parse_crush(iter_t const& i)
       break;
     case crush_grammar::_bucket:
       if (saw_rule) {
-	err << "buckets must be defined before rules" << std::endl;
-	return -1;
+        err << "buckets must be defined before rules" << std::endl;
+        return -1;
       }
       r = parse_bucket(p);
       break;
     case crush_grammar::_crushrule:
       if (!saw_rule) {
-	saw_rule = true;
-	crush.populate_classes(class_bucket);
+        saw_rule = true;
+        crush.populate_classes(class_bucket);
       }
       r = parse_rule(p);
       break;
@@ -1134,12 +1134,12 @@ string CrushCompiler::consolidate_whitespace(string in)
   for (unsigned p=0; p<in.length(); p++) {
     if (isspace(in[p]) && in[p] != '\n') {
       if (white)
-	continue;
+        continue;
       white = true;
     } else {
       if (white) {
-	if (out.length()) out += " ";
-	white = false;
+        if (out.length()) out += " ";
+        white = false;
       }
       out += in[p];
     }
@@ -1202,12 +1202,12 @@ int CrushCompiler::adjust_bucket_item_place(iter_t const &i)
           << buckets[j] << "' are included each other" << std::endl;
           return -1; 
         } else {  
-	   std::iter_swap(bucket_itrer[buckets[i]], bucket_itrer[buckets[j]]);
+           std::iter_swap(bucket_itrer[buckets[i]], bucket_itrer[buckets[j]]);
         } 
       } 
     }
   }
-	
+        
   return 0;
 }
 
@@ -1272,7 +1272,7 @@ int CrushCompiler::compile(istream& in, const char *infn)
     int line = p->second;
     int pos = cpos - p->first;
     err << infn << ":" << line //<< ":" << (pos+1)
-	<< " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
+        << " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
     return -1;
   }
   

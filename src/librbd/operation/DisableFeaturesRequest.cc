@@ -45,7 +45,7 @@ void DisableFeaturesRequest<I>::send_op() {
   ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   ldout(cct, 20) << this << " " << __func__ << ": features=" << m_features
-		 << dendl;
+                 << dendl;
 
   send_prepare_lock();
 }
@@ -118,8 +118,8 @@ Context *DisableFeaturesRequest<I>::handle_block_writes(int *result) {
     // avoid accepting new requests from peers while we manipulate
     // the image features
     if (image_ctx.exclusive_lock != nullptr &&
-	(image_ctx.journal == nullptr ||
-	 !image_ctx.journal->is_journal_replaying())) {
+        (image_ctx.journal == nullptr ||
+         !image_ctx.journal->is_journal_replaying())) {
       image_ctx.exclusive_lock->block_requests(0);
       m_requests_blocked = true;
     }
@@ -362,8 +362,8 @@ void DisableFeaturesRequest<I>::send_close_journal() {
 
       std::swap(m_journal, image_ctx.journal);
       Context *ctx = create_context_callback<
-	DisableFeaturesRequest<I>,
-	&DisableFeaturesRequest<I>::handle_close_journal>(this);
+        DisableFeaturesRequest<I>,
+        &DisableFeaturesRequest<I>::handle_close_journal>(this);
 
       m_journal->close(ctx);
       return;
@@ -498,8 +498,8 @@ void DisableFeaturesRequest<I>::send_set_features() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": new_features="
-		 << m_new_features << ", features_mask=" << m_features_mask
-		 << dendl;
+                 << m_new_features << ", features_mask=" << m_features_mask
+                 << dendl;
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_features(&op, m_new_features, m_features_mask);
@@ -548,7 +548,7 @@ void DisableFeaturesRequest<I>::send_update_flags() {
   }
 
   ldout(cct, 20) << this << " " << __func__ << ": disable_flags="
-		 << m_disable_flags << dendl;
+                 << m_disable_flags << dendl;
 
   Context *ctx = create_context_callback<
     DisableFeaturesRequest<I>,

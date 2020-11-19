@@ -71,8 +71,8 @@ bool assemble_write_same_extent(
       ws_data->claim_append(sub_bl);
       extent_left -= sub_len;
       if (sub_off) {
-	sub_off = 0;
-	sub_len = data_len;
+        sub_off = 0;
+        sub_len = data_len;
       }
     }
     if (extent_left) {

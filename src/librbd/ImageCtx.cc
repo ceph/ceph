@@ -83,7 +83,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
-		     const char *snap, IoCtx& p, bool ro)
+                     const char *snap, IoCtx& p, bool ro)
     : cct((CephContext*)p.cct()),
       config(cct->_conf),
       perfcounter(NULL),
@@ -145,7 +145,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
-		     uint64_t snap_id, IoCtx& p, bool ro)
+                     uint64_t snap_id, IoCtx& p, bool ro)
     : ImageCtx(image_name, image_id, "", p, ro) {
     open_snap_id = snap_id;
   }
@@ -238,11 +238,11 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     }
 
     ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
-		   << " stripe_count " << stripe_count
-		   << " object_size " << layout.object_size
-		   << " prefix " << object_prefix
-		   << " format " << format_string
-		   << dendl;
+                   << " stripe_count " << stripe_count
+                   << " object_size " << layout.object_size
+                   << " prefix " << object_prefix
+                   << " format " << format_string
+                   << dendl;
   }
 
   void ImageCtx::perf_start(string name) {
@@ -374,7 +374,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   int ImageCtx::get_snap_name(snap_t in_snap_id,
-			      string *out_snap_name) const
+                              string *out_snap_name) const
   {
     ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
@@ -386,7 +386,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   int ImageCtx::get_snap_namespace(snap_t in_snap_id,
-				   cls::rbd::SnapshotNamespace *out_snap_namespace) const
+                                   cls::rbd::SnapshotNamespace *out_snap_namespace) const
   {
     ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
@@ -398,7 +398,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   int ImageCtx::get_parent_spec(snap_t in_snap_id,
-				cls::rbd::ParentImageSpec *out_pspec) const
+                                cls::rbd::ParentImageSpec *out_pspec) const
   {
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
@@ -466,49 +466,49 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   int ImageCtx::is_snap_protected(snap_t in_snap_id,
-				  bool *is_protected) const
+                                  bool *is_protected) const
   {
     ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_protected =
-	(info->protection_status == RBD_PROTECTION_STATUS_PROTECTED);
+        (info->protection_status == RBD_PROTECTION_STATUS_PROTECTED);
       return 0;
     }
     return -ENOENT;
   }
 
   int ImageCtx::is_snap_unprotected(snap_t in_snap_id,
-				    bool *is_unprotected) const
+                                    bool *is_unprotected) const
   {
     ceph_assert(ceph_mutex_is_locked(image_lock));
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_unprotected =
-	(info->protection_status == RBD_PROTECTION_STATUS_UNPROTECTED);
+        (info->protection_status == RBD_PROTECTION_STATUS_UNPROTECTED);
       return 0;
     }
     return -ENOENT;
   }
 
   void ImageCtx::add_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
-			  string in_snap_name,
-			  snap_t id, uint64_t in_size,
-			  const ParentImageInfo &parent,
+                          string in_snap_name,
+                          snap_t id, uint64_t in_size,
+                          const ParentImageInfo &parent,
                           uint8_t protection_status, uint64_t flags,
                           utime_t timestamp)
   {
     ceph_assert(ceph_mutex_is_wlocked(image_lock));
     snaps.push_back(id);
     SnapInfo info(in_snap_name, in_snap_namespace,
-		  in_size, parent, protection_status, flags, timestamp);
+                  in_size, parent, protection_status, flags, timestamp);
     snap_info.insert({id, info});
     snap_ids.insert({{in_snap_namespace, in_snap_name}, id});
   }
 
   void ImageCtx::rm_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
-			 string in_snap_name,
-			 snap_t id)
+                         string in_snap_name,
+                         snap_t id)
   {
     ceph_assert(ceph_mutex_is_wlocked(image_lock));
     snaps.erase(std::remove(snaps.begin(), snaps.end(), id), snaps.end());
@@ -677,7 +677,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
-					  uint64_t overlap)
+                                          uint64_t overlap)
   {
     // drop extents completely beyond the overlap
     while (!objectx.empty() && objectx.back().first >= overlap)
@@ -689,12 +689,12 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
     uint64_t len = 0;
     for (vector<pair<uint64_t,uint64_t> >::iterator p = objectx.begin();
-	 p != objectx.end();
-	 ++p)
+         p != objectx.end();
+         ++p)
       len += p->second;
     ldout(cct, 10) << "prune_parent_extents image overlap " << overlap
-		   << ", object overlap " << len
-		   << " from image extents " << objectx << dendl;
+                   << ", object overlap " << len
+                   << " from image extents " << objectx << dendl;
     return len;
   }
 
@@ -937,7 +937,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
                                     ceph::mutex **timer_lock) {
     auto safe_timer_singleton =
       &cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
-	"librbd::journal::safe_timer", false, cct);
+        "librbd::journal::safe_timer", false, cct);
     *timer = safe_timer_singleton;
     *timer_lock = &safe_timer_singleton->lock;
   }

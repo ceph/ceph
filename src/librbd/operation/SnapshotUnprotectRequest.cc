@@ -150,7 +150,7 @@ template <typename I>
 SnapshotUnprotectRequest<I>::SnapshotUnprotectRequest(I &image_ctx,
                                                       Context *on_finish,
                                                       const cls::rbd::SnapshotNamespace &snap_namespace,
-						      const std::string &snap_name)
+                                                      const std::string &snap_name)
   : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
     m_snap_name(snap_name), m_state(STATE_UNPROTECT_SNAP_START),
     m_ret_val(0), m_snap_id(CEPH_NOSNAP) {

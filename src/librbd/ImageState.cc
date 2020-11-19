@@ -47,18 +47,18 @@ public:
     {
       std::lock_guard locker{m_lock};
       if (!m_in_flight.empty()) {
-	Context *ctx = new LambdaContext(
-	  [this, on_finish](int r) {
-	    ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-	                     << ": completing flush" << dendl;
-	    on_finish->complete(r);
-	  });
-	m_work_queue->queue(ctx, 0);
-	return;
+        Context *ctx = new LambdaContext(
+          [this, on_finish](int r) {
+            ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
+                             << ": completing flush" << dendl;
+            on_finish->complete(r);
+          });
+        m_work_queue->queue(ctx, 0);
+        return;
       }
     }
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-		     << ": completing flush" << dendl;
+                     << ": completing flush" << dendl;
     on_finish->complete(0);
   }
 
@@ -69,12 +69,12 @@ public:
       ceph_assert(m_on_shut_down_finish == nullptr);
       m_watchers.clear();
       if (!m_in_flight.empty()) {
-	m_on_shut_down_finish = on_finish;
-	return;
+        m_on_shut_down_finish = on_finish;
+        return;
       }
     }
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-		     << ": completing shut down" << dendl;
+                     << ": completing shut down" << dendl;
     on_finish->complete(0);
   }
 
@@ -93,26 +93,26 @@ public:
 
   void unregister_watcher(uint64_t handle, Context *on_finish) {
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__ << ": handle="
-		     << handle << dendl;
+                     << handle << dendl;
     int r = 0;
     {
       std::lock_guard locker{m_lock};
       auto it = m_watchers.find(handle);
       if (it == m_watchers.end()) {
-	r = -ENOENT;
+        r = -ENOENT;
       } else {
-	if (m_in_flight.find(handle) != m_in_flight.end()) {
-	  ceph_assert(m_pending_unregister.find(handle) == m_pending_unregister.end());
-	  m_pending_unregister[handle] = on_finish;
-	  on_finish = nullptr;
-	}
-	m_watchers.erase(it);
+        if (m_in_flight.find(handle) != m_in_flight.end()) {
+          ceph_assert(m_pending_unregister.find(handle) == m_pending_unregister.end());
+          m_pending_unregister[handle] = on_finish;
+          on_finish = nullptr;
+        }
+        m_watchers.erase(it);
       }
     }
 
     if (on_finish) {
       ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-		       << ": completing unregister" << dendl;
+                       << ": completing unregister" << dendl;
       on_finish->complete(r);
     }
   }
@@ -130,13 +130,13 @@ public:
     ceph_assert(ceph_mutex_is_locked(m_lock));
 
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__ << ": handle="
-		     << handle << ", watcher=" << watcher << dendl;
+                     << handle << ", watcher=" << watcher << dendl;
 
     m_in_flight.insert(handle);
 
     Context *ctx = new LambdaContext(
       [this, handle, watcher](int r) {
-	handle_notify(handle, watcher);
+        handle_notify(handle, watcher);
       });
 
     m_work_queue->queue(ctx, 0);
@@ -145,7 +145,7 @@ public:
   void handle_notify(uint64_t handle, UpdateWatchCtx *watcher) {
 
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__ << ": handle="
-		     << handle << ", watcher=" << watcher << dendl;
+                     << handle << ", watcher=" << watcher << dendl;
 
     watcher->handle_notify();
 
@@ -162,30 +162,30 @@ public:
       // If there is no more in flight notifications for this watcher
       // and it is pending unregister, complete it now.
       if (m_in_flight.find(handle) == m_in_flight.end()) {
-	auto it = m_pending_unregister.find(handle);
-	if (it != m_pending_unregister.end()) {
-	  on_unregister_finish = it->second;
-	  m_pending_unregister.erase(it);
-	}
+        auto it = m_pending_unregister.find(handle);
+        if (it != m_pending_unregister.end()) {
+          on_unregister_finish = it->second;
+          m_pending_unregister.erase(it);
+        }
       }
 
       if (m_in_flight.empty()) {
-	ceph_assert(m_pending_unregister.empty());
-	if (m_on_shut_down_finish != nullptr) {
-	  std::swap(m_on_shut_down_finish, on_shut_down_finish);
-	}
+        ceph_assert(m_pending_unregister.empty());
+        if (m_on_shut_down_finish != nullptr) {
+          std::swap(m_on_shut_down_finish, on_shut_down_finish);
+        }
       }
     }
 
     if (on_unregister_finish != nullptr) {
       ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-		       << ": completing unregister" << dendl;
+                       << ": completing unregister" << dendl;
       on_unregister_finish->complete(0);
     }
 
     if (on_shut_down_finish != nullptr) {
       ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__
-		       << ": completing shut down" << dendl;
+                       << ": completing shut down" << dendl;
       on_shut_down_finish->complete(0);
     }
   }
@@ -195,7 +195,7 @@ private:
   public:
     explicit ThreadPoolSingleton(CephContext *cct)
       : ThreadPool(cct, "librbd::ImageUpdateWatchers::thread_pool", "tp_librbd",
-		   1) {
+                   1) {
       start();
     }
     ~ThreadPoolSingleton() override {
@@ -218,7 +218,7 @@ private:
     }
     auto& thread_pool = m_cct->lookup_or_create_singleton_object<
       ThreadPoolSingleton>("librbd::ImageUpdateWatchers::thread_pool",
-			   false, m_cct);
+                           false, m_cct);
     m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::work_queue",
                                  ceph::make_timespan(
                                    m_cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout")),
@@ -523,7 +523,7 @@ void ImageState<I>::handle_update_notification() {
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << ": refresh_seq = " << m_refresh_seq << ", "
-		 << "last_refresh = " << m_last_refresh << dendl;
+                 << "last_refresh = " << m_last_refresh << dendl;
 
   switch (m_state) {
   case STATE_UNINITIALIZED:
@@ -656,7 +656,7 @@ void ImageState<I>::handle_prepare_lock_complete() {
 
 template <typename I>
 int ImageState<I>::register_update_watcher(UpdateWatchCtx *watcher,
-					 uint64_t *handle) {
+                                         uint64_t *handle) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 

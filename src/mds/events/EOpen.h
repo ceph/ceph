@@ -39,9 +39,9 @@ public:
       metablob.add_dir_context(in->get_projected_parent_dn()->get_dir());
       metablob.add_primary_dentry(in->get_projected_parent_dn(), 0, false);
       if (in->last == CEPH_NOSNAP)
-	inos.push_back(in->ino());
+        inos.push_back(in->ino());
       else
-	snap_inos.push_back(in->vino());
+        snap_inos.push_back(in->vino());
     }
   }
   void add_ino(inodeno_t ino) {

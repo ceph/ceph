@@ -28,7 +28,7 @@ int C_DecodeTag::process(int r) {
   if (r < 0) {
     lderr(cct) << "C_DecodeTag: " << this << " " << __func__ << ": "
                << "failed to allocate tag: " << cpp_strerror(r)
-      	 << dendl;
+               << dendl;
     return r;
   }
 

@@ -42,7 +42,7 @@ void EnableFeaturesRequest<I>::send_op() {
   ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   ldout(cct, 20) << this << " " << __func__ << ": features=" << m_features
-		 << dendl;
+                 << dendl;
   send_prepare_lock();
 }
 
@@ -169,8 +169,8 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
     // avoid accepting new requests from peers while we manipulate
     // the image features
     if (image_ctx.exclusive_lock != nullptr &&
-	(image_ctx.journal == nullptr ||
-	 !image_ctx.journal->is_journal_replaying())) {
+        (image_ctx.journal == nullptr ||
+         !image_ctx.journal->is_journal_replaying())) {
       image_ctx.exclusive_lock->block_requests(0);
       m_requests_blocked = true;
     }
@@ -188,10 +188,10 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
 
     if ((m_features & RBD_FEATURE_OBJECT_MAP) != 0) {
       if ((m_new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-	lderr(cct) << "cannot enable object-map. exclusive-lock must be "
+        lderr(cct) << "cannot enable object-map. exclusive-lock must be "
                       "enabled before enabling object-map." << dendl;
-	*result = -EINVAL;
-	break;
+        *result = -EINVAL;
+        break;
       }
       m_enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
       m_features_mask |= (RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_FAST_DIFF);
@@ -203,10 +203,10 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
 
     if ((m_features & RBD_FEATURE_JOURNALING) != 0) {
       if ((m_new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-	lderr(cct) << "cannot enable journaling. exclusive-lock must be "
+        lderr(cct) << "cannot enable journaling. exclusive-lock must be "
                       "enabled before enabling journaling." << dendl;
-	*result = -EINVAL;
-	break;
+        *result = -EINVAL;
+        break;
       }
       m_features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
       create_journal = true;
@@ -307,7 +307,7 @@ void EnableFeaturesRequest<I>::send_update_flags() {
   }
 
   ldout(cct, 20) << this << " " << __func__ << ": enable_flags="
-		 << m_enable_flags << dendl;
+                 << m_enable_flags << dendl;
 
   Context *ctx = create_context_callback<
     EnableFeaturesRequest<I>,
@@ -340,8 +340,8 @@ void EnableFeaturesRequest<I>::send_set_features() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": new_features="
-		 << m_new_features << ", features_mask=" << m_features_mask
-		 << dendl;
+                 << m_new_features << ", features_mask=" << m_features_mask
+                 << dendl;
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_features(&op, m_new_features, m_features_mask);

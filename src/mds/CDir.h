@@ -147,7 +147,7 @@ public:
   static const unsigned MASK_STATE_EXPORTED = 
   (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT|STATE_BADFRAG);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
-  (						  
+  (                                                  
    STATE_IMPORTING |
    STATE_IMPORTBOUND |
    STATE_EXPORTBOUND |
@@ -180,7 +180,7 @@ public:
   static const uint64_t WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
   static const uint64_t WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
   static const uint64_t WAIT_FROZEN       = (1<<2);  // auth pins removed
-  static const uint64_t WAIT_CREATED	  = (1<<3);  // new dirfrag is logged
+  static const uint64_t WAIT_CREATED          = (1<<3);  // new dirfrag is logged
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
@@ -368,11 +368,11 @@ public:
   CDentry* lookup(std::string_view n, snapid_t snap=CEPH_NOSNAP);
 
   CDentry* add_null_dentry(std::string_view dname,
-			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
+                           snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_primary_dentry(std::string_view dname, CInode *in,
-			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
+                              snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
-			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
+                             snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
@@ -425,7 +425,7 @@ public:
     if (is_auth()) {
       list_replicas(ls);
       if (!ls.empty()) 
-	ls.insert(auth);
+        ls.insert(auth);
     }
   }
 
@@ -477,7 +477,7 @@ public:
 #endif
   void commit_to(version_t want);
   void commit(version_t want, MDSContext *c,
-	      bool ignore_authpinnability=false, int op_prio=-1);
+              bool ignore_authpinnability=false, int op_prio=-1);
 
   // -- dirtyness --
   version_t get_committing_version() const { return committing_version; }
@@ -539,7 +539,7 @@ public:
   std::pair<bool,bool> is_freezing_or_frozen_tree() const {
     if (freeze_tree_state) {
       if (freeze_tree_state->frozen)
-	return std::make_pair(false, true);
+        return std::make_pair(false, true);
       return std::make_pair(true, false);
     }
     return std::make_pair(false, false);
@@ -566,7 +566,7 @@ public:
   bool is_freezeable(bool freezing=false) const {
     // no nested auth pins.
     if (auth_pins - (freezing ? 1 : 0) > 0 ||
-	(freeze_tree_state && freeze_tree_state->auth_pins != auth_pins))
+        (freeze_tree_state && freeze_tree_state->auth_pins != auth_pins))
       return false;
 
     // inode must not be frozen.
@@ -666,13 +666,13 @@ protected:
   void go_bad(bool complete);
 
   void _omap_fetched(ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
-		     bool complete, int r);
+                     bool complete, int r);
 
   // -- commit --
   void _commit(version_t want, int op_prio);
   void _omap_commit_ops(int r, int op_prio, version_t version, bool _new, bufferlist &bl,
                         vector<dentry_key_t> &to_remove, vector<dentry_commit_item> &to_set,
-			mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
+                        mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
   void _omap_commit(int op_prio);
   void _parse_dentry(CDentry *dn, dentry_commit_item &item,
                      const set<snapid_t> *snaps, bufferlist &bl);

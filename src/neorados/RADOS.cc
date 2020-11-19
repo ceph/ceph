@@ -99,28 +99,28 @@ Object::operator std::string_view() const {
 
 bool operator <(const Object& lhs, const Object& rhs) {
   return (*reinterpret_cast<const object_t*>(&lhs.impl) <
-	  *reinterpret_cast<const object_t*>(&rhs.impl));
+          *reinterpret_cast<const object_t*>(&rhs.impl));
 }
 bool operator <=(const Object& lhs, const Object& rhs) {
   return (*reinterpret_cast<const object_t*>(&lhs.impl) <=
-	  *reinterpret_cast<const object_t*>(&rhs.impl));
+          *reinterpret_cast<const object_t*>(&rhs.impl));
 }
 bool operator >=(const Object& lhs, const Object& rhs) {
   return (*reinterpret_cast<const object_t*>(&lhs.impl) >=
-	  *reinterpret_cast<const object_t*>(&rhs.impl));
+          *reinterpret_cast<const object_t*>(&rhs.impl));
 }
 bool operator >(const Object& lhs, const Object& rhs) {
   return (*reinterpret_cast<const object_t*>(&lhs.impl) >
-	  *reinterpret_cast<const object_t*>(&rhs.impl));
+          *reinterpret_cast<const object_t*>(&rhs.impl));
 }
 
 bool operator ==(const Object& lhs, const Object& rhs) {
   return (*reinterpret_cast<const object_t*>(&lhs.impl) ==
-	  *reinterpret_cast<const object_t*>(&rhs.impl));
+          *reinterpret_cast<const object_t*>(&rhs.impl));
 }
 bool operator !=(const Object& lhs, const Object& rhs) {
   return (*reinterpret_cast<const object_t*>(&lhs.impl) !=
-	  *reinterpret_cast<const object_t*>(&rhs.impl));
+          *reinterpret_cast<const object_t*>(&rhs.impl));
 }
 
 std::ostream& operator <<(std::ostream& m, const Object& o) {
@@ -264,7 +264,7 @@ void IOContext::read_snap(std::optional<std::uint64_t> _snapid) {
 
 std::optional<
   std::pair<std::uint64_t,
-	    std::vector<std::uint64_t>>> IOContext::write_snap_context() const {
+            std::vector<std::uint64_t>>> IOContext::write_snap_context() const {
   auto& snapc = reinterpret_cast<const IOContextImpl*>(&impl)->snapc;
   if (snapc.empty()) {
     return std::nullopt;
@@ -283,8 +283,8 @@ void IOContext::write_snap_context(
     SnapContext n(_snapc->first, { _snapc->second.begin(), _snapc->second.end()});
     if (!n.is_valid()) {
       throw bs::system_error(EINVAL,
-			     bs::system_category(),
-			     "Invalid snap context.");
+                             bs::system_category(),
+                             "Invalid snap context.");
 
     } else {
       snapc = n;
@@ -297,7 +297,7 @@ bool operator <(const IOContext& lhs, const IOContext& rhs) {
   const auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
 
   return (std::tie(l->oloc.pool, l->oloc.nspace, l->oloc.key) <
-	  std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
+          std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
 }
 
 bool operator <=(const IOContext& lhs, const IOContext& rhs) {
@@ -305,7 +305,7 @@ bool operator <=(const IOContext& lhs, const IOContext& rhs) {
   const auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
 
   return (std::tie(l->oloc.pool, l->oloc.nspace, l->oloc.key) <=
-	  std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
+          std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
 }
 
 bool operator >=(const IOContext& lhs, const IOContext& rhs) {
@@ -313,7 +313,7 @@ bool operator >=(const IOContext& lhs, const IOContext& rhs) {
   const auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
 
   return (std::tie(l->oloc.pool, l->oloc.nspace, l->oloc.key) >=
-	  std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
+          std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
 }
 
 bool operator >(const IOContext& lhs, const IOContext& rhs) {
@@ -321,7 +321,7 @@ bool operator >(const IOContext& lhs, const IOContext& rhs) {
   const auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
 
   return (std::tie(l->oloc.pool, l->oloc.nspace, l->oloc.key) >
-	  std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
+          std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
 }
 
 bool operator ==(const IOContext& lhs, const IOContext& rhs) {
@@ -329,7 +329,7 @@ bool operator ==(const IOContext& lhs, const IOContext& rhs) {
   const auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
 
   return (std::tie(l->oloc.pool, l->oloc.nspace, l->oloc.key) ==
-	  std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
+          std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
 }
 
 bool operator !=(const IOContext& lhs, const IOContext& rhs) {
@@ -337,7 +337,7 @@ bool operator !=(const IOContext& lhs, const IOContext& rhs) {
   const auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
 
   return (std::tie(l->oloc.pool, l->oloc.nspace, l->oloc.key) !=
-	  std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
+          std::tie(r->oloc.pool, r->oloc.nspace, r->oloc.key));
 }
 
 std::ostream& operator <<(std::ostream& m, const IOContext& o) {
@@ -408,7 +408,7 @@ void Op::set_fadvise_nocache() {
 
 void Op::cmpext(uint64_t off, bufferlist&& cmp_bl, std::size_t* s) {
   reinterpret_cast<OpImpl*>(&impl)->op.cmpext(off, std::move(cmp_bl), nullptr,
-					      s);
+                                              s);
 }
 void Op::cmpxattr(std::string_view name, cmpxattr_op op, const bufferlist& val) {
   reinterpret_cast<OpImpl*>(&impl)->
@@ -431,34 +431,34 @@ void Op::assert_exists() {
     static_cast<bs::error_code*>(nullptr));
 }
 void Op::cmp_omap(const bc::flat_map<
-		  std::string, std::pair<cb::list,
-		  int>>& assertions) {
+                  std::string, std::pair<cb::list,
+                  int>>& assertions) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_cmp(assertions, nullptr);
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl,
-	      cb::list* out,
-	      bs::error_code* ec) {
+              const bufferlist& inbl,
+              cb::list* out,
+              bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec, out);
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl,
-	      fu2::unique_function<void(bs::error_code,
-					const cb::list&) &&> f) {
+              const bufferlist& inbl,
+              fu2::unique_function<void(bs::error_code,
+                                        const cb::list&) &&> f) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl,
-	      fu2::unique_function<void(bs::error_code, int,
-					const cb::list&) &&> f) {
+              const bufferlist& inbl,
+              fu2::unique_function<void(bs::error_code, int,
+                                        const cb::list&) &&> f) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl, bs::error_code* ec) {
+              const bufferlist& inbl, bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec);
 }
 
@@ -510,56 +510,56 @@ std::ostream& operator <<(std::ostream& m, const Op& o) {
 // ReadOp / WriteOp
 
 void ReadOp::read(size_t off, uint64_t len, cb::list* out,
-		  bs::error_code* ec) {
+                  bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.read(off, len, ec, out);
 }
 
 void ReadOp::get_xattr(std::string_view name, cb::list* out,
-		       bs::error_code* ec) {
+                       bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.getxattr(name, ec, out);
 }
 
 void ReadOp::get_omap_header(cb::list* out,
-			     bs::error_code* ec) {
+                             bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_header(ec, out);
 }
 
 void ReadOp::sparse_read(uint64_t off, uint64_t len, cb::list* out,
-			 std::vector<std::pair<std::uint64_t,
-			 std::uint64_t>>* extents,
-			 bs::error_code* ec) {
+                         std::vector<std::pair<std::uint64_t,
+                         std::uint64_t>>* extents,
+                         bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.sparse_read(off, len, ec, extents, out);
 }
 
 void ReadOp::stat(std::uint64_t* size, ceph::real_time* mtime,
-		  bs::error_code* ec) {
+                  bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.stat(size, mtime, ec);
 }
 
 void ReadOp::get_omap_keys(std::optional<std::string_view> start_after,
-			   std::uint64_t max_return,
-			   bc::flat_set<std::string>* keys,
-			   bool* done,
-			   bs::error_code* ec) {
+                           std::uint64_t max_return,
+                           bc::flat_set<std::string>* keys,
+                           bool* done,
+                           bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_keys(start_after, max_return,
-						     ec, keys, done);
+                                                     ec, keys, done);
 }
 
 void ReadOp::get_xattrs(bc::flat_map<std::string,
-			cb::list>* kv,
-			bs::error_code* ec) {
+                        cb::list>* kv,
+                        bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.getxattrs(ec, kv);
 }
 
 void ReadOp::get_omap_vals(std::optional<std::string_view> start_after,
-			   std::optional<std::string_view> filter_prefix,
-			   uint64_t max_return,
-			   bc::flat_map<std::string,
-			   cb::list>* kv,
-			   bool* done,
-			   bs::error_code* ec) {
+                           std::optional<std::string_view> filter_prefix,
+                           uint64_t max_return,
+                           bc::flat_map<std::string,
+                           cb::list>* kv,
+                           bool* done,
+                           bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_vals(start_after, filter_prefix,
-						     max_return, ec, kv, done);
+                                                     max_return, ec, kv, done);
 }
 
 void ReadOp::get_omap_vals_by_keys(
@@ -570,12 +570,12 @@ void ReadOp::get_omap_vals_by_keys(
 }
 
 void ReadOp::list_watchers(std::vector<ObjWatcher>* watchers,
-			   bs::error_code* ec) {
+                           bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)-> op.list_watchers(watchers, ec);
 }
 
 void ReadOp::list_snaps(SnapSet* snaps,
-			bs::error_code* ec) {
+                        bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.list_snaps(snaps, nullptr, ec);
 }
 
@@ -650,33 +650,33 @@ void WriteOp::rm_omap_keys(
 }
 
 void WriteOp::set_alloc_hint(uint64_t expected_object_size,
-			     uint64_t expected_write_size,
-			     alloc_hint::alloc_hint_t flags) {
+                             uint64_t expected_write_size,
+                             alloc_hint::alloc_hint_t flags) {
   using namespace alloc_hint;
   static_assert(sequential_write ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE));
   static_assert(random_write ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE));
   static_assert(sequential_read ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ));
   static_assert(random_read ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ));
   static_assert(append_only ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY));
   static_assert(immutable ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE));
   static_assert(shortlived ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED));
   static_assert(longlived ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED));
   static_assert(compressible ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
   static_assert(incompressible ==
-		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE));
+                static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE));
 
   reinterpret_cast<OpImpl*>(&impl)->op.set_alloc_hint(expected_object_size,
-						      expected_write_size,
-						      flags);
+                                                      expected_write_size,
+                                                      flags);
 }
 
 // RADOS
@@ -690,7 +690,7 @@ RADOS::Builder& RADOS::Builder::add_conf_file(std::string_view f) {
 }
 
 void RADOS::Builder::build(boost::asio::io_context& ioctx,
-			   std::unique_ptr<BuildComp> c) {
+                           std::unique_ptr<BuildComp> c) {
   constexpr auto env = CODE_ENVIRONMENT_LIBRARY;
   CephInitParameters ci(env);
   if (name)
@@ -716,7 +716,7 @@ void RADOS::Builder::build(boost::asio::io_context& ioctx,
   {
     std::ostringstream ss;
     auto r = cct->_conf.parse_config_files(conf_files ? conf_files->data() : nullptr,
-					   &ss, flags);
+                                           &ss, flags);
     if (r < 0)
       c->dispatch(std::move(c), ceph::to_error_code(r), RADOS{nullptr});
   }
@@ -746,14 +746,14 @@ void RADOS::Builder::build(boost::asio::io_context& ioctx,
 }
 
 void RADOS::make_with_cct(CephContext* cct,
-			  boost::asio::io_context& ioctx,
-			  std::unique_ptr<BuildComp> c) {
+                          boost::asio::io_context& ioctx,
+                          std::unique_ptr<BuildComp> c) {
   try {
     auto r = new detail::NeoClient{std::make_unique<detail::RADOS>(ioctx, cct)};
     r->objecter->wait_for_osd_map(
       [c = std::move(c), r = std::unique_ptr<detail::Client>(r)]() mutable {
-	c->dispatch(std::move(c), bs::error_code{},
-		    RADOS{std::move(r)});
+        c->dispatch(std::move(c), bs::error_code{},
+                    RADOS{std::move(r)});
       });
   } catch (const bs::system_error& err) {
     c->dispatch(std::move(c), err.code(), RADOS{nullptr});
@@ -783,9 +783,9 @@ boost::asio::io_context& RADOS::get_io_context() {
 }
 
 void RADOS::execute(const Object& o, const IOContext& _ioc, ReadOp&& _op,
-		    cb::list* bl,
-		    std::unique_ptr<ReadOp::Completion> c, version_t* objver,
-		    const blkin_trace_info *trace_info) {
+                    cb::list* bl,
+                    std::unique_ptr<ReadOp::Completion> c, version_t* objver,
+                    const blkin_trace_info *trace_info) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
@@ -806,8 +806,8 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, ReadOp&& _op,
 }
 
 void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
-		    std::unique_ptr<WriteOp::Completion> c, version_t* objver,
-		    const blkin_trace_info *trace_info) {
+                    std::unique_ptr<WriteOp::Completion> c, version_t* objver,
+                    const blkin_trace_info *trace_info) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
@@ -833,11 +833,11 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
 }
 
 void RADOS::execute(const Object& o, std::int64_t pool, ReadOp&& _op,
-		    cb::list* bl,
-		    std::unique_ptr<ReadOp::Completion> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key,
-		    version_t* objver) {
+                    cb::list* bl,
+                    std::unique_ptr<ReadOp::Completion> c,
+                    std::optional<std::string_view> ns,
+                    std::optional<std::string_view> key,
+                    version_t* objver) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
   auto flags = 0; // Should be in Op.
@@ -854,10 +854,10 @@ void RADOS::execute(const Object& o, std::int64_t pool, ReadOp&& _op,
 }
 
 void RADOS::execute(const Object& o, std::int64_t pool, WriteOp&& _op,
-		    std::unique_ptr<WriteOp::Completion> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key,
-		    version_t* objver) {
+                    std::unique_ptr<WriteOp::Completion> c,
+                    std::optional<std::string_view> ns,
+                    std::optional<std::string_view> key,
+                    version_t* objver) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
   auto flags = 0; // Should be in Op.
@@ -886,7 +886,7 @@ boost::uuids::uuid RADOS::get_fsid() const noexcept {
 
 
 void RADOS::lookup_pool(std::string_view name,
-			std::unique_ptr<LookupPoolComp> c)
+                        std::unique_ptr<LookupPoolComp> c)
 {
   // I kind of want to make lookup_pg_pool return
   // std::optional<int64_t> since it can only return one error code.
@@ -898,18 +898,18 @@ void RADOS::lookup_pool(std::string_view name,
       [name = std::string(name), c = std::move(c),
        objecter = impl->objecter]
       (bs::error_code ec) mutable {
-	int64_t ret =
-	  objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-				name);
-	if (ret < 0)
-	  ca::dispatch(std::move(c), osdc_errc::pool_dne,
-		       std::int64_t(0));
-	else
-	  ca::dispatch(std::move(c), bs::error_code{}, ret);
+        int64_t ret =
+          objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
+                                name);
+        if (ret < 0)
+          ca::dispatch(std::move(c), osdc_errc::pool_dne,
+                       std::int64_t(0));
+        else
+          ca::dispatch(std::move(c), bs::error_code{}, ret);
       });
   } else if (ret < 0) {
     ca::dispatch(std::move(c), osdc_errc::pool_dne,
-		 std::int64_t(0));
+                 std::int64_t(0));
   } else {
     ca::dispatch(std::move(c), bs::error_code{}, ret);
   }
@@ -921,13 +921,13 @@ std::optional<uint64_t> RADOS::get_pool_alignment(int64_t pool_id)
   return impl->objecter->with_osdmap(
     [pool_id](const OSDMap &o) -> std::optional<uint64_t> {
       if (!o.have_pg_pool(pool_id)) {
-	throw bs::system_error(
-	  ENOENT, bs::system_category(),
-	  "Cannot find pool in OSDMap.");
+        throw bs::system_error(
+          ENOENT, bs::system_category(),
+          "Cannot find pool in OSDMap.");
       } else if (o.get_pg_pool(pool_id)->requires_aligned_append()) {
-	return o.get_pg_pool(pool_id)->required_alignment();
+        return o.get_pg_pool(pool_id)->required_alignment();
       } else {
-	return std::nullopt;
+        return std::nullopt;
       }
     });
 }
@@ -937,101 +937,101 @@ void RADOS::list_pools(std::unique_ptr<LSPoolsComp> c) {
     [&](OSDMap& o) {
       std::vector<std::pair<std::int64_t, std::string>> v;
       for (auto p : o.get_pools())
-	v.push_back(std::make_pair(p.first, o.get_pool_name(p.first)));
+        v.push_back(std::make_pair(p.first, o.get_pool_name(p.first)));
       ca::dispatch(std::move(c), std::move(v));
     });
 }
 
 void RADOS::create_pool_snap(std::int64_t pool,
-			     std::string_view snapName,
-			     std::unique_ptr<SimpleOpComp> c)
+                             std::string_view snapName,
+                             std::unique_ptr<SimpleOpComp> c)
 {
   impl->objecter->create_pool_snap(
     pool, snapName,
     Objecter::PoolOp::OpComp::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
-	ca::dispatch(std::move(c), e);
+        ca::dispatch(std::move(c), e);
       }));
 }
 
 void RADOS::allocate_selfmanaged_snap(int64_t pool,
-				      std::unique_ptr<SMSnapComp> c) {
+                                      std::unique_ptr<SMSnapComp> c) {
   impl->objecter->allocate_selfmanaged_snap(
     pool,
     ca::Completion<void(bs::error_code, snapid_t)>::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, snapid_t snap) mutable {
-	ca::dispatch(std::move(c), e, snap);
+        ca::dispatch(std::move(c), e, snap);
       }));
 }
 
 void RADOS::delete_pool_snap(std::int64_t pool,
-			     std::string_view snapName,
-			     std::unique_ptr<SimpleOpComp> c)
+                             std::string_view snapName,
+                             std::unique_ptr<SimpleOpComp> c)
 {
   impl->objecter->delete_pool_snap(
     pool, snapName,
     Objecter::PoolOp::OpComp::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
-	ca::dispatch(std::move(c), e);
+        ca::dispatch(std::move(c), e);
       }));
 }
 
 void RADOS::delete_selfmanaged_snap(std::int64_t pool,
-				    std::uint64_t snap,
-				    std::unique_ptr<SimpleOpComp> c)
+                                    std::uint64_t snap,
+                                    std::unique_ptr<SimpleOpComp> c)
 {
   impl->objecter->delete_selfmanaged_snap(
     pool, snap,
     Objecter::PoolOp::OpComp::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
-	ca::dispatch(std::move(c), e);
+        ca::dispatch(std::move(c), e);
       }));
 }
 
 void RADOS::create_pool(std::string_view name,
-			std::optional<int> crush_rule,
-			std::unique_ptr<SimpleOpComp> c)
+                        std::optional<int> crush_rule,
+                        std::unique_ptr<SimpleOpComp> c)
 {
   impl->objecter->create_pool(
     name,
     Objecter::PoolOp::OpComp::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
-	ca::dispatch(std::move(c), e);
+        ca::dispatch(std::move(c), e);
       }),
       crush_rule.value_or(-1));
 }
 
 void RADOS::delete_pool(std::string_view name,
-			std::unique_ptr<SimpleOpComp> c)
+                        std::unique_ptr<SimpleOpComp> c)
 {
   impl->objecter->delete_pool(
     name,
     Objecter::PoolOp::OpComp::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
-	ca::dispatch(std::move(c), e);
+        ca::dispatch(std::move(c), e);
       }));
 }
 
 void RADOS::delete_pool(std::int64_t pool,
-			std::unique_ptr<SimpleOpComp> c)
+                        std::unique_ptr<SimpleOpComp> c)
 {
   impl->objecter->delete_pool(
     pool,
     Objecter::PoolOp::OpComp::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
-	ca::dispatch(std::move(c), e);
+        ca::dispatch(std::move(c), e);
       }));
 }
 
 void RADOS::stat_pools(const std::vector<std::string>& pools,
-		       std::unique_ptr<PoolStatComp> c) {
+                       std::unique_ptr<PoolStatComp> c) {
   impl->objecter->get_pool_stats(
     pools,
     [c = std::move(c)]
@@ -1040,34 +1040,34 @@ void RADOS::stat_pools(const std::vector<std::string>& pools,
      bool per_pool) mutable {
       bc::flat_map<std::string, PoolStats> result;
       for (auto p = rawresult.begin(); p != rawresult.end(); ++p) {
-	auto& pv = result[p->first];
-	auto& pstat = p->second;
-	store_statfs_t &statfs = pstat.store_stats;
-	uint64_t allocated_bytes = pstat.get_allocated_data_bytes(per_pool) +
-	  pstat.get_allocated_omap_bytes(per_pool);
-	// FIXME: raw_used_rate is unknown hence use 1.0 here
-	// meaning we keep net amount aggregated over all replicas
-	// Not a big deal so far since this field isn't exposed
-	uint64_t user_bytes = pstat.get_user_data_bytes(1.0, per_pool) +
-	  pstat.get_user_omap_bytes(1.0, per_pool);
+        auto& pv = result[p->first];
+        auto& pstat = p->second;
+        store_statfs_t &statfs = pstat.store_stats;
+        uint64_t allocated_bytes = pstat.get_allocated_data_bytes(per_pool) +
+          pstat.get_allocated_omap_bytes(per_pool);
+        // FIXME: raw_used_rate is unknown hence use 1.0 here
+        // meaning we keep net amount aggregated over all replicas
+        // Not a big deal so far since this field isn't exposed
+        uint64_t user_bytes = pstat.get_user_data_bytes(1.0, per_pool) +
+          pstat.get_user_omap_bytes(1.0, per_pool);
 
-	object_stat_sum_t *sum = &p->second.stats.sum;
-	pv.num_kb = shift_round_up(allocated_bytes, 10);
-	pv.num_bytes = allocated_bytes;
-	pv.num_objects = sum->num_objects;
-	pv.num_object_clones = sum->num_object_clones;
-	pv.num_object_copies = sum->num_object_copies;
-	pv.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
-	pv.num_objects_unfound = sum->num_objects_unfound;
-	pv.num_objects_degraded = sum->num_objects_degraded;
-	pv.num_rd = sum->num_rd;
-	pv.num_rd_kb = sum->num_rd_kb;
-	pv.num_wr = sum->num_wr;
-	pv.num_wr_kb = sum->num_wr_kb;
-	pv.num_user_bytes = user_bytes;
-	pv.compressed_bytes_orig = statfs.data_compressed_original;
-	pv.compressed_bytes = statfs.data_compressed;
-	pv.compressed_bytes_alloc = statfs.data_compressed_allocated;
+        object_stat_sum_t *sum = &p->second.stats.sum;
+        pv.num_kb = shift_round_up(allocated_bytes, 10);
+        pv.num_bytes = allocated_bytes;
+        pv.num_objects = sum->num_objects;
+        pv.num_object_clones = sum->num_object_clones;
+        pv.num_object_copies = sum->num_object_copies;
+        pv.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
+        pv.num_objects_unfound = sum->num_objects_unfound;
+        pv.num_objects_degraded = sum->num_objects_degraded;
+        pv.num_rd = sum->num_rd;
+        pv.num_rd_kb = sum->num_rd_kb;
+        pv.num_wr = sum->num_wr;
+        pv.num_wr_kb = sum->num_wr_kb;
+        pv.num_user_bytes = user_bytes;
+        pv.compressed_bytes_orig = statfs.data_compressed_original;
+        pv.compressed_bytes = statfs.data_compressed;
+        pv.compressed_bytes_alloc = statfs.data_compressed_allocated;
       }
 
       ca::dispatch(std::move(c), ec, std::move(result), per_pool);
@@ -1075,7 +1075,7 @@ void RADOS::stat_pools(const std::vector<std::string>& pools,
 }
 
 void RADOS::stat_fs(std::optional<std::int64_t> _pool,
-		    std::unique_ptr<StatFSComp> c) {
+                    std::unique_ptr<StatFSComp> c) {
   boost::optional<int64_t> pool;
   if (_pool)
     pool = *pool;
@@ -1090,8 +1090,8 @@ void RADOS::stat_fs(std::optional<std::int64_t> _pool,
 // --- Watch/Notify
 
 void RADOS::watch(const Object& o, const IOContext& _ioc,
-		  std::optional<std::chrono::seconds> timeout, WatchCB&& cb,
-		  std::unique_ptr<WatchComp> c) {
+                  std::optional<std::chrono::seconds> timeout, WatchCB&& cb,
+                  std::unique_ptr<WatchComp> c) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
 
@@ -1107,15 +1107,15 @@ void RADOS::watch(const Object& o, const IOContext& _ioc,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
-	ca::dispatch(std::move(c), e, cookie);
+        ca::dispatch(std::move(c), e, cookie);
       }), nullptr);
 }
 
 void RADOS::watch(const Object& o, std::int64_t pool,
-		  std::optional<std::chrono::seconds> timeout, WatchCB&& cb,
-		  std::unique_ptr<WatchComp> c,
-		  std::optional<std::string_view> ns,
-		  std::optional<std::string_view> key) {
+                  std::optional<std::chrono::seconds> timeout, WatchCB&& cb,
+                  std::unique_ptr<WatchComp> c,
+                  std::optional<std::string_view> ns,
+                  std::optional<std::string_view> key) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   object_locator_t oloc;
   oloc.pool = pool;
@@ -1136,16 +1136,16 @@ void RADOS::watch(const Object& o, std::int64_t pool,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [c = std::move(c), cookie](bs::error_code e, bufferlist) mutable {
-	ca::dispatch(std::move(c), e, cookie);
+        ca::dispatch(std::move(c), e, cookie);
       }), nullptr);
 }
 
 void RADOS::notify_ack(const Object& o,
-		       const IOContext& _ioc,
-		       uint64_t notify_id,
-		       uint64_t cookie,
-		       bufferlist&& bl,
-		       std::unique_ptr<SimpleOpComp> c)
+                       const IOContext& _ioc,
+                       uint64_t notify_id,
+                       uint64_t cookie,
+                       bufferlist&& bl,
+                       std::unique_ptr<SimpleOpComp> c)
 {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
@@ -1154,17 +1154,17 @@ void RADOS::notify_ack(const Object& o,
   op.notify_ack(notify_id, cookie, bl);
 
   impl->objecter->read(*oid, ioc->oloc, std::move(op), ioc->snap_seq,
-		       nullptr, 0, std::move(c));
+                       nullptr, 0, std::move(c));
 }
 
 void RADOS::notify_ack(const Object& o,
-		       std::int64_t pool,
-		       uint64_t notify_id,
-		       uint64_t cookie,
-		       bufferlist&& bl,
-		       std::unique_ptr<SimpleOpComp> c,
-		       std::optional<std::string_view> ns,
-		       std::optional<std::string_view> key) {
+                       std::int64_t pool,
+                       uint64_t notify_id,
+                       uint64_t cookie,
+                       bufferlist&& bl,
+                       std::unique_ptr<SimpleOpComp> c,
+                       std::optional<std::string_view> ns,
+                       std::optional<std::string_view> key) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   object_locator_t oloc;
   oloc.pool = pool;
@@ -1176,7 +1176,7 @@ void RADOS::notify_ack(const Object& o,
   ObjectOperation op;
   op.notify_ack(notify_id, cookie, bl);
   impl->objecter->read(*oid, oloc, std::move(op), CEPH_NOSNAP, nullptr, 0,
-		       std::move(c));
+                       std::move(c));
 }
 
 tl::expected<ceph::timespan, bs::error_code> RADOS::watch_check(uint64_t cookie)
@@ -1186,7 +1186,7 @@ tl::expected<ceph::timespan, bs::error_code> RADOS::watch_check(uint64_t cookie)
 }
 
 void RADOS::unwatch(uint64_t cookie, const IOContext& _ioc,
-		    std::unique_ptr<SimpleOpComp> c)
+                    std::unique_ptr<SimpleOpComp> c)
 {
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
 
@@ -1195,21 +1195,21 @@ void RADOS::unwatch(uint64_t cookie, const IOContext& _ioc,
   ObjectOperation op;
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   impl->objecter->mutate(linger_op->target.base_oid, ioc->oloc, std::move(op),
-			 ioc->snapc, ceph::real_clock::now(), 0,
-			 Objecter::Op::OpComp::create(
-			   get_executor(),
-			   [objecter = impl->objecter,
-			    linger_op, c = std::move(c)]
-			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
-			     ca::dispatch(std::move(c), ec);
-			   }));
+                         ioc->snapc, ceph::real_clock::now(), 0,
+                         Objecter::Op::OpComp::create(
+                           get_executor(),
+                           [objecter = impl->objecter,
+                            linger_op, c = std::move(c)]
+                           (bs::error_code ec) mutable {
+                             objecter->linger_cancel(linger_op);
+                             ca::dispatch(std::move(c), ec);
+                           }));
 }
 
 void RADOS::unwatch(uint64_t cookie, std::int64_t pool,
-		    std::unique_ptr<SimpleOpComp> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key)
+                    std::unique_ptr<SimpleOpComp> c,
+                    std::optional<std::string_view> ns,
+                    std::optional<std::string_view> key)
 {
   object_locator_t oloc;
   oloc.pool = pool;
@@ -1223,22 +1223,22 @@ void RADOS::unwatch(uint64_t cookie, std::int64_t pool,
   ObjectOperation op;
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   impl->objecter->mutate(linger_op->target.base_oid, oloc, std::move(op),
-			 {}, ceph::real_clock::now(), 0,
-			 Objecter::Op::OpComp::create(
-			   get_executor(),
-			   [objecter = impl->objecter,
-			    linger_op, c = std::move(c)]
-			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
-			     ca::dispatch(std::move(c), ec);
-			   }));
+                         {}, ceph::real_clock::now(), 0,
+                         Objecter::Op::OpComp::create(
+                           get_executor(),
+                           [objecter = impl->objecter,
+                            linger_op, c = std::move(c)]
+                           (bs::error_code ec) mutable {
+                             objecter->linger_cancel(linger_op);
+                             ca::dispatch(std::move(c), ec);
+                           }));
 }
 
 void RADOS::flush_watch(std::unique_ptr<VoidOpComp> c)
 {
   impl->objecter->linger_callback_flush([c = std::move(c)]() mutable {
-					  ca::post(std::move(c));
-					});
+                                          ca::post(std::move(c));
+                                        });
 }
 
 struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
@@ -1254,31 +1254,31 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
   bufferlist rbl;
 
   NotifyHandler(boost::asio::io_context& ioc,
-		Objecter* objecter,
-		Objecter::LingerOp* op,
-		std::unique_ptr<RADOS::NotifyComp> c)
+                Objecter* objecter,
+                Objecter::LingerOp* op,
+                std::unique_ptr<RADOS::NotifyComp> c)
     : ioc(ioc), strand(ioc), objecter(objecter), op(op), c(std::move(c)) {}
 
   // Use bind or a lambda to pass this in.
   void handle_ack(bs::error_code ec,
-		  bufferlist&&) {
+                  bufferlist&&) {
     boost::asio::post(
       strand,
       [this, ec, p = shared_from_this()]() mutable {
-	acked = true;
-	maybe_cleanup(ec);
+        acked = true;
+        maybe_cleanup(ec);
       });
   }
 
   // Notify finish callback. It can actually own the object's storage.
 
   void operator()(bs::error_code ec,
-		  bufferlist&& bl) {
+                  bufferlist&& bl) {
     boost::asio::post(
       strand,
       [this, ec, p = shared_from_this()]() mutable {
-	finished = true;
-	maybe_cleanup(ec);
+        finished = true;
+        maybe_cleanup(ec);
       });
   }
 
@@ -1295,8 +1295,8 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
 };
 
 void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
-		   std::optional<std::chrono::milliseconds> timeout,
-		   std::unique_ptr<NotifyComp> c)
+                   std::optional<std::chrono::milliseconds> timeout,
+                   std::unique_ptr<NotifyComp> c)
 {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
@@ -1308,7 +1308,7 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
-	(*cb)(ec, std::move(bl));
+        (*cb)(ec, std::move(bl));
       });
   ObjectOperation rd;
   bufferlist inbl;
@@ -1322,15 +1322,15 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
-	cb->handle_ack(ec, std::move(bl));
+        cb->handle_ack(ec, std::move(bl));
       }), nullptr);
 }
 
 void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
-		   std::optional<std::chrono::milliseconds> timeout,
-		   std::unique_ptr<NotifyComp> c,
-		   std::optional<std::string_view> ns,
-		   std::optional<std::string_view> key)
+                   std::optional<std::chrono::milliseconds> timeout,
+                   std::unique_ptr<NotifyComp> c,
+                   std::optional<std::string_view> ns,
+                   std::optional<std::string_view> key)
 {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   object_locator_t oloc;
@@ -1347,7 +1347,7 @@ void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist&& bl) mutable {
-	(*cb)(ec, std::move(bl));
+        (*cb)(ec, std::move(bl));
       });
   ObjectOperation rd;
   bufferlist inbl;
@@ -1361,7 +1361,7 @@ void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [cb](bs::error_code ec, bufferlist&& bl) mutable {
-	cb->handle_ack(ec, std::move(bl));
+        cb->handle_ack(ec, std::move(bl));
       }), nullptr);
 }
 
@@ -1421,32 +1421,32 @@ Cursor::~Cursor() {
 
 bool operator ==(const Cursor& lhs, const Cursor& rhs) {
   return (*reinterpret_cast<const hobject_t*>(&lhs.impl) ==
-	  *reinterpret_cast<const hobject_t*>(&rhs.impl));
+          *reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 bool operator !=(const Cursor& lhs, const Cursor& rhs) {
   return (*reinterpret_cast<const hobject_t*>(&lhs.impl) !=
-	  *reinterpret_cast<const hobject_t*>(&rhs.impl));
+          *reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 bool operator <(const Cursor& lhs, const Cursor& rhs) {
   return (*reinterpret_cast<const hobject_t*>(&lhs.impl) <
-	  *reinterpret_cast<const hobject_t*>(&rhs.impl));
+          *reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 bool operator <=(const Cursor& lhs, const Cursor& rhs) {
   return (*reinterpret_cast<const hobject_t*>(&lhs.impl) <=
-	  *reinterpret_cast<const hobject_t*>(&rhs.impl));
+          *reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 bool operator >=(const Cursor& lhs, const Cursor& rhs) {
   return (*reinterpret_cast<const hobject_t*>(&lhs.impl) >=
-	  *reinterpret_cast<const hobject_t*>(&rhs.impl));
+          *reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 bool operator >(const Cursor& lhs, const Cursor& rhs) {
   return (*reinterpret_cast<const hobject_t*>(&lhs.impl) >
-	  *reinterpret_cast<const hobject_t*>(&rhs.impl));
+          *reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 std::string Cursor::to_str() const {
@@ -1467,11 +1467,11 @@ Cursor::from_str(const std::string& s) {
 }
 
 void RADOS::enumerate_objects(const IOContext& _ioc,
-			      const Cursor& begin,
-			      const Cursor& end,
-			      const std::uint32_t max,
-			      const bufferlist& filter,
-			      std::unique_ptr<EnumerateComp> c) {
+                              const Cursor& begin,
+                              const Cursor& end,
+                              const std::uint32_t max,
+                              const bufferlist& filter,
+                              std::unique_ptr<EnumerateComp> c) {
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
 
   impl->objecter->enumerate_objects<Entry>(
@@ -1485,18 +1485,18 @@ void RADOS::enumerate_objects(const IOContext& _ioc,
     (bs::error_code ec, std::vector<Entry>&& v,
      hobject_t&& n) mutable {
       ca::dispatch(std::move(c), ec, std::move(v),
-		   Cursor(static_cast<void*>(&n)));
+                   Cursor(static_cast<void*>(&n)));
     });
 }
 
 void RADOS::enumerate_objects(std::int64_t pool,
-			      const Cursor& begin,
-			      const Cursor& end,
-			      const std::uint32_t max,
-			      const bufferlist& filter,
-			      std::unique_ptr<EnumerateComp> c,
-			      std::optional<std::string_view> ns,
-			      std::optional<std::string_view> key) {
+                              const Cursor& begin,
+                              const Cursor& end,
+                              const std::uint32_t max,
+                              const bufferlist& filter,
+                              std::unique_ptr<EnumerateComp> c,
+                              std::optional<std::string_view> ns,
+                              std::optional<std::string_view> key) {
   impl->objecter->enumerate_objects<Entry>(
     pool,
     ns ? *ns : std::string_view{},
@@ -1508,53 +1508,53 @@ void RADOS::enumerate_objects(std::int64_t pool,
     (bs::error_code ec, std::vector<Entry>&& v,
      hobject_t&& n) mutable {
       ca::dispatch(std::move(c), ec, std::move(v),
-		   Cursor(static_cast<void*>(&n)));
+                   Cursor(static_cast<void*>(&n)));
     });
 }
 
 
 void RADOS::osd_command(int osd, std::vector<std::string>&& cmd,
-			ceph::bufferlist&& in, std::unique_ptr<CommandComp> c) {
+                        ceph::bufferlist&& in, std::unique_ptr<CommandComp> c) {
   impl->objecter->osd_command(osd, std::move(cmd), std::move(in), nullptr,
-			      [c = std::move(c)]
-			      (bs::error_code ec,
-			       std::string&& s,
-			       ceph::bufferlist&& b) mutable {
-				ca::dispatch(std::move(c), ec,
-					     std::move(s),
-					     std::move(b));
-			      });
+                              [c = std::move(c)]
+                              (bs::error_code ec,
+                               std::string&& s,
+                               ceph::bufferlist&& b) mutable {
+                                ca::dispatch(std::move(c), ec,
+                                             std::move(s),
+                                             std::move(b));
+                              });
 }
 void RADOS::pg_command(PG pg, std::vector<std::string>&& cmd,
-		       ceph::bufferlist&& in, std::unique_ptr<CommandComp> c) {
+                       ceph::bufferlist&& in, std::unique_ptr<CommandComp> c) {
   impl->objecter->pg_command(pg_t{pg.seed, pg.pool}, std::move(cmd), std::move(in), nullptr,
-			     [c = std::move(c)]
-			     (bs::error_code ec,
-			      std::string&& s,
-			      ceph::bufferlist&& b) mutable {
-			       ca::dispatch(std::move(c), ec,
-					    std::move(s),
-					    std::move(b));
-			     });
+                             [c = std::move(c)]
+                             (bs::error_code ec,
+                              std::string&& s,
+                              ceph::bufferlist&& b) mutable {
+                               ca::dispatch(std::move(c), ec,
+                                            std::move(s),
+                                            std::move(b));
+                             });
 }
 
 void RADOS::enable_application(std::string_view pool, std::string_view app_name,
-			       bool force, std::unique_ptr<SimpleOpComp> c) {
+                               bool force, std::unique_ptr<SimpleOpComp> c) {
   // pre-Luminous clusters will return -EINVAL and application won't be
   // preserved until Luminous is configured as minimum version.
   if (!impl->get_required_monitor_features().contains_all(
-	ceph::features::mon::FEATURE_LUMINOUS)) {
+        ceph::features::mon::FEATURE_LUMINOUS)) {
     ca::dispatch(std::move(c), ceph::to_error_code(-EOPNOTSUPP));
   } else {
     impl->monclient.start_mon_command(
       { fmt::format("{{ \"prefix\": \"osd pool application enable\","
-		    "\"pool\": \"{}\", \"app\": \"{}\"{}}}",
-		    pool, app_name,
-		    force ? " ,\"yes_i_really_mean_it\": true" : "")},
+                    "\"pool\": \"{}\", \"app\": \"{}\"{}}}",
+                    pool, app_name,
+                    force ? " ,\"yes_i_really_mean_it\": true" : "")},
       {}, [c = std::move(c)](bs::error_code e,
-			     std::string, cb::list) mutable {
-	    ca::post(std::move(c), e);
-	  });
+                             std::string, cb::list) mutable {
+            ca::post(std::move(c), e);
+          });
   }
 }
 
@@ -1596,18 +1596,18 @@ void RADOS::wait_for_latest_osd_map(std::unique_ptr<SimpleOpComp> c) {
 }
 
 void RADOS::mon_command(std::vector<std::string> command,
-			const cb::list& bl,
-			std::string* outs, cb::list* outbl,
-			std::unique_ptr<SimpleOpComp> c) {
+                        const cb::list& bl,
+                        std::string* outs, cb::list* outbl,
+                        std::unique_ptr<SimpleOpComp> c) {
 
   impl->monclient.start_mon_command(
     command, bl,
     [c = std::move(c), outs, outbl](bs::error_code e,
-				    std::string s, cb::list bl) mutable {
+                                    std::string s, cb::list bl) mutable {
       if (outs)
-	*outs = std::move(s);
+        *outs = std::move(s);
       if (outbl)
-	*outbl = std::move(bl);
+        *outbl = std::move(bl);
       ca::post(std::move(c), e);
     });
 }
@@ -1641,7 +1641,7 @@ const char* category::name() const noexcept {
 }
 
 const char* category::message(int ev, char*,
-			      std::size_t) const noexcept {
+                              std::size_t) const noexcept {
   if (ev == 0)
     return "No error";
 

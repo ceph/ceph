@@ -80,7 +80,7 @@ static PyObject *osdmap_apply_incremental(BasePyOSDMap *self,
   next->decode(bl);
   next->apply_incremental(*(incobj->inc));
   dout(10) << __func__ << " map " << self->osdmap << " inc " << incobj->inc
-	   << " next " << next << dendl;
+           << " next " << next << dendl;
 
   return construct_with_capsule("mgr_module", "OSDMap", (void*)next);
 }
@@ -95,7 +95,7 @@ static PyObject *osdmap_get_pools_by_take(BasePyOSDMap* self, PyObject *args)
 {
   int take;
   if (!PyArg_ParseTuple(args, "i:get_pools_by_take",
-			&take)) {
+                        &take)) {
     return nullptr;
   }
 
@@ -117,8 +117,8 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
   int max_deviation = 0;
   int max_iterations = 0;
   if (!PyArg_ParseTuple(args, "OiiO:calc_pg_upmaps",
-			&incobj, &max_deviation,
-			&max_iterations, &pool_list)) {
+                        &incobj, &max_deviation,
+                        &max_iterations, &pool_list)) {
     return nullptr;
   }
   if (!PyList_CheckExact(pool_list)) {
@@ -143,16 +143,16 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
   }
 
   dout(10) << __func__ << " osdmap " << self->osdmap << " inc " << incobj->inc
-	   << " max_deviation " << max_deviation
-	   << " max_iterations " << max_iterations
-	   << " pools " << pools
-	   << dendl;
+           << " max_deviation " << max_deviation
+           << " max_iterations " << max_iterations
+           << " pools " << pools
+           << dendl;
   PyThreadState *tstate = PyEval_SaveThread();
   int r = self->osdmap->calc_pg_upmaps(g_ceph_context,
-				 max_deviation,
-				 max_iterations,
-				 pools,
-				 incobj->inc);
+                                 max_deviation,
+                                 max_iterations,
+                                 pools,
+                                 incobj->inc);
   PyEval_RestoreThread(tstate);
   dout(10) << __func__ << " r = " << r << dendl;
   return PyLong_FromLong(r);
@@ -162,7 +162,7 @@ static PyObject *osdmap_map_pool_pgs_up(BasePyOSDMap* self, PyObject *args)
 {
   int poolid;
   if (!PyArg_ParseTuple(args, "i:map_pool_pgs_up",
-			&poolid)) {
+                        &poolid)) {
     return nullptr;
   }
   auto pi = self->osdmap->get_pg_pool(poolid);
@@ -224,7 +224,7 @@ static PyObject *osdmap_pg_to_up_acting_osds(BasePyOSDMap *self, PyObject *args)
   int pool_id = 0;
   int ps = 0;
   if (!PyArg_ParseTuple(args, "ii:pg_to_up_acting_osds",
-			&pool_id, &ps)) {
+                        &pool_id, &ps)) {
     return nullptr;
   }
 
@@ -259,7 +259,7 @@ static PyObject *osdmap_pool_raw_used_rate(BasePyOSDMap *self, PyObject *args)
 {
   int pool_id = 0;
   if (!PyArg_ParseTuple(args, "i:pool_raw_used_rate",
-			&pool_id)) {
+                        &pool_id)) {
     return nullptr;
   }
 
@@ -592,7 +592,7 @@ static PyObject *crush_get_take_weight_osd_map(BasePyCRUSH *self, PyObject *args
 {
   int root;
   if (!PyArg_ParseTuple(args, "i:get_take_weight_osd_map",
-			&root)) {
+                        &root)) {
     return nullptr;
   }
   map<int,float> wmap;

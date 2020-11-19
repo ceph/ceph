@@ -35,7 +35,7 @@ void WriteLogImageDispatch<I>::shut_down(Context* on_finish) {
   Context* ctx = new LambdaContext(
       [this, on_finish](int r) {
         m_image_cache = nullptr;
-	on_finish->complete(r);
+        on_finish->complete(r);
       });
 
   cache::pwl::ShutdownRequest<I> *req = cache::pwl::ShutdownRequest<I>::create(

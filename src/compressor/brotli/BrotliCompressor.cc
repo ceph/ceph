@@ -50,7 +50,7 @@ int BrotliCompressor::compress(const bufferlist &in, bufferlist &out, boost::opt
 int BrotliCompressor::decompress(bufferlist::const_iterator &p,
                                  size_t compressed_size,
                                  bufferlist &out,
-				 boost::optional<int32_t> compressor_message) 
+                                 boost::optional<int32_t> compressor_message) 
 {
   BrotliDecoderState* s = BrotliDecoderCreateInstance(nullptr,
                                                       nullptr,

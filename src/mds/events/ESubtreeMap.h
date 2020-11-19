@@ -30,8 +30,8 @@ public:
   
   void print(ostream& out) const override {
     out << "ESubtreeMap " << subtrees.size() << " subtrees " 
-	<< ", " << ambiguous_subtrees.size() << " ambiguous "
-	<< metablob;
+        << ", " << ambiguous_subtrees.size() << " ambiguous "
+        << metablob;
   }
 
   EMetaBlob *get_metablob() override { return &metablob; }

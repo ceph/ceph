@@ -38,7 +38,7 @@ struct inode_backpointer_t {
 WRITE_CLASS_ENCODER(inode_backpointer_t)
 
 inline bool operator==(const inode_backpointer_t& l, const inode_backpointer_t& r) {
-	return l.dirino == r.dirino && l.version == r.version && l.dname == r.dname;
+        return l.dirino == r.dirino && l.version == r.version && l.dname == r.dname;
 }
 
 inline std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib) {

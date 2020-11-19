@@ -41,11 +41,11 @@ namespace cb = ceph::buffer;
 namespace fifo = rados::cls::fifo;
 
 void create_meta(WriteOp& op, std::string_view id,
-		 std::optional<fifo::objv> objv,
-		 std::optional<std::string_view> oid_prefix,
-		 bool exclusive,
-		 std::uint64_t max_part_size,
-		 std::uint64_t max_entry_size)
+                 std::optional<fifo::objv> objv,
+                 std::optional<std::string_view> oid_prefix,
+                 bool exclusive,
+                 std::uint64_t max_part_size,
+                 std::uint64_t max_entry_size)
 {
   fifo::op::create_meta cm;
 
@@ -62,34 +62,34 @@ void create_meta(WriteOp& op, std::string_view id,
 }
 
 void get_meta(ReadOp& op, std::optional<fifo::objv> objv,
-	      bs::error_code* ec_out, fifo::info* info,
-	      std::uint32_t* part_header_size,
-	      std::uint32_t* part_entry_overhead)
+              bs::error_code* ec_out, fifo::info* info,
+              std::uint32_t* part_header_size,
+              std::uint32_t* part_entry_overhead)
 {
   fifo::op::get_meta gm;
   gm.version = objv;
   cb::list in;
   encode(gm, in);
   op.exec(fifo::op::CLASS, fifo::op::GET_META, in,
-	  [ec_out, info, part_header_size,
-	   part_entry_overhead](bs::error_code ec, const cb::list& bl) {
-	    fifo::op::get_meta_reply reply;
-	    if (!ec) try {
-		auto iter = bl.cbegin();
-		decode(reply, iter);
-	      } catch (const cb::error& err) {
-		ec = err.code();
-	      }
-	    if (ec_out) *ec_out = ec;
-	    if (info) *info = std::move(reply.info);
-	    if (part_header_size) *part_header_size = reply.part_header_size;
-	    if (part_entry_overhead)
-		*part_entry_overhead = reply.part_entry_overhead;
-	  });
+          [ec_out, info, part_header_size,
+           part_entry_overhead](bs::error_code ec, const cb::list& bl) {
+            fifo::op::get_meta_reply reply;
+            if (!ec) try {
+                auto iter = bl.cbegin();
+                decode(reply, iter);
+              } catch (const cb::error& err) {
+                ec = err.code();
+              }
+            if (ec_out) *ec_out = ec;
+            if (info) *info = std::move(reply.info);
+            if (part_header_size) *part_header_size = reply.part_header_size;
+            if (part_entry_overhead)
+                *part_entry_overhead = reply.part_entry_overhead;
+          });
 };
 
 void update_meta(WriteOp& op, const fifo::objv& objv,
-		 const fifo::update& update)
+                 const fifo::update& update)
 {
   fifo::op::update_meta um;
 
@@ -107,7 +107,7 @@ void update_meta(WriteOp& op, const fifo::objv& objv,
 }
 
 void part_init(WriteOp& op, std::string_view tag,
-	       fifo::data_params params)
+               fifo::data_params params)
 {
   fifo::op::init_part ip;
 
@@ -120,8 +120,8 @@ void part_init(WriteOp& op, std::string_view tag,
 }
 
 void push_part(WriteOp& op, std::string_view tag,
-	       std::deque<cb::list> data_bufs,
-	       fu2::unique_function<void(bs::error_code, int)> f)
+               std::deque<cb::list> data_bufs,
+               fu2::unique_function<void(bs::error_code, int)> f)
 {
   fifo::op::push_part pp;
 
@@ -135,15 +135,15 @@ void push_part(WriteOp& op, std::string_view tag,
   cb::list in;
   encode(pp, in);
   op.exec(fifo::op::CLASS, fifo::op::PUSH_PART, in,
-	  [f = std::move(f)](bs::error_code ec, int r, const cb::list&) mutable {
-	    std::move(f)(ec, r);
-	  });
+          [f = std::move(f)](bs::error_code ec, int r, const cb::list&) mutable {
+            std::move(f)(ec, r);
+          });
   op.returnvec();
 }
 
 void trim_part(WriteOp& op,
-	       std::optional<std::string_view> tag,
-	       std::uint64_t ofs, bool exclusive)
+               std::optional<std::string_view> tag,
+               std::uint64_t ofs, bool exclusive)
 {
   fifo::op::trim_part tp;
 
@@ -157,14 +157,14 @@ void trim_part(WriteOp& op,
 }
 
 void list_part(ReadOp& op,
-	       std::optional<string_view> tag,
-	       std::uint64_t ofs,
-	       std::uint64_t max_entries,
-	       bs::error_code* ec_out,
-	       std::vector<fifo::part_list_entry>* entries,
-	       bool* more,
-	       bool* full_part,
-	       std::string* ptag)
+               std::optional<string_view> tag,
+               std::uint64_t ofs,
+               std::uint64_t max_entries,
+               bs::error_code* ec_out,
+               std::vector<fifo::part_list_entry>* entries,
+               bool* more,
+               bool* full_part,
+               std::string* ptag)
 {
   fifo::op::list_part lp;
 
@@ -175,53 +175,53 @@ void list_part(ReadOp& op,
   bufferlist in;
   encode(lp, in);
   op.exec(fifo::op::CLASS, fifo::op::LIST_PART, in,
-	  [entries, more, full_part, ptag, ec_out](bs::error_code ec,
-						   const cb::list& bl) {
-	    if (ec) {
-	      if (ec_out) *ec_out = ec;
-	      return;
-	    }
+          [entries, more, full_part, ptag, ec_out](bs::error_code ec,
+                                                   const cb::list& bl) {
+            if (ec) {
+              if (ec_out) *ec_out = ec;
+              return;
+            }
 
-	    fifo::op::list_part_reply reply;
-	    auto iter = bl.cbegin();
-	    try {
-	      decode(reply, iter);
-	    } catch (const cb::error& err) {
-	      if (ec_out) *ec_out = ec;
-	      return;
-	    }
+            fifo::op::list_part_reply reply;
+            auto iter = bl.cbegin();
+            try {
+              decode(reply, iter);
+            } catch (const cb::error& err) {
+              if (ec_out) *ec_out = ec;
+              return;
+            }
 
-	    if (entries) *entries = std::move(reply.entries);
-	    if (more) *more = reply.more;
-	    if (full_part) *full_part = reply.full_part;
-	    if (ptag) *ptag = reply.tag;
-	  });
+            if (entries) *entries = std::move(reply.entries);
+            if (more) *more = reply.more;
+            if (full_part) *full_part = reply.full_part;
+            if (ptag) *ptag = reply.tag;
+          });
 }
 
 void get_part_info(ReadOp& op,
-		   bs::error_code* out_ec,
-		   fifo::part_header* header)
+                   bs::error_code* out_ec,
+                   fifo::part_header* header)
 {
   fifo::op::get_part_info gpi;
 
   bufferlist in;
   encode(gpi, in);
   op.exec(fifo::op::CLASS, fifo::op::GET_PART_INFO, in,
-	  [out_ec, header](bs::error_code ec, const cb::list& bl) {
-	    if (ec) {
-	      if (out_ec) *out_ec = ec;
-	    }
-	    fifo::op::get_part_info_reply reply;
-	    auto iter = bl.cbegin();
-	    try {
-	      decode(reply, iter);
-	    } catch (const cb::error& err) {
-	      if (out_ec) *out_ec = ec;
-	      return;
-	    }
+          [out_ec, header](bs::error_code ec, const cb::list& bl) {
+            if (ec) {
+              if (out_ec) *out_ec = ec;
+            }
+            fifo::op::get_part_info_reply reply;
+            auto iter = bl.cbegin();
+            try {
+              decode(reply, iter);
+            } catch (const cb::error& err) {
+              if (out_ec) *out_ec = ec;
+              return;
+            }
 
-	    if (header) *header = std::move(reply.header);
-	  });
+            if (header) *header = std::move(reply.header);
+          });
 }
 
 std::optional<marker> FIFO::to_marker(std::string_view s) {
@@ -254,8 +254,8 @@ std::optional<marker> FIFO::to_marker(std::string_view s) {
 }
 
 bs::error_code FIFO::apply_update(fifo::info* info,
-				  const fifo::objv& objv,
-				  const fifo::update& update) {
+                                  const fifo::objv& objv,
+                                  const fifo::update& update) {
   std::unique_lock l(m);
   auto err = info->apply_update(update);
   if (objv != info->version) {

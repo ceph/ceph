@@ -27,7 +27,7 @@
 const char* Compressor::get_comp_alg_name(int a) {
 
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
-		   [a](const auto& kv) { return kv.second == a; });
+                   [a](const auto& kv) { return kv.second == a; });
 
   if (std::cend(compression_algorithms) == p)
    return "???"; // It would be nice to revise this...
@@ -38,7 +38,7 @@ const char* Compressor::get_comp_alg_name(int a) {
 boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(const std::string &s) {
 
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
-		   [&s](const auto& kv) { return kv.first == s; });
+                   [&s](const auto& kv) { return kv.first == s; });
   if (std::cend(compression_algorithms) == p)
     return {};
 

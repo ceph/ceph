@@ -76,7 +76,7 @@ struct MonCommand {
   }
   bool is_compat(const MonCommand* o) const {
     return cmdstring == o->cmdstring &&
-	module == o->module && req_perms == o->req_perms;
+        module == o->module && req_perms == o->req_perms;
   }
 
   bool is_tell() const {
@@ -137,7 +137,7 @@ struct MonCommand {
 
   // this uses a u16 for the count, so we need a special encoder/decoder.
   static void encode_vector(const std::vector<MonCommand>& cmds,
-			    ceph::buffer::list &bl) {
+                            ceph::buffer::list &bl) {
     ENCODE_START(2, 1, bl);
     uint16_t s = cmds.size();
     encode(s, bl);
@@ -150,7 +150,7 @@ struct MonCommand {
     ENCODE_FINISH(bl);
   }
   static void decode_vector(std::vector<MonCommand> &cmds,
-			    ceph::buffer::list::const_iterator &bl) {
+        		    ceph::buffer::list::const_iterator &bl) {
     DECODE_START(2, bl);
     uint16_t s = 0;
     decode(s, bl);

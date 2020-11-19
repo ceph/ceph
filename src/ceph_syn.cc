@@ -43,7 +43,7 @@ int main(int argc, const char **argv, char *envp[])
   argv_to_vec(argc, argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+                         CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   parse_syn_options(args);   // for SyntheticClient
@@ -64,7 +64,7 @@ int main(int argc, const char **argv, char *envp[])
   cout << "ceph-syn: starting " << num_client << " syn client(s)" << std::endl;
   for (int i=0; i<num_client; i++) {
     messengers[i] = Messenger::create_client_messenger(g_ceph_context,
-						       "synclient");
+                                                       "synclient");
     mclients[i] = new MonClient(g_ceph_context, poolctx);
     mclients[i]->build_initial_monmap();
     auto client = new StandaloneClient(messengers[i], mclients[i], poolctx);

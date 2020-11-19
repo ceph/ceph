@@ -354,7 +354,7 @@ void RemoveRequest<I>::send_object_map_remove() {
     create_rados_callback<klass, &klass::handle_object_map_remove>(this);
 
   int r = ObjectMap<>::aio_remove(m_ioctx,
-				  m_image_id,
+                                  m_image_id,
                                   rados_completion);
   ceph_assert(r == 0);
   rados_completion->release();

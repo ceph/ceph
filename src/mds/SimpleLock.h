@@ -341,13 +341,13 @@ public:
     return get_sm()->states[state].can_wrlock == ANY ||
       (get_sm()->states[state].can_wrlock == AUTH && parent->is_auth()) ||
       (get_sm()->states[state].can_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
-								    get_excl_client() == client));
+                                                                    get_excl_client() == client));
   }
   bool can_force_wrlock(client_t client) const {
     return get_sm()->states[state].can_force_wrlock == ANY ||
       (get_sm()->states[state].can_force_wrlock == AUTH && parent->is_auth()) ||
       (get_sm()->states[state].can_force_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
-									  get_excl_client() == client));
+                                                                          get_excl_client() == client));
   }
   bool can_xlock(client_t client) const {
     return get_sm()->states[state].can_xlock == ANY ||
@@ -398,7 +398,7 @@ public:
   void get_xlock(MutationRef who, client_t client) { 
     ceph_assert(get_xlock_by() == MutationRef());
     ceph_assert(state == LOCK_XLOCK || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a peer */);
+           state == LOCK_LOCK /* if we are a peer */);
     parent->get(MDSCacheObject::PIN_LOCK);
     more()->num_xlock++;
     more()->xlock_by = who; 
@@ -407,16 +407,16 @@ public:
   void set_xlock_done() {
     ceph_assert(more()->xlock_by);
     ceph_assert(state == LOCK_XLOCK || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a peer */);
+           state == LOCK_LOCK /* if we are a peer */);
     if (!is_locallock())
       state = LOCK_XLOCKDONE;
     more()->xlock_by.reset();
   }
   void put_xlock() {
     ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
-	   state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
-	   state == LOCK_LOCK  || /* if we are a leader of a peer */
-	   is_locallock());
+           state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
+           state == LOCK_LOCK  || /* if we are a leader of a peer */
+           is_locallock());
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
     if (more()->num_xlock == 0) {
@@ -513,11 +513,11 @@ public:
     if (s < 0) s = state;
     if (parent->is_auth()) {
       if (get_xlock_by_client() >= 0 && who == CAP_XLOCKER)
-	return get_sm()->states[s].xlocker_caps | get_sm()->states[s].caps; // xlocker always gets more
+        return get_sm()->states[s].xlocker_caps | get_sm()->states[s].caps; // xlocker always gets more
       else if (is_loner_mode() && who == CAP_ANY)
-	return get_sm()->states[s].caps;
+        return get_sm()->states[s].caps;
       else 
-	return get_sm()->states[s].loner_caps | get_sm()->states[s].caps;  // loner always gets more
+        return get_sm()->states[s].loner_caps | get_sm()->states[s].caps;  // loner always gets more
     } else 
       return get_sm()->states[s].replica_caps;
   }
@@ -546,7 +546,7 @@ public:
     if (is_gathering(from)) {
       remove_gather(from);
       if (!is_gathering())
-	return true;
+        return true;
     }
     return false;
   }
@@ -555,7 +555,7 @@ public:
       remove_gather(from);
       remove_gather(to);
       if (!is_gathering())
-	return true;
+        return true;
     }
     if (!is_stable() && !is_gathering())
       return true;
@@ -576,7 +576,7 @@ public:
     if (is_xlocked()) {
       out << " x=" << get_num_xlocks();
       if (get_xlock_by())
-	out << " by " << get_xlock_by();
+        out << " by " << get_xlock_by();
     }
     /*if (is_stable())
       out << " stable";
@@ -608,9 +608,9 @@ protected:
   __s16 state_flags = 0;
 
   enum {
-    LEASED		= 1 << 0,
-    NEED_RECOVER	= 1 << 1,
-    CACHED		= 1 << 2,
+    LEASED                = 1 << 0,
+    NEED_RECOVER        = 1 << 1,
+    CACHED                = 1 << 2,
   };
 
 private:
@@ -620,13 +620,13 @@ private:
 
     bool empty() {
       return
-	gather_set.empty() &&
-	num_wrlock == 0 &&
-	num_xlock == 0 &&
-	xlock_by.get() == NULL &&
-	xlock_by_client == -1 &&
-	excl_client == -1 &&
-	lock_caches.empty();
+        gather_set.empty() &&
+        num_wrlock == 0 &&
+        num_xlock == 0 &&
+        xlock_by.get() == NULL &&
+        xlock_by_client == -1 &&
+        excl_client == -1 &&
+        lock_caches.empty();
     }
 
     std::set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client

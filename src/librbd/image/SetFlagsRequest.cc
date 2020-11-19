@@ -21,7 +21,7 @@ using util::create_rados_callback;
 
 template <typename I>
 SetFlagsRequest<I>::SetFlagsRequest(I *image_ctx, uint64_t flags,
-				    uint64_t mask, Context *on_finish)
+                                    uint64_t mask, Context *on_finish)
   : m_image_ctx(image_ctx), m_flags(flags), m_mask(mask),
     m_on_finish(on_finish) {
 }
@@ -67,7 +67,7 @@ Context *SetFlagsRequest<I>::handle_set_flags(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "set_flags failed: " << cpp_strerror(*result)
-	       << dendl;
+               << dendl;
   }
   return m_on_finish;
 }

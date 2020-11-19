@@ -319,11 +319,11 @@ struct C_InvokeAsyncRequest : public Context {
 
 template <typename I>
 bool needs_invalidate(I& image_ctx, uint64_t object_no,
-		     uint8_t current_state, uint8_t new_state) {
+                     uint8_t current_state, uint8_t new_state) {
   if ( (current_state == OBJECT_EXISTS ||
-	current_state == OBJECT_EXISTS_CLEAN) &&
+        current_state == OBJECT_EXISTS_CLEAN) &&
        (new_state == OBJECT_NONEXISTENT ||
-	new_state == OBJECT_PENDING)) {
+        new_state == OBJECT_PENDING)) {
     return false;
   }
   return true;
@@ -488,7 +488,7 @@ int Operations<I>::check_object_map(ProgressContext &prog_ctx) {
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true,
                            boost::bind(&Operations<I>::check_object_map, this,
                                        boost::ref(prog_ctx), _1),
-			   [this](Context *c) {
+                           [this](Context *c) {
                              m_image_ctx.op_work_queue->queue(c, -EOPNOTSUPP);
                            });
 
@@ -497,8 +497,8 @@ int Operations<I>::check_object_map(ProgressContext &prog_ctx) {
 
 template <typename I>
 void Operations<I>::object_map_iterate(ProgressContext &prog_ctx,
-				       operation::ObjectIterateWork<I> handle_mismatch,
-				       Context *on_finish) {
+                                       operation::ObjectIterateWork<I> handle_mismatch,
+                                       Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
               m_image_ctx.exclusive_lock->is_lock_owner());
@@ -510,13 +510,13 @@ void Operations<I>::object_map_iterate(ProgressContext &prog_ctx,
 
   operation::ObjectMapIterateRequest<I> *req =
     new operation::ObjectMapIterateRequest<I>(m_image_ctx, on_finish,
-					      prog_ctx, handle_mismatch);
+                                              prog_ctx, handle_mismatch);
   req->send();
 }
 
 template <typename I>
 void Operations<I>::check_object_map(ProgressContext &prog_ctx,
-				     Context *on_finish) {
+                                     Context *on_finish) {
   object_map_iterate(prog_ctx, needs_invalidate, on_finish);
 }
 
@@ -599,13 +599,13 @@ void Operations<I>::execute_rename(const std::string &dest_name,
         if (m_image_ctx.old_format) {
           m_image_ctx.image_watcher->set_oid(m_image_ctx.header_oid);
         }
-	m_image_ctx.image_watcher->register_watch(on_finish);
+        m_image_ctx.image_watcher->register_watch(on_finish);
       });
     on_finish = new LambdaContext([this, dest_name, on_finish](int r) {
         std::shared_lock owner_locker{m_image_ctx.owner_lock};
-	operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
-	  m_image_ctx, on_finish, dest_name);
-	req->send();
+        operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
+          m_image_ctx, on_finish, dest_name);
+        req->send();
       });
     m_image_ctx.image_watcher->unregister_watch(on_finish);
     return;
@@ -687,7 +687,7 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
 
 template <typename I>
 int Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-			       const std::string& snap_name, uint64_t flags,
+                               const std::string& snap_name, uint64_t flags,
                                ProgressContext &prog_ctx) {
   if (m_image_ctx.read_only) {
     return -EROFS;
@@ -712,7 +712,7 @@ int Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace
 
 template <typename I>
 void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-				const std::string& snap_name, uint64_t flags,
+                                const std::string& snap_name, uint64_t flags,
                                 ProgressContext &prog_ctx, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -736,7 +736,7 @@ void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespac
     m_image_ctx, "snap_create", exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
     true,
     boost::bind(&Operations<I>::execute_snap_create, this, snap_namespace, snap_name,
-		_1, 0, flags, boost::ref(prog_ctx)),
+                _1, 0, flags, boost::ref(prog_ctx)),
     boost::bind(&ImageWatcher<I>::notify_snap_create, m_image_ctx.image_watcher,
                 request_id, snap_namespace, snap_name, flags,
                 boost::ref(prog_ctx), _1),
@@ -746,7 +746,7 @@ void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespac
 
 template <typename I>
 void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-					const std::string &snap_name,
+                                        const std::string &snap_name,
                                         Context *on_finish,
                                         uint64_t journal_op_tid,
                                         uint64_t flags,
@@ -781,7 +781,7 @@ void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_
 
 template <typename I>
 int Operations<I>::snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
-				 const std::string& snap_name,
+                                 const std::string& snap_name,
                                  ProgressContext& prog_ctx) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -832,7 +832,7 @@ int Operations<I>::snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespa
 
 template <typename I>
 void Operations<I>::execute_snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
-					  const std::string &snap_name,
+                                          const std::string &snap_name,
                                           ProgressContext& prog_ctx,
                                           Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
@@ -867,7 +867,7 @@ void Operations<I>::execute_snap_rollback(const cls::rbd::SnapshotNamespace& sna
 
 template <typename I>
 int Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-			       const std::string& snap_name) {
+                               const std::string& snap_name) {
   if (m_image_ctx.read_only) {
     return -EROFS;
   }
@@ -891,8 +891,8 @@ int Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace
 
 template <typename I>
 void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-				const std::string& snap_name,
-				Context *on_finish) {
+                                const std::string& snap_name,
+                                Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -935,7 +935,7 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
 
 template <typename I>
 void Operations<I>::execute_snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-					const std::string &snap_name,
+                                        const std::string &snap_name,
                                         Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   {
@@ -1057,7 +1057,7 @@ void Operations<I>::execute_snap_rename(const uint64_t src_snap_id,
 
   m_image_ctx.image_lock.lock_shared();
   if (m_image_ctx.get_snap_id(cls::rbd::UserSnapshotNamespace(),
-			      dest_snap_name) != CEPH_NOSNAP) {
+                              dest_snap_name) != CEPH_NOSNAP) {
     // Renaming is supported for snapshots from user namespace only.
     m_image_ctx.image_lock.unlock_shared();
     on_finish->complete(-EEXIST);
@@ -1079,7 +1079,7 @@ void Operations<I>::execute_snap_rename(const uint64_t src_snap_id,
 
 template <typename I>
 int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespace,
-				const std::string& snap_name) {
+                                const std::string& snap_name) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -1120,7 +1120,7 @@ int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespac
                                          this, snap_namespace, snap_name, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_protect,
                                          m_image_ctx.image_watcher,
-					 snap_namespace, snap_name, _1));
+                                         snap_namespace, snap_name, _1));
     if (r < 0 && r != -EBUSY) {
       return r;
     }
@@ -1141,7 +1141,7 @@ int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespac
 
 template <typename I>
 void Operations<I>::execute_snap_protect(const cls::rbd::SnapshotNamespace& snap_namespace,
-					 const std::string &snap_name,
+                                         const std::string &snap_name,
                                          Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
@@ -1181,7 +1181,7 @@ void Operations<I>::execute_snap_protect(const cls::rbd::SnapshotNamespace& snap
 
 template <typename I>
 int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
-				  const std::string& snap_name) {
+                                  const std::string& snap_name) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -1217,7 +1217,7 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
                                          this, snap_namespace, snap_name, _1),
                              boost::bind(&ImageWatcher<I>::notify_snap_unprotect,
                                          m_image_ctx.image_watcher,
-					 snap_namespace, snap_name, _1));
+                                         snap_namespace, snap_name, _1));
     if (r < 0 && r != -EINVAL) {
       return r;
     }
@@ -1238,7 +1238,7 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
 
 template <typename I>
 void Operations<I>::execute_snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
-					   const std::string &snap_name,
+                                           const std::string &snap_name,
                                            Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
@@ -1308,7 +1308,7 @@ int Operations<I>::snap_set_limit(uint64_t limit) {
 
 template <typename I>
 void Operations<I>::execute_snap_set_limit(const uint64_t limit,
-					   Context *on_finish) {
+                                           Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
 
   CephContext *cct = m_image_ctx.cct;
@@ -1365,12 +1365,12 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
     std::shared_lock image_locker{m_image_ctx.image_lock};
     if (enabled && (features & m_image_ctx.features) != 0) {
       lderr(cct) << "one or more requested features are already enabled"
-		 << dendl;
+                 << dendl;
       return -EINVAL;
     }
     if (!enabled && (features & ~m_image_ctx.features) != 0) {
       lderr(cct) << "one or more requested features are already disabled"
-		 << dendl;
+                 << dendl;
       return -EINVAL;
     }
   }
@@ -1504,8 +1504,8 @@ int Operations<I>::metadata_set(const std::string &key,
 
 template <typename I>
 void Operations<I>::execute_metadata_set(const std::string &key,
-					const std::string &value,
-					Context *on_finish) {
+                                        const std::string &value,
+                                        Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
 
   CephContext *cct = m_image_ctx.cct;
@@ -1519,8 +1519,8 @@ void Operations<I>::execute_metadata_set(const std::string &key,
 
   operation::MetadataSetRequest<I> *request =
     new operation::MetadataSetRequest<I>(m_image_ctx,
-					 new C_NotifyUpdate<I>(m_image_ctx, on_finish),
-					 key, value);
+                                         new C_NotifyUpdate<I>(m_image_ctx, on_finish),
+                                         key, value);
   request->send();
 }
 
@@ -1579,8 +1579,8 @@ void Operations<I>::execute_metadata_remove(const std::string &key,
 
   operation::MetadataRemoveRequest<I> *request =
     new operation::MetadataRemoveRequest<I>(
-	m_image_ctx,
-	new C_NotifyUpdate<I>(m_image_ctx, on_finish), key);
+        m_image_ctx,
+        new C_NotifyUpdate<I>(m_image_ctx, on_finish), key);
   request->send();
 }
 

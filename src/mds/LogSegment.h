@@ -55,7 +55,7 @@ class LogSegment {
   void purge_inodes_finish(interval_set<inodeno_t>& inos){
     purge_inodes.subtract(inos);
     if (NULL != purged_cb &&
-	purge_inodes.empty())
+        purge_inodes.empty())
       purged_cb->complete(0);
   }
   void set_purged_cb(MDSContext* c){

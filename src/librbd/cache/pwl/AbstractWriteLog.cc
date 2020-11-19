@@ -60,7 +60,7 @@ AbstractWriteLog<I>::AbstractWriteLog(I &image_ctx, librbd::cache::pwl::ImageCac
     m_work_queue("librbd::cache::pwl::ReplicatedWriteLog::work_queue",
                  ceph::make_timespan(
                    image_ctx.config.template get_val<uint64_t>(
-		     "rbd_op_thread_timeout")),
+                     "rbd_op_thread_timeout")),
                  &m_thread_pool)
 {
   CephContext *cct = m_image_ctx.cct;
@@ -1947,7 +1947,7 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
         ctx = new LambdaContext(
           [this, ctx, invalidate](int r) {
             Context *next_ctx = ctx;
-	    ldout(m_image_ctx.cct, 6) << "flush_dirty_entries finished" << dendl;
+            ldout(m_image_ctx.cct, 6) << "flush_dirty_entries finished" << dendl;
             if (r < 0) {
               /* Override on_finish status with this error */
               next_ctx = new LambdaContext([r, ctx](int _r) {

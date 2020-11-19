@@ -15,8 +15,8 @@ namespace operation {
 
 template <typename I>
 SnapshotLimitRequest<I>::SnapshotLimitRequest(I &image_ctx,
-					      Context *on_finish,
-					      uint64_t limit)
+                                              Context *on_finish,
+                                              uint64_t limit)
   : Request<I>(image_ctx, on_finish), m_snap_limit(limit) {
 }
 
@@ -54,7 +54,7 @@ void SnapshotLimitRequest<I>::send_limit_snaps() {
     librados::AioCompletion *rados_completion =
       this->create_callback_completion();
     int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
-					 &op);
+                                         &op);
     ceph_assert(r == 0);
     rados_completion->release();
   }

@@ -154,7 +154,7 @@ void SimpleSchedulerObjectDispatch<I>::ObjectRequests::dispatch_delayed_requests
         [requests=std::move(merged_requests.requests), latency_stats,
          latency_stats_lock, start_time=ceph_clock_now()](int r) {
           if (latency_stats) {
-	    std::lock_guard locker{*latency_stats_lock};
+            std::lock_guard locker{*latency_stats_lock};
             auto latency = ceph_clock_now() - start_time;
             latency_stats->add(latency.to_nsec());
           }

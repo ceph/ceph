@@ -40,7 +40,7 @@ struct ExecuteOp : public Context {
 
   void execute(const journal::SnapCreateEvent &_) {
     image_ctx.operations->execute_snap_create(event.snap_namespace,
-					      event.snap_name,
+                                              event.snap_name,
                                               on_op_complete,
                                               event.op_tid,
                                               SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
@@ -49,7 +49,7 @@ struct ExecuteOp : public Context {
 
   void execute(const journal::SnapRemoveEvent &_) {
     image_ctx.operations->execute_snap_remove(event.snap_namespace,
-					      event.snap_name,
+                                              event.snap_name,
                                               on_op_complete);
   }
 
@@ -61,19 +61,19 @@ struct ExecuteOp : public Context {
 
   void execute(const journal::SnapProtectEvent &_) {
     image_ctx.operations->execute_snap_protect(event.snap_namespace,
-					       event.snap_name,
+                                               event.snap_name,
                                                on_op_complete);
   }
 
   void execute(const journal::SnapUnprotectEvent &_) {
     image_ctx.operations->execute_snap_unprotect(event.snap_namespace,
-						 event.snap_name,
+                                                 event.snap_name,
                                                  on_op_complete);
   }
 
   void execute(const journal::SnapRollbackEvent &_) {
     image_ctx.operations->execute_snap_rollback(event.snap_namespace,
-						event.snap_name,
+                                                event.snap_name,
                                                 no_op_progress_callback,
                                                 on_op_complete);
   }
@@ -99,7 +99,7 @@ struct ExecuteOp : public Context {
 
   void execute(const journal::UpdateFeaturesEvent &_) {
     image_ctx.operations->execute_update_features(event.features, event.enabled,
-						  on_op_complete, event.op_tid);
+                                                  on_op_complete, event.op_tid);
   }
 
   void execute(const journal::MetadataSetEvent &_) {
@@ -409,7 +409,7 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::AioFlushEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": AIO flush event" << dendl;
 
@@ -553,7 +553,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Snap create event" << dendl;
 
@@ -582,7 +582,7 @@ void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::SnapRemoveEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Snap remove event" << dendl;
 
@@ -606,7 +606,7 @@ void Replay<I>::handle_event(const journal::SnapRemoveEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::SnapRenameEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Snap rename event" << dendl;
 
@@ -630,7 +630,7 @@ void Replay<I>::handle_event(const journal::SnapRenameEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::SnapProtectEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Snap protect event" << dendl;
 
@@ -654,7 +654,7 @@ void Replay<I>::handle_event(const journal::SnapProtectEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Snap unprotect event" << dendl;
 
@@ -682,7 +682,7 @@ void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::SnapRollbackEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Snap rollback start event" << dendl;
 
@@ -704,7 +704,7 @@ void Replay<I>::handle_event(const journal::SnapRollbackEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::RenameEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Rename event" << dendl;
 
@@ -728,7 +728,7 @@ void Replay<I>::handle_event(const journal::RenameEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::ResizeEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Resize start event" << dendl;
 
@@ -753,7 +753,7 @@ void Replay<I>::handle_event(const journal::ResizeEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::FlattenEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Flatten start event" << dendl;
 
@@ -777,7 +777,7 @@ void Replay<I>::handle_event(const journal::FlattenEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::DemotePromoteEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Demote/Promote event" << dendl;
   on_ready->complete(0);
@@ -786,7 +786,7 @@ void Replay<I>::handle_event(const journal::DemotePromoteEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Snap limit event" << dendl;
 
@@ -800,8 +800,8 @@ void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
 
   op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
     m_image_ctx, new ExecuteOp<I, journal::SnapLimitEvent>(m_image_ctx,
-							   event,
-							   on_op_complete));
+                                                           event,
+                                                           on_op_complete));
 
   op_event->ignore_error_codes = {-ERANGE};
 
@@ -810,7 +810,7 @@ void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::UpdateFeaturesEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Update features event" << dendl;
 
@@ -835,7 +835,7 @@ void Replay<I>::handle_event(const journal::UpdateFeaturesEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::MetadataSetEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Metadata set event" << dendl;
 
@@ -857,7 +857,7 @@ void Replay<I>::handle_event(const journal::MetadataSetEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::MetadataRemoveEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": Metadata remove event" << dendl;
 
@@ -882,7 +882,7 @@ void Replay<I>::handle_event(const journal::MetadataRemoveEvent &event,
 
 template <typename I>
 void Replay<I>::handle_event(const journal::UnknownEvent &event,
-			     Context *on_ready, Context *on_safe) {
+                             Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": unknown event" << dendl;
   on_ready->complete(0);

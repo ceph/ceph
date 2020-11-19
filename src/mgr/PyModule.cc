@@ -110,7 +110,7 @@ namespace {
     if (PyArg_ParseTuple(args, "s", &m)) {
       auto len = strlen(m);
       if (len && m[len-1] == '\n') {
-	m[len-1] = '\0';
+        m[len-1] = '\0';
       }
       dout(4) << m << dendl;
     }
@@ -322,11 +322,11 @@ int PyModule::load(PyThreadState *pMainThreadState)
       PySys_SetArgv(1, (wchar_t**)argv);
       // Configure sys.path to include mgr_module_path
       string paths = (":" + g_conf().get_val<std::string>("mgr_module_path") +
-		      ":" + get_site_packages());
+                      ":" + get_site_packages());
       wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
       dout(10) << "Computed sys.path '"
-	       << string(begin(sys_path), end(sys_path)) << "'" << dendl;
+               << string(begin(sys_path), end(sys_path)) << "'" << dendl;
     }
   }
   // Environment is all good, import the external module
@@ -533,7 +533,7 @@ int PyModule::load_options()
       std::string s = PyUnicode_AsUTF8(p);
       int t = Option::str_to_type(s);
       if (t >= 0) {
-	option.type = t;
+        option.type = t;
       }
     }
     p = PyDict_GetItemString(pOption, "desc");
@@ -565,39 +565,39 @@ int PyModule::load_options()
     p = PyDict_GetItemString(pOption, "enum_allowed");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
       for (unsigned i = 0; i < PyList_Size(p); ++i) {
-	auto q = PyList_GetItem(p, i);
-	if (q) {
-	  auto r = PyObject_Str(q);
-	  option.enum_allowed.insert(PyUnicode_AsUTF8(r));
-	  Py_DECREF(r);
-	}
+        auto q = PyList_GetItem(p, i);
+        if (q) {
+          auto r = PyObject_Str(q);
+          option.enum_allowed.insert(PyUnicode_AsUTF8(r));
+          Py_DECREF(r);
+        }
       }
     }
     p = PyDict_GetItemString(pOption, "see_also");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
       for (unsigned i = 0; i < PyList_Size(p); ++i) {
-	auto q = PyList_GetItem(p, i);
-	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
-	  option.see_also.insert(PyUnicode_AsUTF8(q));
-	}
+        auto q = PyList_GetItem(p, i);
+        if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
+          option.see_also.insert(PyUnicode_AsUTF8(q));
+        }
       }
     }
     p = PyDict_GetItemString(pOption, "tags");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
       for (unsigned i = 0; i < PyList_Size(p); ++i) {
-	auto q = PyList_GetItem(p, i);
-	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
-	  option.tags.insert(PyUnicode_AsUTF8(q));
-	}
+        auto q = PyList_GetItem(p, i);
+        if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
+          option.tags.insert(PyUnicode_AsUTF8(q));
+        }
       }
     }
     p = PyDict_GetItemString(pOption, "runtime");
     if (p && PyObject_TypeCheck(p, &PyBool_Type)) {
       if (p == Py_True) {
-	option.flags |= Option::FLAG_RUNTIME;
+        option.flags |= Option::FLAG_RUNTIME;
       }
       if (p == Py_False) {
-	option.flags &= ~Option::FLAG_RUNTIME;
+        option.flags &= ~Option::FLAG_RUNTIME;
       }
     }
     dout(20) << "loaded module option " << option.name << dendl;
@@ -617,7 +617,7 @@ bool PyModule::is_option(const std::string &option_name)
 }
 
 PyObject *PyModule::get_typed_option_value(const std::string& name,
-					   const std::string& value)
+                                           const std::string& value)
 {
   // we don't need to hold a lock here because these MODULE_OPTIONS
   // are set up exactly once during startup.
@@ -673,14 +673,14 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
     auto class_name = PyUnicode_AsUTF8(key);
     if (*py_class) {
       derr << __func__ << ": ignoring '"
-	   << module_name << "." << class_name << "'"
-	   << ": only one '" << base_class
-	   << "' class is loaded from each plugin" << dendl;
+           << module_name << "." << class_name << "'"
+           << ": only one '" << base_class
+           << "' class is loaded from each plugin" << dendl;
       continue;
     }
     *py_class = value;
     dout(4) << __func__ << ": found class: '"
-	    << module_name << "." << class_name << "'" << dendl;
+            << module_name << "." << class_name << "'" << dendl;
   }
   Py_DECREF(mgr_module_type);
 

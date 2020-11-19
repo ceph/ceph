@@ -45,7 +45,7 @@ std::ostream& operator<<(std::ostream& os,
 
 template <typename I>
 RenameRequest<I>::RenameRequest(I &image_ctx, Context *on_finish,
-				const std::string &dest_name)
+                                const std::string &dest_name)
   : Request<I>(image_ctx, on_finish), m_dest_name(dest_name),
     m_source_oid(image_ctx.old_format ? util::old_header_name(image_ctx.name) :
                                         util::id_obj_name(image_ctx.name)),

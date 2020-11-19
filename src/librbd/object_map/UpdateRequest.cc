@@ -45,10 +45,10 @@ void UpdateRequest<I>::update_object_map() {
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", oid=" << oid << ", "
                  << "[" << m_update_start_object_no << ","
                         << m_update_end_object_no << ") = "
-		 << (m_current_state ?
-		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
-		 << "->" << static_cast<uint32_t>(m_new_state)
-		 << dendl;
+                 << (m_current_state ?
+                       stringify(static_cast<uint32_t>(*m_current_state)) : "")
+                 << "->" << static_cast<uint32_t>(m_new_state)
+                 << dendl;
 
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {

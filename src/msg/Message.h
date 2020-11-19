@@ -45,7 +45,7 @@
 #define MSG_MON_PAXOS              66
 #define MSG_MON_PROBE              67
 #define MSG_MON_JOIN               68
-#define MSG_MON_SYNC		   69
+#define MSG_MON_SYNC                   69
 #define MSG_MON_PING               140
 
 /* monitor <-> mon admin tool */
@@ -285,10 +285,10 @@ public:
   };
 
   typedef boost::intrusive::list<Message,
-				 boost::intrusive::member_hook<
-				   Message,
-				   boost::intrusive::list_member_hook<>,
-				   &Message::dispatch_q>> Queue;
+                                 boost::intrusive::member_hook<
+                                   Message,
+                                   boost::intrusive::list_member_hook<>,
+                                   &Message::dispatch_q>> Queue;
 
   ceph::mono_time queue_start;
 protected:
@@ -441,7 +441,7 @@ public:
 
   void calc_header_crc() {
     header.crc = ceph_crc32c(0, (unsigned char*)&header,
-			     sizeof(header) - sizeof(header.crc));
+                             sizeof(header) - sizeof(header.crc));
   }
   void calc_front_crc() {
     footer.front_crc = payload.crc32c(0);

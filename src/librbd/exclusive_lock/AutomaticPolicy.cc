@@ -17,7 +17,7 @@ int AutomaticPolicy::lock_requested(bool force) {
   ceph_assert(m_image_ctx->exclusive_lock != nullptr);
 
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << ": force=" << force
-			      << dendl;
+                              << dendl;
 
   // release the lock upon request (ignore forced requests)
   m_image_ctx->exclusive_lock->release_lock(nullptr);

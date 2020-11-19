@@ -230,7 +230,7 @@ void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents,
                                ReadResult &&read_result, IOContext io_context,
                                int op_flags, int read_flags,
-			       const ZTracer::Trace &parent_trace) {
+                               const ZTracer::Trace &parent_trace) {
   ImageReadRequest<I> req(*ictx, c, std::move(image_extents),
                           std::move(read_result), io_context, op_flags,
                           read_flags, parent_trace);
@@ -241,7 +241,7 @@ template <typename I>
 void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                 Extents &&image_extents, bufferlist &&bl,
                                 IOContext io_context, int op_flags,
-				const ZTracer::Trace &parent_trace) {
+                                const ZTracer::Trace &parent_trace) {
   ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), std::move(bl),
                            io_context, op_flags, parent_trace);
   req.send();
@@ -251,7 +251,7 @@ template <typename I>
 void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                   Extents &&image_extents,
                                   uint32_t discard_granularity_bytes,
-				  IOContext io_context,
+                                  IOContext io_context,
                                   const ZTracer::Trace &parent_trace) {
   ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents),
                              discard_granularity_bytes, io_context,
@@ -272,7 +272,7 @@ void ImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
                                     Extents &&image_extents,
                                     bufferlist &&bl, IOContext io_context,
                                     int op_flags,
-				    const ZTracer::Trace &parent_trace) {
+                                    const ZTracer::Trace &parent_trace) {
   ImageWriteSameRequest<I> req(*ictx, c, std::move(image_extents),
                                std::move(bl), io_context, op_flags,
                                parent_trace);
@@ -366,7 +366,7 @@ ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
                                       Extents &&image_extents,
                                       ReadResult &&read_result,
                                       IOContext io_context, int op_flags,
-				      int read_flags,
+                                      int read_flags,
                                       const ZTracer::Trace &parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
                     io_context, "read", parent_trace),

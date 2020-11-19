@@ -112,7 +112,7 @@ TrimRequest<I>::TrimRequest(I &image_ctx, Context *on_finish,
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 10) << this << " trim image " << original_size << " -> "
-		 << m_new_size << " periods " << new_num_periods
+                 << m_new_size << " periods " << new_num_periods
                  << " discard to offset " << m_delete_off
                  << " delete objects " << m_delete_start
                  << " to " << m_num_objects << dendl;
@@ -269,8 +269,8 @@ void TrimRequest<I>::send_remove_objects() {
   ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   ldout(image_ctx.cct, 5) << this << " send_remove_objects: "
-			    << " delete_start=" << m_delete_start
-			    << " num_objects=" << m_num_objects << dendl;
+                            << " delete_start=" << m_delete_start
+                            << " num_objects=" << m_num_objects << dendl;
   m_state = STATE_REMOVE_OBJECTS;
 
   Context *ctx = this->create_callback_context();
@@ -325,8 +325,8 @@ void TrimRequest<I>::send_clean_boundary() {
               image_ctx.exclusive_lock->is_lock_owner());
   uint64_t delete_len = m_delete_off - m_new_size;
   ldout(image_ctx.cct, 5) << this << " send_clean_boundary: "
-			    << " delete_off=" << m_delete_off
-			    << " length=" << delete_len << dendl;
+                            << " delete_off=" << m_delete_off
+                            << " length=" << delete_len << dendl;
   m_state = STATE_CLEAN_BOUNDARY;
 
   IOContext io_context;
@@ -338,7 +338,7 @@ void TrimRequest<I>::send_clean_boundary() {
   // discard the weird boundary
   std::vector<ObjectExtent> extents;
   Striper::file_to_extents(cct, image_ctx.format_string,
-			   &image_ctx.layout, m_new_size, delete_len, 0,
+                           &image_ctx.layout, m_new_size, delete_len, 0,
                            extents);
 
   ContextCompletion *completion =

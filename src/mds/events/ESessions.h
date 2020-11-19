@@ -31,7 +31,7 @@ public:
 
   ESessions() : LogEvent(EVENT_SESSIONS), cmapv(0), old_style_encode(false) { }
   ESessions(version_t pv, map<client_t,entity_inst_t>&& cm,
-	    map<client_t,client_metadata_t>&& cmm) :
+            map<client_t,client_metadata_t>&& cmm) :
     LogEvent(EVENT_SESSIONS),
     cmapv(pv), old_style_encode(false),
     client_map(std::move(cm)),

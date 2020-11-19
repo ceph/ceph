@@ -25,7 +25,7 @@ namespace neorados {
 namespace detail {
 
 RADOS::RADOS(boost::asio::io_context& ioctx,
-	     boost::intrusive_ptr<CephContext> cct)
+             boost::intrusive_ptr<CephContext> cct)
   : Dispatcher(cct.get()),
     ioctx(ioctx),
     cct(cct),

@@ -19,8 +19,8 @@
 
 
 extern "C" void mount_ceph_get_config_info(const char *config_file,
-					   const char *name,
-					   struct ceph_config_info *cci)
+                                           const char *name,
+                                           struct ceph_config_info *cci)
 {
   int err;
   KeyRing keyring;
@@ -37,8 +37,8 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
 
   /* Create CephContext */
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DAEMON_ACTIONS|CINIT_FLAG_NO_MON_CONFIG);
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_DAEMON_ACTIONS|CINIT_FLAG_NO_MON_CONFIG);
   auto& conf = cct->_conf;
 
   conf.parse_env(cct->get_module_type()); // environment variables override

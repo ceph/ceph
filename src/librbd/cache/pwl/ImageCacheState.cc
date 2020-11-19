@@ -147,7 +147,7 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
         }
         break;
       default:
-	r = -EINVAL;
+        r = -EINVAL;
     }
   }
   return cache_state;
@@ -158,7 +158,7 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(I* image_ctx) {
   ImageCacheState<I>* cache_state = nullptr;
   string cache_state_str;
   cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
-			   IMAGE_CACHE_STATE, &cache_state_str);
+                           IMAGE_CACHE_STATE, &cache_state_str);
   if (!cache_state_str.empty()) {
     JSONFormattable f;
     bool success = get_json_format(cache_state_str, &f);

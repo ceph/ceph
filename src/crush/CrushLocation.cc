@@ -33,8 +33,8 @@ int CrushLocation::_parse(const std::string& s)
   int r = CrushWrapper::parse_loc_multimap(lvec, &new_crush_location);
   if (r < 0) {
     lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
-	       << "' does not parse, keeping original crush_location "
-	       << loc << dendl;
+               << "' does not parse, keeping original crush_location "
+               << loc << dendl;
     return -EINVAL;
   }
   std::lock_guard l(lock);
@@ -66,7 +66,7 @@ int CrushLocation::update_from_hook()
   int ret = hook.spawn();
   if (ret != 0) {
     lderr(cct) << "error: failed run " << cct->_conf->crush_location_hook << ": "
-	       << hook.err() << dendl;
+               << hook.err() << dendl;
     return ret;
   }
 
@@ -74,8 +74,8 @@ int CrushLocation::update_from_hook()
   ret = bl.read_fd(hook.get_stdout(), 100 * 1024);
   if (ret < 0) {
     lderr(cct) << "error: failed read stdout from "
-	       << cct->_conf->crush_location_hook
-	       << ": " << cpp_strerror(-ret) << dendl;
+               << cct->_conf->crush_location_hook
+               << ": " << cpp_strerror(-ret) << dendl;
     ceph::buffer::list err;
     err.read_fd(hook.get_stderr(), 100 * 1024);
     lderr(cct) << "stderr:\n";

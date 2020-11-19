@@ -81,9 +81,9 @@ int QatAccel::decompress(const bufferlist &in, bufferlist &out, boost::optional<
 }
 
 int QatAccel::decompress(bufferlist::const_iterator &p,
-		 size_t compressed_len,
-		 bufferlist &dst,
-		 boost::optional<int32_t> compressor_message) {
+                 size_t compressed_len,
+                 bufferlist &dst,
+                 boost::optional<int32_t> compressor_message) {
   unsigned int ratio_idx = 0;
   bool read_more = false;
   bool joint = false;

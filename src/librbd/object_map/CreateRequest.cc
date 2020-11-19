@@ -64,8 +64,8 @@ void CreateRequest<I>::send_object_map_resize() {
     uint64_t snap_size = m_image_ctx->get_image_size(snap_id);
 
     cls_client::object_map_resize(&op, Striper::get_num_objects(
-				    m_image_ctx->layout, snap_size),
-				  OBJECT_NONEXISTENT);
+                                    m_image_ctx->layout, snap_size),
+                                  OBJECT_NONEXISTENT);
 
     std::string oid(ObjectMap<>::object_map_name(m_image_ctx->id, snap_id));
     librados::AioCompletion *comp = create_rados_callback(gather_ctx->new_sub());
@@ -83,7 +83,7 @@ Context *CreateRequest<I>::handle_object_map_resize(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "object map resize failed: " << cpp_strerror(*result)
-	       << dendl;
+               << dendl;
   }
   return m_on_finish;
 }

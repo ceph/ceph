@@ -55,7 +55,7 @@ void ResizeRequest::send() {
 void ResizeRequest::finish_request() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " resizing in-memory object map: "
-		<< m_num_objs << dendl;
+                << m_num_objs << dendl;
 
   std::unique_lock object_map_locker{*m_object_map_lock};
   resize(m_object_map, m_num_objs, m_default_object_state);

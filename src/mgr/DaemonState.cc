@@ -122,7 +122,7 @@ void DeviceState::print(ostream& out) const
   out << "device " << devid << "\n";
   for (auto& i : attachments) {
     out << "attachment " << std::get<0>(i) << " " << std::get<1>(i) << " "
-	<< std::get<2>(i) << "\n";
+        << std::get<2>(i) << "\n";
     out << "\n";
   }
   std::copy(std::begin(daemons), std::end(daemons),
@@ -130,8 +130,8 @@ void DeviceState::print(ostream& out) const
   out << '\n';
   if (life_expectancy.first != utime_t()) {
     out << "life_expectancy " << life_expectancy.first << " to "
-	<< life_expectancy.second
-	<< " (as of " << life_expectancy_stamp << ")\n";
+        << life_expectancy.second
+        << " (as of " << life_expectancy_stamp << ")\n";
   }
 }
 
@@ -158,7 +158,7 @@ void DaemonStateIndex::_insert(DaemonStatePtr dm)
       d->attachments.insert(std::make_tuple(dm->hostname, i.second, p->second));
     } else {
       d->attachments.insert(std::make_tuple(dm->hostname, i.second,
-					    std::string()));
+                                            std::string()));
     }
   }
 }
@@ -256,7 +256,7 @@ void DaemonStateIndex::_rm(const DaemonKey &key)
 }
 
 void DaemonStateIndex::cull(const std::string& svc_name,
-			    const std::set<std::string>& names_exist)
+                            const std::set<std::string>& names_exist)
 {
   std::vector<string> victims;
 
@@ -301,8 +301,8 @@ void DaemonStateIndex::cull_services(const std::set<std::string>& types_exist)
 void DaemonPerfCounters::update(const MMgrReport& report)
 {
   dout(20) << "loading " << report.declare_types.size() << " new types, "
-	   << report.undeclare_types.size() << " old types, had "
-	   << types.size() << " types, got "
+           << report.undeclare_types.size() << " old types, had "
+           << types.size() << " types, got "
            << report.packed.length() << " bytes of data" << dendl;
 
   // Retrieve session state

@@ -27,7 +27,7 @@ using util::create_rados_callback;
 template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
                                                 Context *on_finish,
-						const cls::rbd::SnapshotNamespace &snap_namespace,
+                                                const cls::rbd::SnapshotNamespace &snap_namespace,
                                                 const std::string &snap_name,
                                                 uint64_t journal_op_tid,
                                                 uint64_t flags,
@@ -415,8 +415,8 @@ void SnapshotCreateRequest<I>::update_snap_context() {
   // immediately add a reference to the new snapshot
   utime_t snap_time = ceph_clock_now();
   image_ctx.add_snap(m_snap_namespace, m_snap_name, m_snap_id, m_size,
-		     m_parent_info, RBD_PROTECTION_STATUS_UNPROTECTED,
-		     0, snap_time);
+                     m_parent_info, RBD_PROTECTION_STATUS_UNPROTECTED,
+                     0, snap_time);
 
   // immediately start using the new snap context if we
   // own the exclusive lock

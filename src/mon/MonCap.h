@@ -124,10 +124,10 @@ struct MonCapGrant {
    * @return bits we allow
    */
   mon_rwxa_t get_allowed(CephContext *cct,
-			 EntityName name,
-			 const std::string& service,
-			 const std::string& command,
-			 const std::map<std::string, std::string>& command_args) const;
+                         EntityName name,
+                         const std::string& service,
+                         const std::string& command,
+                         const std::map<std::string, std::string>& command_args) const;
 
   bool is_allow_all() const {
     return
@@ -171,12 +171,12 @@ struct MonCap {
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(CephContext *cct,
-		  EntityName name,
-		  const std::string& service,
-		  const std::string& command,
-		  const std::map<std::string, std::string>& command_args,
-		  bool op_may_read, bool op_may_write, bool op_may_exec,
-		  const entity_addr_t& addr) const;
+                  EntityName name,
+                  const std::string& service,
+                  const std::string& command,
+                  const std::map<std::string, std::string>& command_args,
+                  bool op_may_read, bool op_may_write, bool op_may_exec,
+                  const entity_addr_t& addr) const;
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
@@ -187,32 +187,32 @@ struct MonCap {
     std::vector<string> ret;
     for (auto& g : grants) {
       if (not g.fs_name.empty()) {
-	ret.push_back(g.fs_name);
+        ret.push_back(g.fs_name);
       } else {
-	return {};
+        return {};
       }
     }
     return ret;
   }
 
   bool fs_name_capable(const EntityName& ename, string_view fs_name,
-		       __u8 mask) {
+                       __u8 mask) {
     for (auto& g : grants) {
       if (g.is_allow_all()) {
-	return true;
+        return true;
       }
 
       if ((g.fs_name.empty() || g.fs_name == fs_name) && (mask & g.allow)) {
-	  return true;
+          return true;
       }
 
       g.expand_profile(ename);
       for (auto& pg : g.profile_grants) {
-	if ((pg.service == "fs" || pg.service == "mds") &&
-	    (pg.fs_name.empty() || pg.fs_name == fs_name) &&
-	    (pg.allow & mask)) {
-	  return true;
-	}
+        if ((pg.service == "fs" || pg.service == "mds") &&
+            (pg.fs_name.empty() || pg.fs_name == fs_name) &&
+            (pg.allow & mask)) {
+          return true;
+        }
       }
     }
 

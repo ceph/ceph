@@ -80,7 +80,7 @@ private:
 template <typename I>
 SnapshotRollbackRequest<I>::SnapshotRollbackRequest(I &image_ctx,
                                                     Context *on_finish,
-						    const cls::rbd::SnapshotNamespace &snap_namespace,
+                                                    const cls::rbd::SnapshotNamespace &snap_namespace,
                                                     const std::string &snap_name,
                                                     uint64_t snap_id,
                                                     uint64_t snap_size,

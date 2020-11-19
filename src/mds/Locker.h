@@ -52,12 +52,12 @@ public:
   void nudge_log(SimpleLock *lock);
 
   bool acquire_locks(MDRequestRef& mdr,
-		     MutationImpl::LockOpVec& lov,
-		     CInode *auth_pin_freeze=NULL,
-		     bool auth_pin_nonblocking=false);
+                     MutationImpl::LockOpVec& lov,
+                     CInode *auth_pin_freeze=NULL,
+                     bool auth_pin_nonblocking=false);
 
   bool try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
-			      int n=0, bool want_layout=false);
+                              int n=0, bool want_layout=false);
 
   void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);
@@ -139,7 +139,7 @@ public:
   bool should_defer_client_cap_frozen(CInode *in);
 
   void process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& r,
-				   std::string_view dname);
+                                   std::string_view dname);
 
   void kick_cap_releases(MDRequestRef& mdr);
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
@@ -176,10 +176,10 @@ public:
 
   bool check_client_ranges(CInode *in, uint64_t size);
   bool calc_new_client_ranges(CInode *in, uint64_t size,
-			      bool *max_increased=nullptr);
+                              bool *max_increased=nullptr);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,
-			    utime_t mtime=utime_t());
+                            utime_t mtime=utime_t());
   void share_inode_max_size(CInode *in, Capability *only_cap=0);
 
   // -- client leases --
@@ -219,7 +219,7 @@ protected:
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const cref_t<MClientCaps> &m, const ref_t<MClientCaps> &ack);
   void _do_null_snapflush(CInode *head_in, client_t client, snapid_t last=CEPH_NOSNAP);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, const cref_t<MClientCaps> &m,
-		      const ref_t<MClientCaps> &ack, bool *need_flush=NULL);
+                      const ref_t<MClientCaps> &ack, bool *need_flush=NULL);
   void handle_client_cap_release(const cref_t<MClientCapRelease> &m);
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
@@ -237,7 +237,7 @@ protected:
   void handle_inode_file_caps(const cref_t<MInodeFileCaps> &m);
 
   void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
-			  client_t client, const ref_t<MClientCaps> &ack);
+                          client_t client, const ref_t<MClientCaps> &ack);
 
   xlist<ScatterLock*> updated_scatterlocks;
 

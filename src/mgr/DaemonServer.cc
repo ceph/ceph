@@ -56,28 +56,28 @@ namespace {
 
 DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
-			   DaemonStateIndex &daemon_state_,
-			   ClusterState &cluster_state_,
-			   PyModuleRegistry &py_modules_,
-			   LogChannelRef clog_,
-			   LogChannelRef audit_clog_)
+                           DaemonStateIndex &daemon_state_,
+                           ClusterState &cluster_state_,
+                           PyModuleRegistry &py_modules_,
+                           LogChannelRef clog_,
+                           LogChannelRef audit_clog_)
     : Dispatcher(g_ceph_context),
       client_byte_throttler(new Throttle(g_ceph_context, "mgr_client_bytes",
-					 g_conf().get_val<Option::size_t>("mgr_client_bytes"))),
+                                         g_conf().get_val<Option::size_t>("mgr_client_bytes"))),
       client_msg_throttler(new Throttle(g_ceph_context, "mgr_client_messages",
-					g_conf().get_val<uint64_t>("mgr_client_messages"))),
+                                        g_conf().get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
-				      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
+                                      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
       osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
-				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
+                                     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
-				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
+                                      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
       mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
-				     g_conf().get_val<uint64_t>("mgr_mds_messages"))),
+                                     g_conf().get_val<uint64_t>("mgr_mds_messages"))),
       mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
-				      g_conf().get_val<Option::size_t>("mgr_mon_bytes"))),
+                                      g_conf().get_val<Option::size_t>("mgr_mon_bytes"))),
       mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
-				     g_conf().get_val<uint64_t>("mgr_mon_messages"))),
+                                     g_conf().get_val<uint64_t>("mgr_mon_messages"))),
       msgr(nullptr),
       monc(monc_),
       finisher(finisher_),
@@ -109,28 +109,28 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
   std::string public_msgr_type = g_conf()->ms_public_type.empty() ?
     g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   msgr = Messenger::create(g_ceph_context, public_msgr_type,
-			   entity_name_t::MGR(gid),
-			   "mgr",
-			   Messenger::get_pid_nonce());
+                           entity_name_t::MGR(gid),
+                           "mgr",
+                           Messenger::get_pid_nonce());
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
 
   msgr->set_auth_client(monc);
 
   // throttle clients
   msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
-			      client_byte_throttler.get(),
-			      client_msg_throttler.get());
+                              client_byte_throttler.get(),
+                              client_msg_throttler.get());
 
   // servers
   msgr->set_policy_throttlers(entity_name_t::TYPE_OSD,
-			      osd_byte_throttler.get(),
-			      osd_msg_throttler.get());
+                              osd_byte_throttler.get(),
+                              osd_msg_throttler.get());
   msgr->set_policy_throttlers(entity_name_t::TYPE_MDS,
-			      mds_byte_throttler.get(),
-			      mds_msg_throttler.get());
+                              mds_byte_throttler.get(),
+                              mds_msg_throttler.get());
   msgr->set_policy_throttlers(entity_name_t::TYPE_MON,
-			      mon_byte_throttler.get(),
-			      mon_msg_throttler.get());
+                              mon_byte_throttler.get(),
+                              mon_msg_throttler.get());
 
   entity_addrvec_t addrs;
   int r = pick_addresses(cct, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
@@ -176,14 +176,14 @@ int DaemonServer::ms_handle_authentication(Connection *con)
   s->inst.addr = con->get_peer_addr();
   s->entity_name = con->peer_name;
   dout(10) << __func__ << " new session " << s << " con " << con
-	   << " entity " << con->peer_name
-	   << " addr " << con->get_peer_addrs()
-	   << dendl;
+           << " entity " << con->peer_name
+           << " addr " << con->get_peer_addrs()
+           << dendl;
 
   AuthCapsInfo &caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     dout(10) << " session " << s << " " << s->entity_name
-	     << " allow_all" << dendl;
+             << " allow_all" << dendl;
     s->caps.set_allow_all();
   } else if (caps_info.caps.length() > 0) {
     auto p = caps_info.caps.cbegin();
@@ -198,7 +198,7 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     }
     if (!s->caps.parse(str)) {
       dout(10) << " session " << s << " " << s->entity_name
-	       << " failed to parse caps '" << str << "'" << dendl;
+               << " failed to parse caps '" << str << "'" << dendl;
       return -EACCES;
     }
     dout(10) << " session " << s << " " << s->entity_name
@@ -209,7 +209,7 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     std::lock_guard l(lock);
     s->osd_id = atoi(s->entity_name.get_id().c_str());
     dout(10) << "registering osd." << s->osd_id << " session "
-	     << s << " con " << con << dendl;
+             << s << " con " << con << dendl;
     osd_cons[s->osd_id].insert(con);
   }
 
@@ -226,7 +226,7 @@ bool DaemonServer::ms_handle_reset(Connection *con)
     }
     std::lock_guard l(lock);
     dout(10) << "unregistering osd." << session->osd_id
-	     << "  session " << session << " con " << con << dendl;
+             << "  session " << session << " con " << con << dendl;
     osd_cons[session->osd_id].erase(con);
 
     auto iter = daemon_connections.find(con);
@@ -408,7 +408,7 @@ static DaemonKey key_from_service(
 }
 
 void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
-					  const entity_addr_t& addr)
+                                          const entity_addr_t& addr)
 {
   if (!daemon_state.is_updating(key) &&
       (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
@@ -416,14 +416,14 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
     auto c = new MetadataUpdate(daemon_state, key);
     if (key.type == "osd") {
       oss << "{\"prefix\": \"osd metadata\", \"id\": "
-	  << key.name<< "}";
+          << key.name<< "}";
     } else if (key.type == "mds") {
       c->set_default("addr", stringify(addr));
       oss << "{\"prefix\": \"mds metadata\", \"who\": \""
-	  << key.name << "\"}";
+          << key.name << "\"}";
     } else if (key.type == "mon") {
       oss << "{\"prefix\": \"mon metadata\", \"id\": \""
-	  << key.name << "\"}";
+          << key.name << "\"}";
     } else {
       ceph_abort();
     }
@@ -436,8 +436,8 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
   std::unique_lock l(lock);
 
   DaemonKey key = key_from_service(m->service_name,
-				   m->get_connection()->get_peer_type(),
-				   m->daemon_name);
+                                   m->get_connection()->get_peer_type(),
+                                   m->daemon_name);
 
   auto con = m->get_connection();
   dout(10) << "from " << key << " " << con->get_peer_addr() << dendl;
@@ -484,15 +484,15 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 
       utime_t now = ceph_clock_now();
       auto [d, added] = pending_service_map.get_daemon(m->service_name,
-						       m->daemon_name);
+                                                       m->daemon_name);
       if (added || d->gid != (uint64_t)m->get_source().num()) {
-	dout(10) << "registering " << key << " in pending_service_map" << dendl;
-	d->gid = m->get_source().num();
-	d->addr = m->get_source_addr();
-	d->start_epoch = pending_service_map.epoch;
-	d->start_stamp = now;
-	d->metadata = m->daemon_metadata;
-	pending_service_map_dirty = pending_service_map.epoch;
+        dout(10) << "registering " << key << " in pending_service_map" << dendl;
+        d->gid = m->get_source().num();
+        d->addr = m->get_source_addr();
+        d->start_epoch = pending_service_map.epoch;
+        d->start_stamp = now;
+        d->metadata = m->daemon_metadata;
+        pending_service_map_dirty = pending_service_map.epoch;
       }
     }
 
@@ -501,12 +501,12 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
       decode(daemon->config, p);
       decode(daemon->ignored_mon_config, p);
       dout(20) << " got config " << daemon->config
-	       << " ignored " << daemon->ignored_mon_config << dendl;
+               << " ignored " << daemon->ignored_mon_config << dendl;
     }
     daemon->config_defaults_bl = m->config_defaults_bl;
     daemon->config_defaults.clear();
     dout(20) << " got config_defaults_bl " << daemon->config_defaults_bl.length()
-	     << " bytes" << dendl;
+             << " bytes" << dendl;
   }
 
   if (con->get_peer_type() != entity_name_t::TYPE_CLIENT &&
@@ -526,8 +526,8 @@ bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
   std::lock_guard l(lock);
 
   DaemonKey key = key_from_service(m->service_name,
-				   m->get_connection()->get_peer_type(),
-				   m->daemon_name);
+                                   m->get_connection()->get_peer_type(),
+                                   m->daemon_name);
   dout(4) << "from " << m->get_connection() << "  " << key << dendl;
 
   if (daemon_state.exists(key)) {
@@ -536,8 +536,8 @@ bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
     {
       std::lock_guard l(daemon->lock);
       if (daemon->service_daemon) {
-	pending_service_map.rm_daemon(m->service_name, m->daemon_name);
-	pending_service_map_dirty = pending_service_map.epoch;
+        pending_service_map.rm_daemon(m->service_name, m->daemon_name);
+        pending_service_map_dirty = pending_service_map.epoch;
       }
     }
   }
@@ -578,9 +578,9 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     // Clients should not be sending us stats unless they are declaring
     // themselves to be a daemon for some service.
     dout(10) << "rejecting report from non-daemon client " << m->daemon_name
-	     << dendl;
+             << dendl;
     clog->warn() << "rejecting report from non-daemon client " << m->daemon_name
-		 << " at " << m->get_connection()->get_peer_addrs();
+                 << " at " << m->get_connection()->get_peer_addrs();
     m->get_connection()->mark_down();
     return true;
   }
@@ -696,12 +696,12 @@ void DaemonServer::_generate_command_map(
     if (p->first == "caps") {
       vector<string> cv;
       if (cmd_getval(cmdmap, "caps", cv) &&
-	  cv.size() % 2 == 0) {
-	for (unsigned i = 0; i < cv.size(); i += 2) {
-	  string k = string("caps_") + cv[i];
-	  param_str_map[k] = cv[i + 1];
-	}
-	continue;
+          cv.size() % 2 == 0) {
+        for (unsigned i = 0; i < cv.size(); i += 2) {
+          string k = string("caps_") + cv[i];
+          param_str_map[k] = cv[i + 1];
+        }
+        continue;
       }
     }
     param_str_map[p->first] = cmd_vartype_stringify(p->second);
@@ -749,7 +749,7 @@ bool DaemonServer::_allowed_command(
     s->get_peer_addr());
 
   dout(10) << " " << s->entity_name << " "
-	   << (capable ? "" : "not ") << "capable" << dendl;
+           << (capable ? "" : "not ") << "capable" << dendl;
   return capable;
 }
 
@@ -797,15 +797,15 @@ public:
     }
     if (con) {
       if (m_tell) {
-	MCommandReply *reply = new MCommandReply(r, rs);
-	reply->set_tid(m_tell->get_tid());
-	reply->set_data(odata);
-	con->send_message(reply);
+        MCommandReply *reply = new MCommandReply(r, rs);
+        reply->set_tid(m_tell->get_tid());
+        reply->set_data(odata);
+        con->send_message(reply);
       } else {
-	MMgrCommandReply *reply = new MMgrCommandReply(r, rs);
-	reply->set_tid(m_mgr->get_tid());
-	reply->set_data(odata);
-	con->send_message(reply);
+        MMgrCommandReply *reply = new MMgrCommandReply(r, rs);
+        reply->set_tid(m_mgr->get_tid());
+        reply->set_data(odata);
+        con->send_message(reply);
       }
     }
   }
@@ -938,7 +938,7 @@ bool DaemonServer::_handle_command(
       dump_cmd(mgr_cmd);
     }
 
-    f.close_section();	// command_descriptions
+    f.close_section();        // command_descriptions
     f.flush(cmdctx->odata);
     cmdctx->reply(0, ss);
     return true;
@@ -997,7 +997,7 @@ bool DaemonServer::_handle_command(
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     cluster_state.with_servicemap([&](const ServiceMap &service_map) {
-	f->dump_object("service_map", service_map);
+        f->dump_object("service_map", service_map);
       });
     f->flush(cmdctx->odata);
     cmdctx->reply(0, ss);
@@ -1015,19 +1015,19 @@ bool DaemonServer::_handle_command(
 
       f->open_object_section(type.c_str());
       for (auto& q : service.daemons) {
-	f->open_object_section(q.first.c_str());
-	DaemonKey key{type, q.first};
-	ceph_assert(daemon_state.exists(key));
-	auto daemon = daemon_state.get(key);
-	std::lock_guard l(daemon->lock);
-	f->dump_stream("status_stamp") << daemon->service_status_stamp;
-	f->dump_stream("last_beacon") << daemon->last_service_beacon;
-	f->open_object_section("status");
-	for (auto& r : daemon->service_status) {
-	  f->dump_string(r.first.c_str(), r.second);
-	}
-	f->close_section();
-	f->close_section();
+        f->open_object_section(q.first.c_str());
+        DaemonKey key{type, q.first};
+        ceph_assert(daemon_state.exists(key));
+        auto daemon = daemon_state.get(key);
+        std::lock_guard l(daemon->lock);
+        f->dump_stream("status_stamp") << daemon->service_status_stamp;
+        f->dump_stream("last_beacon") << daemon->last_service_beacon;
+        f->open_object_section("status");
+        for (auto& r : daemon->service_status) {
+          f->dump_string(r.first.c_str(), r.second);
+        }
+        f->close_section();
+        f->close_section();
       }
       f->close_section();
     }
@@ -1068,7 +1068,7 @@ bool DaemonServer::_handle_command(
     }
     bool pg_exists = false;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	pg_exists = osdmap.pg_exists(pgid);
+        pg_exists = osdmap.pg_exists(pgid);
       });
     if (!pg_exists) {
       ss << "pg " << pgid << " does not exist";
@@ -1078,8 +1078,8 @@ bool DaemonServer::_handle_command(
     int acting_primary = -1;
     epoch_t epoch;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	epoch = osdmap.get_epoch();
-	osdmap.get_primary_shard(pgid, &acting_primary, &spgid);
+        epoch = osdmap.get_epoch();
+        osdmap.get_primary_shard(pgid, &acting_primary, &spgid);
       });
     if (acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
@@ -1089,24 +1089,24 @@ bool DaemonServer::_handle_command(
     auto p = osd_cons.find(acting_primary);
     if (p == osd_cons.end()) {
       ss << "pg " << pgid << " primary osd." << acting_primary
-	 << " is not currently connected";
+         << " is not currently connected";
       cmdctx->reply(-EAGAIN, ss);
       return true;
     }
     for (auto& con : p->second) {
       if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
-	vector<spg_t> pgs = { spgid };
-	con->send_message(new MOSDScrub2(monc->get_fsid(),
-					 epoch,
-					 pgs,
-					 scrubop == "repair",
-					 scrubop == "deep-scrub"));
+        vector<spg_t> pgs = { spgid };
+        con->send_message(new MOSDScrub2(monc->get_fsid(),
+                                         epoch,
+                                         pgs,
+                                         scrubop == "repair",
+                                         scrubop == "deep-scrub"));
       } else {
-	vector<pg_t> pgs = { pgid };
-	con->send_message(new MOSDScrub(monc->get_fsid(),
-					pgs,
-					scrubop == "repair",
-					scrubop == "deep-scrub"));
+        vector<pg_t> pgs = { pgid };
+        con->send_message(new MOSDScrub(monc->get_fsid(),
+                                        pgs,
+                                        scrubop == "repair",
+                                        scrubop == "deep-scrub"));
       }
     }
     ss << "instructing pg " << spgid << " on osd." << acting_primary
@@ -1114,8 +1114,8 @@ bool DaemonServer::_handle_command(
     cmdctx->reply(0, ss);
     return true;
   } else if (prefix == "osd scrub" ||
-	      prefix == "osd deep-scrub" ||
-	      prefix == "osd repair") {
+              prefix == "osd deep-scrub" ||
+              prefix == "osd repair") {
     string whostr;
     cmd_getval(cmdctx->cmdmap, "who", whostr);
     vector<string> pvec;
@@ -1124,27 +1124,27 @@ bool DaemonServer::_handle_command(
     set<int> osds;
     if (whostr == "*" || whostr == "all" || whostr == "any") {
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	  for (int i = 0; i < osdmap.get_max_osd(); i++)
-	    if (osdmap.is_up(i)) {
-	      osds.insert(i);
-	    }
-	});
+          for (int i = 0; i < osdmap.get_max_osd(); i++)
+            if (osdmap.is_up(i)) {
+              osds.insert(i);
+            }
+        });
     } else {
       long osd = parse_osd_id(whostr.c_str(), &ss);
       if (osd < 0) {
-	ss << "invalid osd '" << whostr << "'";
-	cmdctx->reply(-EINVAL, ss);
-	return true;
+        ss << "invalid osd '" << whostr << "'";
+        cmdctx->reply(-EINVAL, ss);
+        return true;
       }
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	  if (osdmap.is_up(osd)) {
-	    osds.insert(osd);
-	  }
-	});
+          if (osdmap.is_up(osd)) {
+            osds.insert(osd);
+          }
+        });
       if (osds.empty()) {
-	ss << "osd." << osd << " is not up";
-	cmdctx->reply(-EAGAIN, ss);
-	return true;
+        ss << "osd." << osd << " is not up";
+        cmdctx->reply(-EAGAIN, ss);
+        return true;
       }
     }
     set<int> sent_osds, failed_osds;
@@ -1152,47 +1152,47 @@ bool DaemonServer::_handle_command(
       vector<spg_t> spgs;
       epoch_t epoch;
       cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
-	  epoch = osdmap.get_epoch();
-	  auto p = pgmap.pg_by_osd.find(osd);
-	  if (p != pgmap.pg_by_osd.end()) {
-	    for (auto pgid : p->second) {
-	      int primary;
-	      spg_t spg;
-	      osdmap.get_primary_shard(pgid, &primary, &spg);
-	      if (primary == osd) {
-		spgs.push_back(spg);
-	      }
-	    }
-	  }
-	});
+          epoch = osdmap.get_epoch();
+          auto p = pgmap.pg_by_osd.find(osd);
+          if (p != pgmap.pg_by_osd.end()) {
+            for (auto pgid : p->second) {
+              int primary;
+              spg_t spg;
+              osdmap.get_primary_shard(pgid, &primary, &spg);
+              if (primary == osd) {
+                spgs.push_back(spg);
+              }
+            }
+          }
+        });
       auto p = osd_cons.find(osd);
       if (p == osd_cons.end()) {
-	failed_osds.insert(osd);
+        failed_osds.insert(osd);
       } else {
-	sent_osds.insert(osd);
-	for (auto& con : p->second) {
-	  if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
-	    con->send_message(new MOSDScrub2(monc->get_fsid(),
-					     epoch,
-					     spgs,
-					     pvec.back() == "repair",
-					     pvec.back() == "deep-scrub"));
-	  } else {
-	    con->send_message(new MOSDScrub(monc->get_fsid(),
-					    pvec.back() == "repair",
-					    pvec.back() == "deep-scrub"));
-	  }
-	}
+        sent_osds.insert(osd);
+        for (auto& con : p->second) {
+          if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
+            con->send_message(new MOSDScrub2(monc->get_fsid(),
+                                             epoch,
+                                             spgs,
+                                             pvec.back() == "repair",
+                                             pvec.back() == "deep-scrub"));
+          } else {
+            con->send_message(new MOSDScrub(monc->get_fsid(),
+                                            pvec.back() == "repair",
+                                            pvec.back() == "deep-scrub"));
+          }
+        }
       }
     }
     if (failed_osds.size() == osds.size()) {
       ss << "failed to instruct osd(s) " << osds << " to " << pvec.back()
-	 << " (not connected)";
+         << " (not connected)";
       r = -EAGAIN;
     } else {
       ss << "instructed osd(s) " << sent_osds << " to " << pvec.back();
       if (!failed_osds.empty()) {
-	ss << "; osd(s) " << failed_osds << " were not connected";
+        ss << "; osd(s) " << failed_osds << " were not connected";
       }
       r = 0;
     }
@@ -1266,9 +1266,9 @@ bool DaemonServer::_handle_command(
     cmdctx->reply(0, "");
     return true;
   } else if (prefix == "osd reweight-by-pg" ||
-	     prefix == "osd reweight-by-utilization" ||
-	     prefix == "osd test-reweight-by-pg" ||
-	     prefix == "osd test-reweight-by-utilization") {
+             prefix == "osd reweight-by-utilization" ||
+             prefix == "osd test-reweight-by-pg" ||
+             prefix == "osd test-reweight-by-utilization") {
     bool by_pg =
       prefix == "osd reweight-by-pg" || prefix == "osd test-reweight-by-pg";
     bool dry_run =
@@ -1280,14 +1280,14 @@ bool DaemonServer::_handle_command(
     vector<string> poolnames;
     cmd_getval(cmdctx->cmdmap, "pools", poolnames);
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	for (const auto& poolname : poolnames) {
-	  int64_t pool = osdmap.lookup_pg_pool_name(poolname);
-	  if (pool < 0) {
-	    ss << "pool '" << poolname << "' does not exist";
-	    r = -ENOENT;
-	  }
-	  pools.insert(pool);
-	}
+        for (const auto& poolname : poolnames) {
+          int64_t pool = osdmap.lookup_pg_pool_name(poolname);
+          if (pool < 0) {
+            ss << "pool '" << poolname << "' does not exist";
+            r = -ENOENT;
+          }
+          pools.insert(pool);
+        }
       });
     if (r) {
       cmdctx->reply(r, ss);
@@ -1313,15 +1313,15 @@ bool DaemonServer::_handle_command(
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap &osdmap, const PGMap& pgmap) {
-	return reweight::by_utilization(osdmap, pgmap,
-					oload,
-					max_change,
-					max_osds,
-					by_pg,
-					pools.empty() ? NULL : &pools,
-					no_increasing,
-					&new_weights,
-					&ss, &out_str, f.get());
+        return reweight::by_utilization(osdmap, pgmap,
+                                        oload,
+                                        max_change,
+                                        max_osds,
+                                        by_pg,
+                                        pools.empty() ? NULL : &pools,
+                                        no_increasing,
+                                        &new_weights,
+                                        &ss, &out_str, f.get());
       });
     if (r >= 0) {
       dout(10) << "reweight::by_utilization: finished with " << out_str << dendl;
@@ -1342,20 +1342,20 @@ bool DaemonServer::_handle_command(
     } else {
       json_spirit::Object json_object;
       for (const auto& osd_weight : new_weights) {
-	json_spirit::Config::add(json_object,
-				 std::to_string(osd_weight.first),
-				 std::to_string(osd_weight.second));
+        json_spirit::Config::add(json_object,
+                                 std::to_string(osd_weight.first),
+                                 std::to_string(osd_weight.second));
       }
       string s = json_spirit::write(json_object);
       std::replace(begin(s), end(s), '\"', '\'');
       const string cmd =
-	"{"
-	"\"prefix\": \"osd reweightn\", "
-	"\"weights\": \"" + s + "\""
-	"}";
+        "{"
+        "\"prefix\": \"osd reweightn\", "
+        "\"weights\": \"" + s + "\""
+        "}";
       auto on_finish = new ReplyOnFinish(cmdctx);
       monc->start_mon_command({cmd}, {},
-			      &on_finish->from_mon, &on_finish->outs, on_finish);
+                              &on_finish->from_mon, &on_finish->outs, on_finish);
       return true;
     }
   } else if (prefix == "osd df") {
@@ -1372,10 +1372,10 @@ bool DaemonServer::_handle_command(
           rs << "'" << filter << "' not a pool, crush node or device class name";
           return -EINVAL;
         }
-	print_osd_utilization(osdmap, pgmap, ss,
+        print_osd_utilization(osdmap, pgmap, ss,
                               f.get(), method == "tree", filter);
-	cmdctx->odata.append(ss);
-	return 0;
+        cmdctx->odata.append(ss);
+        return 0;
       });
     cmdctx->reply(r, rs);
     return true;
@@ -1426,27 +1426,27 @@ bool DaemonServer::_handle_command(
       return true;
     }
   } else if (prefix == "osd safe-to-destroy" ||
-	     prefix == "osd destroy" ||
-	     prefix == "osd purge") {
+             prefix == "osd destroy" ||
+             prefix == "osd purge") {
     set<int> osds;
     int r = 0;
     if (prefix == "osd safe-to-destroy") {
       vector<string> ids;
       cmd_getval(cmdctx->cmdmap, "ids", ids);
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-				  r = osdmap.parse_osd_id_list(ids, &osds, &ss);
-				});
+                                  r = osdmap.parse_osd_id_list(ids, &osds, &ss);
+                                });
       if (!r && osds.empty()) {
-	ss << "must specify one or more OSDs";
-	r = -EINVAL;
+        ss << "must specify one or more OSDs";
+        r = -EINVAL;
       }
     } else {
       int64_t id;
       if (!cmd_getval(cmdctx->cmdmap, "id", id)) {
-	r = -EINVAL;
-	ss << "must specify OSD id";
+        r = -EINVAL;
+        ss << "must specify OSD id";
       } else {
-	osds.insert(id);
+        osds.insert(id);
       }
     }
     if (r < 0) {
@@ -1456,46 +1456,46 @@ bool DaemonServer::_handle_command(
     set<int> active_osds, missing_stats, stored_pgs, safe_to_destroy;
     int affected_pgs = 0;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
-	if (pg_map.num_pg_unknown > 0) {
-	  ss << pg_map.num_pg_unknown << " pgs have unknown state; cannot draw"
-	     << " any conclusions";
-	  r = -EAGAIN;
-	  return;
-	}
-	int num_active_clean = 0;
-	for (auto& p : pg_map.num_pg_by_state) {
-	  unsigned want = PG_STATE_ACTIVE|PG_STATE_CLEAN;
-	  if ((p.first & want) == want) {
-	    num_active_clean += p.second;
-	  }
-	}
-	for (auto osd : osds) {
-	  if (!osdmap.exists(osd)) {
-	    safe_to_destroy.insert(osd);
-	    continue;  // clearly safe to destroy
-	  }
-	  auto q = pg_map.num_pg_by_osd.find(osd);
-	  if (q != pg_map.num_pg_by_osd.end()) {
-	    if (q->second.acting > 0 || q->second.up_not_acting > 0) {
-	      active_osds.insert(osd);
-	      // XXX: For overlapping PGs, this counts them again
-	      affected_pgs += q->second.acting + q->second.up_not_acting;
-	      continue;
-	    }
-	  }
-	  if (num_active_clean < pg_map.num_pg) {
-	    // all pgs aren't active+clean; we need to be careful.
-	    auto p = pg_map.osd_stat.find(osd);
-	    if (p == pg_map.osd_stat.end() || !osdmap.is_up(osd)) {
-	      missing_stats.insert(osd);
-	      continue;
-	    } else if (p->second.num_pgs > 0) {
-	      stored_pgs.insert(osd);
-	      continue;
-	    }
-	  }
-	  safe_to_destroy.insert(osd);
-	}
+        if (pg_map.num_pg_unknown > 0) {
+          ss << pg_map.num_pg_unknown << " pgs have unknown state; cannot draw"
+             << " any conclusions";
+          r = -EAGAIN;
+          return;
+        }
+        int num_active_clean = 0;
+        for (auto& p : pg_map.num_pg_by_state) {
+          unsigned want = PG_STATE_ACTIVE|PG_STATE_CLEAN;
+          if ((p.first & want) == want) {
+            num_active_clean += p.second;
+          }
+        }
+        for (auto osd : osds) {
+          if (!osdmap.exists(osd)) {
+            safe_to_destroy.insert(osd);
+            continue;  // clearly safe to destroy
+          }
+          auto q = pg_map.num_pg_by_osd.find(osd);
+          if (q != pg_map.num_pg_by_osd.end()) {
+            if (q->second.acting > 0 || q->second.up_not_acting > 0) {
+              active_osds.insert(osd);
+              // XXX: For overlapping PGs, this counts them again
+              affected_pgs += q->second.acting + q->second.up_not_acting;
+              continue;
+            }
+          }
+          if (num_active_clean < pg_map.num_pg) {
+            // all pgs aren't active+clean; we need to be careful.
+            auto p = pg_map.osd_stat.find(osd);
+            if (p == pg_map.osd_stat.end() || !osdmap.is_up(osd)) {
+              missing_stats.insert(osd);
+              continue;
+            } else if (p->second.num_pgs > 0) {
+              stored_pgs.insert(osd);
+              continue;
+            }
+          }
+          safe_to_destroy.insert(osd);
+        }
       });
     if (r && prefix == "osd safe-to-destroy") {
       cmdctx->reply(r, ss); // regardless of formatter
@@ -1592,7 +1592,7 @@ bool DaemonServer::_handle_command(
     set<int> osds;
     int r;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	r = osdmap.parse_osd_id_list(ids, &osds, &ss);
+        r = osdmap.parse_osd_id_list(ids, &osds, &ss);
       });
     if (!r && osds.empty()) {
       ss << "must specify one or more OSDs";
@@ -1605,54 +1605,54 @@ bool DaemonServer::_handle_command(
     int touched_pgs = 0;
     int dangerous_pgs = 0;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
-	if (pg_map.num_pg_unknown > 0) {
-	  ss << pg_map.num_pg_unknown << " pgs have unknown state; "
-	     << "cannot draw any conclusions";
-	  r = -EAGAIN;
-	  return;
-	}
-	for (const auto& q : pg_map.pg_stat) {
+        if (pg_map.num_pg_unknown > 0) {
+          ss << pg_map.num_pg_unknown << " pgs have unknown state; "
+             << "cannot draw any conclusions";
+          r = -EAGAIN;
+          return;
+        }
+        for (const auto& q : pg_map.pg_stat) {
           set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
-	  bool found = false;
-	  if (q.second.state & PG_STATE_DEGRADED) {
-	    for (auto& anm : q.second.avail_no_missing) {
-	      if (osds.count(anm.osd)) {
-		found = true;
-		continue;
-	      }
-	      if (anm.osd != CRUSH_ITEM_NONE) {
-		pg_acting.insert(anm.osd);
-	      }
-	    }
-	  } else {
-	    for (auto& a : q.second.acting) {
-	      if (osds.count(a)) {
-		found = true;
-		continue;
-	      }
-	      if (a != CRUSH_ITEM_NONE) {
-		pg_acting.insert(a);
-	      }
-	    }
-	  }
-	  if (!found) {
-	    continue;
-	  }
-	  touched_pgs++;
-	  if (!(q.second.state & PG_STATE_ACTIVE) ||
-	      (q.second.state & PG_STATE_DEGRADED)) {
-	    ++dangerous_pgs;
-	    continue;
-	  }
-	  const pg_pool_t *pi = osdmap.get_pg_pool(q.first.pool());
-	  if (!pi) {
-	    ++dangerous_pgs; // pool is creating or deleting
-	  } else {
-	    if (pg_acting.size() < pi->min_size) {
-	      ++dangerous_pgs;
-	    }
-	  }
-	}
+          bool found = false;
+          if (q.second.state & PG_STATE_DEGRADED) {
+            for (auto& anm : q.second.avail_no_missing) {
+              if (osds.count(anm.osd)) {
+                found = true;
+                continue;
+              }
+              if (anm.osd != CRUSH_ITEM_NONE) {
+                pg_acting.insert(anm.osd);
+              }
+            }
+          } else {
+            for (auto& a : q.second.acting) {
+              if (osds.count(a)) {
+                found = true;
+                continue;
+              }
+              if (a != CRUSH_ITEM_NONE) {
+                pg_acting.insert(a);
+              }
+            }
+          }
+          if (!found) {
+            continue;
+          }
+          touched_pgs++;
+          if (!(q.second.state & PG_STATE_ACTIVE) ||
+              (q.second.state & PG_STATE_DEGRADED)) {
+            ++dangerous_pgs;
+            continue;
+          }
+          const pg_pool_t *pi = osdmap.get_pg_pool(q.first.pool());
+          if (!pi) {
+            ++dangerous_pgs; // pool is creating or deleting
+          } else {
+            if (pg_acting.size() < pi->min_size) {
+              ++dangerous_pgs;
+            }
+          }
+        }
       });
     if (r) {
       cmdctx->reply(r, ss);
@@ -1660,7 +1660,7 @@ bool DaemonServer::_handle_command(
     }
     if (dangerous_pgs) {
       ss << dangerous_pgs << " PGs are already too degraded, would become"
-	 << " too degraded or might become unavailable";
+         << " too degraded or might become unavailable";
       cmdctx->reply(-EBUSY, ss);
       return true;
     }
@@ -1672,9 +1672,9 @@ bool DaemonServer::_handle_command(
     cmdctx->reply(0, ss);
     return true;
   } else if (prefix == "pg force-recovery" ||
-  	     prefix == "pg force-backfill" ||
-  	     prefix == "pg cancel-force-recovery" ||
-  	     prefix == "pg cancel-force-backfill" ||
+               prefix == "pg force-backfill" ||
+               prefix == "pg cancel-force-recovery" ||
+               prefix == "pg cancel-force-backfill" ||
              prefix == "osd pool force-recovery" ||
              prefix == "osd pool force-backfill" ||
              prefix == "osd pool cancel-force-recovery" ||
@@ -1741,15 +1741,15 @@ bool DaemonServer::_handle_command(
 
     cluster_state.with_pgmap([&](const PGMap& pg_map) {
       for (auto& i : candidates) {
-	auto it = pg_map.pg_stat.find(i);
-	if (it == pg_map.pg_stat.end()) {
-	  ss << "pg " << i << " does not exist; ";
-	  r = -ENOENT;
+        auto it = pg_map.pg_stat.find(i);
+        if (it == pg_map.pg_stat.end()) {
+          ss << "pg " << i << " does not exist; ";
+          r = -ENOENT;
           continue;
-	}
+        }
         auto state = it->second.state;
-	// discard pgs for which user requests are pointless
-	switch (actual_op) {
+        // discard pgs for which user requests are pointless
+        switch (actual_op) {
         case OFR_RECOVERY:
           if ((state & (PG_STATE_DEGRADED |
                         PG_STATE_RECOVERY_WAIT |
@@ -1792,7 +1792,7 @@ bool DaemonServer::_handle_command(
         default:
           ceph_abort_msg("actual_op value is not supported");
         }
-	pgs.push_back(i);
+        pgs.push_back(i);
       } // for
     });
 
@@ -1807,37 +1807,37 @@ bool DaemonServer::_handle_command(
     // optimize the command -> messages conversion, use only one
     // message per distinct OSD
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	// group pgs to process by osd
-	map<int, vector<spg_t>> osdpgs;
-	for (auto& pgid : pgs) {
-	  int primary;
-	  spg_t spg;
-	  if (osdmap.get_primary_shard(pgid, &primary, &spg)) {
-	    osdpgs[primary].push_back(spg);
-	  }
-	}
-	for (auto& i : osdpgs) {
-	  if (osdmap.is_up(i.first)) {
-	    auto p = osd_cons.find(i.first);
-	    if (p == osd_cons.end()) {
-	      ss << "osd." << i.first << " is not currently connected";
-	      r = -EAGAIN;
-	      continue;
-	    }
-	    for (auto& con : p->second) {
-	      con->send_message(
-		new MOSDForceRecovery(monc->get_fsid(), i.second, actual_op));
-	    }
-	    ss << "instructing pg(s) " << i.second << " on osd." << i.first
-	       << " to " << forceop << "; ";
-	  }
-	}
+        // group pgs to process by osd
+        map<int, vector<spg_t>> osdpgs;
+        for (auto& pgid : pgs) {
+          int primary;
+          spg_t spg;
+          if (osdmap.get_primary_shard(pgid, &primary, &spg)) {
+            osdpgs[primary].push_back(spg);
+          }
+        }
+        for (auto& i : osdpgs) {
+          if (osdmap.is_up(i.first)) {
+            auto p = osd_cons.find(i.first);
+            if (p == osd_cons.end()) {
+              ss << "osd." << i.first << " is not currently connected";
+              r = -EAGAIN;
+              continue;
+            }
+            for (auto& con : p->second) {
+              con->send_message(
+                new MOSDForceRecovery(monc->get_fsid(), i.second, actual_op));
+            }
+            ss << "instructing pg(s) " << i.second << " on osd." << i.first
+               << " to " << forceop << "; ";
+          }
+        }
       });
     ss << std::endl;
     cmdctx->reply(r, ss);
     return true;
   } else if (prefix == "config show" ||
-	     prefix == "config show-with-defaults") {
+             prefix == "config show-with-defaults") {
     string who;
     cmd_getval(cmdctx->cmdmap, "who", who);
     auto [key, valid] = DaemonKey::parse(who);
@@ -1866,158 +1866,158 @@ bool DaemonServer::_handle_command(
       }
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
-	  !p->second.empty()) {
-	cmdctx->odata.append(p->second.rbegin()->second + "\n");
+          !p->second.empty()) {
+        cmdctx->odata.append(p->second.rbegin()->second + "\n");
       } else {
-	auto& defaults = daemon->_get_config_defaults();
-	auto q = defaults.find(name);
-	if (q != defaults.end()) {
-	  cmdctx->odata.append(q->second + "\n");
-	} else {
-	  r = -ENOENT;
-	}
+        auto& defaults = daemon->_get_config_defaults();
+        auto q = defaults.find(name);
+        if (q != defaults.end()) {
+          cmdctx->odata.append(q->second + "\n");
+        } else {
+          r = -ENOENT;
+        }
       }
     } else if (daemon->config_defaults_bl.length() > 0) {
       TextTable tbl;
       if (f) {
-	f->open_array_section("config");
+        f->open_array_section("config");
       } else {
-	tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
-	tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
-	tbl.define_column("OVERRIDES", TextTable::LEFT, TextTable::LEFT);
-	tbl.define_column("IGNORES", TextTable::LEFT, TextTable::LEFT);
+        tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+        tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+        tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
+        tbl.define_column("OVERRIDES", TextTable::LEFT, TextTable::LEFT);
+        tbl.define_column("IGNORES", TextTable::LEFT, TextTable::LEFT);
       }
       if (prefix == "config show") {
-	// show
-	for (auto& i : daemon->config) {
-	  dout(20) << " " << i.first << " -> " << i.second << dendl;
-	  if (i.second.empty()) {
-	    continue;
-	  }
-	  if (f) {
-	    f->open_object_section("value");
-	    f->dump_string("name", i.first);
-	    f->dump_string("value", i.second.rbegin()->second);
-	    f->dump_string("source", ceph_conf_level_name(
-			     i.second.rbegin()->first));
-	    if (i.second.size() > 1) {
-	      f->open_array_section("overrides");
-	      auto j = i.second.rend();
-	      for (--j; j != i.second.rbegin(); --j) {
-		f->open_object_section("value");
-		f->dump_string("source", ceph_conf_level_name(j->first));
-		f->dump_string("value", j->second);
-		f->close_section();
-	      }
-	      f->close_section();
-	    }
-	    if (daemon->ignored_mon_config.count(i.first)) {
-	      f->dump_string("ignores", "mon");
-	    }
-	    f->close_section();
-	  } else {
-	    tbl << i.first;
-	    tbl << i.second.rbegin()->second;
-	    tbl << ceph_conf_level_name(i.second.rbegin()->first);
-	    if (i.second.size() > 1) {
-	      list<string> ov;
-	      auto j = i.second.rend();
-	      for (--j; j != i.second.rbegin(); --j) {
-		if (j->second == i.second.rbegin()->second) {
-		  ov.push_front(string("(") + ceph_conf_level_name(j->first) +
-				string("[") + j->second + string("]") +
-				string(")"));
-		} else {
+        // show
+        for (auto& i : daemon->config) {
+          dout(20) << " " << i.first << " -> " << i.second << dendl;
+          if (i.second.empty()) {
+            continue;
+          }
+          if (f) {
+            f->open_object_section("value");
+            f->dump_string("name", i.first);
+            f->dump_string("value", i.second.rbegin()->second);
+            f->dump_string("source", ceph_conf_level_name(
+                             i.second.rbegin()->first));
+            if (i.second.size() > 1) {
+              f->open_array_section("overrides");
+              auto j = i.second.rend();
+              for (--j; j != i.second.rbegin(); --j) {
+                f->open_object_section("value");
+                f->dump_string("source", ceph_conf_level_name(j->first));
+                f->dump_string("value", j->second);
+                f->close_section();
+              }
+              f->close_section();
+            }
+            if (daemon->ignored_mon_config.count(i.first)) {
+              f->dump_string("ignores", "mon");
+            }
+            f->close_section();
+          } else {
+            tbl << i.first;
+            tbl << i.second.rbegin()->second;
+            tbl << ceph_conf_level_name(i.second.rbegin()->first);
+            if (i.second.size() > 1) {
+              list<string> ov;
+              auto j = i.second.rend();
+              for (--j; j != i.second.rbegin(); --j) {
+                if (j->second == i.second.rbegin()->second) {
+                  ov.push_front(string("(") + ceph_conf_level_name(j->first) +
+                                string("[") + j->second + string("]") +
+                                string(")"));
+                } else {
                   ov.push_front(ceph_conf_level_name(j->first) +
                                 string("[") + j->second + string("]"));
 
-		}
-	      }
-	      tbl << ov;
-	    } else {
-	      tbl << "";
-	    }
-	    tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
-	    tbl << TextTable::endrow;
-	  }
-	}
+                }
+              }
+              tbl << ov;
+            } else {
+              tbl << "";
+            }
+            tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
+            tbl << TextTable::endrow;
+          }
+        }
       } else {
-	// show-with-defaults
-	auto& defaults = daemon->_get_config_defaults();
-	for (auto& i : defaults) {
-	  if (f) {
-	    f->open_object_section("value");
-	    f->dump_string("name", i.first);
-	  } else {
-	    tbl << i.first;
-	  }
-	  auto j = daemon->config.find(i.first);
-	  if (j != daemon->config.end() && !j->second.empty()) {
-	    // have config
-	    if (f) {
-	      f->dump_string("value", j->second.rbegin()->second);
-	      f->dump_string("source", ceph_conf_level_name(
-			       j->second.rbegin()->first));
-	      if (j->second.size() > 1) {
-		f->open_array_section("overrides");
-		auto k = j->second.rend();
-		for (--k; k != j->second.rbegin(); --k) {
-		  f->open_object_section("value");
-		  f->dump_string("source", ceph_conf_level_name(k->first));
-		  f->dump_string("value", k->second);
-		  f->close_section();
-		}
-		f->close_section();
-	      }
-	      if (daemon->ignored_mon_config.count(i.first)) {
-		f->dump_string("ignores", "mon");
-	      }
-	      f->close_section();
-	    } else {
-	      tbl << j->second.rbegin()->second;
-	      tbl << ceph_conf_level_name(j->second.rbegin()->first);
-	      if (j->second.size() > 1) {
-		list<string> ov;
-		auto k = j->second.rend();
-		for (--k; k != j->second.rbegin(); --k) {
-		  if (k->second == j->second.rbegin()->second) {
-		    ov.push_front(string("(") + ceph_conf_level_name(k->first) +
-				  string("[") + k->second + string("]") +
-				  string(")"));
-		  } else {
+        // show-with-defaults
+        auto& defaults = daemon->_get_config_defaults();
+        for (auto& i : defaults) {
+          if (f) {
+            f->open_object_section("value");
+            f->dump_string("name", i.first);
+          } else {
+            tbl << i.first;
+          }
+          auto j = daemon->config.find(i.first);
+          if (j != daemon->config.end() && !j->second.empty()) {
+            // have config
+            if (f) {
+              f->dump_string("value", j->second.rbegin()->second);
+              f->dump_string("source", ceph_conf_level_name(
+                               j->second.rbegin()->first));
+              if (j->second.size() > 1) {
+                f->open_array_section("overrides");
+                auto k = j->second.rend();
+                for (--k; k != j->second.rbegin(); --k) {
+                  f->open_object_section("value");
+                  f->dump_string("source", ceph_conf_level_name(k->first));
+                  f->dump_string("value", k->second);
+                  f->close_section();
+                }
+                f->close_section();
+              }
+              if (daemon->ignored_mon_config.count(i.first)) {
+                f->dump_string("ignores", "mon");
+              }
+              f->close_section();
+            } else {
+              tbl << j->second.rbegin()->second;
+              tbl << ceph_conf_level_name(j->second.rbegin()->first);
+              if (j->second.size() > 1) {
+                list<string> ov;
+                auto k = j->second.rend();
+                for (--k; k != j->second.rbegin(); --k) {
+                  if (k->second == j->second.rbegin()->second) {
+                    ov.push_front(string("(") + ceph_conf_level_name(k->first) +
+                                  string("[") + k->second + string("]") +
+                                  string(")"));
+                  } else {
                     ov.push_front(ceph_conf_level_name(k->first) +
                                   string("[") + k->second + string("]"));
-		  }
-		}
-		tbl << ov;
-	      } else {
-		tbl << "";
-	      }
-	      tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
-	      tbl << TextTable::endrow;
-	    }
-	  } else {
-	    // only have default
-	    if (f) {
-	      f->dump_string("value", i.second);
-	      f->dump_string("source", ceph_conf_level_name(CONF_DEFAULT));
-	      f->close_section();
-	    } else {
-	      tbl << i.second;
-	      tbl << ceph_conf_level_name(CONF_DEFAULT);
-	      tbl << "";
-	      tbl << "";
-	      tbl << TextTable::endrow;
-	    }
-	  }
-	}
+                  }
+                }
+                tbl << ov;
+              } else {
+                tbl << "";
+              }
+              tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
+              tbl << TextTable::endrow;
+            }
+          } else {
+            // only have default
+            if (f) {
+              f->dump_string("value", i.second);
+              f->dump_string("source", ceph_conf_level_name(CONF_DEFAULT));
+              f->close_section();
+            } else {
+              tbl << i.second;
+              tbl << ceph_conf_level_name(CONF_DEFAULT);
+              tbl << "";
+              tbl << "";
+              tbl << TextTable::endrow;
+            }
+          }
+        }
       }
       if (f) {
-	f->close_section();
-	f->flush(cmdctx->odata);
+        f->close_section();
+        f->flush(cmdctx->odata);
       } else {
-	cmdctx->odata.append(stringify(tbl));
+        cmdctx->odata.append(stringify(tbl));
       }
     }
     cmdctx->reply(r, ss);
@@ -2028,8 +2028,8 @@ bool DaemonServer::_handle_command(
     if (f) {
       f->open_array_section("devices");
       daemon_state.with_devices([&f](const DeviceState& dev) {
-	  f->dump_object("device", dev);
-	});
+          f->dump_object("device", dev);
+        });
       f->close_section();
       f->flush(cmdctx->odata);
     } else {
@@ -2039,26 +2039,26 @@ bool DaemonServer::_handle_command(
       tbl.define_column("LIFE EXPECTANCY", TextTable::LEFT, TextTable::LEFT);
       auto now = ceph_clock_now();
       daemon_state.with_devices([&tbl, now](const DeviceState& dev) {
-	  string h;
-	  for (auto& i : dev.attachments) {
-	    if (h.size()) {
-	      h += " ";
-	    }
-	    h += std::get<0>(i) + ":" + std::get<1>(i);
-	  }
-	  string d;
-	  for (auto& i : dev.daemons) {
-	    if (d.size()) {
-	      d += " ";
-	    }
-	    d += to_string(i);
-	  }
-	  tbl << dev.devid
-	      << h
-	      << d
-	      << dev.get_life_expectancy_str(now)
-	      << TextTable::endrow;
-	});
+          string h;
+          for (auto& i : dev.attachments) {
+            if (h.size()) {
+              h += " ";
+            }
+            h += std::get<0>(i) + ":" + std::get<1>(i);
+          }
+          string d;
+          for (auto& i : dev.daemons) {
+            if (d.size()) {
+              d += " ";
+            }
+            d += to_string(i);
+          }
+          tbl << dev.devid
+              << h
+              << d
+              << dev.get_life_expectancy_str(now)
+              << TextTable::endrow;
+        });
       cmdctx->odata.append(stringify(tbl));
     }
     cmdctx->reply(0, ss);
@@ -2072,43 +2072,43 @@ bool DaemonServer::_handle_command(
     } else {
       auto dm = daemon_state.get(k);
       if (dm) {
-	if (f) {
-	  f->open_array_section("devices");
-	  for (auto& i : dm->devices) {
-	    daemon_state.with_device(i.first, [&f] (const DeviceState& dev) {
-		f->dump_object("device", dev);
-	      });
-	  }
-	  f->close_section();
-	  f->flush(cmdctx->odata);
-	} else {
-	  TextTable tbl;
-	  tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
-	  tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
-	  tbl.define_column("EXPECTED FAILURE", TextTable::LEFT,
-			    TextTable::LEFT);
-	  auto now = ceph_clock_now();
-	  for (auto& i : dm->devices) {
-	    daemon_state.with_device(
-	      i.first, [&tbl, now] (const DeviceState& dev) {
-		string h;
-		for (auto& i : dev.attachments) {
-		  if (h.size()) {
-		    h += " ";
-		  }
-		  h += std::get<0>(i) + ":" + std::get<1>(i);
-		}
-		tbl << dev.devid
-		    << h
-		    << dev.get_life_expectancy_str(now)
-		    << TextTable::endrow;
-	      });
-	  }
-	  cmdctx->odata.append(stringify(tbl));
-	}
+        if (f) {
+          f->open_array_section("devices");
+          for (auto& i : dm->devices) {
+            daemon_state.with_device(i.first, [&f] (const DeviceState& dev) {
+                f->dump_object("device", dev);
+              });
+          }
+          f->close_section();
+          f->flush(cmdctx->odata);
+        } else {
+          TextTable tbl;
+          tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+          tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
+          tbl.define_column("EXPECTED FAILURE", TextTable::LEFT,
+                            TextTable::LEFT);
+          auto now = ceph_clock_now();
+          for (auto& i : dm->devices) {
+            daemon_state.with_device(
+              i.first, [&tbl, now] (const DeviceState& dev) {
+                string h;
+                for (auto& i : dev.attachments) {
+                  if (h.size()) {
+                    h += " ";
+                  }
+                  h += std::get<0>(i) + ":" + std::get<1>(i);
+                }
+                tbl << dev.devid
+                    << h
+                    << dev.get_life_expectancy_str(now)
+                    << TextTable::endrow;
+              });
+          }
+          cmdctx->odata.append(stringify(tbl));
+        }
       } else {
-	r = -ENOENT;
-	ss << "daemon " << who << " not found";
+        r = -ENOENT;
+        ss << "daemon " << who << " not found";
       }
       cmdctx->reply(r, ss);
     }
@@ -2120,10 +2120,10 @@ bool DaemonServer::_handle_command(
     if (f) {
       f->open_array_section("devices");
       for (auto& devid : devids) {
-	daemon_state.with_device(
-	  devid, [&f] (const DeviceState& dev) {
-	    f->dump_object("device", dev);
-	  });
+        daemon_state.with_device(
+          devid, [&f] (const DeviceState& dev) {
+            f->dump_object("device", dev);
+          });
       }
       f->close_section();
       f->flush(cmdctx->odata);
@@ -2135,30 +2135,30 @@ bool DaemonServer::_handle_command(
       tbl.define_column("EXPECTED FAILURE", TextTable::LEFT, TextTable::LEFT);
       auto now = ceph_clock_now();
       for (auto& devid : devids) {
-	daemon_state.with_device(
-	  devid, [&tbl, &host, now] (const DeviceState& dev) {
-	    string n;
-	    for (auto& j : dev.attachments) {
-	      if (std::get<0>(j) == host) {
-		if (n.size()) {
-		  n += " ";
-		}
-		n += std::get<1>(j);
-	      }
-	    }
-	    string d;
-	    for (auto& i : dev.daemons) {
-	      if (d.size()) {
-		d += " ";
-	      }
-	      d += to_string(i);
-	    }
-	    tbl << dev.devid
-		<< n
-		<< d
-		<< dev.get_life_expectancy_str(now)
-		<< TextTable::endrow;
-	  });
+        daemon_state.with_device(
+          devid, [&tbl, &host, now] (const DeviceState& dev) {
+            string n;
+            for (auto& j : dev.attachments) {
+              if (std::get<0>(j) == host) {
+                if (n.size()) {
+                  n += " ";
+                }
+                n += std::get<1>(j);
+              }
+            }
+            string d;
+            for (auto& i : dev.daemons) {
+              if (d.size()) {
+                d += " ";
+              }
+              d += to_string(i);
+            }
+            tbl << dev.devid
+                << n
+                << d
+                << dev.get_life_expectancy_str(now)
+                << TextTable::endrow;
+          });
       }
       cmdctx->odata.append(stringify(tbl));
     }
@@ -2170,20 +2170,20 @@ bool DaemonServer::_handle_command(
     int r = 0;
     ostringstream rs;
     if (!daemon_state.with_device(devid,
-				  [&f, &rs] (const DeviceState& dev) {
-	  if (f) {
-	    f->dump_object("device", dev);
-	  } else {
-	    dev.print(rs);
-	  }
-	})) {
+                                  [&f, &rs] (const DeviceState& dev) {
+          if (f) {
+            f->dump_object("device", dev);
+          } else {
+            dev.print(rs);
+          }
+        })) {
       ss << "device " << devid << " not found";
       r = -ENOENT;
     } else {
       if (f) {
-	f->flush(cmdctx->odata);
+        f->flush(cmdctx->odata);
       } else {
-	cmdctx->odata.append(rs.str());
+        cmdctx->odata.append(rs.str());
       }
     }
     cmdctx->reply(r, ss);
@@ -2206,22 +2206,22 @@ bool DaemonServer::_handle_command(
     } else {
       map<string,string> meta;
       daemon_state.with_device_create(
-	devid,
-	[from, to, &meta] (DeviceState& dev) {
-	  dev.set_life_expectancy(from, to, ceph_clock_now());
-	  meta = dev.metadata;
-	});
+        devid,
+        [from, to, &meta] (DeviceState& dev) {
+          dev.set_life_expectancy(from, to, ceph_clock_now());
+          meta = dev.metadata;
+        });
       json_spirit::Object json_object;
       for (auto& i : meta) {
-	json_spirit::Config::add(json_object, i.first, i.second);
+        json_spirit::Config::add(json_object, i.first, i.second);
       }
       bufferlist json;
       json.append(json_spirit::write(json_object));
       const string cmd =
-	"{"
-	"\"prefix\": \"config-key set\", "
-	"\"key\": \"device/" + devid + "\""
-	"}";
+        "{"
+        "\"prefix\": \"config-key set\", "
+        "\"key\": \"device/" + devid + "\""
+        "}";
       auto on_finish = new ReplyOnFinish(cmdctx);
       monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
     }
@@ -2231,28 +2231,28 @@ bool DaemonServer::_handle_command(
     cmd_getval(cmdctx->cmdmap, "devid", devid);
     map<string,string> meta;
     if (daemon_state.with_device_write(devid, [&meta] (DeviceState& dev) {
-	  dev.rm_life_expectancy();
-	  meta = dev.metadata;
-	})) {
+          dev.rm_life_expectancy();
+          meta = dev.metadata;
+        })) {
       string cmd;
       bufferlist json;
       if (meta.empty()) {
-	cmd =
-	  "{"
-	  "\"prefix\": \"config-key rm\", "
-	  "\"key\": \"device/" + devid + "\""
-	  "}";
+        cmd =
+          "{"
+          "\"prefix\": \"config-key rm\", "
+          "\"key\": \"device/" + devid + "\""
+          "}";
       } else {
-	json_spirit::Object json_object;
-	for (auto& i : meta) {
-	  json_spirit::Config::add(json_object, i.first, i.second);
-	}
-	json.append(json_spirit::write(json_object));
-	cmd =
-	  "{"
-	  "\"prefix\": \"config-key set\", "
-	  "\"key\": \"device/" + devid + "\""
-	  "}";
+        json_spirit::Object json_object;
+        for (auto& i : meta) {
+          json_spirit::Config::add(json_object, i.first, i.second);
+        }
+        json.append(json_spirit::write(json_object));
+        cmd =
+          "{"
+          "\"prefix\": \"config-key set\", "
+          "\"key\": \"device/" + devid + "\""
+          "}";
       }
       auto on_finish = new ReplyOnFinish(cmdctx);
       monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
@@ -2271,8 +2271,8 @@ bool DaemonServer::_handle_command(
 
     // fall back to feeding command to PGMap
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
-	return process_pg_map_command(prefix, cmdctx->cmdmap, pg_map, osdmap,
-				      f.get(), &ss, &cmdctx->odata);
+        return process_pg_map_command(prefix, cmdctx->cmdmap, pg_map, osdmap,
+                                      f.get(), &ss, &cmdctx->odata);
       });
 
     if (f) {
@@ -2280,7 +2280,7 @@ bool DaemonServer::_handle_command(
     }
     if (r != -EOPNOTSUPP) {
       if (f) {
-	f->flush(cmdctx->odata);
+        f->flush(cmdctx->odata);
       }
       cmdctx->reply(r, ss);
       return true;
@@ -2385,18 +2385,18 @@ void DaemonServer::_prune_pending_service_map()
       auto daemon = daemon_state.get(key);
       std::lock_guard l(daemon->lock);
       if (daemon->last_service_beacon == utime_t()) {
-	// we must have just restarted; assume they are alive now.
-	daemon->last_service_beacon = ceph_clock_now();
-	++q;
-	continue;
+        // we must have just restarted; assume they are alive now.
+        daemon->last_service_beacon = ceph_clock_now();
+        ++q;
+        continue;
       }
       if (daemon->last_service_beacon < cutoff) {
-	dout(10) << "pruning stale " << p->first << "." << q->first
-		 << " last_beacon " << daemon->last_service_beacon << dendl;
-	q = p->second.daemons.erase(q);
-	pending_service_map_dirty = pending_service_map.epoch;
+        dout(10) << "pruning stale " << p->first << "." << q->first
+                 << " last_beacon " << daemon->last_service_beacon << dendl;
+        q = p->second.daemons.erase(q);
+        pending_service_map_dirty = pending_service_map.epoch;
       } else {
-	++q;
+        ++q;
       }
     }
     if (p->second.daemons.empty()) {
@@ -2431,36 +2431,36 @@ void DaemonServer::send_report()
       cluster_state.update_delta_stats();
 
       if (pending_service_map.epoch) {
-	_prune_pending_service_map();
-	if (pending_service_map_dirty >= pending_service_map.epoch) {
-	  pending_service_map.modified = ceph_clock_now();
-	  encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
-	  dout(10) << "sending service_map e" << pending_service_map.epoch
-		   << dendl;
-	  pending_service_map.epoch++;
-	}
+        _prune_pending_service_map();
+        if (pending_service_map_dirty >= pending_service_map.epoch) {
+          pending_service_map.modified = ceph_clock_now();
+          encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
+          dout(10) << "sending service_map e" << pending_service_map.epoch
+                   << dendl;
+          pending_service_map.epoch++;
+        }
       }
 
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	  // FIXME: no easy way to get mon features here.  this will do for
-	  // now, though, as long as we don't make a backward-incompat change.
-	  pg_map.encode_digest(osdmap, m->get_data(), CEPH_FEATURES_ALL);
-	  dout(10) << pg_map << dendl;
+          // FIXME: no easy way to get mon features here.  this will do for
+          // now, though, as long as we don't make a backward-incompat change.
+          pg_map.encode_digest(osdmap, m->get_data(), CEPH_FEATURES_ALL);
+          dout(10) << pg_map << dendl;
 
-	  pg_map.get_health_checks(g_ceph_context, osdmap,
-				   &m->health_checks);
+          pg_map.get_health_checks(g_ceph_context, osdmap,
+                                   &m->health_checks);
 
-	  dout(10) << m->health_checks.checks.size() << " health checks"
-		   << dendl;
-	  dout(20) << "health checks:\n";
-	  JSONFormatter jf(true);
-	  jf.dump_object("health_checks", m->health_checks);
-	  jf.flush(*_dout);
-	  *_dout << dendl;
+          dout(10) << m->health_checks.checks.size() << " health checks"
+                   << dendl;
+          dout(20) << "health checks:\n";
+          JSONFormatter jf(true);
+          jf.dump_object("health_checks", m->health_checks);
+          jf.flush(*_dout);
+          *_dout << dendl;
           if (osdmap.require_osd_release >= ceph_release_t::luminous) {
               clog->debug() << "pgmap v" << pg_map.version << ": " << pg_map;
           }
-	});
+        });
     });
 
   map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
@@ -2474,13 +2474,13 @@ void DaemonServer::send_report()
           auto collector = DaemonHealthMetricCollector::create(metric.get_type());
           if (!collector) {
             derr << __func__ << " " << key
-		 << " sent me an unknown health metric: "
-		 << std::hex << static_cast<uint8_t>(metric.get_type())
-		 << std::dec << dendl;
+                 << " sent me an unknown health metric: "
+                 << std::hex << static_cast<uint8_t>(metric.get_type())
+                 << std::dec << dendl;
             continue;
           }
-	  dout(20) << " + " << state->key << " "
-		   << metric << dendl;
+          dout(20) << " + " << state->key << " "
+                   << metric << dendl;
           tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
               std::move(collector));
         }
@@ -2510,18 +2510,18 @@ void DaemonServer::adjust_pgs()
   cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
       unsigned creating_or_unknown = 0;
       for (auto& i : pg_map.num_pg_by_state) {
-	if ((i.first & (PG_STATE_CREATING)) ||
-	    i.first == 0) {
-	  creating_or_unknown += i.second;
-	}
+        if ((i.first & (PG_STATE_CREATING)) ||
+            i.first == 0) {
+          creating_or_unknown += i.second;
+        }
       }
       unsigned left = max;
       if (creating_or_unknown >= max) {
-	return;
+        return;
       }
       left -= creating_or_unknown;
       dout(10) << "creating_or_unknown " << creating_or_unknown
-	       << " max_creating " << max
+               << " max_creating " << max
                << " left " << left
                << dendl;
 
@@ -2531,52 +2531,52 @@ void DaemonServer::adjust_pgs()
       double misplaced_ratio, degraded_ratio;
       double inactive_pgs_ratio, unknown_pgs_ratio;
       pg_map.get_recovery_stats(&misplaced_ratio, &degraded_ratio,
-				&inactive_pgs_ratio, &unknown_pgs_ratio);
+                                &inactive_pgs_ratio, &unknown_pgs_ratio);
       dout(20) << "misplaced_ratio " << misplaced_ratio
-	       << " degraded_ratio " << degraded_ratio
-	       << " inactive_pgs_ratio " << inactive_pgs_ratio
-	       << " unknown_pgs_ratio " << unknown_pgs_ratio
-	       << "; target_max_misplaced_ratio " << max_misplaced
-	       << dendl;
+               << " degraded_ratio " << degraded_ratio
+               << " inactive_pgs_ratio " << inactive_pgs_ratio
+               << " unknown_pgs_ratio " << unknown_pgs_ratio
+               << "; target_max_misplaced_ratio " << max_misplaced
+               << dendl;
 
       for (auto& i : osdmap.get_pools()) {
-	const pg_pool_t& p = i.second;
+        const pg_pool_t& p = i.second;
 
-	// adjust pg_num?
-	if (p.get_pg_num_target() != p.get_pg_num()) {
-	  dout(20) << "pool " << i.first
-		   << " pg_num " << p.get_pg_num()
-		   << " target " << p.get_pg_num_target()
-		   << dendl;
-	  if (p.has_flag(pg_pool_t::FLAG_CREATING)) {
-	    dout(10) << "pool " << i.first
-		     << " pg_num_target " << p.get_pg_num_target()
-		     << " pg_num " << p.get_pg_num()
-		     << " - still creating initial pgs"
-		     << dendl;
-	  } else if (p.get_pg_num_target() < p.get_pg_num()) {
-	    // pg_num decrease (merge)
-	    pg_t merge_source(p.get_pg_num() - 1, i.first);
-	    pg_t merge_target = merge_source.get_parent();
-	    bool ok = true;
+        // adjust pg_num?
+        if (p.get_pg_num_target() != p.get_pg_num()) {
+          dout(20) << "pool " << i.first
+                   << " pg_num " << p.get_pg_num()
+                   << " target " << p.get_pg_num_target()
+                   << dendl;
+          if (p.has_flag(pg_pool_t::FLAG_CREATING)) {
+            dout(10) << "pool " << i.first
+                     << " pg_num_target " << p.get_pg_num_target()
+                     << " pg_num " << p.get_pg_num()
+                     << " - still creating initial pgs"
+                     << dendl;
+          } else if (p.get_pg_num_target() < p.get_pg_num()) {
+            // pg_num decrease (merge)
+            pg_t merge_source(p.get_pg_num() - 1, i.first);
+            pg_t merge_target = merge_source.get_parent();
+            bool ok = true;
 
-	    if (p.get_pg_num() != p.get_pg_num_pending()) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - decrease and pg_num_pending != pg_num, waiting"
-		       << dendl;
-	      ok = false;
-	    } else if (p.get_pg_num() == p.get_pgp_num()) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - decrease blocked by pgp_num "
-		       << p.get_pgp_num()
-		       << dendl;
-	      ok = false;
-	    }
-	    vector<int32_t> source_acting;
+            if (p.get_pg_num() != p.get_pg_num_pending()) {
+              dout(10) << "pool " << i.first
+                       << " pg_num_target " << p.get_pg_num_target()
+                       << " pg_num " << p.get_pg_num()
+                       << " - decrease and pg_num_pending != pg_num, waiting"
+                       << dendl;
+              ok = false;
+            } else if (p.get_pg_num() == p.get_pgp_num()) {
+              dout(10) << "pool " << i.first
+                       << " pg_num_target " << p.get_pg_num_target()
+                       << " pg_num " << p.get_pg_num()
+                       << " - decrease blocked by pgp_num "
+                       << p.get_pgp_num()
+                       << dendl;
+              ok = false;
+            }
+            vector<int32_t> source_acting;
             for (auto &merge_participant : {merge_source, merge_target}) {
               bool is_merge_source = merge_participant == merge_source;
               if (osdmap.have_pg_upmaps(merge_participant)) {
@@ -2591,133 +2591,133 @@ void DaemonServer::adjust_pgs()
               }
               auto q = pg_map.pg_stat.find(merge_participant);
               if (q == pg_map.pg_stat.end()) {
-	        dout(10) << "pool " << i.first
-		         << " pg_num_target " << p.get_pg_num_target()
-		         << " pg_num " << p.get_pg_num()
-		         << " - no state for " << merge_participant
-		         << (is_merge_source ? " (merge source)" : " (merge target)")
-		         << dendl;
-	        ok = false;
-	      } else if ((q->second.state & (PG_STATE_ACTIVE | PG_STATE_CLEAN)) !=
+                dout(10) << "pool " << i.first
+                         << " pg_num_target " << p.get_pg_num_target()
+                         << " pg_num " << p.get_pg_num()
+                         << " - no state for " << merge_participant
+                         << (is_merge_source ? " (merge source)" : " (merge target)")
+                         << dendl;
+                ok = false;
+              } else if ((q->second.state & (PG_STATE_ACTIVE | PG_STATE_CLEAN)) !=
                                             (PG_STATE_ACTIVE | PG_STATE_CLEAN)) {
-	        dout(10) << "pool " << i.first
-		         << " pg_num_target " << p.get_pg_num_target()
-		         << " pg_num " << p.get_pg_num()
-		         << (is_merge_source ? " - merge source " : " - merge target ")
+                dout(10) << "pool " << i.first
+                         << " pg_num_target " << p.get_pg_num_target()
+                         << " pg_num " << p.get_pg_num()
+                         << (is_merge_source ? " - merge source " : " - merge target ")
                          << merge_participant
-		         << " not clean (" << pg_state_string(q->second.state)
-		         << ")" << dendl;
-	        ok = false;
-	      }
-	      if (is_merge_source) {
-		source_acting = q->second.acting;
-	      } else if (ok && q->second.acting != source_acting) {
-		dout(10) << "pool " << i.first
-		         << " pg_num_target " << p.get_pg_num_target()
-		         << " pg_num " << p.get_pg_num()
-		         << (is_merge_source ? " - merge source " : " - merge target ")
+                         << " not clean (" << pg_state_string(q->second.state)
+                         << ")" << dendl;
+                ok = false;
+              }
+              if (is_merge_source) {
+                source_acting = q->second.acting;
+              } else if (ok && q->second.acting != source_acting) {
+                dout(10) << "pool " << i.first
+                         << " pg_num_target " << p.get_pg_num_target()
+                         << " pg_num " << p.get_pg_num()
+                         << (is_merge_source ? " - merge source " : " - merge target ")
                          << merge_participant
-			 << " acting does not match (source " << source_acting
-			 << " != target " << q->second.acting
-			 << ")" << dendl;
-		ok = false;
-	      }
+                         << " acting does not match (source " << source_acting
+                         << " != target " << q->second.acting
+                         << ")" << dendl;
+                ok = false;
+              }
             }
 
-	    if (ok) {
-	      unsigned target = p.get_pg_num() - 1;
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " -> " << target
-		       << " (merging " << merge_source
-		       << " and " << merge_target
-		       << ")" << dendl;
-	      pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
+            if (ok) {
+              unsigned target = p.get_pg_num() - 1;
+              dout(10) << "pool " << i.first
+                       << " pg_num_target " << p.get_pg_num_target()
+                       << " pg_num " << p.get_pg_num()
+                       << " -> " << target
+                       << " (merging " << merge_source
+                       << " and " << merge_target
+                       << ")" << dendl;
+              pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
               continue;
-	    }
-	  } else if (p.get_pg_num_target() > p.get_pg_num()) {
-	    // pg_num increase (split)
-	    bool active = true;
-	    auto q = pg_map.num_pg_by_pool_state.find(i.first);
-	    if (q != pg_map.num_pg_by_pool_state.end()) {
-	      for (auto& j : q->second) {
-		if ((j.first & (PG_STATE_ACTIVE|PG_STATE_PEERED)) == 0) {
-		  dout(20) << "pool " << i.first << " has " << j.second
-			   << " pgs in " << pg_state_string(j.first)
-			   << dendl;
-		  active = false;
-		  break;
-		}
-	      }
-	    } else {
-	      active = false;
-	    }
-	    if (!active) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - not all pgs active"
-		       << dendl;
-	    } else {
-	      unsigned add = std::min(
-		left,
-		p.get_pg_num_target() - p.get_pg_num());
-	      unsigned target = p.get_pg_num() + add;
-	      left -= add;
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " -> " << target << dendl;
-	      pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
-	    }
-	  }
-	}
+            }
+          } else if (p.get_pg_num_target() > p.get_pg_num()) {
+            // pg_num increase (split)
+            bool active = true;
+            auto q = pg_map.num_pg_by_pool_state.find(i.first);
+            if (q != pg_map.num_pg_by_pool_state.end()) {
+              for (auto& j : q->second) {
+                if ((j.first & (PG_STATE_ACTIVE|PG_STATE_PEERED)) == 0) {
+                  dout(20) << "pool " << i.first << " has " << j.second
+                           << " pgs in " << pg_state_string(j.first)
+                           << dendl;
+                  active = false;
+                  break;
+                }
+              }
+            } else {
+              active = false;
+            }
+            if (!active) {
+              dout(10) << "pool " << i.first
+                       << " pg_num_target " << p.get_pg_num_target()
+                       << " pg_num " << p.get_pg_num()
+                       << " - not all pgs active"
+                       << dendl;
+            } else {
+              unsigned add = std::min(
+                left,
+                p.get_pg_num_target() - p.get_pg_num());
+              unsigned target = p.get_pg_num() + add;
+              left -= add;
+              dout(10) << "pool " << i.first
+                       << " pg_num_target " << p.get_pg_num_target()
+                       << " pg_num " << p.get_pg_num()
+                       << " -> " << target << dendl;
+              pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
+            }
+          }
+        }
 
-	// adjust pgp_num?
-	unsigned target = std::min(p.get_pg_num_pending(),
-				   p.get_pgp_num_target());
-	if (target != p.get_pgp_num()) {
-	  dout(20) << "pool " << i.first
-		   << " pgp_num_target " << p.get_pgp_num_target()
-		   << " pgp_num " << p.get_pgp_num()
-		   << " -> " << target << dendl;
-	  if (target > p.get_pgp_num() &&
-	      p.get_pgp_num() == p.get_pg_num()) {
-	    dout(10) << "pool " << i.first
-		     << " pgp_num_target " << p.get_pgp_num_target()
-		     << " pgp_num " << p.get_pgp_num()
-		     << " - increase blocked by pg_num " << p.get_pg_num()
-		     << dendl;
-	  } else if (!aggro && (inactive_pgs_ratio > 0 ||
-				degraded_ratio > 0 ||
-				unknown_pgs_ratio > 0)) {
-	    dout(10) << "pool " << i.first
-		     << " pgp_num_target " << p.get_pgp_num_target()
-		     << " pgp_num " << p.get_pgp_num()
-		     << " - inactive|degraded|unknown pgs, deferring pgp_num"
-		     << " update" << dendl;
-	  } else if (!aggro && (misplaced_ratio > max_misplaced)) {
-	    dout(10) << "pool " << i.first
-		     << " pgp_num_target " << p.get_pgp_num_target()
-		     << " pgp_num " << p.get_pgp_num()
-		     << " - misplaced_ratio " << misplaced_ratio
-		     << " > max " << max_misplaced
-		     << ", deferring pgp_num update" << dendl;
-	  } else {
-	    // NOTE: this calculation assumes objects are
-	    // basically uniformly distributed across all PGs
-	    // (regardless of pool), which is probably not
-	    // perfectly correct, but it's a start.  make no
-	    // single adjustment that's more than half of the
-	    // max_misplaced, to somewhat limit the magnitude of
-	    // our potential error here.
-	    int next;
-	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
-	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
-	    if (aggro ||
-		// pool is (virtually) empty; just jump to final pgp_num?
-		(p.get_pgp_num_target() > p.get_pgp_num() &&
+        // adjust pgp_num?
+        unsigned target = std::min(p.get_pg_num_pending(),
+                                   p.get_pgp_num_target());
+        if (target != p.get_pgp_num()) {
+          dout(20) << "pool " << i.first
+                   << " pgp_num_target " << p.get_pgp_num_target()
+                   << " pgp_num " << p.get_pgp_num()
+                   << " -> " << target << dendl;
+          if (target > p.get_pgp_num() &&
+              p.get_pgp_num() == p.get_pg_num()) {
+            dout(10) << "pool " << i.first
+                     << " pgp_num_target " << p.get_pgp_num_target()
+                     << " pgp_num " << p.get_pgp_num()
+                     << " - increase blocked by pg_num " << p.get_pg_num()
+                     << dendl;
+          } else if (!aggro && (inactive_pgs_ratio > 0 ||
+                                degraded_ratio > 0 ||
+                                unknown_pgs_ratio > 0)) {
+            dout(10) << "pool " << i.first
+                     << " pgp_num_target " << p.get_pgp_num_target()
+                     << " pgp_num " << p.get_pgp_num()
+                     << " - inactive|degraded|unknown pgs, deferring pgp_num"
+                     << " update" << dendl;
+          } else if (!aggro && (misplaced_ratio > max_misplaced)) {
+            dout(10) << "pool " << i.first
+                     << " pgp_num_target " << p.get_pgp_num_target()
+                     << " pgp_num " << p.get_pgp_num()
+                     << " - misplaced_ratio " << misplaced_ratio
+                     << " > max " << max_misplaced
+                     << ", deferring pgp_num update" << dendl;
+          } else {
+            // NOTE: this calculation assumes objects are
+            // basically uniformly distributed across all PGs
+            // (regardless of pool), which is probably not
+            // perfectly correct, but it's a start.  make no
+            // single adjustment that's more than half of the
+            // max_misplaced, to somewhat limit the magnitude of
+            // our potential error here.
+            int next;
+            static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
+            pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
+            if (aggro ||
+                // pool is (virtually) empty; just jump to final pgp_num?
+        	(p.get_pgp_num_target() > p.get_pgp_num() &&
 		 s.stats.sum.num_objects <= (MAX_NUM_OBJECTS_PER_PG_FOR_LEAP *
 					     p.get_pgp_num_target()))) {
 	      next = target;

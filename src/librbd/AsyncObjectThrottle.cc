@@ -33,7 +33,7 @@ void AsyncObjectThrottle<T>::start_ops(uint64_t max_concurrent) {
     for (uint64_t i = 0; i < max_concurrent; ++i) {
       start_next_op();
       if (m_ret < 0 && m_current_ops == 0) {
-	break;
+        break;
       }
     }
     complete = (m_current_ops == 0);

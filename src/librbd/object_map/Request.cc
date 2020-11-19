@@ -28,7 +28,7 @@ bool Request::should_complete(int r) {
       return true;
     } else if (r < 0) {
       lderr(cct) << "failed to update object map: " << cpp_strerror(r)
-		 << dendl;
+                 << dendl;
       return invalidate();
     }
 
@@ -39,7 +39,7 @@ bool Request::should_complete(int r) {
     ldout(cct, 20) << "INVALIDATE" << dendl;
     if (r < 0) {
       lderr(cct) << "failed to invalidate object map: " << cpp_strerror(r)
-		 << dendl;
+                 << dendl;
     }
     return true;
 

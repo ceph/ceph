@@ -420,7 +420,7 @@ void CreateRequest<I>::handle_negotiate_features(int r) {
   } else if ((m_features & all_features) != m_features) {
     m_features &= all_features;
     ldout(m_cct, 10) << "limiting default features set to server supported: "
-		     << m_features << dendl;
+                     << m_features << dendl;
   }
 
   create_image();

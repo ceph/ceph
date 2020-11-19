@@ -20,15 +20,15 @@
 #include "perfglue/cpu_profiler.h"
 
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
-				 std::ostream& out)
+                                 std::ostream& out)
 {
   if (cmd[1] == "status") {
     ProfilerState st;
     ProfilerGetCurrentState(&st);
     out << "cpu_profiler " << (st.enabled ? "enabled":"not enabled")
-	<< " start_time " << st.start_time
-	<< " profile_name " << st.profile_name
-	<< " samples " << st.samples_gathered;
+        << " start_time " << st.start_time
+        << " profile_name " << st.profile_name
+        << " samples " << st.samples_gathered;
   }
   else if (cmd[1] == "flush") {
     ProfilerFlush();
@@ -36,6 +36,6 @@ void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
   }
   else {
     out << "cpu_profiler: unrecognized command " << cmd
-	<< "; expected one of status, flush.";
+        << "; expected one of status, flush.";
   }
 }

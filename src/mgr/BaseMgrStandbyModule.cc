@@ -84,12 +84,12 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
   PyEval_RestoreThread(tstate);
   if (found) {
     dout(10) << __func__ << " " << final_key << " found: " << value
-	     << dendl;
+             << dendl;
     return self->this_module->py_module->get_typed_option_value(what, value);
   } else {
     if (prefix) {
       dout(4) << __func__ << " [" << prefix << "/]" << what << " not found "
-	      << dendl;
+              << dendl;
     } else {
       dout(4) << __func__ << " " << what << " not found " << dendl;
     }

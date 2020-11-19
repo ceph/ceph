@@ -30,9 +30,9 @@ std::ostream& operator<<(std::ostream& os,
 
 template <typename I>
 SnapshotRenameRequest<I>::SnapshotRenameRequest(I &image_ctx,
-						Context *on_finish,
-						uint64_t snap_id,
-						const std::string &snap_name)
+                                                Context *on_finish,
+                                                uint64_t snap_id,
+                                                const std::string &snap_name)
   : Request<I>(image_ctx, on_finish), m_snap_id(snap_id),
     m_snap_name(snap_name), m_state(STATE_RENAME_SNAP) {
 }

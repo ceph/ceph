@@ -91,7 +91,7 @@ struct C_IsTagOwner : public Context {
 
   void finish(int r) override {
     ldout(cct, 20) << this << " C_IsTagOwner::" << __func__ << ": r=" << r
-		   << dendl;
+                   << dendl;
     if (r < 0) {
       lderr(cct) << this << " C_IsTagOwner::" << __func__ << ": "
                  << "failed to get tag owner: " << cpp_strerror(r) << dendl;
@@ -103,8 +103,8 @@ struct C_IsTagOwner : public Context {
     Context *on_finish = this->on_finish;
     auto ctx = new LambdaContext(
       [journaler, on_finish](int r) {
-	on_finish->complete(r);
-	delete journaler;
+        on_finish->complete(r);
+        delete journaler;
       });
     op_work_queue->queue(ctx, r);
   }
@@ -460,8 +460,8 @@ void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
   C_IsTagOwner<I> *is_tag_owner_ctx =  new C_IsTagOwner<I>(
     io_ctx, image_id, is_tag_owner, op_work_queue, on_finish);
   get_tags(cct, is_tag_owner_ctx->journaler, &is_tag_owner_ctx->client,
-	   &is_tag_owner_ctx->client_meta, &is_tag_owner_ctx->tag_tid,
-	   &is_tag_owner_ctx->tag_data, is_tag_owner_ctx);
+           &is_tag_owner_ctx->client_meta, &is_tag_owner_ctx->tag_tid,
+           &is_tag_owner_ctx->tag_data, is_tag_owner_ctx);
 }
 
 template <typename I>
@@ -1123,8 +1123,8 @@ void Journal<I>::create_journaler() {
   settings.ignored_laggy_clients = {IMAGE_CLIENT_ID};
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
-			      m_image_ctx.md_ctx, m_image_ctx.id,
-			      IMAGE_CLIENT_ID, settings, nullptr);
+                              m_image_ctx.md_ctx, m_image_ctx.id,
+                              IMAGE_CLIENT_ID, settings, nullptr);
   m_journaler->add_listener(&m_metadata_listener);
 
   Context *ctx = create_async_context_callback(
@@ -1326,7 +1326,7 @@ void Journal<I>::handle_replay_complete(int r) {
 
       State state;
       {
-	std::lock_guard locker{m_lock};
+        std::lock_guard locker{m_lock};
         ceph_assert(m_state == STATE_FLUSHING_RESTART ||
                     m_state == STATE_FLUSHING_REPLAY);
         state = m_state;
@@ -1403,7 +1403,7 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
           ldout(cct, 20) << this << " handle_replay_process_safe: "
                          << "shut down replay" << dendl;
           {
-	    std::lock_guard locker{m_lock};
+            std::lock_guard locker{m_lock};
             ceph_assert(m_state == STATE_FLUSHING_RESTART);
           }
 

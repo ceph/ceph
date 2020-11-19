@@ -31,7 +31,7 @@ struct ETableServer : public LogEvent {
   version_t version;
 
   ETableServer() : LogEvent(EVENT_TABLESERVER), table(0), op(0),
-		   reqid(0), bymds(MDS_RANK_NONE), tid(0), version(0) { }
+                   reqid(0), bymds(MDS_RANK_NONE), tid(0), version(0) { }
   ETableServer(int t, int o, uint64_t ri, mds_rank_t m, version_t ti, version_t v) :
     LogEvent(EVENT_TABLESERVER),
     table(t), op(o), reqid(ri), bymds(m), tid(ti), version(v) { }
@@ -43,7 +43,7 @@ struct ETableServer : public LogEvent {
 
   void print(ostream& out) const override {
     out << "ETableServer " << get_mdstable_name(table) 
-	<< " " << get_mdstableserver_opname(op);
+        << " " << get_mdstableserver_opname(op);
     if (reqid) out << " reqid " << reqid;
     if (bymds >= 0) out << " mds." << bymds;
     if (tid) out << " tid " << tid;

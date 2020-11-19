@@ -104,7 +104,7 @@ public:
   void mark_dirty() { 
     if (!is_dirty()) {
       if (!is_flushing())
-	parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);
+        parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);
       set_dirty();
     }
   }
@@ -119,8 +119,8 @@ public:
       clear_flushing();
       set_flushed();
       if (!is_dirty()) {
-	parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
-	parent->clear_dirty_scattered(get_type());
+        parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
+        parent->clear_dirty_scattered(get_type());
       }
     }
   }
@@ -135,8 +135,8 @@ public:
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
     if (rstate == LOCK_MIX || 
-	rstate == LOCK_MIX_LOCK || // replica still has wrlocks?
-	rstate == LOCK_MIX_SYNC)
+        rstate == LOCK_MIX_LOCK || // replica still has wrlocks?
+        rstate == LOCK_MIX_SYNC)
       state = LOCK_MIX;
     else if (locktoo && rstate == LOCK_LOCK)
       state = LOCK_LOCK;
@@ -147,9 +147,9 @@ public:
     if (is_gathering(rep)) {
       // the recovering mds may hold rejoined wrlocks
       if (state == LOCK_MIX_SYNC)
-	s = LOCK_MIX_SYNC;
+        s = LOCK_MIX_SYNC;
       else
-	s = LOCK_MIX_LOCK;
+        s = LOCK_MIX_LOCK;
     }
 
     // If there is a recovering mds who replcated an object when it failed
@@ -181,11 +181,11 @@ public:
 
   bool remove_replica(int from, bool rejoin) {
     if (rejoin &&
-	(state == LOCK_MIX ||
-	 state == LOCK_MIX_SYNC ||
-	 state == LOCK_MIX_LOCK2 ||
-	 state == LOCK_MIX_TSYN ||
-	 state == LOCK_MIX_EXCL))
+        (state == LOCK_MIX ||
+         state == LOCK_MIX_SYNC ||
+         state == LOCK_MIX_LOCK2 ||
+         state == LOCK_MIX_TSYN ||
+         state == LOCK_MIX_EXCL))
       return false;
     return SimpleLock::remove_replica(from);
   }

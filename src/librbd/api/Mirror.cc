@@ -1845,7 +1845,7 @@ int Mirror<I>::image_global_status_list(
   map<std::string, cls::rbd::MirrorImageStatus> statuses_;
 
   r = librbd::cls_client::mirror_image_status_list(&io_ctx, start_id, max,
-      					           &images_, &statuses_);
+                                                         &images_, &statuses_);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to list mirror image statuses: "
                << cpp_strerror(r) << dendl;
@@ -1863,7 +1863,7 @@ int Mirror<I>::image_global_status_list(
     auto &image_name = id_to_name[image_id];
     if (image_name.empty()) {
       lderr(cct) << "failed to find image name for image " << image_id << ", "
-      	         << "using image id as name" << dendl;
+                       << "using image id as name" << dendl;
       image_name = image_id;
     }
 

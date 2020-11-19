@@ -411,7 +411,7 @@ void ResizeRequest<I>::send_update_header() {
   librados::AioCompletion *rados_completion = create_rados_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_update_header>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
-    				       rados_completion, &op);
+                                           rados_completion, &op);
   ceph_assert(r == 0);
   rados_completion->release();
 }

@@ -101,12 +101,12 @@ static void get_profile_name(char *profile_name, int profile_name_len)
 
   if (last_slash == NULL) {
     snprintf(profile_name, profile_name_len, "./%s.profile",
-	     g_conf()->name.to_cstr());
+             g_conf()->name.to_cstr());
   }
   else {
     last_slash[1] = '\0';
     snprintf(profile_name, profile_name_len, "%s/%s.profile",
-	     path, g_conf()->name.to_cstr());
+             path, g_conf()->name.to_cstr());
   }
 #if __GNUC__ && __GNUC__ >= 8
 #pragma GCC diagnostic pop
@@ -119,7 +119,7 @@ void ceph_heap_profiler_start()
   char profile_name[PATH_MAX];
   get_profile_name(profile_name, sizeof(profile_name)); 
   generic_dout(0) << "turning on heap profiler with prefix "
-		  << profile_name << dendl;
+                  << profile_name << dendl;
   HeapProfilerStart(profile_name);
 #endif
 }
@@ -152,7 +152,7 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
     out << g_conf()->name << " dumping heap profile now.\n"
-	<< heap_stats;
+        << heap_stats;
     ceph_heap_profiler_dump("admin request");
   } else if (cmd.size() == 1 && cmd[0] == "start_profiler") {
     ceph_heap_profiler_start();
@@ -165,7 +165,7 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     out << g_conf()->name << " releasing free RAM back to system.";
   } else if (cmd.size() == 1 && cmd[0] == "get_release_rate") {
     out << g_conf()->name << " release rate: " 
-	<< std::setprecision(4) << ceph_heap_get_release_rate() << "\n";
+        << std::setprecision(4) << ceph_heap_get_release_rate() << "\n";
   } else if (cmd.size() == 2 && cmd[0] == "set_release_rate") {
     try {
       double val = std::stod(cmd[1]);
@@ -181,7 +181,7 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
     out << g_conf()->name << " tcmalloc heap stats:"
-	<< heap_stats;
+        << heap_stats;
   } else {
     out << "unknown command " << cmd;
   }

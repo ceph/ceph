@@ -25,13 +25,13 @@ static const std::map<std::string, uint64_t> RBD_FEATURE_MAP = {
   {RBD_FEATURE_NAME_DIRTY_CACHE, RBD_FEATURE_DIRTY_CACHE},
 };
 static_assert((RBD_FEATURE_DIRTY_CACHE << 1) > RBD_FEATURES_ALL,
-	      "new RBD feature added");
+              "new RBD feature added");
 
 
 namespace librbd {
 
 std::string rbd_features_to_string(uint64_t features,
-				   std::ostream *err)
+                                   std::ostream *err)
 {
   std::string r;
   for (auto& i : RBD_FEATURE_MAP) {
@@ -45,13 +45,13 @@ std::string rbd_features_to_string(uint64_t features,
   }
   if (err && features) {
     *err << "ignoring unknown feature mask 0x"
-	 << std::hex << features << std::dec;
+         << std::hex << features << std::dec;
   }
   return r;
 }
 
 uint64_t rbd_features_from_string(const std::string& orig_value,
-				  std::ostream *err)
+                                  std::ostream *err)
 {
   uint64_t features = 0;
   std::string value = orig_value;
@@ -71,7 +71,7 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
     if (unsupported_features != 0ull) {
       features &= RBD_FEATURES_ALL;
       if (err) {
-	*err << "ignoring unknown feature mask 0x"
+        *err << "ignoring unknown feature mask 0x"
              << std::hex << unsupported_features << std::dec;
       }
     }
@@ -82,7 +82,7 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
     if (ignored_features != 0ULL) {
       features &= ~ignore_features_mask;
       if (err) {
-	*err << "ignoring feature mask 0x" << std::hex << ignored_features;
+        *err << "ignoring feature mask 0x" << std::hex << ignored_features;
       }
     }
   } catch (boost::bad_lexical_cast&) {
@@ -94,14 +94,14 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
       boost::trim(feature_name);
       auto feature_it = RBD_FEATURE_MAP.find(feature_name);
       if (feature_it != RBD_FEATURE_MAP.end()) {
-	features += feature_it->second;
+        features += feature_it->second;
       } else if (err) {
-	if (errors) {
-	  *err << ", ";
-	} else {
-	  errors = true;
-	}
-	*err << "ignoring unknown feature " << feature_name;
+        if (errors) {
+          *err << ", ";
+        } else {
+          errors = true;
+        }
+        *err << "ignoring unknown feature " << feature_name;
       }
     }
   }

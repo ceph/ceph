@@ -24,7 +24,7 @@ PyObject *get_python_typed_option_value(
     }
   case Option::TYPE_BOOL:
     if (value == "1" || value == "true" || value == "True" ||
-	value == "on" || value == "yes") {
+        value == "on" || value == "yes") {
       Py_INCREF(Py_True);
       return Py_True;
     } else {

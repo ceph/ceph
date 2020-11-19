@@ -155,15 +155,15 @@ private:
 
 template <typename I>
 int DiffIterate<I>::diff_iterate(I *ictx,
-				 const cls::rbd::SnapshotNamespace& from_snap_namespace,
-				 const char *fromsnapname,
+                                 const cls::rbd::SnapshotNamespace& from_snap_namespace,
+                                 const char *fromsnapname,
                                  uint64_t off, uint64_t len,
                                  bool include_parent, bool whole_object,
                                  int (*cb)(uint64_t, size_t, int, void *),
                                  void *arg)
 {
   ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
-      		 << " len = " << len << dendl;
+                       << " len = " << len << dendl;
 
   if (!ictx->data_ctx.is_valid()) {
     return -ENODEV;
@@ -198,7 +198,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
   }
 
   DiffIterate command(*ictx, from_snap_namespace, fromsnapname, off, len,
-		      include_parent, whole_object, cb, arg);
+                      include_parent, whole_object, cb, arg);
   r = command.execute();
   return r;
 }

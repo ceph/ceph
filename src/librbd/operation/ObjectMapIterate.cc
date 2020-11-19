@@ -30,9 +30,9 @@ template <typename I>
 class C_VerifyObjectCallback : public C_AsyncObjectThrottle<I> {
 public:
   C_VerifyObjectCallback(AsyncObjectThrottle<I> &throttle, I *image_ctx,
-			 uint64_t snap_id, uint64_t object_no,
-			 ObjectIterateWork<I> handle_mismatch,
-			 std::atomic_flag *invalidate)
+                         uint64_t snap_id, uint64_t object_no,
+                         ObjectIterateWork<I> handle_mismatch,
+                         std::atomic_flag *invalidate)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx),
     m_snap_id(snap_id), m_object_no(object_no),
     m_oid(image_ctx->get_object_name(m_object_no)),
@@ -47,7 +47,7 @@ public:
     I &image_ctx = this->m_image_ctx;
     if (should_complete(r)) {
       ldout(image_ctx.cct, 20) << m_oid << " C_VerifyObjectCallback completed "
-			       << dendl;
+                               << dendl;
       m_io_ctx.close();
 
       this->finish(r);
@@ -84,7 +84,7 @@ private:
     }
 
     ldout(cct, 20) << m_oid << " C_VerifyObjectCallback::should_complete: "
-		   << " r="
+                   << " r="
                    << r << dendl;
     return object_map_action(get_object_state());
   }
@@ -93,7 +93,7 @@ private:
     I &image_ctx = this->m_image_ctx;
     ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
     ldout(image_ctx.cct, 5) << m_oid
-			    << " C_VerifyObjectCallback::send_list_snaps"
+                            << " C_VerifyObjectCallback::send_list_snaps"
                             << dendl;
 
     librados::ObjectReadOperation op;
@@ -161,9 +161,9 @@ private:
 
     uint8_t state = (*image_ctx.object_map)[m_object_no];
     ldout(cct, 10) << "C_VerifyObjectCallback::object_map_action"
-		   << " object " << image_ctx.get_object_name(m_object_no)
-		   << " state " << (int)state
-		   << " new_state " << (int)new_state << dendl;
+                   << " object " << image_ctx.get_object_name(m_object_no)
+                   << " state " << (int)state
+                   << " new_state " << (int)new_state << dendl;
 
     if (state != new_state) {
       int r = 0;
@@ -171,16 +171,16 @@ private:
       ceph_assert(m_handle_mismatch);
       r = m_handle_mismatch(image_ctx, m_object_no, state, new_state);
       if (r) {
-	lderr(cct) << "object map error: object "
-		   << image_ctx.get_object_name(m_object_no)
-		   << " marked as " << (int)state << ", but should be "
-		   << (int)new_state << dendl;
-	m_invalidate->test_and_set();
+        lderr(cct) << "object map error: object "
+                   << image_ctx.get_object_name(m_object_no)
+                   << " marked as " << (int)state << ", but should be "
+                   << (int)new_state << dendl;
+        m_invalidate->test_and_set();
       } else {
-	ldout(cct, 1) << "object map inconsistent: object "
-		   << image_ctx.get_object_name(m_object_no)
-		   << " marked as " << (int)state << ", but should be "
-		   << (int)new_state << dendl;
+        ldout(cct, 1) << "object map inconsistent: object "
+                   << image_ctx.get_object_name(m_object_no)
+                   << " marked as " << (int)state << ", but should be "
+                   << (int)new_state << dendl;
       }
     }
 
@@ -212,7 +212,7 @@ bool ObjectMapIterateRequest<I>::should_complete(int r) {
 
   if (r < 0) {
     lderr(cct) << "object map operation encountered an error: "
-	       << cpp_strerror(r) << dendl;
+               << cpp_strerror(r) << dendl;
   }
 
   std::shared_lock owner_lock{m_image_ctx.owner_lock};
@@ -263,8 +263,8 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
 
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_VerifyObjectCallback<I> >(),
-			boost::lambda::_1, &m_image_ctx, snap_id,
-			boost::lambda::_2, m_handle_mismatch, &m_invalidate));
+                        boost::lambda::_1, &m_image_ctx, snap_id,
+                        boost::lambda::_2, m_handle_mismatch, &m_invalidate));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, m_image_ctx, context_factory, this->create_callback_context(),
     &m_prog_ctx, 0, num_objects);
@@ -294,8 +294,8 @@ void ObjectMapIterateRequest<I>::send_invalidate_object_map() {
 
   object_map::InvalidateRequest<I>*req =
     object_map::InvalidateRequest<I>::create(m_image_ctx, m_image_ctx.snap_id,
-					     true,
-					     this->create_callback_context());
+                                             true,
+                                             this->create_callback_context());
 
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   std::unique_lock image_locker{m_image_ctx.image_lock};

@@ -68,7 +68,7 @@ CloneRequest<I>::CloneRequest(
 
   ldout(m_cct, 20) << "parent_pool_id=" << parent_io_ctx.get_id() << ", "
                    << "parent_image_id=" << parent_image_id << ", "
-		   << "parent_snap=" << parent_snap_name << "/"
+                   << "parent_snap=" << parent_snap_name << "/"
                    << parent_snap_id << " clone to "
                    << "pool_id=" << m_ioctx.get_id() << ", "
                    << "name=" << m_name << ", "
@@ -459,7 +459,7 @@ void CloneRequest<I>::get_mirror_mode() {
     create_rados_callback<klass, &klass::handle_get_mirror_mode>(this);
   m_out_bl.clear();
   m_imctx->md_ctx.aio_operate(RBD_MIRRORING,
-			      comp, &op, &m_out_bl);
+                              comp, &op, &m_out_bl);
   comp->release();
 }
 
@@ -561,7 +561,7 @@ void CloneRequest<I>::handle_remove_child(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "Error removing failed clone: "
-		 << cpp_strerror(r) << dendl;
+                 << cpp_strerror(r) << dendl;
   }
 
   close_parent();
@@ -585,7 +585,7 @@ void CloneRequest<I>::handle_close_parent(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "failed to close parent image: "
-		 << cpp_strerror(r) << dendl;
+                 << cpp_strerror(r) << dendl;
     if (m_r_saved == 0) {
       m_r_saved = r;
     }

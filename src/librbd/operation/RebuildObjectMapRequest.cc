@@ -152,7 +152,7 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
 
 template <typename I>
 bool update_object_map(I& image_ctx, uint64_t object_no, uint8_t current_state,
-		      uint8_t new_state) {
+                      uint8_t new_state) {
   CephContext *cct = image_ctx.cct;
   uint64_t snap_id = image_ctx.snap_id;
 
@@ -183,8 +183,8 @@ void RebuildObjectMapRequest<I>::send_verify_objects() {
 
   ObjectMapIterateRequest<I> *req =
     new ObjectMapIterateRequest<I>(m_image_ctx,
-				   this->create_callback_context(),
-				   m_prog_ctx, update_object_map);
+                                   this->create_callback_context(),
+                                   m_prog_ctx, update_object_map);
 
   req->send();
 }

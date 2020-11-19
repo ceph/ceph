@@ -8,7 +8,7 @@
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
- * Foundation.	See file COPYING.
+ * Foundation.        See file COPYING.
  *
  */
 #include "include/int_types.h"
@@ -140,7 +140,7 @@ struct C_OpenComplete : public C_AioCompletion {
   librbd::ImageCtx *ictx;
   void **ictxp;
   C_OpenComplete(librbd::ImageCtx *ictx, librbd::io::AioCompletion* comp,
-		 void **ictxp)
+                 void **ictxp)
     : C_AioCompletion(ictx, librbd::io::AIO_TYPE_OPEN, comp),
       ictx(ictx), ictxp(ictxp) {
   }
@@ -162,12 +162,12 @@ struct C_OpenAfterCloseComplete : public Context {
   void **ictxp;
   C_OpenAfterCloseComplete(librbd::ImageCtx *ictx,
                            librbd::io::AioCompletion* comp,
-			   void **ictxp)
+                           void **ictxp)
     : ictx(ictx), comp(comp), ictxp(ictxp) {
   }
   void finish(int r) override {
     ldout(ictx->cct, 20) << "C_OpenAfterCloseComplete::finish: r=" << r
-			 << dendl;
+                         << dendl;
     *ictxp = nullptr;
 
     ictx->state->open(0, new C_OpenComplete(ictx, comp, ictxp));
@@ -206,26 +206,26 @@ struct C_QuiesceWatchCB : public librbd::QuiesceWatchCtx {
 };
 
 void group_image_status_cpp_to_c(const librbd::group_image_info_t &cpp_info,
-				 rbd_group_image_info_t *c_info) {
+                                 rbd_group_image_info_t *c_info) {
   c_info->name = strdup(cpp_info.name.c_str());
   c_info->pool = cpp_info.pool;
   c_info->state = cpp_info.state;
 }
 
 void group_info_cpp_to_c(const librbd::group_info_t &cpp_info,
-			 rbd_group_info_t *c_info) {
+                         rbd_group_info_t *c_info) {
   c_info->name = strdup(cpp_info.name.c_str());
   c_info->pool = cpp_info.pool;
 }
 
 void group_snap_info_cpp_to_c(const librbd::group_snap_info_t &cpp_info,
-			      rbd_group_snap_info_t *c_info) {
+                              rbd_group_snap_info_t *c_info) {
   c_info->name = strdup(cpp_info.name.c_str());
   c_info->state = cpp_info.state;
 }
 
 void mirror_image_info_cpp_to_c(const librbd::mirror_image_info_t &cpp_info,
-				rbd_mirror_image_info_t *c_info) {
+                                rbd_mirror_image_info_t *c_info) {
   c_info->global_id = strdup(cpp_info.global_id.c_str());
   c_info->state = cpp_info.state;
   c_info->primary = cpp_info.primary;
@@ -474,7 +474,7 @@ namespace librbd {
   }
 
   int RBD::open(IoCtx& io_ctx, Image& image, const char *name,
-		const char *snap_name)
+                const char *snap_name)
   {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, false);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -497,7 +497,7 @@ namespace librbd {
   }
 
   int RBD::open_by_id(IoCtx& io_ctx, Image& image, const char *id,
-		      const char *snap_name)
+                      const char *snap_name)
   {
     ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, false);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -521,7 +521,7 @@ namespace librbd {
   }
 
   int RBD::aio_open(IoCtx& io_ctx, Image& image, const char *name,
-		    const char *snap_name, RBD::AioCompletion *c)
+                    const char *snap_name, RBD::AioCompletion *c)
   {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, false);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -529,7 +529,7 @@ namespace librbd {
 
     if (image.ctx != NULL) {
       reinterpret_cast<ImageCtx*>(image.ctx)->state->close(
-	new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
+        new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
     } else {
       ictx->state->open(0, new C_OpenComplete(ictx, get_aio_completion(c),
                                               &image.ctx));
@@ -539,7 +539,7 @@ namespace librbd {
   }
 
   int RBD::aio_open_by_id(IoCtx& io_ctx, Image& image, const char *id,
-		          const char *snap_name, RBD::AioCompletion *c)
+                          const char *snap_name, RBD::AioCompletion *c)
   {
     ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, false);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -548,7 +548,7 @@ namespace librbd {
 
     if (image.ctx != nullptr) {
       reinterpret_cast<ImageCtx*>(image.ctx)->state->close(
-	new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
+        new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
     } else {
       ictx->state->open(0, new C_OpenComplete(ictx, get_aio_completion(c),
                                               &image.ctx));
@@ -558,7 +558,7 @@ namespace librbd {
   }
 
   int RBD::open_read_only(IoCtx& io_ctx, Image& image, const char *name,
-			  const char *snap_name)
+                          const char *snap_name)
   {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, true);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -581,7 +581,7 @@ namespace librbd {
   }
 
   int RBD::open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
-			        const char *snap_name)
+                                const char *snap_name)
   {
     ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, true);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -605,7 +605,7 @@ namespace librbd {
   }
 
   int RBD::aio_open_read_only(IoCtx& io_ctx, Image& image, const char *name,
-			      const char *snap_name, RBD::AioCompletion *c)
+                              const char *snap_name, RBD::AioCompletion *c)
   {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, true);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -613,7 +613,7 @@ namespace librbd {
 
     if (image.ctx != NULL) {
       reinterpret_cast<ImageCtx*>(image.ctx)->state->close(
-	new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
+        new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
     } else {
       ictx->state->open(0, new C_OpenComplete(ictx, get_aio_completion(c),
                                               &image.ctx));
@@ -623,7 +623,7 @@ namespace librbd {
   }
 
   int RBD::aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
-	                            const char *snap_name, RBD::AioCompletion *c)
+                                    const char *snap_name, RBD::AioCompletion *c)
   {
     ImageCtx *ictx = new ImageCtx("", id, snap_name, io_ctx, true);
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -632,7 +632,7 @@ namespace librbd {
 
     if (image.ctx != nullptr) {
       reinterpret_cast<ImageCtx*>(image.ctx)->state->close(
-	new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
+        new C_OpenAfterCloseComplete(ictx, get_aio_completion(c), &image.ctx));
     } else {
       ictx->state->open(0, new C_OpenComplete(ictx, get_aio_completion(c),
                                               &image.ctx));
@@ -673,7 +673,7 @@ namespace librbd {
   }
 
   int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
-		   uint64_t features, int *order)
+                   uint64_t features, int *order)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, create2_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name, size, features, *order);
@@ -683,19 +683,19 @@ namespace librbd {
   }
 
   int RBD::create3(IoCtx& io_ctx, const char *name, uint64_t size,
-		   uint64_t features, int *order, uint64_t stripe_unit,
-		   uint64_t stripe_count)
+                   uint64_t features, int *order, uint64_t stripe_unit,
+                   uint64_t stripe_count)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, create3_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name, size, features, *order, stripe_unit, stripe_count);
     int r = librbd::create(io_ctx, name, size, false, features, order,
-			  stripe_unit, stripe_count);
+                          stripe_unit, stripe_count);
     tracepoint(librbd, create3_exit, r, *order);
     return r;
   }
 
   int RBD::create4(IoCtx& io_ctx, const char *name, uint64_t size,
-		   ImageOptions& opts)
+                   ImageOptions& opts)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, create4_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name, size, opts.opts);
@@ -705,31 +705,31 @@ namespace librbd {
   }
 
   int RBD::clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
-		 IoCtx& c_ioctx, const char *c_name, uint64_t features,
-		 int *c_order)
+                 IoCtx& c_ioctx, const char *c_name, uint64_t features,
+                 int *c_order)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioctx));
     tracepoint(librbd, clone_enter, p_ioctx.get_pool_name().c_str(), p_ioctx.get_id(), p_name, p_snap_name, c_ioctx.get_pool_name().c_str(), c_ioctx.get_id(), c_name, features);
     int r = librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
-			 features, c_order, 0, 0);
+                         features, c_order, 0, 0);
     tracepoint(librbd, clone_exit, r, *c_order);
     return r;
   }
 
   int RBD::clone2(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
-		  IoCtx& c_ioctx, const char *c_name, uint64_t features,
-		  int *c_order, uint64_t stripe_unit, int stripe_count)
+                  IoCtx& c_ioctx, const char *c_name, uint64_t features,
+                  int *c_order, uint64_t stripe_unit, int stripe_count)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioctx));
     tracepoint(librbd, clone2_enter, p_ioctx.get_pool_name().c_str(), p_ioctx.get_id(), p_name, p_snap_name, c_ioctx.get_pool_name().c_str(), c_ioctx.get_id(), c_name, features, stripe_unit, stripe_count);
     int r = librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
-			 features, c_order, stripe_unit, stripe_count);
+                         features, c_order, stripe_unit, stripe_count);
     tracepoint(librbd, clone2_exit, r, *c_order);
     return r;
   }
 
   int RBD::clone3(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
-		  IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
+                  IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioctx));
     tracepoint(librbd, clone3_enter, p_ioctx.get_pool_name().c_str(), p_ioctx.get_id(), p_name, p_snap_name, c_ioctx.get_pool_name().c_str(), c_ioctx.get_id(), c_name, c_opts.opts);
@@ -750,7 +750,7 @@ namespace librbd {
   }
 
   int RBD::remove_with_progress(IoCtx& io_ctx, const char *name,
-				ProgressContext& pctx)
+                                ProgressContext& pctx)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
@@ -781,7 +781,7 @@ namespace librbd {
 #ifdef WITH_LTTNG
     if (r >= 0) {
       for (const auto& entry : entries) {
-	tracepoint(librbd, trash_list_entry, entry.id.c_str());
+        tracepoint(librbd, trash_list_entry, entry.id.c_str());
       }
     }
 #endif
@@ -1215,7 +1215,7 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, group_create_enter, io_ctx.get_pool_name().c_str(),
-	       io_ctx.get_id(), group_name);
+               io_ctx.get_id(), group_name);
     int r = librbd::api::Group<>::create(io_ctx, group_name);
     tracepoint(librbd, group_create_exit, r);
     return r;
@@ -1225,7 +1225,7 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, group_remove_enter, io_ctx.get_pool_name().c_str(),
-	       io_ctx.get_id(), group_name);
+               io_ctx.get_id(), group_name);
     int r = librbd::api::Group<>::remove(io_ctx, group_name);
     tracepoint(librbd, group_remove_exit, r);
     return r;
@@ -1235,12 +1235,12 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, group_list_enter, io_ctx.get_pool_name().c_str(),
-	       io_ctx.get_id());
+               io_ctx.get_id());
 
     int r = librbd::api::Group<>::list(io_ctx, names);
     if (r >= 0) {
       for (auto itr : *names) {
-	tracepoint(librbd, group_list_entry, itr.c_str());
+        tracepoint(librbd, group_list_entry, itr.c_str());
       }
     }
     tracepoint(librbd, group_list_exit, r);
@@ -1310,7 +1310,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
     tracepoint(librbd, group_image_list_enter,
                group_ioctx.get_pool_name().c_str(),
-	       group_ioctx.get_id(), group_name);
+               group_ioctx.get_id(), group_name);
 
     if (group_image_info_size != sizeof(group_image_info_t)) {
       tracepoint(librbd, group_image_list_exit, -ERANGE);
@@ -1323,11 +1323,11 @@ namespace librbd {
   }
 
   int RBD::group_snap_create(IoCtx& group_ioctx, const char *group_name,
-			     const char *snap_name) {
+                             const char *snap_name) {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
     tracepoint(librbd, group_snap_create_enter,
                group_ioctx.get_pool_name().c_str(),
-	       group_ioctx.get_id(), group_name, snap_name);
+               group_ioctx.get_id(), group_name, snap_name);
     int r = librbd::api::Group<>::snap_create(group_ioctx, group_name,
                                               snap_name);
     tracepoint(librbd, group_snap_create_exit, r);
@@ -1335,11 +1335,11 @@ namespace librbd {
   }
 
   int RBD::group_snap_remove(IoCtx& group_ioctx, const char *group_name,
-			     const char *snap_name) {
+                             const char *snap_name) {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
     tracepoint(librbd, group_snap_remove_enter,
                group_ioctx.get_pool_name().c_str(),
-	       group_ioctx.get_id(), group_name, snap_name);
+               group_ioctx.get_id(), group_name, snap_name);
     int r = librbd::api::Group<>::snap_remove(group_ioctx, group_name,
                                               snap_name);
     tracepoint(librbd, group_snap_remove_exit, r);
@@ -1347,13 +1347,13 @@ namespace librbd {
   }
 
   int RBD::group_snap_list(IoCtx& group_ioctx, const char *group_name,
-			   std::vector<group_snap_info_t> *snaps,
+                           std::vector<group_snap_info_t> *snaps,
                            size_t group_snap_info_size)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
     tracepoint(librbd, group_snap_list_enter,
                group_ioctx.get_pool_name().c_str(),
-	       group_ioctx.get_id(), group_name);
+               group_ioctx.get_id(), group_name);
 
     if (group_snap_info_size != sizeof(group_snap_info_t)) {
       tracepoint(librbd, group_snap_list_exit, -ERANGE);
@@ -1775,7 +1775,7 @@ namespace librbd {
   }
 
   int Image::parent_info(string *parent_pool_name, string *parent_name,
-			 string *parent_snap_name)
+                         string *parent_snap_name)
   {
     librbd::linked_image_spec_t parent_image;
     librbd::snap_spec_t parent_snap;
@@ -1960,7 +1960,7 @@ namespace librbd {
   }
 
   int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
-				librbd::ProgressContext &pctx)
+                                librbd::ProgressContext &pctx)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, copy_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, dest_io_ctx.get_pool_name().c_str(), dest_io_ctx.get_id(), destname);
@@ -1981,8 +1981,8 @@ namespace librbd {
   }
 
   int Image::copy_with_progress3(IoCtx& dest_io_ctx, const char *destname,
-				 ImageOptions& opts,
-				 librbd::ProgressContext &pctx)
+                                 ImageOptions& opts,
+                                 librbd::ProgressContext &pctx)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, copy3_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, dest_io_ctx.get_pool_name().c_str(), dest_io_ctx.get_id(), destname, opts.opts);
@@ -1992,9 +1992,9 @@ namespace librbd {
   }
 
   int Image::copy_with_progress4(IoCtx& dest_io_ctx, const char *destname,
-				 ImageOptions& opts,
-				 librbd::ProgressContext &pctx,
-				 size_t sparse_size)
+                                 ImageOptions& opts,
+                                 librbd::ProgressContext &pctx,
+                                 size_t sparse_size)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, copy4_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, dest_io_ctx.get_pool_name().c_str(), dest_io_ctx.get_id(), destname, opts.opts, sparse_size);
@@ -2138,15 +2138,15 @@ namespace librbd {
   }
 
   int Image::list_lockers(std::list<librbd::locker_t> *lockers,
-			  bool *exclusive, string *tag)
+                          bool *exclusive, string *tag)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, list_lockers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     int r = librbd::list_lockers(ictx, lockers, exclusive, tag);
     if (r >= 0) {
       for (std::list<librbd::locker_t>::const_iterator it = lockers->begin();
-	   it != lockers->end(); ++it) {
-	tracepoint(librbd, list_lockers_entry, it->client.c_str(), it->cookie.c_str(), it->address.c_str());
+           it != lockers->end(); ++it) {
+        tracepoint(librbd, list_lockers_entry, it->client.c_str(), it->cookie.c_str(), it->address.c_str());
       }
     }
     tracepoint(librbd, list_lockers_exit, r);
@@ -2255,7 +2255,7 @@ namespace librbd {
   }
 
   int Image::snap_rollback_with_progress(const char *snap_name,
-					 ProgressContext& prog_ctx)
+                                         ProgressContext& prog_ctx)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_rollback_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
@@ -2298,7 +2298,7 @@ namespace librbd {
     int r = librbd::api::Snapshot<>::list(ictx, snaps);
     if (r >= 0) {
       for (int i = 0, n = snaps.size(); i < n; i++) {
-	tracepoint(librbd, snap_list_entry, snaps[i].id, snaps[i].size, snaps[i].name.c_str());
+        tracepoint(librbd, snap_list_entry, snaps[i].id, snaps[i].size, snaps[i].name.c_str());
       }
     }
     tracepoint(librbd, snap_list_exit, r, snaps.size());
@@ -2356,7 +2356,7 @@ namespace librbd {
   }
 
   int Image::snap_get_namespace_type(uint64_t snap_id,
-				     snap_namespace_type_t *namespace_type) {
+                                     snap_namespace_type_t *namespace_type) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_get_namespace_type_enter, ictx, ictx->name.c_str());
     int r = librbd::api::Snapshot<>::get_namespace_type(ictx, snap_id, namespace_type);
@@ -2365,7 +2365,7 @@ namespace librbd {
   }
 
   int Image::snap_get_group_namespace(uint64_t snap_id,
-			              snap_group_namespace_t *group_snap,
+                                      snap_group_namespace_t *group_snap,
                                       size_t group_snap_size) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_get_group_namespace_enter, ictx,
@@ -2457,7 +2457,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-		ictx->read_only, ofs, len, op_flags);
+                ictx->read_only, ofs, len, op_flags);
     bufferptr ptr(len);
     bl.push_back(std::move(ptr));
 
@@ -2467,8 +2467,8 @@ namespace librbd {
   }
 
   int64_t Image::read_iterate(uint64_t ofs, size_t len,
-			      int (*cb)(uint64_t, size_t, const char *, void *),
-			      void *arg)
+                              int (*cb)(uint64_t, size_t, const char *, void *),
+                              void *arg)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
@@ -2479,8 +2479,8 @@ namespace librbd {
   }
 
   int Image::read_iterate2(uint64_t ofs, uint64_t len,
-			      int (*cb)(uint64_t, size_t, const char *, void *),
-			      void *arg)
+                              int (*cb)(uint64_t, size_t, const char *, void *),
+                              void *arg)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_iterate2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
@@ -2493,17 +2493,17 @@ namespace librbd {
   }
 
   int Image::diff_iterate(const char *fromsnapname,
-			  uint64_t ofs, uint64_t len,
-			  int (*cb)(uint64_t, size_t, int, void *),
-			  void *arg)
+                          uint64_t ofs, uint64_t len,
+                          int (*cb)(uint64_t, size_t, int, void *),
+                          void *arg)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
                ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
                true, false);
     int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						     cls::rbd::UserSnapshotNamespace(),
-						     fromsnapname, ofs,
+                                                     cls::rbd::UserSnapshotNamespace(),
+                                                     fromsnapname, ofs,
                                                      len, true, false, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
     return r;
@@ -2518,8 +2518,8 @@ namespace librbd {
               ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
               include_parent, whole_object);
     int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						     cls::rbd::UserSnapshotNamespace(),
-						     fromsnapname, ofs,
+                                                     cls::rbd::UserSnapshotNamespace(),
+                                                     fromsnapname, ofs,
                                                      len, include_parent,
                                                      whole_object, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
@@ -2544,7 +2544,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, write2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only,
-		ofs, len, bl.length() < len ? NULL : bl.c_str(), op_flags);
+                ofs, len, bl.length() < len ? NULL : bl.c_str(), op_flags);
     if (bl.length() < len) {
       tracepoint(librbd, write_exit, -EINVAL);
       return -EINVAL;
@@ -2625,7 +2625,7 @@ namespace librbd {
   }
 
   int Image::aio_write(uint64_t off, size_t len, bufferlist& bl,
-		       RBD::AioCompletion *c)
+                       RBD::AioCompletion *c)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, bl.length() < len ? NULL : bl.c_str(), c->pc);
@@ -2641,11 +2641,11 @@ namespace librbd {
   }
 
   int Image::aio_write2(uint64_t off, size_t len, bufferlist& bl,
-			  RBD::AioCompletion *c, int op_flags)
+                          RBD::AioCompletion *c, int op_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_write2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-		ictx->read_only, off, len, bl.length() < len ? NULL : bl.c_str(), c->pc, op_flags);
+                ictx->read_only, off, len, bl.length() < len ? NULL : bl.c_str(), c->pc, op_flags);
     if (bl.length() < len) {
       tracepoint(librbd, aio_write_exit, -EINVAL);
       return -EINVAL;
@@ -2658,12 +2658,12 @@ namespace librbd {
   }
 
   int Image::aio_read(uint64_t off, size_t len, bufferlist& bl,
-		      RBD::AioCompletion *c)
+                      RBD::AioCompletion *c)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, bl.c_str(), c->pc);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
-			 << (void *)(bl.c_str() + len - 1) << dendl;
+                         << (void *)(bl.c_str() + len - 1) << dendl;
 
     api::Io<>::aio_read(*ictx, get_aio_completion(c), off, len,
                         io::ReadResult{&bl}, 0, true);
@@ -2672,13 +2672,13 @@ namespace librbd {
   }
 
   int Image::aio_read2(uint64_t off, size_t len, bufferlist& bl,
-			RBD::AioCompletion *c, int op_flags)
+                        RBD::AioCompletion *c, int op_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_read2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-		ictx->read_only, off, len, bl.c_str(), c->pc, op_flags);
+                ictx->read_only, off, len, bl.c_str(), c->pc, op_flags);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
-			 << (void *)(bl.c_str() + len - 1) << dendl;
+                         << (void *)(bl.c_str() + len - 1) << dendl;
 
     api::Io<>::aio_read(*ictx, get_aio_completion(c), off, len,
                         io::ReadResult{&bl}, op_flags, true);
@@ -2921,7 +2921,7 @@ namespace librbd {
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
   int Image::mirror_image_get_status(mirror_image_status_t *mirror_image_status,
-				     size_t status_size) {
+                                     size_t status_size) {
     ImageCtx *ictx = (ImageCtx *)ctx;
 
     if (sizeof(mirror_image_status_t) != status_size) {
@@ -3070,7 +3070,7 @@ namespace librbd {
 #ifdef WITH_LTTNG
     if (r >= 0) {
       for (auto &watcher : watchers) {
-	tracepoint(librbd, list_watchers_entry, watcher.addr.c_str(), watcher.id, watcher.cookie);
+        tracepoint(librbd, list_watchers_entry, watcher.addr.c_str(), watcher.id, watcher.cookie);
       }
     }
 #endif
@@ -3123,19 +3123,19 @@ extern "C" void rbd_image_options_destroy(rbd_image_options_t opts)
 }
 
 extern "C" int rbd_image_options_set_string(rbd_image_options_t opts, int optname,
-					    const char* optval)
+                                            const char* optval)
 {
   return librbd::image_options_set(opts, optname, optval);
 }
 
 extern "C" int rbd_image_options_set_uint64(rbd_image_options_t opts, int optname,
-					    uint64_t optval)
+                                            uint64_t optval)
 {
   return librbd::image_options_set(opts, optname, optval);
 }
 
 extern "C" int rbd_image_options_get_string(rbd_image_options_t opts, int optname,
-					    char* optval, size_t maxlen)
+                                            char* optval, size_t maxlen)
 {
   std::string optval_;
 
@@ -3155,7 +3155,7 @@ extern "C" int rbd_image_options_get_string(rbd_image_options_t opts, int optnam
 }
 
 extern "C" int rbd_image_options_get_uint64(rbd_image_options_t opts, int optname,
-				 uint64_t* optval)
+                                 uint64_t* optval)
 {
   return librbd::image_options_get(opts, optname, optval);
 }
@@ -3803,8 +3803,8 @@ extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int 
 }
 
 extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
-			   uint64_t size, uint64_t features,
-			   int *order)
+                           uint64_t size, uint64_t features,
+                           int *order)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
@@ -3816,22 +3816,22 @@ extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
 }
 
 extern "C" int rbd_create3(rados_ioctx_t p, const char *name,
-			   uint64_t size, uint64_t features,
-			   int *order,
-			   uint64_t stripe_unit, uint64_t stripe_count)
+                           uint64_t size, uint64_t features,
+                           int *order,
+                           uint64_t stripe_unit, uint64_t stripe_count)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, create3_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name, size, features, *order, stripe_unit, stripe_count);
   int r = librbd::create(io_ctx, name, size, false, features, order,
-			stripe_unit, stripe_count);
+                        stripe_unit, stripe_count);
   tracepoint(librbd, create3_exit, r, *order);
   return r;
 }
 
 extern "C" int rbd_create4(rados_ioctx_t p, const char *name,
-			   uint64_t size, rbd_image_options_t opts)
+                           uint64_t size, rbd_image_options_t opts)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
@@ -3844,8 +3844,8 @@ extern "C" int rbd_create4(rados_ioctx_t p, const char *name,
 }
 
 extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
-			 const char *p_snap_name, rados_ioctx_t c_ioctx,
-			 const char *c_name, uint64_t features, int *c_order)
+                         const char *p_snap_name, rados_ioctx_t c_ioctx,
+                         const char *c_name, uint64_t features, int *c_order)
 {
   librados::IoCtx p_ioc, c_ioc;
   librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
@@ -3853,15 +3853,15 @@ extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioc));
   tracepoint(librbd, clone_enter, p_ioc.get_pool_name().c_str(), p_ioc.get_id(), p_name, p_snap_name, c_ioc.get_pool_name().c_str(), c_ioc.get_id(), c_name, features);
   int r = librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name,
-		       features, c_order, 0, 0);
+                       features, c_order, 0, 0);
   tracepoint(librbd, clone_exit, r, *c_order);
   return r;
 }
 
 extern "C" int rbd_clone2(rados_ioctx_t p_ioctx, const char *p_name,
-			  const char *p_snap_name, rados_ioctx_t c_ioctx,
-			  const char *c_name, uint64_t features, int *c_order,
-			  uint64_t stripe_unit, int stripe_count)
+                          const char *p_snap_name, rados_ioctx_t c_ioctx,
+                          const char *c_name, uint64_t features, int *c_order,
+                          uint64_t stripe_unit, int stripe_count)
 {
   librados::IoCtx p_ioc, c_ioc;
   librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
@@ -3869,14 +3869,14 @@ extern "C" int rbd_clone2(rados_ioctx_t p_ioctx, const char *p_name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioc));
   tracepoint(librbd, clone2_enter, p_ioc.get_pool_name().c_str(), p_ioc.get_id(), p_name, p_snap_name, c_ioc.get_pool_name().c_str(), c_ioc.get_id(), c_name, features, stripe_unit, stripe_count);
   int r = librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name,
-		       features, c_order, stripe_unit, stripe_count);
+                       features, c_order, stripe_unit, stripe_count);
   tracepoint(librbd, clone2_exit, r, *c_order);
   return r;
 }
 
 extern "C" int rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
-			  const char *p_snap_name, rados_ioctx_t c_ioctx,
-			  const char *c_name, rbd_image_options_t c_opts)
+                          const char *p_snap_name, rados_ioctx_t c_ioctx,
+                          const char *c_name, rbd_image_options_t c_opts)
 {
   librados::IoCtx p_ioc, c_ioc;
   librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
@@ -3903,7 +3903,7 @@ extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
 }
 
 extern "C" int rbd_remove_with_progress(rados_ioctx_t p, const char *name,
-					librbd_progress_fn_t cb, void *cbdata)
+                                        librbd_progress_fn_t cb, void *cbdata)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
@@ -3988,29 +3988,29 @@ extern "C" void rbd_trash_list_cleanup(rbd_trash_image_info_t *entries,
 }
 
 extern "C" int rbd_trash_purge(rados_ioctx_t io, time_t expire_ts,
-				                       float threshold) {
-	librados::IoCtx io_ctx;
-	librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
-	TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-	tracepoint(librbd, trash_purge_enter, io_ctx.get_pool_name().c_str(),
-	           io_ctx.get_id(), expire_ts, threshold);
+                                                       float threshold) {
+        librados::IoCtx io_ctx;
+        librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+        TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+        tracepoint(librbd, trash_purge_enter, io_ctx.get_pool_name().c_str(),
+                   io_ctx.get_id(), expire_ts, threshold);
         librbd::NoOpProgressContext nop_pctx;
         int r = librbd::api::Trash<>::purge(io_ctx, expire_ts, threshold, nop_pctx);
-	tracepoint(librbd, trash_purge_exit, r);
-	return r;
+        tracepoint(librbd, trash_purge_exit, r);
+        return r;
 }
 
 extern "C" int rbd_trash_purge_with_progress(rados_ioctx_t io, time_t expire_ts,
-				float threshold, librbd_progress_fn_t cb, void* cbdata) {
-	librados::IoCtx io_ctx;
-	librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
-	TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-	tracepoint(librbd, trash_purge_enter, io_ctx.get_pool_name().c_str(),
-	           io_ctx.get_id(), expire_ts, threshold);
-	librbd::CProgressContext pctx(cb, cbdata);
-	int r = librbd::api::Trash<>::purge(io_ctx, expire_ts, threshold, pctx);
-	tracepoint(librbd, trash_purge_exit, r);
-	return r;
+                                float threshold, librbd_progress_fn_t cb, void* cbdata) {
+        librados::IoCtx io_ctx;
+        librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+        TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+        tracepoint(librbd, trash_purge_enter, io_ctx.get_pool_name().c_str(),
+                   io_ctx.get_id(), expire_ts, threshold);
+        librbd::CProgressContext pctx(cb, cbdata);
+        int r = librbd::api::Trash<>::purge(io_ctx, expire_ts, threshold, pctx);
+        tracepoint(librbd, trash_purge_exit, r);
+        return r;
 }
 
 extern "C" int rbd_trash_remove(rados_ioctx_t p, const char *image_id,
@@ -4152,7 +4152,7 @@ extern "C" int rbd_pool_stats_get(
 }
 
 extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p,
-			const char *destname)
+                        const char *destname)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librados::IoCtx dest_io_ctx;
@@ -4177,7 +4177,7 @@ extern "C" int rbd_copy2(rbd_image_t srcp, rbd_image_t destp)
 }
 
 extern "C" int rbd_copy3(rbd_image_t image, rados_ioctx_t dest_p,
-			 const char *destname, rbd_image_options_t c_opts)
+                         const char *destname, rbd_image_options_t c_opts)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librados::IoCtx dest_io_ctx;
@@ -4205,8 +4205,8 @@ extern "C" int rbd_copy4(rbd_image_t image, rados_ioctx_t dest_p,
 }
 
 extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
-				      const char *destname,
-				      librbd_progress_fn_t fn, void *data)
+                                      const char *destname,
+                                      librbd_progress_fn_t fn, void *data)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librados::IoCtx dest_io_ctx;
@@ -4220,7 +4220,7 @@ extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
 }
 
 extern "C" int rbd_copy_with_progress2(rbd_image_t srcp, rbd_image_t destp,
-				      librbd_progress_fn_t fn, void *data)
+                                      librbd_progress_fn_t fn, void *data)
 {
   librbd::ImageCtx *src = (librbd::ImageCtx *)srcp;
   librbd::ImageCtx *dest = (librbd::ImageCtx *)destp;
@@ -4232,9 +4232,9 @@ extern "C" int rbd_copy_with_progress2(rbd_image_t srcp, rbd_image_t destp,
 }
 
 extern "C" int rbd_copy_with_progress3(rbd_image_t image, rados_ioctx_t dest_p,
-				       const char *destname,
-				       rbd_image_options_t dest_opts,
-				       librbd_progress_fn_t fn, void *data)
+                                       const char *destname,
+                                       rbd_image_options_t dest_opts,
+                                       librbd_progress_fn_t fn, void *data)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librados::IoCtx dest_io_ctx;
@@ -4313,7 +4313,7 @@ extern "C" int rbd_flatten(rbd_image_t image)
 }
 
 extern "C" int rbd_flatten_with_progress(rbd_image_t image,
-					 librbd_progress_fn_t cb, void *cbdata)
+                                         librbd_progress_fn_t cb, void *cbdata)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, flatten_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
@@ -4347,7 +4347,7 @@ extern "C" int rbd_sparsify_with_progress(rbd_image_t image, size_t sparse_size,
 }
 
 extern "C" int rbd_rename(rados_ioctx_t src_p, const char *srcname,
-			  const char *destname)
+                          const char *destname)
 {
   librados::IoCtx src_io_ctx;
   librados::IoCtx::from_rados_ioctx_t(src_p, src_io_ctx);
@@ -4623,13 +4623,13 @@ extern "C" void rbd_config_pool_list_cleanup(rbd_config_option_t *options,
 }
 
 extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
-			const char *snap_name)
+                        const char *snap_name)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
-						false);
+                                                false);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
   int r = ictx->state->open(0);
@@ -4647,7 +4647,7 @@ extern "C" int rbd_open_by_id(rados_ioctx_t p, const char *id,
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx("", id, snap_name, io_ctx,
-						false);
+                                                false);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(),
              ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
@@ -4660,14 +4660,14 @@ extern "C" int rbd_open_by_id(rados_ioctx_t p, const char *id,
 }
 
 extern "C" int rbd_aio_open(rados_ioctx_t p, const char *name,
-			    rbd_image_t *image, const char *snap_name,
-			    rbd_completion_t c)
+                            rbd_image_t *image, const char *snap_name,
+                            rbd_completion_t c)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
-						false);
+                                                false);
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only, comp->pc);
   ictx->state->open(0, new C_OpenComplete(ictx, get_aio_completion(comp),
@@ -4677,14 +4677,14 @@ extern "C" int rbd_aio_open(rados_ioctx_t p, const char *name,
 }
 
 extern "C" int rbd_aio_open_by_id(rados_ioctx_t p, const char *id,
-			          rbd_image_t *image, const char *snap_name,
-			          rbd_completion_t c)
+                                  rbd_image_t *image, const char *snap_name,
+                                  rbd_completion_t c)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx("", id, snap_name, io_ctx,
-						false);
+                                                false);
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_open_image_enter, ictx, ictx->name.c_str(),
              ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only,
@@ -4696,13 +4696,13 @@ extern "C" int rbd_aio_open_by_id(rados_ioctx_t p, const char *id,
 }
 
 extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
-				  rbd_image_t *image, const char *snap_name)
+                                  rbd_image_t *image, const char *snap_name)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
-						true);
+                                                true);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
   int r = ictx->state->open(0);
@@ -4714,13 +4714,13 @@ extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
 }
 
 extern "C" int rbd_open_by_id_read_only(rados_ioctx_t p, const char *id,
-			                rbd_image_t *image, const char *snap_name)
+                                        rbd_image_t *image, const char *snap_name)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx("", id, snap_name, io_ctx,
-						true);
+                                                true);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(),
              ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
@@ -4733,14 +4733,14 @@ extern "C" int rbd_open_by_id_read_only(rados_ioctx_t p, const char *id,
 }
 
 extern "C" int rbd_aio_open_read_only(rados_ioctx_t p, const char *name,
-				      rbd_image_t *image, const char *snap_name,
-				      rbd_completion_t c)
+                                      rbd_image_t *image, const char *snap_name,
+                                      rbd_completion_t c)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
-						true);
+                                                true);
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only, comp->pc);
   ictx->state->open(0, new C_OpenComplete(ictx, get_aio_completion(comp),
@@ -4750,7 +4750,7 @@ extern "C" int rbd_aio_open_read_only(rados_ioctx_t p, const char *name,
 }
 
 extern "C" int rbd_aio_open_by_id_read_only(rados_ioctx_t p, const char *id,
-				            rbd_image_t *image,
+                                            rbd_image_t *image,
                                             const char *snap_name,
                                             rbd_completion_t c)
 {
@@ -4758,7 +4758,7 @@ extern "C" int rbd_aio_open_by_id_read_only(rados_ioctx_t p, const char *id,
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx("", id, snap_name, io_ctx,
-						true);
+                                                true);
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_open_image_enter, ictx, ictx->name.c_str(),
              ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only, comp->pc);
@@ -4830,7 +4830,7 @@ extern "C" int rbd_resize(rbd_image_t image, uint64_t size)
 }
 
 extern "C" int rbd_resize2(rbd_image_t image, uint64_t size, bool allow_shrink,
-					librbd_progress_fn_t cb, void *cbdata)
+                                        librbd_progress_fn_t cb, void *cbdata)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
@@ -4841,7 +4841,7 @@ extern "C" int rbd_resize2(rbd_image_t image, uint64_t size, bool allow_shrink,
 }
 
 extern "C" int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
-					librbd_progress_fn_t cb, void *cbdata)
+                                        librbd_progress_fn_t cb, void *cbdata)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
@@ -4852,7 +4852,7 @@ extern "C" int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
 }
 
 extern "C" int rbd_stat(rbd_image_t image, rbd_image_info_t *info,
-			size_t infosize)
+                        size_t infosize)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, stat_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
@@ -5354,7 +5354,7 @@ extern "C" int rbd_snap_remove(rbd_image_t image, const char *snap_name)
 }
 
 extern "C" int rbd_snap_remove2(rbd_image_t image, const char *snap_name, uint32_t flags,
-				librbd_progress_fn_t cb, void *cbdata)
+                                librbd_progress_fn_t cb, void *cbdata)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_remove2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name, flags);
@@ -5381,9 +5381,9 @@ extern "C" int rbd_snap_rollback(rbd_image_t image, const char *snap_name)
 }
 
 extern "C" int rbd_snap_rollback_with_progress(rbd_image_t image,
-					       const char *snap_name,
-					       librbd_progress_fn_t cb,
-					       void *cbdata)
+                                               const char *snap_name,
+                                               librbd_progress_fn_t cb,
+                                               void *cbdata)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_rollback_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
@@ -5394,7 +5394,7 @@ extern "C" int rbd_snap_rollback_with_progress(rbd_image_t image,
 }
 
 extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
-			     int *max_snaps)
+                             int *max_snaps)
 {
   vector<librbd::snap_info_t> cpp_snaps;
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
@@ -5430,7 +5430,7 @@ extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
     snaps[i].name = strdup(cpp_snaps[i].name.c_str());
     if (!snaps[i].name) {
       for (int j = 0; j < i; j++)
-	free((void *)snaps[j].name);
+        free((void *)snaps[j].name);
       tracepoint(librbd, snap_list_exit, -ENOMEM, *max_snaps);
       return -ENOMEM;
     }
@@ -5474,7 +5474,7 @@ extern "C" int rbd_snap_unprotect(rbd_image_t image, const char *snap_name)
 }
 
 extern "C" int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
-				     int *is_protected)
+                                     int *is_protected)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_is_protected_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
@@ -5565,8 +5565,8 @@ extern "C" int rbd_snap_get_id(rbd_image_t image, const char *snapname, uint64_t
 }
 
 extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,
-				     size_t *pools_len, char *images,
-				     size_t *images_len)
+                                     size_t *pools_len, char *images,
+                                     size_t *images_len)
 {
   auto ictx = reinterpret_cast<librbd::ImageCtx*>(image);
   tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(),
@@ -5624,7 +5624,7 @@ extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,
 
 extern "C" int rbd_list_children2(rbd_image_t image,
                                   rbd_child_info_t *children,
-	                          int *max_children)
+                                  int *max_children)
 {
   auto ictx = reinterpret_cast<librbd::ImageCtx*>(image);
   tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(),
@@ -5755,10 +5755,10 @@ extern "C" int rbd_list_descendants(rbd_image_t image,
 }
 
 extern "C" ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
-				    char *tag, size_t *tag_len,
-				    char *clients, size_t *clients_len,
-				    char *cookies, size_t *cookies_len,
-				    char *addrs, size_t *addrs_len)
+                                    char *tag, size_t *tag_len,
+                                    char *clients, size_t *clients_len,
+                                    char *cookies, size_t *cookies_len,
+                                    char *addrs, size_t *addrs_len)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, list_lockers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
@@ -5786,9 +5786,9 @@ extern "C" ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
   }
 
   bool too_short = ((clients_total > *clients_len) ||
-		    (cookies_total > *cookies_len) ||
-		    (addrs_total > *addrs_len) ||
-		    (tag_str.length() + 1 > *tag_len));
+                    (cookies_total > *cookies_len) ||
+                    (addrs_total > *addrs_len) ||
+                    (tag_str.length() + 1 > *tag_len));
   *clients_len = clients_total;
   *cookies_len = cookies_total;
   *addrs_len = addrs_total;
@@ -5831,7 +5831,7 @@ extern "C" int rbd_lock_exclusive(rbd_image_t image, const char *cookie)
 }
 
 extern "C" int rbd_lock_shared(rbd_image_t image, const char *cookie,
-			       const char *tag)
+                               const char *tag)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, lock_shared_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, cookie, tag);
@@ -5850,7 +5850,7 @@ extern "C" int rbd_unlock(rbd_image_t image, const char *cookie)
 }
 
 extern "C" int rbd_break_lock(rbd_image_t image, const char *client,
-			      const char *cookie)
+                              const char *cookie)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, break_lock_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, client, cookie);
@@ -5861,7 +5861,7 @@ extern "C" int rbd_break_lock(rbd_image_t image, const char *client,
 
 /* I/O */
 extern "C" ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
-			    char *buf)
+                            char *buf)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
@@ -5872,11 +5872,11 @@ extern "C" ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
 }
 
 extern "C" ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
-			      char *buf, int op_flags)
+                              char *buf, int op_flags)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read2_enter, ictx, ictx->name.c_str(),
-	      ictx->snap_name.c_str(), ictx->read_only, ofs, len, op_flags);
+              ictx->snap_name.c_str(), ictx->read_only, ofs, len, op_flags);
   int r = librbd::api::Io<>::read(
     *ictx, ofs, len, librbd::io::ReadResult{buf, len}, op_flags);
   tracepoint(librbd, read_exit, r);
@@ -5885,8 +5885,8 @@ extern "C" ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
 
 
 extern "C" int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
-				    int (*cb)(uint64_t, size_t, const char *, void *),
-				    void *arg)
+                                    int (*cb)(uint64_t, size_t, const char *, void *),
+                                    void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
@@ -5896,8 +5896,8 @@ extern "C" int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 }
 
 extern "C" int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len,
-				 int (*cb)(uint64_t, size_t, const char *, void *),
-				 void *arg)
+                                 int (*cb)(uint64_t, size_t, const char *, void *),
+                                 void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read_iterate2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
@@ -5909,18 +5909,18 @@ extern "C" int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len,
 }
 
 extern "C" int rbd_diff_iterate(rbd_image_t image,
-				const char *fromsnapname,
-				uint64_t ofs, uint64_t len,
-				int (*cb)(uint64_t, size_t, int, void *),
-				void *arg)
+                                const char *fromsnapname,
+                                uint64_t ofs, uint64_t len,
+                                int (*cb)(uint64_t, size_t, int, void *),
+                                void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
              true, false);
   int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						   cls::rbd::UserSnapshotNamespace(),
-						   fromsnapname, ofs, len,
+                                                   cls::rbd::UserSnapshotNamespace(),
+                                                   fromsnapname, ofs, len,
                                                    true, false, cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
   return r;
@@ -5937,8 +5937,8 @@ extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
             ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
             include_parent != 0, whole_object != 0);
   int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						   cls::rbd::UserSnapshotNamespace(),
-						   fromsnapname, ofs, len,
+                                                   cls::rbd::UserSnapshotNamespace(),
+                                                   fromsnapname, ofs, len,
                                                    include_parent, whole_object,
                                                    cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
@@ -5946,7 +5946,7 @@ extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
 }
 
 extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
-			     const char *buf)
+                             const char *buf)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len, buf);
@@ -5959,11 +5959,11 @@ extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
 }
 
 extern "C" ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
-			      const char *buf, int op_flags)
+                              const char *buf, int op_flags)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, write2_enter, ictx, ictx->name.c_str(),
-	      ictx->snap_name.c_str(), ictx->read_only, ofs, len, buf, op_flags);
+              ictx->snap_name.c_str(), ictx->read_only, ofs, len, buf, op_flags);
 
   bufferlist bl;
   bl.push_back(create_write_raw(ictx, buf, len, nullptr));
@@ -6048,8 +6048,8 @@ extern "C" ssize_t rbd_compare_and_write(rbd_image_t image,
 }
 
 extern "C" int rbd_aio_create_completion(void *cb_arg,
-					 rbd_callback_t complete_cb,
-					 rbd_completion_t *c)
+                                         rbd_callback_t complete_cb,
+                                         rbd_completion_t *c)
 {
   librbd::RBD::AioCompletion *rbd_comp =
     new librbd::RBD::AioCompletion(cb_arg, complete_cb);
@@ -6058,7 +6058,7 @@ extern "C" int rbd_aio_create_completion(void *cb_arg,
 }
 
 extern "C" int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
-			     const char *buf, rbd_completion_t c)
+                             const char *buf, rbd_completion_t c)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
@@ -6074,12 +6074,12 @@ extern "C" int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
 }
 
 extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
-			      const char *buf, rbd_completion_t c, int op_flags)
+                              const char *buf, rbd_completion_t c, int op_flags)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_write2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-	      ictx->read_only, off, len, buf, comp->pc, op_flags);
+              ictx->read_only, off, len, buf, comp->pc, op_flags);
 
   auto aio_completion = get_aio_completion(comp);
   bufferlist bl;
@@ -6128,7 +6128,7 @@ extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
 }
 
 extern "C" int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
-			    char *buf, rbd_completion_t c)
+                            char *buf, rbd_completion_t c)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
@@ -6141,12 +6141,12 @@ extern "C" int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
 }
 
 extern "C" int rbd_aio_read2(rbd_image_t image, uint64_t off, size_t len,
-			      char *buf, rbd_completion_t c, int op_flags)
+                              char *buf, rbd_completion_t c, int op_flags)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_read2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-	      ictx->read_only, off, len, buf, comp->pc, op_flags);
+              ictx->read_only, off, len, buf, comp->pc, op_flags);
   librbd::api::Io<>::aio_read(
     *ictx, get_aio_completion(comp), off, len, librbd::io::ReadResult{buf, len},
     op_flags, true);
@@ -6212,7 +6212,7 @@ extern "C" int rbd_aio_flush(rbd_image_t image, rbd_completion_t c)
 }
 
 extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
-			       rbd_completion_t c)
+                               rbd_completion_t c)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
@@ -6277,7 +6277,7 @@ extern "C" ssize_t rbd_aio_compare_and_write(rbd_image_t image, uint64_t off,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_compare_and_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-	      ictx->read_only, off, len, cmp_buf, buf, comp->pc, op_flags);
+              ictx->read_only, off, len, cmp_buf, buf, comp->pc, op_flags);
 
   auto aio_completion = get_aio_completion(comp);
   bufferlist cmp_bl;
@@ -6503,8 +6503,8 @@ extern "C" int rbd_mirror_image_get_global_status(
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 extern "C" int rbd_mirror_image_get_status(rbd_image_t image,
-					   rbd_mirror_image_status_t *status,
-					   size_t status_size)
+                                           rbd_mirror_image_status_t *status,
+                                           size_t status_size)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
 
@@ -6653,7 +6653,7 @@ extern "C" int rbd_aio_mirror_image_create_snapshot(rbd_image_t image,
 }
 
 extern "C" int rbd_update_watch(rbd_image_t image, uint64_t *handle,
-				rbd_update_callback_t watch_cb, void *arg)
+                                rbd_update_callback_t watch_cb, void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   C_UpdateWatchCB *wctx = new C_UpdateWatchCB(watch_cb, arg);
@@ -6797,8 +6797,8 @@ extern "C" int rbd_group_image_add(rados_ioctx_t group_p,
 
   TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
   tracepoint(librbd, group_image_add_enter, group_ioctx.get_pool_name().c_str(),
-	     group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
-	     image_ioctx.get_id(), image_name);
+             group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
+             image_ioctx.get_id(), image_name);
 
   int r = librbd::api::Group<>::image_add(group_ioctx, group_name, image_ioctx,
                                           image_name);
@@ -6820,8 +6820,8 @@ extern "C" int rbd_group_image_remove(rados_ioctx_t group_p,
 
   TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
   tracepoint(librbd, group_image_remove_enter, group_ioctx.get_pool_name().c_str(),
-	     group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
-	     image_ioctx.get_id(), image_name);
+             group_ioctx.get_id(), group_name, image_ioctx.get_pool_name().c_str(),
+             image_ioctx.get_id(), image_name);
 
   int r = librbd::api::Group<>::image_remove(group_ioctx, group_name,
                                              image_ioctx, image_name);
@@ -6856,10 +6856,10 @@ extern "C" int rbd_group_image_remove_by_id(rados_ioctx_t group_p,
 }
 
 extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
-				    const char *group_name,
-				    rbd_group_image_info_t *images,
+                                    const char *group_name,
+                                    rbd_group_image_info_t *images,
                                     size_t group_image_info_size,
-				    size_t *image_size)
+                                    size_t *image_size)
 {
   librados::IoCtx group_ioctx;
   librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
@@ -6867,7 +6867,7 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
   tracepoint(librbd, group_image_list_enter,
              group_ioctx.get_pool_name().c_str(),
-	     group_ioctx.get_id(), group_name);
+             group_ioctx.get_id(), group_name);
   // FIPS zeroization audit 20191117: this memset is not security related.
   memset(images, 0, sizeof(*images) * *image_size);
 
@@ -6940,7 +6940,7 @@ extern "C" int rbd_group_snap_create(rados_ioctx_t group_p,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
   tracepoint(librbd, group_snap_create_enter,
              group_ioctx.get_pool_name().c_str(),
-	     group_ioctx.get_id(), group_name, snap_name);
+             group_ioctx.get_id(), group_name, snap_name);
 
   int r = librbd::api::Group<>::snap_create(group_ioctx, group_name, snap_name);
 
@@ -6959,7 +6959,7 @@ extern "C" int rbd_group_snap_remove(rados_ioctx_t group_p,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
   tracepoint(librbd, group_snap_remove_enter,
              group_ioctx.get_pool_name().c_str(),
-	     group_ioctx.get_id(), group_name, snap_name);
+             group_ioctx.get_id(), group_name, snap_name);
 
   int r = librbd::api::Group<>::snap_remove(group_ioctx, group_name, snap_name);
 
@@ -6999,7 +6999,7 @@ extern "C" int rbd_group_snap_list(rados_ioctx_t group_p,
 
   TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
   tracepoint(librbd, group_snap_list_enter, group_ioctx.get_pool_name().c_str(),
-	     group_ioctx.get_id(), group_name);
+             group_ioctx.get_id(), group_name);
   // FIPS zeroization audit 20191117: this memset is not security related.
   memset(snaps, 0, sizeof(*snaps) * *snaps_size);
 
@@ -7096,8 +7096,8 @@ extern "C" int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
 }
 
 extern "C" int rbd_snap_get_namespace_type(rbd_image_t image,
-					   uint64_t snap_id,
-					   rbd_snap_namespace_type_t *namespace_type) {
+                                           uint64_t snap_id,
+                                           rbd_snap_namespace_type_t *namespace_type) {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_get_namespace_type_enter, ictx, ictx->name.c_str());
   int r = librbd::api::Snapshot<>::get_namespace_type(ictx, snap_id,
@@ -7216,8 +7216,8 @@ extern "C" int rbd_snap_mirror_namespace_cleanup(
 }
 
 extern "C" int rbd_watchers_list(rbd_image_t image,
-				 rbd_image_watcher_t *watchers,
-				 size_t *max_watchers) {
+                                 rbd_image_watcher_t *watchers,
+                                 size_t *max_watchers) {
   std::list<librbd::image_watcher_t> watcher_list;
   librbd::ImageCtx *ictx = (librbd::ImageCtx*)image;
 
@@ -7250,7 +7250,7 @@ extern "C" int rbd_watchers_list(rbd_image_t image,
 }
 
 extern "C" void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
-					  size_t num_watchers) {
+                                          size_t num_watchers) {
   for (size_t i = 0; i < num_watchers; ++i) {
     free(watchers[i].addr);
   }

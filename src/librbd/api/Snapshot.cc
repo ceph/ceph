@@ -55,7 +55,7 @@ public:
 
     std::string group_name;
     r = cls_client::dir_get_name(&group_ioctx, RBD_GROUP_DIRECTORY,
-				 snap_namespace.group_id, &group_name);
+                                 snap_namespace.group_id, &group_name);
     if (r < 0) {
       lderr(cct) << "failed to retrieve group name: " << cpp_strerror(r)
                  << dendl;
@@ -64,9 +64,9 @@ public:
 
     string group_header_oid = util::group_header_name(snap_namespace.group_id);
     r = cls_client::group_snap_get_by_id(&group_ioctx,
-					 group_header_oid,
-					 snap_namespace.group_snapshot_id,
-					 &group_snapshot);
+                                         group_header_oid,
+                                         snap_namespace.group_snapshot_id,
+                                         &group_snapshot);
     if (r < 0) {
       lderr(cct) << "failed to retrieve group snapshot: " << cpp_strerror(r)
                  << dendl;
@@ -298,7 +298,7 @@ int Snapshot<I>::list(I *ictx, vector<snap_info_t>& snaps) {
 
 template <typename I>
 int Snapshot<I>::exists(I *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
-		        const char *snap_name, bool *exists) {
+                        const char *snap_name, bool *exists) {
   ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
 
   int r = ictx->state->refresh_if_required();
@@ -341,7 +341,7 @@ int Snapshot<I>::remove(I *ictx, const char *snap_name, uint32_t flags,
   if (flags & RBD_SNAP_REMOVE_FLATTEN) {
      r = Image<I>::flatten_children(ictx, snap_name, pctx);
      if (r < 0) {
-	return r;
+        return r;
      }
   }
 
@@ -403,7 +403,7 @@ int Snapshot<I>::set_limit(I *ictx, uint64_t limit) {
 template <typename I>
 int Snapshot<I>::is_protected(I *ictx, const char *snap_name, bool *protect) {
   ldout(ictx->cct, 20) << "snap_is_protected " << ictx << " " << snap_name
-		       << dendl;
+                       << dendl;
 
   int r = ictx->state->refresh_if_required();
   if (r < 0)

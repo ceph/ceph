@@ -45,7 +45,7 @@ WRITE_CLASS_ENCODER(SnapInfo)
 inline bool operator==(const SnapInfo &l, const SnapInfo &r)
 {
   return l.snapid == r.snapid && l.ino == r.ino &&
-	 l.stamp == r.stamp && l.name == r.name;
+         l.stamp == r.stamp && l.name == r.name;
 }
 
 std::ostream& operator<<(std::ostream& out, const SnapInfo &sn);
@@ -94,8 +94,8 @@ struct sr_t {
 
   __u32 flags = 0;
   enum {
-    PARENT_GLOBAL	= 1 << 0,
-    SUBVOLUME		= 1 << 1,
+    PARENT_GLOBAL        = 1 << 0,
+    SUBVOLUME                = 1 << 1,
   };
 };
 WRITE_CLASS_ENCODER(sr_t)

@@ -49,18 +49,18 @@ ObjectMap<I>::~ObjectMap() {
 
 template <typename I>
 int ObjectMap<I>::aio_remove(librados::IoCtx &io_ctx, const std::string &image_id,
-			     librados::AioCompletion *c) {
+                             librados::AioCompletion *c) {
   return io_ctx.aio_remove(object_map_name(image_id, CEPH_NOSNAP), c);
 }
 
 template <typename I>
 std::string ObjectMap<I>::object_map_name(const std::string &image_id,
-				          uint64_t snap_id) {
+                                          uint64_t snap_id) {
   std::string oid(RBD_OBJECT_MAP_PREFIX + image_id);
   if (snap_id != CEPH_NOSNAP) {
     std::stringstream snap_suffix;
     snap_suffix << "." << std::setfill('0') << std::setw(16) << std::hex
-		<< snap_id;
+                << snap_id;
     oid += snap_suffix.str();
   }
   return oid;
@@ -102,7 +102,7 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
   uint8_t state = (*this)[object_no];
   bool exists = (state != OBJECT_NONEXISTENT);
   ldout(m_image_ctx.cct, 20) << "object_no=" << object_no << " r=" << exists
-			     << dendl;
+                             << dendl;
   return exists;
 }
 
@@ -250,7 +250,7 @@ void ObjectMap<I>::aio_save(Context *on_finish) {
 
 template <typename I>
 void ObjectMap<I>::aio_resize(uint64_t new_size, uint8_t default_object_state,
-			      Context *on_finish) {
+                              Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
@@ -287,11 +287,11 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
   } else if (r > 0) {
     ldout(cct, 20) << "detaining object map update due to in-flight update: "
                    << "start=" << op.start_object_no << ", "
-		   << "end=" << op.end_object_no << ", "
+                   << "end=" << op.end_object_no << ", "
                    << (op.current_state ?
                          stringify(static_cast<uint32_t>(*op.current_state)) :
                          "")
-		   << "->" << static_cast<uint32_t>(op.new_state) << dendl;
+                   << "->" << static_cast<uint32_t>(op.new_state) << dendl;
     return;
   }
 
@@ -340,10 +340,10 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "start=" << start_object_no << ", "
-		 << "end=" << end_object_no << ", "
+                 << "end=" << end_object_no << ", "
                  << (current_state ?
                        stringify(static_cast<uint32_t>(*current_state)) : "")
-		 << "->" << static_cast<uint32_t>(new_state) << dendl;
+                 << "->" << static_cast<uint32_t>(new_state) << dendl;
   if (snap_id == CEPH_NOSNAP) {
     ceph_assert(ceph_mutex_is_wlocked(m_lock));
     end_object_no = std::min(end_object_no, m_object_map.size());

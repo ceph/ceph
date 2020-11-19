@@ -395,18 +395,18 @@ namespace {
     void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) override {
       int type = -1;
       if (qi.is_bucket()) {
-	if (!crush->get_item_name(qi.id)) {
-	  throw BadCrushMap("unknown item name", qi.id);
-	}
-	type = crush->get_bucket_type(qi.id);
+        if (!crush->get_item_name(qi.id)) {
+          throw BadCrushMap("unknown item name", qi.id);
+        }
+        type = crush->get_bucket_type(qi.id);
       } else {
-	if (max_id > 0 && qi.id >= max_id) {
-	  throw BadCrushMap("item id too large", qi.id);
-	}
-	type = 0;
+        if (max_id > 0 && qi.id >= max_id) {
+          throw BadCrushMap("item id too large", qi.id);
+        }
+        type = 0;
       }
       if (!crush->get_type_name(type)) {
-	throw BadCrushMap("unknown type name", qi.id);
+        throw BadCrushMap("unknown type name", qi.id);
       }
     }
   };
@@ -454,10 +454,10 @@ void CrushTester::check_overlapped_rules() const
       continue;
     }
     Rules& rules = rulesets[{crush.get_rule_mask_ruleset(rule),
-			     crush.get_rule_mask_type(rule)}];
+                             crush.get_rule_mask_type(rule)}];
     rules += make_pair(interval::closed(crush.get_rule_mask_min_size(rule),
-					crush.get_rule_mask_max_size(rule)),
-		       RuleNames{get_rule_name(crush, rule)});
+                                        crush.get_rule_mask_max_size(rule)),
+                       RuleNames{get_rule_name(crush, rule)});
   }
   for (auto i : rulesets) {
     auto ruleset_type = i.first;
@@ -467,8 +467,8 @@ void CrushTester::check_overlapped_rules() const
       // if there are more than one rules covering the same size range,
       // print them out.
       if (names.size() > 1) {
-	err << "overlapped rules in ruleset " << ruleset_type.first << ": "
-	    << boost::join(names, ", ") << "\n";
+        err << "overlapped rules in ruleset " << ruleset_type.first << ": "
+            << boost::join(names, ", ") << "\n";
       }
     }
   }
@@ -524,7 +524,7 @@ int CrushTester::test()
       continue;
     }
     if (ruleset >= 0 &&
-	crush.get_rule_mask_ruleset(r) != ruleset) {
+        crush.get_rule_mask_ruleset(r) != ruleset) {
       continue;
     }
     int minr = min_rep, maxr = max_rep;
@@ -562,7 +562,7 @@ int CrushTester::test()
         total_weight += weight[i];
 
       if (total_weight == 0)
-	continue;
+        continue;
 
       // compute the expected number of objects stored per device in the absence of weighting
       float expected_objects = std::min(nr, get_maximum_affected_by_rule(r)) * num_objects;
@@ -615,7 +615,7 @@ int CrushTester::test()
 
           if (use_crush) {
             if (output_mappings)
-	      err << "CRUSH"; // prepend CRUSH to placement output
+              err << "CRUSH"; // prepend CRUSH to placement output
             uint32_t real_x = x;
             if (pool_id != -1) {
               real_x = crush_hash32_2(CRUSH_HASH_RJENKINS1, x, (uint32_t)pool_id);
@@ -623,13 +623,13 @@ int CrushTester::test()
             crush.do_rule(r, real_x, out, nr, weight, 0);
           } else {
             if (output_mappings)
-	      err << "RNG"; // prepend RNG to placement output to denote simulation
+              err << "RNG"; // prepend RNG to placement output to denote simulation
             // test our new monte carlo placement generator
             random_placement(r, out, nr, weight);
           }
 
-	  if (output_mappings)
-	    err << " rule " << r << " x " << x << " " << out << std::endl;
+          if (output_mappings)
+            err << " rule " << r << " x " << x << " " << out << std::endl;
 
           if (output_data_file)
             write_integer_indexed_vector_data_string(tester_data.placement_information, x, out);
@@ -770,7 +770,7 @@ int CrushTester::compare(CrushWrapper& crush2)
       continue;
     }
     if (ruleset >= 0 &&
-	crush.get_rule_mask_ruleset(r) != ruleset) {
+        crush.get_rule_mask_ruleset(r) != ruleset) {
       continue;
     }
     int minr = min_rep, maxr = max_rep;
@@ -781,13 +781,13 @@ int CrushTester::compare(CrushWrapper& crush2)
     int bad = 0;
     for (int nr = minr; nr <= maxr; nr++) {
       for (int x = min_x; x <= max_x; ++x) {
-	vector<int> out;
-	crush.do_rule(r, x, out, nr, weight, 0);
-	vector<int> out2;
-	crush2.do_rule(r, x, out2, nr, weight, 0);
-	if (out != out2) {
-	  ++bad;
-	}
+        vector<int> out;
+        crush.do_rule(r, x, out, nr, weight, 0);
+        vector<int> out2;
+        crush2.do_rule(r, x, out2, nr, weight, 0);
+        if (out != out2) {
+          ++bad;
+        }
       }
     }
     if (bad) {
@@ -796,7 +796,7 @@ int CrushTester::compare(CrushWrapper& crush2)
     int max = (maxr - minr + 1) * (max_x - min_x + 1);
     double ratio = (double)bad / (double)max;
     cout << "rule " << r << " had " << bad << "/" << max
-	 << " mismatched mappings (" << ratio << ")" << std::endl;
+         << " mismatched mappings (" << ratio << ")" << std::endl;
   }
   if (ret) {
     cerr << "warning: maps are NOT equivalent" << std::endl;

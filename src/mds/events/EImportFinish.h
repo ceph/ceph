@@ -28,8 +28,8 @@ class EImportFinish : public LogEvent {
 
  public:
   EImportFinish(CDir *dir, bool s) : LogEvent(EVENT_IMPORTFINISH), 
-				     base(dir->dirfrag()),
-				     success(s) { }
+                                     base(dir->dirfrag()),
+                                     success(s) { }
   EImportFinish() : LogEvent(EVENT_IMPORTFINISH), base(), success(false) { }
   
   void print(ostream& out) const override {

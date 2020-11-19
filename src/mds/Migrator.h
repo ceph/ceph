@@ -50,16 +50,16 @@ class EImportStart;
 class Migrator {
 public:
   // export stages.  used to clean up intelligently if there's a failure.
-  const static int EXPORT_CANCELLED	= 0;  // cancelled
-  const static int EXPORT_CANCELLING	= 1;  // waiting for cancel notifyacks
-  const static int EXPORT_LOCKING	= 2;  // acquiring locks
-  const static int EXPORT_DISCOVERING	= 3;  // dest is disovering export dir
-  const static int EXPORT_FREEZING	= 4;  // we're freezing the dir tree
-  const static int EXPORT_PREPPING	= 5;  // sending dest spanning tree to export bounds
-  const static int EXPORT_WARNING	= 6;  // warning bystanders of dir_auth_pending
-  const static int EXPORT_EXPORTING	= 7;  // sent actual export, waiting for ack
-  const static int EXPORT_LOGGINGFINISH	= 8;  // logging EExportFinish
-  const static int EXPORT_NOTIFYING	= 9;  // waiting for notifyacks
+  const static int EXPORT_CANCELLED        = 0;  // cancelled
+  const static int EXPORT_CANCELLING        = 1;  // waiting for cancel notifyacks
+  const static int EXPORT_LOCKING        = 2;  // acquiring locks
+  const static int EXPORT_DISCOVERING        = 3;  // dest is disovering export dir
+  const static int EXPORT_FREEZING        = 4;  // we're freezing the dir tree
+  const static int EXPORT_PREPPING        = 5;  // sending dest spanning tree to export bounds
+  const static int EXPORT_WARNING        = 6;  // warning bystanders of dir_auth_pending
+  const static int EXPORT_EXPORTING        = 7;  // sent actual export, waiting for ack
+  const static int EXPORT_LOGGINGFINISH        = 8;  // logging EExportFinish
+  const static int EXPORT_NOTIFYING        = 9;  // waiting for notifyacks
 
   // -- imports --
   const static int IMPORT_DISCOVERING   = 1; // waiting for prep
@@ -132,7 +132,7 @@ public:
     if (it == import_state.end())
       return false;
     if (it->second.state >= IMPORT_LOGGINGSTART &&
-	it->second.state < IMPORT_ABORTING)
+        it->second.state < IMPORT_ABORTING)
       return true;
     return false;
   }
@@ -197,55 +197,55 @@ public:
   }
   
   void maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
-			  vector<pair<CDir*, size_t> >& results);
+                          vector<pair<CDir*, size_t> >& results);
 
   bool export_try_grab_locks(CDir *dir, MutationRef& mut);
   void get_export_client_set(CDir *dir, std::set<client_t> &client_set);
   void get_export_client_set(CInode *in, std::set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
-			   std::map<client_t,entity_inst_t>& exported_client_map,
-			   std::map<client_t,client_metadata_t>& exported_client_metadata_map);
+                           std::map<client_t,entity_inst_t>& exported_client_map,
+                           std::map<client_t,client_metadata_t>& exported_client_metadata_map);
   void encode_export_inode_caps(CInode *in, bool auth_cap, bufferlist& bl,
-				std::map<client_t,entity_inst_t>& exported_client_map,
-				std::map<client_t,client_metadata_t>& exported_client_metadata_map);
+                                std::map<client_t,entity_inst_t>& exported_client_map,
+                                std::map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_inode(CInode *in, mds_rank_t target,
-			   std::map<client_t,Capability::Import>& peer_imported,
-			   MDSContext::vec& finished);
+                           std::map<client_t,Capability::Import>& peer_imported,
+                           MDSContext::vec& finished);
   void finish_export_inode_caps(CInode *in, mds_rank_t target,
-			        std::map<client_t,Capability::Import>& peer_imported);
+                                std::map<client_t,Capability::Import>& peer_imported);
 
 
   void encode_export_dir(bufferlist& exportbl,
-			CDir *dir,
-			std::map<client_t,entity_inst_t>& exported_client_map,
-			std::map<client_t,client_metadata_t>& exported_client_metadata_map,
+                        CDir *dir,
+                        std::map<client_t,entity_inst_t>& exported_client_map,
+                        std::map<client_t,client_metadata_t>& exported_client_metadata_map,
                         uint64_t &num_exported);
   void finish_export_dir(CDir *dir, mds_rank_t target,
-			 std::map<inodeno_t,std::map<client_t,Capability::Import> >& peer_imported,
-			 MDSContext::vec& finished, int *num_dentries);
+                         std::map<inodeno_t,std::map<client_t,Capability::Import> >& peer_imported,
+                         MDSContext::vec& finished, int *num_dentries);
 
   void clear_export_proxy_pins(CDir *dir);
 
   void export_caps(CInode *in);
 
   void decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
-			   mds_rank_t oldauth, LogSegment *ls,
-			   std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
-			   std::list<ScatterLock*>& updated_scatterlocks);
+                           mds_rank_t oldauth, LogSegment *ls,
+                           std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
+                           std::list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::const_iterator &blp,
-				std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
+                                std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
   void finish_import_inode_caps(CInode *in, mds_rank_t from, bool auth_cap,
-				const std::map<client_t,pair<Session*,uint64_t> >& smap,
-				const std::map<client_t,Capability::Export> &export_map,
-				std::map<client_t,Capability::Import> &import_map);
+                                const std::map<client_t,pair<Session*,uint64_t> >& smap,
+                                const std::map<client_t,Capability::Export> &export_map,
+                                std::map<client_t,Capability::Import> &import_map);
   void decode_import_dir(bufferlist::const_iterator& blp,
-			mds_rank_t oldauth,
-			CDir *import_root,
-			EImportStart *le, 
-			LogSegment *ls,
-			std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
-			std::list<ScatterLock*>& updated_scatterlocks, int &num_imported);
+                        mds_rank_t oldauth,
+                        CDir *import_root,
+                        EImportStart *le, 
+                        LogSegment *ls,
+                        std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
+                        std::list<ScatterLock*>& updated_scatterlocks, int &num_imported);
 
   void import_reverse(CDir *dir);
 
@@ -345,15 +345,15 @@ protected:
   void import_notify_abort(CDir *dir, std::set<CDir*>& bounds);
   void import_notify_finish(CDir *dir, std::set<CDir*>& bounds);
   void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
-			   std::map<client_t,pair<Session*,uint64_t> >& imported_session_map);
+                           std::map<client_t,pair<Session*,uint64_t> >& imported_session_map);
   void handle_export_finish(const cref_t<MExportDirFinish> &m);
 
   void handle_export_caps(const cref_t<MExportCaps> &m);
   void handle_export_caps_ack(const cref_t<MExportCapsAck> &m);
   void logged_import_caps(CInode *in,
-			  mds_rank_t from,
-			  std::map<client_t,pair<Session*,uint64_t> >& imported_session_map,
-			  std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
+                          mds_rank_t from,
+                          std::map<client_t,pair<Session*,uint64_t> >& imported_session_map,
+                          std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
 
   // bystander
   void handle_export_notify(const cref_t<MExportDirNotify> &m);

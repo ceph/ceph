@@ -65,7 +65,7 @@ string generate_uuid(librados::IoCtx& io_ctx)
 }
 
 int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
-		    std::vector<cls::rbd::GroupSnapshot> *cls_snaps)
+                    std::vector<cls::rbd::GroupSnapshot> *cls_snaps)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
@@ -73,11 +73,11 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
   vector<string> ind_snap_names;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
-				 group_name, &group_id);
+                                 group_name, &group_id);
   if (r < 0) {
     lderr(cct) << "error reading group id object: "
-	       << cpp_strerror(r)
-	       << dendl;
+               << cpp_strerror(r)
+               << dendl;
     return r;
   }
   string group_header_oid = util::group_header_name(group_id);
@@ -89,11 +89,11 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
     vector<cls::rbd::GroupSnapshot> snaps_page;
 
     r = cls_client::group_snap_list(&group_ioctx, group_header_oid,
-				    snap_last, max_read, &snaps_page);
+                                    snap_last, max_read, &snaps_page);
 
     if (r < 0) {
       lderr(cct) << "error reading snap list from group: "
-	<< cpp_strerror(-r) << dendl;
+        << cpp_strerror(-r) << dendl;
       return r;
     }
     cls_snaps->insert(cls_snaps->end(), snaps_page.begin(), snaps_page.end());
@@ -107,8 +107,8 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 }
 
 std::string calc_ind_image_snap_name(uint64_t pool_id,
-				     const std::string &group_id,
-				     const std::string &snap_id)
+                                     const std::string &group_id,
+                                     const std::string &snap_id)
 {
   std::stringstream ind_snap_name_stream;
   ind_snap_name_stream << ".group." << std::hex << pool_id << "_"
@@ -117,24 +117,24 @@ std::string calc_ind_image_snap_name(uint64_t pool_id,
 }
 
 int group_image_list(librados::IoCtx& group_ioctx, const char *group_name,
-		     std::vector<cls::rbd::GroupImageStatus> *image_ids)
+                     std::vector<cls::rbd::GroupImageStatus> *image_ids)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
   string group_id;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
-				 group_name, &group_id);
+                                 group_name, &group_id);
   if (r < 0) {
     lderr(cct) << "error reading group id object: "
-	       << cpp_strerror(r)
-	       << dendl;
+               << cpp_strerror(r)
+               << dendl;
     return r;
   }
   string group_header_oid = util::group_header_name(group_id);
 
   ldout(cct, 20) << "listing images in group name "
-		 << group_name << " group id " << group_header_oid << dendl;
+                 << group_name << " group id " << group_header_oid << dendl;
   image_ids->clear();
 
   const int max_read = 1024;
@@ -143,15 +143,15 @@ int group_image_list(librados::IoCtx& group_ioctx, const char *group_name,
     std::vector<cls::rbd::GroupImageStatus> image_ids_page;
 
     r = cls_client::group_image_list(&group_ioctx, group_header_oid,
-				     start_last, max_read, &image_ids_page);
+                                     start_last, max_read, &image_ids_page);
 
     if (r < 0) {
       lderr(cct) << "error reading image list from group: "
-	<< cpp_strerror(-r) << dendl;
+        << cpp_strerror(-r) << dendl;
       return r;
     }
     image_ids->insert(image_ids->end(),
-		     image_ids_page.begin(), image_ids_page.end());
+                     image_ids_page.begin(), image_ids_page.end());
 
     if (image_ids_page.size() > 0)
       start_last = image_ids_page.rbegin()->spec;
@@ -163,7 +163,7 @@ int group_image_list(librados::IoCtx& group_ioctx, const char *group_name,
 }
 
 int group_image_remove(librados::IoCtx& group_ioctx, string group_id,
-		       librados::IoCtx& image_ioctx, string image_id)
+                       librados::IoCtx& image_ioctx, string image_id)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
@@ -172,29 +172,29 @@ int group_image_remove(librados::IoCtx& group_ioctx, string group_id,
   string image_header_oid = util::header_name(image_id);
 
   ldout(cct, 20) << "removing image " << image_id
-		 << " image id " << image_header_oid << dendl;
+                 << " image id " << image_header_oid << dendl;
 
   cls::rbd::GroupSpec group_spec(group_id, group_ioctx.get_id());
 
   cls::rbd::GroupImageStatus incomplete_st(image_id, image_ioctx.get_id(),
-				cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
+                                cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
 
   cls::rbd::GroupImageSpec spec(image_id, image_ioctx.get_id());
 
   int r = cls_client::group_image_set(&group_ioctx, group_header_oid,
-				      incomplete_st);
+                                      incomplete_st);
 
   if (r < 0) {
     lderr(cct) << "couldn't put image into removing state: "
-	       << cpp_strerror(-r) << dendl;
+               << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = cls_client::image_group_remove(&image_ioctx, image_header_oid,
-				     group_spec);
+                                     group_spec);
   if ((r < 0) && (r != -ENOENT)) {
     lderr(cct) << "couldn't remove group reference from image"
-	       << cpp_strerror(-r) << dendl;
+               << cpp_strerror(-r) << dendl;
     return r;
   } else if (r >= 0) {
     ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
@@ -203,7 +203,7 @@ int group_image_remove(librados::IoCtx& group_ioctx, string group_id,
   r = cls_client::group_image_remove(&group_ioctx, group_header_oid, spec);
   if (r < 0) {
     lderr(cct) << "couldn't remove image from group"
-	       << cpp_strerror(-r) << dendl;
+               << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -211,9 +211,9 @@ int group_image_remove(librados::IoCtx& group_ioctx, string group_id,
 }
 
 int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
-				const cls::rbd::GroupSnapshot& group_snap,
-				const std::string& group_id,
-				const std::string& group_header_oid) {
+                                const cls::rbd::GroupSnapshot& group_snap,
+                                const std::string& group_id,
+                                const std::string& group_header_oid) {
 
   CephContext *cct = (CephContext *)group_ioctx.cct();
   std::vector<C_SaferCond*> on_finishes;
@@ -222,7 +222,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   std::vector<librbd::ImageCtx*> ictxs;
 
   cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
-				      group_snap.id};
+                                      group_snap.id};
 
   ldout(cct, 20) << "Removing snapshots" << dendl;
   int snap_count = group_snap.snaps.size();
@@ -236,7 +236,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     }
 
     librbd::ImageCtx* image_ctx = new ImageCtx("", group_snap.snaps[i].image_id,
-					       nullptr, image_io_ctx, false);
+                                               nullptr, image_io_ctx, false);
 
     C_SaferCond* on_finish = new C_SaferCond;
 
@@ -260,7 +260,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   }
 
   ldout(cct, 20) << "Opened participating images. " <<
-		    "Deleting snapshots themselves." << dendl;
+                    "Deleting snapshots themselves." << dendl;
 
   for (int i = 0; i < snap_count; ++i) {
     ImageCtx *ictx = ictxs[i];
@@ -509,7 +509,7 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
   }
 
   ldout(cct, 20) << "removing image from group name " << group_name
-		  << " group id " << group_id << dendl;
+                  << " group id " << group_id << dendl;
 
   return group_image_remove(group_ioctx, group_id, image_ioctx, string(image_id));
 }
@@ -527,8 +527,8 @@ int Group<I>::create(librados::IoCtx& io_ctx, const char *group_name)
                                     id);
   if (r < 0) {
     lderr(cct) << "error adding group to directory: "
-	       << cpp_strerror(r)
-	       << dendl;
+               << cpp_strerror(r)
+               << dendl;
     return r;
   }
   string header_oid = util::group_header_name(id);
@@ -543,11 +543,11 @@ int Group<I>::create(librados::IoCtx& io_ctx, const char *group_name)
 
 err_remove_from_dir:
   int remove_r = cls_client::group_dir_remove(&io_ctx, RBD_GROUP_DIRECTORY,
-					      group_name, id);
+                                              group_name, id);
   if (remove_r < 0) {
     lderr(cct) << "error cleaning up group from rbd_directory "
-	       << "object after creation failed: " << cpp_strerror(remove_r)
-	       << dendl;
+               << "object after creation failed: " << cpp_strerror(remove_r)
+               << dendl;
   }
 
   return r;
@@ -561,7 +561,7 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
 
   std::string group_id;
   int r = cls_client::dir_get_id(&io_ctx, RBD_GROUP_DIRECTORY,
-				 std::string(group_name), &group_id);
+                                 std::string(group_name), &group_id);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error getting id of group" << dendl;
     return r;
@@ -613,7 +613,7 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
   }
 
   r = cls_client::group_dir_remove(&io_ctx, RBD_GROUP_DIRECTORY,
-				       group_name, group_id);
+                                       group_name, group_id);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error removing group from directory" << dendl;
     return r;
@@ -661,12 +661,12 @@ int Group<I>::list(IoCtx& io_ctx, vector<string> *names)
 
 template <typename I>
 int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
-			librados::IoCtx& image_ioctx, const char *image_name)
+                        librados::IoCtx& image_ioctx, const char *image_name)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
-		 << " group name " << group_name << " image "
-		 << &image_ioctx << " name " << image_name << dendl;
+                 << " group name " << group_name << " image "
+                 << &image_ioctx << " name " << image_name << dendl;
 
   if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
     lderr(cct) << "group and image cannot be in different namespaces" << dendl;
@@ -679,15 +679,15 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
                                  &group_id);
   if (r < 0) {
     lderr(cct) << "error reading group id object: "
-	       << cpp_strerror(r)
-	       << dendl;
+               << cpp_strerror(r)
+               << dendl;
     return r;
   }
   string group_header_oid = util::group_header_name(group_id);
 
 
   ldout(cct, 20) << "adding image to group name " << group_name
-		 << " group id " << group_header_oid << dendl;
+                 << " group id " << group_header_oid << dendl;
 
   string image_id;
 
@@ -695,14 +695,14 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
                              &image_id);
   if (r < 0) {
     lderr(cct) << "error reading image id object: "
-	       << cpp_strerror(-r) << dendl;
+               << cpp_strerror(-r) << dendl;
     return r;
   }
 
   string image_header_oid = util::header_name(image_id);
 
   ldout(cct, 20) << "adding image " << image_name
-		 << " image id " << image_header_oid << dendl;
+                 << " image id " << image_header_oid << dendl;
 
   cls::rbd::GroupImageStatus incomplete_st(
     image_id, image_ioctx.get_id(),
@@ -711,20 +711,20 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     image_id, image_ioctx.get_id(), cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED);
 
   r = cls_client::group_image_set(&group_ioctx, group_header_oid,
-				  incomplete_st);
+                                  incomplete_st);
 
   cls::rbd::GroupSpec group_spec(group_id, group_ioctx.get_id());
 
   if (r < 0) {
     lderr(cct) << "error adding image reference to group: "
-	       << cpp_strerror(-r) << dendl;
+               << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = cls_client::image_group_add(&image_ioctx, image_header_oid, group_spec);
   if (r < 0) {
     lderr(cct) << "error adding group reference to image: "
-	       << cpp_strerror(-r) << dendl;
+               << cpp_strerror(-r) << dendl;
     cls::rbd::GroupImageSpec spec(image_id, image_ioctx.get_id());
     cls_client::group_image_remove(&group_ioctx, group_header_oid, spec);
     // Ignore errors in the clean up procedure.
@@ -733,19 +733,19 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
 
   r = cls_client::group_image_set(&group_ioctx, group_header_oid,
-				  attached_st);
+                                  attached_st);
 
   return r;
 }
 
 template <typename I>
 int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-		           librados::IoCtx& image_ioctx, const char *image_name)
+                           librados::IoCtx& image_ioctx, const char *image_name)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
-		<< " group name " << group_name << " image "
-		<< &image_ioctx << " name " << image_name << dendl;
+                << " group name " << group_name << " image "
+                << &image_ioctx << " name " << image_name << dendl;
 
   if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
     lderr(cct) << "group and image cannot be in different namespaces" << dendl;
@@ -782,12 +782,12 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 
 template <typename I>
 int Group<I>::image_list(librados::IoCtx& group_ioctx,
-			 const char *group_name,
-			 std::vector<group_image_info_t>* images)
+                         const char *group_name,
+                         std::vector<group_image_info_t>* images)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
-		 << " group name " << group_name << dendl;
+                 << " group name " << group_name << dendl;
 
   std::vector<cls::rbd::GroupImageStatus> image_ids;
 
@@ -803,16 +803,16 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 
     std::string image_name;
     r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
-				 image_id.spec.image_id, &image_name);
+                                 image_id.spec.image_id, &image_name);
     if (r < 0) {
       return r;
     }
 
     images->push_back(
-	group_image_info_t {
-	   image_name,
-	   ioctx.get_id(),
-	   static_cast<group_image_state_t>(image_id.state)});
+        group_image_info_t {
+           image_name,
+           ioctx.get_id(),
+           static_cast<group_image_state_t>(image_id.state)});
   }
 
   return 0;
@@ -863,7 +863,7 @@ int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
 
     std::string group_name;
     r = cls_client::dir_get_name(&ioctx, RBD_GROUP_DIRECTORY,
-				 ictx->group_spec.group_id, &group_name);
+                                 ictx->group_spec.group_id, &group_name);
     if (r < 0)
       return r;
     group_info->pool = ioctx.get_id();
@@ -893,11 +893,11 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   NoOpProgressContext prog_ctx;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
-				 group_name, &group_id);
+                                 group_name, &group_id);
   if (r < 0) {
     lderr(cct) << "error reading group id object: "
-	       << cpp_strerror(r)
-	       << dendl;
+               << cpp_strerror(r)
+               << dendl;
     return r;
   }
 
@@ -931,8 +931,8 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
   if (r == -EEXIST) {
     lderr(cct) << "snapshot with this name already exists: "
-	       << cpp_strerror(r)
-	       << dendl;
+               << cpp_strerror(r)
+               << dendl;
   }
   int ret_code = 0;
   if (r < 0) {
@@ -952,7 +952,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     ldout(cct, 20) << "Opening image with id " << image.spec.image_id << dendl;
 
     librbd::ImageCtx* image_ctx = new ImageCtx("", image.spec.image_id.c_str(),
-					       nullptr, image_io_ctx, false);
+                                               nullptr, image_io_ctx, false);
 
     C_SaferCond* on_finish = new C_SaferCond;
 
@@ -1021,7 +1021,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   }
 
   ind_snap_name = calc_ind_image_snap_name(group_ioctx.get_id(), group_id,
-					    group_snap.id);
+                                            group_snap.id);
 
   for (int i = 0; i < image_count; ++i) {
     ImageCtx *ictx = ictxs[i];
@@ -1048,13 +1048,13 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
       snap_t snap_id = get_group_snap_id(ictx, ne);
       ictx->image_lock.unlock_shared();
       if (snap_id == CEPH_NOSNAP) {
-	ldout(cct, 20) << "Couldn't find created snapshot with namespace: "
+        ldout(cct, 20) << "Couldn't find created snapshot with namespace: "
                        << ne << dendl;
-	ret_code = -ENOENT;
+        ret_code = -ENOENT;
       } else {
-	image_snaps[i].snap_id = snapid_t(snap_id);
-	image_snaps[i].pool = ictx->md_ctx.get_id();
-	image_snaps[i].image_id = ictx->id;
+        image_snaps[i].snap_id = snapid_t(snap_id);
+        image_snaps[i].pool = ictx->md_ctx.get_id();
+        image_snaps[i].image_id = ictx->id;
       }
     }
   }
@@ -1127,17 +1127,17 @@ finish:
 
 template <typename I>
 int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
-			  const char *snap_name)
+                          const char *snap_name)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
   string group_id;
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
-				 group_name, &group_id);
+                                 group_name, &group_id);
   if (r < 0) {
     lderr(cct) << "error reading group id object: "
-	       << cpp_strerror(r)
-	       << dendl;
+               << cpp_strerror(r)
+               << dendl;
     return r;
   }
 
@@ -1212,7 +1212,7 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
 
 template <typename I>
 int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
-			std::vector<group_snap_info_t> *snaps)
+                        std::vector<group_snap_info_t> *snaps)
 {
   std::vector<cls::rbd::GroupSnapshot> cls_snaps;
 
@@ -1223,9 +1223,9 @@ int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 
   for (auto snap : cls_snaps) {
     snaps->push_back(
-	group_snap_info_t {
-	   snap.name,
-	   static_cast<group_snap_state_t>(snap.state)});
+        group_snap_info_t {
+           snap.name,
+           static_cast<group_snap_state_t>(snap.state)});
 
   }
   return 0;

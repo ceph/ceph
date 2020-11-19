@@ -24,7 +24,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 GetLockerRequest<I>::GetLockerRequest(librados::IoCtx& ioctx,
-				      const std::string& oid, bool exclusive,
+                                      const std::string& oid, bool exclusive,
                                       Locker *locker, Context *on_finish)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_oid(oid), m_exclusive(exclusive), m_locker(locker),
@@ -98,7 +98,7 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
            rados::cls::lock::locker_info_t>::iterator iter = lockers.begin();
   if (!util::decode_lock_cookie(iter->first.cookie, &m_locker->handle)) {
     ldout(m_cct, 5) << "locked by external mechanism: "
-		    << "cookie=" << iter->first.cookie << dendl;
+                    << "cookie=" << iter->first.cookie << dendl;
     finish(-EBUSY);
     return;
   }

@@ -71,8 +71,8 @@ public:
     : m_io_ctx(io_ctx), m_header_oid(header_oid), m_state(state),
       m_prog_ctx(prog_ctx), m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
       m_lock(ceph::make_mutex(
-	util::unique_lock_name("librbd::api::MigrationProgressContext",
-			       this))) {
+        util::unique_lock_name("librbd::api::MigrationProgressContext",
+                               this))) {
     ceph_assert(m_prog_ctx != nullptr);
   }
 

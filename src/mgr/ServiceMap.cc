@@ -83,7 +83,7 @@ std::string ServiceMap::Service::get_summary() const
     ss << " (";
     for (auto p = daemons.begin(); p != daemons.end(); ++p) {
       if (p != daemons.begin()) {
-	ss << ", ";
+        ss << ", ";
       }
       ss << p->first;
     }
@@ -110,7 +110,7 @@ std::string ServiceMap::Service::get_task_summary(const std::string_view task_pr
   for (const auto& [service_id, daemon] : daemons) {
     for (const auto& [task_name, status] : daemon.task_status) {
       by_task[task_name].emplace(fmt::format("{}.{}", task_prefix, service_id),
-				 status);
+                                 status);
     }
   }
   std::stringstream ss;
@@ -124,7 +124,7 @@ std::string ServiceMap::Service::get_task_summary(const std::string_view task_pr
 }
 
 void ServiceMap::Service::count_metadata(const std::string& field,
-					std::map<std::string,int> *out) const
+                                        std::map<std::string,int> *out) const
 {
   for (auto& p : daemons) {
     auto q = p.second.metadata.find(field);

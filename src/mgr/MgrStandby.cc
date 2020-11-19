@@ -40,11 +40,11 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(
-		     g_ceph_context,
-		     cct->_conf.get_val<std::string>("ms_type"),
-		     entity_name_t::MGR(),
-		     "mgr",
-		     Messenger::get_pid_nonce())),
+                     g_ceph_context,
+                     cct->_conf.get_val<std::string>("ms_type"),
+                     entity_name_t::MGR(),
+                     "mgr",
+                     Messenger::get_pid_nonce())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
   client{client_messenger.get(), &monc, &objecter},
   mgrc(g_ceph_context, client_messenger.get(), &monc.monmap),
@@ -134,10 +134,10 @@ int MgrStandby::init()
   monc.register_config_callback([this](const std::string &k, const std::string &v){
       dout(10) << "config_callback: " << k << " : " << v << dendl;
       if (k.substr(0, 4) == "mgr/") {
-	const std::string global_key = PyModule::config_prefix + k.substr(4);
+        const std::string global_key = PyModule::config_prefix + k.substr(4);
         py_module_registry.handle_config(global_key, v);
 
-	return true;
+        return true;
       }
       return false;
     });
@@ -225,14 +225,14 @@ void MgrStandby::send_beacon()
   collect_sys_info(&metadata, g_ceph_context);
 
   auto m = ceph::make_message<MMgrBeacon>(monc.get_fsid(),
-				 monc.get_global_id(),
+                                 monc.get_global_id(),
                                  g_conf()->name.get_id(),
                                  addrs,
                                  available,
-				 std::move(module_info),
-				 std::move(metadata),
+                                 std::move(module_info),
+                                 std::move(metadata),
                                  std::move(clients),
-				 CEPH_FEATURES_ALL);
+                                 CEPH_FEATURES_ALL);
 
   if (available) {
     if (!available_in_map) {
@@ -360,17 +360,17 @@ void MgrStandby::_update_log_config()
   string host;
 
   if (parse_log_client_options(cct, log_to_monitors, log_to_syslog,
-			       log_channel, log_prio, log_to_graylog,
-			       log_to_graylog_host, log_to_graylog_port,
-			       fsid, host) == 0) {
+                               log_channel, log_prio, log_to_graylog,
+                               log_to_graylog_host, log_to_graylog_port,
+                               fsid, host) == 0) {
     clog->update_config(log_to_monitors, log_to_syslog,
-			log_channel, log_prio, log_to_graylog,
-			log_to_graylog_host, log_to_graylog_port,
-			fsid, host);
+                        log_channel, log_prio, log_to_graylog,
+                        log_to_graylog_host, log_to_graylog_port,
+                        fsid, host);
     audit_clog->update_config(log_to_monitors, log_to_syslog,
-			      log_channel, log_prio, log_to_graylog,
-			      log_to_graylog_host, log_to_graylog_port,
-			      fsid, host);
+                              log_channel, log_prio, log_to_graylog,
+                              log_to_graylog_host, log_to_graylog_port,
+                              fsid, host);
   }
 }
 
@@ -395,7 +395,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
       dout(1) << "Activating!" << dendl;
       active_mgr.reset(new Mgr(&monc, map, &py_module_registry,
                                client_messenger.get(), &objecter,
-			       &client, clog, audit_clog));
+                               &client, clog, audit_clog));
       active_mgr->background_init(new LambdaContext(
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for
@@ -408,7 +408,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
       dout(10) << "I was already active" << dendl;
       bool need_respawn = active_mgr->got_mgr_map(map);
       if (need_respawn) {
-	respawn();
+        respawn();
       }
     }
 

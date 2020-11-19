@@ -48,7 +48,7 @@ struct OptionMask {
     }
     if (device_class.size()) {
       if (r.size()) {
-	r += "/";
+        r += "/";
       }
       r += "class:" + device_class;
     }

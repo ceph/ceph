@@ -375,10 +375,10 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
     // report failed always_on modules as health errors
     for (const auto& name : mgr_map.get_always_on_modules()) {
       if (obsolete_modules.count(name)) {
-	continue;
+        continue;
       }
       if (active_modules->is_pending(name)) {
-	continue;
+        continue;
       }
       if (!active_modules->module_exists(name)) {
         if (failed_modules.find(name) == failed_modules.end() &&
@@ -396,14 +396,14 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
            << iter->second;
       } else if (dependency_modules.size() > 1) {
         ss << dependency_modules.size()
-	   << " mgr modules have failed dependencies";
+           << " mgr modules have failed dependencies";
       }
       auto& d = checks->add("MGR_MODULE_DEPENDENCY", HEALTH_WARN, ss.str(),
-			    dependency_modules.size());
+                            dependency_modules.size());
       for (auto& i : dependency_modules) {
-	std::ostringstream ss;
+        std::ostringstream ss;
         ss << "Module '" << i.first << "' has failed dependency: " << i.second;
-	d.detail.push_back(ss.str());
+        d.detail.push_back(ss.str());
       }
     }
 
@@ -416,11 +416,11 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
         ss << failed_modules.size() << " mgr modules have failed";
       }
       auto& d = checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str(),
-			    failed_modules.size());
+                            failed_modules.size());
       for (auto& i : failed_modules) {
-	std::ostringstream ss;
+        std::ostringstream ss;
         ss << "Module '" << i.first << "' has failed: " << i.second;
-	d.detail.push_back(ss.str());
+        d.detail.push_back(ss.str());
       }
     }
   }

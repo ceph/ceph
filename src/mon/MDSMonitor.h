@@ -119,7 +119,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   void tick() override;     // check state, take actions
 
   int dump_metadata(const FSMap &fsmap, const std::string &who, ceph::Formatter *f,
-		    std::ostream& err);
+                    std::ostream& err);
 
   void update_metadata(mds_gid_t gid, const Metadata& metadata);
   void remove_from_metadata(const FSMap &fsmap, MonitorDBStore::TransactionRef t);

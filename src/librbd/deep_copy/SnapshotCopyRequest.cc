@@ -27,10 +27,10 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
   auto snap_it = std::find_if(image_ctx->snap_ids.begin(),
                               image_ctx->snap_ids.end(),
                               [snap_id](
-				const std::pair<
-					  std::pair<cls::rbd::SnapshotNamespace,
-						    std::string>,
-					  librados::snap_t> &pair) {
+                                const std::pair<
+                                          std::pair<cls::rbd::SnapshotNamespace,
+                                                    std::string>,
+                                          librados::snap_t> &pair) {
     return pair.second == snap_id;
   });
   ceph_assert(snap_it != image_ctx->snap_ids.end());
