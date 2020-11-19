@@ -136,11 +136,6 @@ int ConfFile::parse_file(const std::string &fname,
   std::ifstream ifs{fname};
   std::string buffer{std::istreambuf_iterator<char>(ifs),
 			               std::istreambuf_iterator<char>()};
-  #ifdef _WIN32
-    // We'll need to ensure that there's a new line at the end of the file,
-    // otherwise the config parsing will fail.
-    buffer.append("\n");
-  #endif
   if (parse_buffer(buffer, warnings)) {
     return 0;
   } else {
@@ -255,17 +250,24 @@ struct IniGrammer : qi::grammar<Iterator, ConfFile(), Skipper>
 bool ConfFile::parse_buffer(std::string_view buf, std::ostream* err)
 {
   assert(err);
-  if (int err_pos = check_utf8(buf.data(), buf.size()); err_pos > 0) {
+#ifdef _WIN32
+  // We'll need to ensure that there's a new line at the end of the buffer,
+  // otherwise the config parsing will fail.
+  std::string _buf = std::string(buf) + "\n";
+#else
+  std::string_view _buf = buf;
+#endif
+  if (int err_pos = check_utf8(_buf.data(), _buf.size()); err_pos > 0) {
     *err << "parse error: invalid UTF-8 found at line "
-	 << std::count(buf.begin(), std::next(buf.begin(), err_pos), '\n') + 1;
+	 << std::count(_buf.begin(), std::next(_buf.begin(), err_pos), '\n') + 1;
     return false;
   }
-  using iter_t = boost::spirit::line_pos_iterator<decltype(buf.begin())>;
-  iter_t first{buf.begin()};
+  using iter_t = boost::spirit::line_pos_iterator<decltype(_buf.begin())>;
+  iter_t first{_buf.begin()};
   using skipper_t = qi::rule<iter_t>;
   IniGrammer<iter_t, skipper_t> grammar{first, *err};
   skipper_t skipper = grammar.continue_marker | grammar.comment;
-  return qi::phrase_parse(first, iter_t{buf.end()},
+  return qi::phrase_parse(first, iter_t{_buf.end()},
 			  grammar, skipper, *this);
 }
 
