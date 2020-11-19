@@ -140,12 +140,7 @@ class List(object):
         """
         return self.create_report(api.get_lvs())
 
-    def single_report(self, device):
-        """
-        Generate a report for a single device. This can be either a logical
-        volume in the form of vg/lv or a device with an absolute path like
-        /dev/sda1 or /dev/sda. Returns '{}' to denote failure.
-        """
+    def get_lvs_from_path(self, device):
         lvs = []
         if os.path.isabs(device):
             # we have a block device
@@ -159,13 +154,30 @@ class List(object):
             lvs = api.get_lvs(filters={'lv_name': lv_name,
                                        'vg_name': vg_name})
 
-        report = self.create_report(lvs)
+        return lvs
+
+    def single_report(self, arg):
+        """
+        Generate a report for a single device. This can be either a logical
+        volume in the form of vg/lv, a device with an absolute path like
+        /dev/sda1 or /dev/sda, or a list of devices under same OSD ID.
+
+        Return value '{}' denotes failure.
+        """
+        if isinstance(arg, int) or arg.isdigit():
+            lv = api.get_lvs_from_osd_id(arg)
+        elif arg[0] == '/':
+            lv = self.get_lvs_from_path(arg)
+        else:
+            lv = [api.get_single_lv(filters={'lv_name': arg.split('/')[1]})]
+
+        report = self.create_report(lv)
 
         if not report:
             # check if device is a non-lvm journals or wal/db
             for dev_type in ['journal', 'wal', 'db']:
                 lvs = api.get_lvs(tags={
-                    'ceph.{}_device'.format(dev_type): device})
+                    'ceph.{}_device'.format(dev_type): arg})
                 if lvs:
                     # just taking the first lv here should work
                     lv = lvs[0]
@@ -189,6 +201,10 @@ class List(object):
         Full listing of all system devices associated with a cluster::
 
             ceph-volume lvm list
+
+        List devices under same OSD ID::
+
+            ceph-volume lvm list <OSD-ID>
 
         List a particular device, reporting all metadata about it::
 
