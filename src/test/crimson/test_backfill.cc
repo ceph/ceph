@@ -124,7 +124,6 @@ class BackfillFixture : public crimson::osd::BackfillState::BackfillListener {
     const hobject_t& begin) override;
 
   void enqueue_push(
-    const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) override;
 
@@ -281,11 +280,12 @@ void BackfillFixture::request_primary_scan(
 }
 
 void BackfillFixture::enqueue_push(
-  const pg_shard_t& target,
   const hobject_t& obj,
   const eversion_t& v)
 {
-  backfill_targets.at(target).store.push(obj, v);
+  for (auto& [ _, bt ] : backfill_targets) {
+    bt.store.push(obj, v);
+  }
   schedule_event(crimson::osd::BackfillState::ObjectPushed{ obj });
 }
 
