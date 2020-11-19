@@ -22,16 +22,18 @@ Ceph provides an infinitely scalable :term:`Ceph Storage Cluster` based upon
 about in `RADOS - A Scalable, Reliable Storage Service for Petabyte-scale
 Storage Clusters`_.
 
-A Ceph Storage Cluster consists of two types of daemons:
+A Ceph Storage Cluster consists of multiple types of daemons:
 
 - :term:`Ceph Monitor`
 - :term:`Ceph OSD Daemon`
+- :term:`Ceph Manager`
+- :term:`Ceph Metadata Server`
 
 .. ditaa::
 
-            +---------------+ +---------------+
-            |      OSDs     | |    Monitors   |
-            +---------------+ +---------------+
+            +---------------+ +---------------+ +---------------+ +---------------+ 
+            |      OSDs     | |    Monitors   | |    Managers   | |      MDS      |
+            +---------------+ +---------------+ +---------------+ +---------------+ 
 
 A Ceph Monitor maintains a master copy of the cluster map. A cluster of Ceph
 monitors ensures high availability should a monitor daemon fail. Storage cluster
@@ -40,9 +42,15 @@ clients retrieve a copy of the cluster map from the Ceph Monitor.
 A Ceph OSD Daemon checks its own state and the state of other OSDs and reports 
 back to monitors.
 
+A Ceph Manager acts as an endpoint for monitoring, orchestration, and plug-in
+modules.
+
+A Ceph Metadata Server (MDS) manages file metadata when CephFS is used to
+provide file services.
+
 Storage cluster clients and each :term:`Ceph OSD Daemon` use the CRUSH algorithm
 to efficiently compute information about data location, instead of having to
-depend on a central lookup table. Ceph's high-level features include providing a
+depend on a central lookup table. Ceph's high-level features include a
 native interface to the Ceph Storage Cluster via ``librados``, and a number of
 service interfaces built on top of ``librados``.
 
@@ -54,9 +62,12 @@ Storing Data
 The Ceph Storage Cluster receives data from :term:`Ceph Clients`--whether it
 comes through a :term:`Ceph Block Device`, :term:`Ceph Object Storage`, the
 :term:`Ceph File System` or a custom implementation you create using
-``librados``--and it stores the data as objects. Each object corresponds to a
-file in a filesystem, which is stored on an :term:`Object Storage Device`. Ceph
-OSD Daemons handle the read/write operations on the storage disks.
+``librados``-- which is stored as RADOS objects. Each object is stored on an
+:term:`Object Storage Device`. Ceph OSD Daemons handle read, write, and
+replication operations on storage drives.  With the older Filestore back end,
+each RADOS object was stored as a separate file on a conventional filesystem
+(usually XFS).  With the new and default BlueStore back end, objects are
+stored in a monolithic database-like fashion.
 
 .. ditaa::
 
@@ -64,9 +75,9 @@ OSD Daemons handle the read/write operations on the storage disks.
            | obj |------>| {d} |------>| {s} |
            \-----/       +-----+       +-----+
    
-            Object         File         Disk
+            Object         OSD          Drive
 
-Ceph OSD Daemons store all data as objects in a flat namespace (e.g., no
+Ceph OSD Daemons store data as objects in a flat namespace (e.g., no
 hierarchy of directories). An object has an identifier, binary data, and
 metadata consisting of a set of name/value pairs. The semantics are completely
 up to :term:`Ceph Clients`. For example, CephFS uses metadata to store file
@@ -657,13 +668,14 @@ new OSD after rebalancing is complete.
 Data Consistency
 ~~~~~~~~~~~~~~~~
 
-As part of maintaining data consistency and cleanliness, Ceph OSDs can also
-scrub objects within placement groups. That is, Ceph OSDs can compare object
-metadata in one placement group with its replicas in placement groups stored in
-other OSDs. Scrubbing (usually performed daily) catches OSD bugs or filesystem
-errors.  OSDs can also perform deeper scrubbing by comparing data in objects
-bit-for-bit.  Deep scrubbing (usually performed weekly) finds bad sectors on a
-disk that weren't apparent in a light scrub.
+As part of maintaining data consistency and cleanliness, Ceph OSDs also scrub
+objects within placement groups. That is, Ceph OSDs compare object metadata in
+one placement group with its replicas in placement groups stored in other
+OSDs. Scrubbing (usually performed daily) catches OSD bugs or filesystem
+errors, often as a result of hardware issues.  OSDs also perform deeper
+scrubbing by comparing data in objects bit-for-bit.  Deep scrubbing (by default
+performed weekly) finds bad blocks on a drive that weren't apparent in a light
+scrub.
 
 See `Data Scrubbing`_ for details on configuring scrubbing.
 
@@ -681,7 +693,7 @@ An erasure coded pool stores each object as ``K+M`` chunks. It is divided into
 of ``K+M`` so that each chunk is stored in an OSD in the acting set. The rank of
 the chunk is stored as an attribute of the object.
 
-For instance an erasure coded pool is created to use five OSDs (``K+M = 5``) and
+For instance an erasure coded pool can be created to use five OSDs (``K+M = 5``) and
 sustain the loss of two of them (``M = 2``).
 
 Reading and Writing Encoded Chunks
@@ -863,8 +875,8 @@ instructing it to write the chunk, it also creates a new entry in the placement
 group logs to reflect the change. For instance, as soon as **OSD 3** stores
 ``C1v2``, it adds the entry ``1,2`` ( i.e. epoch 1, version 2 ) to its logs.
 Because the OSDs work asynchronously, some chunks may still be in flight ( such
-as ``D2v2`` ) while others are acknowledged and on disk ( such as ``C1v1`` and
-``D1v1``).
+as ``D2v2`` ) while others are acknowledged and persisted to storage drives
+(such as ``C1v1`` and ``D1v1``).
 
 .. ditaa::
 
@@ -1117,7 +1129,8 @@ to Ceph clients.
                               +---------------+
                                  Slower I/O
 
-See `Cache Tiering`_ for additional details.
+See `Cache Tiering`_ for additional details.  Note that Cache Tiers can be
+tricky and their use is now discouraged.
 
 
 .. index:: Extensibility, Ceph Classes
@@ -1333,7 +1346,7 @@ improvements by striping client data over multiple objects within an object set.
 Significant write performance occurs when the client writes the stripe units to
 their corresponding objects in parallel. Since objects get mapped to different
 placement groups and further mapped to different OSDs, each write occurs in
-parallel at the maximum write speed. A write to a single disk would be limited
+parallel at the maximum write speed. A write to a single drive would be limited
 by the head movement (e.g. 6ms per seek) and bandwidth of that one device (e.g.
 100MB/s).  By spreading that write over multiple objects (which map to different
 placement groups and OSDs) Ceph can reduce the number of seeks per drive and
@@ -1437,7 +1450,7 @@ Three important variables determine how Ceph stripes data:
 Once the Ceph Client has striped data to stripe units and mapped the stripe
 units to objects, Ceph's CRUSH algorithm maps the objects to placement groups,
 and the placement groups to Ceph OSD Daemons before the objects are stored as 
-files on a storage disk.
+files on a storage drive.
 
 .. note:: Since a client writes to a single pool, all data striped into objects
    get mapped to placement groups in the same pool. So they use the same CRUSH
@@ -1603,7 +1616,6 @@ either for high availability or for scalability.
 Combinations of `standby` and `active` etc are possible, for example
 running 3 `active` ``ceph-mds`` instances for scaling, and one `standby`
 instance for high availability.
-
 
 
 
