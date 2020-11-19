@@ -7067,14 +7067,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  chunk_length += p.second.length;
 	}
 	if (chunk_length == obs.oi.size) {
-	  // truncate
 	  for (auto &p : obs.oi.manifest.chunk_map) {
 	    p.second.set_flag(chunk_info_t::FLAG_MISSING);
 	  }
-	  t->truncate(obs.oi.soid, 0);
-	  ctx->delta_stats.num_bytes -= obs.oi.size;
+	  // punch hole
+	  t->zero(soid, 0, oi.size);
+	  oi.clear_data_digest();
 	  ctx->delta_stats.num_wr++;
-	  oi.size = 0;
 	  ctx->cache_operation = true;
 	}
 	osd->logger->inc(l_osd_tier_evict);
