@@ -110,6 +110,7 @@ rbd:
   - qa/workunits/rbd/**
   - src/include/rbd/**
   - src/librbd/**
+  - src/pybind/mgr/rbd_support/**
   - src/pybind/rbd/**
   - src/test/librbd/**
   - src/test/rbd_mirror/**
