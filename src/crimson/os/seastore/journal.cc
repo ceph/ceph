@@ -253,7 +253,7 @@ Journal::read_segment_header(segment_id_t segment)
     bl.push_back(bptr);
 
     logger().debug(
-      "find_replay_segments: segment {} block crc {}",
+      "Journal::read_segment_header: segment {} block crc {}",
       segment,
       bl.begin().crc32c(block_size, 0));
 
@@ -262,13 +262,13 @@ Journal::read_segment_header(segment_id_t segment)
       decode(header, bp);
     } catch (ceph::buffer::error &e) {
       logger().debug(
-	"find_replay_segments: segment {} unable to decode "
+	"Journal::read_segment_header: segment {} unable to decode "
 	"header, skipping",
 	segment);
       return crimson::ct_error::enodata::make();
     }
     logger().debug(
-      "find_replay_segments: segment {} header {}",
+      "Journal::read_segment_header: segment {} header {}",
       segment,
       header);
     return read_segment_header_ret(
