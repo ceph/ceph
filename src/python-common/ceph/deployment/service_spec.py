@@ -734,12 +734,12 @@ class IscsiServiceSpec(ServiceSpec):
         if not self.pool:
             raise ServiceSpecValidationError(
                 'Cannot add ISCSI: No Pool specified')
-        if not self.api_user:
-            raise ServiceSpecValidationError(
-                'Cannot add ISCSI: No Api user specified')
-        if not self.api_password:
-            raise ServiceSpecValidationError(
-                'Cannot add ISCSI: No Api password specified')
+
+        # Do not need to check for api_user and api_password as they
+        # now default to 'admin' when setting up the gateway url. Older
+        # iSCSI specs from before this change should be fine as they will
+        # have been required to have an api_user and api_password set and
+        # will be unaffected by the new default value.
 
 
 yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
