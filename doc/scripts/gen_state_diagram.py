@@ -235,7 +235,8 @@ class StateMachineRenderer(object):
             yield("%s -> %s %s;" % (fro, to, append(appendix)))
 
 
-INPUT_GENERATOR = do_filter(line for line in sys.stdin)
-RENDERER = StateMachineRenderer()
-RENDERER.read_input(INPUT_GENERATOR)
-RENDERER.emit_dot()
+if __name__ == '__main__':
+    INPUT_GENERATOR = do_filter(line for line in sys.stdin)
+    RENDERER = StateMachineRenderer()
+    RENDERER.read_input(INPUT_GENERATOR)
+    RENDERER.emit_dot()
