@@ -169,6 +169,9 @@ public:
 
     // these methods take BackfillIntervals instead of extracting them from
     // the state to emphasize the relationships across the main loop.
+    bool all_emptied(
+      const BackfillInterval& local_backfill_info,
+      const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const;
     hobject_t earliest_peer_backfill(
       const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const;
     bool should_rescan_replicas(

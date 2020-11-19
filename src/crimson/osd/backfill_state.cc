@@ -278,6 +278,19 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
   return result;
 }
 
+bool BackfillState::Enqueuing::Enqueuing::all_emptied(
+  const BackfillInterval& local_backfill_info,
+  const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const
+{
+  const auto& targets = peering_state().get_backfill_targets();
+  const auto replicas_emptied =
+    std::all_of(std::begin(targets), std::end(targets),
+      [&] (const auto& bt) {
+        return peer_backfill_info.at(bt).empty();
+      });
+  return local_backfill_info.empty() && replicas_emptied;
+}
+
 BackfillState::Enqueuing::Enqueuing(my_context ctx)
   : my_base(ctx)
 {
@@ -299,7 +312,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   }
   trim_backfill_infos();
 
-  while (!primary_bi.empty()) {
+  while (!all_emptied(primary_bi, backfill_state().peer_backfill_info)) {
     if (!backfill_listener().budget_available()) {
       post_event(RequestWaiting{});
       return;
