@@ -616,9 +616,8 @@ int CryptoObjectDispatch<I>::prepare_copyup(
               extent.get_off(), extent.get_len());
 
       io::Extents image_extents;
-      Striper::extent_to_file(
-              m_image_ctx->cct, &m_image_ctx->layout, object_no, aligned_off,
-              aligned_len, image_extents);
+      io::util::extent_to_file(
+              m_image_ctx, object_no, aligned_off, aligned_len, image_extents);
 
       ceph::bufferlist encrypted_bl;
       uint64_t position = 0;

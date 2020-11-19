@@ -101,6 +101,7 @@ namespace crypto {
 using ::testing::_;
 using ::testing::ElementsAre;
 using ::testing::Invoke;
+using ::testing::InSequence;
 using ::testing::Pair;
 using ::testing::Return;
 using ::testing::WithArg;
@@ -221,6 +222,12 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
   void expect_get_object_size() {
     EXPECT_CALL(*mock_image_ctx, get_object_size()).WillOnce(Return(
             mock_image_ctx->layout.object_size));
+  }
+
+  void expect_remap_extents(uint64_t offset, uint64_t length) {
+    EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, remap_extents(
+            ElementsAre(Pair(offset, length)),
+            io::IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL));
   }
 
   void expect_get_parent_overlap(uint64_t overlap) {
@@ -510,6 +517,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteCopyup) {
 
   expect_get_object_size();
   expect_get_parent_overlap(mock_image_ctx->layout.object_size);
+  expect_remap_extents(0, mock_image_ctx->layout.object_size);
   expect_prune_parent_extents(mock_image_ctx->layout.object_size);
   EXPECT_CALL(mock_exclusive_lock, is_lock_owner()).WillRepeatedly(
           Return(true));
@@ -698,6 +706,13 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
 
   expect_get_object_size();
   expect_encrypt(6);
+  InSequence seq;
+  expect_remap_extents(0, 4096);
+  expect_remap_extents(4096, 4096);
+  expect_remap_extents(8192, 4096);
+  expect_remap_extents(0, 4096);
+  expect_remap_extents(4096, 8192);
+  expect_remap_extents(16384, 4096);
   ASSERT_EQ(0, mock_crypto_object_dispatch->prepare_copyup(
           0, &snapshot_sparse_bufferlist));
 
