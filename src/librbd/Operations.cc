@@ -415,22 +415,31 @@ void Operations<I>::start_op(Operation op, Context *ctx) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << __func__ << ": " << op << " " << ctx << dendl;
 
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  bool requires_lock = m_image_ctx.exclusive_lock != nullptr;
+
   ctx = util::create_async_context_callback(
       m_image_ctx, new LambdaContext(
-        [this, op, ctx](int r) {
-          if (r == 0) {
+        [this, op, requires_lock, ctx](int r) {
+          Context *finish_op_ctx = nullptr;
+          if (requires_lock && r == 0) {
             std::shared_lock owner_locker{m_image_ctx.owner_lock};
             std::shared_lock image_locker{m_image_ctx.image_lock};
+            auto exclusive_lock = m_image_ctx.exclusive_lock;
 
-            if (m_image_ctx.exclusive_lock != nullptr &&
-                (!m_image_ctx.exclusive_lock->is_lock_owner())) {
-              ldout(m_image_ctx.cct, 20) << "lock owner lost, restarting" << dendl;
+            if (exclusive_lock == nullptr ||
+                (finish_op_ctx = exclusive_lock->start_op(&r)) == nullptr) {
+              ldout(m_image_ctx.cct, 20) << "lock owner lost, restarting"
+                                         << dendl;
               r = -ERESTART;
             }
           }
 
           ldout(m_image_ctx.cct, 20) << "start " << op << " " << ctx << dendl;
           ctx->complete(r);
+          if (finish_op_ctx != nullptr) {
+            finish_op_ctx->complete(0);
+          }
         }));
 
   std::unique_lock locker{m_queue_lock};
