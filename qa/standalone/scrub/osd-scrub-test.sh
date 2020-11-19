@@ -290,11 +290,12 @@ function _scrub_abort() {
     then
       stopscrub="noscrub"
       check="noscrub"
+      state="+scrubbing "
     else
       stopscrub="nodeep-scrub"
       check="nodeep_scrub"
+      state="+scrubbing+deep"
     fi
-
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=3 || return 1
@@ -335,7 +336,7 @@ function _scrub_abort() {
     for i in $(seq 0 200)
     do
       flush_pg_stats
-      if ceph pg dump pgs | grep  ^$pgid| grep -q "scrubbing"
+      if ceph pg dump pgs | grep  ^$pgid| grep -q $state
       then
         found="yes"
         #ceph pg dump pgs
@@ -350,6 +351,13 @@ function _scrub_abort() {
       return 1
     fi
 
+    # Reset scrub stamp (0 means use scrub_max_interval, so use 1)
+    # Prevent scrub from taking over after nodeep-scrub set
+    if [ "$type" = "deep_scrub" ];
+    then
+      ceph tell $pgid scrub 1 || return 1
+      sleep 1
+    fi
     ceph osd set $stopscrub
 
     # Wait for scrubbing to end
@@ -357,7 +365,7 @@ function _scrub_abort() {
     for i in $(seq 0 200)
     do
       flush_pg_stats
-      if ceph pg dump pgs | grep ^$pgid | grep -q "scrubbing"
+      if ceph pg dump pgs | grep ^$pgid | grep -q $state
       then
         continue
       fi
@@ -374,10 +382,16 @@ function _scrub_abort() {
       return 1
     fi
 
-    local last_scrub=$(get_last_scrub_stamp $pgid)
-    ceph osd unset noscrub
-    TIMEOUT=$(($objects / 2))
-    wait_for_scrub $pgid "$last_scrub" || return 1
+    # Don't do this for deep-scrub because of special handling
+    # to prevent scrub from taking over after nodeep-scrub set without
+    # abort being handled.
+    if test $type = "scrub";
+    then
+      local last_scrub=$(get_last_scrub_stamp $pgid)
+      ceph osd unset $stopscrub
+      TIMEOUT=$(($objects / 2))
+      wait_for_scrub $pgid "$last_scrub" || return 1
+    fi
 
     teardown $dir || return 1
 }
