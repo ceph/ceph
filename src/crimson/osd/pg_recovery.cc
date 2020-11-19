@@ -430,12 +430,11 @@ void PGRecovery::request_primary_scan(
 }
 
 void PGRecovery::enqueue_push(
-  const pg_shard_t& target,
   const hobject_t& obj,
   const eversion_t& v)
 {
-  logger().debug("{}: target={} obj={} v={}",
-                 __func__, target, obj, v);
+  logger().debug("{}: obj={} v={}",
+                 __func__, obj, v);
   pg->get_recovery_backend()->add_recovering(obj);
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception([] (auto) {
