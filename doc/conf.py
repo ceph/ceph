@@ -114,6 +114,9 @@ breathe_doxygen_config_options = {
 edit_on_github_project = 'ceph/ceph'
 edit_on_github_branch = 'master'
 
+# graphviz options
+graphviz_output_format = 'svg'
+
 def generate_state_diagram(input_paths, output_path):
     sys.path.append(os.path.join(top_level, 'doc', 'scripts'))
     from gen_state_diagram import do_filter, StateMachineRenderer
