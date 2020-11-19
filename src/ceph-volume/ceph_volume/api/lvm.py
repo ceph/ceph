@@ -1137,6 +1137,14 @@ def get_single_lv(fields=LV_FIELDS, filters=None, tags=None):
     return lvs[0]
 
 
+def get_lvs_from_osd_id(osd_id):
+    return get_lvs(tags={'ceph.osd_id': osd_id})
+
+
+def get_single_lv_from_osd_id(osd_id):
+    return get_single_lv(tags={'ceph.osd_id': osd_id})
+
+
 def get_lv_by_name(name):
     stdout, stderr, returncode = process.call(
         ['lvs', '--noheadings', '-o', LV_FIELDS, '-S',
