@@ -5390,7 +5390,7 @@ namespace {
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
-    PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, DEDUP_CDC_WINDOW_SIZE,
+    PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE };
 
   std::set<osd_pool_get_choices>
@@ -6128,7 +6128,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
       {"dedup_tier", DEDUP_TIER},
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
-      {"dedup_cdc_window_size", DEDUP_CDC_WINDOW_SIZE},
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
     };
 
@@ -6348,7 +6347,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case PG_AUTOSCALE_BIAS:
 	  case DEDUP_TIER:
 	  case DEDUP_CHUNK_ALGORITHM:
-	  case DEDUP_CDC_WINDOW_SIZE:
 	  case DEDUP_CDC_CHUNK_SIZE:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
@@ -6509,7 +6507,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case PG_AUTOSCALE_BIAS:
 	  case DEDUP_TIER:
 	  case DEDUP_CHUNK_ALGORITHM:
-	  case DEDUP_CDC_WINDOW_SIZE:
 	  case DEDUP_CDC_CHUNK_SIZE:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
@@ -8707,11 +8704,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           ss << "unrecognized fingerprint_algorithm '" << val << "'";
 	  return -EINVAL;
         }
-      }
-    } else if (var == "dedup_cdc_window_size") {
-      if (interr.length()) {
-        ss << "error parsing int value '" << val << "': " << interr;
-        return -EINVAL;
       }
     } else if (var == "dedup_cdc_chunk_size") {
       if (interr.length()) {

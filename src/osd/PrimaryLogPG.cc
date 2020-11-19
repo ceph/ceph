@@ -10024,7 +10024,6 @@ struct C_Flush : public Context {
 int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
 {
   bufferlist bl;
-  uint64_t cur_off = 0;
   const object_info_t& oi = obc->obs.oi;
   const hobject_t& soid = oi.soid;
 
@@ -10044,49 +10043,45 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
    */
   ManifestOpRef mop(std::make_shared<ManifestOp>(nullptr, 0));
 
-  while (cur_off < oi.size) {
-    // cdc
-    std::map<uint64_t, bufferlist> chunks; 
-    int r = do_cdc(oi, cur_off, mop->new_manifest.chunk_map, chunks);
-    if (r < 0) {
-      return r;
-    }
-    if (!chunks.size()) {
-      break;
-    }
+  // cdc
+  std::map<uint64_t, bufferlist> chunks; 
+  int r = do_cdc(oi, mop->new_manifest.chunk_map, chunks);
+  if (r < 0) {
+    return r;
+  }
+  if (!chunks.size()) {
+    return 0;
+  }
 
-    // chunks issued here are different with chunk_map newly generated
-    // because the same chunks in previous snap will not be issued
-    // So, we need two data structures; the first is the issued chunk list to track
-    // issued operations, and the second is the new chunk_map to update chunk_map after 
-    // all operations are finished
-    object_ref_delta_t refs;
-    ObjectContextRef obc_l, obc_g;
-    get_adjacent_clones(obc, obc_l, obc_g);
-    // skip if the same content exits in prev snap at same offset
-    mop->new_manifest.calc_refs_to_inc_on_set(
-      obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
-      obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
-      refs,
-      chunks.begin()->first); // to avoid unnecessary search
+  // chunks issued here are different with chunk_map newly generated
+  // because the same chunks in previous snap will not be issued
+  // So, we need two data structures; the first is the issued chunk list to track
+  // issued operations, and the second is the new chunk_map to update chunk_map after 
+  // all operations are finished
+  object_ref_delta_t refs;
+  ObjectContextRef obc_l, obc_g;
+  get_adjacent_clones(obc, obc_l, obc_g);
+  // skip if the same content exits in prev snap at same offset
+  mop->new_manifest.calc_refs_to_inc_on_set(
+    obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
+    obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
+    refs);
 
-    for (auto p : chunks) {
-      hobject_t target = mop->new_manifest.chunk_map[p.first].oid;
-      if (refs.find(target) == refs.end()) {
-	continue;
-      }
-      C_SetDedupChunks *fin = new C_SetDedupChunks(this, soid, get_last_peering_reset(), p.first);
-      ceph_tid_t tid = refcount_manifest(soid, target, refcount_t::CREATE_OR_GET_REF, 
-			      fin, move(chunks[p.first]));
-      mop->chunks[target] = make_pair(p.first, p.second.length());
-      mop->num_chunks++;
-      mop->tids[p.first] = tid;
-      fin->tid = tid;
-      dout(10) << __func__ << " oid: " << soid << " tid: " << tid
-	      << " target: " << target << " offset: " << p.first
-	      << " length: " << p.second.length() << dendl;
+  for (auto p : chunks) {
+    hobject_t target = mop->new_manifest.chunk_map[p.first].oid;
+    if (refs.find(target) == refs.end()) {
+      continue;
     }
-    cur_off += r;
+    C_SetDedupChunks *fin = new C_SetDedupChunks(this, soid, get_last_peering_reset(), p.first);
+    ceph_tid_t tid = refcount_manifest(soid, target, refcount_t::CREATE_OR_GET_REF, 
+			    fin, move(chunks[p.first]));
+    mop->chunks[target] = make_pair(p.first, p.second.length());
+    mop->num_chunks++;
+    mop->tids[p.first] = tid;
+    fin->tid = tid;
+    dout(10) << __func__ << " oid: " << soid << " tid: " << tid
+	    << " target: " << target << " offset: " << p.first
+	    << " length: " << p.second.length() << dendl;
   }
 
   if (mop->tids.size()) {
@@ -10100,14 +10095,12 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
   return -EINPROGRESS;
 }
 
-int PrimaryLogPG::do_cdc(const object_info_t& oi, uint64_t off, 
+int PrimaryLogPG::do_cdc(const object_info_t& oi, 
 			 std::map<uint64_t, chunk_info_t>& chunk_map,
 			 std::map<uint64_t, bufferlist>& chunks)
 {
-  uint64_t cur_off = off;
   string chunk_algo = pool.info.get_dedup_chunk_algorithm_name();
   int64_t chunk_size = pool.info.get_dedup_cdc_chunk_size();
-  uint64_t max_window_size = static_cast<uint64_t>(pool.info.get_dedup_cdc_window_size());
   uint64_t total_length = 0;
 
   std::unique_ptr<CDC> cdc = CDC::create(chunk_algo, cbits(chunk_size)-1);
@@ -10116,9 +10109,6 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi, uint64_t off,
     return -EINVAL;
   }
 
-  if (cur_off >= oi.size) {
-    return -ERANGE;
-  }
   bufferlist bl;
   /**
    * We disable EC pool as a base tier of distributed dedup.
@@ -10127,10 +10117,10 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi, uint64_t off,
    * As s result, we leave this as a future work.
    */
   int r = pgbackend->objects_read_sync(
-      oi.soid, cur_off, max_window_size, 0, &bl);
+      oi.soid, 0, oi.size, 0, &bl);
   if (r < 0) {
-    dout(0) << __func__ << " read fail " << " offset: " << cur_off
-      << " len: " << max_window_size << " r: " << r << dendl;
+    dout(0) << __func__ << " read fail " << oi.soid
+            << " len: " << oi.size << " r: " << r << dendl;
     return r;
   }
   if (bl.length() == 0) {
@@ -10139,8 +10129,8 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi, uint64_t off,
   }
 
   dout(10) << __func__ << " oid: " << oi.soid << " len: " << bl.length() 
-	  << " oi.size: " << oi.size << " window_size: " << max_window_size 
-	  << " chunk_size: " << chunk_size << dendl;
+	   << " oi.size: " << oi.size   
+	   << " chunk_size: " << chunk_size << dendl;
 
   vector<pair<uint64_t, uint64_t>> cdc_chunks;
   cdc->calc_chunks(bl, &cdc_chunks);
@@ -10148,11 +10138,10 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi, uint64_t off,
   // get fingerprint 
   for (auto p : cdc_chunks) {
     bufferlist chunk;
-    uint64_t object_offset = off + p.first;
     chunk.substr_of(bl, p.first, p.second);
     hobject_t target = get_fpoid_from_chunk(oi.soid, chunk);
-    chunks[object_offset] = move(chunk);
-    chunk_map[object_offset] = chunk_info_t(0, p.second, target);
+    chunks[p.first] = move(chunk);
+    chunk_map[p.first] = chunk_info_t(0, p.second, target);
     total_length += p.second;
   }
   return total_length;

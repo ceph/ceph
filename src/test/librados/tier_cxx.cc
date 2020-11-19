@@ -4665,9 +4665,6 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
 	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 8192),
-	inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
 	inbl, NULL, NULL));
 
@@ -4740,9 +4737,6 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   }
 
   ASSERT_EQ(0, cluster.mon_command(
-	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 512),
-	inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 512),
 	inbl, NULL, NULL));
   cluster.wait_for_latest_osdmap();
@@ -4769,11 +4763,9 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
 
   cdc = CDC::create("fastcdc", cbits(512)-1);
   chunks.clear();
-  bufferlist chunk_target;
-  chunk_target.substr_of(gbl, 512, 512); // calculate based on window size
-  cdc->calc_chunks(chunk_target, &chunks);
+  cdc->calc_chunks(gbl, &chunks);
   bufferlist chunk_512;
-  chunk_512.substr_of(gbl, chunks[0].first + 512, chunks[0].second);
+  chunk_512.substr_of(gbl, chunks[3].first, chunks[3].second);
   {
     unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
     char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
@@ -4792,9 +4784,6 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
     ASSERT_EQ(test_bl[1], chunk_512[1]);
   }
 
-  ASSERT_EQ(0, cluster.mon_command(
-	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 16384),
-	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 16384),
 	inbl, NULL, NULL));
@@ -4843,9 +4832,6 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   }
 
   // less than object size
-  ASSERT_EQ(0, cluster.mon_command(
-	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 4096),
-	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
 	inbl, NULL, NULL));
@@ -4932,9 +4918,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
 	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 8192),
 	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
@@ -5117,9 +5100,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
 	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 8192),
 	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
@@ -5343,9 +5323,6 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
 	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-	set_pool_str(cache_pool_name, "dedup_cdc_window_size", 8192),
 	inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
