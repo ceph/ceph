@@ -219,6 +219,7 @@
 
 #include "messages/MReplicaDaemonMap.h"
 #include "messages/MReplicaDaemonBlink.h"
+#include "messages/MMonGetReplicaDaemonMap.h"
 
 #ifdef WITH_BLKIN
 #include "Messenger.h"
@@ -930,6 +931,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_REPLICADAEMON_BLINK:
     m = make_message<MReplicaDaemonBlink>();
+    break;
+
+  case CEPH_MSG_MON_GET_REPLICADAEMONMAP:
+    m = make_message<MMonGetReplicaDaemonMap>();
     break;
 #endif
 
