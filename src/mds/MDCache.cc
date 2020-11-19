@@ -1026,7 +1026,6 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
     root = get_subtree_root(dir);  // subtree root
   }
   ceph_assert(root);
-  ceph_assert(subtrees.count(root));
   dout(7) << " current root is " << *root << dendl;
 
   if (root == dir) {
@@ -1036,31 +1035,28 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
     // i am a new subtree.
     dout(10) << "  new subtree at " << *dir << dendl;
     ceph_assert(subtrees.count(dir) == 0);
-    subtrees[dir];      // create empty subtree bounds list for me.
+    auto& dir_bounds = subtrees[dir];      // create empty subtree bounds list for me.
     dir->get(CDir::PIN_SUBTREE);
 
     // set dir_auth
     dir->set_dir_auth(auth);
-    
+
+    auto& root_bounds = subtrees.at(root);
     // move items nested beneath me, under me.
-    set<CDir*>::iterator p = subtrees[root].begin();
-    while (p != subtrees[root].end()) {
-      set<CDir*>::iterator next = p;
+    for (auto p = root_bounds.begin(); p != root_bounds.end(); ) {
+      auto next = p;
       ++next;
       if (get_subtree_root((*p)->get_parent_dir()) == dir) {
 	// move under me
 	dout(10) << "  claiming child bound " << **p << dendl;
-	subtrees[dir].insert(*p); 
-	subtrees[root].erase(p);
+	dir_bounds.insert(*p);
+	root_bounds.erase(p);
       }
       p = next;
     }
     
     // i am a bound of the parent subtree.
-    subtrees[root].insert(dir); 
-
-    // i am now the subtree root.
-    root = dir;
+    root_bounds.insert(dir);
 
     // adjust recursive pop counters
     if (adjust_pop && dir->is_auth()) {
@@ -1120,13 +1116,14 @@ bool MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust
     dout(10) << "  subtree merge at " << *dir << dendl;
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
     
+    auto& parent_bounds = subtrees.at(parent);
     // move our bounds under the parent
-    subtrees[parent].insert(it->second.begin(), it->second.end());
+    parent_bounds.insert(it->second.begin(), it->second.end());
     
     // we are no longer a subtree or bound
     dir->put(CDir::PIN_SUBTREE);
     subtrees.erase(it);
-    subtrees[parent].erase(dir);
+    parent_bounds.erase(dir);
 
     // adjust popularity?
     if (adjust_pop && dir->is_auth()) {
@@ -1167,57 +1164,9 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const set<CDir*>& bounds, m
 	  << " bounds " << bounds
 	  << dendl;
 
-  show_subtrees();
-
-  CDir *root;
-  if (dir->inode->is_base() || dir->inode->is_unconnected()) {
-    root = dir;  // bootstrap hack.
-    if (subtrees.count(root) == 0) {
-      subtrees[root];
-      root->get(CDir::PIN_SUBTREE);
-    }
-  } else {
-    root = get_subtree_root(dir);  // subtree root
-  }
-  ceph_assert(root);
-  ceph_assert(subtrees.count(root));
-  dout(7) << " current root is " << *root << dendl;
-
   mds_authority_t oldauth = dir->authority();
 
-  if (root == dir) {
-    // i am already a subtree.
-    dir->set_dir_auth(auth);
-  } else {
-    // i am a new subtree.
-    dout(10) << "  new subtree at " << *dir << dendl;
-    ceph_assert(subtrees.count(dir) == 0);
-    subtrees[dir];      // create empty subtree bounds list for me.
-    dir->get(CDir::PIN_SUBTREE);
-    
-    // set dir_auth
-    dir->set_dir_auth(auth);
-    
-    // move items nested beneath me, under me.
-    set<CDir*>::iterator p = subtrees[root].begin();
-    while (p != subtrees[root].end()) {
-      set<CDir*>::iterator next = p;
-      ++next;
-      if (get_subtree_root((*p)->get_parent_dir()) == dir) {
-	// move under me
-	dout(10) << "  claiming child bound " << **p << dendl;
-	subtrees[dir].insert(*p); 
-	subtrees[root].erase(p);
-      }
-      p = next;
-    }
-    
-    // i am a bound of the parent subtree.
-    subtrees[root].insert(dir); 
-
-    // i am now the subtree root.
-    root = dir;
-  }
+  adjust_subtree_auth(dir, auth);
 
   set<CInode*> to_eval;
 
@@ -1225,14 +1174,14 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const set<CDir*>& bounds, m
   // - these may be new, or
   // - beneath existing ambiguous bounds (which will be collapsed),
   // - but NOT beneath unambiguous bounds.
+  auto& dir_bounds = subtrees.at(dir);
   for (const auto& bound : bounds) {
     // new bound?
-    if (subtrees[dir].count(bound) == 0) {
+    if (dir_bounds.count(bound) == 0) {
       if (get_subtree_root(bound) == dir) {
 	dout(10) << "  new bound " << *bound << ", adjusting auth back to old " << oldauth << dendl;
 	adjust_subtree_auth(bound, oldauth);       // otherwise, adjust at bound.
-      }
-      else {
+      } else {
 	dout(10) << "  want bound " << *bound << dendl;
 	CDir *t = get_subtree_root(bound->get_parent_dir());
 	if (subtrees[t].count(bound) == 0) {
@@ -1248,27 +1197,28 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const set<CDir*>& bounds, m
 	  adjust_subtree_auth(t, auth);
 	  try_subtree_merge_at(t, &to_eval);
 	  t = get_subtree_root(bound->get_parent_dir());
-	  if (t == dir) break;
+	  if (t == dir)
+	    break;
 	}
       }
-    }
-    else {
+    } else {
       dout(10) << "  already have bound " << *bound << dendl;
     }
   }
   // merge stray bounds?
-  while (!subtrees[dir].empty()) {
-    set<CDir*> copy = subtrees[dir];
-    for (set<CDir*>::iterator p = copy.begin(); p != copy.end(); ++p) {
-      if (bounds.count(*p) == 0) {
-	CDir *stray = *p;
-	dout(10) << "  swallowing extra subtree at " << *stray << dendl;
-	adjust_subtree_auth(stray, auth);
-	try_subtree_merge_at(stray, &to_eval);
+  while (!dir_bounds.empty()) {
+    set<CDir*> copy = dir_bounds;
+    bool found_stray = false;
+    for (auto& d : copy) {
+      if (bounds.count(d) == 0) {
+	dout(10) << "  swallowing extra subtree at " << *d << dendl;
+	adjust_subtree_auth(d, auth);
+	try_subtree_merge_at(d, &to_eval);
+	found_stray = true;
       }
     }
     // swallowing subtree may add new subtree bounds
-    if (copy == subtrees[dir])
+    if (!found_stray)
       break;
   }
 
