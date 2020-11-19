@@ -28,25 +28,36 @@ bluestore:
   - src/os/bluestore/**
 
 core:
-  - src/blk/**
-  - src/crush/*
-  - src/erasure-code/**
-  - src/librados/**
-  - src/kv/**
-  - src/mgr/**
-  - src/msg/**
-  - src/mon/**
-  - src/os/**
-  - src/osd/**
-  - src/tools/rados/**
+  - doc/man/8/ceph-authtool.rst
+  - doc/man/8/ceph-conf.rst
+  - doc/man/8/ceph-create-keys.rst
+  - doc/man/8/ceph-kvstore-tool.rst
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/ceph-objectstore-tool.rst
+  - doc/man/8/ceph-osd.rst
+  - doc/man/8/ceph.rst
+  - doc/man/8/crushtool.rst
+  - doc/man/8/monmaptool.rst
+  - doc/man/8/rados.rst
+  - doc/rados/**
   - qa/standalone/**
   - qa/suites/rados/**
   - qa/workunits/erasure-code/**
-  - qa/workunits/mon/**
   - qa/workunits/mgr/**
+  - qa/workunits/mon/**
   - qa/workunits/objectstore/**
   - qa/workunits/rados/**
-  - doc/rados/**
+  - src/blk/**
+  - src/crush/*
+  - src/erasure-code/**
+  - src/kv/**
+  - src/librados/**
+  - src/mgr/**
+  - src/mon/**
+  - src/msg/**
+  - src/os/**
+  - src/osd/**
+  - src/tools/rados/**
 
 crimson:
   - doc/dev/crimson/**
@@ -105,6 +116,7 @@ CI:
   - .github/**
 
 rbd:
+  - doc/man/8/rbd*
   - doc/rbd/**
   - qa/suites/rbd/**
   - qa/workunits/rbd/**
