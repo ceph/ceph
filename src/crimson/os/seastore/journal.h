@@ -55,6 +55,8 @@ struct record_header_t {
   uint32_t deltas;                // number of deltas
   uint32_t extents;               // number of extents
   segment_nonce_t segment_nonce;// nonce of containing segment
+  segment_off_t committed_to;   // records in this segment prior to committed_to
+                                // have been fully written
   checksum_t data_crc;          // crc of data payload
 
 
@@ -65,6 +67,7 @@ struct record_header_t {
     denc(v.deltas, p);
     denc(v.extents, p);
     denc(v.segment_nonce, p);
+    denc(v.committed_to, p);
     denc(v.data_crc, p);
     DENC_FINISH(p);
   }
@@ -235,6 +238,7 @@ private:
 
   SegmentRef current_journal_segment;
   segment_off_t written_to = 0;
+  segment_off_t committed_to = 0;
 
   journal_seq_t get_journal_seq(paddr_t addr) {
     return journal_seq_t{next_journal_segment_seq-1, addr};
