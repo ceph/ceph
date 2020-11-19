@@ -72,6 +72,54 @@ void encode(const bucket_index_layout_generation& l, bufferlist& bl, uint64_t f=
 void decode(bucket_index_layout_generation& l, bufferlist::const_iterator& bl);
 
 
+enum class BucketLogType : uint8_t {
+  // colocated with bucket index, so the log layout matches the index layout
+  InIndex,
+};
+
+inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type)
+{
+  switch (log_type) {
+    case BucketLogType::InIndex:
+      return out << "InIndex";
+    default:
+      return out << "Unknown";
+  }
+}
+
+struct bucket_index_log_layout {
+  uint64_t gen = 0;
+  bucket_index_normal_layout layout;
+};
+
+void encode(const bucket_index_log_layout& l, bufferlist& bl, uint64_t f=0);
+void decode(bucket_index_log_layout& l, bufferlist::const_iterator& bl);
+
+struct bucket_log_layout {
+  BucketLogType type = BucketLogType::InIndex;
+
+  bucket_index_log_layout in_index;
+};
+
+void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f=0);
+void decode(bucket_log_layout& l, bufferlist::const_iterator& bl);
+
+
+struct bucket_log_layout_generation {
+  uint64_t gen = 0;
+  bucket_log_layout layout;
+};
+
+void encode(const bucket_log_layout_generation& l, bufferlist& bl, uint64_t f=0);
+void decode(bucket_log_layout_generation& l, bufferlist::const_iterator& bl);
+
+// return a log layout that shares its layout with the index
+inline bucket_log_layout_generation log_layout_from_index(
+    uint64_t gen, const bucket_index_normal_layout& index)
+{
+  return {gen, {BucketLogType::InIndex, {gen, index}}};
+}
+
 enum class BucketReshardState : uint8_t {
   None,
   InProgress,
@@ -86,6 +134,10 @@ struct BucketLayout {
 
   // target index layout of a resharding operation
   std::optional<bucket_index_layout_generation> target_index;
+
+  // history of untrimmed bucket log layout generations, with the current
+  // generation at the back()
+  std::vector<bucket_log_layout_generation> logs;
 };
 
 void encode(const BucketLayout& l, bufferlist& bl, uint64_t f=0);
