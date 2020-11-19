@@ -584,10 +584,7 @@ struct rgw_bilog_marker_info {
   }
 };
 
-struct rgw_bucket_index_marker_info {
-  rgw_sip_pos pos;
-  bool syncstopped{false};
-};
+using rgw_bucket_index_marker_info = rgw_sip_pos;
 
 class RGWBucketShardSIPCRWrapper;
 class RGWBucketPipeSyncStatusCRHandler;

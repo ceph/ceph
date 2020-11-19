@@ -43,6 +43,7 @@ class RGWOp_SIP_GetStageStatus : public RGWRESTOp {
   string provider;
   rgw_sip_pos start_pos;
   rgw_sip_pos cur_pos;
+  bool disabled{false};
 
 public:
   RGWOp_SIP_GetStageStatus(string&& _provider) : provider(std::move(_provider)) {}

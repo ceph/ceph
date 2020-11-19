@@ -40,7 +40,7 @@ public:
   virtual RGWCoroutine *get_info_cr(SIProvider::Info *info) = 0;
   virtual RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
   virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
-  virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
+  virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) = 0;
   virtual RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) = 0;
   virtual RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
                                          const RGWSI_SIP_Marker::SetParams& params) = 0;
@@ -70,7 +70,7 @@ public:
   RGWCoroutine *get_info_cr(SIProvider::Info *info) override;
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
-  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
+  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;
   RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
   RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
                                  const RGWSI_SIP_Marker::SetParams& params) override;
@@ -121,7 +121,7 @@ public:
   RGWCoroutine *get_info_cr(SIProvider::Info *info) override;
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
-  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
+  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;
   RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
   RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
                                  const RGWSI_SIP_Marker::SetParams& params) override;

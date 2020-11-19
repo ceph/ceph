@@ -103,10 +103,11 @@ int SIProvider_REST::get_start_marker(const SIProvider::stage_id_t& sid, int sha
   return 0;
 }
 
-int SIProvider_REST::get_cur_state(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp)
+int SIProvider_REST::get_cur_state(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
+                                   bool *disabled)
 {
   rgw_sip_pos pos;
-  int r = cr_mgr->run(sip_cr_mgr->get_cur_state_cr(sid, shard_id, &pos));
+  int r = cr_mgr->run(sip_cr_mgr->get_cur_state_cr(sid, shard_id, &pos, disabled));
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
     return r;

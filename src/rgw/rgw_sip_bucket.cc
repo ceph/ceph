@@ -313,17 +313,21 @@ int SIProvider_BucketInc::do_fetch(int shard_id, std::string marker, int max, fe
   return 0;
 }
 
-int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp) const
+int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+                                           bool *disabled) const
 {
   int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
 
-  map<int, string> markers;
+  map<int, RGWSI_BILog_RADOS::Status> markers;
   int ret = store->svc()->bilog_rados->get_log_status(bucket_info, sid, &markers);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: " << __func__ << ": get_log_status() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " returned ret=" << ret << dendl;
     return ret;
   }
-  *marker = markers[shard_id];
+
+  auto& entry = markers[shard_id];
+  *marker = entry.marker;
+  *disabled = entry.disabled;
 
   /* bucket index header doesn't keep the timestamp info for max marker,
    * we can add that, but at the moment it's not needed

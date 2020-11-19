@@ -192,7 +192,8 @@ int SIProvider_DataInc::do_get_start_marker(int shard_id, std::string *marker, c
   return 0;
 }
 
-int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp) const
+int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+                                         bool *disabled) const
 {
   RGWDataChangesLogInfo info;
   int ret = data_log->get_info(shard_id, &info);
@@ -205,6 +206,7 @@ int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker, ceph
   }
   *marker = info.marker;
   *timestamp = info.last_update;
+  *disabled = false;
   return 0;
 }
 

@@ -31,6 +31,13 @@ public:
     RGWSI_BucketIndex_RADOS *bi{nullptr};
   } svc;
 
+  struct Status {
+    std::string marker;
+    bool disabled{false};
+
+    void dump(Formatter *f) const;
+  };
+
   RGWSI_BILog_RADOS(CephContext *cct);
 
   void init(RGWSI_BucketIndex_RADOS *bi_rados_svc);
@@ -54,7 +61,7 @@ public:
   int get_log_status(const DoutPrefixProvider *dpp,
                      const RGWBucketInfo& bucket_info,
                      int shard_id,
-                     std::map<int, std::string> *markers,
+                     std::map<int, Status> *markers,
                      optional_yield y);
 };
 

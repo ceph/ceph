@@ -46,7 +46,7 @@ public:
   int get_stage_info(const stage_id_t& sid, SIProvider::StageInfo *sinfo) override;
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
-  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
+  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled) override;
   int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 

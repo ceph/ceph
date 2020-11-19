@@ -10,6 +10,12 @@
 
 using namespace std;
 
+void RGWSI_BILog_RADOS::Status::dump(Formatter *f) const
+{
+  encode_json("marker", marker, f);
+  encode_json("disabled", disabled, f);
+}
+
 RGWSI_BILog_RADOS::RGWSI_BILog_RADOS(CephContext *cct) : RGWServiceInstance(cct)
 {
 }
@@ -180,7 +186,7 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, const RGWBucketIn
 int RGWSI_BILog_RADOS::get_log_status(const DoutPrefixProvider *dpp,
                                       const RGWBucketInfo& bucket_info,
                                       int shard_id,
-                                      map<int, string> *markers,
+                                      map<int, Status> *markers,
 				      optional_yield y)
 {
   vector<rgw_bucket_dir_header> headers;
@@ -196,9 +202,9 @@ int RGWSI_BILog_RADOS::get_log_status(const DoutPrefixProvider *dpp,
 
   for(; iter != headers.end(); ++iter, ++viter) {
     if (shard_id >= 0) {
-      (*markers)[shard_id] = iter->max_marker;
+      (*markers)[shard_id] = { iter->max_marker, iter->syncstopped };
     } else {
-      (*markers)[viter->first] = iter->max_marker;
+      (*markers)[viter->first] = { iter->max_marker, iter->syncstopped };
     }
   }
 

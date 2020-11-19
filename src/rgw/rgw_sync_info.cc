@@ -118,12 +118,13 @@ int SIProvider_SingleStage::get_start_marker(const stage_id_t& sid, int shard_id
   return do_get_start_marker(shard_id, marker, timestamp);
 }
 
-int SIProvider_SingleStage::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp)
+int SIProvider_SingleStage::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
+                                          bool *disabled)
 {
   if (sid != stage_info.sid) {
     return -ERANGE;
   }
-  return do_get_cur_state(shard_id, marker, timestamp);
+  return do_get_cur_state(shard_id, marker, timestamp, disabled);
 }
 
 int SIProvider_SingleStage::trim(const stage_id_t& sid, int shard_id, const std::string& marker)
@@ -314,7 +315,8 @@ int SIProvider_Container::get_start_marker(const stage_id_t& sid, int shard_id, 
   return provider->get_start_marker(psid, shard_id, marker, timestamp);
 }
 
-int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp)
+int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
+                                        bool *disabled)
 {
   SIProviderRef provider;
   stage_id_t psid;
@@ -324,7 +326,7 @@ int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std
     return -ENOENT;
   }
 
-  return provider->get_cur_state(psid, shard_id, marker, timestamp);
+  return provider->get_cur_state(psid, shard_id, marker, timestamp, disabled);
 }
 
 SIProvider::TypeHandler *SIProvider_Container::TypeProvider::get_type_handler()
@@ -372,7 +374,8 @@ int SIProviderClient::init_markers()
     for (int i = 0; i < sinfo.num_shards; ++i) {
       std::string marker;
       ceph::real_time timestamp;
-      int r = (!all_history ? provider->get_cur_state(sid, i, &marker, &timestamp) : 
+      bool disabled{false};
+      int r = (!all_history ? provider->get_cur_state(sid, i, &marker, &timestamp, &disabled) : 
                               provider->get_start_marker(sid, i, &marker, &timestamp));
       if (r < 0) {
         return r;

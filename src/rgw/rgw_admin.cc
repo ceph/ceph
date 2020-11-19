@@ -2576,11 +2576,11 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   for (auto& r : remote_markers) {
     int shard_id = i++;
     auto& m = status[shard_id];
-    if (r.pos.marker.empty()) {
+    if (r.marker.empty()) {
       continue; // empty bucket index shard
     }
     auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker->position);
-    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.pos.marker) {
+    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.marker) {
       shards_behind.insert(shard_id);
     }
   }
@@ -9650,8 +9650,8 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    map<int, string> markers;
-    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(dpp(), bucket->get_info(), shard_id,
+    map<int, RGWSI_BILog_RADOS::Status> markers;
+    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(bucket->get_info(), shard_id,
 						    &markers, null_yield);
     if (ret < 0) {
       cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
@@ -10629,6 +10629,7 @@ next:
 
    string marker;
    ceph::real_time timestamp;
+   bool disabled;
 
    auto stage_id = opt_stage_id.value_or(provider->get_first_stage());
 
@@ -10647,7 +10648,7 @@ next:
        return EINVAL;
      }
    }
-   r = provider->get_cur_state(stage_id, shard_id, &marker, &timestamp);
+   r = provider->get_cur_state(stage_id, shard_id, &marker, &timestamp, &disabled);
    if (r < 0) {
      cerr << "ERROR: failed to trim sync info provider: " << cpp_strerror(-r) << std::endl;
      return -r;
@@ -10656,6 +10657,8 @@ next:
    {
      Formatter::ObjectSection top_section(*formatter, "result");
      encode_json("marker", marker, formatter.get());
+     encode_json("timestamp", timestamp, formatter.get());
+     encode_json("disabled", disabled, formatter.get());
    }
    formatter->flush(cout);
  }
