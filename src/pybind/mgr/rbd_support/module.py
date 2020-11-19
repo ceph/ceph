@@ -563,6 +563,7 @@ class Task:
         self.progress = 0.0
         self.canceled = False
         self.failed = False
+        self.progress_posted = False
 
     def __str__(self):
         return self.to_json()
@@ -855,7 +856,6 @@ class TaskHandler:
                 else:
                     task.in_progress = True
                     self.in_progress_task = task
-                    self.update_progress(task, 0)
 
                     self.lock.release()
                     try:
@@ -912,7 +912,12 @@ class TaskHandler:
         finally:
             self.lock.release()
 
-        self.throttled_update_progress(task, progress)
+        if not task.progress_posted:
+            # delayed creation of progress event until first callback
+            self.post_progress(task, progress)
+        else:
+            self.throttled_update_progress(task, progress)
+
         return 0
 
     def execute_flatten(self, ioctx, task):
@@ -988,6 +993,10 @@ class TaskHandler:
             self.log.info("{}: task={}".format(task.failure_message, str(task)))
 
     def complete_progress(self, task):
+        if not task.progress_posted:
+            # ensure progress event exists before we complete/fail it
+            self.post_progress(task, 0)
+
         self.log.debug("complete_progress: task={}".format(str(task)))
         try:
             if task.failed:
@@ -999,7 +1008,7 @@ class TaskHandler:
             # progress module is disabled
             pass
 
-    def update_progress(self, task, progress):
+    def _update_progress(self, task, progress):
         self.log.debug("update_progress: task={}, progress={}".format(str(task), progress))
         try:
             refs = {"origin": "rbd_support"}
@@ -1010,6 +1019,14 @@ class TaskHandler:
         except ImportError:
             # progress module is disabled
             pass
+
+    def post_progress(self, task, progress):
+        self._update_progress(task, progress)
+        task.progress_posted = True
+
+    def update_progress(self, task, progress):
+        if task.progress_posted:
+            self._update_progress(task, progress)
 
     @Throttle(timedelta(seconds=1))
     def throttled_update_progress(self, task, progress):
