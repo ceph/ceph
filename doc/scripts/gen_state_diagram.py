@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import itertools
 import re
 import sys
 
@@ -73,8 +74,7 @@ class StateMachineRenderer(object):
         self.subgraphnum = 0
         self.clusterlabel = {}
 
-        self.color_idx = 0
-        self.color_palette = [
+        self.color_palette = itertools.cycle([
             "#000000",  # black
             "#1e90ff",  # dodgerblue
             "#ff0000",  # red
@@ -82,7 +82,7 @@ class StateMachineRenderer(object):
             "#ffa500",  # orange
             "#40e0d0",  # turquoise
             "#c71585",  # mediumvioletred
-        ]
+        ])
 
     def __str__(self):
         return "-------------------\n\nstates: %s\n\n machines: %s\n\n edges: %s\n\n context %s\n\n state_contents %s\n\n--------------------" % (
@@ -92,13 +92,6 @@ class StateMachineRenderer(object):
             self.context,
             self.state_contents
             )
-
-    def __next_color(self):
-        color = self.color_palette[self.color_idx]
-        self.color_idx += 1
-        if self.color_idx == len(self.color_palette):
-            self.color_idx = 0
-        return color
 
     def read_input(self, input_lines):
         previous_line = None
@@ -219,8 +212,9 @@ class StateMachineRenderer(object):
                 retval += (i + ",")
             retval += "]"
             return retval
+
         for (fro, to) in self.edges[event]:
-            color = self.__next_color()
+            color = next(self.color_palette)
             appendix = ['label="%s"' % (event,),
                         'color="%s"' % (color,),
                         'fontcolor="%s"' % (color,)]
