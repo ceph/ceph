@@ -22,6 +22,6 @@ class Perf(RestController):
 
         if 'daemon' in kwargs:
             _re = re.compile(kwargs['daemon'])
-            counters = {k: v for k, v in counters.items() if _re.match(k)}
+            counters = {k: v for k, v in list(counters.items()) if _re.match(k)}
 
         return counters

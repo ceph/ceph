@@ -1,7 +1,7 @@
 """
 A RESTful API for Ceph
 """
-from __future__ import absolute_import
+
 
 import os
 import json
@@ -92,7 +92,7 @@ class CommandsRequest(object):
         return results
 
 
-    def next(self):
+    def __next__(self):
         with self.lock:
             if not self.waiting:
                 # Nothing to run
@@ -262,7 +262,7 @@ class Module(MgrModule):
     def refresh_keys(self):
         self.keys = {}
         rawkeys = self.get_store_prefix('keys/') or {}
-        for k, v in rawkeys.items():
+        for k, v in list(rawkeys.items()):
             self.keys[k[5:]] = v  # strip of keys/ prefix
 
     def _serve(self):
@@ -381,7 +381,7 @@ class Module(MgrModule):
                 request = next(x for x in self.requests if x.is_running(tag))
             request.finish(tag)
             if request.is_ready():
-                request.next()
+                next(request)
         except StopIteration:
             # the command was not issued by me
             pass
@@ -514,13 +514,13 @@ class Module(MgrModule):
 
 
     def get_osd_pools(self):
-        osds = dict(map(lambda x: (x['osd'], []), self.get('osd_map')['osds']))
-        pools = dict(map(lambda x: (x['pool'], x), self.get('osd_map')['pools']))
+        osds = dict([(x['osd'], []) for x in self.get('osd_map')['osds']])
+        pools = dict([(x['pool'], x) for x in self.get('osd_map')['pools']])
         crush = self.get('osd_map_crush')
         crush_rules = crush['rules']
 
         osds_by_pool = {}
-        for pool_id, pool in pools.items():
+        for pool_id, pool in list(pools.items()):
             pool_osds = None
             for rule in [r for r in crush_rules if r['rule_id'] == pool['crush_rule']]:
                 if rule['min_size'] <= pool['size'] <= rule['max_size']:
@@ -528,7 +528,7 @@ class Module(MgrModule):
 
             osds_by_pool[pool_id] = pool_osds
 
-        for pool_id in pools.keys():
+        for pool_id in list(pools.keys()):
             for in_pool_id in osds_by_pool[pool_id]:
                 osds[in_pool_id].append(pool_id)
 
