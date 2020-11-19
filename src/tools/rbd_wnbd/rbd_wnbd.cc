@@ -396,7 +396,10 @@ int load_mapping_config_from_registry(string devpath, Config* cfg)
   auto reg_key = RegistryKey(
     g_ceph_context, HKEY_LOCAL_MACHINE, strKey.c_str(), false);
   if (!reg_key.hKey) {
-    return -EINVAL;
+    if (reg_key.missingKey)
+      return -ENOENT;
+    else
+      return -EINVAL;
   }
 
   reg_key.get("devpath", cfg->devpath);
