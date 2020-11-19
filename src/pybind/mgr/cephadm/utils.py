@@ -103,4 +103,8 @@ def datetime_to_str(dt: datetime.datetime) -> str:
 
 
 def resolve_ip(hostname: str) -> str:
-    return socket.getaddrinfo(hostname, 2049, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]
+    try:
+        return socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]
+        return socket.getaddrinfo(hostname, 2049, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]
+    except socket.gaierror as e:
+        raise OrchestratorError(f"Cannot resolve ip for host {hostname}: {e}")
