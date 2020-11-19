@@ -1062,7 +1062,6 @@ public:
     READ_LEASE_INTERVAL,
     DEDUP_TIER,
     DEDUP_CHUNK_ALGORITHM,
-    DEDUP_CDC_WINDOW_SIZE,
     DEDUP_CDC_CHUNK_SIZE,
   };
 
@@ -1593,11 +1592,6 @@ public:
     int64_t chunk_size;
     opts.get(pool_opts_t::DEDUP_CDC_CHUNK_SIZE, &chunk_size);
     return chunk_size;
-  }
-  int64_t get_dedup_cdc_window_size() const {
-    int64_t window_size;
-    opts.get(pool_opts_t::DEDUP_CDC_WINDOW_SIZE, &window_size);
-    return window_size;
   }
 
   /// application -> key/value metadata
@@ -5687,8 +5681,7 @@ struct object_manifest_t {
   void calc_refs_to_inc_on_set(
     const object_manifest_t* g, ///< [in] manifest for clone > *this
     const object_manifest_t* l, ///< [in] manifest for clone < *this
-    object_ref_delta_t &delta,   ///< [out] set of refs to drop
-    uint64_t start = 0           ///< [in] start position
+    object_ref_delta_t &delta   ///< [out] set of refs to drop
   ) const;
 
   /**
