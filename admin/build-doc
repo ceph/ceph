@@ -48,8 +48,6 @@ fi
 # for availability of commands
 set -e
 
-cat $TOPDIR/src/osd/PeeringState.h $TOPDIR/src/osd/PeeringState.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
-
 cd build-doc
 
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
