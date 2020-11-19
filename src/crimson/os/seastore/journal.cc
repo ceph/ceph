@@ -79,6 +79,7 @@ Journal::initialize_segment(Segment &segment)
   bl.append(bp);
 
   written_to = segment_manager.get_block_size();
+  committed_to = 0;
   return segment.write(0, bl).safe_then(
     [=] {
       segment_provider->update_journal_tail_committed(new_tail);
@@ -104,6 +105,7 @@ ceph::bufferlist Journal::encode_record(
     (uint32_t)record.deltas.size(),
     (uint32_t)record.extents.size(),
     current_segment_nonce,
+    committed_to,
     data_bl.crc32c(-1)
   };
   encode(header, bl);
@@ -175,6 +177,7 @@ Journal::write_record_ret Journal::write_record(
   return current_journal_segment->write(target, to_write).handle_error(
     write_record_ertr::pass_further{},
     crimson::ct_error::assert_all{ "TODO" }).safe_then([this, target] {
+      committed_to = target;
       return write_record_ret(
 	write_record_ertr::ready_future_marker{},
 	paddr_t{
