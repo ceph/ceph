@@ -259,20 +259,20 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
     // Find all check peers that have the wrong version
     if (const eversion_t& obj_v = primary_bi.objects.begin()->second;
         check == primary_bi.begin && check == peer_bi.begin) {
-      if(peer_bi.objects.begin()->second != obj_v) {
-        backfill_state().progress_tracker->enqueue_push(primary_bi.begin);
-        backfill_listener().enqueue_push(bt, primary_bi.begin, obj_v);
+      if(peer_bi.objects.begin()->second != obj_v &&
+          backfill_state().progress_tracker->enqueue_push(primary_bi.begin)) {
+        backfill_listener().enqueue_push(primary_bi.begin, obj_v);
       } else {
-        // it's fine, keep it!
+        // it's fine, keep it! OR already recovering
       }
       result.pbi_targets.insert(bt);
     } else {
       // Only include peers that we've caught up to their backfill line
       // otherwise, they only appear to be missing this object
       // because their peer_bi.begin > backfill_info.begin.
-      if (primary_bi.begin > peering_state().get_peer_last_backfill(bt)) {
-        backfill_state().progress_tracker->enqueue_push(primary_bi.begin);
-        backfill_listener().enqueue_push(bt, primary_bi.begin, obj_v);
+      if (primary_bi.begin > peering_state().get_peer_last_backfill(bt) &&
+          backfill_state().progress_tracker->enqueue_push(primary_bi.begin)) {
+        backfill_listener().enqueue_push(primary_bi.begin, obj_v);
       }
     }
   }
@@ -497,16 +497,17 @@ bool BackfillState::ProgressTracker::tracked_objects_completed() const
   return registry.empty();
 }
 
-void BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
+bool BackfillState::ProgressTracker::enqueue_push(const hobject_t& obj)
 {
-  ceph_assert(registry.count(obj) == 0);
-  registry[obj] = registry_item_t{ op_stage_t::enqueued_push, std::nullopt };
+  [[maybe_unused]] const auto [it, first_seen] = registry.try_emplace(
+    obj, registry_item_t{op_stage_t::enqueued_push, std::nullopt});
+  return first_seen;
 }
 
 void BackfillState::ProgressTracker::enqueue_drop(const hobject_t& obj)
 {
-  ceph_assert(registry.count(obj) == 0);
-  registry[obj] = registry_item_t{ op_stage_t::enqueued_drop, pg_stat_t{} };
+  registry.try_emplace(
+    obj, registry_item_t{op_stage_t::enqueued_drop, pg_stat_t{}});
 }
 
 void BackfillState::ProgressTracker::complete_to(

@@ -287,7 +287,6 @@ struct BackfillState::BackfillListener {
     const hobject_t& begin) = 0;
 
   virtual void enqueue_push(
-    const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) = 0;
 
@@ -339,7 +338,7 @@ public:
 
   bool tracked_objects_completed() const;
 
-  void enqueue_push(const hobject_t&);
+  bool enqueue_push(const hobject_t&);
   void enqueue_drop(const hobject_t&);
   void complete_to(const hobject_t&, const pg_stat_t&);
 };
