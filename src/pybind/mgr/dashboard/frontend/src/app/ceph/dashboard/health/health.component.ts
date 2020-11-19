@@ -95,7 +95,11 @@ export class HealthComponent implements OnInit, OnDestroy {
       )} ${this.i18n(`/s`)}`
     );
     ratioData.push(this.healthData.client_perf.read_op_per_sec);
-    ratioLabels.push(this.healthData.client_perf.write_op_per_sec);
+    ratioLabels.push(
+      `${this.i18n(`Writes`)}: ${this.dimless.transform(
+        this.healthData.client_perf.write_op_per_sec
+      )} ${this.i18n(`/s`)}`
+    );
     ratioData.push(this.calcPercentage(this.healthData.client_perf.write_op_per_sec, total));
 
     chart.labels = ratioLabels;
