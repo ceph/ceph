@@ -4556,6 +4556,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 #if defined(WITH_CACHE_REPLICA)
     // ReplicaDaemons
     case MSG_REPLICADAEMON_BLINK:
+    case CEPH_MSG_MON_GET_REPLICADAEMONMAP:
       paxos_service[PAXOS_REPLICAMAP]->dispatch(op);
       return;
 #endif
