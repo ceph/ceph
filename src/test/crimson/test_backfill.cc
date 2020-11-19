@@ -355,7 +355,7 @@ TEST(backfill, same_primary_same_replica)
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
 }
 
-TEST(backfill, single_empty_replica)
+TEST(backfill, one_empty_replica)
 {
   const auto reference_store = FakeStore{ {
     { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
@@ -373,6 +373,27 @@ TEST(backfill, single_empty_replica)
   cluster_fixture.next_round(2);
   EXPECT_CALL(cluster_fixture, backfilled);
   cluster_fixture.next_round();
+  EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
+}
+
+TEST(backfill, two_empty_replicas)
+{
+  const auto reference_store = FakeStore{ {
+    { "1:00058bcc:::rbd_data.1018ac3e755.00000000000000d5:head", {10, 234} },
+    { "1:00ed7f8e:::rbd_data.1018ac3e755.00000000000000af:head", {10, 196} },
+    { "1:01483aea:::rbd_data.1018ac3e755.0000000000000095:head", {10, 169} },
+  }};
+  auto cluster_fixture = BackfillFixtureBuilder::add_source(
+    reference_store.objs
+  ).add_target(
+    { /* nothing 1 */ }
+  ).add_target(
+    { /* nothing 2 */ }
+  ).get_result();
+
+  EXPECT_CALL(cluster_fixture, backfilled);
+  cluster_fixture.next_till_done();
+
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
 }
 
