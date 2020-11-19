@@ -233,7 +233,11 @@ export class HostsComponent extends ListWithDetails implements OnInit {
           });
           return host;
         });
-        this.hosts = resp;
+        this.hosts = resp.filter((respKey: any) => {
+          if (respKey['sources']['ceph'] && respKey['sources']['orchestrator']) {
+            return respKey;
+          }
+        });
         this.isLoadingHosts = false;
       },
       () => {
