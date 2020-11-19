@@ -52,19 +52,20 @@ struct record_header_t {
   // Fixed portion
   extent_len_t  mdlength;       // block aligned, length of metadata
   extent_len_t  dlength;        // block aligned, length of data
-  checksum_t    full_checksum;  // checksum for full record (TODO)
   size_t deltas;                // number of deltas
   size_t extents;               // number of extents
   segment_nonce_t segment_nonce;// nonce of containing segment
+  checksum_t data_crc;          // crc of data payload
+
 
   DENC(record_header_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.mdlength, p);
     denc(v.dlength, p);
-    denc(v.full_checksum, p);
     denc(v.deltas, p);
     denc(v.extents, p);
     denc(v.segment_nonce, p);
+    denc(v.data_crc, p);
     DENC_FINISH(p);
   }
 };
@@ -266,6 +267,9 @@ private:
   ceph::bufferlist encode_record(
     record_size_t rsize,
     record_t &&record);
+
+  /// validate metadata
+  static bool validate_metadata(const bufferlist &bl);
 
   /// do record write
   using write_record_ertr = crimson::errorator<
