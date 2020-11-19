@@ -4608,24 +4608,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestEvict) {
 
     stat_op.stat(&size, NULL, NULL);
     ASSERT_EQ(0, ioctx.operate("foo", &stat_op, NULL));
-    ASSERT_EQ(0, size);
-  }
-
-  ioctx.snap_set_read(my_snaps[1]);
-  {
-    ObjectReadOperation op, stat_op;
-    uint64_t size;
-    op.tier_evict();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-	"foo", completion, &op,
-	librados::OPERATION_IGNORE_OVERLAY, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-
-    stat_op.stat(&size, NULL, NULL);
-    ASSERT_EQ(0, ioctx.operate("foo", &stat_op, NULL));
-    ASSERT_EQ(0, size);
+    ASSERT_EQ(10, size);
   }
 
   ioctx.snap_set_read(librados::SNAP_HEAD);
