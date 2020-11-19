@@ -193,9 +193,6 @@ class MDCache {
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
 
-  bool forward_all_reqs_to_auth() const { 
-    return forward_all_requests_to_auth;
-  }
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
   }
@@ -840,7 +837,9 @@ class MDCache {
 
   void kick_open_ino_peers(mds_rank_t who);
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,
-		bool want_replica=true, bool want_xlocked=false);
+		bool want_replica=true, bool want_xlocked=false,
+		vector<inode_backpointer_t> *ancestors_hint=nullptr,
+		mds_rank_t auth_hint=MDS_RANK_NONE);
 
   void find_ino_peers(inodeno_t ino, MDSContext *c,
 		      mds_rank_t hint=MDS_RANK_NONE, bool path_locked=false);
@@ -887,7 +886,7 @@ class MDCache {
   bool is_any_uncommitted_fragment() const {
     return !uncommitted_fragments.empty();
   }
-  void wait_for_uncommitted_fragments(MDSGather *gather);
+  void wait_for_uncommitted_fragments(MDSContext* finisher);
   void rollback_uncommitted_fragments();
 
   void split_dir(CDir *dir, int byn);
@@ -1312,7 +1311,6 @@ class MDCache {
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;
-  bool forward_all_requests_to_auth;
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
 
   bool export_ephemeral_distributed_config;

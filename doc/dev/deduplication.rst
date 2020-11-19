@@ -50,7 +50,8 @@ More details in https://ieeexplore.ieee.org/document/8416369
 Design
 ======
 
-.. ditaa:: 
+.. ditaa::
+
            +-------------+
            | Ceph Client |
            +------+------+

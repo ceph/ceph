@@ -398,21 +398,29 @@ class Module(MgrModule):
             if not anon_host:
                 anon_host = str(uuid.uuid1())
                 self.set_store('host-id/%s' % host, anon_host)
+            serial = None
             for dev, rep in m.items():
                 rep['host_id'] = anon_host
+                if serial is None and 'serial_number' in rep:
+                    serial = rep['serial_number']
 
             # anonymize device id
             anon_devid = self.get_store('devid-id/%s' % devid)
             if not anon_devid:
-                anon_devid = f"{devid.rsplit('_', 1)[0]}_{uuid.uuid1()}"
+                # ideally devid is 'vendor_model_serial',
+                # but can also be 'model_serial', 'serial'
+                if '_' in devid:
+                    anon_devid = f"{devid.rsplit('_', 1)[0]}_{uuid.uuid1()}"
+                else:
+                    anon_devid = str(uuid.uuid1())
                 self.set_store('devid-id/%s' % devid, anon_devid)
             self.log.info('devid %s / %s, host %s / %s' % (devid, anon_devid,
                                                            host, anon_host))
 
             # anonymize the smartctl report itself
-            serial = devid.rsplit('_', 1)[1]
-            m_str = json.dumps(m)
-            m = json.loads(m_str.replace(serial, 'deleted'))
+            if serial:
+                m_str = json.dumps(m)
+                m = json.loads(m_str.replace(serial, 'deleted'))
 
             if anon_host not in res:
                 res[anon_host] = {}

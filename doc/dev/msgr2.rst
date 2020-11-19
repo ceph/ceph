@@ -74,7 +74,9 @@ If the remote party advertises required features we don't support, we
 can disconnect.
 
 
-.. ditaa:: +---------+        +--------+
+.. ditaa::
+
+           +---------+        +--------+
            | Client  |        | Server |
            +---------+        +--------+
                 | send banner     |
@@ -291,7 +293,9 @@ Authentication
 Example of authentication phase interaction when the client uses an
 allowed authentication method:
 
-.. ditaa:: +---------+        +--------+
+.. ditaa::
+
+           +---------+        +--------+
            | Client  |        | Server |
            +---------+        +--------+
                 | auth request    |
@@ -308,7 +312,9 @@ allowed authentication method:
 Example of authentication phase interaction when the client uses a forbidden
 authentication method as the first attempt:
 
-.. ditaa:: +---------+        +--------+
+.. ditaa::
+
+           +---------+        +--------+
            | Client  |        | Server |
            +---------+        +--------+
                 | auth request    |
@@ -615,7 +621,9 @@ Example of failure scenarios:
 
 * First client's client_ident message is lost, and then client reconnects.
 
-.. ditaa:: +---------+           +--------+
+.. ditaa::
+
+           +---------+           +--------+
            | Client  |           | Server |
            +---------+           +--------+
                 |                     |
@@ -633,7 +641,9 @@ Example of failure scenarios:
 
 * Server's server_ident message is lost, and then client reconnects.
 
-.. ditaa:: +---------+           +--------+
+.. ditaa::
+
+           +---------+           +--------+
            | Client  |           | Server |
            +---------+           +--------+
                 |                     |
@@ -654,7 +664,9 @@ Example of failure scenarios:
 
 * Server's server_ident message is lost, and then server reconnects.
 
-.. ditaa:: +---------+           +--------+
+.. ditaa::
+
+           +---------+           +--------+
            | Client  |           | Server |
            +---------+           +--------+
                 |                     |
@@ -678,7 +690,9 @@ Example of failure scenarios:
 
 * Connection failure after session is established, and then client reconnects.
 
-.. ditaa:: +---------+           +--------+
+.. ditaa::
+
+           +---------+           +--------+
            | Client  |           | Server |
            +---------+           +--------+
                 |                     |
@@ -696,7 +710,9 @@ Example of failure scenarios:
 * Connection failure after session is established because server reset,
   and then client reconnects.
 
-.. ditaa:: +---------+           +--------+
+.. ditaa::
+
+           +---------+           +--------+
            | Client  |           | Server |
            +---------+           +--------+
                 |                     |
@@ -722,7 +738,9 @@ of the connection.
 * Connection failure after session is established because client reset,
   and then client reconnects.
 
-.. ditaa:: +---------+           +--------+
+.. ditaa::
+
+           +---------+           +--------+
            | Client  |           | Server |
            +---------+           +--------+
                 |                     |
@@ -789,7 +807,9 @@ Example of protocol interaction (WIP)
 _____________________________________
 
 
-.. ditaa:: +---------+        +--------+
+.. ditaa::
+
+           +---------+        +--------+
            | Client  |        | Server |
            +---------+        +--------+
                 | send banner       |

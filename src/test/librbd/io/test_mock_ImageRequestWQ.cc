@@ -105,11 +105,13 @@ struct ThreadPool::PointerWQ<librbd::io::ImageDispatchSpec<librbd::MockTestImage
   MOCK_METHOD0(empty, bool());
   MOCK_METHOD0(mock_empty, bool());
   MOCK_METHOD0(signal, void());
+  MOCK_METHOD1(signal, void(const std::lock_guard<ceph::mutex>&));
   MOCK_METHOD0(process_finish, void());
 
   MOCK_METHOD0(front, ImageDispatchSpec*());
   MOCK_METHOD1(requeue_front, void(ImageDispatchSpec*));
-  MOCK_METHOD1(requeue_back, void(ImageDispatchSpec*));
+  MOCK_METHOD2(requeue_back, void(const std::lock_guard<ceph::mutex>&,
+                                  ImageDispatchSpec*));
 
   MOCK_METHOD0(dequeue, void*());
   MOCK_METHOD1(queue, void(ImageDispatchSpec*));
@@ -171,12 +173,16 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
     EXPECT_CALL(image_request_wq, signal());
   }
 
+  void expect_signal_locked(MockImageRequestWQ &image_request_wq) {
+    EXPECT_CALL(image_request_wq, signal(_));
+  }
+
   void expect_queue(MockImageRequestWQ &image_request_wq) {
     EXPECT_CALL(image_request_wq, queue(_));
   }
 
   void expect_requeue_back(MockImageRequestWQ &image_request_wq) {
-    EXPECT_CALL(image_request_wq, requeue_back(_));
+    EXPECT_CALL(image_request_wq, requeue_back(_, _));
   }
 
   void expect_front(MockImageRequestWQ &image_request_wq,
@@ -445,7 +451,7 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosNoBurst) {
   expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
   expect_all_throttled(mock_queued_image_request, true);
   expect_requeue_back(mock_image_request_wq);
-  expect_signal(mock_image_request_wq);
+  expect_signal_locked(mock_image_request_wq);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 }
 
@@ -469,7 +475,7 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosWithBurst) {
   expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
   expect_all_throttled(mock_queued_image_request, true);
   expect_requeue_back(mock_image_request_wq);
-  expect_signal(mock_image_request_wq);
+  expect_signal_locked(mock_image_request_wq);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 }
 

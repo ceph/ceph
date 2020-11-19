@@ -45,9 +45,29 @@ Create a volume using::
 
     $ ceph fs volume create <vol_name> [<placement>]
 
-This creates a CephFS file system and its data and metadata pools. It also tries
-to create MDSes for the filesystem using the enabled ceph-mgr orchestrator
-module  (see :doc:`/mgr/orchestrator`) , e.g., rook.
+This creates a CephFS file system and its data and metadata pools. It can also
+try to create MDSes for the filesystem using the enabled ceph-mgr orchestrator
+module (see :doc:`/mgr/orchestrator`), e.g. rook.
+
+<vol_name> is the volume name (an arbitrary string), and
+
+<placement> is an optional string signifying which hosts should have NFS Ganesha
+daemon containers running on them and, optionally, the total number of NFS
+Ganesha daemons the cluster (should you want to have more than one NFS Ganesha
+daemon running per node). For example, the following placement string means
+"deploy NFS Ganesha daemons on nodes host1 and host2 (one daemon per host):
+
+    "host1,host2"
+
+and this placement specification says to deploy two NFS Ganesha daemons each
+on nodes host1 and host2 (for a total of four NFS Ganesha daemons in the
+cluster):
+
+    "4 host1,host2"
+
+For more details on placement specification refer to the `orchestrator doc
+<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_
+but keep in mind that specifying the placement via a YAML file is not supported.
 
 Remove a volume using::
 
@@ -250,6 +270,10 @@ Cloned subvolumes can be a part of a different group than the source snapshot (b
 Similar to specifying a pool layout when creating a subvolume, pool layout can be specified when creating a cloned subvolume. To create a cloned subvolume with a specific pool layout use::
 
   $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
+
+Configure maximum number of concurrent clones. The default is set to 4::
+
+  $ ceph config set mgr mgr/volumes/max_concurrent_clones <value>
 
 To check the status of a clone operation use::
 

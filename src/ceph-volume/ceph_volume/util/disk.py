@@ -330,7 +330,7 @@ def is_device(dev):
     # use lsblk first, fall back to using stat
     TYPE = lsblk(dev).get('TYPE')
     if TYPE:
-        return TYPE == 'disk'
+        return TYPE in ['disk', 'mpath']
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
@@ -603,6 +603,12 @@ class Size(object):
         _b = self._b / other
         return Size(b=_b)
 
+    def __bool__(self):
+        return self.b != 0
+
+    def __nonzero__(self):
+        return self.__bool__()
+
     def __getattr__(self, unit):
         """
         Calculate units on the fly, relies on the fact that ``bytes`` has been
@@ -747,7 +753,7 @@ def get_devices(_sys_block_path='/sys/block'):
     for block in block_devs:
         devname = os.path.basename(block[0])
         diskname = block[1]
-        if block[2] != 'disk':
+        if block[2] not in ['disk', 'mpath']:
             continue
         sysdir = os.path.join(_sys_block_path, devname)
         metadata = {}

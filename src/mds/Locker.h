@@ -174,9 +174,9 @@ public:
 
   void request_inode_file_caps(CInode *in);
 
-  void calc_new_client_ranges(CInode *in, uint64_t size, bool update,
-			      CInode::mempool_inode::client_range_map* new_ranges,
-			      bool *max_increased);
+  bool check_client_ranges(CInode *in, uint64_t size);
+  bool calc_new_client_ranges(CInode *in, uint64_t size,
+			      bool *max_increased=nullptr);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,
 			    utime_t mtime=utime_t());

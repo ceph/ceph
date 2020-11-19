@@ -420,6 +420,8 @@ void MonClient::handle_monmap(MMonMap *m)
     }
   }
 
+  cct->set_mon_addrs(monmap);
+
   sub.got("monmap", monmap.get_epoch());
   map_cond.notify_all();
   want_monmap = false;
@@ -1321,7 +1323,8 @@ void MonClient::start_mon_command(const std::vector<string>& cmd,
   r->poutbl = outbl;
   r->prs = outs;
   r->onfinish = onfinish;
-  if (cct->_conf->rados_mon_op_timeout > 0) {
+  auto timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  if (timeout.count() > 0) {
     class C_CancelMonCommand : public Context
     {
       uint64_t tid;
@@ -1333,7 +1336,7 @@ void MonClient::start_mon_command(const std::vector<string>& cmd,
       }
     };
     r->ontimeout = new C_CancelMonCommand(r->tid, this);
-    timer.add_event_after(cct->_conf->rados_mon_op_timeout, r->ontimeout);
+    timer.add_event_after(static_cast<double>(timeout.count()), r->ontimeout);
   }
   mon_commands[r->tid] = r;
   _send_command(r);

@@ -3790,6 +3790,9 @@ int main(int argc, const char **argv)
 
   // not a raw op if 'period update' needs to commit to master
   bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
+  // not a raw op if 'period pull' needs to read zone/period configuration
+  bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
+
   std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE, OPT::ZONEGROUP_DELETE,
 			 OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
                          OPT::ZONEGROUP_SET, OPT::ZONEGROUP_DEFAULT,
@@ -3807,7 +3810,6 @@ int main(int argc, const char **argv)
 			 OPT::ZONE_PLACEMENT_GET,
 			 OPT::REALM_CREATE,
 			 OPT::PERIOD_DELETE, OPT::PERIOD_GET,
-			 OPT::PERIOD_PULL,
 			 OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
 			 OPT::GLOBAL_QUOTA_GET, OPT::GLOBAL_QUOTA_SET,
 			 OPT::GLOBAL_QUOTA_ENABLE, OPT::GLOBAL_QUOTA_DISABLE,
@@ -3878,7 +3880,7 @@ int main(int argc, const char **argv)
 
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
-                         raw_period_update);
+                         raw_period_update || raw_period_pull);
   bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
 
   if (raw_storage_op) {
@@ -6042,10 +6044,17 @@ int main(int argc, const char **argv)
         return -ret;
       }
       formatter->open_array_section("entries");
-      bool truncated;
+
+      bool truncated = false;
       int count = 0;
-      if (max_entries < 0)
-        max_entries = 1000;
+
+      static constexpr int MAX_PAGINATE_SIZE = 10000;
+      static constexpr int DEFAULT_MAX_ENTRIES = 1000;
+
+      if (max_entries < 0) {
+	max_entries = DEFAULT_MAX_ENTRIES;
+      }
+      const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
 
       string prefix;
       string delim;
@@ -6065,7 +6074,10 @@ int main(int argc, const char **argv)
       list_op.params.allow_unordered = bool(allow_unordered);
 
       do {
-        ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated, null_yield);
+        const int remaining = max_entries - count;
+        ret = list_op.list_objects(std::min(remaining, paginate_size),
+				   &result, &common_prefixes, &truncated,
+				   null_yield);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -6073,8 +6085,7 @@ int main(int argc, const char **argv)
 
         count += result.size();
 
-        for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
-          rgw_bucket_dir_entry& entry = *iter;
+        for (const auto& entry : result) {
           encode_json("entry", entry, formatter);
         }
         formatter->flush(cout);

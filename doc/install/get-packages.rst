@@ -127,32 +127,42 @@ Debian Packages
 
 Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to
-get the short codename, and replace ``{codename}`` in the following command. ::
+get the short codename, and replace ``{codename}`` in the following command.
 
-	sudo apt-add-repository 'deb https://download.ceph.com/debian-luminous/ {codename} main'
+.. prompt:: bash $
+   :substitutions:
 
-For early Linux distributions, you may execute the following command::
+   sudo apt-add-repository 'deb https://download.ceph.com/debian-|stable-release|/ {codename} main'
 
-	echo deb https://download.ceph.com/debian-luminous/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+For early Linux distributions, you may execute the following command
+
+.. prompt:: bash $
+   :substitutions:
+
+   echo deb https://download.ceph.com/debian-|stable-release|/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
 to get the short codename, and replace ``{codename}`` in the following command.
 
-::
+.. prompt:: bash $
 
-	sudo apt-add-repository 'deb https://download.ceph.com/debian-{release-name}/ {codename} main'
+   sudo apt-add-repository 'deb https://download.ceph.com/debian-{release-name}/ {codename} main'
 
 For older Linux distributions, replace ``{release-name}`` with the name of the
-release::
+release
+
+.. prompt:: bash $
 
 	echo deb https://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For development release packages, add our package repository to your system's
 list of APT sources.  See `the testing Debian repository`_ for a complete list
-of Debian and Ubuntu releases supported. ::
+of Debian and Ubuntu releases supported.
 
-	echo deb https://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+.. prompt:: bash $
+
+   echo deb https://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 .. tip:: For non-US users: There might be a mirror close to you where
          to download Ceph from. For more information see: `Ceph Mirrors`_.
@@ -166,12 +176,14 @@ RHEL
 
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
-``{ceph-release}`` with  a major release of Ceph (e.g., ``luminous``, ``mimic``, ``nautilus``,
-etc.) and ``{distro}`` with your Linux distribution (e.g., ``el7``, etc.).  You
+``{ceph-release}`` with  a major release of Ceph (e.g., ``|stable-release|``)
+and ``{distro}`` with your Linux distribution (e.g., ``el8``, etc.).  You
 may view https://download.ceph.com/rpm-{ceph-release}/ directory to see which
 distributions Ceph supports. Some Ceph packages (e.g., EPEL) must take priority
 over standard packages, so you must ensure that you set
-``priority=2``. ::
+``priority=2``.
+
+.. code-block:: ini
 
 	[ceph]
 	name=Ceph packages for $basearch
@@ -206,13 +218,17 @@ weeks of QA prior to release.
 
 The repository package installs the repository details on your local system for
 use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
-``{release}`` with the specific release of Ceph::
+``{release}`` with the specific release of Ceph
+
+.. prompt:: bash $
 
     su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el7.noarch.rpm'
 
-You can download the RPMs directly from::
+You can download the RPMs directly from
 
-     https://download.ceph.com/rpm-testing
+.. code-block:: none
+
+   https://download.ceph.com/rpm-testing
 
 .. tip:: For non-US users: There might be a mirror close to you where
          to download Ceph from. For more information see: `Ceph Mirrors`_.
@@ -220,7 +236,9 @@ You can download the RPMs directly from::
 openSUSE Leap 15.1
 ^^^^^^^^^^^^^^^^^^
 
-You need to add the Ceph package repository to your list of zypper sources. This can be done with the following command ::
+You need to add the Ceph package repository to your list of zypper sources. This can be done with the following command
+
+.. code-block:: bash
 
     zypper ar https://download.opensuse.org/repositories/filesystems:/ceph/openSUSE_Leap_15.1/filesystems:ceph.repo
 
@@ -248,7 +266,9 @@ only.
 Add the package repository to your system's list of APT sources, but
 replace ``{BRANCH}`` with the branch you'd like to use (e.g.,
 wip-hack, master).  See `the shaman page`_ for a complete
-list of distributions we build. ::
+list of distributions we build.
+
+.. prompt:: bash $
 
     curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/ubuntu/$(lsb_release -sc)/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
@@ -256,7 +276,9 @@ list of distributions we build. ::
 
 The use of ``latest`` in the url, means it will figure out which is the last
 commit that has been built. Alternatively, a specific sha1 can be specified.
-For Ubuntu Xenial and the master branch of Ceph, it would look like::
+For Ubuntu Xenial and the master branch of Ceph, it would look like
+
+.. prompt:: bash $
 
     curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/ubuntu/xenial/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
@@ -268,13 +290,17 @@ RPM Packages
 
 For current development branches, you may add a Ceph entry to the
 ``/etc/yum.repos.d`` directory. The `the shaman page`_ can be used to retrieve the full details
-of a repo file. It can be retrieved via an HTTP request, for example::
+of a repo file. It can be retrieved via an HTTP request, for example
+
+.. prompt:: bash $
 
     curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
 
 The use of ``latest`` in the url, means it will figure out which is the last
 commit that has been built. Alternatively, a specific sha1 can be specified.
-For CentOS 7 and the master branch of Ceph, it would look like::
+For CentOS 7 and the master branch of Ceph, it would look like
+
+.. prompt:: bash $
 
     curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/centos/7/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
@@ -309,7 +335,7 @@ use with ``apt``. Replace ``{release}`` with the latest Ceph release. Replace
 ``{version}`` with the latest Ceph version number. Replace ``{distro}`` with
 your Linux distribution codename. Replace ``{arch}`` with the CPU architecture.
 
-::
+.. prompt:: bash $
 
 	wget -q https://download.ceph.com/debian-{release}/pool/main/c/ceph/ceph_{version}{distro}_{arch}.deb
 
@@ -318,7 +344,9 @@ RPM Packages
 ~~~~~~~~~~~~
 
 Ceph requires additional additional third party libraries.
-To add the EPEL repository, execute the following::
+To add the EPEL repository, execute the following
+
+.. prompt:: bash $
 
    sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
@@ -333,22 +361,33 @@ Ceph requires the following packages:
 
 Packages are currently built for the RHEL/CentOS7 (``el7``) platforms.  The
 repository package installs the repository details on your local system for use
-with ``yum``. Replace ``{distro}`` with your distribution. ::
+with ``yum``. Replace ``{distro}`` with your distribution.
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-luminous/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+.. prompt:: bash $
+   :substitutions:
 
-For example, for CentOS 7  (``el7``)::
+   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-luminous/el7/noarch/ceph-release-1-0.el7.noarch.rpm'
+For example, for CentOS 8  (``el8``)
 
-You can download the RPMs directly from::
+.. prompt:: bash $
+   :substitutions:
 
-	https://download.ceph.com/rpm-luminous
+   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/el8/noarch/ceph-release-1-0.el8.noarch.rpm'
+
+You can download the RPMs directly from
+
+.. code-block:: none
+   :substitutions:
+
+   https://download.ceph.com/rpm-|stable-release|
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name
 with the name of the Ceph release. You may call ``lsb_release -sc`` on the command
-line to get the short codename. ::
+line to get the short codename.
+
+.. prompt:: bash $
 
 	su -c 'rpm -Uvh https://download.ceph.com/rpm-{release-name}/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 

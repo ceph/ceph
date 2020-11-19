@@ -45,7 +45,7 @@ class MonMapTest : public ::testing::Test {
     }
 };
 
-TEST_F(MonMapTest, build_initial_config_from_dns) {
+TEST_F(MonMapTest, DISABLED_build_initial_config_from_dns) {
 
   MockResolvHWrapper *resolvH = new MockResolvHWrapper();
   DNSResolver::get_instance(resolvH);
@@ -102,25 +102,25 @@ TEST_F(MonMapTest, build_initial_config_from_dns) {
   int r = monmap.build_initial(cct, false, std::cerr);
 
   ASSERT_EQ(r, 0);
-  ASSERT_EQ(monmap.mon_addr.size(), (unsigned int)3);
-  map<string,entity_addr_t>::iterator it = monmap.mon_addr.find("mon.a");
-  ASSERT_NE(it, monmap.mon_addr.end());
+  ASSERT_EQ(monmap.mon_info.size(), (unsigned int)3);
+  auto it = monmap.mon_info.find("mon.a");
+  ASSERT_NE(it, monmap.mon_info.end());
   std::ostringstream os;
-  os << it->second;
+  os << it->second.public_addrs;
   ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
   os.str("");
-  it = monmap.mon_addr.find("mon.b");
-  ASSERT_NE(it, monmap.mon_addr.end());
-  os << it->second;
+  it = monmap.mon_info.find("mon.b");
+  ASSERT_NE(it, monmap.mon_info.end());
+  os << it->second.public_addrs;
   ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
   os.str("");
-  it = monmap.mon_addr.find("mon.c");
-  ASSERT_NE(it, monmap.mon_addr.end());
-  os << it->second;
+  it = monmap.mon_info.find("mon.c");
+  ASSERT_NE(it, monmap.mon_info.end());
+  os << it->second.public_addrs;
   ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
 }
 
-TEST_F(MonMapTest, build_initial_config_from_dns_fail) {
+TEST_F(MonMapTest, DISABLED_build_initial_config_from_dns_fail) {
   MockResolvHWrapper *resolvH = new MockResolvHWrapper();
   DNSResolver::get_instance(resolvH);
 
@@ -139,11 +139,11 @@ TEST_F(MonMapTest, build_initial_config_from_dns_fail) {
   int r = monmap.build_initial(cct, false, std::cerr);
 
   ASSERT_EQ(r, -ENOENT);
-  ASSERT_EQ(monmap.mon_addr.size(), (unsigned int)0);
+  ASSERT_EQ(monmap.mon_info.size(), (unsigned int)0);
 
 }
 
-TEST_F(MonMapTest, build_initial_config_from_dns_with_domain) {
+TEST_F(MonMapTest, DISABLED_build_initial_config_from_dns_with_domain) {
 
   MockResolvHWrapper *resolvH = new MockResolvHWrapper();
   DNSResolver::get_instance(resolvH);
@@ -200,21 +200,40 @@ TEST_F(MonMapTest, build_initial_config_from_dns_with_domain) {
   int r = monmap.build_initial(cct, false, std::cerr);
 
   ASSERT_EQ(r, 0);
-  ASSERT_EQ(monmap.mon_addr.size(), (unsigned int)3);
-  map<string,entity_addr_t>::iterator it = monmap.mon_addr.find("mon.a");
-  ASSERT_NE(it, monmap.mon_addr.end());
+  ASSERT_EQ(monmap.mon_info.size(), (unsigned int)3);
+  auto it = monmap.mon_info.find("mon.a");
+  ASSERT_NE(it, monmap.mon_info.end());
   std::ostringstream os;
-  os << it->second;
+  os << it->second.public_addrs;
   ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
   os.str("");
-  it = monmap.mon_addr.find("mon.b");
-  ASSERT_NE(it, monmap.mon_addr.end());
-  os << it->second;
+  it = monmap.mon_info.find("mon.b");
+  ASSERT_NE(it, monmap.mon_info.end());
+  os << it->second.public_addrs;
   ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
   os.str("");
-  it = monmap.mon_addr.find("mon.c");
-  ASSERT_NE(it, monmap.mon_addr.end());
-  os << it->second;
+  it = monmap.mon_info.find("mon.c");
+  ASSERT_NE(it, monmap.mon_info.end());
+  os << it->second.public_addrs;
   ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
 }
 
+TEST(MonMapBuildInitial, build_initial_mon_host_from_dns) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_MON))->get();
+  cct->_conf.set_val("mon_host", "ceph.io");
+  MonMap monmap;
+  int r = monmap.build_initial(cct, false, std::cerr);
+  ASSERT_EQ(r, 0);
+  ASSERT_GE(monmap.mon_info.size(), 1u);
+  for (const auto& [name, info] : monmap.mon_info) {
+    std::cerr << info << std::endl;
+  }
+}
+
+TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_MON))->get();
+  cct->_conf.set_val("mon_host", "ceph.noname");
+  MonMap monmap;
+  int r = monmap.build_initial(cct, false, std::cerr);
+  ASSERT_EQ(r, -EINVAL);
+}

@@ -3,13 +3,10 @@
           [hasDetails]="true"
           (updateSelection)="setExpandedRow($event)"
           [selectionType]="'single'">
-  <tabset cdTableDetail
-          *ngIf="expandedRow">
-    <tab i18n-heading
-         heading="Details">
-      <cd-table-key-value [data]="expandedRow"
-                          [renderObjects]="true"
-                          [hideKeys]="hideKeys"></cd-table-key-value>
-    </tab>
-  </tabset>
+  <cd-table-key-value cdTableDetail
+                      *ngIf="expandedRow"
+                      [data]="expandedRow"
+                      [renderObjects]="true"
+                      [hideKeys]="hideKeys">
+  </cd-table-key-value>
 </cd-table>

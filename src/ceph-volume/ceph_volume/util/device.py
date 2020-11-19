@@ -4,7 +4,8 @@ import os
 from functools import total_ordering
 from ceph_volume import sys_info, process
 from ceph_volume.api import lvm
-from ceph_volume.util import disk
+from ceph_volume.util import disk, system
+from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 
 report_template = """
@@ -26,13 +27,15 @@ class Devices(object):
     A container for Device instances with reporting
     """
 
-    def __init__(self, devices=None):
+    def __init__(self, filter_for_batch=False):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
         self.devices = [Device(k) for k in
                             sys_info.devices.keys()]
+        if filter_for_batch:
+            self.devices = [d for d in self.devices if d.available_lvm_batch]
 
-    def pretty_report(self, all=True):
+    def pretty_report(self):
         output = [
             report_template.format(
                 dev='Device Path',
@@ -63,6 +66,7 @@ class Device(object):
         'path',
         'sys_api',
         'device_id',
+        'lsm_data',
     ]
     pretty_report_sys_fields = [
         'human_readable_size',
@@ -75,13 +79,17 @@ class Device(object):
         'vendor',
     ]
 
+    # define some class variables; mostly to enable the use of autospec in
+    # unittests
+    lvs = []
+
     def __init__(self, path):
         self.path = path
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
-        self.vgs = []
         self.lvs = []
+        self.vgs = []
         self.vg_name = None
         self.lv_name = None
         self.disk_api = {}
@@ -90,6 +98,7 @@ class Device(object):
         self._exists = None
         self._is_lvm_member = None
         self._parse()
+        self.lsm_data = self.fetch_lsm()
 
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()
         self.available_raw, self.rejected_reasons_raw = self._check_raw_reject_reasons()
@@ -98,6 +107,21 @@ class Device(object):
                                          self.rejected_reasons_raw))
 
         self.device_id = self._get_device_id()
+
+    def fetch_lsm(self):
+        '''
+        Attempt to fetch libstoragemgmt (LSM) metadata, and return to the caller
+        as a dict. An empty dict is passed back to the caller if the target path
+        is not a block device, or lsm is unavailable on the host. Otherwise the
+        json returned will provide LSM attributes, and any associated errors that
+        lsm encountered when probing the device.
+        '''
+        if not self.exists or not self.is_device:
+            return {}
+
+        lsm_disk = LSMDisk(self.path)
+        
+        return  lsm_disk.json_report()
 
     def __lt__(self, other):
         '''
@@ -343,16 +367,27 @@ class Device(object):
     def is_partition(self):
         if self.disk_api:
             return self.disk_api['TYPE'] == 'part'
+        elif self.blkid_api:
+            return self.blkid_api['TYPE'] == 'part'
         return False
 
     @property
     def is_device(self):
+        api = None
         if self.disk_api:
-            is_device = self.disk_api['TYPE'] == 'device'
-            is_disk = self.disk_api['TYPE'] == 'disk'
+            api = self.disk_api
+        elif self.blkid_api:
+            api = self.blkid_api
+        if api:
+            is_device = api['TYPE'] == 'device'
+            is_disk = api['TYPE'] == 'disk'
             if is_device or is_disk:
                 return True
         return False
+
+    @property
+    def is_acceptable_device(self):
+        return self.is_device or self.is_partition
 
     @property
     def is_encrypted(self):
@@ -389,6 +424,41 @@ class Device(object):
                    if lv.tags.get("ceph.type") in ["data", "block"]]
         return any(osd_ids)
 
+    @property
+    def vg_free_percent(self):
+        if self.vgs:
+            return [vg.free_percent for vg in self.vgs]
+        else:
+            return [1]
+
+    @property
+    def vg_size(self):
+        if self.vgs:
+            return [vg.size for vg in self.vgs]
+        else:
+            # TODO fix this...we can probably get rid of vg_free
+            return self.vg_free
+
+    @property
+    def vg_free(self):
+        '''
+        Returns the free space in all VGs on this device. If no VGs are
+        present, returns the disk size.
+        '''
+        if self.vgs:
+            return [vg.free for vg in self.vgs]
+        else:
+            # We could also query 'lvmconfig
+            # --typeconfig full' and use allocations -> physical_extent_size
+            # value to project the space for a vg
+            # assuming 4M extents here
+            extent_size = 4194304
+            vg_free = int(self.size / extent_size) * extent_size
+            if self.size % 4194304 == 0:
+                # If the extent size divides size exactly, deduct on extent for
+                # LVM metadata
+                vg_free -= extent_size
+            return [vg_free]
 
     def _check_generic_reject_reasons(self):
         reasons = [
@@ -398,9 +468,12 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
-        # reject disks smaller than 5GB
-        if int(self.sys_api.get('size', 0)) < 5368709120:
-            rejected.append('Insufficient space (<5GB)')
+        if self.is_acceptable_device:
+            # reject disks smaller than 5GB
+            if int(self.sys_api.get('size', 0)) < 5368709120:
+                rejected.append('Insufficient space (<5GB)')
+        else:
+            rejected.append("Device type is not acceptable. It should be raw device or partition")
         if self.is_ceph_disk_member:
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
@@ -410,9 +483,9 @@ class Device(object):
     def _check_lvm_reject_reasons(self):
         rejected = []
         if self.vgs:
-            available_vgs = [vg for vg in self.vgs if vg.free >= 5368709120]
+            available_vgs = [vg for vg in self.vgs if int(vg.vg_free_count) > 10]
             if not available_vgs:
-                rejected.append('Insufficient space (<5GB) on vgs')
+                rejected.append('Insufficient space (<10 extents) on vgs')
         else:
             # only check generic if no vgs are present. Vgs might hold lvs and
             # that might cause 'locked' to trigger
@@ -426,6 +499,14 @@ class Device(object):
             rejected.append('LVM detected')
 
         return len(rejected) == 0, rejected
+
+    @property
+    def available_lvm_batch(self):
+        if self.sys_api.get("partitions"):
+            return False
+        if system.device_is_mounted(self.path):
+            return False
+        return self.is_device or self.is_lv
 
 
 class CephDiskDevice(object):

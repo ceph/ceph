@@ -8,9 +8,11 @@ OSD Service Specification
 It gives the user an abstract way tell ceph which disks should turn into an OSD
 with which configuration without knowing the specifics of device names and paths.
 
-Instead of doing this::
+Instead of doing this
 
-  [monitor 1] # ceph orch daemon add osd *<host>*:*<path-to-device>*
+.. prompt:: bash [monitor.1]#
+
+  ceph orch daemon add osd *<host>*:*<path-to-device>*
 
 for each device and each host, we can define a yaml|json file that allows us to describe
 the layout. Here's the most basic example.
@@ -32,9 +34,11 @@ Turn any available(ceph-volume decides what 'available' is) into an OSD on all h
 the glob pattern '*'. (The glob pattern matches against the registered hosts from `host ls`)
 There will be a more detailed section on host_pattern down below.
 
-and pass it to `osd create` like so::
+and pass it to `osd create` like so
 
-  [monitor 1] # ceph orch apply osd -i /path/to/osd_spec.yml
+.. prompt:: bash [monitor.1]#
+
+  ceph orch apply osd -i /path/to/osd_spec.yml
 
 This will go out on all the matching hosts and deploy these OSDs.
 
@@ -43,9 +47,11 @@ Since we want to have more complex setups, there are more filters than just the 
 Also, there is a `--dry-run` flag that can be passed to the `apply osd` command, which gives you a synopsis
 of the proposed layout.
 
-Example::
+Example
 
-  [monitor 1] # ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
+.. prompt:: bash [monitor.1]#
+
+  [monitor.1]# ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
 
 
 
@@ -64,7 +70,9 @@ Filters
 You can assign disks to certain groups by their attributes using filters.
 
 The attributes are based off of ceph-volume's disk query. You can retrieve the information
-with::
+with
+
+.. code-block:: bash
 
   ceph-volume inventory </path/to/disk>
 
@@ -105,20 +113,28 @@ Size specification of format can be of form:
 
 Concrete examples:
 
-Includes disks of an exact size::
+Includes disks of an exact size
+
+.. code-block:: yaml
 
     size: '10G'
 
-Includes disks which size is within the range::
+Includes disks which size is within the range
+
+.. code-block:: yaml
 
     size: '10G:40G'
 
-Includes disks less than or equal to 10G in size::
+Includes disks less than or equal to 10G in size
+
+.. code-block:: yaml
 
     size: ':10G'
 
 
-Includes disks equal to or greater than 40G in size::
+Includes disks equal to or greater than 40G in size
+
+.. code-block:: yaml
 
     size: '40G:'
 
@@ -206,7 +222,9 @@ Examples
 The simple case
 ---------------
 
-All nodes with the same setup::
+All nodes with the same setup
+
+.. code-block:: none
 
     20 HDDs
     Vendor: VendorA
@@ -265,7 +283,9 @@ Note: All of the above DriveGroups are equally valid. Which of those you want to
 The advanced case
 -----------------
 
-Here we have two distinct setups::
+Here we have two distinct setups
+
+.. code-block:: none
 
     20 HDDs
     Vendor: VendorA
@@ -317,7 +337,9 @@ The advanced case (with non-uniform nodes)
 
 The examples above assumed that all nodes have the same drives. That's however not always the case.
 
-Node1-5::
+Node1-5
+
+.. code-block:: none
 
     20 HDDs
     Vendor: Intel
@@ -328,7 +350,9 @@ Node1-5::
     Model: MC-55-44-ZX
     Size: 512GB
 
-Node6-10::
+Node6-10
+
+.. code-block:: none
 
     5 NVMEs
     Vendor: Intel
@@ -371,7 +395,7 @@ Dedicated wal + db
 All previous cases co-located the WALs with the DBs.
 It's however possible to deploy the WAL on a dedicated device as well, if it makes sense.
 
-::
+.. code-block:: none
 
     20 HDDs
     Vendor: VendorA

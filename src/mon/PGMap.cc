@@ -760,6 +760,7 @@ void PGMapDigest::dump_pool_stats_full(
   } else {
     tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
     if (verbose) {
       tbl.define_column("(DATA)", TextTable::LEFT, TextTable::RIGHT);
@@ -791,6 +792,7 @@ void PGMapDigest::dump_pool_stats_full(
       continue;
 
     const string& pool_name = osd_map.get_pool_name(pool_id);
+    auto pool_pg_num = osd_map.get_pg_num(pool_id);
     const pool_stat_t &stat = pg_pool_sum.at(pool_id);
 
     const pg_pool_t *pool = osd_map.get_pg_pool(pool_id);
@@ -814,7 +816,8 @@ void PGMapDigest::dump_pool_stats_full(
       f->open_object_section("stats");
     } else {
       tbl << pool_name
-          << pool_id;
+          << pool_id
+          << pool_pg_num;
     }
     float raw_used_rate = osd_map.pool_raw_used_rate(pool_id);
     bool per_pool = use_per_pool_stats();

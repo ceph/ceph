@@ -41,24 +41,34 @@ did not do this (by passing ``--skip-monitoring-stack``, or if you
 converted an existing cluster to cephadm management, you can set up
 monitoring by following the steps below.
 
-#. Enable the prometheus module in the ceph-mgr daemon.  This exposes the internal Ceph metrics so that prometheus can scrape them.::
+#. Enable the prometheus module in the ceph-mgr daemon.  This exposes the internal Ceph metrics so that prometheus can scrape them.
+
+   .. code-block:: bash
 
      ceph mgr module enable prometheus
 
-#. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization.::
+#. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization.
+
+   .. code-block:: bash
 
      ceph orch apply node-exporter '*'
 
-#. Deploy alertmanager::
+#. Deploy alertmanager
+
+   .. code-block:: bash
 
      ceph orch apply alertmanager 1
 
 #. Deploy prometheus.  A single prometheus instance is sufficient, but
-   for HA you may want to deploy two.::
+   for HA you may want to deploy two.
+
+   .. code-block:: bash
 
      ceph orch apply prometheus 1    # or 2
 
-#. Deploy grafana::
+#. Deploy grafana
+
+   .. code-block:: bash
 
      ceph orch apply grafana 1
 
@@ -66,7 +76,9 @@ Cephadm handles the prometheus, grafana, and alertmanager
 configurations automatically.
 
 It may take a minute or two for services to be deployed.  Once
-completed, you should see something like this from ``ceph orch ls``::
+completed, you should see something like this from ``ceph orch ls``
+
+.. code-block:: console
 
   $ ceph orch ls
   NAME           RUNNING  REFRESHED  IMAGE NAME                                      IMAGE ID        SPEC
@@ -88,11 +100,15 @@ configuration first.  The following configuration options are available.
 - ``container_image_alertmanager``
 - ``container_image_node_exporter``
 
-Custom images can be set with the ``ceph config`` command::
+Custom images can be set with the ``ceph config`` command
+
+.. code-block:: bash
 
      ceph config set mgr mgr/cephadm/<option_name> <value>
 
-For example::
+For example
+
+.. code-block:: bash
 
      ceph config set mgr mgr/cephadm/container_image_prometheus prom/prometheus:v1.4.1
 
@@ -107,11 +123,15 @@ For example::
      
      If you choose to go with the recommendations instead, you can reset the
      custom image you have set before.  After that, the default value will be
-     used again.  Use ``ceph config rm`` to reset the configuration option::
+     used again.  Use ``ceph config rm`` to reset the configuration option
+
+     .. code-block:: bash
 
           ceph config rm mgr mgr/cephadm/<option_name>
 
-     For example::
+     For example
+
+     .. code-block:: bash
 
           ceph config rm mgr mgr/cephadm/container_image_prometheus
 
@@ -119,7 +139,9 @@ Disabling monitoring
 --------------------
 
 If you have deployed monitoring and would like to remove it, you can do
-so with::
+so with
+
+.. code-block:: bash
 
   ceph orch rm grafana
   ceph orch rm prometheus --force   # this will delete metrics data collected so far
@@ -135,7 +157,9 @@ If you have an existing prometheus monitoring infrastructure, or would like
 to manage it yourself, you need to configure it to integrate with your Ceph
 cluster.
 
-* Enable the prometheus module in the ceph-mgr daemon::
+* Enable the prometheus module in the ceph-mgr daemon
+
+  .. code-block:: bash
 
      ceph mgr module enable prometheus
 

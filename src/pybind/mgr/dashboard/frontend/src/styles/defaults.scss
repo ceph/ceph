@@ -192,3 +192,18 @@ $color-rgw-icon: $color-blue-gray !default;
     }
   }
 }
+
+// This was backported from _bootstrap-defaults.scss in master
+$health-chart-colors: (
+  'red': #c9190b,
+  'blue': #06c,
+  'orange': #ef9234,
+  'yellow': #f6d173,
+  'magenta': #009596,
+  'green': #7cc674,
+  'gray': #ededed,
+  'light-blue': #519de9,
+  'light-yellow': #f9e0a2,
+  'cyan': #73c5c5,
+  'purple': #3c3d99
+);

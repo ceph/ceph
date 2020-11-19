@@ -28,7 +28,7 @@ MDSUtility::MDSUtility() :
   monc = new MonClient(g_ceph_context);
   messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
   fsmap = new FSMap();
-  objecter = new Objecter(g_ceph_context, messenger, monc, NULL, 0, 0);
+  objecter = new Objecter(g_ceph_context, messenger, monc, NULL);
 }
 
 

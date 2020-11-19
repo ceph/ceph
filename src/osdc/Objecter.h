@@ -2119,9 +2119,7 @@ private:
 
  public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
-	   Finisher *fin,
-	   double mon_timeout,
-	   double osd_timeout);
+	   Finisher *fin);
   ~Objecter() override;
 
   void init();

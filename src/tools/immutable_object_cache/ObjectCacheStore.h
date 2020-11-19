@@ -31,6 +31,7 @@ class ObjectCacheStore {
   int lookup_object(std::string pool_nspace,
                     uint64_t pool_id, uint64_t snap_id,
                     std::string object_name,
+                    bool return_dne_path,
                     std::string& target_cache_file_path);
 
  private:

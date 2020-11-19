@@ -1954,7 +1954,7 @@ create_image()
 		goto failed_shutdown;
 	}
 #if defined(WITH_KRBD)
-	r = krbd_create_from_context(rados_cct(cluster), &krbd);
+	r = krbd_create_from_context(rados_cct(cluster), 0, &krbd);
 	if (r < 0) {
 		simple_err("Could not create libkrbd handle", r);
 		goto failed_shutdown;

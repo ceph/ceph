@@ -1,10 +1,6 @@
 @import 'defaults';
 
 ::ng-deep cd-login {
-  h1 {
-    margin: 0 0 30px 0;
-  }
-
   .form-group {
     border-left: 4px solid white;
     background-color: $color-password-toggle-bg;

@@ -1,4 +1,4 @@
-import { Component, Input, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, TemplateRef, ViewChild } from '@angular/core';
 
 import { RbdFormModel } from '../rbd-form/rbd-form.model';
 
@@ -7,7 +7,7 @@ import { RbdFormModel } from '../rbd-form/rbd-form.model';
   templateUrl: './rbd-details.component.html',
   styleUrls: ['./rbd-details.component.scss']
 })
-export class RbdDetailsComponent {
+export class RbdDetailsComponent implements OnChanges {
   @Input()
   selection: RbdFormModel;
   @Input()
@@ -16,4 +16,12 @@ export class RbdDetailsComponent {
   poolConfigurationSourceTpl: TemplateRef<any>;
 
   constructor() {}
+
+  rbdDashboardUrl: string;
+
+  ngOnChanges() {
+    if (this.selection) {
+      this.rbdDashboardUrl = `rbd-details?var-Pool=${this.selection['pool_name']}&var-Image=${this.selection['name']}`;
+    }
+  }
 }

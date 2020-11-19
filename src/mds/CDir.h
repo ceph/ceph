@@ -421,7 +421,7 @@ public:
 
   // for giving to clients
   void get_dist_spec(std::set<mds_rank_t>& ls, mds_rank_t auth) {
-    if (is_rep()) {
+    if (is_auth()) {
       list_replicas(ls);
       if (!ls.empty()) 
 	ls.insert(auth);
@@ -644,12 +644,8 @@ protected:
       bufferlist &bl,
       int pos,
       const std::set<snapid_t> *snaps,
+      double rand_threshold,
       bool *force_dirty);
-
-  /**
-   * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
-   */
-  void _go_bad();
 
   /**
    * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)

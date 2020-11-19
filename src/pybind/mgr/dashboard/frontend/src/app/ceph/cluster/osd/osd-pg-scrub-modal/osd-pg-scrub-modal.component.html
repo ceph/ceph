@@ -5,7 +5,8 @@
   <ng-container class="modal-content">
     <form #formDir="ngForm"
           [formGroup]="osdPgScrubForm"
-          novalidate>
+          novalidate
+          cdFormScope="osd">
       <div class="modal-body osd-modal">
         <!-- Basic -->
         <cd-config-option [optionNames]="basicOptions"
@@ -23,8 +24,8 @@
           </div>
         </div>
         <div *ngIf="advancedEnabled">
-          <h2 class="page-header"
-              i18n>Advanced configuration options</h2>
+          <h3 class="page-header"
+              i18n>Advanced configuration options</h3>
           <cd-config-option [optionNames]="advancedOptions"
                             [optionsForm]="osdPgScrubForm"
                             [optionsFormDir]="formDir"

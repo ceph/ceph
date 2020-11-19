@@ -129,6 +129,13 @@
        heading="Configuration">
     <cd-rbd-configuration-table [data]="selection['configuration']"></cd-rbd-configuration-table>
   </tab>
+  <tab i18n-heading
+       heading="Performance">
+    <cd-grafana [grafanaPath]="rbdDashboardUrl"
+                uid="YhCYGcuZz"
+                grafanaStyle="one">
+    </cd-grafana>
+  </tab>
 </tabset>
 
 <ng-template
@@ -146,4 +153,3 @@
           tooltip="This is the global value. No value for this option has been set for this image.">Global</span>
   </ng-template>
 </ng-template>
-

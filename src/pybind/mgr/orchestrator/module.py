@@ -13,7 +13,7 @@ from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 
-from mgr_util import format_bytes, to_pretty_timedelta
+from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
 from mgr_module import MgrModule, HandleCommandResult
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
@@ -108,18 +108,12 @@ def preview_table_osd(data):
                 if spec.get('error'):
                     return spec.get('message')
                 dg_name = spec.get('osdspec')
-                for osd in spec.get('data', {}).get('osds', []):
-                    db_path = '-'
-                    wal_path = '-'
-                    block_db = osd.get('block.db', {}).get('path')
-                    block_wal = osd.get('block.wal', {}).get('path')
-                    block_data = osd.get('data', {}).get('path', '')
+                for osd in spec.get('data', []):
+                    db_path = osd.get('block_db', '-')
+                    wal_path = osd.get('block_wal', '-')
+                    block_data = osd.get('data', '')
                     if not block_data:
                         continue
-                    if block_db:
-                        db_path = spec.get('data', {}).get('vg', {}).get('devices', [])
-                    if block_wal:
-                        wal_path = spec.get('data', {}).get('wal_vg', {}).get('devices', [])
                     table.add_row(('osd', dg_name, host, block_data, db_path, wal_path))
     return table.get_string()
 
@@ -174,7 +168,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         encoded = json.dumps({
             'ident': list(self.ident),
             'fault': list(self.fault),
-            })
+        })
         self.set_store('active_devices', encoded)
 
     def _refresh_health(self):
@@ -208,7 +202,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             stdout=json.dumps({
                 'ident': list(self.ident),
                 'fault': list(self.fault)
-                }, indent=4, sort_keys=True))
+            }, indent=4, sort_keys=True))
 
     def light_on(self, fault_ident, devid):
         # type: (str, str) -> HandleCommandResult
@@ -280,7 +274,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         'name=addr,type=CephString,req=false '
         'name=labels,type=CephString,n=N,req=false',
         'Add a host')
-    def _add_host(self, hostname:str, addr: Optional[str]=None, labels: Optional[List[str]]=None):
+    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None):
         s = HostSpec(hostname=hostname, addr=addr, labels=labels)
         completion = self.add_host(s)
         self._orchestrator_wait([completion])
@@ -366,10 +360,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         'orch device ls',
         "name=hostname,type=CephString,n=N,req=false "
         "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false "
-        "name=refresh,type=CephBool,req=false",
+        "name=refresh,type=CephBool,req=false "
+        "name=wide,type=CephBool,req=false",
         'List devices on a host')
-    def _list_devices(self, hostname=None, format='plain', refresh=False):
-        # type: (Optional[List[str]], str, bool) -> HandleCommandResult
+    def _list_devices(self, hostname=None, format='plain', refresh=False, wide=False):
+        # type: (Optional[List[str]], str, bool, bool) -> HandleCommandResult
         """
         Provide information about storage devices present in cluster hosts
 
@@ -387,32 +382,78 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         if format != 'plain':
             return HandleCommandResult(stdout=to_format(completion.result, format, many=True, cls=InventoryHost))
         else:
-            out = []
+            display_map = {
+                "Unsupported": "N/A",
+                "N/A": "N/A",
+                "On": "On",
+                "Off": "Off",
+                True: "Yes",
+                False: "No",
+            }
 
-            table = PrettyTable(
-                ['HOST', 'PATH', 'TYPE', 'SIZE', 'DEVICE_ID', 'MODEL', 'VENDOR', 'ROTATIONAL', 'AVAIL',
-                 'REJECT REASONS'],
-                border=False)
+            out = []
+            if wide:
+                table = PrettyTable(
+                    ['Hostname', 'Path', 'Type', 'Transport', 'RPM', 'Vendor', 'Model',
+                     'Serial', 'Size', 'Health', 'Ident', 'Fault', 'Available',
+                     'Reject Reasons'],
+                    border=False)
+            else:
+                table = PrettyTable(
+                    ['Hostname', 'Path', 'Type', 'Serial', 'Size',
+                     'Health', 'Ident', 'Fault', 'Available'],
+                    border=False)
             table.align = 'l'
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for host_ in completion.result: # type: InventoryHost
+            for host_ in completion.result:  # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
-                    table.add_row(
-                        (
-                            host_.name,
-                            d.path,
-                            d.human_readable_type,
-                            format_bytes(d.sys_api.get('size', 0), 5),
-                            d.device_id,
-                            d.sys_api.get('model') or 'n/a',
-                            d.sys_api.get('vendor') or 'n/a',
-                            d.sys_api.get('rotational') or 'n/a',
-                            d.available,
-                            ', '.join(d.rejected_reasons)
+
+                    led_ident = 'N/A'
+                    led_fail = 'N/A'
+                    if d.lsm_data.get('ledSupport', None):
+                        led_ident = d.lsm_data['ledSupport']['IDENTstatus']
+                        led_fail = d.lsm_data['ledSupport']['FAILstatus']
+
+                    if d.device_id is not None:
+                        fallback_serial = d.device_id.split('_')[-1]
+                    else:
+                        fallback_serial = ""
+
+                    if wide:
+                        table.add_row(
+                            (
+                                host_.name,
+                                d.path,
+                                d.human_readable_type,
+                                d.lsm_data.get('transport', 'Unknown'),
+                                d.lsm_data.get('rpm', 'Unknown'),
+                                d.sys_api.get('vendor') or 'N/A',
+                                d.sys_api.get('model') or 'N/A',
+                                d.lsm_data.get('serialNum', fallback_serial),
+                                format_dimless(d.sys_api.get('size', 0), 5),
+                                d.lsm_data.get('health', 'Unknown'),
+                                display_map[led_ident],
+                                display_map[led_fail],
+                                display_map[d.available],
+                                ', '.join(d.rejected_reasons)
+                            )
                         )
-                    )
+                    else:
+                        table.add_row(
+                            (
+                                host_.name,
+                                d.path,
+                                d.human_readable_type,
+                                d.lsm_data.get('serialNum', fallback_serial),
+                                format_dimless(d.sys_api.get('size', 0), 5),
+                                d.lsm_data.get('health', 'Unknown'),
+                                display_map[led_ident],
+                                display_map[led_fail],
+                                display_map[d.available]
+                            )
+                        )
             out.append(table.get_string())
             return HandleCommandResult(stdout='\n'.join(out))
 
@@ -470,7 +511,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
                  'PLACEMENT',
                  'IMAGE NAME', 'IMAGE ID'
-                ],
+                 ],
                 border=False)
             table.align['NAME'] = 'l'
             table.align['RUNNING'] = 'r'
@@ -703,7 +744,8 @@ Usage:
             host_name, block_device = svc_arg.split(":")
             block_devices = block_device.split(',')
             devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)
+            drive_group = DriveGroupSpec(placement=PlacementSpec(
+                host_pattern=host_name), data_devices=devs)
         except (TypeError, KeyError, ValueError):
             msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
@@ -761,7 +803,7 @@ Usage:
             table.left_padding_width = 0
             table.right_padding_width = 2
             for osd in sorted(report, key=lambda o: o.osd_id):
-                table.add_row([osd.osd_id, osd.nodename, osd.drain_status_human(),
+                table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
                                osd.get_pg_count(), osd.replace, osd.replace, osd.drain_started_at])
             out = table.get_string()
 
@@ -967,7 +1009,7 @@ Usage:
         "name=name,type=CephString "
         "name=image,type=CephString,req=false",
         'Redeploy a daemon (with a specifc image)')
-    def _daemon_action_redeploy(self, name, image):
+    def _daemon_action_redeploy(self, name: str, image: Optional[str] = None) -> HandleCommandResult:
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
         completion = self.daemon_action("redeploy", name, image=image)
@@ -986,7 +1028,8 @@ Usage:
                 raise OrchestratorError('%s is not a valid daemon name' % name)
             (daemon_type) = name.split('.')[0]
             if not force and daemon_type in ['osd', 'mon', 'prometheus']:
-                raise OrchestratorError('must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
+                raise OrchestratorError(
+                    'must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
         completion = self.remove_daemons(names)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -1037,7 +1080,8 @@ Usage:
         else:
             placementspec = PlacementSpec.from_string(placement)
             assert service_type
-            specs = [ServiceSpec(service_type, placement=placementspec, unmanaged=unmanaged, preview_only=dry_run)]
+            specs = [ServiceSpec(service_type, placement=placementspec,
+                                 unmanaged=unmanaged, preview_only=dry_run)]
 
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
@@ -1103,7 +1147,7 @@ Usage:
         'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
-        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false ' 
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
     def _apply_rgw(self,
@@ -1153,7 +1197,7 @@ Usage:
         'name=namespace,type=CephString,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
-        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false ' 
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
     def _apply_nfs(self,
@@ -1200,7 +1244,7 @@ Usage:
         'name=trusted_ip_list,type=CephString,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
-        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false ' 
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an iSCSI service')
     def _apply_iscsi(self,
@@ -1377,8 +1421,8 @@ Usage:
         """
         if image and re.match(r'^v?\d+\.\d+\.\d+$', image) and ceph_version is None:
             ver = image[1:] if image.startswith('v') else image
-            s =  f"Error: unable to pull image name `{image}`.\n" \
-                 f"  Maybe you meant `--ceph-version {ver}`?"
+            s = f"Error: unable to pull image name `{image}`.\n" \
+                f"  Maybe you meant `--ceph-version {ver}`?"
             raise OrchestratorValidationError(s)
 
     @_cli_write_command(

@@ -5,7 +5,9 @@ HashiCorp Vault Integration
 HashiCorp `Vault`_ can be used as a secure key management service for
 `Server-Side Encryption`_ (SSE-KMS).
 
-.. ditaa:: +---------+       +---------+        +-------+     +-------+
+.. ditaa::
+
+           +---------+       +---------+        +-------+     +-------+
            |  Client |       | RadosGW |        | Vault |     |  OSD  |
            +---------+       +---------+        +-------+     +-------+
                 | create secret   |                 |             |

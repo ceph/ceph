@@ -9,10 +9,12 @@ $fa-font-path: '~fork-awesome/fonts';
 $font-family-icon: 'ForkAwesome';
 
 // Bootstrap
+$warning-dark: #fd7e14;
 $theme-colors: (
   'primary': $color-primary,
   'secondary': $color-accent,
-  'dark': $color-mild-gray
+  'dark': $color-mild-gray,
+  'warning-dark': $warning-dark
 );
 
 $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-serif,
@@ -21,6 +23,16 @@ $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-s
 $badge-font-size: 1rem;
 $form-feedback-font-size: 100%;
 $popover-max-width: 350px;
+
+// https://getbootstrap.com/docs/4.5/layout/grid/#variables
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  2xl: 1450px
+);
 
 @import '~bootstrap/scss/bootstrap';
 @import '~fork-awesome/scss/fork-awesome';
@@ -61,23 +73,6 @@ body {
   width: 100%;
   height: 100%;
   font-size: 12px;
-}
-h1 {
-  letter-spacing: -1px;
-  font-size: 2em;
-}
-h2 {
-  letter-spacing: -1px;
-  font-size: 1.833em;
-}
-h3 {
-  display: block;
-  font-size: 1.583em;
-  font-weight: 400;
-}
-h4 {
-  font-size: 1.5em;
-  line-height: normal;
 }
 option {
   font-weight: normal;
@@ -263,9 +258,6 @@ uib-accordion .card-title,
 }
 .card-header {
   font-size: 1.3em;
-}
-.card-body h2:first-child {
-  margin-top: 0;
 }
 .disabled {
   pointer-events: none;
