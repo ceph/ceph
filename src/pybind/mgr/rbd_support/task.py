@@ -23,6 +23,7 @@ TASK_REFS = "refs"
 TASK_MESSAGE = "message"
 TASK_RETRY_ATTEMPTS = "retry_attempts"
 TASK_RETRY_TIME = "retry_time"
+TASK_RETRY_MESSAGE = "retry_message"
 TASK_IN_PROGRESS = "in_progress"
 TASK_PROGRESS = "progress"
 TASK_CANCELED = "canceled"
@@ -73,6 +74,7 @@ class Task:
         self.task_id = task_id
         self.message = message
         self.refs = refs
+        self.retry_message = None
         self.retry_attempts = 0
         self.retry_time = None
         self.in_progress = False
@@ -101,6 +103,8 @@ class Task:
              TASK_MESSAGE: self.message,
              TASK_REFS: self.refs
              }
+        if self.retry_message:
+            d[TASK_RETRY_MESSAGE] = self.retry_message
         if self.retry_attempts:
             d[TASK_RETRY_ATTEMPTS] = self.retry_attempts
         if self.retry_time:
@@ -391,6 +395,7 @@ class TaskHandler:
         except rados.ObjectNotFound as e:
             self.log.error("execute_task: {}".format(e))
             if pool_valid:
+                task.retry_message = "{}".format(e)
                 self.update_progress(task, 0)
             else:
                 # pool DNE -- remove the task
@@ -399,6 +404,7 @@ class TaskHandler:
 
         except (rados.Error, rbd.Error) as e:
             self.log.error("execute_task: {}".format(e))
+            task.retry_message = "{}".format(e)
             self.update_progress(task, 0)
 
         finally:
