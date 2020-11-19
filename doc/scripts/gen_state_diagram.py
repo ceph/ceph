@@ -85,13 +85,19 @@ class StateMachineRenderer(object):
         ])
 
     def __str__(self):
-        return "-------------------\n\nstates: %s\n\n machines: %s\n\n edges: %s\n\n context %s\n\n state_contents %s\n\n--------------------" % (
-            self.states,
-            self.machines,
-            self.edges,
-            self.context,
-            self.state_contents
-            )
+        return f'''-------------------
+
+ states: {self.states}
+
+ machines: {self.machines}
+
+ edges: {self.edges}
+
+ context: {self.context}
+
+ state_contents: {self.state_contents}
+
+--------------------'''
 
     def read_input(self, input_lines):
         previous_line = None
