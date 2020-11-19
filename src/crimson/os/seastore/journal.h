@@ -52,8 +52,8 @@ struct record_header_t {
   // Fixed portion
   extent_len_t  mdlength;       // block aligned, length of metadata
   extent_len_t  dlength;        // block aligned, length of data
-  size_t deltas;                // number of deltas
-  size_t extents;               // number of extents
+  uint32_t deltas;                // number of deltas
+  uint32_t extents;               // number of extents
   segment_nonce_t segment_nonce;// nonce of containing segment
   checksum_t data_crc;          // crc of data payload
 
