@@ -475,3 +475,20 @@ TEST(backfill, one_pseudorandomized_replica)
 
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
 }
+
+TEST(backfill, two_pseudorandomized_replicas)
+{
+  const auto reference_store = StoreRandomizer::create();
+  auto cluster_fixture = BackfillFixtureBuilder::add_source(
+    reference_store.objs
+  ).add_target(
+    StoreRandomizer::mutate(reference_store).objs
+  ).add_target(
+    StoreRandomizer::mutate(reference_store).objs
+  ).get_result();
+
+  EXPECT_CALL(cluster_fixture, backfilled);
+  cluster_fixture.next_till_done();
+
+  EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
+}
