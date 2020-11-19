@@ -21,6 +21,7 @@ TASK_SEQUENCE = "sequence"
 TASK_ID = "id"
 TASK_REFS = "refs"
 TASK_MESSAGE = "message"
+TASK_RETRY_ATTEMPTS = "retry_attempts"
 TASK_RETRY_TIME = "retry_time"
 TASK_IN_PROGRESS = "in_progress"
 TASK_PROGRESS = "progress"
@@ -47,6 +48,7 @@ VALID_TASK_ACTIONS = [TASK_REF_ACTION_FLATTEN,
                       TASK_REF_ACTION_MIGRATION_ABORT]
 
 TASK_RETRY_INTERVAL = timedelta(seconds=30)
+TASK_MAX_RETRY_INTERVAL = timedelta(seconds=300)
 MAX_COMPLETED_TASKS = 50
 
 
@@ -71,6 +73,7 @@ class Task:
         self.task_id = task_id
         self.message = message
         self.refs = refs
+        self.retry_attempts = 0
         self.retry_time = None
         self.in_progress = False
         self.progress = 0.0
@@ -98,6 +101,8 @@ class Task:
              TASK_MESSAGE: self.message,
              TASK_REFS: self.refs
              }
+        if self.retry_attempts:
+            d[TASK_RETRY_ATTEMPTS] = self.retry_attempts
         if self.retry_time:
             d[TASK_RETRY_TIME] = self.retry_time.isoformat()
         if self.in_progress:
@@ -398,7 +403,10 @@ class TaskHandler:
 
         finally:
             task.in_progress = False
-            task.retry_time = datetime.now() + TASK_RETRY_INTERVAL
+            task.retry_attempts += 1
+            task.retry_time = datetime.now() + min(
+                TASK_RETRY_INTERVAL * task.retry_attempts,
+                TASK_MAX_RETRY_INTERVAL)
 
     def progress_callback(self, task, current, total):
         progress = float(current) / float(total)
