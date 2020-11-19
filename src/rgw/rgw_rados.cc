@@ -7212,6 +7212,10 @@ int RGWRados::with_bilog(F&& func,
                          Args&&... args)
 {
   constexpr bool is_inindex = true;
+  // there are actually two variants of with_bilog():
+  //   1. CLSRGWBucketModifyOpT-taking one in which the passed lambda gets
+  //      both `op_issuer` and `bilog_handler`:
+  //   2. void-taking one -- the lambda is called with `bilog_handler` only.
   if constexpr (std::is_same_v<CLSRGWBucketModifyOpT, void>) {
      if (svc.zone->get_zone().log_data && !is_inindex) {
        return std::forward<F>(func)(get_or_create_fifo_bilog_op(*this, bucket_info));
