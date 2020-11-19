@@ -341,7 +341,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   } else if (backfill_state().progress_tracker->tracked_objects_completed()) {
     post_event(RequestDone{});
   } else {
-    logger().debug("{}: reached end for both local and all peers ",
+    logger().debug("{}: reached end for both local and all peers "
                    "but still has in-flight operations", __func__);
     post_event(RequestWaiting{});
   }
