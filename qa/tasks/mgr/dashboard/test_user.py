@@ -169,6 +169,16 @@ class UserTest(DashboardTestCase):
         self.assertError(code='role_does_not_exist',
                          component='user')
 
+    def test_create_user_invalid_chars_in_name(self):
+        self._create_user(username='userö',
+                          password='mypassword10#',
+                          name='administrator',
+                          email='my@email.com',
+                          roles=['administrator'])
+        self.assertStatus(400)
+        self.assertError(code='ceph_type_not_valid',
+                         component='user')
+
     def test_delete_user_does_not_exist(self):
         self._delete('/api/user/user2')
         self.assertStatus(404)
