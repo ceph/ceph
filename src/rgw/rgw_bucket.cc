@@ -439,7 +439,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
             max_aio = concurrent_max;
           }
 
-          rgw_raw_obj last_obj = miter.get_location().get_raw_obj(store->getRados());
+          rgw_raw_obj last_obj = miter.get_location().get_raw_obj(store);
           if (last_obj == raw_head_obj) {
             // have the head obj deleted at the end
             continue;
@@ -1819,7 +1819,8 @@ static int fix_single_bucket_lc(rgw::sal::RGWRadosStore *store,
     return ret;
   }
 
-  return rgw::lc::fix_lc_shard_entry(store, bucket_info, bucket_attrs);
+  return rgw::lc::fix_lc_shard_entry(store, store->get_rgwlc()->get_lc(), bucket_info,
+				     bucket_attrs);
 }
 
 static void format_lc_status(Formatter* formatter,

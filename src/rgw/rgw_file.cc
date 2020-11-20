@@ -1583,7 +1583,8 @@ namespace rgw {
                       &state->dest_placement,
                       state->bucket_owner.get_id(),
                       *static_cast<RGWObjectCtx *>(state->obj_ctx),
-                      state->object->get_obj(), olh_epoch, state->req_id, this, state->yield);
+                      std::move(state->object->clone()), olh_epoch, state->req_id,
+		      this, state->yield);
 
     op_ret = processor->prepare(state->yield);
     if (op_ret < 0) {

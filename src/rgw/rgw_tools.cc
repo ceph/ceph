@@ -486,7 +486,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, store, b.get(), nullptr,
-                                  owner.get_id(), obj_ctx, obj->get_obj(), olh_epoch,
+                                  owner.get_id(), obj_ctx, std::move(obj), olh_epoch,
                                   req_id, dpp, y);
 
   int ret = processor.prepare(y);

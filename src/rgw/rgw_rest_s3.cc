@@ -3961,7 +3961,7 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   f.open_array_section("data_location");
   for (auto miter = manifest->obj_begin(); miter != manifest->obj_end(); ++miter) {
     f.open_object_section("obj");
-    rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store->getRados());
+    rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
     uint64_t ofs = miter.get_ofs();
     uint64_t left = manifest->get_obj_size() - ofs;
     ::encode_json("ofs", miter.get_ofs(), &f);

@@ -7224,7 +7224,7 @@ next:
 
   if (opt_cmd == OPT::LC_LIST) {
     formatter->open_array_section("lifecycle_list");
-    vector<cls_rgw_lc_entry> bucket_lc_map;
+    vector<rgw::sal::Lifecycle::LCEntry> bucket_lc_map;
     string marker;
     int index{0};
 #define MAX_LC_LIST_ENTRIES 100

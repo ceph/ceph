@@ -370,7 +370,11 @@ public:
 
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
-namespace rgw { namespace sal { class RGWRadosStore; } }
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+  class MPRadosSerializer;
+  class LCRadosSerializer;
+} }
 
 class RGWAsyncRadosProcessor;
 
@@ -396,7 +400,6 @@ class RGWRados
   friend class RGWGC;
   friend class RGWMetaNotifier;
   friend class RGWDataNotifier;
-  friend class RGWLC;
   friend class RGWObjectExpirer;
   friend class RGWMetaSyncProcessorThread;
   friend class RGWDataSyncProcessorThread;
@@ -404,7 +407,8 @@ class RGWRados
   friend class RGWBucketReshard;
   friend class RGWBucketReshardLock;
   friend class BucketIndexLockGuard;
-  friend class RGWCompleteMultipart;
+  friend class rgw::sal::MPRadosSerializer;
+  friend class rgw::sal::LCRadosSerializer;
   friend class rgw::sal::RGWRadosStore;
 
   /** Open the pool used as root for this gateway */
@@ -1121,7 +1125,7 @@ public:
                        const char *if_nomatch,
                        AttrsMod attrs_mod,
                        bool copy_if_newer,
-                       map<string, bufferlist>& attrs,
+                       rgw::sal::RGWAttrs& attrs,
                        RGWObjCategory category,
                        std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
@@ -1446,7 +1450,7 @@ public:
 
   int process_lc();
   int list_lc_progress(string& marker, uint32_t max_entries,
-		       vector<cls_rgw_lc_entry>& progress_map, int& index);
+		       vector<rgw::sal::Lifecycle::LCEntry>& progress_map, int& index);
 
   int bucket_check_index(RGWBucketInfo& bucket_info,
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,

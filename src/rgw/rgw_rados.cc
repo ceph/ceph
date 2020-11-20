@@ -149,11 +149,11 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGW
   return raw_obj;
 }
 
-rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados *store) const
+rgw_raw_obj rgw_obj_select::get_raw_obj(rgw::sal::RGWStore* store) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
-    store->obj_to_raw(placement_rule, obj, &r);
+    store->get_raw_obj(placement_rule, obj, &r);
     return r;
   }
   return raw_obj;
@@ -2575,7 +2575,7 @@ int RGWRados::fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key
     RGWObjManifest::obj_iterator miter;
     RGWObjManifest& manifest = *astate->manifest;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(this);
+      rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
       rgw_obj loc;
       string oid;
       string locator;
@@ -3772,7 +3772,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                RGWObjCategory category,
                std::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
@@ -3798,7 +3798,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this->store, dest_bucket, nullptr, user_id,
-                                  obj_ctx, dest_obj->get_obj(), olh_epoch, tag, dpp, null_yield);
+                                  obj_ctx, std::move(dest_obj->clone()), olh_epoch,
+				  tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4155,7 +4156,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
 	       real_time delete_at,
@@ -4328,7 +4329,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   rgw_rados_ref ref;
-  ret = get_raw_obj_ref(miter.get_location().get_raw_obj(this), &ref);
+  ret = get_raw_obj_ref(miter.get_location().get_raw_obj(store), &ref);
   if (ret < 0) {
     return ret;
   }
@@ -4364,7 +4365,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       ObjectWriteOperation op;
       ref_tag = tag + '\0';
       cls_refcount_get(op, ref_tag, true);
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(this);
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
 
       auto& ioctx = ref.pool.ioctx();
       ioctx.locator_set_key(loc.loc);
@@ -4442,7 +4443,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                rgw::sal::RGWObject* dest_obj,
 	       real_time *mtime,
 	       real_time set_mtime,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
@@ -4458,7 +4459,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   // it causes crashes in the ragweed tests
   AtomicObjectProcessor processor(&aio, this->store, bucket, &dest_placement,
                                   bucket->get_info().owner, obj_ctx,
-                                  dest_obj->get_obj(), olh_epoch, tag, dpp, null_yield);
+                                  std::move(dest_obj->clone()), olh_epoch, tag,
+				  dpp, null_yield);
   int ret = processor.prepare(y);
   if (ret < 0)
     return ret;
@@ -4524,7 +4526,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              const DoutPrefixProvider *dpp,
                              optional_yield y)
 {
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   real_time read_mtime;
   uint64_t obj_size;
 
@@ -4784,7 +4786,7 @@ void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_
   rgw_raw_obj raw_head;
   obj_to_raw(manifest.get_head_placement_rule(), head_obj, &raw_head);
   for (iter = manifest.obj_begin(); iter != manifest.obj_end(); ++iter) {
-    const rgw_raw_obj& mobj = iter.get_location().get_raw_obj(this);
+    const rgw_raw_obj& mobj = iter.get_location().get_raw_obj(store);
     if (mobj == raw_head)
       continue;
     cls_rgw_obj_key key(mobj.oid);
@@ -5233,7 +5235,7 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime)
   return index_op.complete_del(-1 /* pool */, 0, mtime, NULL);
 }
 
-static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
+static void generate_fake_tag(rgw::sal::RGWStore* store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
 {
   string tag;
 
@@ -5406,7 +5408,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
 	s->manifest->has_explicit_objs()) {
       RGWObjManifest::obj_iterator mi;
       for (mi = s->manifest->obj_begin(); mi != s->manifest->obj_end(); ++mi) {
-        ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(this) << dendl;
+        ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(store) << dendl;
       }
     }
 
@@ -5415,7 +5417,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
        * Uh oh, something's wrong, object with manifest should have tag. Let's
        * create one out of the manifest, would be unique
        */
-      generate_fake_tag(this, s->attrset, *s->manifest, manifest_bl, s->obj_tag);
+      generate_fake_tag(store, s->attrset, *s->manifest, manifest_bl, s->obj_tag);
       s->fake_tag = true;
     }
   }
@@ -6214,7 +6216,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
     RGWObjManifest::obj_iterator iter = astate->manifest->obj_find(ofs);
 
     uint64_t stripe_ofs = iter.get_stripe_ofs();
-    read_obj = iter.get_location().get_raw_obj(store);
+    read_obj = iter.get_location().get_raw_obj(store->store);
     len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
     read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
     reading_from_head = (read_obj == state.head_obj);
@@ -6465,7 +6467,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
       off_t next_stripe_ofs = stripe_ofs + iter.get_stripe_size();
 
       while (ofs < next_stripe_ofs && ofs <= end) {
-        read_obj = iter.get_location().get_raw_obj(this);
+        read_obj = iter.get_location().get_raw_obj(store);
         uint64_t read_len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
         read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
 
@@ -8143,7 +8145,7 @@ int RGWRados::process_gc(bool expired_only)
 }
 
 int RGWRados::list_lc_progress(string& marker, uint32_t max_entries,
-			       vector<cls_rgw_lc_entry>& progress_map,
+			       vector<rgw::sal::Lifecycle::LCEntry>& progress_map,
 			       int& index)
 {
   return lc->list_lc_progress(marker, max_entries, progress_map, index);
@@ -8901,7 +8903,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     RGWObjManifest::obj_iterator miter;
     RGWObjManifest& manifest = *astate->manifest;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& raw_loc = miter.get_location().get_raw_obj(this);
+      const rgw_raw_obj& raw_loc = miter.get_location().get_raw_obj(store);
       rgw_obj loc;
       RGWSI_Tier_RADOS::raw_obj_to_obj(manifest.get_obj().bucket, raw_loc, &loc);
 
