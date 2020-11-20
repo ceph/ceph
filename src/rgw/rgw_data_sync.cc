@@ -2861,9 +2861,6 @@ void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct, map<string,
   if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "state", &state)) {
     decode_attr(cct, attrs, "state", &state);
   }
-  if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "full_marker", &full_marker)) {
-    decode_attr(cct, attrs, "full_marker", &full_marker);
-  }
   if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "inc_marker", &inc_marker)) {
     decode_attr(cct, attrs, "inc_marker", &inc_marker);
   }
@@ -2872,7 +2869,6 @@ void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct, map<string,
 void rgw_bucket_shard_sync_info::encode_all_attrs(map<string, bufferlist>& attrs)
 {
   encode_state_attr(attrs);
-  full_marker.encode_attr(attrs);
   inc_marker.encode_attr(attrs);
 }
 
