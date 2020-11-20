@@ -24,7 +24,7 @@ Cache::Cache(SegmentManager &segment_manager) :
 Cache::~Cache()
 {
   for (auto &i: extents) {
-    logger().error("~Cache: extent {} still alive", i);
+    logger().error("{}: extent {} still alive", __func__, i);
   }
   ceph_assert(extents.empty());
 }
@@ -58,7 +58,7 @@ void Cache::add_extent(CachedExtentRef ref)
   } else {
     ceph_assert(!ref->primary_ref_list_hook.is_linked());
   }
-  logger().debug("add_extent: {}", *ref);
+  logger().debug("{}: {}", __func__, *ref);
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
@@ -71,7 +71,7 @@ void Cache::mark_dirty(CachedExtentRef ref)
   add_to_dirty(ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
 
-  logger().debug("mark_dirty: {}", *ref);
+  logger().debug("{}: {}", __func__, *ref);
 }
 
 void Cache::add_to_dirty(CachedExtentRef ref)
@@ -84,7 +84,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
 
 void Cache::remove_extent(CachedExtentRef ref)
 {
-  logger().debug("remove_extent: {}", *ref);
+  logger().debug("{}: {}", __func__, *ref);
   assert(ref->is_valid());
   extents.erase(*ref);
 
@@ -168,7 +168,7 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
-  logger().debug("Cache::duplicate_for_write: {} -> {}", *i, *ret);
+  logger().debug("{}: {} -> {}", __func__, *i, *ret);
   return ret;
 }
 
@@ -188,10 +188,10 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   record.deltas.reserve(t.mutated_block_list.size());
   for (auto &i: t.mutated_block_list) {
     if (!i->is_valid()) {
-      logger().debug("try_construct_record: ignoring invalid {}", *i);
+      logger().debug("{}: ignoring invalid {}", __func__, *i);
       continue;
     }
-    logger().debug("try_construct_record: mutating {}", *i);
+    logger().debug("{}: mutating {}", __func__, *i);
 
     assert(i->prior_instance);
     replace_extent(i, i->prior_instance);
@@ -238,7 +238,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
   for (auto &i: t.retired_set) {
-    logger().debug("try_construct_record: retiring {}", *i);
+    logger().debug("{}: retiring {}", __func__, *i);
     ceph_assert(i->is_valid());
     remove_extent(i);
     i->state = CachedExtent::extent_state_t::INVALID;
@@ -246,7 +246,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 
   record.extents.reserve(t.fresh_block_list.size());
   for (auto &i: t.fresh_block_list) {
-    logger().debug("try_construct_record: fresh block {}", *i);
+    logger().debug("{}: fresh block {}", __func__, *i);
     bufferlist bl;
     i->prepare_write();
     bl.append(i->get_bptr());
@@ -280,7 +280,7 @@ void Cache::complete_commit(
     root->on_delta_write(final_block_start);
     root->dirty_from = seq;
     add_extent(root);
-    logger().debug("complete_commit: new root {}", *t.root);
+    logger().debug("{}: new root {}", __func__, *t.root);
   }
 
   for (auto &i: t.fresh_block_list) {
@@ -289,12 +289,12 @@ void Cache::complete_commit(
     i->on_initial_write();
 
     if (!i->is_valid()) {
-      logger().debug("complete_commit: invalid {}", *i);
+      logger().debug("{}: invalid {}", __func__, *i);
       continue;
     }
 
     i->state = CachedExtent::extent_state_t::CLEAN;
-    logger().debug("complete_commit: fresh {}", *i);
+    logger().debug("{}: fresh {}", __func__, *i);
     add_extent(i);
     if (cleaner) {
       cleaner->mark_space_used(
@@ -305,12 +305,12 @@ void Cache::complete_commit(
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
-    logger().debug("complete_commit: mutated {}", *i);
+    logger().debug("{}: mutated {}", __func__, *i);
     assert(i->prior_instance);
     i->on_delta_write(final_block_start);
     i->prior_instance = CachedExtentRef();
     if (!i->is_valid()) {
-      logger().debug("complete_commit: not dirtying invalid {}", *i);
+      logger().debug("{}: not dirtying invalid {}", __func__, *i);
       continue;
     }
     i->state = CachedExtent::extent_state_t::DIRTY;
@@ -369,7 +369,7 @@ Cache::replay_delta(
   const delta_info_t &delta)
 {
   if (delta.type == extent_types_t::ROOT) {
-    logger().debug("replay_delta: found root delta");
+    logger().debug("{}: found root delta", __func__);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from = journal_seq;
     return replay_delta_ertr::now();
@@ -395,14 +395,14 @@ Cache::replay_delta(
       if (!extent) {
 	assert(delta.pversion > 0);
 	logger().debug(
-	  "replay_delta: replaying {}, extent not present so delta is obsolete",
-	  delta);
+	  "{}: replaying {}, extent not present so delta is obsolete",
+	  __func__, delta);
 	return;
       }
 
       logger().debug(
-	"replay_delta: replaying {} on {}",
-	  *extent,
+	"{}: replaying {} on {}",
+	__func__, *extent,
 	delta);
 
       assert(extent->version == delta.pversion);
@@ -440,8 +440,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	ret,
 	[](auto &ext) {
 	  logger().debug(
-	    "get_next_dirty_extents: waiting on {}",
-	    *ext);
+	    "get_next_dirty_extents: waiting on {}", *ext);
 	  return ext->wait_io();
 	}).then([&ret]() mutable {
 	  return seastar::make_ready_future<std::vector<CachedExtentRef>>(

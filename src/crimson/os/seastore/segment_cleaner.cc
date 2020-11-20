@@ -56,14 +56,16 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
     if (bitmap[i]) {
       if (!error) {
 	logger().error(
-	  "SegmentMap::allocate found allocated in {}, {} ~ {}",
+	  "{}: found allocated in {}, {} ~ {}",
+	  __func__,
 	  segment,
 	  offset,
 	  len);
 	error = true;
       }
       logger().debug(
-	"SegmentMap::allocate block {} allocated",
+	"{}: block {} allocated",
+	__func__,
 	i * block_size);
     }
     bitmap[i] = true;
@@ -88,14 +90,17 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
     if (!bitmap[i]) {
       if (!error) {
 	logger().error(
-	  "SegmentMap::release found unallocated in {}, {} ~ {}",
+	  "{}: found unallocated in {}, {} ~ {}",
+	  __func__,
+	  segment,
 	  segment,
 	  offset,
 	  len);
 	error = true;
       }
       logger().debug(
-	"SegmentMap::release block {} unallocated",
+	"{}: block {} unallocated",
+	__func__,
 	i * block_size);
     }
     bitmap[i] = false;
@@ -278,12 +283,12 @@ SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
     if (gc_current_pos == P_ADDR_NULL) {
       // apparently there are no segments to gc
       logger().debug(
-	"SegmentCleaner::do_gc: no segments to gc");
+	"{}: no segments to gc", __func__);
       return do_gc_ertr::now();
     }
     logger().debug(
-      "SegmentCleaner::do_gc: starting gc on segment {}",
-      gc_current_pos.segment);
+      "{}: starting gc on segment {}",
+      __func__, gc_current_pos.segment);
     gc_current_pos.offset = 0;
   }
 

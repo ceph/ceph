@@ -172,7 +172,7 @@ TransactionManager::submit_transaction_ertr::future<>
 TransactionManager::submit_transaction(
   TransactionRef t)
 {
-  logger().debug("TransactionManager::submit_transaction");
+  logger().debug("{}", __func__);
   return segment_cleaner.do_immediate_work(*t
   ).safe_then([this, t=std::move(t)]() mutable -> submit_transaction_ertr::future<> {
     auto record = cache.try_construct_record(*t);
@@ -290,8 +290,8 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
       });
   } else {
     logger().debug(
-      "TransactionManager::get_extent_if_live: non-logical extent {}",
-      addr);
+      "{}: non-logical extent {}",
+      __func__, addr);
     return lba_manager.get_physical_extent_if_live(
       t,
       type,

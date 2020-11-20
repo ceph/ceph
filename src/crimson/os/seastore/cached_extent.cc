@@ -21,12 +21,12 @@ void intrusive_ptr_add_ref(CachedExtent *ptr)
     static_cast<boost::intrusive_ref_counter<
     CachedExtent,
     boost::thread_unsafe_counter>*>(ptr));
-    logger().debug("intrusive_ptr_add_ref: {}", *ptr);
+    logger().debug("{}: {}", __func__, *ptr);
 }
 
 void intrusive_ptr_release(CachedExtent *ptr)
 {
-  logger().debug("intrusive_ptr_release: {}", *ptr);
+  logger().debug("{}: {}", _func__, *ptr);
   intrusive_ptr_release(
     static_cast<boost::intrusive_ref_counter<
     CachedExtent,

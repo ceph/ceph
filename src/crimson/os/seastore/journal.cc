@@ -110,7 +110,8 @@ Journal::write_record_ret Journal::write_record(
   assert((to_write.length() % block_size) == 0);
   written_to += to_write.length();
   logger().debug(
-    "write_record, mdlength {}, dlength {}, target {}",
+    "{}: mdlength {}, dlength {}, target {}",
+    __func__,
     rsize.mdlength,
     rsize.dlength,
     target);
@@ -394,7 +395,7 @@ Journal::replay_segment(
   journal_seq_t seq,
   delta_handler_t &handler)
 {
-  logger().debug("replay_segment: starting at {}", seq);
+  logger().debug("{}: starting at {}", __func__, seq);
   return seastar::do_with(
     delta_scan_handler_t(
       [=, &handler](auto addr, auto base, const auto &delta) {
@@ -476,7 +477,7 @@ Journal::scan_segment_ret Journal::scan_segment(
   delta_scan_handler_t *delta_handler,
   extent_handler_t *extent_info_handler)
 {
-  logger().debug("Journal::scan_segment: starting at {}", addr);
+  logger().debug("{}: starting at {}", __func__, addr);
   return seastar::do_with(
     addr,
     [=](paddr_t &current) {

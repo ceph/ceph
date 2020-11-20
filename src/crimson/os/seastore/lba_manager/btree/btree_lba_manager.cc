@@ -22,7 +22,7 @@ namespace crimson::os::seastore::lba_manager::btree {
 BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
   Transaction &t)
 {
-  logger().debug("BtreeLBAManager::mkfs");
+  logger().debug("{}", __func__);
   return cache.get_root(t).safe_then([this, &t](auto croot) {
     auto root_leaf = cache.alloc_new_extent<LBALeafNode>(
       t,
@@ -46,7 +46,8 @@ BtreeLBAManager::get_root(Transaction &t)
 {
   return cache.get_root(t).safe_then([this, &t](auto croot) {
     logger().debug(
-      "BtreeLBAManager::get_root: reading root at {} depth {}",
+      "{}: reading root at {} depth {}",
+      __func__,
       paddr_t{croot->get_lba_root().lba_root_addr},
       unsigned(croot->get_lba_root().lba_depth));
     return get_lba_btree_extent(
@@ -62,7 +63,7 @@ BtreeLBAManager::get_mapping(
   Transaction &t,
   laddr_t offset, extent_len_t length)
 {
-  logger().debug("BtreeLBAManager::get_mapping: {}, {}", offset, length);
+  logger().debug("{}: {}, {}", __func__, offset, length);
   return get_root(
     t).safe_then([this, &t, offset, length](auto extent) {
       return extent->lookup_range(
@@ -83,7 +84,7 @@ BtreeLBAManager::get_mappings(
   Transaction &t,
   laddr_list_t &&list)
 {
-  logger().debug("BtreeLBAManager::get_mappings: {}", list);
+  logger().debug("{}: {}", __func__, list);
   auto l = std::make_unique<laddr_list_t>(std::move(list));
   auto retptr = std::make_unique<lba_pin_list_t>();
   auto &ret = *retptr;
