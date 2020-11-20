@@ -1206,6 +1206,7 @@ public:
                                                       timestamp(_timestamp) {
     if (_delete_marker) {
       marker_version_id = key.instance;
+      key.instance.clear();
     }
 
     if (_zones_trace) {
