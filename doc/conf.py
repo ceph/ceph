@@ -3,8 +3,8 @@ import shutil
 import sys
 import os
 
-project = u'Ceph'
-copyright = u'2016, Ceph authors and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
+project = 'Ceph'
+copyright = '2016, Ceph authors and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
 version = 'dev'
 release = 'dev'
 
