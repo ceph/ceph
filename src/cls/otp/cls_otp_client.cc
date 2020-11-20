@@ -56,7 +56,27 @@ namespace rados {
         encode(op, in);
         rados_op->exec("otp", "otp_remove", in);
       }
+      void OTP::check(CephContext *cct, librados::ObjectReadOperation *rados_op, const string& oid,
+                     const string& id, const string& val, otp_check_t *result) {
+        cls_otp_check_otp_op op;
+        op.id = id;
+        op.val = val;
+#define TOKEN_LEN 16
+        op.token = gen_rand_alphanumeric(cct, TOKEN_LEN);
+        
+        bufferlist in;
+        bufferlist out;
+        encode(op, in);
+        rados_op->exec(oid, "otp", "otp_check", in);
+        
 
+        cls_otp_get_result_op op2;
+        op2.token = op.token;
+        bufferlist in2;
+        bufferlist out2;
+        encode(op2, in2);
+        rados_op->exec(oid, "otp", "otp_get_result", in);
+      }
       int OTP::check(CephContext *cct, librados::IoCtx& ioctx, const string& oid,
                      const string& id, const string& val, otp_check_t *result) {
         cls_otp_check_otp_op op;
@@ -72,6 +92,7 @@ namespace rados {
         if (r < 0) {
           return r;
         }
+        
 
         cls_otp_get_result_op op2;
         op2.token = op.token;
@@ -82,6 +103,7 @@ namespace rados {
         if (r < 0) {
           return r;
         }
+        
 
         auto iter = out.cbegin();
         cls_otp_get_result_reply ret;
@@ -156,7 +178,16 @@ namespace rados {
                        list<otp_info_t> *result) {
         return get(op, ioctx, oid, nullptr, true, result);
       }
-
+      void OTP::get_current_time(librados::ObjectReadOperation *rados_op, const string& oid,
+                                ceph::real_time *result) {
+        cls_otp_get_current_time_op op;
+        bufferlist in;
+        bufferlist out;
+        encode(op, in);
+        ObjectReadOperation rop;
+        rados_op.exec("otp", "get_current_time", in);
+       // int r = ioctx.operate(oid, &rop, nullptr);
+      }
       int OTP::get_current_time(librados::IoCtx& ioctx, const string& oid,
                                 ceph::real_time *result) {
         cls_otp_get_current_time_op op;

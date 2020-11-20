@@ -203,12 +203,13 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
 
     //processing_queue is set to true from previous iteration if the queue was under process and probably has more elements in it.
     if (! transitioned_objects_cache[*index] && ! check_queue && ! processing_queue) {
-      ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
+      librados::ObjectReadOperation op;
+      cls_rgw_gc_list(op, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
       if (ret != -ENOENT && ret < 0) {
         return ret;
       }
       obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[*index], &objv);
+      cls_version_read(op, &objv);
       if (ret == -ENOENT || entries.size() == 0) {
         if (objv.ver == 0) {
           continue;
@@ -218,7 +219,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
             marker.clear();
           } else {
             std::list<cls_rgw_gc_obj_info> non_expired_entries;
-            ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, 1, false, non_expired_entries, truncated, next_marker);
+            cls_rgw_gc_list(op, obj_names[*index], marker, 1, false, non_expired_entries, truncated, next_marker);
             if (non_expired_entries.size() == 0) {
               transitioned_objects_cache[*index] = true;
               marker.clear();
@@ -534,16 +535,17 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     int ret = 0;
 
     if (! transitioned_objects_cache[index]) {
-      ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
+      librados::ObjectReadOperation op;
+      cls_rgw_gc_list(op, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
       ldpp_dout(this, 20) <<
       "RGWGC::process cls_rgw_gc_list returned with returned:" << ret <<
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
       ", next_marker='" << next_marker << "'" << dendl;
       obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
+      cls_version_read(op, &objv);
       if ((objv.ver == 1) && entries.size() == 0) {
         std::list<cls_rgw_gc_obj_info> non_expired_entries;
-        ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, &truncated, next_marker);
+        cls_rgw_gc_list(op, obj_names[index], marker, 1, false, non_expired_entries, &truncated, next_marker);
         if (non_expired_entries.size() == 0) {
           transitioned_objects_cache[index] = true;
           marker.clear();

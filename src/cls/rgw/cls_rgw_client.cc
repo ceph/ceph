@@ -705,6 +705,25 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user,
   return 0;
 }
 
+void cls_rgw_usage_log_read(librados::ObjectWriteOperation& op, const string& oid, const string& user, const string& bucket,
+                           uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+                           string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
+                           bool *is_truncated)
+{
+  if (is_truncated)
+    *is_truncated = false;
+
+  bufferlist in, out;
+  rgw_cls_usage_log_read_op call;
+  call.start_epoch = start_epoch;
+  call.end_epoch = end_epoch;
+  call.owner = user;
+  call.max_entries = max_entries;
+  call.bucket = bucket;
+  call.iter = read_iter;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_USER_USAGE_LOG_READ, in, out);
+}
 int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
 			   uint64_t start_epoch, uint64_t end_epoch)
 {
@@ -780,6 +799,18 @@ void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, 
   op.exec(RGW_CLASS, RGW_GC_DEFER_ENTRY, in);
 }
 
+void cls_rgw_gc_list(librados::ObjectReadOperation& op, string& oid, string& marker, uint32_t max, bool expired_only,
+                    list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+{
+  bufferlist in, out;
+  cls_rgw_gc_list_op call;
+  call.marker = marker;
+  call.max = max;
+  call.expired_only = expired_only;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_GC_LIST, in, out);
+}
+
 int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
                     list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
 {
@@ -837,6 +868,12 @@ int cls_rgw_lc_get_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
  return r;
 }
 
+void cls_rgw_lc_get_head(librados::ObjectReadOperation& op, const string& oid, cls_rgw_lc_obj_head& head)
+{
+  bufferlist in, out;
+  op.exec(oid, RGW_CLASS, RGW_LC_GET_HEAD, in, out);
+}
+
 int cls_rgw_lc_put_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& head)
 {
   bufferlist in, out;
@@ -845,6 +882,15 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_PUT_HEAD, in, out);
   return r;
+}
+
+void cls_rgw_lc_put_head(librados::ObjectWriteOperation& op, const string& oid, cls_rgw_lc_obj_head& head)
+{
+  bufferlist in, out;
+  cls_rgw_lc_put_head_op call;
+  call.head = head;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_LC_PUT_HEAD, in, out);
 }
 
 int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker,
@@ -870,6 +916,16 @@ int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker,
  return r;
 }
 
+void cls_rgw_lc_get_next_entry(librados::ObjectReadOperation& op, const string& oid, string& marker,
+			      cls_rgw_lc_entry& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_get_next_entry_op call;
+  call.marker = marker;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_LC_GET_NEXT_ENTRY, in, out);
+}
+
 int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid,
 			const cls_rgw_lc_entry& entry)
 {
@@ -881,6 +937,16 @@ int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid,
  return r;
 }
 
+void cls_rgw_lc_rm_entry(librados::ObjectWriteOperation& op, const string& oid,
+			const cls_rgw_lc_entry& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_rm_entry_op call;
+  call.entry = entry;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_LC_RM_ENTRY, in, out);
+}
+
 int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid,
 			 const cls_rgw_lc_entry& entry)
 {
@@ -890,6 +956,15 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid,
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_SET_ENTRY, in, out);
   return r;
+}
+void cls_rgw_lc_set_entry(librados::ObjectWriteOperation& op, const string& oid,
+			 const cls_rgw_lc_entry& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_set_entry_op call;
+  call.entry = entry;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_LC_SET_ENTRY, in, out);
 }
 
 int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid,
@@ -914,6 +989,15 @@ int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid,
 
   entry = std::move(ret.entry);
   return r;
+}
+
+void cls_rgw_lc_get_entry(librados::ObjectReadOperation& op, const string& oid,
+			 const std::string& marker, cls_rgw_lc_entry& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_get_entry_op call{marker};;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_LC_GET_ENTRY, in, out);
 }
 
 int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
@@ -950,6 +1034,24 @@ int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
   return r;
 }
 
+void cls_rgw_lc_list(librados::ObjectReadOperation& op, const string& oid,
+                    const string& marker,
+                    uint32_t max_entries,
+                    vector<cls_rgw_lc_entry>& entries)
+{
+  bufferlist in, out;
+  cls_rgw_lc_list_entries_op op;
+
+  entries.clear();
+
+  op.marker = marker;
+  op.max_entries = max_entries;
+
+  encode(op, in);
+
+  op.exec(oid, RGW_CLASS, RGW_LC_LIST_ENTRIES, in, out);
+}
+
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
 {
   bufferlist in;
@@ -957,6 +1059,17 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_resha
   call.entry = entry;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_RESHARD_ADD, in);
+}
+
+void cls_rgw_reshard_list(librados::ObjectReadOperation& op, const string& oid, string& marker, uint32_t max,
+                         list<cls_rgw_reshard_entry>& entries, bool* is_truncated)
+{
+  bufferlist in, out;
+  cls_rgw_reshard_list_op call;
+  call.marker = marker;
+  call.max = max;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_RESHARD_LIST, in, out);
 }
 
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
@@ -1008,6 +1121,16 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
   return 0;
 }
 
+void cls_rgw_reshard_get(librados::ObjectReadOperation& op, const string& oid, cls_rgw_reshard_entry& entry)
+{
+  bufferlist in, out;
+  cls_rgw_reshard_get_op call;
+  call.entry = entry;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_RESHARD_GET, in, out);
+
+}
+
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
 {
   bufferlist in;
@@ -1037,8 +1160,16 @@ int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
   return io_ctx.exec(oid, RGW_CLASS, RGW_CLEAR_BUCKET_RESHARDING, in, out);
 }
 
-int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
-				  cls_rgw_bucket_instance_entry *entry)
+void cls_rgw_clear_bucket_resharding(librados::ObjectWriteOperation& op, const string& oid)
+{
+  bufferlist in, out;
+  cls_rgw_clear_bucket_resharding_op call;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_CLEAR_BUCKET_RESHARDING, in, out);
+}
+
+int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
+                                  cls_rgw_bucket_instance_entry *entry)
 {
   bufferlist in, out;
   cls_rgw_get_bucket_resharding_op call;
@@ -1058,6 +1189,15 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   *entry = op_ret.new_instance;
 
   return 0;
+}
+
+void cls_rgw_get_bucket_resharding(librados::ObjectReadOperation& op, const std::string& oid,
+                                  cls_rgw_bucket_instance_entry *entry)
+{
+  bufferlist in, out;
+  cls_rgw_get_bucket_resharding_op call;
+  encode(call, in);
+  op.exec(oid, RGW_CLASS, RGW_GET_BUCKET_RESHARDING, in, out);
 }
 
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
