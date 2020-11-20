@@ -15,7 +15,7 @@ metrics on cluster utilization and performance.  Ceph users have three options:
    Ceph is running in Kubernetes with Rook).
 #. Skip the monitoring stack completely.  Some Ceph dashboard graphs will
    not be available.
-   
+
 The monitoring stack consists of `Prometheus <https://prometheus.io/>`_,
 Prometheus exporters (:ref:`mgr-prometheus`, `Node exporter
 <https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus Alert
@@ -93,6 +93,37 @@ completed, you should see something like this from ``ceph orch ls``
   node-exporter      2/2  6s ago     docker.io/prom/node-exporter:latest             e5a616e4b9cf  present
   prometheus         1/1  6s ago     docker.io/prom/prometheus:latest                e935122ab143  present
 
+Configuring SSL/TLS for Grafana
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``cephadm`` will deploy Grafana using the certificate defined in the ceph
+key/value store. If a certificate is not specified, ``cephadm`` will generate a
+self-signed certificate during deployment of the Grafana service.
+
+A custom certificate can be configured using the following commands.
+
+.. code-block:: bash
+
+  ceph config-key set mgr/cephadm/grafana_key -i $PWD/key.pem
+  ceph config-key set mgr/cephadm/grafana_crt -i $PWD/certificate.pem
+
+The ``cephadm`` manager module needs to be restarted to be able to read updates
+to these keys.
+
+.. code-block:: bash
+
+  ceph orch restart mgr
+
+If you already deployed Grafana, you need to redeploy the service for the
+configuration to be updated.
+
+.. code-block:: bash
+
+  ceph orch redeploy grafana
+
+The ``redeploy`` command also takes care of setting the right URL for Ceph
+Dashboard.
+
 Using custom images
 ~~~~~~~~~~~~~~~~~~~
 
@@ -125,7 +156,7 @@ For example
      you have set the custom image for automatically.  You will need to
      manually update the configuration (image name and tag) to be able to
      install updates.
-     
+
      If you choose to go with the recommendations instead, you can reset the
      custom image you have set before.  After that, the default value will be
      used again.  Use ``ceph config rm`` to reset the configuration option
