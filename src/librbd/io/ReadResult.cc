@@ -142,8 +142,10 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
 };
 
 ReadResult::C_ImageReadRequest::C_ImageReadRequest(
-    AioCompletion *aio_completion, const Extents image_extents)
-  : aio_completion(aio_completion), image_extents(image_extents) {
+    AioCompletion *aio_completion, uint64_t buffer_offset,
+    const Extents image_extents)
+  : aio_completion(aio_completion), buffer_offset(buffer_offset),
+    image_extents(image_extents) {
   aio_completion->add_request();
 }
 
@@ -155,7 +157,7 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
     striper::LightweightBufferExtents buffer_extents;
     size_t length = 0;
     for (auto &image_extent : image_extents) {
-      buffer_extents.emplace_back(length, image_extent.second);
+      buffer_extents.emplace_back(buffer_offset + length, image_extent.second);
       length += image_extent.second;
     }
     ceph_assert(length == bl.length());

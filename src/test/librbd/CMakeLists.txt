@@ -90,7 +90,10 @@ set(unittest_librbd_srcs
   managed_lock/test_mock_ReacquireRequest.cc
   managed_lock/test_mock_ReleaseRequest.cc
   migration/test_mock_FileStream.cc
+  migration/test_mock_HttpClient.cc
+  migration/test_mock_HttpStream.cc
   migration/test_mock_RawFormat.cc
+  migration/test_mock_Utils.cc
   mirror/snapshot/test_mock_CreateNonPrimaryRequest.cc
   mirror/snapshot/test_mock_CreatePrimaryRequest.cc
   mirror/snapshot/test_mock_ImageMeta.cc
@@ -154,6 +157,7 @@ target_link_libraries(unittest_librbd
   osdc
   ceph-common
   global
+  OpenSSL::SSL
   ${UNITTEST_LIBS})
 
 add_executable(ceph_test_librbd
