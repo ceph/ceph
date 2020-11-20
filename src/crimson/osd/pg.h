@@ -536,6 +536,10 @@ private:
     osd_op_params_t&& osd_op_p,
     Ref<MOSDOp> m,
     const bool user_modify);
+  seastar::future<Ref<MOSDOpReply>> handle_failed_op(
+    const std::error_code& e,
+    ObjectContextRef obc,
+    const MOSDOp& m) const;
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,

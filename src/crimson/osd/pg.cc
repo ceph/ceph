@@ -612,6 +612,26 @@ osd_op_params_t&& PG::fill_op_params_bump_pg_version(
   return std::move(osd_op_p);
 }
 
+seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
+  const std::error_code& e,
+  ObjectContextRef obc,
+  const MOSDOp& m) const
+{
+  assert(e.value() > 0);
+  logger().debug(
+    "{}: {} - object {} got error code {}, {}",
+    __func__,
+    m,
+    obc->obs.oi.soid,
+    e.value(),
+    e.message());
+  auto reply = make_message<MOSDOpReply>(
+    &m, -e.value(), get_osdmap_epoch(), 0, false);
+  reply->set_enoent_reply_versions(peering_state.get_info().last_update,
+                                   peering_state.get_info().last_user_version);
+  return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+}
+
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
@@ -689,31 +709,11 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       obc->obs.oi.soid);
     return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
   }, OpsExecuter::osd_op_errorator::all_same_way([=] (const std::error_code& e) {
-    assert(e.value() > 0);
-    logger().debug(
-      "do_osd_ops: {} - object {} got error code {}, {}",
-      *m,
-      obc->obs.oi.soid,
-      e.value(),
-      e.message());
-    auto reply = make_message<MOSDOpReply>(
-      m.get(), -e.value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-				     peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    return handle_failed_op(e, obc, *m);
   })).handle_exception_type([=](const crimson::osd::error& e) {
     // we need this handler because throwing path which aren't errorated yet.
-    logger().debug(
-      "do_osd_ops: {} - object {} got unhandled exception {} ({})",
-      *m,
-      obc->obs.oi.soid,
-      e.code(),
-      e.what());
-    auto reply = make_message<MOSDOpReply>(
-      m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-				     peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    logger().debug("encountered the legacy error handling path!");
+    return handle_failed_op(e.code(), obc, *m);
   });
 }
 
