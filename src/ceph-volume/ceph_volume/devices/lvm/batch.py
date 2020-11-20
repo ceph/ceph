@@ -73,7 +73,8 @@ def get_physical_osds(devices, args):
                                      abs_size,
                                      args.osds_per_device,
                                      osd_id,
-                                     'dmcrypt' if args.dmcrypt else None))
+                                     'dmcrypt' if args.dmcrypt else None,
+                                     dev.symlink))
     return ret
 
 
@@ -566,7 +567,8 @@ class Batch(object):
                      abs_size,
                      slots,
                      id_,
-                     encryption):
+                     encryption,
+                     symlink=None):
             self.id_ = id_
             self.data = self.VolSpec(path=data_path,
                                 rel_size=rel_size,
@@ -576,6 +578,7 @@ class Batch(object):
             self.fast = None
             self.very_fast = None
             self.encryption = encryption
+            self.symlink = symlink
 
         def add_fast_device(self, path, rel_size, abs_size, slots, type_):
             self.fast = self.VolSpec(path=path,
@@ -627,9 +630,12 @@ class Batch(object):
             if self.encryption:
                 report += templates.osd_encryption.format(
                     enc=self.encryption)
+            path = self.data.path
+            if self.symlink:
+                path = f'{self.symlink} -> {self.data.path}'
             report += templates.osd_component.format(
                 _type=self.data.type_,
-                path=self.data.path,
+                path=path,
                 size=self.data.abs_size,
                 percent=self.data.rel_size)
             if self.fast:
