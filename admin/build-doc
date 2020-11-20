@@ -48,8 +48,6 @@ fi
 # for availability of commands
 set -e
 
-cat $TOPDIR/src/osd/PeeringState.h $TOPDIR/src/osd/PeeringState.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
-
 cd build-doc
 
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
@@ -129,7 +127,6 @@ for target in $sphinx_targets; do
     case $target in
         html)
             builder=dirhtml
-            extra_opt="-D graphviz_output_format=svg"
             ;;
         man)
             extra_opt="-t man"
