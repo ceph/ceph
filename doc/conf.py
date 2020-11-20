@@ -1,3 +1,4 @@
+import fileinput
 import shutil
 import sys
 import os
@@ -113,6 +114,25 @@ breathe_doxygen_config_options = {
 edit_on_github_project = 'ceph/ceph'
 edit_on_github_branch = 'master'
 
+# graphviz options
+graphviz_output_format = 'svg'
+
+def generate_state_diagram(input_paths, output_path):
+    sys.path.append(os.path.join(top_level, 'doc', 'scripts'))
+    from gen_state_diagram import do_filter, StateMachineRenderer
+    inputs = [os.path.join(top_level, fn) for fn in input_paths]
+    output = os.path.join(top_level, output_path)
+
+    def process(app):
+        with fileinput.input(files=inputs) as f:
+            input = do_filter(f)
+            render = StateMachineRenderer()
+            render.read_input(input)
+            with open(output, 'w') as dot_output:
+                render.emit_dot(dot_output)
+
+    return process
+
 # handles edit-on-github and old version warning display
 def setup(app):
     app.add_js_file('js/ceph.js')
@@ -120,6 +140,9 @@ def setup(app):
         # add "ditaa" as an alias of "diagram"
         from plantweb.directive import DiagramDirective
         app.add_directive('ditaa', DiagramDirective)
+    app.connect('builder-inited', generate_state_diagram(['src/osd/PeeringState.h',
+                                                          'src/osd/PeeringState.cc'],
+                                                         'doc/dev/peering_graph.generated.dot'))
 
 # mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
 # mgr.mgr_module
