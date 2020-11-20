@@ -48,7 +48,6 @@
 #include "rgw_torrent.h"
 #include "rgw_tag.h"
 #include "rgw_object_lock.h"
-#include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "rgw_public_access.h"
 
@@ -1135,7 +1134,7 @@ protected:
   std::unique_ptr <RGWObjTags> obj_tags;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
@@ -1741,31 +1740,11 @@ protected:
   string etag;
   string version_id;
   bufferlist data;
-
-  struct MPSerializer {
-    librados::IoCtx ioctx;
-    rados::cls::lock::Lock lock;
-    librados::ObjectWriteOperation op;
-    std::string oid;
-    bool locked;
-
-    MPSerializer() : lock("RGWCompleteMultipart"), locked(false)
-      {}
-
-    int try_lock(const std::string& oid, utime_t dur, optional_yield y);
-
-    int unlock() {
-      return lock.unlock(&ioctx, oid);
-    }
-
-    void clear_locked() {
-      locked = false;
-    }
-  } serializer;
+  rgw::sal::MPSerializer* serializer;
 
 public:
-  RGWCompleteMultipart() {}
-  ~RGWCompleteMultipart() override {}
+  RGWCompleteMultipart() : serializer(nullptr) {}
+  ~RGWCompleteMultipart() override { delete serializer; }
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
@@ -2375,7 +2354,7 @@ public:
 
 class RGWGetClusterStat : public RGWOp {
 protected:
-  struct rados_cluster_stat_t stats_op;
+  RGWClusterStat stats_op;
 public:
   RGWGetClusterStat() {}
 

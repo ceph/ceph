@@ -3371,7 +3371,6 @@ void RGWDeleteBucket::execute(optional_yield y)
 int RGWPutObj::init_processing(optional_yield y) {
   copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
-  map<string, bufferlist> src_attrs;
   size_t pos;
   int ret;
 
@@ -3413,15 +3412,20 @@ int RGWPutObj::init_processing(optional_yield y) {
         return ret;
       }
     }
-    ret = store->getRados()->get_bucket_info(store->svc(),
-                                 copy_source_tenant_name,
-                                 copy_source_bucket_name,
-                                 copy_source_bucket_info,
-                                 NULL, s->yield, &src_attrs);
+    std::unique_ptr<rgw::sal::RGWBucket> bucket;
+    ret = store->get_bucket(s->user.get(), copy_source_tenant_name, copy_source_bucket_name,
+			      &bucket, s->yield);
+    if (ret < 0) {
+      ldpp_dout(this, 5) << __func__ << "(): get_bucket() returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    ret = bucket->get_bucket_info(s->yield);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
       return ret;
     }
+    copy_source_bucket_info = bucket->get_info();
 
     /* handle x-amz-copy-source-range */
     if (copy_source_range) {
@@ -3790,12 +3794,7 @@ void RGWPutObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
-    op_ret = store->getRados()->swift_versioning_copy(obj_ctx,
-                                          s->bucket_owner.get_id(),
-                                          s->bucket.get(),
-                                          s->object.get(),
-                                          this,
-                                          s->yield);
+    op_ret = s->object->swift_versioning_copy(s->obj_ctx, this, s->yield);
     if (op_ret < 0) {
       return;
     }
@@ -3837,7 +3836,7 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 20) << "dest_placement for part=" << upload_info.dest_placement << dendl;
     processor.emplace<MultipartObjectProcessor>(
         &*aio, store, s->bucket.get(), pdest_placement,
-        s->owner.get_id(), obj_ctx, s->object->get_obj(),
+        s->owner.get_id(), obj_ctx, std::move(s->object->clone()),
         multipart_upload_id, multipart_part_num, multipart_part_str,
         this, s->yield);
   } else if(append) {
@@ -3848,7 +3847,7 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     processor.emplace<AppendObjectProcessor>(
             &*aio, store, s->bucket.get(), pdest_placement, s->bucket_owner.get_id(),
-	    obj_ctx, s->object->get_obj(),
+	    obj_ctx, std::move(s->object->clone()),
             s->req_id, position, &cur_accounted_size, this, s->yield);
   } else {
     if (s->bucket->versioning_enabled()) {
@@ -3862,8 +3861,8 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     processor.emplace<AtomicObjectProcessor>(
         &*aio, store, s->bucket.get(), pdest_placement,
-        s->bucket_owner.get_id(), obj_ctx, s->object->get_obj(), olh_epoch,
-        s->req_id, this, s->yield);
+        s->bucket_owner.get_id(), obj_ctx,  std::move(s->object->clone()),
+	olh_epoch, s->req_id, this, s->yield);
   }
 
   op_ret = processor->prepare(s->yield);
@@ -4201,7 +4200,7 @@ void RGWPostObj::execute(optional_yield y)
                                     &s->dest_placement,
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
-                                    obj->get_obj(), 0, s->req_id, this, s->yield);
+                                    std::move(obj), 0, s->req_id, this, s->yield);
     op_ret = processor.prepare(s->yield);
     if (op_ret < 0) {
       return;
@@ -4836,10 +4835,7 @@ void RGWDeleteObj::execute(optional_yield y)
     s->object->set_atomic(s->obj_ctx);
 
     bool ver_restored = false;
-    op_ret = store->getRados()->swift_versioning_restore(*obj_ctx, s->bucket_owner.get_id(),
-							 s->bucket.get(),
-							 s->object.get(),
-							 ver_restored, this);
+    op_ret = s->object->swift_versioning_restore(s->obj_ctx, ver_restored, this);
     if (op_ret < 0) {
       return;
     }
@@ -5157,15 +5153,14 @@ void RGWCopyObj::execute(optional_yield y)
     return;
   }
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   if ( ! version_id.empty()) {
     dest_object->set_instance(version_id);
   } else if (dest_bucket->versioning_enabled()) {
     dest_object->gen_rand_obj_instance_name();
   }
 
-  src_object->set_atomic(&obj_ctx);
-  dest_object->set_atomic(&obj_ctx);
+  src_object->set_atomic(s->obj_ctx);
+  dest_object->set_atomic(s->obj_ctx);
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -5189,16 +5184,12 @@ void RGWCopyObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. In case of copying to remote this
    * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
-  op_ret = store->getRados()->swift_versioning_copy(obj_ctx,
-                                        dest_bucket->get_info().owner,
-                                        dest_bucket.get(),
-                                        dest_object.get(),
-                                        this,
-                                        s->yield);
+  op_ret = dest_object->swift_versioning_copy(s->obj_ctx, this, s->yield);
   if (op_ret < 0) {
     return;
   }
 
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   op_ret = src_object->copy_object(obj_ctx,
 	   s->user.get(),
 	   &s->info,
@@ -5557,7 +5548,7 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = config.rebuild(store->getRados(), new_config);
+  op_ret = config.rebuild(new_config);
   if (op_ret < 0)
     return;
 
@@ -5575,7 +5566,7 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->getRados()->get_lc()->set_bucket_config(s->bucket->get_info(), s->bucket_attrs, &new_config);
+  op_ret = store->get_rgwlc()->set_bucket_config(s->bucket->get_info(), s->bucket_attrs, &new_config);
   if (op_ret < 0) {
     return;
   }
@@ -5591,7 +5582,7 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->getRados()->get_lc()->remove_bucket_config(s->bucket->get_info(), s->bucket_attrs);
+  op_ret = store->get_rgwlc()->remove_bucket_config(s->bucket->get_info(), s->bucket_attrs);
   if (op_ret < 0) {
     return;
   }
@@ -5823,8 +5814,7 @@ void RGWInitMultipart::pre_exec()
 void RGWInitMultipart::execute(optional_yield y)
 {
   bufferlist aclbl;
-  map<string, bufferlist> attrs;
-  rgw_obj obj;
+  rgw::sal::RGWAttrs attrs;
 
   if (get_params(y) < 0)
     return;
@@ -5857,6 +5847,7 @@ void RGWInitMultipart::execute(optional_yield y)
 
   do {
     char buf[33];
+    std::unique_ptr<rgw::sal::RGWObject> obj;
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
     upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
     upload_id.append(buf);
@@ -5865,29 +5856,30 @@ void RGWInitMultipart::execute(optional_yield y)
     RGWMPObj mp(s->object->get_name(), upload_id);
     tmp_obj_name = mp.get_meta();
 
-    obj.init_ns(s->bucket->get_key(), tmp_obj_name, mp_ns);
+    obj = s->bucket->get_object(rgw_obj_key(tmp_obj_name, string(), mp_ns));
     // the meta object will be indexed with 0 size, we c
-    obj.set_in_extra_data(true);
-    obj.index_hash_source = s->object->get_name();
+    obj->set_in_extra_data(true);
+    obj->set_hash_source(s->object->get_name());
 
-    RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-    op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
+    std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = obj->get_write_op(s->obj_ctx);
 
-    RGWRados::Object::Write obj_op(&op_target);
-
-    obj_op.meta.owner = s->owner.get_id();
-    obj_op.meta.category = RGWObjCategory::MultiMeta;
-    obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
-    obj_op.meta.mtime = &mtime;
+    obj_op->params.versioning_disabled = true; /* no versioning for multipart meta */
+    obj_op->params.owner = s->owner;
+    obj_op->params.category = RGWObjCategory::MultiMeta;
+    obj_op->params.flags = PUT_OBJ_CREATE_EXCL;
+    obj_op->params.mtime = &mtime;
+    obj_op->params.attrs = &attrs;
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = s->dest_placement;
 
     bufferlist bl;
     encode(upload_info, bl);
-    obj_op.meta.data = &bl;
+    obj_op->params.data = &bl;
 
-    op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield);
+    op_ret = obj_op->prepare(s->yield);
+
+    op_ret = obj_op->write_meta(bl.length(), 0, s->yield);
   } while (op_ret == -EEXIST);
   
   // send request to notification manager
@@ -5944,14 +5936,14 @@ void RGWCompleteMultipart::execute(optional_yield y)
   string meta_oid;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   off_t ofs = 0;
   MD5 hash;
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
   bufferlist etag_bl;
   std::unique_ptr<rgw::sal::RGWObject> meta_obj;
-  rgw_obj target_obj;
+  std::unique_ptr<rgw::sal::RGWObject> target_obj;
   RGWMPObj mp;
   RGWObjManifest manifest;
   uint64_t olh_epoch = 0;
@@ -6026,18 +6018,12 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   /*take a cls lock on meta_obj to prevent racing completions (or retries)
     from deleting the parts*/
-  rgw_pool meta_pool;
-  rgw_raw_obj raw_obj;
   int max_lock_secs_mp =
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   utime_t dur(max_lock_secs_mp, 0);
 
-  store->getRados()->obj_to_raw((s->bucket->get_info()).placement_rule, meta_obj->get_obj(), &raw_obj);
-  store->getRados()->get_obj_data_pool((s->bucket->get_info()).placement_rule,
-			   meta_obj->get_obj(), &meta_pool);
-  store->getRados()->open_pool_ctx(meta_pool, serializer.ioctx, true);
-
-  op_ret = serializer.try_lock(raw_obj.oid, dur, y);
+  serializer = meta_obj->get_serializer("RGWCompleteMultipart");
+  op_ret = serializer->try_lock(dur, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "failed to acquire lock" << dendl;
     op_ret = -ERR_INTERNAL_ERROR;
@@ -6172,42 +6158,46 @@ void RGWCompleteMultipart::execute(optional_yield y)
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  target_obj.init(s->bucket->get_key(), s->object->get_name());
+  target_obj = s->bucket->get_object(rgw_obj_key(s->object->get_name()));
   if (versioned_object) {
     if (!version_id.empty()) {
-      target_obj.key.set_instance(version_id);
+      target_obj->set_instance(version_id);
     } else {
-      store->getRados()->gen_rand_obj_instance_name(&target_obj);
-      version_id = target_obj.key.get_instance();
+      target_obj->gen_rand_obj_instance_name();
+      version_id = target_obj->get_instance();
     }
   }
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  obj_ctx.set_atomic(target_obj);
+  target_obj->set_atomic(&obj_ctx);
 
-  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), target_obj);
-  RGWRados::Object::Write obj_op(&op_target);
+  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = target_obj->get_write_op(&obj_ctx);
 
-  obj_op.meta.manifest = &manifest;
-  obj_op.meta.remove_objs = &remove_objs;
+  obj_op->params.manifest = &manifest;
+  obj_op->params.remove_objs = &remove_objs;
 
-  obj_op.meta.ptag = &s->req_id; /* use req_id as operation tag */
-  obj_op.meta.owner = s->owner.get_id();
-  obj_op.meta.flags = PUT_OBJ_CREATE;
-  obj_op.meta.modify_tail = true;
-  obj_op.meta.completeMultipart = true;
-  obj_op.meta.olh_epoch = olh_epoch;
-  op_ret = obj_op.write_meta(ofs, accounted_size, attrs, s->yield);
+  obj_op->params.ptag = &s->req_id; /* use req_id as operation tag */
+  obj_op->params.owner = s->owner;
+  obj_op->params.flags = PUT_OBJ_CREATE;
+  obj_op->params.modify_tail = true;
+  obj_op->params.completeMultipart = true;
+  obj_op->params.olh_epoch = olh_epoch;
+  obj_op->params.attrs = &attrs;
+  op_ret = obj_op->prepare(s->yield);
+  if (op_ret < 0)
+    return;
+
+  op_ret = obj_op->write_meta(ofs, accounted_size, s->yield);
   if (op_ret < 0)
     return;
 
   // remove the upload obj
-  int r = store->getRados()->delete_obj(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-			    s->bucket->get_info(), meta_obj->get_obj(), 0);
+  string version_id;
+  int r = meta_obj->delete_object(s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0, version_id, null_yield);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
-    serializer.clear_locked();
+    serializer->clear_locked();
   } else {
     ldpp_dout(this, 0) << "WARNING: failed to remove object " << meta_obj << dendl;
   }
@@ -6220,28 +6210,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 }
 
-int RGWCompleteMultipart::MPSerializer::try_lock(
-  const std::string& _oid,
-  utime_t dur, optional_yield y)
-{
-  oid = _oid;
-  op.assert_exists();
-  lock.set_duration(dur);
-  lock.lock_exclusive(&op);
-  int ret = rgw_rados_operate(ioctx, oid, &op, y);
-  if (! ret) {
-    locked = true;
-  }
-  return ret;
-}
-
 void RGWCompleteMultipart::complete()
 {
   /* release exclusive lock iff not already */
-  if (unlikely(serializer.locked)) {
-    int r = serializer.unlock();
+  if (unlikely(serializer && serializer->locked)) {
+    int r = serializer->unlock();
     if (r < 0) {
-      ldpp_dout(this, 0) << "WARNING: failed to unlock " << serializer.oid << dendl;
+      ldpp_dout(this, 0) << "WARNING: failed to unlock " << serializer->oid << dendl;
     }
   }
   send_response();
@@ -7052,7 +7027,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&*aio, store, bucket.get(), &s->dest_placement, bowner.get_id(),
-                                  obj_ctx, obj->get_obj(), 0, s->req_id, this, s->yield);
+                                  obj_ctx, std::move(obj), 0, s->req_id, this, s->yield);
 
   op_ret = processor.prepare(s->yield);
   if (op_ret < 0) {
@@ -7936,7 +7911,7 @@ void RGWGetObjLegalHold::execute(optional_yield y)
 
 void RGWGetClusterStat::execute(optional_yield y)
 {
-  op_ret = this->store->getRados()->get_rados_handle()->cluster_stat(stats_op);
+  op_ret = store->cluster_stat(stats_op);
 }
 
 
