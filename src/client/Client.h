@@ -1164,6 +1164,7 @@ private:
 
   /* Flags for VXattr */
   static const unsigned VXATTR_RSTAT = 0x1;
+  static const unsigned VXATTR_DIRSTAT = 0x2;
 
   static const VXattr _dir_vxattrs[];
   static const VXattr _file_vxattrs[];
