@@ -1711,7 +1711,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   const uint64_t prev_epoch = olh.get_epoch();
 
   if (!olh.start_modify(op.olh_epoch)) {
-    ret = obj.write(op.olh_epoch, false);
+    bool is_current = (op.key.instance == olh.get_entry().key.instance);
+    ret = obj.write(op.olh_epoch, is_current);
     if (ret < 0) {
       return ret;
     }
@@ -1906,8 +1907,16 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       return ret;
     }
 
+    CLS_LOG(20, "%s(): next_key=%s[%s]", __func__, next_key.name.c_str(), next_key.instance.c_str());
+
     if (found) {
       BIVerObjEntry next(hctx, next_key);
+      ret = next.init();
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: %s(): failed to read next key instance entry: %s[%s]: ret=%d", __func__, next_key.name.c_str(), next_key.instance.c_str(), ret);
+        return ret;
+      }
+      CLS_LOG(20, "%s(): olh.get_epoch()=%d", __func__, (int)olh.get_epoch());
       ret = next.write(olh.get_epoch(), true);
       if (ret < 0) {
         CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
