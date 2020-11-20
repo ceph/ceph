@@ -297,4 +297,38 @@ describe('RbdListComponent', () => {
       }
     });
   });
+
+  const getActionDisable = (name: string) =>
+    component.tableActions.find((o) => o.name === name).disable;
+
+  const testActions = (selection: any, expected: string | boolean) => {
+    expect(getActionDisable('Edit')(selection)).toBe(expected);
+    expect(getActionDisable('Delete')(selection)).toBe(expected);
+    expect(getActionDisable('Copy')(selection)).toBe(expected);
+    expect(getActionDisable('Flatten')(selection)).toBeTruthy();
+    expect(getActionDisable('Move to Trash')(selection)).toBe(expected);
+  };
+
+  it('should test TableActions with valid/invalid image name', () => {
+    component.selection.selected = [
+      {
+        name: 'foobar',
+        pool_name: 'rbd',
+        snapshots: []
+      }
+    ];
+    testActions(component.selection, false);
+
+    component.selection.selected = [
+      {
+        name: 'foo/bar',
+        pool_name: 'rbd',
+        snapshots: []
+      }
+    ];
+    testActions(
+      component.selection,
+      `This RBD image has an invalid name and can't be managed by ceph.`
+    );
+  });
 });
