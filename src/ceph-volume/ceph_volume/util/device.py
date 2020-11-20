@@ -144,6 +144,10 @@ class Device(object):
     def _parse(self):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
+        # check if we are a symlink
+        if os.path.islink(self.abspath):
+                realpath = os.path.join(os.path.dirname(self.abspath),
+                                        os.readlink(self.abspath))
         self.sys_api = sys_info.devices.get(self.abspath, {})
         if not self.sys_api:
             # if no device was found check if we are a partition
@@ -153,7 +157,6 @@ class Device(object):
                 if part:
                     self.sys_api = part
                     break
-
         # if the path is not absolute, we have 'vg/lv', let's use LV name
         # to get the LV.
         if self.path[0] == '/':
