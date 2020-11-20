@@ -356,6 +356,8 @@ class RemoveUtil(object):
 
             if not osd.exists:
                 continue
+            assert osd.fullname is not None
+            assert osd.hostname is not None
             self.mgr._remove_daemon(osd.fullname, osd.hostname)
             logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.hostname}")
             logger.debug(f"Removing {osd.osd_id} from the queue.")

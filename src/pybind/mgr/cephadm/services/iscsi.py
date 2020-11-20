@@ -17,6 +17,7 @@ class IscsiService(CephService):
 
     def config(self, spec: IscsiServiceSpec) -> None:
         assert self.TYPE == spec.service_type
+        assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
         logger.info('Saving service %s spec with placement %s' % (
