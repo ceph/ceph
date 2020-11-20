@@ -608,8 +608,10 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   using osd_op_errorator = OpsExecuter::osd_op_errorator;
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
+  // OpsExecuter gets PG as non-const as it's responsible for modying
+  // e.g. `projected_last_update`.
   auto ox =
-    std::make_unique<OpsExecuter>(obc, op_info, *this/* as const& */, m);
+    std::make_unique<OpsExecuter>(obc, op_info, *this, m);
 
   return crimson::do_for_each(
     m->ops, [obc, m, ox = ox.get()](OSDOp& osd_op) {
