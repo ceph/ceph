@@ -232,6 +232,41 @@ class TestDevice(object):
         disk = device.Device("/dev/dm-0")
         assert not disk.available
 
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    @patch('ceph_volume.util.device.os.path.realpath')
+    @patch('ceph_volume.util.device.os.path.islink')
+    def test_accept_symlink_to_device(self,
+                                      m_os_path_islink,
+                                      m_os_path_realpath,
+                                      device_info,
+                                      fake_call):
+        m_os_path_islink.return_value = True
+        m_os_path_realpath.return_value = '/dev/sdb'
+        data = {"/dev/sdb": {"ro": 0, "size": 5368709120}}
+        lsblk = {"TYPE": "disk"}
+        device_info(devices=data,lsblk=lsblk)
+        disk = device.Device("/dev/test_symlink")
+        print(disk)
+        print(disk.sys_api)
+        assert disk.available
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    @patch('ceph_volume.util.device.os.readlink')
+    @patch('ceph_volume.util.device.os.path.islink')
+    def test_reject_symlink_to_device_mapper(self,
+                                             m_os_path_islink,
+                                             m_os_readlink,
+                                             device_info,
+                                             fake_call):
+        m_os_path_islink.return_value = True
+        m_os_readlink.return_value = '/dev/dm-0'
+        data = {"/dev/mapper/mpatha": {"ro": 0, "size": 5368709120}}
+        lsblk = {"TYPE": "disk"}
+        device_info(devices=data,lsblk=lsblk)
+        disk = device.Device("/dev/mapper/mpatha")
+        assert disk.available
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_readonly_device(self, fake_call, device_info):
         data = {"/dev/cdrom": {"ro": 1}}
         lsblk = {"TYPE": "disk", "NAME": "cdrom"}

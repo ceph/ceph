@@ -98,6 +98,15 @@ class Device(object):
 
     def __init__(self, path, with_lsm=False, lvs=None, lsblk_all=None, all_devices_vgs=None):
         self.path = path
+        # LVs can have a vg/lv path, while disks will have /dev/sda
+        self.symlink = None
+        # check if we are a symlink
+        if os.path.islink(self.path):
+            self.symlink = self.path
+            real_path = os.path.realpath(self.path)
+            # check if we are not a device mapper
+            if "dm-" not in real_path:
+                self.path = real_path
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.path, {})
