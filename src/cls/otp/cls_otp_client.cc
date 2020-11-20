@@ -67,7 +67,7 @@ namespace rados {
         bufferlist in;
         bufferlist out;
         encode(op, in);
-        rados_op->exec(oid, "otp", "otp_check", in);
+        rados_op->exec("otp", "otp_check", in);
         
 
         cls_otp_get_result_op op2;
@@ -75,7 +75,7 @@ namespace rados {
         bufferlist in2;
         bufferlist out2;
         encode(op2, in2);
-        rados_op->exec(oid, "otp", "otp_get_result", in);
+        rados_op->exec("otp", "otp_get_result", in);
       }
       int OTP::check(CephContext *cct, librados::IoCtx& ioctx, const string& oid,
                      const string& id, const string& val, otp_check_t *result) {
@@ -183,9 +183,10 @@ namespace rados {
         cls_otp_get_current_time_op op;
         bufferlist in;
         bufferlist out;
+        int op_ret;
         encode(op, in);
         ObjectReadOperation rop;
-        rados_op.exec("otp", "get_current_time", in);
+        rop.exec("otp", "get_current_time", in, &out, &op_ret);
        // int r = ioctx.operate(oid, &rop, nullptr);
       }
       int OTP::get_current_time(librados::IoCtx& ioctx, const string& oid,
