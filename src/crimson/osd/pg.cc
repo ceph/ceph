@@ -625,7 +625,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
   auto ox = std::make_unique<OpsExecuter>(
-    obc, op_info, get_pool().info, get_backend(), m);
+    obc, op_info, get_pool().info, get_backend(), *m);
   return crimson::do_for_each(
     m->ops, [obc, m, ox = ox.get()](OSDOp& osd_op) {
     logger().debug(

@@ -87,7 +87,7 @@ private:
   const OpInfo& op_info;
   const pg_pool_t& pool_info;  // for the sake of the ObjClass API
   PGBackend& backend;
-  Ref<MOSDOp> msg;
+  const MOSDOp& msg;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -170,12 +170,12 @@ public:
               const OpInfo& op_info,
               const pg_pool_t& pool_info,
               PGBackend& backend,
-              Ref<MOSDOp> msg)
+              const MOSDOp& msg)
     : obc(std::move(obc)),
       op_info(op_info),
       pool_info(pool_info),
       backend(backend),
-      msg(std::move(msg)) {
+      msg(msg) {
   }
 
   osd_op_errorator::future<> execute_op(class OSDOp& osd_op);
@@ -184,7 +184,7 @@ public:
   osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
 
   const auto& get_message() const {
-    return *msg;
+    return msg;
   }
 
   size_t get_processed_rw_ops_num() const {
