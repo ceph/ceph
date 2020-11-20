@@ -13,6 +13,7 @@
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
 #include "mds/InoTable.h"
+#include "mds/CDentry.h"
 
 #include "mds/events/ENoOp.h"
 #include "mds/events/EUpdate.h"
@@ -925,15 +926,8 @@ int MetaTool::show_child(std::string_view key,
     // hard link
     inodeno_t ino;
     unsigned char d_type;
-    if (type == 'l') {
-      DECODE_START(1, q);
-      ::decode(ino, q);
-      ::decode(d_type, q);
-      DECODE_FINISH(q);
-    } else {
-      ::decode(ino, q);
-      ::decode(d_type, q);
-    }
+
+    CDentry::decode_remote(type, ino, d_type, q);
 
     if (sp_ino > 0) {
       if (sp_ino == ino) {

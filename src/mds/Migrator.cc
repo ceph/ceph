@@ -1791,15 +1791,9 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     }
     
     if (dn->get_linkage()->is_remote()) {
-      // remote link
-      exportbl.append("l", 1);  // remote link
-      
       inodeno_t ino = dn->get_linkage()->get_remote_ino();
       unsigned char d_type = dn->get_linkage()->get_remote_d_type();
-      ENCODE_START(1, 1, exportbl);
-      encode(ino, exportbl);
-      encode(d_type, exportbl);
-      ENCODE_FINISH(exportbl);
+      CDentry::encode_remote(ino, d_type, exportbl); // remote link
       continue;
     }
 
@@ -3451,15 +3445,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      if (icode == 'l') {
-        DECODE_START(1, blp);
-        decode(ino, blp);
-        decode(d_type, blp);
-        DECODE_FINISH(blp);
-      } else {
-        decode(ino, blp);
-        decode(d_type, blp);
-      }
+      CDentry::decode_remote(icode, ino, d_type, blp);
       if (dn->get_linkage()->is_remote()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
       } else {
