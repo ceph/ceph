@@ -332,6 +332,9 @@ public:
   void print(std::ostream& out) override;
   void dump(ceph::Formatter *f) const;
 
+  static void encode_remote(inodeno_t& ino, unsigned char d_type, bufferlist &bl);
+  static void decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            ceph::buffer::list::const_iterator& bl);
 
   __u32 hash;
   snapid_t first, last;

@@ -18,6 +18,7 @@
 #include <fstream>
 #include "include/util.h"
 
+#include "mds/CDentry.h"
 #include "mds/CInode.h"
 #include "mds/InoTable.h"
 #include "mds/SnapServer.h"
@@ -1058,15 +1059,7 @@ int DataScan::scan_links()
 	  } else if (dentry_type == 'L' || dentry_type == 'l') {
 	    inodeno_t ino;
 	    unsigned char d_type;
-            if (dentry_type == 'l') {
-	      DECODE_START(1, q);
-	      decode(ino, q);
-	      decode(d_type, q);
-	      DECODE_FINISH(q);
-	    } else {
-	      decode(ino, q);
-	      decode(d_type, q);
-	    }
+            CDentry::decode_remote(dentry_type, ino, d_type, q);
 
 	    if (step == SCAN_INOS) {
 	      remote_links[ino]++;

@@ -530,6 +530,31 @@ void CDentry::_put()
   }
 }
 
+void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type, bufferlist &bl)
+{
+  bl.append("l", 1);  // remote link
+
+  // marker, name, ino
+  ENCODE_START(1, 1, bl);
+  encode(ino, bl);
+  encode(d_type, bl);
+  ENCODE_FINISH(bl);
+}
+
+void CDentry::decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            ceph::buffer::list::const_iterator& bl)
+{
+  if (icode == 'l') {
+    DECODE_START(1, bl);
+    decode(ino, bl);
+    decode(d_type, bl);
+    DECODE_FINISH(bl);
+  } else if (icode == 'L') {
+    decode(ino, bl);
+    decode(d_type, bl);
+  } else ceph_assert(0);
+}
+
 void CDentry::dump(Formatter *f) const
 {
   ceph_assert(f != NULL);
