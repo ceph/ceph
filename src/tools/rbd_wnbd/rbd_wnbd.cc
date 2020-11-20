@@ -590,7 +590,7 @@ Service options:
   --hard-disconnect           Skip attempting a soft disconnect
   --soft-disconnect-timeout   Cummulative soft disconnect timeout in seconds,
                               used when disconnecting existing mappings. A hard
-                              disconnect will be issuedwhen hitting the timeout.
+                              disconnect will be issued when hitting the timeout
   --service-thread-count      The number of workers used when mapping or
                               unmapping images. Default: 8
 
@@ -1138,6 +1138,8 @@ static int parse_args(std::vector<const char*>& args,
       cmd = Service;
     } else if (strcmp(*args.begin(), "stats") == 0) {
       cmd = Stats;
+    } else if (strcmp(*args.begin(), "help") == 0) {
+      return HELP_INFO;
     } else {
       *err_msg << "rbd-wnbd: unknown command: " <<  *args.begin();
       return -EINVAL;
