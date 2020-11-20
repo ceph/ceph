@@ -12,17 +12,17 @@ documentation:
   - "**/*.+(rst|md)"
 
 pybind:
-  - src/pybind/cephfs/*
-  - src/pybind/mgr/*
-  - src/pybind/rados/*
-  - src/pybind/rbd/*
-  - src/pybind/rgw/*
-  - src/pybind/*
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/**
+  - src/pybind/rados/**
+  - src/pybind/rbd/**
+  - src/pybind/rgw/**
+  - src/pybind/**
 
 common:
-  - src/common
-  - src/global
-  - src/log
+  - src/common/**
+  - src/global/**
+  - src/log/**
 
 bluestore:
   - src/os/bluestore/**
