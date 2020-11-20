@@ -887,7 +887,7 @@ PG::with_locked_obc(Ref<MOSDOp> &m, const OpInfo &op_info,
       return with_clone_obc<RWState::RWWRITE>(oid, std::move(f));
     }
   default:
-    assert(0);
+    ceph_abort();
   };
 }
 
