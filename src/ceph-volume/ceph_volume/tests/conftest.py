@@ -63,6 +63,7 @@ def mock_device():
     dev.path = '/dev/foo'
     dev.vg_name = 'vg_foo'
     dev.lv_name = 'lv_foo'
+    dev.symlink = None
     dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
     dev.available_lvm = True
     dev.vg_size = [21474836480]
