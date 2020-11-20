@@ -4,17 +4,25 @@ import sys
 import os
 
 project = 'Ceph'
-copyright = '2016, Ceph authors and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
+copyright = ('2016, Ceph authors and contributors. '
+             'Licensed under Creative Commons Attribution Share Alike 3.0 '
+             '(CC-BY-SA-3.0)')
 version = 'dev'
 release = 'dev'
 
 templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
-exclude_patterns = ['**/.#*', '**/*~', 'start/quick-common.rst', '**/*.inc.rst']
+exclude_patterns = ['**/.#*',
+                    '**/*~',
+                    'start/quick-common.rst',
+                    '**/*.inc.rst']
 if tags.has('man'):             # noqa: F821
     master_doc = 'man_index'
-    exclude_patterns += ['index.rst', 'architecture.rst', 'glossary.rst', 'release*.rst',
+    exclude_patterns += ['index.rst',
+                         'architecture.rst',
+                         'glossary.rst',
+                         'release*.rst',
                          'api/*',
                          'cephadm/*',
                          'cephfs/*',
@@ -101,7 +109,9 @@ breathe_projects_source = {
     "Ceph": (os.path.join(top_level, "src/include/rados"),
              ["rados_types.h", "librados.h"])
 }
-breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp': 'cxx'}
+breathe_domain_by_extension = {'py': 'py',
+                               'c': 'c', 'h': 'c',
+                               'cc': 'cxx', 'hpp': 'cxx'}
 breathe_doxygen_config_options = {
     'EXPAND_ONLY_PREDEF': 'YES',
     'MACRO_EXPANSION': 'YES',
@@ -141,9 +151,10 @@ def setup(app):
         # add "ditaa" as an alias of "diagram"
         from plantweb.directive import DiagramDirective
         app.add_directive('ditaa', DiagramDirective)
-    app.connect('builder-inited', generate_state_diagram(['src/osd/PeeringState.h',
-                                                          'src/osd/PeeringState.cc'],
-                                                         'doc/dev/peering_graph.generated.dot'))
+    app.connect('builder-inited',
+                generate_state_diagram(['src/osd/PeeringState.h',
+                                        'src/osd/PeeringState.cc'],
+                                       'doc/dev/peering_graph.generated.dot'))
 
 
 # mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
