@@ -536,9 +536,6 @@ private:
     ObjectContextRef obc,
     const OpInfo &op_info);
   seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
-  seastar::future<ceph::bufferlist> do_pgnls(ceph::bufferlist& indata,
-					     const std::string& nspace,
-					     uint64_t limit);
   seastar::future<> submit_transaction(const OpInfo& op_info,
 				       const std::vector<OSDOp>& ops,
 				       ObjectContextRef&& obc,
