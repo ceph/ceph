@@ -1763,7 +1763,6 @@ void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
   } else {
     state = StateInit;
   }
-  JSONDecoder::decode_json("full_marker", full_marker, obj);
   JSONDecoder::decode_json("inc_marker", inc_marker, obj);
 }
 
@@ -1788,7 +1787,6 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
     break;
   }
   encode_json("status", s, f);
-  encode_json("full_marker", full_marker, f);
   encode_json("inc_marker", inc_marker, f);
 }
 
