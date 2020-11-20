@@ -530,7 +530,6 @@ struct rgw_bucket_shard_sync_info {
   };
 
   uint16_t state;
-  rgw_bucket_shard_full_sync_marker full_marker;
   rgw_bucket_shard_inc_sync_marker inc_marker;
 
   void decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs);
@@ -538,17 +537,19 @@ struct rgw_bucket_shard_sync_info {
   void encode_state_attr(map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(state, bl);
-    encode(full_marker, bl);
     encode(inc_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      decode(state, bl);
-     decode(full_marker, bl);
+     if (struct_v <= 1) {
+       rgw_bucket_shard_full_sync_marker full_marker;
+       decode(full_marker, bl);
+     }
      decode(inc_marker, bl);
      DECODE_FINISH(bl);
   }
