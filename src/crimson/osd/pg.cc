@@ -596,6 +596,22 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
   });
 }
 
+osd_op_params_t&& PG::fill_op_params_bump_pg_version(
+  osd_op_params_t&& osd_op_p,
+  Ref<MOSDOp> m,
+  const bool user_modify)
+{
+  osd_op_p.req = std::move(m);
+  osd_op_p.at_version = next_version();
+  osd_op_p.pg_trim_to = get_pg_trim_to();
+  osd_op_p.min_last_complete_ondisk = get_min_last_complete_ondisk();
+  osd_op_p.last_complete = get_info().last_complete;
+  if (user_modify) {
+    osd_op_p.user_at_version = osd_op_p.at_version.version;
+  }
+  return std::move(osd_op_p);
+}
+
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
@@ -608,11 +624,8 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   using osd_op_errorator = OpsExecuter::osd_op_errorator;
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
-  // OpsExecuter gets PG as non-const as it's responsible for modying
-  // e.g. `projected_last_update`.
-  auto ox =
-    std::make_unique<OpsExecuter>(obc, op_info, *this, m);
-
+  auto ox = std::make_unique<OpsExecuter>(
+    obc, op_info, get_pool().info, get_backend(), m);
   return crimson::do_for_each(
     m->ops, [obc, m, ox = ox.get()](OSDOp& osd_op) {
     logger().debug(
@@ -636,13 +649,22 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       },
       [this, m, &op_info] (auto&& txn,
 			   auto&& obc,
-			   auto&& osd_op_p) -> osd_op_errorator::future<> {
+			   auto&& osd_op_p,
+                           bool user_modify) -> osd_op_errorator::future<> {
 	logger().debug(
 	  "do_osd_ops: {} - object {} submitting txn",
 	  *m,
 	  obc->obs.oi.soid);
+        auto filled_osd_op_p = fill_op_params_bump_pg_version(
+          std::move(osd_op_p),
+          std::move(m),
+          user_modify);
 	return submit_transaction(
-          op_info, m->ops, std::move(obc), std::move(txn), std::move(osd_op_p));
+          op_info,
+          filled_osd_op_p.req->ops,
+          std::move(obc),
+          std::move(txn),
+          std::move(filled_osd_op_p));
       });
   }).safe_then([this,
                 m,
