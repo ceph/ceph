@@ -20,6 +20,7 @@ class NFSService(CephService):
 
     def config(self, spec: NFSServiceSpec) -> None:
         assert self.TYPE == spec.service_type
+        assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
         logger.info('Saving service %s spec with placement %s' % (
