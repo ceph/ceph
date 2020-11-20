@@ -381,6 +381,7 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
              please upgrade them first!";
     }
     elector.dump_connection_scores(f.get());
+    f->flush(ss);
   } else if (command == "connection scores reset") {
     if (!get_quorum_mon_features().contains_all(
 				   ceph::features::mon::FEATURE_PINGING)) {
@@ -388,6 +389,7 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
               please upgrade them first!";
     }
     elector.notify_clear_peer_state();
+    f->flush(ss);
   } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
@@ -870,11 +872,11 @@ int Monitor::preinit()
                                      admin_hook,
                                     "show recent slow ops");
   ceph_assert(r == 0);
-  r = admin_socket->register_commmand("connection scores dump", "connection scores dump",
+  r = admin_socket->register_command("connection scores dump", "connection scores dump",
 				      admin_hook,
 				      "show the scores used in connectivity-based elections");
   ceph_assert(r == 0);
-  r = admin_socket->register_commmand("connection scores reset", "connection scores reset",
+  r = admin_socket->register_command("connection scores reset", "connection scores reset",
 				      admin_hook,
 				      "show the scores used in connectivity-based elections");
   ceph_assert(r == 0);
