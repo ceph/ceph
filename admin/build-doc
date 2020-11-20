@@ -142,7 +142,7 @@ done
 # build the releases.json. this reads in the yaml version and dumps
 # out the json representation of the same file. the resulting releases.json
 # should be served from the root of hosted site.
-$vdir/bin/python << EOF > $TOPDIR/build-doc/output/html/releases.json
+$vdir/bin/python << EOF > $TOPDIR/build-doc/output/html/_static/releases.json
 from __future__ import print_function
 import datetime
 import json
