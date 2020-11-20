@@ -531,6 +531,10 @@ private:
   void do_peering_event(
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
+  osd_op_params_t&& fill_op_params_bump_pg_version(
+    osd_op_params_t&& osd_op_p,
+    Ref<MOSDOp> m,
+    const bool user_modify);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,
