@@ -20,8 +20,8 @@ $(function() {
   }
 
   function get_branch() {
-    var url = window.location.href;
-    var res = url.match(/docs.ceph.com\/docs\/([a-z]+)\/?/i)
+    var pathname = window.location.pathname;
+    var res = pathname.match(/en\/([a-z]+)\/?/i)
     if (res) {
       return res[1]
     }
