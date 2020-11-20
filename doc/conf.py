@@ -133,6 +133,7 @@ def generate_state_diagram(input_paths, output_path):
 
     return process
 
+
 # handles edit-on-github and old version warning display
 def setup(app):
     app.add_js_file('js/ceph.js')
@@ -144,14 +145,17 @@ def setup(app):
                                                           'src/osd/PeeringState.cc'],
                                                          'doc/dev/peering_graph.generated.dot'))
 
+
 # mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
 # mgr.mgr_module
 class Dummy(object):
     def __getattr__(self, _):
         return lambda *args, **kwargs: None
 
+
 class Mock(object):
     __all__ = []
+
     def __init__(self, *args, **kwargs):
         pass
 
@@ -163,6 +167,7 @@ class Mock(object):
         mock = type(name, (Dummy,), {})
         mock.__module__ = __name__
         return mock
+
 
 sys.modules['ceph_module'] = Mock()
 
