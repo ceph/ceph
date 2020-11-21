@@ -6,7 +6,7 @@
 #include <map>
 #include <vector>
 
-#include "Compressor.h"
+#include "compressor/Compressor.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_context.h"
 #include "common/config_cacher.h"
@@ -25,9 +25,10 @@ public:
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override;
 
-  uint32_t pick_method(uint32_t peer_type, uint32_t comp_mode, const std::vector<uint32_t>& preferred_methods);
+  Compressor::CompressionAlgorithm pick_method(uint32_t peer_type,
+					       const std::vector<uint32_t>& preferred_methods);
 
-  const uint32_t get_mode(uint32_t peer_type, bool is_secure);
+  Compressor::CompressionMode get_mode(uint32_t peer_type, bool is_secure);
 
   const std::vector<uint32_t> get_methods(uint32_t peer_type) { 
     switch (peer_type) {

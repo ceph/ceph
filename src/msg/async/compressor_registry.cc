@@ -1,4 +1,7 @@
-#include "CompressorRegistry.h"
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#include "compressor_registry.h"
 #include "common/dout.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -35,20 +38,18 @@ void CompressorRegistry::handle_conf_change(
   _refresh_config();
 }
 
-std::vector<uint32_t> CompressorRegistry::_parse_method_list(const string& s) {
+std::vector<uint32_t> CompressorRegistry::_parse_method_list(const string& s)
+{
   std::vector<uint32_t> methods;
 
-  std::list<std::string> supported_list;
-  for_each_substr(s, ";,= \t", [&] (auto token) {
-    std::string alg_type_str(token.data(), token.size());
+  for_each_substr(s, ";,= \t", [&] (auto method) {
+    ldout(cct,20) << "adding algorithm method: " << method << dendl;
 
-    ldout(cct,20) << "adding algorithm method: " << alg_type_str << dendl;
-
-    auto alg_type = Compressor::get_comp_alg_type(alg_type_str.data());
+    auto alg_type = Compressor::get_comp_alg_type(method);
     if (alg_type) {
       methods.push_back(*alg_type);
     } else {
-      ldout(cct,5) << "WARNING: unknown algorithm method " << alg_type_str << dendl;
+      ldout(cct,5) << "WARNING: unknown algorithm method " << method << dendl;
     }
   });
 
@@ -85,26 +86,28 @@ void CompressorRegistry::_refresh_config()
     << dendl;
 }
 
-uint32_t CompressorRegistry::pick_method(uint32_t peer_type, uint32_t comp_mode, const std::vector<uint32_t>& preferred_methods) {
-  if (comp_mode == Compressor::COMP_NONE) {
-    return Compressor::COMP_ALG_NONE;
-  }
-
+Compressor::CompressionAlgorithm
+CompressorRegistry::pick_method(uint32_t peer_type,
+                                const std::vector<uint32_t>& preferred_methods)
+{
   std::vector<uint32_t> allowed_methods = get_methods(peer_type);
-  
-  for (auto mode : preferred_methods) {
-    if (std::find(allowed_methods.begin(), allowed_methods.end(), mode)
-	!= allowed_methods.end()) {
-      return mode;
-    }
+  auto preferred = std::find_first_of(preferred_methods.begin(),
+                                      preferred_methods.end(),
+                                      allowed_methods.begin(),
+                                      allowed_methods.end());
+  if (preferred == preferred_methods.end()) {
+    ldout(cct,1) << "failed to pick compression method from client's "
+                 << preferred_methods
+                 << " and our " << allowed_methods << dendl;
+    return Compressor::COMP_ALG_NONE;
+  } else {
+    return static_cast<Compressor::CompressionAlgorithm>(*preferred);
   }
-
-  ldout(cct,1) << "failed to pick compression method from client's " << preferred_methods
-	       << " and our " << allowed_methods << dendl;
-  return Compressor::COMP_ALG_NONE;
 }
 
-const uint32_t CompressorRegistry::get_mode(uint32_t peer_type, bool is_secure) {
+Compressor::CompressionMode
+CompressorRegistry::get_mode(uint32_t peer_type, bool is_secure)
+{
   ldout(cct, 20) << __func__ << " peer_type " << peer_type 
     << " is_secure " << is_secure << dendl;
 
@@ -113,9 +116,9 @@ const uint32_t CompressorRegistry::get_mode(uint32_t peer_type, bool is_secure) 
   }
 
   switch (peer_type) {
-    case CEPH_ENTITY_TYPE_OSD:
-      return ms_osd_compress_mode;
-    default:
-      return Compressor::COMP_NONE;
+  case CEPH_ENTITY_TYPE_OSD:
+    return static_cast<Compressor::CompressionMode>(ms_osd_compress_mode);
+  default:
+    return Compressor::COMP_NONE;
   }
 }

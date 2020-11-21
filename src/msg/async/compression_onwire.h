@@ -7,19 +7,23 @@
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
 
+class CompConnectionMeta;
+
 namespace ceph::compression::onwire {
+  using Compressor = TOPNSPC::Compressor;
+  using CompressorRef = TOPNSPC::CompressorRef;
+
   class Handler {
   public:
     Handler(CephContext* const cct, CompressorRef compressor)
-      : m_cct(cct), m_compressor(compressor) {};
-    ~Handler() {m_compressor = nullptr;};
+      : m_cct(cct), m_compressor(compressor) {}
 
   protected:
     CephContext* const m_cct;
     CompressorRef m_compressor;
   };
 
-  class RxHandler : public Handler {
+  class RxHandler final : private Handler {
   public:
     RxHandler(CephContext* const cct, CompressorRef compressor)
       : Handler(cct, compressor) {}
@@ -36,12 +40,13 @@ namespace ceph::compression::onwire {
     bool decompress(const ceph::bufferlist &input, ceph::bufferlist &out);
   };
 
-  class TxHandler : public Handler {
+  class TxHandler final : private Handler {
   public:
     TxHandler(CephContext* const cct, CompressorRef compressor, int mode, std::uint64_t min_size)
-      : Handler(cct, compressor), m_min_size(min_size) {
-      m_mode = static_cast<Compressor::CompressionMode>(mode);
-    } 
+      : Handler(cct, compressor),
+	m_min_size(min_size),
+	m_mode(static_cast<Compressor::CompressionMode>(mode))
+    {}
     ~TxHandler() {}
 
     void reset_handler(int num_segments, uint64_t size) {
@@ -50,7 +55,7 @@ namespace ceph::compression::onwire {
       m_onwire_size = 0;
     }
 
-    void final();
+    void done();
 
     /**
      * Compresses a bufferlist 
@@ -63,15 +68,15 @@ namespace ceph::compression::onwire {
     bool compress(const ceph::bufferlist &input, ceph::bufferlist &out);
 
     double get_ratio() const {
-    return get_initial_size() / (double) get_final_size();
+      return get_initial_size() / (double) get_final_size();
     }
 
     uint64_t get_initial_size() const {
-    return m_init_onwire_size;
+      return m_init_onwire_size;
     } 
 
     uint64_t get_final_size() const {
-    return m_onwire_size;
+      return m_onwire_size;
     }
 
   private:

@@ -10,7 +10,6 @@
 #include "AsyncConnection.h"
 #include "include/buffer.h"
 #include "include/msgr.h"
-#include "compressor/Compressor.h"
 
 /*
  * Continuation Helper Classes
@@ -109,7 +108,6 @@ protected:
   CephContext *cct;
 public:
   std::shared_ptr<AuthConnectionMeta> auth_meta;
-  std::shared_ptr<CompConnectionMeta> comp_meta;
 
 public:
   Protocol(int type, AsyncConnection *connection);

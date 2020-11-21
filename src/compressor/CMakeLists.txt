@@ -1,7 +1,6 @@
 
 set(compressor_srcs
-  Compressor.cc
-  CompressorRegistry.cc)
+  Compressor.cc)
 if (HAVE_QATZIP)
   list(APPEND compressor_srcs QatAccel.cc)
 endif()

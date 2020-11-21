@@ -6,7 +6,9 @@
 
 #include "Protocol.h"
 #include "crypto_onwire.h"
+#include "compression_meta.h"
 #include "compression_onwire.h"
+#include "compressor_registry.h"
 #include "frames_v2.h"
 
 class ProtocolV2 : public Protocol {
@@ -121,6 +123,8 @@ private:
   bool keepalive;
   bool write_in_progress = false;
 
+  CompConnectionMeta comp_meta;
+  CompressorRegistry comp_registry;
   std::ostream& _conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *pcontinuation);
   void run_continuation(Ct<ProtocolV2> &continuation);

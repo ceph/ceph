@@ -35,8 +35,6 @@
 #include "common/item_history.h"
 #include "auth/AuthRegistry.h"
 #include "include/ceph_assert.h"
-#include "compressor/CompressorServer.h"
-#include "compressor/CompressorClient.h"
 
 #include <errno.h>
 #include <sstream>
@@ -114,8 +112,6 @@ protected:
 public:
   AuthClient *auth_client = 0;
   AuthServer *auth_server = 0;
-  CompressorClient comp_client;
-  CompressorServer comp_server;
 
 #ifdef UNIT_TESTS_BUILT
   Interceptor *interceptor = nullptr;

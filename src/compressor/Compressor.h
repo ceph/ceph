@@ -107,19 +107,4 @@ protected:
 
 } // namespace TOPNSPC
 
-struct CompConnectionMeta {
-  Compressor::CompressionMode con_mode = Compressor::COMP_NONE;  // negotiated mode
-  Compressor::CompressionAlgorithm con_method = Compressor::COMP_ALG_NONE; // negotiated method
-
-  bool is_compress() const { 
-    return con_mode != Compressor::COMP_NONE; 
-  }
-  Compressor::CompressionAlgorithm get_method() const { 
-    return con_method; 
-  }
-  Compressor::CompressionMode get_mode() const { 
-    return con_mode; 
-  }
-};
-
 #endif

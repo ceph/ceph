@@ -99,7 +99,8 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       tx_frame_asm(&session_stream_handlers, false, &session_compression_handlers),
       rx_frame_asm(&session_stream_handlers, false, &session_compression_handlers),
       next_tag(static_cast<Tag>(0)),
-      keepalive(false) {
+      keepalive(false),
+      comp_registry(cct) {
 }
 
 ProtocolV2::~ProtocolV2() {
@@ -624,7 +625,7 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
 void ProtocolV2::reset_compression() {
   ldout(cct, 5) << __func__ << dendl;
 
-  comp_meta.reset(new CompConnectionMeta);
+  comp_meta = CompConnectionMeta{};
   session_compression_handlers.rx.reset(nullptr);
   session_compression_handlers.tx.reset(nullptr);
 }
@@ -2116,15 +2117,13 @@ CtPtr ProtocolV2::handle_server_ident(ceph::bufferlist &payload)
   return ready();
 }
 
-CtPtr ProtocolV2::send_compression_request() { 
-  auto cm = comp_meta;
-  auto am = auth_meta;
-  
-  std::vector<uint32_t> preferred_methods;
-  messenger->comp_client.get_comp_request(connection, cm.get(), am.get(), &preferred_methods);
-
-  auto comp_req_frame = CompressionRequestFrame::Encode(cm->is_compress(), preferred_methods);
-
+CtPtr ProtocolV2::send_compression_request() {
+  const entity_type_t peer_type = connection->get_peer_type();
+  comp_meta.con_mode =
+    static_cast<Compressor::CompressionMode>(
+      comp_registry.get_mode(peer_type, auth_meta->is_mode_secure()));
+  const auto preferred_methods = comp_registry.get_methods(peer_type);
+  auto comp_req_frame = CompressionRequestFrame::Encode(comp_meta.is_compress(), preferred_methods);
   state = COMPRESSION_CONNECTING;
   return WRITE(comp_req_frame, "compression request", read_frame);
 }
@@ -2139,11 +2138,12 @@ CtPtr ProtocolV2::handle_compression_done(ceph::bufferlist &payload) {
   ldout(cct, 10) << __func__ << " CompressionDoneFrame(is_compress=" << response.is_compress()
 		 << ", method=" << response.method() << ")" << dendl;
 
-  auto cm = comp_meta;
-  messenger->comp_client.handle_comp_done(cm.get(), response.is_compress(), response.method());
-
+  comp_meta.con_method = static_cast<Compressor::CompressionAlgorithm>(response.method());
+  if (comp_meta.is_compress() != response.is_compress()) {
+    comp_meta.con_mode = Compressor::COMP_NONE;
+  }
   session_compression_handlers = ceph::compression::onwire::rxtx_t::create_handler_pair(
-    cct, *comp_meta, messenger->comp_client.get_min_compress_size(connection->get_peer_type()));
+    cct, comp_meta, comp_registry.get_min_compression_size(connection->get_peer_type()));
 
   return ready();
 }
@@ -2982,23 +2982,24 @@ CtPtr ProtocolV2::handle_compression_request(ceph::bufferlist &payload) {
   ldout(cct, 10) << __func__ << " CompressionRequestFrame(is_compress=" << request.is_compress()
 		 << ", preferred_methods=" << request.preferred_methods() << ")" << dendl;
 
-  auto cm = comp_meta;
-  auto am = auth_meta;
-  messenger->comp_server.handle_comp_request(connection, cm.get(), am.get(),
-    request.is_compress(), request.preferred_methods());
-
-  auto response = CompressionDoneFrame::Encode(comp_meta->is_compress(), comp_meta->get_method());
+  const int peer_type = connection->get_peer_type();
+  if (uint32_t mode = comp_registry.get_mode(peer_type, auth_meta->is_mode_secure());
+      mode != Compressor::COMP_NONE && request.is_compress()) {
+    comp_meta.con_method = comp_registry.pick_method(peer_type, request.preferred_methods());
+  } else {
+    comp_meta.con_method = Compressor::COMP_ALG_NONE;
+  }
+  auto response = CompressionDoneFrame::Encode(comp_meta.is_compress(), comp_meta.get_method());
 
   return WRITE(response, "compression done", finish_compression);
 }
 
 CtPtr ProtocolV2::finish_compression() {
-  ceph_assert(comp_meta);
   // TODO: having a possibility to check whether we're server or client could
   // allow reusing finish_compression().
   
   session_compression_handlers = ceph::compression::onwire::rxtx_t::create_handler_pair(
-    cct, *comp_meta, messenger->comp_client.get_min_compress_size(connection->get_peer_type()));
+    cct, comp_meta, comp_registry.get_min_compression_size(connection->get_peer_type()));
 
   return server_ready();
 }

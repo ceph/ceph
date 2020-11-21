@@ -503,7 +503,7 @@ void FrameAssembler::asm_compress(bufferlist segment_bls[]) {
   }
 
   if (!abort) {
-    m_compression->tx->final();
+    m_compression->tx->done();
 
     for (size_t i = 0; i < m_descs.size(); i++) {
       segment_bls[i].swap(compressed[i]);
