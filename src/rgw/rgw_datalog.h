@@ -142,10 +142,6 @@ public:
   std::string get_oid(int i) {
     return fmt::format("{}.{}", prefix, i);
   }
-  static int remove(CephContext* cct, librados::Rados* rados,
-		    const rgw_pool& log_pool);
-
-
   virtual void prepare(ceph::real_time now,
 		       const std::string& key,
 		       ceph::buffer::list&& entry,
@@ -167,6 +163,7 @@ public:
 
 class RGWDataChangesLog {
   CephContext *cct;
+  librados::IoCtx ioctx;
   rgw::BucketChangeObserver *observer = nullptr;
   const RGWZone* zone;
   std::unique_ptr<RGWDataChangesBE> be;
