@@ -105,7 +105,7 @@ void HttpStream<I>::read(io::Extents&& byte_extents, bufferlist* data,
     req.set(boost::beast::http::field::range, range.str());
 
     m_http_client->issue(std::move(req),
-      [this, byte_offset, byte_length, ctx](int r, HttpResponse&& response) {
+      [this, byte_offset=byte_offset, byte_length=byte_length, ctx](int r, HttpResponse&& response) {
         handle_read(r, std::move(response), byte_offset, byte_length, &ctx->bl,
                     ctx);
      });
