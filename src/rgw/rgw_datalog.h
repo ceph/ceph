@@ -20,6 +20,7 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/function2.hpp"
 
 #include "include/rados/librados.hpp"
 
@@ -114,34 +115,24 @@ struct RGWDataChangesLogMarker {
   RGWDataChangesLogMarker() = default;
 };
 
+class RGWDataChangesLog;
+
 class RGWDataChangesBE {
 protected:
   librados::IoCtx& ioctx;
   CephContext* const cct;
+  RGWDataChangesLog& datalog;
 private:
-  std::string prefix;
-  static std::string_view get_prefix(CephContext* cct) {
-    std::string_view prefix = cct->_conf->rgw_data_log_obj_prefix;
-    if (prefix.empty()) {
-      prefix = "data_log"sv;
-    }
-    return prefix;
-  }
 public:
   using entries = std::variant<std::list<cls_log_entry>,
 			       std::vector<ceph::buffer::list>>;
 
-  RGWDataChangesBE(librados::IoCtx& ioctx)
+  RGWDataChangesBE(librados::IoCtx& ioctx,
+		   RGWDataChangesLog& datalog)
     : ioctx(ioctx), cct(static_cast<CephContext*>(ioctx.cct())),
-      prefix(get_prefix(cct)) {}
+      datalog(datalog) {}
   virtual ~RGWDataChangesBE() = default;
 
-  static std::string get_oid(CephContext* cct, int i) {
-    return fmt::format("{}.{}", get_prefix(cct), i);
-  }
-  std::string get_oid(int i) {
-    return fmt::format("{}.{}", prefix, i);
-  }
   virtual void prepare(ceph::real_time now,
 		       const std::string& key,
 		       ceph::buffer::list&& entry,
@@ -169,6 +160,11 @@ class RGWDataChangesLog {
   std::unique_ptr<RGWDataChangesBE> be;
 
   const int num_shards;
+  std::string get_prefix() {
+    auto prefix = cct->_conf->rgw_data_log_obj_prefix;
+    return prefix.empty() ? prefix : "data_log"s;
+  }
+  std::string prefix;
 
   ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
   ceph::shared_mutex modified_lock =
