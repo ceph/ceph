@@ -3496,13 +3496,11 @@ int process_pg_map_command(
   if (prefix == "pg dump_json") {
     vector<string> v;
     v.push_back(string("all"));
-    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   } else if (prefix == "pg dump_pools_json") {
     vector<string> v;
     v.push_back(string("pools"));
-    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   } else if (prefix == "pg ls-by-primary") {
