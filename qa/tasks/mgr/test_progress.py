@@ -106,6 +106,14 @@ class TestProgress(MgrTestCase):
 
         return ev
 
+    def _no_events_anywhere(self):
+        """
+        Whether there are any live or completed events
+        """
+        p = self._get_progress()
+        total_events = len(p['events']) + len(p['completed'])
+        return total_events == 0
+
     def _is_quiet(self):
         """
         Whether any progress events are live.
@@ -224,3 +232,49 @@ class TestProgress(MgrTestCase):
         time.sleep(self.EVENT_CREATION_PERIOD)
 
         self.assertEqual(len(self._all_events()), osd_count - pool_size)
+
+    def test_turn_off_module(self):
+        """
+        When the the module is turned off, there should not
+        be any on going events or completed events.
+        Also module should not accept any kind of Remote Event
+        coming in from other module, however, once it is turned
+        back, on creating an event should be working as it is.
+        """
+
+        pool_size = 3
+        self._setup_pool(size=pool_size)
+        self._write_some_data(self.WRITE_PERIOD)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", "off")
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'osd', 'out', '0')
+
+        time.sleep(self.EVENT_CREATION_PERIOD)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'in', '0')
+
+        time.sleep(self.EVENT_CREATION_PERIOD)
+
+        self.assertTrue(self._is_quiet())
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", "on")
+
+        self._write_some_data(self.WRITE_PERIOD)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'osd', 'out', '0')
+
+        # Wait for a progress event to pop up
+        self.wait_until_equal(lambda: len(self._all_events()), 1,
+                              timeout=self.EVENT_CREATION_PERIOD*2)
+
+        ev = self._all_events()[0]
+
+        log.info(json.dumps(ev, indent=1))
+
+        self.wait_until_true(lambda: self._is_complete(ev['id']),
+                             timeout=self.RECOVERY_PERIOD)
+        self.assertTrue(self._is_quiet())
