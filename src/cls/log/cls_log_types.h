@@ -65,6 +65,9 @@ inline bool operator ==(const cls_log_header& lhs, const cls_log_header& rhs) {
   return (lhs.max_marker == rhs.max_marker &&
 	  lhs.max_time == rhs.max_time);
 }
+inline bool operator !=(const cls_log_header& lhs, const cls_log_header& rhs) {
+  return !(lhs == rhs);
+}
 WRITE_CLASS_ENCODER(cls_log_header)
 
 
