@@ -27,6 +27,8 @@
   #include "QatAccel.h"
 #endif
 
+namespace TOPNSPC {
+
 class Compressor;
 typedef std::shared_ptr<Compressor> CompressorRef;
 
@@ -103,4 +105,5 @@ protected:
 
 };
 
+} // namespace TOPNSPC
 #endif
