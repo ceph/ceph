@@ -272,8 +272,18 @@ private:
     record_size_t rsize,
     record_t &&record);
 
-  /// validate metadata
+  /// validate embedded metadata checksum
   static bool validate_metadata(const bufferlist &bl);
+
+  /// read and validate data
+  using read_validate_data_ertr = SegmentManager::read_ertr;
+  using read_validate_data_ret = read_validate_data_ertr::future<bool>;
+  read_validate_data_ret read_validate_data(
+    paddr_t record_base,
+    const record_header_t &header  ///< caller must ensure lifetime through
+                                   ///  future resolution
+  );
+
 
   /// do record write
   using write_record_ertr = crimson::errorator<
@@ -310,14 +320,6 @@ private:
     replay_segments_t>;
   find_replay_segments_fut find_replay_segments();
 
-  /// read record metadata for record starting at start
-  using read_record_metadata_ertr = replay_ertr;
-  using read_record_metadata_ret = read_record_metadata_ertr::future<
-    std::optional<std::pair<record_header_t, bufferlist>>
-    >;
-  read_record_metadata_ret read_record_metadata(
-    paddr_t start);
-
   /// attempts to decode deltas from bl, return nullopt if unsuccessful
   std::optional<std::vector<delta_info_t>> try_decode_deltas(
     record_header_t header,
@@ -327,6 +329,16 @@ private:
   std::optional<std::vector<extent_info_t>> try_decode_extent_infos(
     record_header_t header,
     bufferlist &bl);
+
+  /// read record metadata for record starting at start
+  using read_validate_record_metadata_ertr = replay_ertr;
+  using read_validate_record_metadata_ret =
+    read_validate_record_metadata_ertr::future<
+      std::optional<std::pair<record_header_t, bufferlist>>
+    >;
+  read_validate_record_metadata_ret read_validate_record_metadata(
+    paddr_t start,
+    segment_nonce_t nonce);
 
   /**
    * scan_segment
