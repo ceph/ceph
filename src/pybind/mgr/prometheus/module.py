@@ -199,7 +199,7 @@ class MetricCollectionThread(threading.Thread):
                 duration = time.time() - start_time
 
                 self.mod.log.debug('collecting cache in thread done')
-                
+
                 sleep_time = self.mod.scrape_interval - duration
                 if sleep_time < 0:
                     self.mod.log.warning(
@@ -1151,16 +1151,13 @@ class Module(MgrModule):
                 if service['type'] != 'mgr':
                     continue
                 id_ = service['id']
-                # get port for prometheus module at mgr with id_
-                # TODO use get_config_prefix or get_config here once
-                # https://github.com/ceph/ceph/pull/20458 is merged
                 result = CommandResult("")
                 assert isinstance(_global_instance, Module)
                 _global_instance.send_command(
                     result, "mon", '',
                     json.dumps({
-                        "prefix": "config-key get",
-                        'key': "config/mgr/mgr/prometheus/{}/server_port".format(id_),
+                        "prefix": "config get",
+                        'key': "mgr/prometheus/{}/server_port".format(id_),
                     }),
                     "")
                 r, outb, outs = result.wait()
