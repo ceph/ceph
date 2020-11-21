@@ -11,6 +11,24 @@ documentation:
   - man/**
   - "**/*.+(rst|md)"
 
+mon:
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/monmaptool.rst
+  - doc/mon/**
+  - qa/workunits/mon/**
+  - src/mon/**
+  - src/test/mon/**
+
+mgr:
+  - doc/mgr/**
+  - src/mgr/**
+  - src/pybind/mgr/ceph_module.pyi
+  - src/pybind/mgr/mgr_module.py
+  - src/pybind/mgr/mgr_util.py
+  - src/pybind/mgr/requirements.txt
+  - src/pybind/mgr/tox.ini
+  - src/test/mgr/**
+
 pybind:
   - src/pybind/cephfs/**
   - src/pybind/mgr/**
