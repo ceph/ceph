@@ -37,8 +37,6 @@
 #include "rgw_zone.h"
 #include "rgw_trim_bilog.h"
 
-#include "services/svc_cls.h"
-
 namespace bc = boost::container;
 
 enum DataLogEntityType {
@@ -118,6 +116,7 @@ struct RGWDataChangesLogMarker {
 
 class RGWDataChangesBE {
 protected:
+  librados::IoCtx& ioctx;
   CephContext* const cct;
 private:
   std::string prefix;
@@ -132,8 +131,9 @@ public:
   using entries = std::variant<std::list<cls_log_entry>,
 			       std::vector<ceph::buffer::list>>;
 
-  RGWDataChangesBE(CephContext* const cct)
-    : cct(cct), prefix(get_prefix(cct)) {}
+  RGWDataChangesBE(librados::IoCtx& ioctx)
+    : ioctx(ioctx), cct(static_cast<CephContext*>(ioctx.cct())),
+      prefix(get_prefix(cct)) {}
   virtual ~RGWDataChangesBE() = default;
 
   static std::string get_oid(CephContext* cct, int i) {
@@ -214,7 +214,7 @@ public:
   ~RGWDataChangesLog();
 
   int start(const RGWZone* _zone, const RGWZoneParams& zoneparams,
-	    RGWSI_Cls *cls_svc, librados::Rados* lr);
+	    librados::Rados* lr);
 
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
