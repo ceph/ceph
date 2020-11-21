@@ -366,6 +366,56 @@ private:
     delta_scan_handler_t *delta_handler,
     extent_handler_t *extent_info_handler
   );
+public:
+  /// scan segment for end incrementally
+  struct scan_valid_records_cursor {
+    bool last_valid_header_found = false;
+    paddr_t offset;
+    paddr_t last_committed;
+
+    struct found_record_t {
+      paddr_t offset;
+      record_header_t header;
+      bufferlist mdbuffer;
+
+      found_record_t(
+	paddr_t offset,
+	const record_header_t &header,
+	const bufferlist &mdbuffer)
+	: offset(offset), header(header), mdbuffer(mdbuffer) {}
+    };
+    std::deque<found_record_t> pending_records;
+
+    bool is_complete() const {
+      return last_valid_header_found && pending_records.empty();
+    }
+
+    paddr_t get_offset() const {
+      return offset;
+    }
+
+    scan_valid_records_cursor(
+      paddr_t offset)
+      : offset(offset) {}
+  };
+private:
+
+  using scan_valid_records_ertr = SegmentManager::read_ertr;
+  using scan_valid_records_ret = scan_valid_records_ertr::future<
+    size_t>;
+  using found_record_handler_t = std::function<
+    scan_valid_records_ertr::future<>(
+      paddr_t record_block_base,
+      // callee may assume header and bl will remain valid until
+      // returned future resolves
+      const record_header_t &header,
+      const bufferlist &bl)>;
+  scan_valid_records_ret scan_valid_records(
+    scan_valid_records_cursor &cursor, ///< [in, out] cursor, updated during call
+    segment_nonce_t nonce,             ///< [in] nonce for segment
+    size_t budget,                     ///< [in] max budget to use
+    found_record_handler_t &handler    ///< [in] handler for records
+  ); ///< @return used budget
 
   /// replays records starting at start through end of segment
   replay_ertr::future<>
