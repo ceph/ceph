@@ -37,7 +37,8 @@ const char* Compressor::get_comp_alg_name(int a) {
   return p->first;
 }
 
-boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(const std::string &s) {
+boost::optional<Compressor::CompressionAlgorithm>
+Compressor::get_comp_alg_type(std::string_view s) {
 
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
 		   [&s](const auto& kv) { return kv.first == s; });
@@ -56,7 +57,8 @@ const char *Compressor::get_comp_mode_name(int m) {
     default: return "???";
   }
 }
-boost::optional<Compressor::CompressionMode> Compressor::get_comp_mode_type(const std::string &s) {
+boost::optional<Compressor::CompressionMode>
+Compressor::get_comp_mode_type(std::string_view s) {
   if (s == "force")
     return COMP_FORCE;
   if (s == "aggressive")
