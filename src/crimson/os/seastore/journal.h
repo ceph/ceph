@@ -323,12 +323,12 @@ private:
   /// attempts to decode deltas from bl, return nullopt if unsuccessful
   std::optional<std::vector<delta_info_t>> try_decode_deltas(
     record_header_t header,
-    bufferlist &bl);
+    const bufferlist &bl);
 
   /// attempts to decode extent infos from bl, return nullopt if unsuccessful
   std::optional<std::vector<extent_info_t>> try_decode_extent_infos(
     record_header_t header,
-    bufferlist &bl);
+    const bufferlist &bl);
 
   /// read record metadata for record starting at start
   using read_validate_record_metadata_ertr = replay_ertr;
