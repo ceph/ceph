@@ -404,19 +404,20 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
     });
 }
 
-Journal::read_record_metadata_ret Journal::read_record_metadata(
-  paddr_t start)
+Journal::read_validate_record_metadata_ret Journal::read_validate_record_metadata(
+  paddr_t start,
+  segment_nonce_t nonce)
 {
   if (start.offset + block_size > (int64_t)segment_manager.get_segment_size()) {
-    return read_record_metadata_ret(
-      read_record_metadata_ertr::ready_future_marker{},
+    return read_validate_record_metadata_ret(
+      read_validate_record_metadata_ertr::ready_future_marker{},
       std::nullopt);
   }
   return segment_manager.read(start, block_size
   ).safe_then(
-    [this, start](bufferptr bptr) mutable
-    -> read_record_metadata_ret {
-      logger().debug("read_record_metadata: reading {}", start);
+    [=](bufferptr bptr) mutable
+    -> read_validate_record_metadata_ret {
+      logger().debug("read_validate_record_metadata: reading {}", start);
       bufferlist bl;
       bl.append(bptr);
       auto bp = bl.cbegin();
@@ -424,8 +425,13 @@ Journal::read_record_metadata_ret Journal::read_record_metadata(
       try {
 	decode(header, bp);
       } catch (ceph::buffer::error &e) {
-	return read_record_metadata_ret(
-	  read_record_metadata_ertr::ready_future_marker{},
+	return read_validate_record_metadata_ret(
+	  read_validate_record_metadata_ertr::ready_future_marker{},
+	  std::nullopt);
+      }
+      if (header.segment_nonce != nonce) {
+	return read_validate_record_metadata_ret(
+	  read_validate_record_metadata_ertr::ready_future_marker{},
 	  std::nullopt);
       }
       if (header.mdlength > block_size) {
@@ -439,15 +445,26 @@ Journal::read_record_metadata_ret Journal::read_record_metadata(
 	    [header=std::move(header), bl=std::move(bl)](
 	      auto &&bptail) mutable {
 	      bl.push_back(bptail);
-	      return read_record_metadata_ret(
-		read_record_metadata_ertr::ready_future_marker{},
+	      return read_validate_record_metadata_ret(
+		read_validate_record_metadata_ertr::ready_future_marker{},
 		std::make_pair(std::move(header), std::move(bl)));
 	    });
       } else {
-	  return read_record_metadata_ret(
-	    read_record_metadata_ertr::ready_future_marker{},
-	    std::make_pair(std::move(header), std::move(bl))
-	  );
+	return read_validate_record_metadata_ret(
+	  read_validate_record_metadata_ertr::ready_future_marker{},
+	  std::make_pair(std::move(header), std::move(bl))
+	);
+      }
+    }).safe_then([=](auto p) {
+      if (p && validate_metadata(p->second)) {
+	return read_validate_record_metadata_ret(
+	  read_validate_record_metadata_ertr::ready_future_marker{},
+	  std::move(*p)
+	);
+      } else {
+	return read_validate_record_metadata_ret(
+	  read_validate_record_metadata_ertr::ready_future_marker{},
+	  std::nullopt);
       }
     });
 }
@@ -594,7 +611,7 @@ Journal::scan_segment_ret Journal::scan_segment(
     [=](paddr_t &current) {
       return crimson::do_until(
 	[=, &current]() -> scan_segment_ertr::future<bool> {
-	  return read_record_metadata(current).safe_then
+	  return read_validate_record_metadata(current, nonce).safe_then
 	    ([=, &current](auto p)
 	     -> scan_segment_ertr::future<bool> {
 	      if (!p.has_value()) {
