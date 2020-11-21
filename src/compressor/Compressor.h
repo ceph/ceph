@@ -76,10 +76,10 @@ public:
 #endif
 
   static const char* get_comp_alg_name(int a);
-  static boost::optional<CompressionAlgorithm> get_comp_alg_type(const std::string &s);
+  static boost::optional<CompressionAlgorithm> get_comp_alg_type(std::string_view s);
 
   static const char *get_comp_mode_name(int m);
-  static boost::optional<CompressionMode> get_comp_mode_type(const std::string &s);
+  static boost::optional<CompressionMode> get_comp_mode_type(std::string_view s);
 
   Compressor(CompressionAlgorithm a, const char* t) : alg(a), type(t) {
   }
