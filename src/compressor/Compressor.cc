@@ -24,6 +24,8 @@
 #include "common/debug.h"
 #include "common/dout.h"
 
+namespace TOPNSPC {
+
 const char* Compressor::get_comp_alg_name(int a) {
 
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
@@ -100,3 +102,5 @@ CompressorRef Compressor::create(CephContext *cct, int alg)
   std::string type_name = get_comp_alg_name(alg);
   return create(cct, type_name);
 }
+
+} // namespace TOPNSPC
