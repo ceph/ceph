@@ -7894,7 +7894,7 @@ TEST_P(StoreTest, KVDBHistogramTest) {
   }
 
   std::unique_ptr<Formatter> f(Formatter::create("store_test", "json-pretty", "json-pretty"));
-  store->generate_db_histogram(f);
+  store->generate_db_histogram(f.get());
   f->flush(cout);
   cout << std::endl;
 }
@@ -7938,7 +7938,7 @@ TEST_P(StoreTest, KVDBStatsTest) {
   }
 
   std::unique_ptr<Formatter> f(Formatter::create("store_test", "json-pretty", "json-pretty"));
-  store->get_db_statistics(f);
+  store->get_db_statistics(f.get());
   f->flush(cout);
   cout << std::endl;
 }
@@ -8483,7 +8483,7 @@ TEST_P(StoreTest, BluestoreStatistics) {
     ASSERT_TRUE(bl_eq(bl, readback));
   }
   std::unique_ptr<Formatter> f(Formatter::create("store_test", "json-pretty", "json-pretty"));
-  EXPECT_NO_THROW(store->get_db_statistics(f));
+  EXPECT_NO_THROW(store->get_db_statistics(f.get()));
   f->flush(cout);
   cout << std::endl;
 }
