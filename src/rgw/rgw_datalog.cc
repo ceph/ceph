@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "common/debug.h"
+#include "common/containers.h"
 #include "common/errno.h"
 #include "common/error_code.h"
 
@@ -23,6 +24,8 @@ static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 namespace bs = boost::system;
 namespace lr = librados;
+
+using ceph::containers::tiny_vector;
 
 void rgw_data_change::dump(ceph::Formatter *f) const
 {
@@ -229,27 +232,16 @@ public:
 
 class RGWDataChangesFIFO final : public RGWDataChangesBE {
   using centries = std::vector<ceph::buffer::list>;
-  std::vector<std::unique_ptr<rgw::cls::fifo::FIFO>> fifos;
+  tiny_vector<LazyFIFO> fifos;
 
 public:
   RGWDataChangesFIFO(lr::IoCtx& ioctx,
 		     RGWDataChangesLog& datalog,
 		     uint64_t gen_id, int shards)
-    : RGWDataChangesBE(ioctx, datalog, gen_id) {
-    fifos.resize(shards);
-    for (auto i = 0; i < shards; ++i) {
-      auto  r = rgw::cls::fifo::FIFO::create(ioctx, get_oid(i),
-					     &fifos[i], null_yield);
-      if (r < 0) {
-	throw bs::system_error(ceph::to_error_code(r));
-      }
-    }
-    ceph_assert(fifos.size() == unsigned(shards));
-    ceph_assert(std::none_of(fifos.cbegin(), fifos.cend(),
-			     [](const auto& p) {
-			       return p == nullptr;
-			     }));
-  }
+    : RGWDataChangesBE(ioctx, datalog, gen_id),
+      fifos(shards, [&ioctx, this](std::size_t i, auto emplacer) {
+	emplacer.emplace(ioctx, get_oid(i));
+      }) {}
   ~RGWDataChangesFIFO() override = default;
   void prepare(ceph::real_time, const std::string&,
 	       ceph::buffer::list&& entry, entries& out) override {
@@ -260,7 +252,7 @@ public:
     std::get<centries>(out).push_back(std::move(entry));
   }
   int push(int index, entries&& items) override {
-    auto r = fifos[index]->push(std::get<centries>(items), null_yield);
+    auto r = fifos[index].push(std::get<centries>(items), null_yield);
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << get_oid(index)
@@ -271,7 +263,7 @@ public:
   int push(int index, ceph::real_time,
 	   const std::string&,
 	   ceph::buffer::list&& bl) override {
-    auto r = fifos[index]->push(std::move(bl), null_yield);
+    auto r = fifos[index].push(std::move(bl), null_yield);
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << get_oid(index)
@@ -285,8 +277,8 @@ public:
 	   std::string* out_marker, bool* truncated) override {
     std::vector<rgw::cls::fifo::list_entry> log_entries;
     bool more = false;
-    auto r = fifos[index]->list(max_entries, marker, &log_entries, &more,
-				null_yield);
+    auto r = fifos[index].list(max_entries, marker, &log_entries, &more,
+			       null_yield);
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": unable to list FIFO: " << get_oid(index)
@@ -317,14 +309,15 @@ public:
   }
   int get_info(int index, RGWDataChangesLogInfo *info) override {
     auto& fifo = fifos[index];
-    auto r = fifo->read_meta(null_yield);
+    auto r = fifo.read_meta(null_yield);
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": unable to get FIFO metadata: " << get_oid(index)
 		 << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
-    auto m = fifo->meta();
+    rados::cls::fifo::info m;
+    fifo.meta(m, null_yield);
     auto p = m.head_part_num;
     if (p < 0) {
       info->marker = rgw::cls::fifo::marker{}.to_string();
@@ -332,7 +325,7 @@ public:
       return 0;
     }
     rgw::cls::fifo::part_info h;
-    r = fifo->get_part_info(p, &h, null_yield);
+    r = fifo.get_part_info(p, &h, null_yield);
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": unable to get part info: " << get_oid(index) << "/" << p
@@ -344,7 +337,7 @@ public:
     return 0;
   }
   int trim(int index, std::string_view marker) override {
-    auto r = fifos[index]->trim(marker, false, null_yield);
+    auto r = fifos[index].trim(marker, false, null_yield);
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": unable to trim FIFO: " << get_oid(index)
@@ -358,7 +351,7 @@ public:
     if (marker == rgw::cls::fifo::marker(0, 0).to_string()) {
       rgw_complete_aio_completion(c, -ENODATA);
     } else {
-      fifos[index]->trim(marker, false, c);
+      fifos[index].trim(marker, false, c, null_yield);
     }
     return r;
   }
@@ -371,8 +364,8 @@ public:
     std::vector<rgw::cls::fifo::list_entry> log_entries;
     bool more = false;
     for (auto shard = 0u; shard < fifos.size(); ++shard) {
-      auto r = fifos[shard]->list(1, {}, &log_entries, &more,
-				  null_yield);
+      auto r = fifos[shard].list(1, {}, &log_entries, &more,
+				 null_yield);
       if (r < 0) {
 	lderr(cct) << __PRETTY_FUNCTION__
 		   << ": unable to list FIFO: " << get_oid(shard)
