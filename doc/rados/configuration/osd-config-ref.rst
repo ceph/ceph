@@ -4,34 +4,45 @@
 
 .. index:: OSD; configuration
 
-You can configure Ceph OSD Daemons in the Ceph configuration file, but Ceph OSD
-Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` and ``host``,  and
-uses default values for nearly everything else.
+You can configure Ceph OSD Daemons in the Ceph configuration file, though
+default values are enough for the daemon to run, requiring only an entry
+in `ceph.conf` pointing to your monitor daemons.  When running Mimic and later
+releases, the :ref:`ceph-conf-database` can also be used to simplify management
+of `ceph.conf` across systems.
 
-Ceph OSD Daemons are numerically identified in incremental fashion, beginning
+Ceph OSD Daemons are numerically identified in sequential fashion, beginning
 with ``0`` using the following convention. ::
 
 	osd.0
 	osd.1
 	osd.2
 
-In a configuration file, you may specify settings for all Ceph OSD Daemons in
-the cluster by adding configuration settings to the ``[osd]`` section of your
-configuration file. To add settings directly to a specific Ceph OSD Daemon
-(e.g., ``host``), enter  it in an OSD-specific section of your configuration
-file. For example:
+You may specify settings for all Ceph OSD Daemons present on the local system
+by  adding entries to the ``[osd]`` section of the configuration file. To add
+settings directly to a specific Ceph OSD Daemon (e.g., ``host``), enter them in
+an OSD-specific section of your configuration file. For example to configure
+increased BlueStore memory targets for two specific OSD daemons:
 
 .. code-block:: ini
 
 	[osd]
-		osd journal size = 5120
+		osd_memory_target = 4294967296
 
 	[osd.0]
 		host = osd-host-a
+		osd_memory_target = 5368709120
 
 	[osd.1]
 		host = osd-host-b
+		osd_memory_target = 5368709120
+
+OSD-specific sections are rarely needed, but allow you to distribute a uniform
+configuration file across all systems while accomodating both cluster-wide and
+daemon-specific settings.  Be aware that the OSD IDs found on a given host (and
+thus the drive and host on which a given OSD ID is found) are likely to change
+over time due to drive failures and other cluster topology events.  This is one
+reason why daemon-specific configuration is usually not only unnecessary but
+also potentially incorrect or even dangerous.
 
 
 .. index:: OSD; config settings
@@ -39,33 +50,25 @@ file. For example:
 General Settings
 ================
 
-The following settings provide a Ceph OSD Daemon's ID, and determine paths to
-data and journals. Ceph deployment scripts typically generate the UUID
-automatically.
+The following settings apply to Ceph OSD daemons.
 
 .. warning:: **DO NOT** change the default paths for data or journals, as it
              makes it more problematic to troubleshoot Ceph later.
-
-The journal size should be at least twice the product of the expected drive
-speed multiplied by ``filestore max sync interval``. However, the most common
-practice is to partition the journal drive (often an SSD), and mount it such
-that Ceph uses the entire partition for the journal.
-
 
 ``osd uuid``
 
 :Description: The universally unique identifier (UUID) for the Ceph OSD Daemon.
 :Type: UUID
 :Default: The UUID.
-:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
-       applies to the entire cluster.
-
+:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. Do not confuse this
+        with the similar-looking ``fsid``, which applies to the entire cluster.
+        This value is usually generated automatically by Ceph deployment
+        automation.
 
 ``osd data``
 
-:Description: The path to the OSDs data. You must create the directory when
-              deploying Ceph. You should mount a drive for OSD data at this
-              mount point. We do not recommend changing the default.
+:Description: The path to the OSD's data. We do not recommend changing the
+        default.
 
 :Type: String
 :Default: ``/var/lib/ceph/osd/$cluster-$id``
@@ -73,7 +76,7 @@ that Ceph uses the entire partition for the journal.
 
 ``osd max write size``
 
-:Description: The maximum size of a write in megabytes.
+:Description: The maximum size of a write in MB.
 :Type: 32-bit Integer
 :Default: ``90``
 
@@ -103,7 +106,9 @@ that Ceph uses the entire partition for the journal.
 
 File System Settings
 ====================
-Ceph builds and mounts file systems which are used for Ceph OSDs.
+Ceph builds and mounts file systems which are used for Ceph OSDs that employ
+the older _Filestore_ back end.  These are rarely used when running Luminous
+or later Ceph releases.
 
 ``osd mkfs options {fs-type}``
 
@@ -133,8 +138,9 @@ For example::
 Journal Settings
 ================
 
-By default, Ceph expects that you will store an Ceph OSD Daemons journal with
-the  following path::
+When using the older _Filestore_ back end, each Ceph OSD will maintain a
+_journal_ at the following path.  When using the newer BlueStore back end,
+these settings are not used::
 
 	/var/lib/ceph/osd/$cluster-$id/journal
 
@@ -146,8 +152,9 @@ When using a mix of fast (SSDs, NVMe) devices with slower ones (like spinning
 drives) it makes sense to place the journal on the faster device, while
 ``data`` occupies the slower device fully.
 
-The default ``osd journal size`` value is 5120 (5 gigabytes), but it can be
-larger, in which case it will need to be set in the ``ceph.conf`` file::
+The default ``osd journal size`` value is 5120 (5 GB), but it can be
+larger, in which case it will need to be set in the ``ceph.conf`` file.  A
+one-size-fits-all value of 10 GB was common for Filestore::
 
 
 	osd journal size = 10240
@@ -178,11 +185,11 @@ See `Journal Config Reference`_ for additional details.
 Monitor OSD Interaction
 =======================
 
-Ceph OSD Daemons check each other's heartbeats and report to monitors
-periodically. Ceph can use default values in many cases. However, if your
-network  has latency issues, you may need to adopt longer intervals. See
-`Configuring Monitor/OSD Interaction`_ for a detailed discussion of heartbeats.
-
+Ceph OSD Daemons periodically send each other heartbeat probes and report
+success and failure to the monitors. Ceph does fine with default values in most
+cases. However, if your network has latency issues, you may need to adopt longer
+intervals. See `Configuring Monitor/OSD Interaction`_ for a detailed discussion
+of heartbeats.
 
 Data Placement
 ==============
@@ -196,11 +203,11 @@ Scrubbing
 =========
 
 In addition to making multiple copies of objects, Ceph ensures data integrity by
-scrubbing placement groups. Ceph scrubbing is analogous to ``fsck`` on the
-object storage layer. For each placement group, Ceph generates a catalog of all
-objects and compares each primary object and its replicas to ensure that no
-objects are missing or mismatched. Light scrubbing (daily) checks the object
-size and attributes.  Deep scrubbing (weekly) reads the data and uses checksums
+_scrubbing_ placement groups (PGs). Ceph scrubbing is analogous to ``fsck`` on a
+traditional filesystem. For each PG, Ceph generates a catalog of all RADOS objects
+and compares each primary to its replicas to ensure that none are missing or
+mismatched. Light scrubbing (daily) checks object size and attributes (metadata).
+Deep scrubbing (weekly by default) reads the actual user data and uses checksums
 to ensure data integrity.
 
 Scrubbing is important for maintaining data integrity, but it can reduce
@@ -220,23 +227,26 @@ scrubbing operations.
 
 :Description: This restricts scrubbing to this hour of the day or later.
               Use ``osd scrub begin hour = 0`` and ``osd scrub end hour = 0``
-              to allow scrubbing the entire day.  Along with ``osd scrub end hour``, they define a time
-              window, in which the scrubs can happen.
-              But a scrub will be performed
-              no matter whether the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd scrub max interval``.
-:Type: Integer in the range of 0 to 23
+              to allow scrubbing the entire day.  Along with
+              ``osd scrub end hour``, this delimits a time window in which
+	      scrubs can start. Note that in cases where the PG's
+              last scrub was longer ago than the current time minus the
+              ``osd scrub max interval``, a scrub will be performed
+              whether the time window allows or not. 
+:Type: Integer in the range; of 0 to 23
 :Default: ``0``
 
 
 ``osd scrub end hour``
 
-:Description: This restricts scrubbing to the hour earlier than this.
-              Use ``osd scrub begin hour = 0`` and ``osd scrub end hour = 0`` to allow scrubbing
-              for the entire day.  Along with ``osd scrub begin hour``, they define a time
-              window, in which the scrubs can happen. But a scrub will be performed
-              no matter whether the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd scrub max interval``.
+:Description: This restricts scrubbing to hours earlier than the configured value.
+              Use ``osd scrub begin hour = 0`` and ``osd scrub end hour = 0`` to
+              allow scrubbing throughout the entire day.  Along with
+              ``osd scrub begin hour``, this delimits a time window in which
+              scrubs can start. Note that in cases where the PG's last scrub
+              was longer ago then the current time minus the
+              ``osd scrub max interval``, a scrub will be performed
+              whether the time window allows or not.
 :Type: Integer in the range of 0 to 23
 :Default: ``0``
 
@@ -245,11 +255,14 @@ scrubbing operations.
 
 :Description: This restricts scrubbing to this day of the week or later.
               0  = Sunday, 1 = Monday, etc. Use ``osd scrub begin week day = 0``
-              and ``osd scrub end week day = 0`` to allow scrubbing for the entire week.
-              Along with ``osd scrub end week day``, they define a time window, in which
-              the scrubs can happen. But a scrub will be performed
-              no matter whether the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd scrub max interval``.
+              and ``osd scrub end week day = 0`` to allow scrubbing throughout
+              the entire week.
+              Along with ``osd scrub end week day``, this delimits time windows in which
+              scrubs can start. Note that in cases where the PG's last scrub
+              was longer ago then the current time minus the
+              ``osd scrub max interval``, a scrub will be performed
+              whether the time window allows or not.
+
 :Type: Integer in the range of 0 to 6
 :Default: ``0``
 
@@ -258,21 +271,24 @@ scrubbing operations.
 
 :Description: This restricts scrubbing to days of the week earlier than this.
               0 = Sunday, 1 = Monday, etc.  Use ``osd scrub begin week day = 0``
-              and ``osd scrub end week day = 0`` to allow scrubbing for the entire week.
-              Along with ``osd scrub begin week day``, they define a time
-              window, in which the scrubs can happen. But a scrub will be performed
-              no matter whether the time window allows or not, as long as the placement
-              group's scrub interval exceeds ``osd scrub max interval``.
+              and ``osd scrub end week day = 0`` to allow scrubbing throughout the week.
+              Along with ``osd scrub begin week day``, this delimits time
+              windows in which scrubs can start. Note that in cases where the PG's last scrub
+              was longer ago then the current time minus the
+              ``osd scrub max interval``, a scrub will be performed
+              whether the time window allows or not.
+
 :Type: Integer in the range of 0 to 6
 :Default: ``0``
 
 
 ``osd scrub during recovery``
 
-:Description: Allow scrub during recovery. Setting this to ``false`` will disable
-              scheduling new scrub (and deep--scrub) while there is active recovery.
-              Already running scrubs will be continued. This might be useful to reduce
-              load on busy clusters.
+:Description: Allow scrubbing during recovery. Setting this to ``false`` will disable
+              scheduling new scrubs (and deep--scrubs) while there is active recovery.
+              Already running scrubs will be continued. This can be useful to reduce
+              load on busy clusters during recovery or balancing operations, especially
+              when OSDs are on HDDs.
 :Type: Boolean
 :Default: ``false``
 
@@ -305,7 +321,7 @@ scrubbing operations.
 
 ``osd scrub min interval``
 
-:Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
+:Description: The minimal interval in seconds for scrubbing Ceph OSDs
               when the Ceph Storage Cluster load is low.
 
 :Type: Float
@@ -314,7 +330,7 @@ scrubbing operations.
 
 ``osd scrub max interval``
 
-:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
+:Description: The maximum interval in seconds for scrubbing Ceph OSDs
               irrespective of cluster load.
 
 :Type: Float
@@ -340,8 +356,9 @@ scrubbing operations.
 
 ``osd scrub sleep``
 
-:Description: Time to sleep before scrubbing next group of chunks. Increasing this value will slow
-              down whole scrub operation while client operations will be less impacted.
+:Description: Time to sleep before scrubbing the next group of chunks. Increasing
+              this value will space out scrub operations to reduce contention with
+              client operations.
 
 :Type: Float
 :Default: 0
@@ -351,6 +368,9 @@ scrubbing operations.
 
 :Description: The interval for "deep" scrubbing (fully reading all data). The
               ``osd scrub load threshold`` does not affect this setting.
+              Clusters running HDD OSDs may benefit from an increased value
+              to reduce contention with client operations, at the expense of
+              less frequent checks of data integrity.
 
 :Type: Float
 :Default: Once per week.  ``7*24*60*60``
