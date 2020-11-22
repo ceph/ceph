@@ -32,6 +32,8 @@
 namespace bc = boost::container;
 namespace bs = boost::system;
 
+#include "cls_fifo_legacy.h"
+
 /// Type of log backing, stored in the mark used in the quick check,
 /// and passed to checking functions.
 enum class log_type {
@@ -254,5 +256,138 @@ cursorgeno(std::optional<std::string_view> cursor) {
     return { 0, ""s };
   }
 }
+
+class LazyFIFO {
+  librados::IoCtx& ioctx;
+  std::string oid;
+  std::mutex m;
+  std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
+
+  int lazy_init(optional_yield y) {
+    std::unique_lock l(m);
+    if (fifo) return 0;
+    auto r = rgw::cls::fifo::FIFO::create(ioctx, oid, &fifo, y);
+    if (r) {
+      fifo.reset();
+    }
+    return r;
+  }
+
+public:
+
+  LazyFIFO(librados::IoCtx& ioctx, std::string oid)
+    : ioctx(ioctx), oid(std::move(oid)) {}
+
+  int read_meta(optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    return fifo->read_meta(y);
+  }
+
+  int meta(rados::cls::fifo::info& info, optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    info = fifo->meta();
+    return 0;
+  }
+
+  int get_part_layout_info(std::uint32_t& part_header_size,
+			   std::uint32_t& part_entry_overhead,
+			   optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    std::tie(part_header_size, part_entry_overhead)
+      = fifo->get_part_layout_info();
+    return 0;
+  }
+
+  int push(const ceph::buffer::list& bl,
+	   optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    return fifo->push(bl, y);
+  }
+
+  int push(ceph::buffer::list& bl,
+	   librados::AioCompletion* c,
+	   optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    fifo->push(bl, c);
+    return 0;
+  }
+
+  int push(const std::vector<ceph::buffer::list>& data_bufs,
+	   optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    return fifo->push(data_bufs, y);
+  }
+
+  int push(const std::vector<ceph::buffer::list>& data_bufs,
+	    librados::AioCompletion* c,
+	    optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    fifo->push(data_bufs, c);
+    return 0;
+  }
+
+  int list(int max_entries, std::optional<std::string_view> markstr,
+	   std::vector<rgw::cls::fifo::list_entry>* out,
+	   bool* more, optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    return fifo->list(max_entries, markstr, out, more, y);
+  }
+
+  int list(int max_entries, std::optional<std::string_view> markstr,
+	   std::vector<rgw::cls::fifo::list_entry>* out, bool* more,
+	   librados::AioCompletion* c, optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    fifo->list(max_entries, markstr, out, more, c);
+    return 0;
+  }
+
+  int trim(std::string_view markstr, bool exclusive, optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    return fifo->trim(markstr, exclusive, y);
+  }
+
+  int trim(std::string_view markstr, bool exclusive, librados::AioCompletion* c,
+	   optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    fifo->trim(markstr, exclusive, c);
+    return 0;
+  }
+
+  int get_part_info(int64_t part_num, rados::cls::fifo::part_header* header,
+		    optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    return fifo->get_part_info(part_num, header, y);
+  }
+
+  int get_part_info(int64_t part_num, rados::cls::fifo::part_header* header,
+		    librados::AioCompletion* c, optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    fifo->get_part_info(part_num, header, c);
+    return 0;
+  }
+
+  int get_head_info(fu2::unique_function<
+		      void(int r, rados::cls::fifo::part_header&&)>&& f,
+		    librados::AioCompletion* c,
+		    optional_yield y) {
+    auto r = lazy_init(y);
+    if (r < 0) return r;
+    fifo->get_head_info(std::move(f), c);
+    return 0;
+  }
+};
 
 #endif
