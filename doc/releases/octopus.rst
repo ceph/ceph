@@ -5,7 +5,6 @@ This is the fifth release of the Ceph Octopus stable release series. This
 release brings a range of fixes across all components. We recommend that all
 Octopus users upgrade to this release.
 
-
 Notable Changes
 ---------------
 
@@ -882,7 +881,7 @@ Upgrade compatibility notes
 * The RGW "num_rados_handles" has been removed.
   If you were using a value of "num_rados_handles" greater than 1
   multiply your current "objecter_inflight_ops" and
-  "objecter_inflight_op_bytes" paramaeters by the old
+  "objecter_inflight_op_bytes" parameters by the old
   "num_rados_handles" to get the same throttle behavior.
 
 * Ceph now packages python bindings for python3.6 instead of
