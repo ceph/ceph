@@ -351,3 +351,6 @@ target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
 
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
+
+add_executable(unittest_dynarray test_dynarray.cc)
+add_ceph_unittest(unittest_dynarray)
