@@ -3264,6 +3264,8 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     if (op_ret)
     set_req_state_err(s, op_ret);
     dump_errno(s);
+    dump_header_if_nonempty(s, "x-amz-version-id", dest_object->get_instance());
+    dump_header_if_nonempty(s, "x-amz-copy-source-version-id", src_object->get_instance());
 
     // Explicitly use chunked transfer encoding so that we can stream the result
     // to the user without having to wait for the full length of it.
