@@ -139,8 +139,13 @@ SIProvider::Entry SIProvider_BucketFull::create_entry(rgw_bucket_dir_entry& be) 
   log_entry.object = be.key.name;
   log_entry.instance = be.key.instance;
   log_entry.timestamp = be.meta.mtime;
-  if (be.ver.pool < 0) {
-    log_entry.versioned_epoch = be.ver.epoch;
+
+  if (be.versioned_epoch > 0) {
+    log_entry.versioned_epoch = be.versioned_epoch;
+
+    if (be.key.instance.empty()) {
+      log_entry.instance = "null";
+    }
   }
 
   if (!be.is_delete_marker()) {
@@ -256,6 +261,11 @@ SIProvider::Entry SIProvider_BucketInc::create_entry(rgw_bi_log_entry& be) const
   log_entry.timestamp = be.timestamp;
   if (be.ver.pool < 0) {
     log_entry.versioned_epoch = be.ver.epoch;
+  }
+
+  if (be.is_versioned() &&
+      log_entry.instance.empty()) {
+    log_entry.instance = "null";
   }
 
   log_entry.op = siprovider_bucket_entry_info::Info::to_sip_op(be.op);
