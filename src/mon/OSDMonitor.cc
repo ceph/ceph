@@ -896,6 +896,12 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
         osd_epochs.erase(osd_state.first);
       }
     }
+    for (const auto [osd, weight] : inc.new_weight) {
+      if (weight == CEPH_OSD_OUT) {
+        // manually marked out, so drop it
+        osd_epochs.erase(osd);
+      }
+    }
   }
 
   if (t) {
