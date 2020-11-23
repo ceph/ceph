@@ -428,28 +428,10 @@ public:
     return c;
   }
   static void complete(Ptr&& p, int r) {
-    auto c = p->_super->pc;
+    auto c = p->_super;
     p->_super = nullptr;
-    c->lock.lock();
-    c->rval = r;
-    c->complete = true;
-    c->lock.unlock();
-
-    auto cb_complete = c->callback_complete;
-    auto cb_complete_arg = c->callback_complete_arg;
-    if (cb_complete)
-      cb_complete(c, cb_complete_arg);
-
-    auto cb_safe = c->callback_safe;
-    auto cb_safe_arg = c->callback_safe_arg;
-    if (cb_safe)
-      cb_safe(c, cb_safe_arg);
-
-    c->lock.lock();
-    c->callback_complete = nullptr;
-    c->callback_safe = nullptr;
-    c->cond.notify_all();
-    c->put_unlock();
+    c->pc->put();
+    rgw_complete_aio_completion(c, r);
   }
 
   static void cb(lr::completion_t, void* arg) {

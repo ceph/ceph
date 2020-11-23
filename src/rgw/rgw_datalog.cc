@@ -333,27 +333,7 @@ public:
 	   librados::AioCompletion* c) override {
     int r = 0;
     if (marker == rgw::cls::fifo::marker(0, 0).to_string()) {
-      auto pc = c->pc;
-      pc->get();
-      pc->lock.lock();
-      pc->rval = 0;
-      pc->complete = true;
-      pc->lock.unlock();
-      auto cb_complete = pc->callback_complete;
-      auto cb_complete_arg = pc->callback_complete_arg;
-      if (cb_complete)
-	cb_complete(pc, cb_complete_arg);
-
-      auto cb_safe = pc->callback_safe;
-      auto cb_safe_arg = pc->callback_safe_arg;
-      if (cb_safe)
-	cb_safe(pc, cb_safe_arg);
-
-      pc->lock.lock();
-      pc->callback_complete = NULL;
-      pc->callback_safe = NULL;
-      pc->cond.notify_all();
-      pc->put_unlock();
+      rgw_complete_aio_completion(c, 0);
     } else {
       fifos[index]->trim(marker, false, c);
     }
