@@ -157,16 +157,15 @@ class Prepare(object):
             lv = None
 
         if lv:
-            uuid = lv.lv_uuid
+            lv_uuid = lv.lv_uuid
             path = lv.lv_path
-            tags['ceph.%s_uuid' % device_type] = uuid
+            tags['ceph.%s_uuid' % device_type] = lv_uuid
             tags['ceph.%s_device' % device_type] = path
             lv.set_tags(tags)
         elif disk.is_device(device_name):
             # We got a disk, create an lv
             lv_type = "osd-{}".format(device_type)
-            uuid = system.generate_uuid()
-            tags['ceph.{}_uuid'.format(device_type)] = uuid
+            name_uuid = system.generate_uuid()
             kwargs = {
                 'device': device_name,
                 'tags': tags,
@@ -178,18 +177,21 @@ class Prepare(object):
                 kwargs['size'] = size
             lv = api.create_lv(
                 lv_type,
-                uuid,
+                name_uuid,
                 **kwargs)
             path = lv.lv_path
             tags['ceph.{}_device'.format(device_type)] = path
+            tags['ceph.{}_uuid'.format(device_type)] = lv.lv_uuid
+            lv_uuid = lv.lv_uuid
             lv.set_tags(tags)
         else:
             # otherwise assume this is a regular disk partition
-            uuid = self.get_ptuuid(device_name)
+            name_uuid = self.get_ptuuid(device_name)
             path = device_name
-            tags['ceph.%s_uuid' % device_type] = uuid
+            tags['ceph.%s_uuid' % device_type] = name_uuid
             tags['ceph.%s_device' % device_type] = path
-        return path, uuid, tags
+            lv_uuid = name_uuid
+        return path, lv_uuid, tags
 
     def prepare_data_device(self, device_type, osd_uuid):
         """
