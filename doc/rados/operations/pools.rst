@@ -276,21 +276,21 @@ You may set values for the following keys:
 
 ``compression_algorithm``
 
-:Description: Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression algorithm``.
+:Description: Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the `global setting <https://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#inline-compression>`__ of ``bluestore compression algorithm``.
 
 :Type: String
 :Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
 
 ``compression_mode``
 
-:Description: Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression mode``.
+:Description: Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#inline-compression>`__ of ``bluestore compression mode``.
 
 :Type: String
 :Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
 
 ``compression_min_blob_size``
 
-:Description: Chunks smaller than this are never compressed. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression min blob *``.
+:Description: Chunks smaller than this are never compressed. This setting overrides the `global setting <http://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#inline-compression>`__ of ``bluestore compression min blob *``.
 
 :Type: Unsigned Integer
 
@@ -837,4 +837,3 @@ a size of 3).
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
 .. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites
 .. _Block Device Commands: ../../../rbd/rados-rbd-cmds/#create-a-block-device-pool
-
