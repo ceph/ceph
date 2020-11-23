@@ -199,7 +199,6 @@ public:
     rev_obs_map_t rev_obs;
     if (config.finalize_reexpand_meta(values, obs_mgr)) {
       _gather_changes(values.changed, &rev_obs, nullptr);
-      values.changed.clear();
     }
 
     call_observers(locker, rev_obs);
@@ -256,7 +255,6 @@ public:
     if (!values.cluster.empty()) {
       // meta expands could have modified anything.  Copy it all out again.
       _gather_changes(values.changed, &rev_obs, oss);
-      values.changed.clear();
     }
 
     call_observers(locker, rev_obs);
@@ -268,6 +266,7 @@ public:
       [this, rev_obs](md_config_obs_t *obs, const std::string &key) {
         map_observer_changes(obs, key, rev_obs);
       }, oss);
+      changes.clear();
   }
   int set_val(const std::string_view key, const std::string& s,
               std::stringstream* err_ss=nullptr) {
@@ -290,7 +289,6 @@ public:
 
     rev_obs_map_t rev_obs;
     _gather_changes(values.changed, &rev_obs, nullptr);
-    values.changed.clear();
 
     call_observers(locker, rev_obs);
     return ret;
@@ -301,7 +299,6 @@ public:
 
     rev_obs_map_t rev_obs;
     _gather_changes(values.changed, &rev_obs, oss);
-    values.changed.clear();
 
     call_observers(locker, rev_obs);
     return ret;
