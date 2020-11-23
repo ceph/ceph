@@ -193,6 +193,15 @@ if(WITH_BLUESTORE)
   endif()
 endif()
 
+# libcryptsetup is only available on linux
+if(WITH_RBD AND LINUX)
+  find_package(libcryptsetup REQUIRED)
+  set(HAVE_LIBCRYPTSETUP ${LIBCRYPTSETUP_FOUND})
+  if(${LIBCRYPTSETUP_VERSION} VERSION_LESS 2.0.5)
+    set(LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT TRUE)
+  endif()
+endif()
+
 include(CMakeDependentOption)
 
 CMAKE_DEPENDENT_OPTION(WITH_ZBD "Enable libzbd bluestore backend" OFF
