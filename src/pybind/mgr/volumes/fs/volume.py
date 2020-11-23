@@ -241,6 +241,22 @@ class VolumeClient(object):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def authorized_list(self, **kwargs):
+        ret = 0, "", ""
+        volname     = kwargs['vol_name']
+        subvolname  = kwargs['sub_name']
+        groupname   = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.ALLOW_ACCESS) as subvolume:
+                        auths = subvolume.authorized_list()
+                        ret = 0, json.dumps(auths, indent=4, sort_keys=True), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     def resize_subvolume(self, **kwargs):
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
