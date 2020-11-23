@@ -478,6 +478,7 @@ class RGWObject {
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
 
     RGWAttrs& get_attrs(void) { return attrs; }
+    const RGWAttrs& get_attrs(void) const { return attrs; }
     ceph::real_time get_mtime(void) const { return mtime; }
     uint64_t get_obj_size(void) const { return obj_size; }
     RGWBucket* get_bucket(void) const { return bucket; }

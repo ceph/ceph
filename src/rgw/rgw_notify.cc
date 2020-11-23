@@ -597,9 +597,59 @@ int remove_persistent_topic(const std::string& topic_name, optional_yield y) {
   return s_manager->remove_persistent_topic(topic_name, y);
 }
 
+rgw::sal::RGWObject* get_object_with_atttributes(const req_state* s, rgw::sal::RGWObject* obj) {
+  // in case of copy obj, the tags and metadata are taken from source
+  const auto src_obj = s->src_object ? s->src_object.get() : obj;
+  if (src_obj->get_attrs().empty()) {
+    if (!src_obj->get_bucket()) {
+      src_obj->set_bucket(s->bucket.get());
+    }
+    if (src_obj->get_obj_attrs(s->obj_ctx, s->yield) < 0) {
+      return nullptr;
+    }
+  }
+  return src_obj;
+}
+
+void metadata_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& metadata) {
+  const auto src_obj = get_object_with_atttributes(s, obj);
+  if (!src_obj) {
+    return;
+  }
+  for (auto& attr : src_obj->get_attrs()) {
+    if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
+      std::string_view key(attr.first);
+      key.remove_prefix(sizeof(RGW_ATTR_PREFIX)-1);
+      // we want to pass a null terminated version
+      // of the bufferlist, hence "to_str().c_str()"
+      metadata.emplace(key, attr.second.to_str().c_str());
+    }
+  }
+}
+
+void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& tags) {
+  const auto src_obj = get_object_with_atttributes(s, obj);
+  if (!src_obj) {
+    return;
+  }
+  const auto& attrs = src_obj->get_attrs();
+  const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
+  if (attr_iter != attrs.end()) {
+    auto bliter = attr_iter->second.cbegin();
+    RGWObjTags obj_tags;
+    try {
+      ::decode(obj_tags, bliter);
+    } catch(buffer::error&) {
+      // not able to decode tags
+      return;
+    }
+    tags = std::move(obj_tags.get_tags());
+  }
+}
+
 // populate record from request
 void populate_record_from_request(const req_state *s, 
-        const rgw::sal::RGWObject* obj,
+        rgw::sal::RGWObject* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
@@ -625,30 +675,76 @@ void populate_record_from_request(const req_state *s,
   set_event_id(record.id, etag, ts);
   record.bucket_id = s->bucket->get_bucket_id();
   // pass meta data
-  record.x_meta_map = s->info.x_meta_map;
+  if (s->info.x_meta_map.empty()) {
+    // try to fetch the metadata from the attributes
+    metadata_from_attributes(s, obj, record.x_meta_map);
+  } else {
+    record.x_meta_map = s->info.x_meta_map;
+  }
   // pass tags
-  record.tags = s->tagset.get_tags();
+  if (s->tagset.get_tags().empty()) {
+    // try to fetch the tags from the attributes
+    tags_from_attributes(s, obj, record.tags);
+  } else {
+    record.tags = s->tagset.get_tags();
+  }
   // opaque data will be filled from topic configuration
 }
 
-bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, const rgw::sal::RGWObject* obj, EventType event) {
+bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::RGWObject* obj, 
+    EventType event, const RGWObjTags* req_tags) {
   if (!::match(filter.events, event)) { 
     return false;
   }
   if (!::match(filter.s3_filter.key_filter, obj->get_name())) {
     return false;
   }
-  if (!::match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
-    return false;
+
+  if (!filter.s3_filter.metadata_filter.kv.empty()) {
+    // metadata filter exists
+    if (!s->info.x_meta_map.empty()) {
+      // metadata was cached in req_state
+      if (!::match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
+        return false;
+      }
+    } else {
+      // try to fetch the metadata from the attributes
+      KeyValueMap metadata;
+      metadata_from_attributes(s, obj, metadata);
+      if (!::match(filter.s3_filter.metadata_filter, metadata)) {
+        return false;
+      }
+    }
   }
-  if (!::match(filter.s3_filter.tag_filter, s->tagset.get_tags())) {
-    return false;
+
+  if (!filter.s3_filter.tag_filter.kv.empty()) {
+    // tag filter exists
+    if (req_tags) {
+      // tags in the request
+      if (!::match(filter.s3_filter.tag_filter, req_tags->get_tags())) {
+        return false;
+      }
+    } else if (!s->tagset.get_tags().empty()) { 
+      // tags were cached in req_state
+      if (!::match(filter.s3_filter.tag_filter, s->tagset.get_tags())) {
+        return false;
+      }
+    } else {
+      // try to fetch tags from the attributes
+      KeyValueMap tags;
+      tags_from_attributes(s, obj, tags);
+      if (!::match(filter.s3_filter.tag_filter, tags)) {
+        return false;
+      }
+    }
   }
+
   return true;
 }
 
 int publish_reserve(EventType event_type,
-      reservation_t& res) 
+      reservation_t& res,
+      const RGWObjTags* req_tags)
 {
   RGWPubSub ps(res.store, res.s->user->get_id().tenant);
   RGWPubSub::Bucket ps_bucket(&ps, res.s->bucket->get_key());
@@ -661,7 +757,7 @@ int publish_reserve(EventType event_type,
   for (const auto& bucket_topic : bucket_topics.topics) {
     const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
     const rgw_pubsub_topic& topic_cfg = topic_filter.topic;
-    if (!match(topic_filter, res.s, res.object, event_type)) {
+    if (!match(topic_filter, res.s, res.object, event_type, req_tags)) {
       // topic does not apply to req_state
       continue;
     }
@@ -700,7 +796,7 @@ int publish_reserve(EventType event_type,
   return 0;
 }
 
-int publish_commit(const rgw::sal::RGWObject* obj,
+int publish_commit(rgw::sal::RGWObject* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 

@@ -77,7 +77,7 @@ bool rgw_s3_key_filter::has_content() const {
 }
 
 bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
-  kvl.clear();
+  kv.clear();
   XMLObjIter iter = obj->find("FilterRule");
   XMLObj *o;
 
@@ -89,13 +89,13 @@ bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
   while ((o = iter.get_next())) {
     RGWXMLDecoder::decode_xml("Name", key, o, throw_if_missing);
     RGWXMLDecoder::decode_xml("Value", value, o, throw_if_missing);
-    kvl.emplace(key, value);
+    kv.emplace(key, value);
   }
   return true;
 }
 
 void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
-  for (const auto& key_value : kvl) {
+  for (const auto& key_value : kv) {
     f->open_object_section("FilterRule");
     ::encode_xml("Name", key_value.first, f);
     ::encode_xml("Value", key_value.second, f);
@@ -104,7 +104,7 @@ void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
 }
 
 bool rgw_s3_key_value_filter::has_content() const {
-    return !kvl.empty();
+    return !kv.empty();
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
@@ -166,10 +166,10 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   return true;
 }
 
-bool match(const rgw_s3_key_value_filter& filter, const KeyValueList& kvl) {
+bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv) {
   // all filter pairs must exist with the same value in the object's metadata/tags
   // object metadata/tags may include items not in the filter
-  return std::includes(kvl.begin(), kvl.end(), filter.kvl.begin(), filter.kvl.end());
+  return std::includes(kv.begin(), kv.end(), filter.kv.begin(), filter.kv.end());
 }
 
 bool match(const rgw::notify::EventTypeList& events, rgw::notify::EventType event) {

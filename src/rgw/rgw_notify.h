@@ -56,9 +56,9 @@ struct reservation_t {
   rgw::sal::RGWRadosStore* const store;
   const req_state* const s;
   size_t size;
-  const rgw::sal::RGWObject* const object;
+  rgw::sal::RGWObject* const object;
 
-  reservation_t(rgw::sal::RGWRadosStore* _store, const req_state* _s, const rgw::sal::RGWObject* _object) : 
+  reservation_t(rgw::sal::RGWRadosStore* _store, const req_state* _s, rgw::sal::RGWObject* _object) : 
       store(_store), s(_s), object(_object) {}
 
   // dtor doing resource leak guarding
@@ -68,10 +68,11 @@ struct reservation_t {
 
 // create a reservation on the 2-phase-commit queue
 int publish_reserve(EventType event_type,
-        reservation_t& reservation);
+        reservation_t& reservation,
+        const RGWObjTags* req_tags);
 
 // commit the reservation to the queue
-int publish_commit(const rgw::sal::RGWObject* obj,
+int publish_commit(rgw::sal::RGWObject* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
