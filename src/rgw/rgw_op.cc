@@ -6359,7 +6359,7 @@ void RGWGetHealthCheck::execute(optional_yield y)
 
 int RGWDeleteMultiObj::verify_permission(optional_yield y)
 {
-  int op_ret = get_params();
+  int op_ret = get_params(y);
   if (op_ret) {
     return op_ret;
   }
