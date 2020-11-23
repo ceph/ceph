@@ -117,7 +117,7 @@ class TestPrepare(object):
             assert expected in str(error.value)
 
     def test_setup_device_device_name_is_none(self):
-        result = lvm.prepare.Prepare.setup_device(self=None, device_type='data', device_name=None, tags={'ceph.type': 'data'}, size=0, slots=None)
+        result = lvm.prepare.Prepare([]).setup_device(device_type='data', device_name=None, tags={'ceph.type': 'data'}, size=0, slots=None)
         assert result == ('', '', {'ceph.type': 'data'})
 
     @patch('ceph_volume.api.lvm.Volume.set_tags')
