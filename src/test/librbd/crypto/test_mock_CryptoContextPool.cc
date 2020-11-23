@@ -14,7 +14,7 @@ using ::testing::Return;
 namespace librbd {
 namespace crypto {
 
-struct TestMockCryptoContextPool : public ::testing::Test {
+struct TestMockCryptoCryptoContextPool : public ::testing::Test {
     MockDataCryptor cryptor;
 
     void expect_get_context(CipherMode mode) {
@@ -28,7 +28,7 @@ struct TestMockCryptoContextPool : public ::testing::Test {
     }
 };
 
-TEST_F(TestMockCryptoContextPool, Test) {
+TEST_F(TestMockCryptoCryptoContextPool, Test) {
   CryptoContextPool<MockCryptoContext> pool(&cryptor, 1);
 
   expect_get_context(CipherMode::CIPHER_MODE_ENC);

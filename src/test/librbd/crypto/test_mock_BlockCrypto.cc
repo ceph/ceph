@@ -21,7 +21,7 @@ MATCHER_P(CompareArrayToString, s, "") {
   return (memcmp(arg, s.c_str(), s.length()) == 0);
 }
 
-struct TestMockBlockCrypto : public TestFixture {
+struct TestMockCryptoBlockCrypto : public TestFixture {
     MockDataCryptor cryptor;
     ceph::ref_t<BlockCrypto<MockCryptoContext>> bc;
     int cryptor_block_size = 2;
@@ -73,7 +73,7 @@ struct TestMockBlockCrypto : public TestFixture {
     }
 };
 
-TEST_F(TestMockBlockCrypto, Encrypt) {
+TEST_F(TestMockCryptoBlockCrypto, Encrypt) {
   uint32_t image_offset = 0x1234 * block_size;
 
   ceph::bufferlist data1;
@@ -104,19 +104,19 @@ TEST_F(TestMockBlockCrypto, Encrypt) {
   ASSERT_TRUE(data.is_aligned(block_size));
 }
 
-TEST_F(TestMockBlockCrypto, UnalignedImageOffset) {
+TEST_F(TestMockCryptoBlockCrypto, UnalignedImageOffset) {
   ceph::bufferlist data;
   data.append("1234");
   ASSERT_EQ(-EINVAL, bc->encrypt(&data, 2));
 }
 
-TEST_F(TestMockBlockCrypto, UnalignedDataLength) {
+TEST_F(TestMockCryptoBlockCrypto, UnalignedDataLength) {
   ceph::bufferlist data;
   data.append("123");
   ASSERT_EQ(-EINVAL, bc->encrypt(&data, 0));
 }
 
-TEST_F(TestMockBlockCrypto, GetContextError) {
+TEST_F(TestMockCryptoBlockCrypto, GetContextError) {
   ceph::bufferlist data;
   data.append("1234");
   EXPECT_CALL(cryptor, get_context(CipherMode::CIPHER_MODE_ENC)).WillOnce(
@@ -124,7 +124,7 @@ TEST_F(TestMockBlockCrypto, GetContextError) {
   ASSERT_EQ(-EIO, bc->encrypt(&data, 0));
 }
 
-TEST_F(TestMockBlockCrypto, InitContextError) {
+TEST_F(TestMockCryptoBlockCrypto, InitContextError) {
   ceph::bufferlist data;
   data.append("1234");
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
@@ -132,7 +132,7 @@ TEST_F(TestMockBlockCrypto, InitContextError) {
   ASSERT_EQ(-123, bc->encrypt(&data, 0));
 }
 
-TEST_F(TestMockBlockCrypto, UpdateContextError) {
+TEST_F(TestMockCryptoBlockCrypto, UpdateContextError) {
   ceph::bufferlist data;
   data.append("1234");
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
