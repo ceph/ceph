@@ -213,12 +213,13 @@ class VolumeClient(object):
         authid      = kwargs['auth_id']
         groupname   = kwargs['group_name']
         accesslevel = kwargs['access_level']
+        tenant_id   = kwargs['tenant_id']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.ALLOW_ACCESS) as subvolume:
-                        key = subvolume.authorize(authid, accesslevel)
+                        key = subvolume.authorize(authid, accesslevel, tenant_id)
                         ret = 0, key, ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
