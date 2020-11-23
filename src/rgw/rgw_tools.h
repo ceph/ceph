@@ -253,4 +253,9 @@ public:
 
 using RGWDataAccessRef = std::shared_ptr<RGWDataAccess>;
 
+/// Complete an AioCompletion. To return error values or otherwise
+/// satisfy the caller. Useful for making complicated asynchronous
+/// calls and error handling.
+void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
+
 #endif
