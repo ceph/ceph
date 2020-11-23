@@ -121,7 +121,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=sub_name,type=CephString '
                    'name=auth_id,type=CephString '
                    'name=group_name,type=CephString,req=false '
-                   'name=access_level,type=CephString,req=false ',
+                   'name=access_level,type=CephString,req=false '
+                   'name=tenant_id,type=CephString,req=false ',
             'desc': "Allow a cephx auth ID access to a subvolume",
             'perm': 'rw'
         },
@@ -422,7 +423,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            sub_name=cmd['sub_name'],
                                            auth_id=cmd['auth_id'],
                                            group_name=cmd.get('group_name', None),
-                                           access_level=cmd.get('access_level', 'rw'))
+                                           access_level=cmd.get('access_level', 'rw'),
+                                           tenant_id=cmd.get('tenant_id', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_deauthorize(self, inbuf, cmd):
