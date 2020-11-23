@@ -222,6 +222,19 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   return 0;
 }
 
+static void remove_urgent_data_before(ceph::real_time t,
+                                      std::unordered_map<string, ceph::real_time>& m)
+{
+  auto i = m.begin();
+  while (i != m.end()) {
+    if (i->second < t) {
+      i = m.erase(i);
+    } else {
+      ++i;
+    }
+  }
+}
+
 static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
@@ -272,6 +285,10 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
   // re-queued at the end
   std::vector<ceph::buffer::list> requeue_buffers;
 
+  // track the largest timestamp of removed entries so we can expire any
+  // urgent_data entries that are older
+  std::optional<ceph::real_time> last_removed_time;
+
   // List entries and calculate total number of entries (including invalid entries)
   if (! op.num_entries) {
     op.num_entries = GC_LIST_DEFAULT_MAX;
@@ -300,6 +317,9 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
         } catch (ceph::buffer::error& err) {
           CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode gc info\n");
           return -EINVAL;
+        }
+        if (!last_removed_time || *last_removed_time < info.time) {
+          last_removed_time = info.time;
         }
         CLS_LOG(20, "INFO: cls_rgw_gc_queue_remove_entries(): entry: %s\n", info.tag.c_str());
         total_num_entries++;
@@ -383,6 +403,16 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     }
   }
 
+  if (head.front == head.tail) {
+    // the queue is empty, so we can discard all urgent_data
+    urgent_data.urgent_data_map.clear();
+    xattr_urgent_data_map.clear();
+  } else if (last_removed_time) {
+    // it's safe to discard any urgent_data entries before removed entries
+    remove_urgent_data_before(*last_removed_time, urgent_data.urgent_data_map);
+    remove_urgent_data_before(*last_removed_time, xattr_urgent_data_map);
+  }
+
   // update the xattr if we removed anything
   if (urgent_data.num_xattr_urgent_entries != xattr_urgent_data_map.size()) {
     bufferlist bl;
@@ -396,6 +426,7 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     // update the count in the head
     urgent_data.num_xattr_urgent_entries = xattr_urgent_data_map.size();
   }
+  urgent_data.num_head_urgent_entries = urgent_data.urgent_data_map.size();
 
   //Update urgent data map
   head.bl_urgent_data.clear();
