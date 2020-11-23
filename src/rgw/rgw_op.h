@@ -1131,7 +1131,7 @@ protected:
   string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
-  std::unique_ptr <RGWObjTags> obj_tags;
+  std::optional<RGWObjTags> obj_tags;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
   rgw::sal::RGWAttrs attrs;
@@ -1714,6 +1714,7 @@ protected:
   string upload_id;
   RGWAccessControlPolicy policy;
   ceph::real_time mtime;
+  std::optional<RGWObjTags> obj_tags;
 
 public:
   RGWInitMultipart() {}
@@ -2082,9 +2083,9 @@ inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 } /* encode_delete_at_attr */
 
-inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, bufferlist>& attrs)
+inline void encode_obj_tags_attr(const std::optional<RGWObjTags>& obj_tags, map<string, bufferlist>& attrs)
 {
-  if (obj_tags == nullptr){
+  if (!obj_tags) {
     // we assume the user submitted a tag format which we couldn't parse since
     // this wouldn't be parsed later by get/put obj tags, lets delete if the
     // attr was populated
