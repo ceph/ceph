@@ -268,6 +268,10 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     }
   }
 
+  // any removed entries that were filtered out based on urgent_data must be
+  // re-queued at the end
+  std::vector<ceph::buffer::list> requeue_buffers;
+
   // List entries and calculate total number of entries (including invalid entries)
   if (! op.num_entries) {
     op.num_entries = GC_LIST_DEFAULT_MAX;
@@ -289,7 +293,7 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     unsigned int index = 0;
     // If data is not empty
     if (op_ret.entries.size()) {
-      for (auto it : op_ret.entries) {
+      for (const auto& it : op_ret.entries) {
         cls_rgw_gc_obj_info info;
         try {
           decode(info, it.data);
@@ -303,23 +307,32 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
         //Search for tag in urgent data map
         if (auto i = urgent_data.urgent_data_map.find(info.tag);
             i != urgent_data.urgent_data_map.end()) {
-          if (i->second > info.time) {
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): tag found in urgent data: %s\n", info.tag.c_str());
+          const auto defer_time = i->second;
+          CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
+          urgent_data.urgent_data_map.erase(i);
+
+          if (defer_time > info.time) {
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
+            info.time = defer_time;
+            bufferlist bl;
+            encode(info, bl);
+            requeue_buffers.push_back(std::move(bl));
             continue;
-          } else if (i->second == info.time) {
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
-            urgent_data.urgent_data_map.erase(i); //erase entry from map, as it will be removed later from queue
-            urgent_data.num_head_urgent_entries -= 1;
           }
         // Search the xattr urgent data map
         } else if (auto i = xattr_urgent_data_map.find(info.tag);
                    i != xattr_urgent_data_map.end()) {
-          if (i->second > info.time) {
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
+          const auto defer_time = i->second;
+          CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
+          xattr_urgent_data_map.erase(i);
+
+          if (defer_time > info.time) {
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
+            info.time = defer_time;
+            bufferlist bl;
+            encode(info, bl);
+            requeue_buffers.push_back(std::move(bl));
             continue;
-          } else if (i->second == info.time) {
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
-            xattr_urgent_data_map.erase(i); //erase entry from map, as it will be removed later
           }
         }// search in xattrs
         num_entries++;
@@ -355,6 +368,17 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     int ret = queue_remove_entries(hctx, rem_op, head);
     if (ret < 0) {
       CLS_LOG(5, "ERROR: queue_remove_entries(): returned error %d\n", ret);
+      return ret;
+    }
+  }
+
+  if (!requeue_buffers.empty()) {
+    // requeue any deferred entries that were removed
+    cls_queue_enqueue_op enqueue_op;
+    enqueue_op.bl_data_vec = std::move(requeue_buffers);
+    ret = queue_enqueue(hctx, enqueue_op, head);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: %s(): queue_enqueue() failed to requeue deferred entries with %d", __func__, ret);
       return ret;
     }
   }
