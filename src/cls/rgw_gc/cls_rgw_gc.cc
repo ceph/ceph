@@ -124,6 +124,23 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
     }
   }
 
+  std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
+  if (urgent_data.num_xattr_urgent_entries > 0) {
+    bufferlist bl;
+    ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+      return ret;
+    }
+    auto iter = bl.cbegin();
+    try {
+      decode(xattr_urgent_data_map, iter);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(1, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode xattrs urgent data map\n");
+      return -EINVAL;
+    }
+  }
+
   cls_queue_list_op list_op;
   if (! op.max) {
     op.max = GC_LIST_DEFAULT_MAX;
@@ -155,42 +172,21 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
           CLS_LOG(5, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode gc info\n");
           return -EINVAL;
         }
-        bool found = false;
         //Check for info tag in urgent data map
-        auto iter = urgent_data.urgent_data_map.find(info.tag);
-        if (iter != urgent_data.urgent_data_map.end()) {
-          found = true;
-          if (iter->second > info.time) {
+        if (auto i = urgent_data.urgent_data_map.find(info.tag);
+            i != urgent_data.urgent_data_map.end()) {
+          if (i->second > info.time) {
             CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): tag found in urgent data: %s\n", info.tag.c_str());
             continue;
           }
-        }
         //Search in xattrs
-        if (! found && urgent_data.num_xattr_urgent_entries > 0) {
-          bufferlist bl_xattrs;
-          int ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl_xattrs);
-          if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
-            CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
-            return ret;
+        } else if (auto i = xattr_urgent_data_map.find(info.tag);
+                   i != xattr_urgent_data_map.end()) {
+          if (i->second > info.time) {
+            CLS_LOG(1, "INFO: cls_rgw_gc_queue_list_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
+            continue;
           }
-          if (ret != -ENOENT && ret != -ENODATA) {
-            std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
-            auto iter = bl_xattrs.cbegin();
-            try {
-              decode(xattr_urgent_data_map, iter);
-            } catch (ceph::buffer::error& err) {
-              CLS_LOG(1, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode xattrs urgent data map\n");
-              return -EINVAL;
-            } //end - catch
-            auto xattr_iter = xattr_urgent_data_map.find(info.tag);
-            if (xattr_iter != xattr_urgent_data_map.end()) {
-              if (xattr_iter->second > info.time) {
-                CLS_LOG(1, "INFO: cls_rgw_gc_queue_list_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
-                continue;
-              }
-            }
-          } // end - ret != ENOENT && ENODATA
-        } // end - if not found
+        }
         if (op.expired_only) {
           real_time now = ceph::real_clock::now();
           if (info.time <= now) {
