@@ -5,6 +5,9 @@ After=network-online.target local-fs.target time-sync.target
 Before=remote-fs-pre.target ceph-osd.target
 Wants=network-online.target local-fs.target time-sync.target remote-fs-pre.target ceph-osd.target
 
+Requires=ceph-volume-systemd2@%i.service
+After=ceph-volume-systemd2@%i.service
+
 [Service]
 Environment=CLUSTER=ceph
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
