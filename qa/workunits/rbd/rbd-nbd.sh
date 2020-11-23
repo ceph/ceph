@@ -108,7 +108,7 @@ unmap_device()
 
     _sudo rbd-nbd unmap ${dev}
     rbd-nbd list-mapped | expect_false grep "^${pid}\\b" || return 1
-    ps -C rbd-nbd | expect_false grep "^${pid}\\b" || return 1
+    ps -C rbd-nbd | expect_false grep "^ *${pid}\\b" || return 1
 
     # workaround possible race between unmap and following map
     sleep 0.5
@@ -318,6 +318,10 @@ DEV=`_sudo rbd-nbd map --try-netlink ${POOL}/${IMAGE}`
 get_pid
 _sudo mount ${DEV} ${TEMPDIR}/mnt
 _sudo rbd-nbd detach ${POOL}/${IMAGE}
+expect_false get_pid
+_sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
+get_pid
+_sudo rbd-nbd detach ${DEV}
 expect_false get_pid
 _sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
 get_pid

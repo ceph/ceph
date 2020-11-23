@@ -17,14 +17,14 @@ class TestReadahead(CephFSTestCase):
         self.mount_a.umount_wait()
         self.mount_a.mount_wait()
 
-        initial_op_r = self.mount_a.admin_socket(['perf', 'dump', 'objecter'])['objecter']['op_r']
+        initial_op_read = self.mount_a.admin_socket(['perf', 'dump', 'objecter'])['objecter']['osdop_read']
         self.mount_a.run_shell(["dd", "if=foo", "of=/dev/null", "bs=128k", "count=32"])
-        op_r = self.mount_a.admin_socket(['perf', 'dump', 'objecter'])['objecter']['op_r']
-        assert op_r >= initial_op_r
-        op_r -= initial_op_r
-        log.info("read operations: {0}".format(op_r))
+        op_read = self.mount_a.admin_socket(['perf', 'dump', 'objecter'])['objecter']['osdop_read']
+        assert op_read >= initial_op_read
+        op_read -= initial_op_read
+        log.info("read operations: {0}".format(op_read))
 
         # with exponentially increasing readahead, we should see fewer than 10 operations
         # but this test simply checks if the client is doing a remote read for each local read
-        if op_r >= 32:
+        if op_read >= 32:
             raise RuntimeError("readahead not working")

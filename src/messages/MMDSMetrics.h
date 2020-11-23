@@ -7,7 +7,7 @@
 #include "messages/MMDSOp.h"
 #include "mds/MDSPerfMetricTypes.h"
 
-class MMDSMetrics : public MMDSOp {
+class MMDSMetrics final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -22,7 +22,7 @@ protected:
     : MMDSOp(MSG_MDS_METRICS, HEAD_VERSION, COMPAT_VERSION),
       metrics_message(metrics_message) {
   }
-  ~MMDSMetrics() { }
+  ~MMDSMetrics() final {}
 
 public:
   std::string_view get_type_name() const override {

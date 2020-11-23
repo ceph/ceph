@@ -256,7 +256,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         # Construct auth caps that if present might conflict with the desired
         # auth caps.
-        unwanted_access_level = 'r' if access_level is 'rw' else 'rw'
+        unwanted_access_level = 'r' if access_level == 'rw' else 'rw'
         unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, subvol_path.decode('utf-8'))
         unwanted_osd_cap = "allow {0} pool={1}{2}".format(
                 unwanted_access_level, pool, " namespace={0}".format(namespace) if namespace else "")

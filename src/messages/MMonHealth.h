@@ -18,7 +18,7 @@
 #include "messages/MMonQuorumService.h"
 #include "mon/mon_types.h"
 
-class MMonHealth : public MMonQuorumService {
+class MMonHealth final : public MMonQuorumService {
 public:
   static constexpr int HEAD_VERSION = 1;
 
@@ -31,7 +31,7 @@ public:
   MMonHealth() : MMonQuorumService{MSG_MON_HEALTH, HEAD_VERSION} { }
 
 private:
-  ~MMonHealth() override { }
+  ~MMonHealth() final { }
 
 public:
   std::string_view get_type_name() const override { return "mon_health"; }

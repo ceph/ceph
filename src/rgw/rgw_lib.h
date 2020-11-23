@@ -117,7 +117,7 @@ namespace rgw {
     friend class RGWRESTMgr_Lib;
   public:
 
-    int authorize(const DoutPrefixProvider *dpp) override;
+    int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
@@ -141,7 +141,7 @@ namespace rgw {
 	 tuser(std::move(_user)), cct(_cct)
       {}
 
-  int postauth_init() override { return 0; }
+  int postauth_init(optional_yield) override { return 0; }
 
     /* descendant equivalent of *REST*::init_from_header(...):
      * prepare request for execute()--should mean, fixup URI-alikes
@@ -182,7 +182,7 @@ namespace rgw {
 
     virtual bool only_bucket() = 0;
 
-    int read_permissions(RGWOp *op) override;
+    int read_permissions(RGWOp *op, optional_yield y) override;
 
   }; /* RGWLibRequest */
 

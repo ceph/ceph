@@ -612,12 +612,15 @@ class RGWUserPubSub
   int read(const rgw_raw_obj& obj, T *data, RGWObjVersionTracker *objv_tracker);
 
   template <class T>
-  int write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTracker *obj_tracker);
+  int write(const rgw_raw_obj& obj, const T& info,
+	    RGWObjVersionTracker *obj_tracker, optional_yield y);
 
-  int remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker);
+  int remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker,
+	     optional_yield y);
 
   int read_user_topics(rgw_pubsub_user_topics *result, RGWObjVersionTracker *objv_tracker);
-  int write_user_topics(const rgw_pubsub_user_topics& topics, RGWObjVersionTracker *objv_tracker);
+  int write_user_topics(const rgw_pubsub_user_topics& topics,
+			RGWObjVersionTracker *objv_tracker, optional_yield y);
 
 public:
   RGWUserPubSub(rgw::sal::RGWRadosStore *_store, const rgw_user& _user);
@@ -635,7 +638,8 @@ public:
     // set the list of topics associated with a bucket
     // use version tacker to enforce atomicity between read/write
     // return 0 on success, error code otherwise
-    int write_topics(const rgw_pubsub_bucket_topics& topics, RGWObjVersionTracker *objv_tracker);
+    int write_topics(const rgw_pubsub_bucket_topics& topics,
+		     RGWObjVersionTracker *objv_tracker, optional_yield y);
   public:
     Bucket(RGWUserPubSub *_ps, const rgw_bucket& _bucket) : ps(_ps), bucket(_bucket) {
       ps->get_bucket_meta_obj(bucket, &bucket_meta_obj);
@@ -650,13 +654,13 @@ public:
     // for S3 compliant notifications the version with: s3_filter and notif_name should be used
     // return -ENOENT if the topic does not exists
     // return 0 on success, error code otherwise
-    int create_notification(const string& topic_name, const rgw::notify::EventTypeList& events);
-    int create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name);
+    int create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, optional_yield y);
+    int create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y);
     // remove a topic and filter from bucket
     // if the topic does not exists on the bucket it is a no-op (considered success)
     // return -ENOENT if the topic does not exists
     // return 0 on success, error code otherwise
-    int remove_notification(const string& topic_name);
+    int remove_notification(const string& topic_name, optional_yield y);
   };
 
   // base class for subscription
@@ -668,8 +672,9 @@ public:
     rgw_raw_obj sub_meta_obj;
 
     int read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker *objv_tracker);
-    int write_sub(const rgw_pubsub_sub_config& sub_conf, RGWObjVersionTracker *objv_tracker);
-    int remove_sub(RGWObjVersionTracker *objv_tracker);
+    int write_sub(const rgw_pubsub_sub_config& sub_conf,
+		  RGWObjVersionTracker *objv_tracker, optional_yield y);
+    int remove_sub(RGWObjVersionTracker *objv_tracker, optional_yield y);
   public:
     Sub(RGWUserPubSub *_ps, const std::string& _sub) : ps(_ps), sub(_sub) {
       ps->get_sub_meta_obj(sub, &sub_meta_obj);
@@ -677,8 +682,9 @@ public:
 
     virtual ~Sub() = default;
 
-    int subscribe(const string& topic_name, const rgw_pubsub_sub_dest& dest, const std::string& s3_id="");
-    int unsubscribe(const string& topic_name);
+    int subscribe(const string& topic_name, const rgw_pubsub_sub_dest& dest, optional_yield y,
+		  const std::string& s3_id="");
+    int unsubscribe(const string& topic_name, optional_yield y);
     int get_conf(rgw_pubsub_sub_config* result);
     
     static const int DEFAULT_MAX_EVENTS = 100;
@@ -751,15 +757,15 @@ public:
   // create a topic with a name only
   // if the topic already exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
-  int create_topic(const string& name);
+  int create_topic(const string& name, optional_yield y);
   // create a topic with push destination information and ARN
   // if the topic already exists the destination and ARN values may be updated (considered succsess)
   // return 0 on success, error code otherwise
-  int create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data);
+  int create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y);
   // remove a topic according to its name
   // if the topic does not exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
-  int remove_topic(const string& name);
+  int remove_topic(const string& name, optional_yield y);
 };
 
 
@@ -787,14 +793,15 @@ int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker 
 }
 
 template <class T>
-int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTracker *objv_tracker)
+int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info,
+			 RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
   bufferlist bl;
   encode(info, bl);
 
   int ret = rgw_put_system_obj(obj_ctx, obj.pool, obj.oid,
-                           bl, false, objv_tracker,
-                           real_time());
+			       bl, false, objv_tracker,
+			       real_time(), y);
   if (ret < 0) {
     return ret;
   }

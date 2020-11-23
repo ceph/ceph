@@ -19,14 +19,14 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDAlive : public PaxosServiceMessage {
+class MOSDAlive final : public PaxosServiceMessage {
 public:
   epoch_t want = 0;
 
   MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage{MSG_OSD_ALIVE, h}, want(w) {}
   MOSDAlive() : MOSDAlive{0, 0} {}
 private:
-  ~MOSDAlive() override {}
+  ~MOSDAlive() final {}
 
 public:
   void encode_payload(uint64_t features) override {

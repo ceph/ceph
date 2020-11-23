@@ -23,6 +23,8 @@
 #include <iostream>
 #include <set>
 
+#include <fmt/format.h>
+
 #define MAX_LOG_BUF 65536
 
 namespace ceph {
@@ -311,24 +313,30 @@ void Log::_flush(EntryVector& t, bool crash)
   _flush_logbuf();
 }
 
-void Log::_log_message(const char *s, bool crash)
+void Log::_log_message(std::string_view s, bool crash)
 {
   if (m_fd >= 0) {
-    size_t len = strlen(s);
-    std::string b;
-    b.reserve(len + 1);
-    b.append(s, len);
-    b += '\n';
-    int r = safe_write(m_fd, b.c_str(), b.size());
+    std::string b = fmt::format("{}\n", s);
+    int r = safe_write(m_fd, b.data(), b.size());
     if (r < 0)
       std::cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
-    syslog(LOG_USER|LOG_INFO, "%s", s);
+    syslog(LOG_USER|LOG_INFO, "%.*s", static_cast<int>(s.size()), s.data());
   }
 
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {
     std::cerr << s << std::endl;
+  }
+}
+
+template<typename T>
+static uint64_t tid_to_int(T tid)
+{
+  if constexpr (std::is_pointer_v<T>) {
+    return reinterpret_cast<std::uintptr_t>(tid);
+  } else {
+    return tid;
   }
 }
 
@@ -359,32 +367,28 @@ void Log::dump_recent()
     _flush(t, true);
   }
 
-  char buf[4096];
   _log_message("--- logging levels ---", true);
   for (const auto& p : m_subs->m_subsys) {
-    snprintf(buf, sizeof(buf), "  %2d/%2d %s", p.log_level, p.gather_level, p.name);
-    _log_message(buf, true);
+    _log_message(fmt::format("  {:2d}/{:2d} {}",
+			     p.log_level, p.gather_level, p.name), true);
   }
-  sprintf(buf, "  %2d/%2d (syslog threshold)", m_syslog_log, m_syslog_crash);
-  _log_message(buf, true);
-  sprintf(buf, "  %2d/%2d (stderr threshold)", m_stderr_log, m_stderr_crash);
-  _log_message(buf, true);
+  _log_message(fmt::format("  {:2d}/{:2d} (syslog threshold)",
+			   m_syslog_log, m_syslog_crash), true);
+  _log_message(fmt::format("  {:2d}/{:2d} (stderr threshold)",
+			   m_stderr_log, m_stderr_crash), true);
 
   _log_message("--- pthread ID / name mapping for recent threads ---", true);
   for (const auto pthread_id : recent_pthread_ids)
   {
     char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
     ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
-    snprintf(buf, sizeof(buf), "  %llx / %s", pthread_id, pthread_name);
-    _log_message(buf, true);
+    _log_message(fmt::format("  {} / {}",
+			     tid_to_int(pthread_id), pthread_name), true);
   }
 
-  sprintf(buf, "  max_recent %9zu", m_max_recent);
-  _log_message(buf, true);
-  sprintf(buf, "  max_new    %9zu", m_max_new);
-  _log_message(buf, true);
-  sprintf(buf, "  log_file %s", m_log_file.c_str());
-  _log_message(buf, true);
+  _log_message(fmt::format("  max_recent {:9}", m_max_recent), true);
+  _log_message(fmt::format("  max_new    {:9}", m_max_recent), true);
+  _log_message(fmt::format("  log_file {}", m_log_file), true);
 
   _log_message("--- end dump of recent events ---", true);
 

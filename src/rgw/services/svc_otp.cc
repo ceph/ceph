@@ -60,7 +60,7 @@ void RGWSI_OTP::init(RGWSI_Zone *_zone_svc,
   svc.meta_be = _meta_be_svc;
 }
 
-int RGWSI_OTP::do_start()
+int RGWSI_OTP::do_start(optional_yield)
 {
   /* create first backend handler for bucket entrypoints */
 

@@ -467,6 +467,8 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 .. index:: Ceph Storage Cluster; capacity planning, Ceph Monitor; capacity planning
 
+.. _storage-capacity:
+
 Storage Capacity
 ----------------
 
@@ -952,6 +954,7 @@ Client
 :Type: 64-bit Integer Unsigned
 :Default: ``100ul << 20``
 
+.. _pool-settings:
 
 Pool settings
 =============

@@ -1,4 +1,14 @@
-#include "SubProcess.h"
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2020 SUSE LINUX GmbH
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
 #include <stdarg.h>
 #include <fcntl.h>
@@ -6,6 +16,7 @@
 #include <iostream>
 #include <iomanip>
 
+#include "common/SubProcess.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "include/compat.h"

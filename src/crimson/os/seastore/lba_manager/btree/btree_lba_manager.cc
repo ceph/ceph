@@ -436,7 +436,7 @@ BtreeLBAManager::get_physical_extent_if_live(
       return root->lookup(
 	op_context_t{cache, pin_set, t},
 	lba_node->get_node_meta().begin,
-	lba_node->get_node_meta().depth).safe_then([=, &t](LBANodeRef c) {
+	lba_node->get_node_meta().depth).safe_then([=](LBANodeRef c) {
 	  if (c->get_paddr() == lba_node->get_paddr()) {
 	    return get_physical_extent_if_live_ret(
 	      get_physical_extent_if_live_ertr::ready_future_marker{},

@@ -1,55 +1,68 @@
 Testing - unit tests
 ====================
 
-Ceph has two types of tests: unit tests (also called ``make check`` tests) and
-integration tests. Strictly speaking, the ``make check`` tests are not "unit
-tests", but rather tests that can be run easily on a single build machine
-after compiling Ceph from source, whereas integration tests require packages
-and multi-machine clusters to run.
+Ceph has two types of tests: 
+
+#. unit tests (also called ``make check`` tests)
+#. integration tests. 
+   
+What are here called ``make check`` tests are not, strictly speaking, "unit
+tests". They are tests that can be easily run on a single-build machine
+after Ceph has been compiled from source. Such ``make check`` tests do
+not require packages or a multi-machine cluster.
+
+Integration tests, however, require packages and multi-machine clusters.
 
 .. _make-check:
 
 What does "make check" mean?
 ----------------------------
 
-After compiling Ceph, the code can be run through a battery of tests covering
-various aspects of Ceph. For historical reasons, this battery of tests is
-often referred to as ``make check`` even though the actual command used to run
-the tests is now ``ctest``. For inclusion in this battery of tests, a test
-must:
+After Ceph has been compiled, its code can be run through a battery of
+tests that cover various aspects of Ceph. For historical reasons, this
+battery of tests is often referred to as ``make check`` even though the
+actual command used to run the tests is now ``ctest``. In order to be
+included in this battery of tests, a test must:
 
 * bind ports that do not conflict with other tests
 * not require root access
 * not require more than one machine to run
 * complete within a few minutes
 
-For simplicity, we will refer to this class of tests as "make check tests" or
-"unit tests", to distinguish them from the more complex "integration tests"
-that are run via the `teuthology framework`_.
+For the sake of simplicity, this class of tests is referred to as "make
+check tests" or "unit tests". This is meant to distinguish these tests from
+the more complex "integration tests" that are run via the `teuthology
+framework`_.
 
-While it is possible to run ``ctest`` directly, it can be tricky to correctly
-set up your environment. Fortunately, a script is provided to make it easier
-run the unit tests on your code. It can be run from the top-level directory of
-the Ceph source tree by doing::
+While it is possible to run ``ctest`` directly, it can be tricky to
+correctly set up your environment for it. Fortunately, a script is provided
+to make it easier to run the unit tests on your code. This script can be
+run from the top-level directory of the Ceph source tree by running the
+following command:
 
-    $ ./run-make-check.sh
+.. prompt:: bash $
 
+   ./run-make-check.sh
 
 You will need a minimum of 8GB of RAM and 32GB of free disk space for this
 command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
-minutes to three hours to complete, but it's worth the wait.
+minutes to three hours to complete.
 
 How unit tests are declared
 ---------------------------
 
-Unit tests are declared in the ``CMakeLists.txt`` files (multiple files under
-``./src``) using the ``add_ceph_test`` or ``add_ceph_unittest`` CMake
-functions, which are themselves defined in
-``./cmake/modules/AddCephTest.cmake``. Some unit tests are scripts, while
-others are binaries that are compiled during the build process.  The
-``add_ceph_test`` function is used to declare unit test scripts, while
-``add_ceph_unittest`` is used for unit test binaries.
+Unit tests are declared in the ``CMakeLists.txt`` file, which is found
+in the ``./src`` directory. The ``add_ceph_test`` and 
+``add_ceph_unittest`` CMake functions are used to declare unit tests.
+``add_ceph_test`` and ``add_ceph_unittest`` are themselves defined in
+``./cmake/modules/AddCephTest.cmake``. 
+
+Some unit tests are scripts and other unit tests are binaries that are
+compiled during the build process.  
+
+* ``add_ceph_test`` function - used to declare unit test scripts 
+* ``add_ceph_unittest`` function - used for unit test binaries
 
 Unit testing of CLI tools
 -------------------------

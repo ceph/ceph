@@ -18,7 +18,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MGetPoolStats : public PaxosServiceMessage {
+class MGetPoolStats final : public PaxosServiceMessage {
 public:
   uuid_d fsid;
   std::vector<std::string> pools;
@@ -31,7 +31,7 @@ public:
   }
 
 private:
-  ~MGetPoolStats() override {}
+  ~MGetPoolStats() final {}
 
 public:
   std::string_view get_type_name() const override { return "getpoolstats"; }

@@ -96,9 +96,9 @@ int RGWHandler_REST_IAM::init(rgw::sal::RGWRadosStore *store,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp)
+int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
+  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
 int RGWHandler_REST_IAM::init_from_header(struct req_state* s,

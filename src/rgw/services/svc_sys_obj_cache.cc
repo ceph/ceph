@@ -30,19 +30,19 @@ public:
   }
 };
 
-int RGWSI_SysObj_Cache::do_start()
+int RGWSI_SysObj_Cache::do_start(optional_yield y)
 {
   int r = asocket.start();
   if (r < 0) {
     return r;
   }
 
-  r = RGWSI_SysObj_Core::do_start();
+  r = RGWSI_SysObj_Core::do_start(y);
   if (r < 0) {
     return r;
   }
 
-  r = notify_svc->start();
+  r = notify_svc->start(y);
   if (r < 0) {
     return r;
   }

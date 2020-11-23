@@ -627,14 +627,8 @@ int Client::handle_auth_request(crimson::net::ConnectionRef con,
     return -EOPNOTSUPP;
   }
   auto authorizer_challenge = &auth_meta->authorizer_challenge;
-  if (!active_con) {
-    logger().error("connection to monitors is down, abort connection for now");
-    return -EBUSY;
-  }
-  if (!HAVE_FEATURE(active_con->get_conn()->get_features(), CEPHX_V2)) {
-    if (local_conf().get_val<uint64_t>("cephx_service_require_version") >= 2) {
-      return -EACCES;
-    }
+  if (auth_meta->skip_authorizer_challenge) {
+    logger().info("skipping challenge on {}", con);
     authorizer_challenge = nullptr;
   }
   bool was_challenge = (bool)auth_meta->authorizer_challenge;

@@ -30,8 +30,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-void RGWOp_ZoneGroupMap_Get::execute() {
-  op_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj);
+void RGWOp_ZoneGroupMap_Get::execute(optional_yield y) {
+  op_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj, y);
   if (op_ret < 0) {
     dout(5) << "failed to read zone_group map" << dendl;
   }
@@ -50,7 +50,7 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
     region_map.regions = zonegroup_map.zonegroups;
     region_map.master_region = zonegroup_map.master_zonegroup;
     region_map.bucket_quota = zonegroup_map.bucket_quota;
-    region_map.user_quota = zonegroup_map.user_quota;    
+    region_map.user_quota = zonegroup_map.user_quota;
     encode_json("region-map", region_map, s->formatter);
   } else {
     encode_json("zonegroup-map", zonegroup_map, s->formatter);

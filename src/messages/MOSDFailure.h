@@ -19,7 +19,7 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-class MOSDFailure : public PaxosServiceMessage {
+class MOSDFailure final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
@@ -57,7 +57,7 @@ private:
       flags(extra_flags),
       epoch(e), failed_for(duration) { }
 private:
-  ~MOSDFailure() override {}
+  ~MOSDFailure() final {}
 
 public:
   int get_target_osd() { return target_osd; }

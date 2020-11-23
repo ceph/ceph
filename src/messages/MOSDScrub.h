@@ -22,7 +22,7 @@
  * instruct an OSD to scrub some or all pg(s)
  */
 
-class MOSDScrub : public Message {
+class MOSDScrub final : public Message {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -40,7 +40,7 @@ public:
     Message{MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
-  ~MOSDScrub() override {}
+  ~MOSDScrub() final {}
 
 public:
   std::string_view get_type_name() const override { return "scrub"; }

@@ -122,22 +122,11 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
   if (recovery_waiter.obc) {
     return seastar::now();
   }
-  return pg.get_or_load_head_obc(soid).safe_then(
-    [&recovery_waiter](auto p) {
-    auto& [obc, existed] = p;
+  return pg.with_head_obc<RWState::RWREAD>(soid, [&recovery_waiter](auto obc) {
     logger().debug("load_obc_for_recovery: loaded obc: {}", obc->obs.oi.soid);
     recovery_waiter.obc = obc;
-    if (!existed) {
-      // obc is loaded with excl lock
-      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-    }
     return recovery_waiter.obc->wait_recovery_read();
-  }, crimson::osd::PG::load_obc_ertr::all_same_way(
-      [this, &recovery_waiter, soid](const std::error_code& e) {
-      logger().error("load_obc_for_recovery: load failure of obc: {}", soid);
-      return seastar::make_exception_future<>(e);
-    })
-  );
+  });
 }
 
 seastar::future<> ReplicatedRecoveryBackend::push_delete(
@@ -652,29 +641,19 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
   if (pi.recovery_info.version == eversion_t())
     pi.recovery_info.version = pop.version;
 
-  bool first = pi.recovery_progress.first;
-
-  return [this, &pi, first, &recovery_waiter, &pop] {
-    if (first) {
-      return pg.get_or_load_head_obc(pi.recovery_info.soid).safe_then(
-	[&pi, &recovery_waiter, &pop](auto p) {
-	auto& [obc, existed] = p;
-	pi.obc = obc;
-	recovery_waiter.obc = obc;
-	obc->obs.oi.decode(pop.attrset[OI_ATTR]);
-	pi.recovery_info.oi = obc->obs.oi;
-	return seastar::make_ready_future<>();
-      }, crimson::osd::PG::load_obc_ertr::all_same_way(
-	  [this, &pi](const std::error_code& e) {
-	  auto [obc, existed] = shard_services.obc_registry.get_cached_obc(
-				    pi.recovery_info.soid);
-	  pi.obc = obc;
-	  return seastar::make_ready_future<>();
-	})
-      );
-    }
-    return seastar::make_ready_future<>();
-  }().then([this, first, &pi, &pop, t, response]() mutable {
+  auto prepare_waiter = seastar::make_ready_future<>();
+  if (pi.recovery_progress.first) {
+    prepare_waiter = pg.with_head_obc<RWState::RWNONE>(
+      pi.recovery_info.soid, [&pi, &recovery_waiter, &pop](auto obc) {
+        pi.obc = obc;
+        recovery_waiter.obc = obc;
+        obc->obs.oi.decode(pop.attrset[OI_ATTR]);
+        pi.recovery_info.oi = obc->obs.oi;
+        return seastar::make_ready_future<>();
+      });
+  };
+  return prepare_waiter.then([this, first=pi.recovery_progress.first,
+			      &pi, &pop, t, response]() mutable {
     return seastar::do_with(interval_set<uint64_t>(),
 			    bufferlist(),
 			    interval_set<uint64_t>(),

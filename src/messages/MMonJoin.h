@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MMonJoin : public PaxosServiceMessage {
+class MMonJoin final : public PaxosServiceMessage {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -33,7 +33,7 @@ public:
   { }
   
 private:
-  ~MMonJoin() override {}
+  ~MMonJoin() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_join"; }

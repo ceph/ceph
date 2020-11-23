@@ -329,11 +329,8 @@ def fill_keystone(ctx, config):
         admin_url = 'http://{host}:{port}/v3'.format(host=admin_host,
                                                      port=admin_port)
         opts = {'password': 'ADMIN',
-                'username': 'admin',
-                'project-name': 'admin',
-                'role-name': 'admin',
-                'service-name': 'keystone',
                 'region-id': 'RegionOne',
+                'internal-url': url,
                 'admin-url': admin_url,
                 'public-url': url}
         bootstrap_args = chain.from_iterable(('--bootstrap-{}'.format(k), v)

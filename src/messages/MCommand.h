@@ -19,7 +19,7 @@
 
 #include "msg/Message.h"
 
-class MCommand : public Message {
+class MCommand final : public Message {
 public:
   uuid_d fsid;
   std::vector<std::string> cmd;
@@ -31,7 +31,7 @@ public:
       fsid(f) { }
 
 private:
-  ~MCommand() override {}
+  ~MCommand() final {}
 
 public:
   std::string_view get_type_name() const override { return "command"; }

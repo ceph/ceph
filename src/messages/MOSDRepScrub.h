@@ -22,7 +22,7 @@
  * instruct an OSD initiate a replica scrub on a specific PG
  */
 
-class MOSDRepScrub : public MOSDFastDispatchOp {
+class MOSDRepScrub final : public MOSDFastDispatchOp {
 public:
   static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 6;
@@ -72,7 +72,7 @@ public:
 
 
 private:
-  ~MOSDRepScrub() override {}
+  ~MOSDRepScrub() final {}
 
 public:
   std::string_view get_type_name() const override { return "replica scrub"; }

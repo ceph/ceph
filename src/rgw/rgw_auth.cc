@@ -227,7 +227,7 @@ strategy_handle_granted(rgw::auth::Engine::result_t&& engine_result,
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
+rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const
 {
   result_t strategy_result = result_t::deny();
 
@@ -239,7 +239,7 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
 
     result_t engine_result = result_t::deny();
     try {
-      engine_result = engine.authenticate(dpp, s);
+      engine_result = engine.authenticate(dpp, s, y);
     } catch (const int err) {
       engine_result = result_t::deny(err);
     }
@@ -287,10 +287,10 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
 
 int
 rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strategy& auth_strategy,
-                           req_state* const s) noexcept
+                           req_state* const s, optional_yield y) noexcept
 {
   try {
-    auto result = auth_strategy.authenticate(dpp, s);
+    auto result = auth_strategy.authenticate(dpp, s, y);
     if (result.get_status() != decltype(result)::Status::GRANTED) {
       /* Access denied is acknowledged by returning a std::unique_ptr with
        * nullptr inside. */
@@ -795,7 +795,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
+rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const
 {
   if (! is_applicable(s)) {
     return result_t::deny(-EPERM);

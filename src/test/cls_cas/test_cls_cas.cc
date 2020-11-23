@@ -327,7 +327,7 @@ TEST(chunk_refs_t, size)
       bufferlist bl2;
       encode(a, bl2);
       if (!bl.contents_equal(bl2)) {
-	Formatter *f = Formatter::create("json-pretty");
+	std::unique_ptr<Formatter> f(Formatter::create("json-pretty"));
 	cout << "original:\n";
 	f->dump_object("refs", r);
 	f->flush(cout);

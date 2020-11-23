@@ -286,7 +286,7 @@ template <class FuncHead, class... FuncTail>
 static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
   return [
     head = std::forward<FuncHead>(head),
-    // perfect forwarding in lambda's closure isn't availble in C++17
+    // perfect forwarding in lambda's closure isn't available in C++17
     // using tuple as workaround; see: https://stackoverflow.com/a/49902823
     tail = std::make_tuple(std::forward<FuncTail>(tail)...)
   ] (auto&&... args) mutable -> decltype(auto) {
@@ -686,7 +686,7 @@ private:
     template<typename AsyncAction>
     friend inline auto ::crimson::do_until(AsyncAction action);
 
-    template <class...>
+    template <typename Result>
     friend class ::seastar::future;
 
     // let seastar::do_with_impl to up-cast us to seastar::future.

@@ -444,10 +444,23 @@ if (NOT Boost_NO_BOOST_CMAKE)
     endif()
   endif()
 
+  set(_boost_FIND_PACKAGE_ARGS "")
+  if(Boost_NO_SYSTEM_PATHS)
+    list(APPEND _boost_FIND_PACKAGE_ARGS NO_CMAKE_SYSTEM_PATH NO_SYSTEM_ENVIRONMENT_PATH)
+  endif()
+
   # Do the same find_package call but look specifically for the CMake version.
   # Note that args are passed in the Boost_FIND_xxxxx variables, so there is no
   # need to delegate them to this find_package call.
-  find_package(Boost QUIET NO_MODULE)
+  cmake_policy(PUSH)
+  if(BOOST_ROOT AND NOT Boost_ROOT)
+    if(POLICY CMP0074)
+      cmake_policy(SET CMP0074 NEW)
+    endif()
+    set(Boost_ROOT "${BOOST_ROOT}")
+  endif()
+  find_package(Boost QUIET NO_MODULE ${_boost_FIND_PACKAGE_ARGS})
+  cmake_policy(POP)
   if (DEFINED Boost_DIR)
     mark_as_advanced(Boost_DIR)
   endif ()
@@ -1185,7 +1198,7 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
       set(_Boost_TIMER_DEPENDENCIES chrono)
       set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono date_time atomic)
       set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
-      if(Boost_VERSION_STRING VERSION_GREATER_EQUAL 1.74.0)
+      if(Boost_VERSION_STRING VERSION_GREATER_EQUAL 1.75.0)
         message(WARNING "New Boost version may have incorrect or missing dependencies and imported targets")
       endif()
     endif()
@@ -1457,6 +1470,7 @@ else()
   # _Boost_COMPONENT_HEADERS.  See the instructions at the top of
   # _Boost_COMPONENT_DEPENDENCIES.
   set(_Boost_KNOWN_VERSIONS ${Boost_ADDITIONAL_VERSIONS}
+    "1.74.0" "1.74"
     "1.73.0" "1.73" "1.72.0" "1.72" "1.71.0" "1.71" "1.70.0" "1.70" "1.69.0" "1.69"
     "1.68.0" "1.68" "1.67.0" "1.67" "1.66.0" "1.66" "1.65.1" "1.65.0" "1.65"
     "1.64.0" "1.64" "1.63.0" "1.63" "1.62.0" "1.62" "1.61.0" "1.61" "1.60.0" "1.60"

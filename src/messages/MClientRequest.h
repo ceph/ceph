@@ -48,7 +48,7 @@
 
 // metadata ops.
 
-class MClientRequest : public MMDSOp {
+class MClientRequest final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
@@ -95,7 +95,7 @@ protected:
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
-  ~MClientRequest() override {}
+  ~MClientRequest() final {}
 
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }

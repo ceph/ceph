@@ -15,6 +15,7 @@
 #include <sstream>
 #include <windows.h>
 
+#include "common/errno.h"
 #include "include/dlfcn_compat.h"
 
 
@@ -32,26 +33,6 @@ void* dlsym(void* handle, const char* symbol) {
 }
 
 dl_errmsg_t dlerror() {
-  DWORD err_code = ::GetLastError();
-  // As opposed to dlerror messages, this has to be freed.
-  LPSTR msg = NULL;
-  DWORD msg_len = FormatMessageA(
-    FORMAT_MESSAGE_ALLOCATE_BUFFER |
-    FORMAT_MESSAGE_FROM_SYSTEM |
-    FORMAT_MESSAGE_IGNORE_INSERTS,
-    NULL,
-    err_code,
-    0,
-    (LPSTR) &msg,
-    0,
-    NULL);
-  if (!msg_len) {
-    std::ostringstream msg_stream;
-    msg_stream << "Unknown error (" << err_code << ").";
-    return msg_stream.str();
-  }
-  std::string msg_s(msg);
-  LocalFree(msg);
-  return msg_s;
+  return win32_lasterror_str();
 }
 

@@ -522,10 +522,28 @@ bool ProtocolV1::require_auth_feature() const
     return true;
   }
   if (h.connect.host_type == CEPH_ENTITY_TYPE_OSD ||
-      h.connect.host_type == CEPH_ENTITY_TYPE_MDS) {
+      h.connect.host_type == CEPH_ENTITY_TYPE_MDS ||
+      h.connect.host_type == CEPH_ENTITY_TYPE_MGR) {
     return local_conf()->cephx_cluster_require_signatures;
   } else {
     return local_conf()->cephx_service_require_signatures;
+  }
+}
+
+bool ProtocolV1::require_cephx_v2_feature() const
+{
+  if (h.connect.authorizer_protocol != CEPH_AUTH_CEPHX) {
+    return false;
+  }
+  if (local_conf()->cephx_require_version >= 2) {
+    return true;
+  }
+  if (h.connect.host_type == CEPH_ENTITY_TYPE_OSD ||
+      h.connect.host_type == CEPH_ENTITY_TYPE_MDS ||
+      h.connect.host_type == CEPH_ENTITY_TYPE_MGR) {
+    return local_conf()->cephx_cluster_require_version >= 2;
+  } else {
+    return local_conf()->cephx_service_require_version >= 2;
   }
 }
 
@@ -561,6 +579,9 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
       if (require_auth_feature()) {
         conn.policy.features_required |= CEPH_FEATURE_MSG_AUTH;
       }
+      if (require_cephx_v2_feature()) {
+        conn.policy.features_required |= CEPH_FEATUREMASK_CEPHX_V2;
+      }
       if (auto feat_missing = conn.policy.features_required & ~(uint64_t)h.connect.features;
           feat_missing != 0) {
         return send_connect_reply(
@@ -569,6 +590,10 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
 
       bufferlist authorizer_reply;
       auth_meta->auth_method = h.connect.authorizer_protocol;
+      if (!HAVE_FEATURE((uint64_t)h.connect.features, CEPHX_V2)) {
+        // peer doesn't support it and we won't get here if we require it
+        auth_meta->skip_authorizer_challenge = true;
+      }
       auto more = static_cast<bool>(auth_meta->authorizer_challenge);
       ceph_assert(messenger.get_auth_server());
       int r = messenger.get_auth_server()->handle_auth_request(

@@ -116,7 +116,7 @@ static void get_gmt_date_str(string& date_str)
   date_str = buffer;
 }
 
-int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const char *resource)
+int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const char *resource, optional_yield y)
 {
   method = _method;
   string new_url = url;
@@ -155,7 +155,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const 
   ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
 
   headers.push_back(pair<string, string>("AUTHORIZATION", auth_hdr));
-  int r = process(null_yield);
+  int r = process(y);
   if (r < 0)
     return r;
 
@@ -269,7 +269,7 @@ static int sign_request(CephContext *cct, RGWAccessKey& key, RGWEnv& env, req_in
   return 0;
 }
 
-int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
 
   string date_str;
@@ -331,7 +331,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   method = new_info.method;
   url = new_url;
 
-  int r = process(null_yield);
+  int r = process(y);
   if (r < 0){
     if (r == -EINVAL){
       // curl_easy has errored, generally means the service is not available

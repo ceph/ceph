@@ -21,7 +21,7 @@
 #include "include/types.h"
 #include "osd/osd_types.h"
 
-class MOSDBoot : public PaxosServiceMessage {
+class MOSDBoot final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 7;
@@ -53,7 +53,7 @@ private:
   { }
   
 private:
-  ~MOSDBoot() override { }
+  ~MOSDBoot() final { }
 
 public:
   std::string_view get_type_name() const override { return "osd_boot"; }

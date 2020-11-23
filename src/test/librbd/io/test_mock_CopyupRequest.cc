@@ -16,6 +16,7 @@
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 
 namespace librbd {
 namespace {
@@ -79,6 +80,26 @@ ObjectCopyRequest<librbd::MockTestImageCtx>* ObjectCopyRequest<librbd::MockTestI
 } // namespace deep_copy
 
 namespace io {
+
+namespace util {
+
+template <> void file_to_extents(
+        MockTestImageCtx* image_ctx, uint64_t offset, uint64_t length,
+        uint64_t buffer_offset,
+        striper::LightweightObjectExtents* object_extents) {
+  Striper::file_to_extents(image_ctx->cct, &image_ctx->layout, offset, length,
+                           0, buffer_offset, object_extents);
+}
+
+template <> void extent_to_file(
+        MockTestImageCtx* image_ctx, uint64_t object_no, uint64_t offset,
+        uint64_t length,
+        std::vector<std::pair<uint64_t, uint64_t> >& extents) {
+  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout, object_no,
+                          offset, length, extents);
+}
+
+} // namespace util
 
 template <>
 struct ObjectRequest<librbd::MockTestImageCtx> {
@@ -198,7 +219,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
           aio_comp->read_result = std::move(req->read_result);
           aio_comp->read_result.set_image_extents(image_extents);
           aio_comp->set_request_count(1);
-          auto ctx = new ReadResult::C_ImageReadRequest(aio_comp,
+          auto ctx = new ReadResult::C_ImageReadRequest(aio_comp, 0,
                                                         image_extents);
           ctx->bl.append(data);
           mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
@@ -338,8 +359,9 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
         }));
   }
 
-  void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, prepare_copyup(_, _));
+  void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx, int r = 0) {
+    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher,
+            prepare_copyup(_, _)).WillOnce(Return(r));
   }
 
   void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx,
@@ -354,6 +376,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
           EXPECT_EQ(in_sparse_bl, sparse_bl);
 
           sparse_bl = out_sparse_bl;
+          return 0;
         })));
   }
 
@@ -975,6 +998,40 @@ TEST_F(TestMockIoCopyupRequest, ReadFromParentError) {
   req->send();
 
   ASSERT_EQ(-EPERM, mock_write_request.ctx.wait());
+}
+
+TEST_F(TestMockIoCopyupRequest, PrepareCopyupError) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_parent_image_ctx(*ictx->parent);
+  MockTestImageCtx mock_image_ctx(*ictx, &mock_parent_image_ctx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+          mock_object_map);
+
+  expect_op_work_queue(mock_image_ctx);
+  expect_is_lock_owner(mock_image_ctx);
+
+  InSequence seq;
+
+  std::string data(4096, '1');
+  expect_read_parent(mock_parent_image_ctx, {{0, 4096}}, data, 0);
+  expect_prepare_copyup(mock_image_ctx, -EIO);
+
+  auto req = new MockCopyupRequest(&mock_image_ctx, 0,
+                                   {{0, 4096}}, {});
+  mock_image_ctx.copyup_list[0] = req;
+  MockAbstractObjectWriteRequest mock_write_request;
+  req->append_request(&mock_write_request, {});
+  req->send();
+
+  ASSERT_EQ(-EIO, mock_write_request.ctx.wait());
 }
 
 TEST_F(TestMockIoCopyupRequest, DeepCopyError) {

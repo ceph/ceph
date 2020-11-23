@@ -112,22 +112,24 @@ private:
   }
 
 public:
-  template<typename Func>
-  auto with_lock(RWState::State type, Func&& func) {
-    switch (type) {
+  template<RWState::State Type, typename Func>
+  auto with_lock(Func&& func) {
+    switch (Type) {
     case RWState::RWWRITE:
       return seastar::with_lock(lock.for_write(), std::forward<Func>(func));
     case RWState::RWREAD:
       return seastar::with_lock(lock.for_read(), std::forward<Func>(func));
     case RWState::RWEXCL:
       return seastar::with_lock(lock.for_excl(), std::forward<Func>(func));
+    case RWState::RWNONE:
+      return seastar::futurize_invoke(func);
     default:
       assert(0 == "noop");
     }
   }
-  template<typename Func>
-  auto with_promoted_lock(RWState::State type, Func&& func) {
-    switch (type) {
+  template<RWState::State Type, typename Func>
+  auto with_promoted_lock(Func&& func) {
+    switch (Type) {
     case RWState::RWWRITE:
       return seastar::with_lock(lock.excl_from_write(), std::forward<Func>(func));
     case RWState::RWREAD:
@@ -137,59 +139,6 @@ public:
      default:
       assert(0 == "noop");
     }
-  }
-  seastar::future<> get_lock_type(Operation *op, RWState::State type) {
-    switch (type) {
-    case RWState::RWWRITE:
-      return get_lock(op, lock.lock_for_write(false));
-    case RWState::RWREAD:
-      return get_lock(op, lock.lock_for_read());
-    case RWState::RWEXCL:
-      return get_lock(op, lock.lock_for_excl());
-    case RWState::RWNONE:
-      return seastar::make_ready_future<>();
-    default:
-      assert(0 == "invalid lock type");
-    }
-  }
-
-  void put_lock_type(RWState::State type) {
-    switch (type) {
-    case RWState::RWWRITE:
-      return lock.unlock_for_write();
-    case RWState::RWREAD:
-      return lock.unlock_for_read();
-    case RWState::RWEXCL:
-      return lock.unlock_for_excl();
-    case RWState::RWNONE:
-      return;
-    default:
-      assert(0 == "invalid lock type");
-    }
-  }
-
-  void degrade_excl_to(RWState::State type) {
-    // assume we already hold an excl lock
-    lock.unlock_for_excl();
-    bool success = false;
-    switch (type) {
-    case RWState::RWWRITE:
-      success = lock.try_lock_for_write(false);
-      break;
-    case RWState::RWREAD:
-      success = lock.try_lock_for_read();
-      break;
-    case RWState::RWEXCL:
-      success = lock.try_lock_for_excl();
-      break;
-    case RWState::RWNONE:
-      success = true;
-      break;
-    default:
-      assert(0 == "invalid lock type");
-      break;
-    }
-    ceph_assert(success);
   }
 
   bool empty() const {

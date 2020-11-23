@@ -6,9 +6,9 @@ Orchestrator CLI
 ================
 
 This module provides a command line interface (CLI) to orchestrator
-modules (ceph-mgr modules which interface with external orchestration services).
+modules (``ceph-mgr`` modules which interface with external orchestration services).
 
-As the orchestrator CLI unifies different external orchestrators, a common nomenclature
+As the orchestrator CLI unifies multiple external orchestrators, a common nomenclature
 for the orchestrator module is needed.
 
 +--------------------------------------+---------------------------------------+
@@ -603,9 +603,9 @@ Or in YAML:
 
 MONs and other services may require some enhanced network specifications::
 
-  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
+  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
 
-where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
+where ``[v2:1.2.3.4:3300,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
 
 Placement by labels

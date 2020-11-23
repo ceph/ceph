@@ -4,6 +4,16 @@ export enum CellTemplate {
   perSecond = 'perSecond',
   checkIcon = 'checkIcon',
   routerLink = 'routerLink',
+  // Display the cell with an executing state. The state can be set to the `cdExecuting`
+  // attribute of table rows.
+  // It supports an optional custom configuration:
+  // {
+  //   ...
+  //   cellTransformation: CellTemplate.executing,
+  //   customTemplateConfig: {
+  //     valueClass?: string;       // Cell value classes.
+  //     executingClass?: string;   // Executing state classes.
+  // }
   executing = 'executing',
   classAdding = 'classAdding',
   // Display the cell value as a badge. The template

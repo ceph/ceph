@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
 
-class MClientCaps : public SafeMessage {
+class MClientCaps final : public SafeMessage {
 private:
 
   static constexpr int HEAD_VERSION = 11;
@@ -167,7 +167,7 @@ protected:
     head.migrate_seq = mseq;
     memset(&peer, 0, sizeof(peer));
   }
-  ~MClientCaps() override {}
+  ~MClientCaps() final {}
 
 private:
   file_layout_t layout;

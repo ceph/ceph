@@ -11,13 +11,13 @@
 // future this message could be generalized to other state bits, but
 // for now name it for its sole application.
 
-class MOSDFull : public PaxosServiceMessage {
+class MOSDFull final : public PaxosServiceMessage {
 public:
   epoch_t map_epoch = 0;
   uint32_t state = 0;
 
 private:
-  ~MOSDFull() {}
+  ~MOSDFull() final {}
 
 public:
   MOSDFull(epoch_t e, unsigned s)

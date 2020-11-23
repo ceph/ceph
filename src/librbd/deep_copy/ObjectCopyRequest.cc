@@ -15,6 +15,7 @@
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -67,9 +68,9 @@ void ObjectCopyRequest<I>::send() {
 template <typename I>
 void ObjectCopyRequest<I>::send_list_snaps() {
   // image extents are consistent across src and dst so compute once
-  Striper::extent_to_file(m_cct, &m_dst_image_ctx->layout, m_dst_object_number,
-                          0, m_dst_image_ctx->layout.object_size,
-                          m_image_extents);
+  io::util::extent_to_file(
+          m_dst_image_ctx, m_dst_object_number, 0,
+          m_dst_image_ctx->layout.object_size, m_image_extents);
   ldout(m_cct, 20) << "image_extents=" << m_image_extents << dendl;
 
   io::SnapIds snap_ids;
@@ -277,8 +278,14 @@ void ObjectCopyRequest<I>::process_copyup() {
 
   // let dispatch layers have a chance to process the data but
   // assume that the dispatch layer will only touch the sparse bufferlist
-  m_dst_image_ctx->io_object_dispatcher->prepare_copyup(
+  auto r = m_dst_image_ctx->io_object_dispatcher->prepare_copyup(
     m_dst_object_number, &m_snapshot_sparse_bufferlist);
+  if (r < 0) {
+    lderr(m_cct) << "failed to prepare copyup data: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
 
   send_write_object();
 }
@@ -578,8 +585,8 @@ void ObjectCopyRequest<I>::merge_write_ops() {
     for (auto [image_offset, image_length] : read_op.image_extent_map) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      Striper::file_to_extents(m_cct, &m_dst_image_ctx->layout, image_offset,
-                               image_length, 0, buffer_offset, &object_extents);
+      io::util::file_to_extents(m_dst_image_ctx, image_offset,
+                                image_length, buffer_offset, &object_extents);
       for (auto& object_extent : object_extents) {
         ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", "
                          << "object_offset=" << object_extent.offset << ", "
@@ -722,8 +729,8 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     for (auto z = zero_interval.begin(); z != zero_interval.end(); ++z) {
       // convert image extents back to object extents for the write op
       striper::LightweightObjectExtents object_extents;
-      Striper::file_to_extents(m_cct, &m_dst_image_ctx->layout, z.get_start(),
-                               z.get_len(), 0, 0, &object_extents);
+      io::util::file_to_extents(m_dst_image_ctx, z.get_start(), z.get_len(), 0,
+                                &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.offset + object_extent.length <=
                       m_dst_image_ctx->layout.object_size);

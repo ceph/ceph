@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MMDSFragmentNotifyAck : public MMDSOp {
+class MMDSFragmentNotifyAck final : public MMDSOp {
 private:
   dirfrag_t base_dirfrag;
   int8_t bits = 0;
@@ -35,7 +35,7 @@ protected:
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }
-  ~MMDSFragmentNotifyAck() override {}
+  ~MMDSFragmentNotifyAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "fragment_notify_ack"; }

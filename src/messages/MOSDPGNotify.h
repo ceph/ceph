@@ -23,7 +23,7 @@
  * PGNotify - notify primary of my PGs and versions.
  */
 
-class MOSDPGNotify : public Message {
+class MOSDPGNotify final : public Message {
 private:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 6;
@@ -52,7 +52,7 @@ private:
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGNotify() override {}
+  ~MOSDPGNotify() final {}
 
 public:  
   std::string_view get_type_name() const override { return "PGnot"; }

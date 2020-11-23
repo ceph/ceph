@@ -85,5 +85,6 @@ target_link_libraries(rbd-mirror
   cls_journal_client
   global
   heap_profiler
-  ${ALLOC_LIBS})
+  ${ALLOC_LIBS}
+  OpenSSL::SSL)
 install(TARGETS rbd-mirror DESTINATION bin)

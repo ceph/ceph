@@ -6,7 +6,7 @@
 
 #include "include/Context.h"
 #include "librbd/crypto/CryptoInterface.h"
-#include "librbd/crypto/DataCryptor.h"
+#include "librbd/crypto/openssl/DataCryptor.h"
 
 namespace librbd {
 namespace crypto {
@@ -15,8 +15,12 @@ template <typename T>
 class BlockCrypto : public CryptoInterface {
 
 public:
+    static BlockCrypto* create(CephContext* cct, DataCryptor<T>* data_cryptor,
+                               uint32_t block_size, uint64_t data_offset) {
+      return new BlockCrypto(cct, data_cryptor, block_size, data_offset);
+    }
     BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
-                uint64_t block_size);
+                uint64_t block_size, uint64_t data_offset);
 
     int encrypt(ceph::bufferlist* data, uint64_t image_offset) override;
     int decrypt(ceph::bufferlist* data, uint64_t image_offset) override;
@@ -25,10 +29,15 @@ public:
       return m_block_size;
     }
 
+    uint64_t get_data_offset() const override {
+      return m_data_offset;
+    }
+
 private:
     CephContext* m_cct;
     DataCryptor<T>* m_data_cryptor;
     uint64_t m_block_size;
+    uint64_t m_data_offset;
     uint32_t m_iv_size;
 
     int crypt(ceph::bufferlist* data, uint64_t image_offset, CipherMode mode);
@@ -36,5 +45,7 @@ private:
 
 } // namespace crypto
 } // namespace librbd
+
+extern template class librbd::crypto::BlockCrypto<EVP_CIPHER_CTX>;
 
 #endif //CEPH_LIBRBD_CRYPTO_BLOCK_CRYPTO_H

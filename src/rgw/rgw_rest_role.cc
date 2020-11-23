@@ -19,7 +19,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRestRole::verify_permission()
+int RGWRestRole::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -27,7 +27,7 @@ int RGWRestRole::verify_permission()
 
   string role_name = s->info.args.get("RoleName");
   RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
-  if (op_ret = role.get(); op_ret < 0) {
+  if (op_ret = role.get(y); op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_ROLE_FOUND;
     }
@@ -74,7 +74,7 @@ int RGWRoleWrite::check_caps(const RGWUserCaps& caps)
     return caps.check_cap("roles", RGW_CAP_WRITE);
 }
 
-int RGWCreateRole::verify_permission()
+int RGWCreateRole::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -124,7 +124,7 @@ int RGWCreateRole::get_params()
   return 0;
 }
 
-void RGWCreateRole::execute()
+void RGWCreateRole::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -132,7 +132,7 @@ void RGWCreateRole::execute()
   }
   RGWRole role(s->cct, store->getRados()->pctl, role_name, role_path, trust_policy,
                 s->user->get_tenant(), max_session_duration);
-  op_ret = role.create(true);
+  op_ret = role.create(true, y);
 
   if (op_ret == -EEXIST) {
     op_ret = -ERR_ROLE_EXISTS;
@@ -164,14 +164,14 @@ int RGWDeleteRole::get_params()
   return 0;
 }
 
-void RGWDeleteRole::execute()
+void RGWDeleteRole::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
 
-  op_ret = _role.delete_obj();
+  op_ret = _role.delete_obj(y);
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
@@ -184,7 +184,7 @@ void RGWDeleteRole::execute()
   s->formatter->close_section();
 }
 
-int RGWGetRole::verify_permission()
+int RGWGetRole::verify_permission(optional_yield y)
 {
   return 0;
 }
@@ -223,14 +223,14 @@ int RGWGetRole::get_params()
   return 0;
 }
 
-void RGWGetRole::execute()
+void RGWGetRole::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
   RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->get_tenant());
-  op_ret = role.get();
+  op_ret = role.get(y);
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
@@ -271,7 +271,7 @@ int RGWModifyRole::get_params()
   return 0;
 }
 
-void RGWModifyRole::execute()
+void RGWModifyRole::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -279,7 +279,7 @@ void RGWModifyRole::execute()
   }
 
   _role.update_trust_policy(trust_policy);
-  op_ret = _role.update();
+  op_ret = _role.update(y);
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -288,7 +288,7 @@ void RGWModifyRole::execute()
   s->formatter->close_section();
 }
 
-int RGWListRoles::verify_permission()
+int RGWListRoles::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -315,14 +315,14 @@ int RGWListRoles::get_params()
   return 0;
 }
 
-void RGWListRoles::execute()
+void RGWListRoles::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
   vector<RGWRole> result;
-  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->get_tenant(), result);
+  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->get_tenant(), result, y);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
@@ -363,7 +363,7 @@ int RGWPutRolePolicy::get_params()
   return 0;
 }
 
-void RGWPutRolePolicy::execute()
+void RGWPutRolePolicy::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -371,7 +371,7 @@ void RGWPutRolePolicy::execute()
   }
 
   _role.set_perm_policy(policy_name, perm_policy);
-  op_ret = _role.update();
+  op_ret = _role.update(y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("PutRolePolicyResponse");
@@ -394,7 +394,7 @@ int RGWGetRolePolicy::get_params()
   return 0;
 }
 
-void RGWGetRolePolicy::execute()
+void RGWGetRolePolicy::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -432,7 +432,7 @@ int RGWListRolePolicies::get_params()
   return 0;
 }
 
-void RGWListRolePolicies::execute()
+void RGWListRolePolicies::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -466,7 +466,7 @@ int RGWDeleteRolePolicy::get_params()
   return 0;
 }
 
-void RGWDeleteRolePolicy::execute()
+void RGWDeleteRolePolicy::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -479,7 +479,7 @@ void RGWDeleteRolePolicy::execute()
   }
 
   if (op_ret == 0) {
-    op_ret = _role.update();
+    op_ret = _role.update(y);
   }
 
   s->formatter->open_object_section("DeleteRolePoliciesResponse");
