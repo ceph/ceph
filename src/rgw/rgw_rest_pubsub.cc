@@ -349,12 +349,12 @@ RGWOp* RGWHandler_REST_PSTopic_AWS::op_post() {
   return nullptr;
 }
 
-int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp) {
+int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp, optional_yield y) {
   /*if (s->info.args.exists("Action") && s->info.args.get("Action").find("Topic") != std::string::npos) {
       // TODO: some topic specific authorization
       return 0;
   }*/
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
+  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
 
@@ -443,10 +443,10 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
 
 public:
   const char* name() const override { return "pubsub_notification_create_s3"; }
-  void execute() override;
+  void execute(optional_yield) override;
 };
 
-void RGWPSCreateNotif_ObjStore_S3::execute() {
+void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
   op_ret = get_params_from_body();
   if (op_ret < 0) {
     return;
@@ -514,7 +514,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
     // generate the internal topic. destination is stored here for the "push-only" case
     // when no subscription exists
     // ARN is cached to make the "GET" method faster
-    op_ret = ups->create_topic(unique_topic_name, topic_info.dest, topic_info.arn, topic_info.opaque_data);
+    op_ret = ups->create_topic(unique_topic_name, topic_info.dest, topic_info.arn, topic_info.opaque_data, y);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to auto-generate unique topic '" << unique_topic_name << 
         "', ret=" << op_ret << dendl;
@@ -523,12 +523,12 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
     ldout(s->cct, 20) << "successfully auto-generated unique topic '" << unique_topic_name << "'" << dendl;
     // generate the notification
     rgw::notify::EventTypeList events;
-    op_ret = b->create_notification(unique_topic_name, c.events, std::make_optional(c.filter), notif_name);
+    op_ret = b->create_notification(unique_topic_name, c.events, std::make_optional(c.filter), notif_name, y);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to auto-generate notification for unique topic '" << unique_topic_name <<
         "', ret=" << op_ret << dendl;
       // rollback generated topic (ignore return value)
-      ups->remove_topic(unique_topic_name);
+      ups->remove_topic(unique_topic_name, y);
       return;
     }
     ldout(s->cct, 20) << "successfully auto-generated notification for unique topic '" << unique_topic_name << "'" << dendl;
@@ -539,13 +539,13 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
       dest.bucket_name = data_bucket_prefix + s->owner.get_id().to_str() + "-" + unique_topic_name;
       dest.oid_prefix = data_oid_prefix + notif_name + "/";
       auto sub = ups->get_sub(notif_name);
-      op_ret = sub->subscribe(unique_topic_name, dest, notif_name);
+      op_ret = sub->subscribe(unique_topic_name, dest, y, notif_name);
       if (op_ret < 0) {
         ldout(s->cct, 1) << "failed to auto-generate subscription '" << notif_name << "', ret=" << op_ret << dendl;
         // rollback generated notification (ignore return value)
-        b->remove_notification(unique_topic_name);
+        b->remove_notification(unique_topic_name, y);
         // rollback generated topic (ignore return value)
-        ups->remove_topic(unique_topic_name);
+        ups->remove_topic(unique_topic_name, y);
         return;
       }
       ldout(s->cct, 20) << "successfully auto-generated subscription '" << notif_name << "'" << dendl;
@@ -573,23 +573,23 @@ private:
     return 0;
   }
 
-  void remove_notification_by_topic(const std::string& topic_name, const RGWUserPubSub::BucketRef& b) {
-    op_ret = b->remove_notification(topic_name);
+  void remove_notification_by_topic(const std::string& topic_name, const RGWUserPubSub::BucketRef& b, optional_yield y) {
+    op_ret = b->remove_notification(topic_name, y);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to remove notification of topic '" << topic_name << "', ret=" << op_ret << dendl;
     }
-    op_ret = ups->remove_topic(topic_name);
+    op_ret = ups->remove_topic(topic_name, y);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to remove auto-generated topic '" << topic_name << "', ret=" << op_ret << dendl;
     }
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   const char* name() const override { return "pubsub_notification_delete_s3"; }
 };
 
-void RGWPSDeleteNotif_ObjStore_S3::execute() {
+void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -614,12 +614,12 @@ void RGWPSDeleteNotif_ObjStore_S3::execute() {
       // remove the auto generated subscription according to notification name (if exist)
       const auto unique_topic_name = unique_topic->get().topic.name;
       auto sub = ups->get_sub(notif_name);
-      op_ret = sub->unsubscribe(unique_topic_name);
+      op_ret = sub->unsubscribe(unique_topic_name, y);
       if (op_ret < 0 && op_ret != -ENOENT) {
         ldout(s->cct, 1) << "failed to remove auto-generated subscription '" << notif_name << "', ret=" << op_ret << dendl;
         return;
       }
-      remove_notification_by_topic(unique_topic_name, b);
+      remove_notification_by_topic(unique_topic_name, b, y);
       return;
     }
     // notification to be removed is not found - considered success
@@ -643,14 +643,14 @@ void RGWPSDeleteNotif_ObjStore_S3::execute() {
       if (!sub_conf.s3_id.empty()) {
         // S3 notification, has autogenerated subscription
         const auto& sub_topic_name = sub_conf.topic;
-        op_ret = sub->unsubscribe(sub_topic_name);
+        op_ret = sub->unsubscribe(sub_topic_name, y);
         if (op_ret < 0) {
           ldout(s->cct, 1) << "failed to remove auto-generated subscription '" << topic_sub_name << "', ret=" << op_ret << dendl;
           return;
         }
       }
     }
-    remove_notification_by_topic(topic.first, b);
+    remove_notification_by_topic(topic.first, b, y);
   }
 }
 
@@ -676,7 +676,7 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
@@ -693,7 +693,7 @@ public:
   const char* name() const override { return "pubsub_notifications_get_s3"; }
 };
 
-void RGWPSListNotifs_ObjStore_S3::execute() {
+void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);

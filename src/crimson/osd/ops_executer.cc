@@ -16,6 +16,7 @@
 #include <seastar/core/thread.hh>
 
 #include "crimson/osd/exceptions.h"
+#include "crimson/osd/pg.h"
 #include "crimson/osd/watch.h"
 #include "osd/ClassHandler.h"
 

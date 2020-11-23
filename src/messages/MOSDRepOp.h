@@ -22,7 +22,7 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public MOSDFastDispatchOp {
+class MOSDRepOp final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -172,7 +172,7 @@ public:
     min_last_complete_ondisk = rollback_to;
   }
 private:
-  ~MOSDRepOp() override {}
+  ~MOSDRepOp() final {}
 
 public:
   std::string_view get_type_name() const override { return "osd_repop"; }

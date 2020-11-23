@@ -87,7 +87,7 @@ int RGWUserCreateCR::Request::_send_request()
   }
 
   RGWNullFlusher flusher;
-  return RGWUserAdminOp_User::create(store, op_state, flusher);
+  return RGWUserAdminOp_User::create(store, op_state, flusher, null_yield);
 }
 
 template<>
@@ -139,7 +139,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   bucket_owner.set_name(user_info->display_name);
   if (bucket_exists) {
     ret = rgw_op_get_bucket_policy_from_attr(cct, store, bucket_info,
-                                             bucket_attrs, &old_policy);
+                                             bucket_attrs, &old_policy, null_yield);
     if (ret >= 0)  {
       if (old_policy.get_owner().get_id().compare(user) != 0) {
         return -EEXIST;
@@ -160,8 +160,8 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     bucket.tenant = user.tenant;
     bucket.name = bucket_name;
     ret = zone_svc->select_bucket_placement(*user_info, zonegroup_id,
-                                         placement_rule,
-                                         &selected_placement_rule, nullptr);
+					    placement_rule,
+					    &selected_placement_rule, nullptr, null_yield);
     if (selected_placement_rule != bucket_info.placement_rule) {
       ldout(cct, 0) << "bucket already exists on a different placement rule: "
         << " selected_rule= " << selected_placement_rule
@@ -194,7 +194,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
                                 placement_rule, bucket_info.swift_ver_location,
                                 pquota_info, attrs,
                                 info, nullptr, &ep_objv, creation_time,
-                                pmaster_bucket, pmaster_num_shards, true);
+				pmaster_bucket, pmaster_num_shards, null_yield, true);
 
 
   if (ret && ret != -EEXIST)

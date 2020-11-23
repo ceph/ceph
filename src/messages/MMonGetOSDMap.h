@@ -23,7 +23,7 @@
 
 #include "include/types.h"
 
-class MMonGetOSDMap : public PaxosServiceMessage {
+class MMonGetOSDMap final : public PaxosServiceMessage {
 private:
   epoch_t full_first, full_last;
   epoch_t inc_first, inc_last;
@@ -36,7 +36,7 @@ public:
       inc_first(0),
       inc_last(0) { }
 private:
-  ~MMonGetOSDMap() override {}
+  ~MMonGetOSDMap() final {}
 
 public:
   void request_full(epoch_t first, epoch_t last) {

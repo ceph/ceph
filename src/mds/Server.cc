@@ -3382,23 +3382,6 @@ public:
   }
 };
 
-class CF_MDS_MDRContextFactory : public MDSContextFactory {
-public:
-  CF_MDS_MDRContextFactory(MDCache *cache, MDRequestRef &mdr, bool dl) :
-    mdcache(cache), mdr(mdr), drop_locks(dl) {}
-  MDSContext *build() {
-    if (drop_locks) {
-      mdcache->mds->locker->drop_locks(mdr.get(), nullptr);
-      mdr->drop_local_auth_pins();
-    }
-    return new C_MDS_RetryRequest(mdcache, mdr);
-  }
-private:
-  MDCache *mdcache;
-  MDRequestRef mdr;
-  bool drop_locks;
-};
-
 /* If this returns null, the request has been handled
  * as appropriate: forwarded on, or the client's been replied to */
 CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
@@ -3412,7 +3395,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
     return mdr->in[0];
 
   // traverse
-  CF_MDS_MDRContextFactory cf(mdcache, mdr, true);
+  CF_MDS_RetryRequestFactory cf(mdcache, mdr, true);
   int flags = 0;
   if (refpath.is_last_snap()) {
     if (!no_want_auth)
@@ -3505,7 +3488,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
   }
 
   // traverse to parent dir
-  CF_MDS_MDRContextFactory cf(mdcache, mdr, true);
+  CF_MDS_RetryRequestFactory cf(mdcache, mdr, true);
   int flags = MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_PATH |
 	      MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_XLOCK_DENTRY |
 	      MDS_TRAVERSE_WANT_AUTH;
@@ -3600,7 +3583,7 @@ Server::rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn)
   }
 
   // traverse to parent dir
-  CF_MDS_MDRContextFactory cf(mdcache, mdr, true);
+  CF_MDS_RetryRequestFactory cf(mdcache, mdr, true);
   int flags = MDS_TRAVERSE_RDLOCK_SNAP |  MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_WANT_AUTH;
   int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[0]);
   if (r != 0) {
@@ -3788,7 +3771,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
     want_auth = true; // set want_auth for CEPH_STAT_RSTAT mask
 
   if (!mdr->is_batch_head() && mdr->can_batch()) {
-    CF_MDS_MDRContextFactory cf(mdcache, mdr, false);
+    CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
     int r = mdcache->path_traverse(mdr, cf, mdr->get_filepath(),
 				   (want_auth ? MDS_TRAVERSE_WANT_AUTH : 0),
 				   &mdr->dn[0], &mdr->in[0]);
@@ -7554,7 +7537,7 @@ void Server::handle_peer_rmdir_prep(MDRequestRef& mdr)
   filepath srcpath(mdr->peer_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   CInode *in;
-  CF_MDS_MDRContextFactory cf(mdcache, mdr, false);
+  CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
   int r = mdcache->path_traverse(mdr, cf, srcpath,
 				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED,
 				 &trace, &in);
@@ -9098,7 +9081,7 @@ void Server::handle_peer_rename_prep(MDRequestRef& mdr)
   filepath destpath(mdr->peer_request->destdnpath);
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
-  CF_MDS_MDRContextFactory cf(mdcache, mdr, false);
+  CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
   int r = mdcache->path_traverse(mdr, cf, destpath,
 				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED | MDS_TRAVERSE_WANT_DENTRY,
 				 &trace);

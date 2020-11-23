@@ -20,7 +20,7 @@
 #include "mds/SimpleLock.h"
 #include "messages/MMDSOp.h"
 
-class MLock : public MMDSOp {
+class MLock final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -63,7 +63,7 @@ protected:
     lock->get_parent()->set_object_info(object_info);
     lockdata = std::move(bl);
   }
-  ~MLock() override {}
+  ~MLock() final {}
   
 public:
   std::string_view get_type_name() const override { return "ILock"; }

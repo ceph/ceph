@@ -173,7 +173,7 @@ void ObjectDispatcher<I>::extent_overwritten(
 }
 
 template <typename I>
-void ObjectDispatcher<I>::prepare_copyup(
+int ObjectDispatcher<I>::prepare_copyup(
     uint64_t object_no,
     SnapshotSparseBufferlist* snapshot_sparse_bufferlist) {
   auto cct = this->m_image_ctx->cct;
@@ -183,8 +183,14 @@ void ObjectDispatcher<I>::prepare_copyup(
   for (auto it : this->m_dispatches) {
     auto& object_dispatch_meta = it.second;
     auto object_dispatch = object_dispatch_meta.dispatch;
-    object_dispatch->prepare_copyup(object_no, snapshot_sparse_bufferlist);
+    auto r = object_dispatch->prepare_copyup(
+            object_no, snapshot_sparse_bufferlist);
+    if (r < 0) {
+      return r;
+    }
   }
+
+  return 0;
 }
 
 template <typename I>

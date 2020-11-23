@@ -649,7 +649,7 @@ static void build_redirect_url(req_state *s, const string& redirect_base, string
 }
 
 void abort_early(struct req_state *s, RGWOp* op, int err_no,
-		RGWHandler* handler)
+		 RGWHandler* handler, optional_yield y)
 {
   string error_content("");
   if (!s->formatter) {
@@ -660,13 +660,13 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
   // op->error_handler is responsible for calling it's handler error_handler
   if (op != NULL) {
     int new_err_no;
-    new_err_no = op->error_handler(err_no, &error_content);
+    new_err_no = op->error_handler(err_no, &error_content, y);
     ldout(s->cct, 1) << "op->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   } else if (handler != NULL) {
     int new_err_no;
-    new_err_no = handler->error_handler(err_no, &error_content);
+    new_err_no = handler->error_handler(err_no, &error_content, y);
     ldout(s->cct, 1) << "handler->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
@@ -785,7 +785,7 @@ int recv_body(struct req_state* const s,
   }
 }
 
-int RGWGetObj_ObjStore::get_params()
+int RGWGetObj_ObjStore::get_params(optional_yield y)
 {
   range_str = s->info.env->get("HTTP_RANGE");
   if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
@@ -1011,7 +1011,7 @@ int RGWPutObj_ObjStore::verify_params()
   return 0;
 }
 
-int RGWPutObj_ObjStore::get_params()
+int RGWPutObj_ObjStore::get_params(optional_yield y)
 {
   /* start gettorrent */
   if (s->cct->_conf->rgw_torrent_flag)
@@ -1389,7 +1389,7 @@ int RGWPostObj_ObjStore::verify_params()
   return 0;
 }
 
-int RGWPostObj_ObjStore::get_params()
+int RGWPostObj_ObjStore::get_params(optional_yield y)
 {
   if (s->expect_cont) {
     /* OK, here it really gets ugly. With POST, the params are embedded in the
@@ -1434,7 +1434,7 @@ int RGWPostObj_ObjStore::get_params()
 }
 
 
-int RGWPutACLs_ObjStore::get_params()
+int RGWPutACLs_ObjStore::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
@@ -1442,21 +1442,21 @@ int RGWPutACLs_ObjStore::get_params()
   return op_ret;
 }
 
-int RGWPutLC_ObjStore::get_params()
+int RGWPutLC_ObjStore::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
   return op_ret;
 }
 
-int RGWPutBucketObjectLock_ObjStore::get_params()
+int RGWPutBucketObjectLock_ObjStore::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
   return op_ret;
 }
 
-int RGWPutObjLegalHold_ObjStore::get_params()
+int RGWPutObjLegalHold_ObjStore::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
@@ -1544,7 +1544,7 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
   return std::make_tuple(0, std::move(bl));
 }
 
-int RGWCompleteMultipart_ObjStore::get_params()
+int RGWCompleteMultipart_ObjStore::get_params(optional_yield y)
 {
   upload_id = s->info.args.get("uploadId");
 
@@ -1561,7 +1561,7 @@ int RGWCompleteMultipart_ObjStore::get_params()
   return 0;
 }
 
-int RGWListMultipart_ObjStore::get_params()
+int RGWListMultipart_ObjStore::get_params(optional_yield y)
 {
   upload_id = s->info.args.get("uploadId");
 
@@ -1588,7 +1588,7 @@ int RGWListMultipart_ObjStore::get_params()
   return op_ret;
 }
 
-int RGWListBucketMultiparts_ObjStore::get_params()
+int RGWListBucketMultiparts_ObjStore::get_params(optional_yield y)
 {
   delimiter = s->info.args.get("delimiter");
   prefix = s->info.args.get("prefix");
@@ -1618,7 +1618,7 @@ int RGWListBucketMultiparts_ObjStore::get_params()
   return 0;
 }
 
-int RGWDeleteMultiObj_ObjStore::get_params()
+int RGWDeleteMultiObj_ObjStore::get_params(optional_yield y)
 {
 
   if (s->bucket_name.empty()) {
@@ -1645,7 +1645,7 @@ void RGWRESTOp::send_response()
   flusher.flush();
 }
 
-int RGWRESTOp::verify_permission()
+int RGWRESTOp::verify_permission(optional_yield)
 {
   return check_caps(s->user->get_info().caps);
 }
@@ -1843,14 +1843,14 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
-int RGWHandler_REST::init_permissions(RGWOp* op)
+int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET) {
     // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
     if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
         map<string, bufferlist> uattrs;
-        if (auto ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &uattrs, null_yield); ! ret) {
+        if (auto ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &uattrs, y); ! ret) {
           auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());
           s->iam_user_policies.insert(s->iam_user_policies.end(),
                                       std::make_move_iterator(user_policies.begin()),
@@ -1865,10 +1865,10 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
     return 0;
   }
 
-  return do_init_permissions();
+  return do_init_permissions(y);
 }
 
-int RGWHandler_REST::read_permissions(RGWOp* op_obj)
+int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
 {
   bool only_bucket = false;
 
@@ -1907,7 +1907,7 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj)
     return -EINVAL;
   }
 
-  return do_read_permissions(op_obj, only_bucket);
+  return do_read_permissions(op_obj, only_bucket, y);
 }
 
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)

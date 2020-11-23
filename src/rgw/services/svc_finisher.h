@@ -25,7 +25,7 @@ private:
 
 protected:
   void init() {}
-  int do_start() override;
+  int do_start(optional_yield y) override;
 
 public:
   RGWSI_Finisher(CephContext *cct): RGWServiceInstance(cct) {}

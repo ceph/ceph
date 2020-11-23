@@ -247,6 +247,7 @@ BackfillState::Enqueuing::remove_on_peers(const hobject_t& check)
 BackfillState::Enqueuing::result_t
 BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
 {
+  logger().debug("{}: check={}", __func__, check);
   const auto& primary_bi = backfill_state().backfill_info;
   result_t result { {}, primary_bi.begin };
 
@@ -340,7 +341,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   } else if (backfill_state().progress_tracker->tracked_objects_completed()) {
     post_event(RequestDone{});
   } else {
-    logger().debug("{}: reached end for both local and all peers ",
+    logger().debug("{}: reached end for both local and all peers "
                    "but still has in-flight operations", __func__);
     post_event(RequestWaiting{});
   }

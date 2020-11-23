@@ -53,6 +53,20 @@ void unsparsify(CephContext* cct, ceph::bufferlist* bl,
 template <typename ImageCtxT = librbd::ImageCtx>
 bool trigger_copyup(ImageCtxT *image_ctx, uint64_t object_no,
                     IOContext io_context, Context* on_finish);
+                
+template <typename ImageCtxT = librbd::ImageCtx>
+void file_to_extents(ImageCtxT *image_ctx, uint64_t offset, uint64_t length,
+                     uint64_t buffer_offset,
+                     striper::LightweightObjectExtents* object_extents);
+
+template <typename ImageCtxT = librbd::ImageCtx>
+void extent_to_file(ImageCtxT *image_ctx, uint64_t object_no, uint64_t offset,
+                    uint64_t length,
+                    std::vector<std::pair<uint64_t, uint64_t> >& extents);
+
+template <typename ImageCtxT = librbd::ImageCtx>
+uint64_t get_file_offset(ImageCtxT *image_ctx, uint64_t object_no,
+                         uint64_t offset);
 
 } // namespace util
 } // namespace io

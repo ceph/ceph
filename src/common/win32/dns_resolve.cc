@@ -13,7 +13,7 @@
  */
 
 #include "include/scope_guard.h"
-#include "dns_resolve.h"
+#include "common/dns_resolve.h"
 #include "common/debug.h"
 
 #define dout_subsys ceph_subsys_

@@ -90,42 +90,19 @@ public:
   public:
     MEMPOOL_CLASS_HELPERS();
     struct scrub_stamps {
-      version_t version;
+      version_t version = 0;
       utime_t time;
-      scrub_stamps() : version(0) {}
-      void operator=(const scrub_stamps &o) {
-        version = o.version;
-        time = o.time;
-      }
     };
 
-    scrub_info_t() :
-      directory_scrubbing(false),
-      need_scrub_local(false),
-      last_scrub_dirty(false),
-      pending_scrub_error(false) {}
+    scrub_info_t() {}
 
-    /// inodes we contain with dirty scrub stamps
-    dentry_key_map dirty_scrub_stamps; // TODO: make use of this!
-
-    scrub_stamps recursive_start; // when we last started a recursive scrub
     scrub_stamps last_recursive; // when we last finished a recursive scrub
     scrub_stamps last_local; // when we last did a local scrub
 
-    bool directory_scrubbing; /// safety check
-    bool need_scrub_local;
-    bool last_scrub_dirty; /// is scrub info dirty or is it flushed to fnode?
-    bool pending_scrub_error;
+    bool directory_scrubbing = false; /// safety check
+    bool last_scrub_dirty = false; /// is scrub info dirty or is it flushed to fnode?
 
-    /// these are lists of children in each stage of scrubbing
-    dentry_key_set directories_to_scrub;
-    dentry_key_set directories_scrubbing;
-    dentry_key_set directories_scrubbed;
-    dentry_key_set others_to_scrub;
-    dentry_key_set others_scrubbing;
-    dentry_key_set others_scrubbed;
-
-    ScrubHeaderRefConst header;
+    ScrubHeaderRef header;
   };
 
   // -- pins --
@@ -320,40 +297,23 @@ public:
    * @pre The CDir is marked complete.
    * @post It has set up its internal scrubbing state.
    */
-  void scrub_initialize(const ScrubHeaderRefConst& header);
-  /**
-   * Get the next dentry to scrub. Gives you a CDentry* and its meaning. This
-   * function will give you all directory-representing dentries before any
-   * others.
-   * 0: success, you should scrub this CDentry right now
-   * EAGAIN: is currently fetching the next CDentry into memory for you.
-   *   It will activate your callback when done; try again when it does!
-   * ENOENT: there are no remaining dentries to scrub
-   * <0: There was an unexpected error
-   *
-   * @param cb An MDSContext which will be activated only if
-   *   we return EAGAIN via rcode, or else ignored
-   * @param dnout CDentry * which you should next scrub, or NULL
-   * @returns a value as described above
-   */
-  int scrub_dentry_next(MDSContext *cb, CDentry **dnout);
-  /**
-   * Get the currently scrubbing dentries. When returned, the passed-in
-   * list will be filled with all CDentry * which have been returned
-   * from scrub_dentry_next() but not sent back via scrub_dentry_finished().
-   */
-  std::vector<CDentry*> scrub_dentries_scrubbing();
-  /**
-   * Report to the CDir that a CDentry has been scrubbed. Call this
-   * for every CDentry returned from scrub_dentry_next().
-   * @param dn The CDentry which has been scrubbed.
-   */
-  void scrub_dentry_finished(CDentry *dn);
+  void scrub_initialize(const ScrubHeaderRef& header);
+  const ScrubHeaderRef& get_scrub_header() {
+    static const ScrubHeaderRef nullref;
+    return scrub_infop ? scrub_infop->header : nullref;
+  }
+
+  bool scrub_is_in_progress() const {
+    return (scrub_infop && scrub_infop->directory_scrubbing);
+  }
+
   /**
    * Call this once all CDentries have been scrubbed, according to
    * scrub_dentry_next's listing. It finalizes the scrub statistics.
    */
   void scrub_finished();
+
+  void scrub_aborted();
   /**
    * Tell the CDir to do a local scrub of itself.
    * @pre The CDir is_complete().
@@ -362,9 +322,8 @@ public:
   bool scrub_local();
 
   const scrub_info_t *scrub_info() const {
-    if (!scrub_infop) {
+    if (!scrub_infop)
       scrub_info_create();
-    }
     return scrub_infop.get();
   }
 
@@ -797,12 +756,6 @@ private:
    * Delete the scrub_infop if it's not got any useful data.
    */
   void scrub_maybe_delete_info();
-  /**
-   * Check the given set (presumably one of those in scrub_info_t) for the
-   * next key to scrub and look it up (or fail!).
-   */
-  int _next_dentry_on_set(dentry_key_set &dns, bool missing_okay,
-                          MDSContext *cb, CDentry **dnout);
 
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );

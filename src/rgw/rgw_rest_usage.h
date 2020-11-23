@@ -15,7 +15,7 @@ public:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
   ~RGWHandler_Usage() override = default;
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*, optional_yield) override {
     return 0;
   }
 };

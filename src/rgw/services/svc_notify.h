@@ -53,7 +53,7 @@ private:
 
   bool finalized{false};
 
-  int init_watch();
+  int init_watch(optional_yield y);
   void finalize_watch();
 
   void init(RGWSI_Zone *_zone_svc,
@@ -63,7 +63,7 @@ private:
     rados_svc = _rados_svc;
     finisher_svc = _finisher_svc;
   }
-  int do_start() override;
+  int do_start(optional_yield) override;
   void shutdown() override;
 
   int unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle);

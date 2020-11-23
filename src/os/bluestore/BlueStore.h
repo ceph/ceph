@@ -297,11 +297,13 @@ public:
       ceph_assert(writing.empty());
     }
 
-    void _add_buffer(BufferCacheShard* cache, Buffer *b, int level, Buffer *near) {
+    void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
+        // we might get already cached data for which resetting mempool is inppropriate
+        // hence calling try_assign_to_mempool
+        b->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
         if (writing.empty() || writing.rbegin()->seq <= b->seq) {
           writing.push_back(*b);
         } else {
@@ -316,8 +318,8 @@ public:
           writing.insert(it, *b);
         }
       } else {
-	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-	cache->_add(b, level, near);
+        b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+        cache->_add(b, level, near);
       }
       cache->_audit("_add_buffer end");
     }
@@ -2946,6 +2948,9 @@ public:
   }
   const PerfCounters* get_bluefs_perf_counters() const {
     return bluefs->get_perf_counters();
+  }
+  KeyValueDB* get_kv() {
+    return db;
   }
 
   int queue_transactions(

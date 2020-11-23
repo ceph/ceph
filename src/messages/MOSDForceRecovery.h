@@ -31,7 +31,7 @@ static const int OFR_BACKFILL = 2;
 // cancel priority boost, requeue if necessary
 static const int OFR_CANCEL = 4;
 
-class MOSDForceRecovery : public Message {
+class MOSDForceRecovery final : public Message {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -48,7 +48,7 @@ public:
     Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
-  ~MOSDForceRecovery() {}
+  ~MOSDForceRecovery() final {}
 
 public:
   std::string_view get_type_name() const { return "force_recovery"; }

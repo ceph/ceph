@@ -66,7 +66,10 @@ class TemplateMgr:
         }
         self.mgr = mgr
 
-    def render(self, name: str, context: Optional[dict] = None, managed_context=True) -> str:
+    def render(self, name: str,
+               context: Optional[dict] = None,
+               managed_context=True,
+               host: Optional[str] = None) -> str:
         """Render a string from a template with context.
 
         :param name: template name. e.g. services/nfs/ganesha.conf.j2
@@ -77,6 +80,9 @@ class TemplateMgr:
         :param managed_context: to inject default context like managed header or not, defaults
             to True
         :type managed_context: bool, optional
+        :param host: The host name used to build the key to access
+            the module's persistent key-value store.
+        :type host: Optional[str], optional
         :return: the templated string
         :rtype: str
         """
@@ -86,8 +92,17 @@ class TemplateMgr:
         if context is not None:
             ctx = {**ctx, **context}
 
-        store_name = name.replace('/', '_').rstrip('.j2')
+        # Check if the given name exists in the module's persistent
+        # key-value store, e.g.
+        # - blink_device_light_cmd
+        # - <host>/blink_device_light_cmd
+        # - services/nfs/ganesha.conf
+        store_name = name.rstrip('.j2')
         custom_template = self.mgr.get_store(store_name, None)
+        if host and custom_template is None:
+            store_name = '{}/{}'.format(host, store_name)
+            custom_template = self.mgr.get_store(store_name, None)
+
         if custom_template:
             return self.engine.render_plain(custom_template, ctx)
         else:
