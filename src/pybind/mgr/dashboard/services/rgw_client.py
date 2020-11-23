@@ -163,7 +163,7 @@ def _parse_frontend_config(config):
     the first found option will be returned.
 
     Get more details about the configuration syntax here:
-    http://docs.ceph.com/docs/master/radosgw/frontends/
+    http://docs.ceph.com/en/latest/radosgw/frontends/
     https://civetweb.github.io/civetweb/UserManual.html
 
     :param config: The configuration string to parse.

@@ -44,7 +44,7 @@ MON creation
 
 Monitors are created by following the manual creation steps on::
 
-  http://docs.ceph.com/docs/master/install/manual-deployment/
+  https://docs.ceph.com/en/latest/install/manual-freebsd-deployment/
 
 
 OSD creation

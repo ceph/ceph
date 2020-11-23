@@ -863,7 +863,7 @@ void DaemonServer::log_access_denied(
                      << "entity='" << session->entity_name << "' "
                      << "cmd=" << cmdctx->cmd << ":  access denied";
   ss << "access denied: does your client key have mgr caps? "
-        "See http://docs.ceph.com/docs/master/mgr/administrator/"
+        "See http://docs.ceph.com/en/latest/mgr/administrator/"
         "#client-authentication";
 }
 

@@ -19,7 +19,7 @@ are sufficient for some pools, but others (especially those listed in
 tuning. We recommend using the `Ceph Placement Group’s per Pool
 Calculator <http://ceph.com/pgcalc/>`__ to calculate a suitable number of
 placement groups for these pools. See
-`Pools <http://docs.ceph.com/docs/master/rados/operations/pools/#pools>`__
+`Pools <http://docs.ceph.com/en/latest/rados/operations/pools/#pools>`__
 for details on pool creation.
 
 .. _radosgw-pool-namespaces:
