@@ -86,7 +86,7 @@ Vault authentication
 
 Vault supports several authentication mechanisms. Currently, the Object
 Gateway can be configured to authenticate to Vault using the
-`Token authentication method`_ or a `Vault agent`_.
+`Token authentication method`_ , `Vault agent`_, `Service Account authentication method`_.
 
 Most tokens in Vault have limited lifetimes and powers.  The only
 sort of Vault token that does not have a lifetime are root tokens.
@@ -293,6 +293,60 @@ Once the vault agent is running, you should find it listening
 to port 8100 on localhost, and you should be able to interact
 with it using the vault command.
 
+Service Account authentication
+------------------------------
+.. note:: Service Account authentication is used in K8s enviroments, for this a service account must be attached with RGW pod
+
+On the vault side this can be enabled with help of following settings::
+
+  vault auth enable kubernetes
+
+  vault write auth/kubernetes/config \
+        token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+        kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443" \
+        kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+  Success! Data written to: auth/kubernetes/config
+
+
+The service account authentication method expects a vault role to created with policy and service account.
+The Object Gateway can be configured to use token authentication with the following settings::
+
+  rgw crypt vault auth = service account
+  rgw crypt vault service account token file = /var/run/secrets/kubernetes.io/serviceaccount/token
+  rgw crypt vault service account role = rgwrole
+  rgw crypt vault addr = http://vault-server:8200
+
+Create the vault policies as mentioned in ``Token authentication`` section. Once policy is created, the vault administrator
+needs to attach policy with the vault role and service account as follows::
+
+  vault write auth/kubernetes/role/rgwrole \
+        bound_service_account_names=rook-ceph-rgw \
+        bound_service_account_namespaces=rook-ceph \
+        policies=rgw-kv-policy \
+        ttl=24h
+  Success! Data written to: auth/kubernetes/role/rgwrole
+
+  vault read auth/kubernetes/role/rgwrole
+
+Sample Output::
+
+  Key                                 Value
+  ---                                 -----
+  bound_service_account_names         [rook-ceph-rgw]
+  bound_service_account_namespaces    [rook-ceph]
+  policies                            [rgw-kv-policy]
+  token_bound_cidrs                   []
+  token_explicit_max_ttl              0s
+  token_max_ttl                       0s
+  token_no_default_policy             false
+  token_num_uses                      0
+  token_period                        0s
+  token_policies                      [rgw-kv-policy]
+  token_ttl                           24h
+  token_type                          default
+  ttl                                 24h
+
 Vault namespaces
 ================
 
@@ -317,7 +371,7 @@ Using the KV engine
 A key for server-side encryption can be created in the KV version 2 engine using
 the command line utility, as in the following example::
 
-  vault kv put secret/myproject/mybucketkey key=$(openssl rand -base64 32)
+  vault kv put secret/data/myproject/mybucketkey key=$(openssl rand -base64 32)
 
 Sample output::
 
@@ -374,6 +428,13 @@ Or::
 
   rgw crypt vault auth = agent
   rgw crypt vault addr = http://localhost:8100
+
+Or::
+
+  rgw crypt vault auth = service account
+  rgw crypt vault service account token file = /var/run/secrets/kubernetes.io/serviceaccount/token
+  rgw crypt vault role = rgwrole
+  rgw crypt vault addr = http://vault-server:8200
 
 Choose the secrets engine::
 
@@ -480,3 +541,4 @@ In the transit engine example above, the Gateway would encrypt the secret using 
 .. _KV Secrets engine: https://www.vaultproject.io/docs/secrets/kv/
 .. _Transit engine: https://www.vaultproject.io/docs/secrets/transit
 .. _namespaces: https://www.vaultproject.io/docs/enterprise/namespaces/index.html
+.. _Service account authentication method: https://www.vaultproject.io/docs/auth/kubernetes
