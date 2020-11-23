@@ -6,6 +6,7 @@ import errno
 import logging
 import json
 from datetime import datetime
+from typing import List, Dict
 
 import cephfs
 
@@ -513,6 +514,27 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                           access_level, pool_name, " namespace={0}".format(namespace) if namespace else "")
                          for access_level in access_levels]
         deny_access(self.mgr, client_entity, want_mds_caps, want_osd_caps)
+
+    def authorized_list(self):
+        """
+        Expose a list of auth IDs that have access to a subvolume.
+
+        return: a list of (auth_id, access_level) tuples, where
+                the access_level can be 'r' , or 'rw'.
+                None if no auth ID is given access to the subvolume.
+        """
+        with self.auth_mdata_mgr.subvol_metadata_lock(self.group.groupname, self.subvolname):
+            meta = self.auth_mdata_mgr.subvol_metadata_get(self.group.groupname, self.subvolname)
+            auths = [] # type: List[Dict[str,str]]
+            if not meta or not meta['auths']:
+                return auths
+
+            for auth, auth_data in meta['auths'].items():
+                # Skip partial auth updates.
+                if not auth_data['dirty']:
+                    auths.append({auth: auth_data['access_level']})
+
+            return auths
 
     def _get_clone_source(self):
         try:
