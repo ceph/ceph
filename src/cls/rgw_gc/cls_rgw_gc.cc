@@ -251,6 +251,23 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
     }
   }
 
+  std::unordered_map<string, ceph::real_time> xattr_urgent_data_map;
+  if (urgent_data.num_xattr_urgent_entries > 0) {
+    bufferlist bl;
+    ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+      return ret;
+    }
+    auto iter = bl.cbegin();
+    try {
+      decode(xattr_urgent_data_map, iter);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode xattrs urgent data map");
+      return -EINVAL;
+    }
+  }
+
   // List entries and calculate total number of entries (including invalid entries)
   if (! op.num_entries) {
     op.num_entries = GC_LIST_DEFAULT_MAX;
@@ -283,49 +300,27 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
         CLS_LOG(20, "INFO: cls_rgw_gc_queue_remove_entries(): entry: %s\n", info.tag.c_str());
         total_num_entries++;
         index++;
-        bool found = false;
         //Search for tag in urgent data map
-        auto iter = urgent_data.urgent_data_map.find(info.tag);
-        if (iter != urgent_data.urgent_data_map.end()) {
-          found = true;
-          if (iter->second > info.time) {
+        if (auto i = urgent_data.urgent_data_map.find(info.tag);
+            i != urgent_data.urgent_data_map.end()) {
+          if (i->second > info.time) {
             CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): tag found in urgent data: %s\n", info.tag.c_str());
             continue;
-          } else if (iter->second == info.time) {
+          } else if (i->second == info.time) {
             CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
-            urgent_data.urgent_data_map.erase(info.tag); //erase entry from map, as it will be removed later from queue
+            urgent_data.urgent_data_map.erase(i); //erase entry from map, as it will be removed later from queue
             urgent_data.num_head_urgent_entries -= 1;
           }
-        }//end-if map end
-        if (! found && urgent_data.num_xattr_urgent_entries > 0) {
-          //Search in xattrs
-          bufferlist bl_xattrs;
-          int ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl_xattrs);
-          if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
-            CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
-            return ret;
+        // Search the xattr urgent data map
+        } else if (auto i = xattr_urgent_data_map.find(info.tag);
+                   i != xattr_urgent_data_map.end()) {
+          if (i->second > info.time) {
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
+            continue;
+          } else if (i->second == info.time) {
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
+            xattr_urgent_data_map.erase(i); //erase entry from map, as it will be removed later
           }
-          if (ret != -ENOENT && ret != -ENODATA) {
-            std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
-            auto iter = bl_xattrs.cbegin();
-            try {
-              decode(xattr_urgent_data_map, iter);
-            } catch (ceph::buffer::error& err) {
-              CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode xattrs urgent data map\n");
-              return -EINVAL;
-            } //end - catch
-            auto xattr_iter = xattr_urgent_data_map.find(info.tag);
-            if (xattr_iter != xattr_urgent_data_map.end()) {
-              if (xattr_iter->second > info.time) {
-                CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
-                continue;
-              } else if (xattr_iter->second == info.time) {
-                CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
-                xattr_urgent_data_map.erase(info.tag); //erase entry from map, as it will be removed later
-                urgent_data.num_xattr_urgent_entries -= 1;
-              }
-            }
-          } // end - ret != ENOENT && ENODATA
         }// search in xattrs
         num_entries++;
       }//end-for
@@ -362,6 +357,20 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
       CLS_LOG(5, "ERROR: queue_remove_entries(): returned error %d\n", ret);
       return ret;
     }
+  }
+
+  // update the xattr if we removed anything
+  if (urgent_data.num_xattr_urgent_entries != xattr_urgent_data_map.size()) {
+    bufferlist bl;
+    encode(xattr_urgent_data_map, bl);
+    CLS_LOG(20, "%s(): setting attr: %s", __func__, "cls_queue_urgent_data");
+    ret = cls_cxx_setxattr(hctx, "cls_queue_urgent_data", &bl);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, "cls_queue_urgent_data", ret);
+      return ret;
+    }
+    // update the count in the head
+    urgent_data.num_xattr_urgent_entries = xattr_urgent_data_map.size();
   }
 
   //Update urgent data map
@@ -477,7 +486,7 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
         } //end - catch
       }
       xattr_urgent_data_map.insert({op.info.tag, op.info.time});
-      urgent_data.num_xattr_urgent_entries += 1;
+      urgent_data.num_xattr_urgent_entries = xattr_urgent_data_map.size();
       has_urgent_data = true;
       bufferlist bl_map;
       encode(xattr_urgent_data_map, bl_map);
