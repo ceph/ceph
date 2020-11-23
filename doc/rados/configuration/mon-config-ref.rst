@@ -954,6 +954,7 @@ Client
 :Type: 64-bit Integer Unsigned
 :Default: ``100ul << 20``
 
+.. _pool-settings:
 
 Pool settings
 =============
