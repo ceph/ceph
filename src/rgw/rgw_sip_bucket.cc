@@ -254,7 +254,10 @@ SIProvider::Entry SIProvider_BucketInc::create_entry(rgw_bi_log_entry& be) const
   log_entry.object = be.object;
   log_entry.instance = be.instance;
   log_entry.timestamp = be.timestamp;
-  log_entry.versioned_epoch = be.ver.epoch;
+  if (be.ver.pool < 0) {
+    log_entry.versioned_epoch = be.ver.epoch;
+  }
+
   log_entry.op = siprovider_bucket_entry_info::Info::to_sip_op(be.op);
   log_entry.owner = be.owner;
   log_entry.owner_display_name = be.owner_display_name;

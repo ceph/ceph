@@ -3674,7 +3674,7 @@ protected:
       }
       e.mtime = le.timestamp;
       e.versioned_epoch = le.versioned_epoch;
-      e.is_versioned = !(le.instance.empty() || le.instance == "null");
+      e.is_versioned = (!!e.versioned_epoch) || (!e.key.instance.empty());
       e.op = siprovider_bucket_entry_info::Info::from_sip_op(le.op, e.versioned_epoch);
       e.state = (le.complete ? CLS_RGW_STATE_COMPLETE : CLS_RGW_STATE_PENDING_MODIFY);
       e.tag = le.instance_tag;
@@ -4529,10 +4529,10 @@ struct bucket_list_entry {
   uint64_t size;
   string storage_class;
   rgw_bucket_entry_owner owner;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
   string rgw_tag;
 
-  bucket_list_entry() : delete_marker(false), is_latest(false), size(0), versioned_epoch(0) {}
+  bucket_list_entry() : delete_marker(false), is_latest(false), size(0) {}
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("IsDeleteMarker", delete_marker, obj);
@@ -4554,11 +4554,17 @@ struct bucket_list_entry {
     JSONDecoder::decode_json("Size", size, obj);
     JSONDecoder::decode_json("StorageClass", storage_class, obj);
     JSONDecoder::decode_json("Owner", owner, obj);
-    JSONDecoder::decode_json("VersionedEpoch", versioned_epoch, obj);
-    JSONDecoder::decode_json("RgwxTag", rgw_tag, obj);
-    if (key.instance == "null" && !versioned_epoch) {
+    uint64_t ve;
+    JSONDecoder::decode_json("VersionedEpoch", ve, obj);
+    if (ve > 0) {
+      versioned_epoch = ve;
+      if (key.instance.empty()) {
+        key.instance = "null";
+      }
+    } else if (key.instance == "null") {
       key.instance.clear();
     }
+    JSONDecoder::decode_json("RgwxTag", rgw_tag, obj);
   }
 
   RGWModifyOp get_modify_op() const {
