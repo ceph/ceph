@@ -4570,7 +4570,7 @@ struct bucket_list_entry {
   RGWModifyOp get_modify_op() const {
     if (delete_marker) {
       return CLS_RGW_OP_LINK_OLH_DM;
-    } else if (!key.instance.empty() && key.instance != "null") {
+    } else if (versioned_epoch) {
       return CLS_RGW_OP_LINK_OLH;
     } else {
       return CLS_RGW_OP_ADD;
@@ -4578,8 +4578,7 @@ struct bucket_list_entry {
   }
 
   bool is_versioned() const {
-    return (delete_marker ||
-            (!key.instance.empty() && key.instance != "null"));
+    return !!versioned_epoch;
   }
 };
 
