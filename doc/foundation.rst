@@ -112,7 +112,9 @@ Members
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
 * Sage Weil (Red Hat) - Ceph project leader
+* Winston Damarillio (Amihan)
 * Xie Xingguo (ZTE)
+* Zhang Shaowen (China Mobile)
 
 Joining
 =======
