@@ -512,7 +512,7 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-find_package(Lua REQUIRED)
+find_package(Lua 5.3 REQUIRED)
 
 # rados object classes
 add_subdirectory(cls)
