@@ -946,3 +946,12 @@ def allow_empty_body(func):  # noqa: N802
     except (AttributeError, KeyError):
         func._cp_config = {'tools.json_in.force': False}
     return func
+
+
+def set_cookies(url_prefix, token):
+    cherrypy.response.cookie['token'] = token
+    if url_prefix == 'https':
+        cherrypy.response.cookie['token']['secure'] = True
+    cherrypy.response.cookie['token']['HttpOnly'] = True
+    cherrypy.response.cookie['token']['path'] = '/'
+    cherrypy.response.cookie['token']['SameSite'] = 'Strict'

@@ -17,7 +17,7 @@ from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
 from ..tools import prepare_url_prefix
-from . import Controller, Endpoint, BaseController
+from . import BaseController, Controller, Endpoint, allow_empty_body, set_cookies
 
 
 @Controller('/auth/saml2', secure=False)
@@ -46,6 +46,7 @@ class Saml2(BaseController):
             raise cherrypy.HTTPError(400, 'Single Sign-On is not configured.')
 
     @Endpoint('POST', path="")
+    @allow_empty_body
     def auth_response(self, **kwargs):
         Saml2._check_python_saml()
         req = Saml2._build_req(self._request, kwargs)
@@ -73,6 +74,7 @@ class Saml2(BaseController):
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
             token = token.decode('utf-8')
+            set_cookies(url_prefix, token)
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
         else:
             return {
@@ -106,5 +108,6 @@ class Saml2(BaseController):
         # pylint: disable=unused-argument
         Saml2._check_python_saml()
         JwtManager.reset_user()
+        cherrypy.response.cookie['token'] = {'expires': 0, 'max-age': 0}
         url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         raise cherrypy.HTTPRedirect("{}/#/login".format(url_prefix))
