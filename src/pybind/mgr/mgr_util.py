@@ -370,8 +370,8 @@ def get_default_addr():
             with contextlib.closing(sock):
                 sock.bind(("::1", 0))
                 return True
-        except (AttributeError, socket.error) as e:
-           return False
+        except (AttributeError, socket.error):
+            return False
 
     try:
         return get_default_addr.result  # type: ignore
@@ -515,6 +515,7 @@ def verify_tls_files(cert_fname, pkey_fname):
             'Private key {} and certificate {} do not match up: {}'.format(
                 pkey_fname, cert_fname, str(e)))
 
+
 def get_most_recent_rate(rates):
     """ Get most recent rate from rates
 
@@ -565,6 +566,7 @@ def get_time_series_rates(data):
     return [(data2[0], _derivative(data1, data2)) for data1, data2 in
             _pairwise(data)]
 
+
 def _filter_time_series(data):
     """ Filters time series data
 
@@ -609,6 +611,7 @@ def _filter_time_series(data):
     filtered.append(data[-1])
     return filtered
 
+
 def _derivative(p1, p2):
     """ Derivative between two time series data points
 
@@ -629,6 +632,7 @@ def _derivative(p1, p2):
     """
     return (p2[1] - p1[1]) / float(p2[0] - p1[0])
 
+
 def _pairwise(iterable):
     it = iter(iterable)
     a = next(it, None)
@@ -636,6 +640,7 @@ def _pairwise(iterable):
     for b in it:
         yield (a, b)
         a = b
+
 
 def to_pretty_timedelta(n):
     if n < datetime.timedelta(seconds=120):
