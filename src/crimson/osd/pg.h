@@ -363,6 +363,7 @@ public:
 
   bool try_reserve_recovery_space(
     int64_t primary_num_bytes, int64_t local_num_bytes) final {
+    // TODO
     return true;
   }
   void unreserve_recovery_space() final {}
