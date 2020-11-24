@@ -235,12 +235,16 @@ public:
     laddr_t laddr,
     segment_off_t len) final;
 
+  using scan_extents_cursor =
+    SegmentCleaner::ExtentCallbackInterface::scan_extents_cursor;
+  using scan_extents_ertr =
+    SegmentCleaner::ExtentCallbackInterface::scan_extents_ertr;
   using scan_extents_ret =
     SegmentCleaner::ExtentCallbackInterface::scan_extents_ret;
   scan_extents_ret scan_extents(
-    paddr_t addr,
+    scan_extents_cursor &cursor,
     extent_len_t bytes_to_read) final {
-    return journal.scan_extents(addr, bytes_to_read);
+    return journal.scan_extents(cursor, bytes_to_read);
   }
 
   using release_segment_ret =
