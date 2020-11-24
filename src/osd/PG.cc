@@ -2643,24 +2643,6 @@ void PG::abort_scrub()
  */
 void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 {
-  // Since repair is only by request and we need to scrub afterward
-  // treat the same as req_scrub.
-  if (!scrubber.req_scrub) {
-    if (state_test(PG_STATE_DEEP_SCRUB)) {
-      if (get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
-	  pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
-           dout(10) << "nodeep_scrub set, aborting" << dendl;
-	abort_scrub();
-        return;
-      }
-    } else if (state_test(PG_STATE_SCRUBBING)) {
-      if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) || pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) {
-         dout(10) << "noscrub set, aborting" << dendl;
-	 abort_scrub();
-         return;
-      }
-    }
-  }
   // check for map changes
   if (scrubber.is_chunky_scrub_active()) {
     if (scrubber.epoch_start != info.history.same_interval_since) {
@@ -2906,6 +2888,24 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           done = true;
 	  break;
 	}
+        // Since repair is only by request and we need to scrub afterward
+        // treat the same as req_scrub.
+        if (!scrubber.req_scrub) {
+          if (state_test(PG_STATE_DEEP_SCRUB)) {
+            if (get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+	        pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
+              dout(10) << "nodeep_scrub set, aborting" << dendl;
+	      abort_scrub();
+              return;
+            }
+          } else if (state_test(PG_STATE_SCRUBBING)) {
+            if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) || pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) {
+              dout(10) << "noscrub set, aborting" << dendl;
+	      abort_scrub();
+              return;
+            }
+          }
+        }
 	// end (possible) preemption window
 	scrub_can_preempt = false;
 	if (scrub_preempted) {
