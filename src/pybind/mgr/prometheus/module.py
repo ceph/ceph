@@ -14,7 +14,7 @@ from rbd import RBD
 from collections import namedtuple
 try:
     from typing import Optional, Dict, Any, Set
-except:
+except ImportError:
     pass
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
