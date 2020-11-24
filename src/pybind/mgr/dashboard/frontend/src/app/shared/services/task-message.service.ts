@@ -120,6 +120,10 @@ export class TaskMessageService {
     'host/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.host(metadata)
     ),
+    'host/identify_device': this.newTaskMessage(
+      new TaskMessageOperation($localize`Identifying`, $localize`identify`, $localize`Identified`),
+      (metadata) => $localize`device '${metadata.device}' on host '${metadata.hostname}'`
+    ),
     // OSD tasks
     'osd/create': this.newTaskMessage(
       this.commonOperations.create,
@@ -327,11 +331,6 @@ export class TaskMessageService {
       this.commonOperations.update,
       this.grafana.update_dashboards,
       () => ({})
-    ),
-    // Orchestrator tasks
-    'orchestrator/identify_device': this.newTaskMessage(
-      new TaskMessageOperation($localize`Identifying`, $localize`identify`, $localize`Identified`),
-      (metadata) => $localize`device '${metadata.device}' on host '${metadata.hostname}'`
     ),
     // Service tasks
     'service/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>

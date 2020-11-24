@@ -9,6 +9,7 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
+import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SummaryService } from '~/app/shared/services/summary.service';
@@ -26,6 +27,7 @@ describe('OsdFormComponent', () => {
   let fixture: ComponentFixture<OsdFormComponent>;
   let fixtureHelper: FixtureHelper;
   let orchService: OrchestratorService;
+  let hostService: HostService;
   let summaryService: SummaryService;
   const devices: InventoryDevice[] = [
     {
@@ -109,6 +111,7 @@ describe('OsdFormComponent', () => {
     form = component.form;
     formHelper = new FormHelper(form);
     orchService = TestBed.inject(OrchestratorService);
+    hostService = TestBed.inject(HostService);
     summaryService = TestBed.inject(SummaryService);
     summaryService['summaryDataSource'] = new BehaviorSubject(null);
     summaryService['summaryData$'] = summaryService['summaryDataSource'].asObservable();
@@ -122,7 +125,7 @@ describe('OsdFormComponent', () => {
   describe('without orchestrator', () => {
     beforeEach(() => {
       spyOn(orchService, 'status').and.returnValue(of({ available: false }));
-      spyOn(orchService, 'inventoryDeviceList').and.callThrough();
+      spyOn(hostService, 'inventoryDeviceList').and.callThrough();
       fixture.detectChanges();
     });
 
@@ -132,14 +135,14 @@ describe('OsdFormComponent', () => {
     });
 
     it('should not call inventoryDeviceList', () => {
-      expect(orchService.inventoryDeviceList).not.toHaveBeenCalled();
+      expect(hostService.inventoryDeviceList).not.toHaveBeenCalled();
     });
   });
 
   describe('with orchestrator', () => {
     beforeEach(() => {
       spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-      spyOn(orchService, 'inventoryDeviceList').and.returnValue(of([]));
+      spyOn(hostService, 'inventoryDeviceList').and.returnValue(of([]));
       fixture.detectChanges();
     });
 
