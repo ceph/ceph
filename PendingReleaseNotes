@@ -4,9 +4,6 @@
 * MGR: progress module can now be turned on/off, using the commands:
   ``ceph progress on`` and ``ceph progress off``.
 
-14.2.13
--------
-
-* This release fixes a regression introduced in 14.2.12 which broke deployments
-  that referred to MON hosts using DNS names instead of IP addresses in the
-  ``mon_host`` parameter in ``/etc/ceph/ceph.conf``.
+* The structured output of ``ceph status`` or ``ceph -s`` is now more
+  concise, particularly the ``mgrmap`` and ``monmap`` sections, and the
+  structure of the ``osdmap`` section has been cleaned up.
