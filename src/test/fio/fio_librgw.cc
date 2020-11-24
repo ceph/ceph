@@ -392,8 +392,10 @@ namespace {
 	goto out;
       }
 
-      r = rgw_write(data->fs, object_fh, 0, io_u->buflen, &nbytes,
-		    (void*) io_u->buf, RGW_WRITE_FLAG_NONE);
+      /* librgw can write at any offset, but only sequentially
+       * starting at 0, in one open/write/close cycle */
+      r = rgw_write(data->fs, object_fh, 0, io_u->xfer_buflen, &nbytes,
+		    (void*) io_u->xfer_buf, RGW_WRITE_FLAG_NONE);
       if (!! r) {
 	dprint(FD_IO, "rgw_write failed for %s\n",
 	       object);
@@ -421,8 +423,8 @@ namespace {
 	goto out;
       }
 
-      r = rgw_read(data->fs, object_fh, 0, io_u->buflen, &nbytes, io_u->buf,
-		   RGW_READ_FLAG_NONE);
+      r = rgw_read(data->fs, object_fh, io_u->offset, io_u->xfer_buflen,
+		   &nbytes, io_u->xfer_buf, RGW_READ_FLAG_NONE);
       if (!! r) {
 	dprint(FD_IO, "rgw_read failed for %s\n",
 	       object);
