@@ -49,7 +49,7 @@ namespace {
     rgw_fs* fs;
     rgw_file_handle* bucket_fh;
 
-    sem_t active;
+    std::vector<rgw_file_handle*> fh_vec;
 
     librgw_data(thread_data* td)
       : rgw_h(nullptr), fs(nullptr), bucket_fh(nullptr)
@@ -58,6 +58,17 @@ namespace {
 	aio_events = static_cast<io_u**>(malloc(size));
 	memset(aio_events, 0, size);
       }
+
+    void save_handle(rgw_file_handle* fh) {
+      fh_vec.push_back(fh);
+    }
+
+    void release_handles() {
+      for (auto object_fh : fh_vec) {
+	rgw_fh_rele(fs, object_fh, RGW_FH_RELE_FLAG_NONE);
+      }
+      fh_vec.clear();
+    }
 
     ~librgw_data() {
       free(aio_events);
@@ -298,6 +309,10 @@ namespace {
     /* cleanup specific data */
     librgw_data* data = static_cast<librgw_data*>(td->io_ops_data);
     if (data) {
+
+      /* release active handles */
+      data->release_handles();
+
       if (data->bucket_fh) {
 	r = rgw_fh_rele(data->fs, data->bucket_fh, 0 /* flags */);
       }
@@ -403,8 +418,8 @@ namespace {
 
       r = rgw_close(data->fs, object_fh, 0 /* flags */);
 
-      /* release 1 ref */
-      rgw_fh_rele(data->fs, object_fh, RGW_FH_RELE_FLAG_NONE);
+      /* object_fh is closed but still reachable, save it */
+      data->save_handle(object_fh);
     } else if (io_u->ddir == DDIR_READ) {
 
       r = rgw_lookup(data->fs, data->bucket_fh, object, &object_fh,
@@ -436,7 +451,9 @@ namespace {
 
     if (object_fh) {
       r = rgw_close(data->fs, object_fh, 0 /* flags */);
-      rgw_fh_rele(data->fs, object_fh, RGW_FH_RELE_FLAG_NONE);
+
+      /* object_fh is closed but still reachable, save it */
+      data->save_handle(object_fh);
     }
 
   out:
