@@ -83,7 +83,7 @@ on_tests_error() {
     local ret=$?
     if [[ -n "$JENKINS_HOME" && -z "$ON_TESTS_ERROR_RUN" ]]; then
         CEPH_OUT_DIR=${CEPH_OUT_DIR:-"$LOCAL_BUILD_DIR"/out}
-        display_log "mgr" 1000
+        display_log "mgr" 1500
         display_log "osd" 1000
         ON_TESTS_ERROR_RUN=1
     fi
