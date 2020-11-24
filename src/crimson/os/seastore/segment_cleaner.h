@@ -292,9 +292,11 @@ public:
      *
      * Interface shim for Journal::scan_extents
      */
+    using scan_extents_cursor = Journal::scan_valid_records_cursor;
+    using scan_extents_ertr = Journal::scan_extents_ertr;
     using scan_extents_ret = Journal::scan_extents_ret;
     virtual scan_extents_ret scan_extents(
-      paddr_t addr,
+      scan_extents_cursor &cursor,
       extent_len_t bytes_to_read) = 0;
 
     /**
@@ -518,7 +520,7 @@ private:
   }
 
   // GC status helpers
-  paddr_t gc_current_pos = P_ADDR_NULL;
+  std::unique_ptr<ExtentCallbackInterface::scan_extents_cursor> scan_cursor;
 
   /**
    * do_gc
@@ -547,10 +549,10 @@ private:
    * have been scanned.
    */
   size_t get_bytes_scanned_current_segment() const {
-    if (gc_current_pos == P_ADDR_NULL)
+    if (!scan_cursor)
       return 0;
 
-    return gc_current_pos.offset;
+    return scan_cursor->get_offset().offset;
   }
 
   size_t get_available_bytes() const {
