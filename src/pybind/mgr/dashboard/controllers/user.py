@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 import cherrypy
-from ceph_argparse import CephString  # pylint: disable=import-error
+from ceph_argparse import CephString
 
 from .. import mgr
 from ..exceptions import DashboardException, PasswordPolicyException, \
