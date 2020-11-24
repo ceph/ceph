@@ -601,37 +601,51 @@ Journal::replay_ret Journal::replay(delta_handler_t &&delta_handler)
 }
 
 Journal::scan_extents_ret Journal::scan_extents(
-  paddr_t addr,
+  scan_extents_cursor &cursor,
   extent_len_t bytes_to_read)
 {
-  // Caller doesn't know addr of first record, so addr.offset == 0 is special
-  if (addr.offset == 0) addr.offset = block_size;
-
-  return read_segment_header(addr.segment
+  auto ret = std::make_unique<scan_extents_ret_bare>();
+  auto &retref = *ret;
+  return read_segment_header(cursor.get_offset().segment
   ).handle_error(
     scan_extents_ertr::pass_further{},
     crimson::ct_error::assert_all{}
-  ).safe_then([=](auto header) {
+  ).safe_then([&](auto segment_header) {
+    auto segment_nonce = segment_header.segment_nonce;
     return seastar::do_with(
-      scan_extents_ret_bare(),
-      [=](auto &ret) {
-	return seastar::do_with(
-	  extent_handler_t([&ret](auto addr, const auto &info) mutable {
-	    ret.second.push_back(std::make_pair(addr, info));
-	    return scan_extents_ertr::now();
-	  }),
-	  [=, &ret](auto &handler) mutable {
-	    return scan_segment(
-	      addr,
-	      bytes_to_read,
-	      header.segment_nonce,
-	      nullptr,
-	      &handler).safe_then([&ret](auto next) mutable {
-		ret.first = next;
-		return std::move(ret);
-	      });
-	  });
+      found_record_handler_t(
+	[&](
+	  paddr_t base,
+	  const record_header_t &header,
+	  const bufferlist &mdbuf) mutable {
+
+	  auto infos = try_decode_extent_infos(
+	    header,
+	    mdbuf);
+	  if (!infos) {
+	    // This should be impossible, we did check the crc on the mdbuf
+	    logger().error(
+	      "Journal::scan_extents unable to decode extents for record {}",
+	      base);
+	    assert(infos);
+	  }
+
+	  paddr_t extent_offset = base.add_offset(header.mdlength);
+	  for (const auto &i : *infos) {
+	    retref.emplace_back(extent_offset, i);
+	    extent_offset.offset += i.len;
+	  }
+	  return scan_extents_ertr::now();
+	}),
+      [=, &cursor](auto &dhandler) {
+	return scan_valid_records(
+	  cursor,
+	  segment_nonce,
+	  std::numeric_limits<size_t>::max(),
+	  dhandler).safe_then([](auto){});
       });
+  }).safe_then([ret=std::move(ret)] {
+    return std::move(*ret);
   });
 }
 
