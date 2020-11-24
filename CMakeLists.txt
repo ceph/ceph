@@ -14,7 +14,8 @@ foreach(policy
     CMP0056
     CMP0065
     CMP0074
-    CMP0075)
+    CMP0075
+    CMP0093)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
   endif()
