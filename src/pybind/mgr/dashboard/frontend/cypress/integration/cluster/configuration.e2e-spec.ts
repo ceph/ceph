@@ -5,6 +5,7 @@ describe('Configuration page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     configuration.navigateTo();
   });
 

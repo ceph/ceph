@@ -9,7 +9,6 @@ import {
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
@@ -27,10 +26,6 @@ import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
 
 import { environment } from '../environments/environment';
-
-export function jwtTokenGetter() {
-  return localStorage.getItem('access_token');
-}
 
 @NgModule({
   declarations: [AppComponent],
@@ -50,11 +45,6 @@ export function jwtTokenGetter() {
     AccordionModule.forRoot(),
     BsDropdownModule.forRoot(),
     TabsModule.forRoot(),
-    JwtModule.forRoot({
-      config: {
-        tokenGetter: jwtTokenGetter
-      }
-    }),
     NgBootstrapFormValidationModule.forRoot()
   ],
   exports: [SharedModule],
