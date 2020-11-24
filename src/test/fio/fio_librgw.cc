@@ -241,14 +241,30 @@ namespace {
       r = rgw_lookup(data->fs, data->fs->root_fh, o.bucket_name,
 		     &data->bucket_fh, nullptr, 0, RGW_LOOKUP_FLAG_NONE);
       if (! data->bucket_fh) {
-	dprint(FD_IO, "rgw_lookup on bucket %s failed %s\n", o.bucket_name);
-	return EINVAL;
+	dprint(FD_IO, "rgw_lookup on bucket %s failed, will create\n",
+	       o.bucket_name);
+
+	struct stat st;
+	st.st_uid = o.owner_uid;
+	st.st_gid = o.owner_gid;
+	st.st_mode = 755;
+
+	r = rgw_mkdir(data->fs, data->fs->root_fh, o.bucket_name,
+		      &st, create_mask, &data->bucket_fh, RGW_MKDIR_FLAG_NONE);
+	if (! data->bucket_fh) {
+	  dprint(FD_IO, "rgw_mkdir for bucket %s failed\n", o.bucket_name);
+	  return EINVAL;
+	}
       }
 
       td->io_ops_data = data;
     }
 
     td->o.use_thread = 1;
+
+    if (r != 0) {
+      abort();
+    }
 
     return r;
   }
@@ -465,13 +481,13 @@ namespace {
   int fio_librgw_io_u_init(thread_data* td, io_u* u)
   {
     // no data is allocated, we just use the pointer as a boolean 'completed' flag
-    //u->engine_data = nullptr;
+    u->engine_data = nullptr;
     return 0;
   }
 
   void fio_librgw_io_u_free(thread_data* td, io_u* u)
   {
-    //u->engine_data = nullptr;
+    u->engine_data = nullptr;
   }
 
   struct librgw_ioengine : public ioengine_ops 
@@ -479,7 +495,7 @@ namespace {
     librgw_ioengine() : ioengine_ops({}) {
       name        = "librgw";
       version     = FIO_IOOPS_VERSION;
-      flags       = FIO_DISKLESSIO; // XXX ?
+      flags       = FIO_DISKLESSIO;
       setup       = fio_librgw_setup;
       init        = fio_librgw_init;
       queue       = fio_librgw_queue;
