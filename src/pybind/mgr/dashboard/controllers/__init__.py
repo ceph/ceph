@@ -1031,3 +1031,12 @@ def validate_ceph_type(validations, component=''):
             return func(*args, **kwargs)
         return validate_args
     return decorator
+
+
+def set_cookies(url_prefix, token):
+    cherrypy.response.cookie['token'] = token
+    if url_prefix == 'https':
+        cherrypy.response.cookie['token']['secure'] = True
+    cherrypy.response.cookie['token']['HttpOnly'] = True
+    cherrypy.response.cookie['token']['path'] = '/'
+    cherrypy.response.cookie['token']['SameSite'] = 'Strict'
