@@ -899,8 +899,9 @@ void RADOS::lookup_pool(std::string_view name,
        objecter = impl->objecter]
       (bs::error_code ec) mutable {
 	int64_t ret =
-	  objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-				name);
+	  objecter->with_osdmap([&](const OSDMap &osdmap) {
+	    return osdmap.lookup_pg_pool_name(name);
+	  });
 	if (ret < 0)
 	  ca::dispatch(std::move(c), osdc_errc::pool_dne,
 		       std::int64_t(0));
