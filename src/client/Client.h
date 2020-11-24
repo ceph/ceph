@@ -1167,6 +1167,7 @@ private:
 
   static const VXattr _dir_vxattrs[];
   static const VXattr _file_vxattrs[];
+  static const VXattr _common_vxattrs[];
 
 
 
@@ -1323,6 +1324,9 @@ private:
 
   bool _vxattrcb_mirror_info_exists(Inode *in);
   size_t _vxattrcb_mirror_info(Inode *in, char *val, size_t size);
+
+  size_t _vxattrcb_cluster_fsid(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_client_id(Inode *in, char *val, size_t size);
 
   static const VXattr *_get_vxattrs(Inode *in);
   static const VXattr *_match_vxattr(Inode *in, const char *name);
