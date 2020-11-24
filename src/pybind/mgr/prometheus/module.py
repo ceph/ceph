@@ -9,7 +9,7 @@ import re
 import socket
 import threading
 import time
-from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
+from mgr_module import MgrModule, MgrStandbyModule, PG_STATES
 from mgr_util import get_default_addr, profile_method
 from rbd import RBD
 from collections import namedtuple
@@ -198,9 +198,8 @@ class MetricCollectionThread(threading.Thread):
                 start_time = time.time()
                 data = self.mod.collect()
                 duration = time.time() - start_time
-
                 self.mod.log.debug('collecting cache in thread done')
-                
+
                 sleep_time = self.mod.scrape_interval - duration
                 if sleep_time < 0:
                     self.mod.log.warning(
@@ -1144,26 +1143,8 @@ class Module(MgrModule):
                 if service['type'] != 'mgr':
                     continue
                 id_ = service['id']
-                # get port for prometheus module at mgr with id_
-                # TODO use get_config_prefix or get_config here once
-                # https://github.com/ceph/ceph/pull/20458 is merged
-                result = CommandResult("")
-                assert isinstance(_global_instance, Module)
-                _global_instance.send_command(
-                    result, "mon", '',
-                    json.dumps({
-                        "prefix": "config-key get",
-                        'key': "config/mgr/mgr/prometheus/{}/server_port".format(id_),
-                    }),
-                    "")
-                r, outb, outs = result.wait()
-                if r != 0:
-                    _global_instance.log.error("Failed to retrieve port for mgr {}: {}".format(id_, outs))
-                    targets.append('{}:{}'.format(hostname, DEFAULT_PORT))
-                else:
-                    port = json.loads(outb)
-                    targets.append('{}:{}'.format(hostname, port))
-
+                port = self._get_module_option('server_port', DEFAULT_PORT, id_)
+                targets.append(f'{hostname}:{port}')
         ret = [
             {
                 "targets": targets,
