@@ -259,6 +259,13 @@ public:
     Client *m_client;
   };
 
+  // snapshot info returned via get_snap_info(). nothing to do
+  // with SnapInfo on the MDS.
+  struct SnapInfo {
+    snapid_t id;
+    std::map<std::string, std::string> metadata;
+  };
+
   Client(Messenger *m, MonClient *mc, Objecter *objecter_);
   Client(const Client&) = delete;
   Client(const Client&&) = delete;
@@ -439,6 +446,8 @@ public:
 
   int sync_fs();
   int64_t drop_caches();
+
+  int get_snap_info(const char *path, const UserPerm &perms, SnapInfo *snap_info);
 
   // hpc lazyio
   int lazyio(int fd, int enable);
