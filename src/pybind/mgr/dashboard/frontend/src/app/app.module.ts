@@ -3,7 +3,6 @@ import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import { JwtModule } from '@auth0/angular-jwt';
 import { ToastrModule } from 'ngx-toastr';
 
 import { AppRoutingModule } from './app-routing.module';
@@ -13,10 +12,6 @@ import { CoreModule } from './core/core.module';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
-
-export function jwtTokenGetter() {
-  return localStorage.getItem('access_token');
-}
 
 @NgModule({
   declarations: [AppComponent],
@@ -32,12 +27,7 @@ export function jwtTokenGetter() {
     AppRoutingModule,
     CoreModule,
     SharedModule,
-    CephModule,
-    JwtModule.forRoot({
-      config: {
-        tokenGetter: jwtTokenGetter
-      }
-    })
+    CephModule
   ],
   exports: [SharedModule],
   providers: [

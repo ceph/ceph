@@ -28,7 +28,6 @@ export class AuthService {
       tap((resp: LoginResponse) => {
         this.authStorageService.set(
           resp.username,
-          resp.token,
           resp.permissions,
           resp.sso,
           resp.pwdExpirationDate,
@@ -40,8 +39,8 @@ export class AuthService {
 
   logout(callback: Function = null) {
     return this.http.post('api/auth/logout', null).subscribe((resp: any) => {
-      this.router.navigate(['/login'], { skipLocationChange: true });
       this.authStorageService.remove();
+      this.router.navigate(['/login'], { skipLocationChange: true });
       if (callback) {
         callback();
       }
