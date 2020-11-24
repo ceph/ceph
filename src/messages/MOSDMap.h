@@ -20,7 +20,7 @@
 #include "osd/OSDMap.h"
 #include "include/ceph_features.h"
 
-class MOSDMap : public Message {
+class MOSDMap final : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 3;
@@ -64,7 +64,7 @@ public:
       fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:
-  ~MOSDMap() override {}
+  ~MOSDMap() final {}
 public:
   // marshalling
   void decode_payload() override {

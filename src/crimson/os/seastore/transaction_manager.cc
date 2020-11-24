@@ -272,7 +272,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 	    addr,
 	    laddr,
 	    len).safe_then(
-	      [this, &t, pin=std::move(pin)](CachedExtentRef ret) mutable {
+	      [this, pin=std::move(pin)](CachedExtentRef ret) mutable {
 		auto lref = ret->cast<LogicalCachedExtent>();
 		if (!lref->has_pin()) {
 		  lref->set_pin(std::move(pin));

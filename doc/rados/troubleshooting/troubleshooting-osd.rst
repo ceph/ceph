@@ -241,6 +241,7 @@ unexpected error), search the archives and tracker as above, and
 report it to the `ceph-devel`_ email list if there's no clear fix or
 existing bug.
 
+.. _no-free-drive-space:
 
 No Free Drive Space
 -------------------

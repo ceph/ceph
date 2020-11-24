@@ -23,9 +23,8 @@ public:
             Context* on_finish) override;
 
 private:
-  ImageCtxT* m_image_ctx = nullptr;
-
   void handle_init_parent_cache(int r, Context* on_finish);
+  using ceph::Plugin::cct;
 
 };
 

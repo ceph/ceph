@@ -19,7 +19,7 @@
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPGLog : public MOSDPeeringOp {
+class MOSDPGLog final : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 5;
@@ -81,7 +81,7 @@ public:
   }
 
 private:
-  ~MOSDPGLog() override {}
+  ~MOSDPGLog() final {}
 
 public:
   std::string_view get_type_name() const override { return "PGlog"; }

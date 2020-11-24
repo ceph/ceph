@@ -36,8 +36,8 @@ backtraceDir="${depsToolsetDir}/backtrace"
 snappyDir="${depsToolsetDir}/snappy"
 winLibDir="${depsToolsetDir}/windows/lib"
 generatorUsed="Unix Makefiles"
-
-pyVersion=`python -c "import sys; print('%d.%d' % (sys.version_info.major, sys.version_info.minor))"`
+wnbdSrcDir="${depsSrcDir}/wnbd"
+wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 
 depsDirs="$lz4Dir;$curlDir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
 depsDirs+=";$winLibDir"
@@ -83,7 +83,6 @@ fi
 # or circular), we'll have to stick to static linking.
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D CMAKE_TOOLCHAIN_FILE="$CEPH_DIR/cmake/toolchains/mingw32.cmake" \
-      -D MGR_PYTHON_VERSION=$pyVersion \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
       -D WITH_GSSAPI=OFF -D WITH_FUSE=OFF -D WITH_XFS=OFF \
       -D WITH_BLUESTORE=OFF -D WITH_LEVELDB=OFF \
@@ -100,6 +99,8 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D Boost_THREADAPI="pthread" \
       -D ENABLE_GIT_VERSION=$ENABLE_GIT_VERSION \
       -D ALLOCATOR="$ALLOCATOR" -D CMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE \
+      -D WNBD_INCLUDE_DIRS="$wnbdSrcDir/include" \
+      -D WNBD_LIBRARIES="$wnbdLibDir/libwnbd.a" \
       -G "$generatorUsed" \
       $CEPH_DIR  2>&1 | tee "${BUILD_DIR}/cmake.log"
 
@@ -113,7 +114,7 @@ if [[ -z $SKIP_BUILD ]]; then
     make_targets["src/tools"]="ceph-conf ceph_radosacl ceph_scratchtool rados"
     make_targets["src/tools/immutable_object_cache"]="all"
     make_targets["src/tools/rbd"]="all"
-    make_targets["src/tools/rbd_mirror"]="all"
+    make_targets["src/tools/rbd_wnbd"]="all"
     make_targets["src/compressor"]="all"
 
     for target_subdir in "${!make_targets[@]}"; do

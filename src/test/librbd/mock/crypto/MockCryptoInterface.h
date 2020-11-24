@@ -19,6 +19,10 @@ struct MockCryptoInterface : CryptoInterface {
   uint64_t get_block_size() const override {
     return 4096;
   }
+
+  uint64_t get_data_offset() const override {
+    return 4 * 1024 * 1024;
+  }
 };
 
 } // namespace crypto

@@ -31,7 +31,7 @@ class RGWSI_OTP : public RGWServiceInstance
   RGWSI_OTP_BE_Handler be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
 
-  int do_start() override;
+  int do_start(optional_yield) override;
 
 public:
   struct Svc {

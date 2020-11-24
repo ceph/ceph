@@ -15,9 +15,9 @@ template bool librbd::io::util::trigger_copyup(
         MockImageCtx *image_ctx, uint64_t object_no, IOContext io_context,
         Context* on_finish);
 
-#include "librbd/io/ObjectRequest.cc"
 template class librbd::io::ObjectWriteRequest<librbd::MockImageCtx>;
 template class librbd::io::AbstractObjectWriteRequest<librbd::MockImageCtx>;
+#include "librbd/io/ObjectRequest.cc"
 
 namespace librbd {
 
@@ -54,6 +54,12 @@ CopyupRequest<librbd::MockImageCtx>* CopyupRequest<
         librbd::MockImageCtx>::s_instance = nullptr;
 
 namespace util {
+
+template <> uint64_t get_file_offset(
+        MockImageCtx *image_ctx, uint64_t object_no, uint64_t offset) {
+  return Striper::get_file_offset(image_ctx->cct, &image_ctx->layout,
+                                  object_no, offset);
+}
 
 namespace {
 
@@ -95,6 +101,7 @@ namespace crypto {
 using ::testing::_;
 using ::testing::ElementsAre;
 using ::testing::Invoke;
+using ::testing::InSequence;
 using ::testing::Pair;
 using ::testing::Return;
 using ::testing::WithArg;
@@ -215,6 +222,12 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
   void expect_get_object_size() {
     EXPECT_CALL(*mock_image_ctx, get_object_size()).WillOnce(Return(
             mock_image_ctx->layout.object_size));
+  }
+
+  void expect_remap_extents(uint64_t offset, uint64_t length) {
+    EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, remap_extents(
+            ElementsAre(Pair(offset, length)),
+            io::IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL));
   }
 
   void expect_get_parent_overlap(uint64_t overlap) {
@@ -504,6 +517,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteCopyup) {
 
   expect_get_object_size();
   expect_get_parent_overlap(mock_image_ctx->layout.object_size);
+  expect_remap_extents(0, mock_image_ctx->layout.object_size);
   expect_prune_parent_extents(mock_image_ctx->layout.object_size);
   EXPECT_CALL(mock_exclusive_lock, is_lock_owner()).WillRepeatedly(
           Return(true));
@@ -669,6 +683,70 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, WriteSame) {
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
   dispatcher_ctx->complete(0);
   ASSERT_EQ(0, dispatched_cond.wait());
+}
+
+TEST_F(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
+  char* data = (char*)"0123456789";
+  io::SnapshotSparseBufferlist snapshot_sparse_bufferlist;
+  auto& snap1 = snapshot_sparse_bufferlist[0];
+  auto& snap2 = snapshot_sparse_bufferlist[1];
+
+  snap1.insert(0, 1, {io::SPARSE_EXTENT_STATE_DATA, 1,
+                      ceph::bufferlist::static_from_mem(data + 1, 1)});
+  snap1.insert(8191, 1, {io::SPARSE_EXTENT_STATE_DATA, 1,
+                         ceph::bufferlist::static_from_mem(data + 2, 1)});
+  snap1.insert(8193, 3, {io::SPARSE_EXTENT_STATE_DATA, 3,
+                         ceph::bufferlist::static_from_mem(data + 3, 3)});
+
+  snap2.insert(0, 2, {io::SPARSE_EXTENT_STATE_ZEROED, 2});
+  snap2.insert(8191, 3, {io::SPARSE_EXTENT_STATE_DATA, 3,
+                         ceph::bufferlist::static_from_mem(data + 6, 3)});
+  snap2.insert(16384, 1, {io::SPARSE_EXTENT_STATE_DATA, 1,
+                          ceph::bufferlist::static_from_mem(data + 9, 1)});
+
+  expect_get_object_size();
+  expect_encrypt(6);
+  InSequence seq;
+  expect_remap_extents(0, 4096);
+  expect_remap_extents(4096, 4096);
+  expect_remap_extents(8192, 4096);
+  expect_remap_extents(0, 4096);
+  expect_remap_extents(4096, 8192);
+  expect_remap_extents(16384, 4096);
+  ASSERT_EQ(0, mock_crypto_object_dispatch->prepare_copyup(
+          0, &snapshot_sparse_bufferlist));
+
+  ASSERT_EQ(2, snapshot_sparse_bufferlist.size());
+
+  auto& snap1_result = snapshot_sparse_bufferlist[0];
+  auto& snap2_result = snapshot_sparse_bufferlist[1];
+
+  auto it = snap1_result.begin();
+  ASSERT_NE(it, snap1_result.end());
+  ASSERT_EQ(0, it.get_off());
+  ASSERT_EQ(4096 * 3, it.get_len());
+
+  ASSERT_TRUE(it.get_val().bl.to_str() ==
+    std::string("1") + std::string(4095, '\0') +
+    std::string(4095, '\0') + std::string("2") +
+    std::string(1, '\0') + std::string("345") + std::string(4092, '\0'));
+  ASSERT_EQ(++it, snap1_result.end());
+
+  it = snap2_result.begin();
+  ASSERT_NE(it, snap2_result.end());
+  ASSERT_EQ(0, it.get_off());
+  ASSERT_EQ(4096 * 3, it.get_len());
+  ASSERT_TRUE(it.get_val().bl.to_str() ==
+    std::string(4096, '\0') +
+    std::string(4095, '\0') + std::string("6") +
+    std::string("7845") + std::string(4092, '\0'));
+
+  ASSERT_NE(++it, snap2_result.end());
+  ASSERT_EQ(16384, it.get_off());
+  ASSERT_EQ(4096, it.get_len());
+  ASSERT_TRUE(it.get_val().bl.to_str() ==
+    std::string("9") + std::string(4095, '\0'));
+  ASSERT_EQ(++it, snap2_result.end());
 }
 
 } // namespace io

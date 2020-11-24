@@ -34,6 +34,7 @@
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 
 #include "nbd-netlink.h"
 #include <libnl3/netlink/genl/genl.h>
@@ -180,6 +181,7 @@ static EventSocket terminate_event_sock;
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg);
+static int netlink_disconnect(int index);
 static int netlink_resize(int nbd_index, uint64_t size);
 
 static int run_quiesce_hook(const std::string &quiesce_hook,
@@ -360,7 +362,7 @@ private:
         }
         r = -errno;
         derr << "failed to poll nbd: " << cpp_strerror(r) << dendl;
-        goto signal;
+        goto error;
       }
 
       if ((poll_fds[1].revents & POLLIN) != 0) {
@@ -377,7 +379,7 @@ private:
       if (r < 0) {
 	derr << "failed to read nbd request header: " << cpp_strerror(r)
 	     << dendl;
-	goto signal;
+	goto error;
       }
 
       if (ctx->request.magic != htonl(NBD_REQUEST_MAGIC)) {
@@ -408,7 +410,7 @@ private:
           if (r < 0) {
 	    derr << *ctx << ": failed to read nbd request data: "
 		 << cpp_strerror(r) << dendl;
-            goto signal;
+            goto error;
 	  }
           ctx->data.push_back(ptr);
           break;
@@ -436,6 +438,13 @@ private:
 	  derr << *pctx << ": invalid request command" << dendl;
           c->release();
           goto signal;
+      }
+    }
+error:
+    {
+      int r = netlink_disconnect(nbd_index);
+      if (r == 1) {
+        ioctl(nbd, NBD_DISCONNECT);
       }
     }
 signal:
@@ -814,9 +823,11 @@ private:
   std::map<int, Config> m_mapped_info_cache;
 
   int get_mapped_info(int pid, Config *cfg) {
+    ceph_assert(!cfg->devpath.empty());
+
     auto it = m_mapped_info_cache.find(pid);
     if (it != m_mapped_info_cache.end()) {
-      if (it->second.devpath.empty()) {
+      if (it->second.devpath != cfg->devpath) {
         return -EINVAL;
       }
       *cfg = it->second;
@@ -826,8 +837,19 @@ private:
     m_mapped_info_cache[pid] = {};
 
     int r;
-    std::string path = "/proc/" + stringify(pid) + "/cmdline";
+    std::string path = "/proc/" + stringify(pid) + "/comm";
     std::ifstream ifs;
+    std::string comm;
+    ifs.open(path.c_str(), std::ifstream::in);
+    if (!ifs.is_open())
+      return -1;
+    ifs >> comm;
+    if (comm != "rbd-nbd") {
+      return -EINVAL;
+    }
+    ifs.close();
+
+    path = "/proc/" + stringify(pid) + "/cmdline";
     std::string cmdline;
     std::vector<const char*> args;
 
@@ -856,22 +878,28 @@ private:
     }
 
     std::ostringstream err_msg;
-    r = parse_args(args, &err_msg, cfg);
+    Config c;
+    r = parse_args(args, &err_msg, &c);
     if (r < 0) {
       return r;
     }
 
-    if (cfg->command != Map && cfg->command != Attach) {
+    if (c.command != Map && c.command != Attach) {
       return -ENOENT;
     }
 
-    cfg->pid = pid;
-
+    c.pid = pid;
     m_mapped_info_cache.erase(pid);
-    if (!cfg->devpath.empty()) {
-      m_mapped_info_cache[pid] = *cfg;
+    if (!c.devpath.empty()) {
+      m_mapped_info_cache[pid] = c;
+      if (c.devpath != cfg->devpath) {
+        return -ENOENT;
+      }
+    } else {
+      c.devpath = cfg->devpath;
     }
 
+    *cfg = c;
     return 0;
   }
 
@@ -889,8 +917,8 @@ private:
       }
 
       Config cfg;
-      if (get_mapped_info(pid, &cfg) >=0 && cfg.devpath == devpath &&
-          cfg.command == Attach) {
+      cfg.devpath = devpath;
+      if (get_mapped_info(pid, &cfg) >=0 && cfg.command == Attach) {
         return cfg.pid;
       }
     }
@@ -1431,25 +1459,54 @@ static void run_server(Preforker& forker, NBDServer *server, bool netlink_used)
   shutdown_async_signal_handler();
 }
 
-// Eventually it should be replaced with glibc' pidfd_open
-// when it is widely available.
-static int
-pidfd_open(pid_t pid, unsigned int)
+// Eventually it should be removed when pidfd_open is widely supported.
+
+static int wait_for_terminate_legacy(int pid, int timeout)
 {
-  std::string path = "/proc/" + stringify(pid);
-  int fd = open(path.c_str(), O_RDONLY);
-  if (fd == -1 && errno == ENOENT) {
-    errno = ESRCH;
+  for (int i = 0; ; i++) {
+    if (kill(pid, 0) == -1) {
+      if (errno == ESRCH) {
+        return 0;
+      }
+      int r = -errno;
+      cerr << "rbd-nbd: kill(" << pid << ", 0) failed: "
+           << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (i >= timeout * 2) {
+      break;
+    }
+    usleep(500000);
   }
 
-  return fd;
+  cerr << "rbd-nbd: waiting for process exit timed out" << std::endl;
+  return -ETIMEDOUT;
 }
+
+// Eventually it should be replaced with glibc' pidfd_open
+// when it is widely available.
+
+#ifdef __NR_pidfd_open
+static int pidfd_open(pid_t pid, unsigned int flags)
+{
+  return syscall(__NR_pidfd_open, pid, flags);
+}
+#else
+static int pidfd_open(pid_t pid, unsigned int flags)
+{
+  errno = ENOSYS;
+  return -1;
+}
+#endif
 
 static int wait_for_terminate(int pid, int timeout)
 {
   int fd = pidfd_open(pid, 0);
   if (fd == -1) {
-    if (errno == -ESRCH) {
+    if (errno == ENOSYS) {
+      return wait_for_terminate_legacy(pid, timeout);
+    }
+    if (errno == ESRCH) {
       return 0;
     }
     int r = -errno;
@@ -1469,6 +1526,8 @@ static int wait_for_terminate(int pid, int timeout)
     cerr << "rbd-nbd: failed to poll rbd-nbd process: " << cpp_strerror(r)
          << std::endl;
     goto done;
+  } else {
+    r = 0;
   }
 
   if ((poll_fds[0].revents & POLLIN) == 0) {
@@ -1700,34 +1759,39 @@ static int do_detach(Config *cfg)
 
 static int do_unmap(Config *cfg)
 {
-  int r, nbd;
-
   /*
    * The netlink disconnect call supports devices setup with netlink or ioctl,
    * so we always try that first.
    */
-  r = netlink_disconnect_by_path(cfg->devpath);
-  if (r != 1)
+  int r = netlink_disconnect_by_path(cfg->devpath);
+  if (r < 0) {
     return r;
-
-  nbd = open(cfg->devpath.c_str(), O_RDWR);
-  if (nbd < 0) {
-    cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
-    return nbd;
   }
 
-  r = ioctl(nbd, NBD_DISCONNECT);
-  if (r < 0) {
+  if (r == 1) {
+    int nbd = open(cfg->devpath.c_str(), O_RDWR);
+    if (nbd < 0) {
+      cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
+      return nbd;
+    }
+
+    r = ioctl(nbd, NBD_DISCONNECT);
+    if (r < 0) {
       cerr << "rbd-nbd: the device is not used" << std::endl;
+    }
+
+    close(nbd);
+
+    if (r < 0) {
+      return r;
+    }
   }
 
-  close(nbd);
-
-  if (r < 0) {
-    return r;
+  if (cfg->pid > 0) {
+    r = wait_for_terminate(cfg->pid, cfg->reattach_timeout);
   }
 
-  return wait_for_terminate(cfg->pid, cfg->reattach_timeout);
+  return 0;
 }
 
 static int parse_imgpath(const std::string &imgpath, Config *cfg,
@@ -1819,7 +1883,8 @@ static bool find_mapped_dev_by_spec(Config *cfg, int skip_pid=-1) {
   while (it.get(&c)) {
     if (c.pid != skip_pid &&
         c.poolname == cfg->poolname && c.nsname == cfg->nsname &&
-        c.imgname == cfg->imgname && c.snapname == cfg->snapname) {
+        c.imgname == cfg->imgname && c.snapname == cfg->snapname &&
+        (cfg->devpath.empty() || c.devpath == cfg->devpath)) {
       *cfg = c;
       return true;
     }
@@ -1827,6 +1892,17 @@ static bool find_mapped_dev_by_spec(Config *cfg, int skip_pid=-1) {
   return false;
 }
 
+static int find_proc_by_dev(Config *cfg) {
+  Config c;
+  NBDListIterator it;
+  while (it.get(&c)) {
+    if (c.devpath == cfg->devpath) {
+      *cfg = c;
+      return true;
+    }
+  }
+  return false;
+}
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg) {
@@ -1955,7 +2031,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       if (cfg->devpath.empty()) {
         *err_msg << "rbd-nbd: must specify device to attach";
         return -EINVAL;
-      }      
+      }
       [[fallthrough]];
     case Map:
       if (args.begin() == args.end()) {
@@ -2040,8 +2116,14 @@ static int rbd_nbd(int argc, const char *argv[])
         return -EINVAL;
       break;
     case Detach:
-      if (cfg.devpath.empty() && !find_mapped_dev_by_spec(&cfg)) {
-        cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
+      if (cfg.devpath.empty()) {
+        if (!find_mapped_dev_by_spec(&cfg)) {
+          cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
+               << std::endl;
+          return -ENOENT;
+        }
+      } else if (!find_proc_by_dev(&cfg)) {
+        cerr << "rbd-nbd: no process attached to " << cfg.devpath << " found"
              << std::endl;
         return -ENOENT;
       }
@@ -2050,10 +2132,14 @@ static int rbd_nbd(int argc, const char *argv[])
         return -EINVAL;
       break;
     case Unmap:
-      if (cfg.devpath.empty() && !find_mapped_dev_by_spec(&cfg)) {
-        cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
-             << std::endl;
-        return -ENOENT;
+      if (cfg.devpath.empty()) {
+        if (!find_mapped_dev_by_spec(&cfg)) {
+          cerr << "rbd-nbd: " << cfg.image_spec() << " is not mapped"
+               << std::endl;
+          return -ENOENT;
+        }
+      } else if (!find_proc_by_dev(&cfg)) {
+        // still try to send disconnect to the device
       }
       r = do_unmap(&cfg);
       if (r < 0)

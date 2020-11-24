@@ -22,6 +22,7 @@ public:
   MOCK_METHOD1(shut_down, void(Context*));
 
   MOCK_METHOD1(register_dispatch, void(ImageDispatchInterface*));
+  MOCK_METHOD1(exists, bool(ImageDispatchLayer));
   MOCK_METHOD2(shut_down_dispatch, void(ImageDispatchLayer, Context*));
   MOCK_METHOD1(invalidate_cache, void(Context *));
 
@@ -37,6 +38,8 @@ public:
 
   MOCK_METHOD0(unblock_writes, void());
   MOCK_METHOD1(wait_on_writes_unblocked, void(Context*));
+
+  MOCK_METHOD2(remap_extents, void(Extents&&, ImageExtentsMapType));
 };
 
 } // namespace io

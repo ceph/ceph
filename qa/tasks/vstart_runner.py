@@ -592,6 +592,16 @@ def safe_kill(pid):
         else:
             raise
 
+def mon_in_localhost(config_path="./ceph.conf"):
+    """
+    If the ceph cluster is using the localhost IP as mon host, will must disable ns unsharing
+    """
+    with open(config_path) as f:
+        for line in f:
+            local = re.match(r'^\s*mon host\s*=\s*\[((v1|v2):127\.0\.0\.1:\d+,?)+\]', line)
+            if local:
+                return True
+    return False
 
 class LocalKernelMount(KernelMount):
     def __init__(self, ctx, test_dir, client_id=None,
@@ -1612,6 +1622,9 @@ def exec_test():
 
     if opt_create_cluster_only:
         return
+
+    if opt_use_ns and mon_in_localhost() and not opt_create_cluster:
+        raise RuntimeError("cluster is on localhost; '--usens' option is incompatible. Or you can pass an extra '--create' option to create a new cluster without localhost!")
 
     # List of client mounts, sufficient to run the selected tests
     clients = [i.__str__() for i in range(0, max_required_clients)]

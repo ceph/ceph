@@ -16,7 +16,7 @@
 #ifndef CEPH_MGETPOOLSTATSREPLY_H
 #define CEPH_MGETPOOLSTATSREPLY_H
 
-class MGetPoolStatsReply : public PaxosServiceMessage {
+class MGetPoolStatsReply final : public PaxosServiceMessage {
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -35,7 +35,7 @@ public:
   }
 
 private:
-  ~MGetPoolStatsReply() override {}
+  ~MGetPoolStatsReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "getpoolstats"; }

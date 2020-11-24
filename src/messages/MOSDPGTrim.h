@@ -19,7 +19,7 @@
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPGTrim : public MOSDPeeringOp {
+class MOSDPGTrim final : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -51,7 +51,7 @@ public:
     MOSDPeeringOp{MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION},
     epoch(mv), pgid(p), trim_to(tt) { }
 private:
-  ~MOSDPGTrim() override {}
+  ~MOSDPGTrim() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_trim"; }

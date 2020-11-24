@@ -25,12 +25,12 @@
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
 
-#include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/exceptions.h"
 
 #include "messages/MOSDOp.h"
 
+class PG;
 class PGLSFilter;
 class OSDOp;
 
@@ -85,9 +85,9 @@ private:
 
   ObjectContextRef obc;
   const OpInfo& op_info;
-  PG& pg;
+  const pg_pool_t& pool_info;  // for the sake of the ObjClass API
   PGBackend& backend;
-  Ref<MOSDOp> msg;
+  const MOSDOp& msg;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -166,12 +166,16 @@ private:
   }
 
 public:
-  OpsExecuter(ObjectContextRef obc, const OpInfo& op_info, PG& pg, Ref<MOSDOp> msg)
+  OpsExecuter(ObjectContextRef obc,
+              const OpInfo& op_info,
+              const pg_pool_t& pool_info,
+              PGBackend& backend,
+              const MOSDOp& msg)
     : obc(std::move(obc)),
       op_info(op_info),
-      pg(pg),
-      backend(pg.get_backend()),
-      msg(std::move(msg)) {
+      pool_info(pool_info),
+      backend(backend),
+      msg(msg) {
   }
 
   osd_op_errorator::future<> execute_op(class OSDOp& osd_op);
@@ -180,7 +184,7 @@ public:
   osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
 
   const auto& get_message() const {
-    return *msg;
+    return msg;
   }
 
   size_t get_processed_rw_ops_num() const {
@@ -188,7 +192,7 @@ public:
   }
 
   uint32_t get_pool_stripe_width() const {
-    return pg.get_pool().info.get_stripe_width();
+    return pool_info.get_stripe_width();
   }
 };
 
@@ -233,29 +237,21 @@ OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
   Func&& func,
   MutFunc&& mut_func) &&
 {
-  assert(obc);
   const bool want_mutate = !txn.empty();
-  if (want_mutate) {
-    // osd_op_params are instantiated by every wr-like operation.
-    assert(osd_op_params);
-    osd_op_params->req = std::move(msg);
-    osd_op_params->at_version = pg.next_version();
-    osd_op_params->pg_trim_to = pg.get_pg_trim_to();
-    osd_op_params->min_last_complete_ondisk = pg.get_min_last_complete_ondisk();
-    osd_op_params->last_complete = pg.get_info().last_complete;
-    if (user_modify) {
-      osd_op_params->user_at_version = osd_op_params->at_version.version;
-    }
-  }
+  // osd_op_params are instantiated by every wr-like operation.
+  assert(osd_op_params || !want_mutate);
+  assert(obc);
   if (__builtin_expect(op_effects.empty(), true)) {
     return want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
                                                          std::move(obc),
-                                                         std::move(*osd_op_params))
+                                                         std::move(*osd_op_params),
+                                                         user_modify)
                        : std::forward<Func>(func)(std::move(obc));
   } else {
     return (want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
                                                           std::move(obc),
-                                                          std::move(*osd_op_params))
+                                                          std::move(*osd_op_params),
+                                                          user_modify)
                         : std::forward<Func>(func)(std::move(obc))
     ).safe_then([this] {
       // let's do the cleaning of `op_effects` in destructor

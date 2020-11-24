@@ -6,7 +6,7 @@
 #include "msg/Message.h"
 #include "mgr/ServiceMap.h"
 
-class MServiceMap : public Message {
+class MServiceMap final : public Message {
 public:
   ServiceMap service_map;
 
@@ -16,7 +16,7 @@ public:
       service_map(sm) {
   }
 private:
-  ~MServiceMap() override {}
+  ~MServiceMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "service_map"; }

@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MClientLease : public SafeMessage {
+class MClientLease final : public SafeMessage {
 public:
   struct ceph_mds_lease h;
   std::string dname;
@@ -59,7 +59,7 @@ protected:
     h.last = sl;
     h.duration_ms = 0;
   }
-  ~MClientLease() override {}
+  ~MClientLease() final {}
 
 public:
   std::string_view get_type_name() const override { return "client_lease"; }

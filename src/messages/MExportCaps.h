@@ -18,7 +18,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MExportCaps : public MMDSOp {
+class MExportCaps final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -32,7 +32,7 @@ public:
 protected:
   MExportCaps() :
     MMDSOp{MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MExportCaps() override {}
+  ~MExportCaps() final {}
 
 public:
   std::string_view get_type_name() const override { return "export_caps"; }

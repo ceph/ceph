@@ -51,7 +51,7 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
   RGWSI_BucketInstance_BE_Handler bi_be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> bi_be_module;
 
-  int do_start() override;
+  int do_start(optional_yield) override;
 
   int do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                    const string& key,

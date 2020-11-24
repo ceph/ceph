@@ -19,37 +19,44 @@ often referred to as ``make check`` even though the actual command used to run
 the tests is now ``ctest``. For inclusion in this group of tests, a test
 must:
 
+
 * bind ports that do not conflict with other tests
 * not require root access
 * not require more than one machine to run
 * complete within a few minutes
 
-For simplicity, we will refer to this class of tests as "make check tests" or
-"unit tests", to distinguish them from the more complex "integration tests"
-that are run via the `teuthology framework`_.
+For the sake of simplicity, this class of tests is referred to as "make
+check tests" or "unit tests". This is meant to distinguish these tests from
+the more complex "integration tests" that are run via the `teuthology
+framework`_.
 
 While it is possible to run ``ctest`` directly, it can be tricky to correctly
 set up your environment. Fortunately, a script is provided to make it easier
 run the unit tests on your code. It can be run from the top-level directory of
 the Ceph source tree by invoking::
 
-    $ ./run-make-check.sh
+.. prompt:: bash $
 
 You will need a minimum of 8GB of RAM and 32GB of free drive space for this
 command to complete successfully on x86_64; other architectures may have
-different requirements. Depending on your hardware, it can take from twendy
+different requirements. Depending on your hardware, it can take from twenty
 minutes to three hours to complete, but it's worth the wait.
+
 
 How unit tests are declared
 ---------------------------
 
-Unit tests are declared in the ``CMakeLists.txt`` files (multiple files under
-``./src``) using the ``add_ceph_test`` or ``add_ceph_unittest`` CMake
-functions, which are themselves defined in
-``./cmake/modules/AddCephTest.cmake``. Some unit tests are scripts, while
-others are binaries that are compiled during the build process.  The
-``add_ceph_test`` function is used to declare unit test scripts, while
-``add_ceph_unittest`` is used for unit test binaries.
+Unit tests are declared in the ``CMakeLists.txt`` file, which is found
+in the ``./src`` directory. The ``add_ceph_test`` and 
+``add_ceph_unittest`` CMake functions are used to declare unit tests.
+``add_ceph_test`` and ``add_ceph_unittest`` are themselves defined in
+``./cmake/modules/AddCephTest.cmake``. 
+
+Some unit tests are scripts and other unit tests are binaries that are
+compiled during the build process.  
+
+* ``add_ceph_test`` function - used to declare unit test scripts 
+* ``add_ceph_unittest`` function - used for unit test binaries
 
 Unit testing of CLI tools
 -------------------------

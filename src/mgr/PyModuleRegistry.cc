@@ -60,13 +60,13 @@ void PyModuleRegistry::init()
   }
   PyImport_AppendInittab("ceph_module", PyModule::init_ceph_module);
   Py_InitializeEx(0);
-
+#if PY_VERSION_HEX < 0x03090000
   // Let CPython know that we will be calling it back from other
   // threads in future.
   if (! PyEval_ThreadsInitialized()) {
     PyEval_InitThreads();
   }
-
+#endif
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();

@@ -159,7 +159,7 @@ void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
   svc.bucket_sync = _bucket_sync_svc;
 }
 
-int RGWSI_Bucket_SObj::do_start()
+int RGWSI_Bucket_SObj::do_start(optional_yield)
 {
   binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
   binfo_cache->init(svc.cache);

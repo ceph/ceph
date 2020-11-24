@@ -132,7 +132,8 @@ WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& c
 
 //Offline validation of incoming Web Token which is a signed JWT (JSON Web Token)
 boost::optional<WebTokenEngine::token_t>
-WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s) const
+WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s,
+			     optional_yield y) const
 {
   WebTokenEngine::token_t t;
   try {
@@ -174,7 +175,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (decoded.has_algorithm()) {
       auto& algorithm = decoded.get_algorithm();
       try {
-        validate_signature(dpp, decoded, algorithm, t.iss, thumbprints);
+        validate_signature(dpp, decoded, algorithm, t.iss, thumbprints, y);
       } catch (...) {
         throw -EACCES;
       }
@@ -196,7 +197,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
 }
 
 void
-WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints) const
+WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
     // Get certificate
@@ -206,7 +207,7 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
     //Headers
     cert_req.append_header("Content-Type", "application/x-www-form-urlencoded");
 
-    int res = cert_req.process(null_yield);
+    int res = cert_req.process(y);
     if (res < 0) {
       ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
       throw -EINVAL;
@@ -324,7 +325,8 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
 WebTokenEngine::result_t
 WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
                               const std::string& token,
-                              const req_state* const s) const
+                              const req_state* const s,
+			      optional_yield y) const
 {
   boost::optional<WebTokenEngine::token_t> t;
 
@@ -333,7 +335,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   }
 
   try {
-    t = get_from_jwt(dpp, token, s);
+    t = get_from_jwt(dpp, token, s, y);
   }
   catch (...) {
     return result_t::deny(-EACCES);
@@ -355,13 +357,13 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
 
 } // namespace rgw::auth::sts
 
-int RGWREST_STS::verify_permission()
+int RGWREST_STS::verify_permission(optional_yield y)
 {
   STS::STSService _sts(s->cct, store, s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
 
   string rArn = s->info.args.get("RoleArn");
-  const auto& [ret, role] = sts.getRoleInfo(rArn);
+  const auto& [ret, role] = sts.getRoleInfo(rArn, y);
   if (ret < 0) {
     ldout(s->cct, 0) << "failed to get role info using role arn: " << rArn << dendl;
     return ret;
@@ -402,7 +404,7 @@ void RGWREST_STS::send_response()
   end_header(s);
 }
 
-int RGWSTSGetSessionToken::verify_permission()
+int RGWSTSGetSessionToken::verify_permission(optional_yield y)
 {
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
@@ -440,7 +442,7 @@ int RGWSTSGetSessionToken::get_params()
   return 0;
 }
 
-void RGWSTSGetSessionToken::execute()
+void RGWSTSGetSessionToken::execute(optional_yield y)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
@@ -493,7 +495,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   return 0;
 }
 
-void RGWSTSAssumeRoleWithWebIdentity::execute()
+void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
@@ -552,7 +554,7 @@ int RGWSTSAssumeRole::get_params()
   return 0;
 }
 
-void RGWSTSAssumeRole::execute()
+void RGWSTSAssumeRole::execute(optional_yield y)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
@@ -560,7 +562,7 @@ void RGWSTSAssumeRole::execute()
 
   STS::AssumeRoleRequest req(s->cct, duration, externalId, policy, roleArn,
                         roleSessionName, serialNumber, tokenCode);
-  STS::AssumeRoleResponse response = sts.assumeRole(req);
+  STS::AssumeRoleResponse response = sts.assumeRole(req, y);
   op_ret = std::move(response.retCode);
   //Dump the output
   if (op_ret == 0) {
@@ -581,9 +583,9 @@ void RGWSTSAssumeRole::execute()
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
                             rgw::sal::RGWRadosStore *store,
                             const rgw::auth::StrategyRegistry& auth_registry,
-                            struct req_state *s)
+                            struct req_state *s, optional_yield y)
 {
-    return rgw::auth::Strategy::apply(dpp, auth_registry.get_sts(), s);
+  return rgw::auth::Strategy::apply(dpp, auth_registry.get_sts(), s, y);
 }
 
 void RGWHandler_REST_STS::rgw_sts_parse_input()
@@ -639,12 +641,12 @@ int RGWHandler_REST_STS::init(rgw::sal::RGWRadosStore *store,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp)
+int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp, optional_yield y)
 {
   if (s->info.args.exists("Action") && s->info.args.get("Action") == "AssumeRoleWithWebIdentity") {
-    return RGW_Auth_STS::authorize(dpp, store, auth_registry, s);
+    return RGW_Auth_STS::authorize(dpp, store, auth_registry, s, y);
   }
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
+  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
 int RGWHandler_REST_STS::init_from_header(struct req_state* s,

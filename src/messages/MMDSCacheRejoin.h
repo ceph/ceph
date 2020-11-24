@@ -24,7 +24,7 @@
 
 // sent from replica to auth
 
-class MMDSCacheRejoin : public MMDSOp {
+class MMDSCacheRejoin final : public MMDSOp {
 public:
   static constexpr int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static constexpr int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
@@ -346,7 +346,7 @@ private:
 
   MMDSCacheRejoin(int o) : MMDSCacheRejoin() { op = o; }
   MMDSCacheRejoin() : MMDSOp{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION} {}
-  ~MMDSCacheRejoin() override {}
+  ~MMDSCacheRejoin() final {}
 };
 
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)

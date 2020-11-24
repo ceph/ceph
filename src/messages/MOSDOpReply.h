@@ -29,7 +29,7 @@
  *
  */
 
-class MOSDOpReply : public Message {
+class MOSDOpReply final : public Message {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 2;
@@ -165,7 +165,7 @@ public:
     }
   }
 private:
-  ~MOSDOpReply() override {}
+  ~MOSDOpReply() final {}
 
 public:
   void encode_payload(uint64_t features) override {

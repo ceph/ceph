@@ -90,7 +90,7 @@ struct ObjectDispatchInterface {
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       uint64_t journal_tid, uint64_t new_journal_tid) = 0;
 
-  virtual void prepare_copyup(
+  virtual int prepare_copyup(
       uint64_t object_no,
       SnapshotSparseBufferlist* snapshot_sparse_bufferlist) = 0;
 

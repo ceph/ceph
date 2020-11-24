@@ -1,10 +1,27 @@
+v15.2.6 Octopus
+===============
+
+This is the 6th backport release in the Octopus series. This release fixes
+a security flaw affecting Messenger v1 & v2. We recommend users to update to
+this release.
+
+Notable Changes
+---------------
+
+* CVE 2020-25660: CEPHX_V2 replay attack protection lost, for Messenger v1 & v2 (Ilya Dryomov)
+
+Changelog
+---------
+
+* mon/MonClient: bring back CEPHX_V2 authorizer challenges (Ilya Dryomov)
+
+
 v15.2.5 Octopus
 ===============
 
 This is the fifth release of the Ceph Octopus stable release series. This
 release brings a range of fixes across all components. We recommend that all
 Octopus users upgrade to this release.
-
 
 Notable Changes
 ---------------
@@ -882,7 +899,7 @@ Upgrade compatibility notes
 * The RGW "num_rados_handles" has been removed.
   If you were using a value of "num_rados_handles" greater than 1
   multiply your current "objecter_inflight_ops" and
-  "objecter_inflight_op_bytes" paramaeters by the old
+  "objecter_inflight_op_bytes" parameters by the old
   "num_rados_handles" to get the same throttle behavior.
 
 * Ceph now packages python bindings for python3.6 instead of

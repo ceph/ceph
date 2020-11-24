@@ -23,12 +23,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_bucket_info"; }
 };
 
-void RGWOp_Bucket_Info::execute()
+void RGWOp_Bucket_Info::execute(optional_yield y)
 {
   RGWBucketAdminOpState op_state;
 
@@ -48,7 +48,7 @@ void RGWOp_Bucket_Info::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_fetch_stats(fetch_stats);
 
-  op_ret = RGWBucketAdminOp::info(store, op_state, flusher);
+  op_ret = RGWBucketAdminOp::info(store, op_state, flusher, y);
 }
 
 class RGWOp_Get_Policy : public RGWRESTOp {
@@ -60,12 +60,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_policy"; }
 };
 
-void RGWOp_Get_Policy::execute()
+void RGWOp_Get_Policy::execute(optional_yield y)
 {
   RGWBucketAdminOpState op_state;
 
@@ -90,12 +90,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "check_bucket_index"; }
 };
 
-void RGWOp_Check_Bucket_Index::execute()
+void RGWOp_Check_Bucket_Index::execute(optional_yield y)
 {
   std::string bucket;
 
@@ -124,12 +124,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "link_bucket"; }
 };
 
-void RGWOp_Bucket_Link::execute()
+void RGWOp_Bucket_Link::execute(optional_yield y)
 {
   std::string uid_str;
   std::string bucket;
@@ -150,7 +150,7 @@ void RGWOp_Bucket_Link::execute()
   op_state.set_new_bucket_name(new_bucket_name);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -167,12 +167,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "unlink_bucket"; }
 };
 
-void RGWOp_Bucket_Unlink::execute()
+void RGWOp_Bucket_Unlink::execute(optional_yield y)
 {
   std::string uid_str;
   std::string bucket;
@@ -188,7 +188,7 @@ void RGWOp_Bucket_Unlink::execute()
   op_state.set_bucket_name(bucket);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -205,12 +205,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_bucket"; }
 };
 
-void RGWOp_Bucket_Remove::execute()
+void RGWOp_Bucket_Remove::execute(optional_yield y)
 {
   std::string bucket_name;
   bool delete_children;
@@ -219,7 +219,7 @@ void RGWOp_Bucket_Remove::execute()
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
 
-  op_ret = store->get_bucket(nullptr, string(), bucket_name, &bucket);
+  op_ret = store->get_bucket(nullptr, string(), bucket_name, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
     return;
@@ -237,14 +237,14 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "set_bucket_quota"; }
 };
 
 #define QUOTA_INPUT_MAX_LEN 1024
 
-void RGWOp_Set_Bucket_Quota::execute()
+void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
 {
   bool uid_arg_existed = false;
   std::string uid_str;
@@ -314,12 +314,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "sync_bucket"; }
 };
 
-void RGWOp_Sync_Bucket::execute()
+void RGWOp_Sync_Bucket::execute(optional_yield y)
 {
   std::string bucket;
   std::string tenant;
@@ -346,12 +346,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "remove_object"; }
 };
 
-void RGWOp_Object_Remove::execute()
+void RGWOp_Object_Remove::execute(optional_yield y)
 {
   std::string bucket;
   std::string object;

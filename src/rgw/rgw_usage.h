@@ -9,6 +9,7 @@
 
 #include "common/Formatter.h"
 #include "rgw_formats.h"
+#include "rgw_user.h"
 
 class RGWRados;
 

@@ -394,9 +394,11 @@ RGWUserPubSub::RGWUserPubSub(rgw::sal::RGWRadosStore* _store, const rgw_user& _u
     get_user_meta_obj(&user_meta_obj);
 }
 
-int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
+int RGWUserPubSub::remove(const rgw_raw_obj& obj,
+			  RGWObjVersionTracker *objv_tracker,
+			  optional_yield y)
 {
-  int ret = rgw_delete_system_obj(store->svc()->sysobj, obj.pool, obj.oid, objv_tracker);
+  int ret = rgw_delete_system_obj(store->svc()->sysobj, obj.pool, obj.oid, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -414,9 +416,10 @@ int RGWUserPubSub::read_user_topics(rgw_pubsub_user_topics *result, RGWObjVersio
   return 0;
 }
 
-int RGWUserPubSub::write_user_topics(const rgw_pubsub_user_topics& topics, RGWObjVersionTracker *objv_tracker)
+int RGWUserPubSub::write_user_topics(const rgw_pubsub_user_topics& topics,
+				     RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
-  int ret = write(user_meta_obj, topics, objv_tracker);
+  int ret = write(user_meta_obj, topics, objv_tracker, y);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
@@ -439,9 +442,11 @@ int RGWUserPubSub::Bucket::read_topics(rgw_pubsub_bucket_topics *result, RGWObjV
   return 0;
 }
 
-int RGWUserPubSub::Bucket::write_topics(const rgw_pubsub_bucket_topics& topics, RGWObjVersionTracker *objv_tracker)
+int RGWUserPubSub::Bucket::write_topics(const rgw_pubsub_bucket_topics& topics,
+					RGWObjVersionTracker *objv_tracker,
+					optional_yield y)
 {
-  int ret = ps->write(bucket_meta_obj, topics, objv_tracker);
+  int ret = ps->write(bucket_meta_obj, topics, objv_tracker, y);
   if (ret < 0) {
     ldout(ps->store->ctx(), 1) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
     return ret;
@@ -493,11 +498,11 @@ int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_topic *result)
   return 0;
 }
 
-int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const rgw::notify::EventTypeList& events) {
-    return create_notification(topic_name, events, std::nullopt, "");
+int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, optional_yield y) {
+  return create_notification(topic_name, events, std::nullopt, "", y);
 }
 
-int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name) {
+int RGWUserPubSub::Bucket::create_notification(const string& topic_name,const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) {
   rgw_pubsub_topic_subs user_topic_info;
   rgw::sal::RGWRadosStore *store = ps->store;
 
@@ -528,7 +533,7 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const r
     topic_filter.s3_filter = *s3_filter;
   }
 
-  ret = write_topics(bucket_topics, &objv_tracker);
+  ret = write_topics(bucket_topics, &objv_tracker, y);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to write topics to bucket '" << bucket.name << "': ret=" << ret << dendl;
     return ret;
@@ -539,7 +544,7 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const r
   return 0;
 }
 
-int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
+int RGWUserPubSub::Bucket::remove_notification(const string& topic_name, optional_yield y)
 {
   rgw_pubsub_topic_subs user_topic_info;
   rgw::sal::RGWRadosStore *store = ps->store;
@@ -561,7 +566,7 @@ int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
 
   bucket_topics.topics.erase(topic_name);
 
-  ret = write_topics(bucket_topics, &objv_tracker);
+  ret = write_topics(bucket_topics, &objv_tracker, y);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
@@ -570,11 +575,11 @@ int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
   return 0;
 }
 
-int RGWUserPubSub::create_topic(const string& name) {
-  return create_topic(name, rgw_pubsub_sub_dest(), "", "");
+int RGWUserPubSub::create_topic(const string& name, optional_yield y) {
+  return create_topic(name, rgw_pubsub_sub_dest(), "", "", y);
 }
 
-int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data) {
+int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y) {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_user_topics topics;
 
@@ -592,7 +597,7 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& d
   new_topic.topic.arn = arn;
   new_topic.topic.opaque_data = opaque_data;
 
-  ret = write_user_topics(topics, &objv_tracker);
+  ret = write_user_topics(topics, &objv_tracker, y);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
@@ -601,7 +606,7 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& d
   return 0;
 }
 
-int RGWUserPubSub::remove_topic(const string& name)
+int RGWUserPubSub::remove_topic(const string& name, optional_yield y)
 {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_user_topics topics;
@@ -618,7 +623,7 @@ int RGWUserPubSub::remove_topic(const string& name)
 
   topics.topics.erase(name);
 
-  ret = write_user_topics(topics, &objv_tracker);
+  ret = write_user_topics(topics, &objv_tracker, y);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to remove topics info: ret=" << ret << dendl;
     return ret;
@@ -637,9 +642,11 @@ int RGWUserPubSub::Sub::read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTra
   return 0;
 }
 
-int RGWUserPubSub::Sub::write_sub(const rgw_pubsub_sub_config& sub_conf, RGWObjVersionTracker *objv_tracker)
+int RGWUserPubSub::Sub::write_sub(const rgw_pubsub_sub_config& sub_conf,
+				  RGWObjVersionTracker *objv_tracker,
+				  optional_yield y)
 {
-  int ret = ps->write(sub_meta_obj, sub_conf, objv_tracker);
+  int ret = ps->write(sub_meta_obj, sub_conf, objv_tracker, y);
   if (ret < 0) {
     ldout(ps->store->ctx(), 1) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
@@ -648,9 +655,10 @@ int RGWUserPubSub::Sub::write_sub(const rgw_pubsub_sub_config& sub_conf, RGWObjV
   return 0;
 }
 
-int RGWUserPubSub::Sub::remove_sub(RGWObjVersionTracker *objv_tracker)
+int RGWUserPubSub::Sub::remove_sub(RGWObjVersionTracker *objv_tracker,
+				   optional_yield y)
 {
-  int ret = ps->remove(sub_meta_obj, objv_tracker);
+  int ret = ps->remove(sub_meta_obj, objv_tracker, y);
   if (ret < 0) {
     ldout(ps->store->ctx(), 1) << "ERROR: failed to remove subscription info: ret=" << ret << dendl;
     return ret;
@@ -664,7 +672,7 @@ int RGWUserPubSub::Sub::get_conf(rgw_pubsub_sub_config *result)
   return read_sub(result, nullptr);
 }
 
-int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest& dest, const std::string& s3_id)
+int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest& dest, optional_yield y, const std::string& s3_id)
 {
   RGWObjVersionTracker user_objv_tracker;
   rgw_pubsub_user_topics topics;
@@ -694,13 +702,13 @@ int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest
 
   t.subs.insert(sub);
 
-  ret = ps->write_user_topics(topics, &user_objv_tracker);
+  ret = ps->write_user_topics(topics, &user_objv_tracker, y);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
-  ret = write_sub(sub_conf, nullptr);
+  ret = write_sub(sub_conf, nullptr, y);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
@@ -708,7 +716,7 @@ int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest
   return 0;
 }
 
-int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
+int RGWUserPubSub::Sub::unsubscribe(const string& _topic, optional_yield y)
 {
   string topic = _topic;
   RGWObjVersionTracker sobjv_tracker;
@@ -738,7 +746,7 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
 
       t.subs.erase(sub);
 
-      ret = ps->write_user_topics(topics, &objv_tracker);
+      ret = ps->write_user_topics(topics, &objv_tracker, y);
       if (ret < 0) {
         ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
         return ret;
@@ -746,7 +754,7 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
     }
   }
 
-  ret = remove_sub(&sobjv_tracker);
+  ret = remove_sub(&sobjv_tracker, y);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to delete subscription info: ret=" << ret << dendl;
     return ret;

@@ -19,7 +19,7 @@
 #include "mds/mdstypes.h"
 #include "messages/MMDSOp.h"
 
-class MMDSPeerRequest : public MMDSOp {
+class MMDSPeerRequest final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:
@@ -170,7 +170,7 @@ protected:
     MMDSOp{MSG_MDS_PEER_REQUEST, HEAD_VERSION, COMPAT_VERSION},
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
-  ~MMDSPeerRequest() override {}
+  ~MMDSPeerRequest() final {}
 
 public:
   void encode_payload(uint64_t features) override {

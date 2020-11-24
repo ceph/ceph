@@ -287,7 +287,7 @@ public:
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(openc_response_t)
 
-class MClientReply : public SafeMessage {
+class MClientReply final : public SafeMessage {
 public:
   // reply data
   struct ceph_mds_reply_head head {};
@@ -320,7 +320,7 @@ protected:
     head.result = result;
     head.safe = 1;
   }
-  ~MClientReply() override {}
+  ~MClientReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "creply"; }

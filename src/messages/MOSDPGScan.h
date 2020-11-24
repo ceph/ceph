@@ -17,7 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGScan : public MOSDFastDispatchOp {
+class MOSDPGScan final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -100,7 +100,7 @@ public:
       begin(be), end(en) {
   }
 private:
-  ~MOSDPGScan() override {}
+  ~MOSDPGScan() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_scan"; }

@@ -78,7 +78,7 @@ class Log : private Thread
   void _flush_logbuf();
   void _flush(EntryVector& q, bool crash);
 
-  void _log_message(const char *s, bool crash);
+  void _log_message(std::string_view s, bool crash);
 
 public:
   using Thread::is_started;

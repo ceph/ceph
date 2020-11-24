@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "common/errno.h"
 
-class MAuthReply : public Message {
+class MAuthReply final : public Message {
 public:
   __u32 protocol;
   errorcode32_t result;
@@ -35,7 +35,7 @@ public:
       result_bl = *bl;
   }
 private:
-  ~MAuthReply() override {}
+  ~MAuthReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "auth_reply"; }

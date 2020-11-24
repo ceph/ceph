@@ -17,7 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDMarkMeDown : public PaxosServiceMessage {
+class MOSDMarkMeDown final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
@@ -39,7 +39,7 @@ private:
       fsid(fs), target_osd(osd), target_addrs(av),
       epoch(e), request_ack(request_ack) {}
  private:
-  ~MOSDMarkMeDown() override {}
+  ~MOSDMarkMeDown() final {}
 
 public: 
   epoch_t get_epoch() const { return epoch; }

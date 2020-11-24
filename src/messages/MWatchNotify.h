@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 
-class MWatchNotify : public Message {
+class MWatchNotify final : public Message {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -45,7 +45,7 @@ private:
       return_code(0),
       notifier_gid(n) { }
 private:
-  ~MWatchNotify() override {}
+  ~MWatchNotify() final {}
 
 public:
   void decode_payload() override {

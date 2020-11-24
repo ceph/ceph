@@ -35,7 +35,7 @@ const auto current_period = make_period("5", 5, "4");
 
 // mock puller that throws an exception if it's called
 struct ErrorPuller : public RGWPeriodHistory::Puller {
-  int pull(const std::string& id, RGWPeriod& period) override {
+  int pull(const std::string& id, RGWPeriod& period, optional_yield) override {
     throw std::runtime_error("unexpected call to pull");
   }
 };
@@ -48,7 +48,7 @@ class RecordingPuller : public RGWPeriodHistory::Puller {
  public:
   explicit RecordingPuller(int error) : error(error) {}
   Ids ids;
-  int pull(const std::string& id, RGWPeriod& period) override {
+  int pull(const std::string& id, RGWPeriod& period, optional_yield) override {
     ids.push_back(id);
     return error;
   }
@@ -56,7 +56,7 @@ class RecordingPuller : public RGWPeriodHistory::Puller {
 
 // mock puller that returns a fake period by parsing the period id
 struct NumericPuller : public RGWPeriodHistory::Puller {
-  int pull(const std::string& id, RGWPeriod& period) override {
+  int pull(const std::string& id, RGWPeriod& period, optional_yield) override {
     // relies on numeric period ids to divine the realm_epoch
     auto realm_epoch = boost::lexical_cast<epoch_t>(id);
     auto predecessor = boost::lexical_cast<std::string>(realm_epoch-1);
@@ -133,7 +133,7 @@ TEST(PeriodHistory, PullPredecessorsBeforeCurrent)
 
   // create a disjoint history at 1 and verify that periods are requested
   // backwards from current_period
-  auto c1 = history.attach(make_period("1", 1, ""));
+  auto c1 = history.attach(make_period("1", 1, ""), null_yield);
   ASSERT_FALSE(c1);
   ASSERT_EQ(-EFAULT, c1.get_error());
   ASSERT_EQ(Ids{"4"}, puller.ids);
@@ -141,7 +141,7 @@ TEST(PeriodHistory, PullPredecessorsBeforeCurrent)
   auto c4 = history.insert(make_period("4", 4, "3"));
   ASSERT_TRUE(c4);
 
-  c1 = history.attach(make_period("1", 1, ""));
+  c1 = history.attach(make_period("1", 1, ""), null_yield);
   ASSERT_FALSE(c1);
   ASSERT_EQ(-EFAULT, c1.get_error());
   ASSERT_EQ(Ids({"4", "3"}), puller.ids);
@@ -149,7 +149,7 @@ TEST(PeriodHistory, PullPredecessorsBeforeCurrent)
   auto c3 = history.insert(make_period("3", 3, "2"));
   ASSERT_TRUE(c3);
 
-  c1 = history.attach(make_period("1", 1, ""));
+  c1 = history.attach(make_period("1", 1, ""), null_yield);
   ASSERT_FALSE(c1);
   ASSERT_EQ(-EFAULT, c1.get_error());
   ASSERT_EQ(Ids({"4", "3", "2"}), puller.ids);
@@ -157,7 +157,7 @@ TEST(PeriodHistory, PullPredecessorsBeforeCurrent)
   auto c2 = history.insert(make_period("2", 2, "1"));
   ASSERT_TRUE(c2);
 
-  c1 = history.attach(make_period("1", 1, ""));
+  c1 = history.attach(make_period("1", 1, ""), null_yield);
   ASSERT_TRUE(c1);
   ASSERT_EQ(Ids({"4", "3", "2"}), puller.ids);
 }
@@ -169,22 +169,22 @@ TEST(PeriodHistory, PullPredecessorsAfterCurrent)
 
   // create a disjoint history at 9 and verify that periods are requested
   // backwards down to current_period
-  auto c9 = history.attach(make_period("9", 9, "8"));
+  auto c9 = history.attach(make_period("9", 9, "8"), null_yield);
   ASSERT_FALSE(c9);
   ASSERT_EQ(-EFAULT, c9.get_error());
   ASSERT_EQ(Ids{"8"}, puller.ids);
 
-  auto c8 = history.attach(make_period("8", 8, "7"));
+  auto c8 = history.attach(make_period("8", 8, "7"), null_yield);
   ASSERT_FALSE(c8);
   ASSERT_EQ(-EFAULT, c8.get_error());
   ASSERT_EQ(Ids({"8", "7"}), puller.ids);
 
-  auto c7 = history.attach(make_period("7", 7, "6"));
+  auto c7 = history.attach(make_period("7", 7, "6"), null_yield);
   ASSERT_FALSE(c7);
   ASSERT_EQ(-EFAULT, c7.get_error());
   ASSERT_EQ(Ids({"8", "7", "6"}), puller.ids);
 
-  auto c6 = history.attach(make_period("6", 6, "5"));
+  auto c6 = history.attach(make_period("6", 6, "5"), null_yield);
   ASSERT_TRUE(c6);
   ASSERT_EQ(Ids({"8", "7", "6"}), puller.ids);
 }
@@ -271,7 +271,7 @@ TEST(PeriodHistory, AttachBefore)
   NumericPuller puller;
   RGWPeriodHistory history(g_ceph_context, &puller, current_period);
 
-  auto c1 = history.attach(make_period("1", 1, ""));
+  auto c1 = history.attach(make_period("1", 1, ""), null_yield);
   ASSERT_TRUE(c1);
 
   // verify that we pulled and merged all periods from 1-5
@@ -297,7 +297,7 @@ TEST(PeriodHistory, AttachAfter)
   NumericPuller puller;
   RGWPeriodHistory history(g_ceph_context, &puller, current_period);
 
-  auto c9 = history.attach(make_period("9", 9, "8"));
+  auto c9 = history.attach(make_period("9", 9, "8"), null_yield);
   ASSERT_TRUE(c9);
 
   // verify that we pulled and merged all periods from 5-9

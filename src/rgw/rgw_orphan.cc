@@ -450,7 +450,7 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store->getRados());
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
       string s = loc.oid;
       obj_oids.insert(obj_fingerprint(s));
     }
@@ -1036,7 +1036,7 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
       const rgw_raw_obj& loc =
-	miter.get_location().get_raw_obj(store->getRados());
+	miter.get_location().get_raw_obj(store);
       string s = loc.oid;
       obj_oids.insert(s);
     }
@@ -1525,7 +1525,7 @@ int RGWRadosList::do_incomplete_multipart(
 		 obj_it != manifest.obj_end();
 		 ++obj_it) {
 	      const rgw_raw_obj& loc =
-		obj_it.get_location().get_raw_obj(store->getRados());
+		obj_it.get_location().get_raw_obj(store);
 	      std::cout << loc.oid << std::endl;
 	    }
 	  }

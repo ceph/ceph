@@ -31,6 +31,9 @@
   "ceph health mute DAEMON_OLD_VERSION --sticky".  In this case after
   upgrade has finished use "ceph health unmute DAEMON_OLD_VERSION".
 
+* MGR: progress module can now be turned on/off, using the commands:
+  ``ceph progress on`` and ``ceph progress off``.
+
 >=15.0.0
 --------
 
@@ -182,6 +185,9 @@
 
     ceph daemon <mds of rank 0> scrub_path / force recursive repair
     ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
+
+* CephFS: Scrub is supported in multiple active mds setup. MDS rank 0 handles
+  scrub commands, and forward scrub to other mds if nessesary.
 
 * The following librados API calls have changed:
 

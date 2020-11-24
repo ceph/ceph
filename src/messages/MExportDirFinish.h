@@ -17,7 +17,7 @@
 
 #include "messages/MMDSOp.h"
 
-class MExportDirFinish : public MMDSOp {
+class MExportDirFinish final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -36,7 +36,7 @@ protected:
     MMDSOp{MSG_MDS_EXPORTDIRFINISH, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), last(l) {
     set_tid(tid);
   }
-  ~MExportDirFinish() override {}
+  ~MExportDirFinish() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExFin"; }

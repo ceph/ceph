@@ -18,7 +18,7 @@
 #include "include/filepath.h"
 #include "messages/MMDSOp.h"
 
-class MMDSFindInoReply : public MMDSOp {
+class MMDSFindInoReply final : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:
@@ -28,7 +28,7 @@ public:
 protected:
   MMDSFindInoReply() : MMDSOp{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSFindInoReply(ceph_tid_t t) : MMDSOp{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION}, tid(t) {}
-  ~MMDSFindInoReply() override {}
+  ~MMDSFindInoReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "findinoreply"; }

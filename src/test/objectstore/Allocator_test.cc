@@ -341,12 +341,14 @@ TEST_P(AllocTest, test_dump_fragmentation_score)
 	//allocate
 	want_size = ( rng() % one_alloc_max ) / alloc_unit * alloc_unit + alloc_unit;
 	tmp.clear();
-	uint64_t r = alloc->allocate(want_size, alloc_unit, 0, 0, &tmp);
-	for (auto& t: tmp) {
-	  if (t.length > 0)
-	    allocated.push_back(t);
-	}
-	allocated_cnt += r;
+        int64_t r = alloc->allocate(want_size, alloc_unit, 0, 0, &tmp);
+        if (r > 0) {
+          for (auto& t: tmp) {
+            if (t.length > 0)
+              allocated.push_back(t);
+          }
+          allocated_cnt += r;
+        }
       } else {
 	//free
 	ceph_assert(allocated.size() > 0);

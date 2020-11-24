@@ -144,6 +144,11 @@ def handle_sso_command(cmd):
                              'dashboard sso setup saml2']:
         return -errno.ENOSYS, '', ''
 
+    if cmd['prefix'] == 'dashboard sso disable':
+        mgr.SSO_DB.protocol = ''
+        mgr.SSO_DB.save()
+        return 0, 'SSO is "disabled".', ''
+
     if not python_saml_imported:
         return -errno.EPERM, '', 'Required library not found: `python3-saml`'
 
@@ -156,11 +161,6 @@ def handle_sso_command(cmd):
         mgr.SSO_DB.protocol = 'saml2'
         mgr.SSO_DB.save()
         return 0, 'SSO is "enabled" with "SAML2" protocol.', ''
-
-    if cmd['prefix'] == 'dashboard sso disable':
-        mgr.SSO_DB.protocol = ''
-        mgr.SSO_DB.save()
-        return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso status':
         if mgr.SSO_DB.protocol == 'saml2':
