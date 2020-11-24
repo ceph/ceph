@@ -59,7 +59,7 @@ void RGWSI_Bucket_Sync_SObj::init(RGWSI_Zone *_zone_svc,
   hint_index_mgr.reset(new RGWSI_Bucket_Sync_SObj_HintIndexManager(svc.zone, svc.sysobj));
 }
 
-int RGWSI_Bucket_Sync_SObj::do_start()
+int RGWSI_Bucket_Sync_SObj::do_start(optional_yield)
 {
   sync_policy_cache.reset(new RGWChainedCacheImpl<bucket_sync_policy_cache_entry>);
   sync_policy_cache->init(svc.cache);

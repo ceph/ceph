@@ -1,6 +1,7 @@
 import json
 import errno
 import logging
+import re
 import shlex
 from collections import defaultdict
 from configparser import ConfigParser
@@ -18,7 +19,6 @@ import os
 import random
 import tempfile
 import multiprocessing.pool
-import shutil
 import subprocess
 
 from ceph.deployment import inventory
@@ -598,6 +598,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self._reset_cons()
 
+    def validate_ssh_config_content(self, ssh_config):
+        if ssh_config is None or len(ssh_config.strip()) == 0:
+            raise OrchestratorValidationError('ssh_config cannot be empty')
+        # StrictHostKeyChecking is [yes|no] ?
+        l = re.findall(r'StrictHostKeyChecking\s+.*', ssh_config)
+        if not l:
+            raise OrchestratorValidationError('ssh_config requires StrictHostKeyChecking')
+        for s in l:
+            if 'ask' in s.lower():
+                raise OrchestratorValidationError(f'ssh_config cannot contain: \'{s}\'')
+
     def validate_ssh_config_fname(self, ssh_config_fname):
         if not os.path.isfile(ssh_config_fname):
             raise OrchestratorValidationError("ssh_config \"{}\" does not exist".format(
@@ -657,14 +668,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _set_ssh_config(self, inbuf=None):
         """
         Set an ssh_config file provided from stdin
-
-        TODO:
-          - validation
         """
-        if inbuf is None or len(inbuf) == 0:
-            return -errno.EINVAL, "", "empty ssh config provided"
         if inbuf == self.ssh_config:
             return 0, "value unchanged", ""
+        self.validate_ssh_config_content(inbuf)
         self.set_store("ssh_config", inbuf)
         self.log.info('Set ssh_config')
         self._reconfig_ssh()
@@ -1566,30 +1573,30 @@ To check that the host is reachable:
 
         If you must, you can customize this via::
 
-          ceph config-key set mgr/cephadm/lsmcli_blink_lights_cmd '<my jinja2 template>'
+          ceph config-key set mgr/cephadm/blink_device_light_cmd '<my jinja2 template>'
+          ceph config-key set mgr/cephadm/<host>/blink_device_light_cmd '<my jinja2 template>'
 
-        See templates/lsmcli_blink_lights_cmd.j2
+        See templates/blink_device_light_cmd.j2
         """
         @forall_hosts
         def blink(host, dev, path):
-            j2_ctx = {
-                'on': on,
-                'ident_fault': ident_fault,
-                'dev': dev,
-                'path': path
-            }
-
-            lsmcli_blink_lights_cmd = self.template.render('lsmcli_blink_lights_cmd.j2', j2_ctx)
-
-            cmd = shlex.split(lsmcli_blink_lights_cmd)
+            cmd_line = self.template.render('blink_device_light_cmd.j2',
+                                            {
+                                                'on': on,
+                                                'ident_fault': ident_fault,
+                                                'dev': dev,
+                                                'path': path
+                                            },
+                                            host=host)
+            cmd_args = shlex.split(cmd_line)
 
             out, err, code = self._run_cephadm(
-                host, 'osd', 'shell', ['--'] + cmd,
+                host, 'osd', 'shell', ['--'] + cmd_args,
                 error_ok=True)
             if code:
                 raise OrchestratorError(
                     'Unable to affect %s light for %s:%s. Command: %s' % (
-                        ident_fault, host, dev, ' '.join(cmd)))
+                        ident_fault, host, dev, ' '.join(cmd_args)))
             self.log.info('Set %s light for %s:%s %s' % (
                 ident_fault, host, dev, 'on' if on else 'off'))
             return "Set %s light for %s:%s %s" % (

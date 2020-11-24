@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientRequestForward : public SafeMessage {
+class MClientRequestForward final : public SafeMessage {
 private:
   int32_t dest_mds;
   int32_t num_fwd;
@@ -34,7 +34,7 @@ protected:
     ceph_assert(client_must_resend);
     header.tid = t;
   }
-  ~MClientRequestForward() override {}
+  ~MClientRequestForward() final {}
 
 public:
   int get_dest_mds() const { return dest_mds; }

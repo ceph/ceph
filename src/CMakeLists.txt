@@ -28,7 +28,8 @@ add_definitions(
   -D_REENTRANT
   -D_THREAD_SAFE
   -D__STDC_FORMAT_MACROS
-  -D_FILE_OFFSET_BITS=64)
+  -D_FILE_OFFSET_BITS=64
+  -DBOOST_ASIO_DISABLE_THREAD_KEYWORD_EXTENSION)
 if(LINUX)
   add_definitions("-D_GNU_SOURCE")
 endif()
@@ -126,10 +127,12 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
         -D_FORTIFY_SOURCE=2)
     endif()
   endif()
-  CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
-  if (HAS_STACK_PROTECT)
-    add_compile_options(-fstack-protector-strong)
-  endif()
+  if(NOT WIN32)
+    CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
+    if (HAS_STACK_PROTECT)
+      add_compile_options(-fstack-protector-strong)
+    endif()
+  endif(NOT WIN32)
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 CHECK_C_COMPILER_FLAG("-D_GLIBCXX_ASSERTIONS" HAS_GLIBCXX_ASSERTIONS)
@@ -509,7 +512,7 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-find_package(Lua REQUIRED)
+find_package(Lua 5.3 REQUIRED)
 
 # rados object classes
 add_subdirectory(cls)

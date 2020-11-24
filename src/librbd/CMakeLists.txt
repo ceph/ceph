@@ -56,6 +56,7 @@ set(librbd_internal_srcs
   cache/WriteAroundObjectDispatch.cc
   crypto/BlockCrypto.cc
   crypto/CryptoContextPool.cc
+  crypto/CryptoImageDispatch.cc
   crypto/CryptoObjectDispatch.cc
   crypto/openssl/DataCryptor.cc
   deep_copy/ImageCopyRequest.cc
@@ -126,11 +127,14 @@ set(librbd_internal_srcs
   managed_lock/ReleaseRequest.cc
   managed_lock/Utils.cc
   migration/FileStream.cc
+  migration/HttpClient.cc
+  migration/HttpStream.cc
   migration/ImageDispatch.cc
   migration/NativeFormat.cc
   migration/OpenSourceImageRequest.cc
   migration/RawFormat.cc
   migration/SourceSpecBuilder.cc
+  migration/Utils.cc
   mirror/DemoteRequest.cc
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
@@ -196,6 +200,13 @@ if(WITH_EVENTTRACE)
   list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
 endif()
 
+if(LINUX AND HAVE_LIBCRYPTSETUP)
+  list(APPEND librbd_internal_srcs
+          crypto/luks/Header.cc
+          crypto/luks/FormatRequest.cc
+          crypto/luks/LoadRequest.cc)
+endif()
+
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   set(librbd_internal_srcs
     ${librbd_internal_srcs}
@@ -234,8 +245,13 @@ if(WITH_EVENTTRACE)
   add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE
-  osdc rbd_types)
+  osdc rbd_types
+  OpenSSL::SSL)
 target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
+if(LINUX AND HAVE_LIBCRYPTSETUP)
+  target_include_directories(rbd_internal PRIVATE ${LIBCRYPTSETUP_INCLUDE_DIR})
+  target_link_libraries(rbd_internal PRIVATE ${LIBCRYPTSETUP_LIBRARIES})
+endif()
 
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   target_link_libraries(rbd_internal

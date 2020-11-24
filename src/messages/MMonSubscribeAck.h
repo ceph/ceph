@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMonSubscribeAck : public Message {
+class MMonSubscribeAck final : public Message {
 public:
   __u32 interval;
   uuid_d fsid;
@@ -28,7 +28,7 @@ public:
   MMonSubscribeAck(uuid_d& f, int i) : Message{CEPH_MSG_MON_SUBSCRIBE_ACK},
 				       interval(i), fsid(f) { }
 private:
-  ~MMonSubscribeAck() override {}
+  ~MMonSubscribeAck() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_subscribe_ack"; }

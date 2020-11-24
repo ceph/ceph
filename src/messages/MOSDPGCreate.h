@@ -23,7 +23,7 @@
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
  */
 
-class MOSDPGCreate : public Message {
+class MOSDPGCreate final : public Message {
 public:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
@@ -40,7 +40,7 @@ public:
       epoch(e)
   {}
 private:
-  ~MOSDPGCreate() override {}
+  ~MOSDPGCreate() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_create"; }

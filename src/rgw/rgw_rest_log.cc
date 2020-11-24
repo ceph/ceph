@@ -37,7 +37,7 @@
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
 #define dout_subsys ceph_subsys_rgw
 
-void RGWOp_MDLog_List::execute() {
+void RGWOp_MDLog_List::execute(optional_yield y) {
   string   period = s->info.args.get("period");
   string   shard = s->info.args.get("id");
   string   max_entries_str = s->info.args.get("max-entries");
@@ -117,9 +117,9 @@ void RGWOp_MDLog_List::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Info::execute() {
+void RGWOp_MDLog_Info::execute(optional_yield y) {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = store->svc()->mdlog->read_oldest_log_period();
+  period = store->svc()->mdlog->read_oldest_log_period(y);
   op_ret = period.get_error();
 }
 
@@ -138,7 +138,7 @@ void RGWOp_MDLog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_ShardInfo::execute() {
+void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
   string period = s->info.args.get("period");
   string shard = s->info.args.get("id");
   string err;
@@ -174,7 +174,7 @@ void RGWOp_MDLog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Delete::execute() {
+void RGWOp_MDLog_Delete::execute(optional_yield y) {
   string   marker = s->info.args.get("marker"),
            period = s->info.args.get("period"),
            shard = s->info.args.get("id"),
@@ -231,7 +231,7 @@ void RGWOp_MDLog_Delete::execute() {
   op_ret = meta_log.trim(shard_id, {}, {}, {}, marker);
 }
 
-void RGWOp_MDLog_Lock::execute() {
+void RGWOp_MDLog_Lock::execute(optional_yield y) {
   string period, shard_id_str, duration_str, locker_id, zone_id;
   unsigned shard_id;
 
@@ -280,7 +280,7 @@ void RGWOp_MDLog_Lock::execute() {
     op_ret = -ERR_LOCKED;
 }
 
-void RGWOp_MDLog_Unlock::execute() {
+void RGWOp_MDLog_Unlock::execute(optional_yield y) {
   string period, shard_id_str, locker_id, zone_id;
   unsigned shard_id;
 
@@ -317,7 +317,7 @@ void RGWOp_MDLog_Unlock::execute() {
   op_ret = meta_log.unlock(shard_id, zone_id, locker_id);
 }
 
-void RGWOp_MDLog_Notify::execute() {
+void RGWOp_MDLog_Notify::execute(optional_yield y) {
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
   int r = 0;
@@ -359,7 +359,7 @@ void RGWOp_MDLog_Notify::execute() {
   op_ret = 0;
 }
 
-void RGWOp_BILog_List::execute() {
+void RGWOp_BILog_List::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
@@ -455,7 +455,7 @@ void RGWOp_BILog_List::send_response_end() {
   flusher.flush();
 }
       
-void RGWOp_BILog_Info::execute() {
+void RGWOp_BILog_Info::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          bucket_instance = s->info.args.get("bucket-instance");
@@ -514,7 +514,7 @@ void RGWOp_BILog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_BILog_Delete::execute() {
+void RGWOp_BILog_Delete::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          start_marker = s->info.args.get("start-marker"),
@@ -559,7 +559,7 @@ void RGWOp_BILog_Delete::execute() {
   return;
 }
 
-void RGWOp_DATALog_List::execute() {
+void RGWOp_DATALog_List::execute(optional_yield y) {
   string   shard = s->info.args.get("id");
 
   string   max_entries_str = s->info.args.get("max-entries"),
@@ -630,7 +630,7 @@ void RGWOp_DATALog_List::send_response() {
 }
 
 
-void RGWOp_DATALog_Info::execute() {
+void RGWOp_DATALog_Info::execute(optional_yield y) {
   num_objects = s->cct->_conf->rgw_data_log_num_shards;
   op_ret = 0;
 }
@@ -646,7 +646,7 @@ void RGWOp_DATALog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_ShardInfo::execute() {
+void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
   string shard = s->info.args.get("id");
   string err;
 
@@ -669,7 +669,7 @@ void RGWOp_DATALog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_Notify::execute() {
+void RGWOp_DATALog_Notify::execute(optional_yield y) {
   string  source_zone = s->info.args.get("source-zone");
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
@@ -716,7 +716,7 @@ void RGWOp_DATALog_Notify::execute() {
   op_ret = 0;
 }
 
-void RGWOp_DATALog_Delete::execute() {
+void RGWOp_DATALog_Delete::execute(optional_yield y) {
   string   marker = s->info.args.get("marker"),
            shard = s->info.args.get("id"),
            err;
@@ -765,15 +765,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "get_metadata_log_status"; }
 };
 
-void RGWOp_MDLog_Status::execute()
+void RGWOp_MDLog_Status::execute(optional_yield y)
 {
   auto sync = store->getRados()->get_meta_sync_manager();
   if (sync == nullptr) {
@@ -803,15 +803,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield y) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "get_bucket_index_log_status"; }
 };
 
-void RGWOp_BILog_Status::execute()
+void RGWOp_BILog_Status::execute(optional_yield y)
 {
   const auto options = s->info.args.get("options");
   bool merge = (options == "merge");
@@ -867,7 +867,7 @@ void RGWOp_BILog_Status::execute()
     pipe.dest.zone = local_zone_id;
     pipe.dest.bucket = info.bucket;
 
-    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(): getting sync status for pipe=" << pipe << dendl;
+    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
 
     op_ret = rgw_bucket_sync_status(this, store, pipe, info, nullptr, &status);
 
@@ -880,7 +880,7 @@ void RGWOp_BILog_Status::execute()
   rgw_zone_id source_zone_id(source_zone);
 
   RGWBucketSyncPolicyHandlerRef source_handler;
-  op_ret = store->ctl()->bucket->get_sync_policy_handler(source_zone_id, source_bucket, &source_handler, null_yield);
+  op_ret = store->ctl()->bucket->get_sync_policy_handler(source_zone_id, source_bucket, &source_handler, y);
   if (op_ret < 0) {
     lderr(s->cct) << "could not get bucket sync policy handler (r=" << op_ret << ")" << dendl;
     return;
@@ -892,14 +892,14 @@ void RGWOp_BILog_Status::execute()
   for (auto& entry : local_dests) {
     auto pipe = entry.second;
 
-    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(): getting sync status for pipe=" << pipe << dendl;
+    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
 
     RGWBucketInfo *pinfo = &info;
     std::optional<RGWBucketInfo> opt_dest_info;
 
     if (!pipe.dest.bucket) {
       /* Uh oh, something went wrong */
-      ldout(s->cct, 20) << "ERROR: RGWOp_BILog_Status::execute(): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
+      ldout(s->cct, 20) << "ERROR: RGWOp_BILog_Status::execute(optional_yield y): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
       op_ret = -EIO;
       return;
     }
@@ -969,15 +969,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(optional_yield y) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override ;
+  void execute(optional_yield y) override ;
   void send_response() override;
   const char* name() const override { return "get_data_changes_log_status"; }
 };
 
-void RGWOp_DATALog_Status::execute()
+void RGWOp_DATALog_Status::execute(optional_yield y)
 {
   const auto source_zone = s->info.args.get("source-zone");
   auto sync = store->getRados()->get_data_sync_manager(source_zone);

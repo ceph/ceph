@@ -108,7 +108,7 @@ public:
   virtual void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup);
 
   /* sync request */
-  int forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+  int forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 
 
   /* async requests */
@@ -296,7 +296,7 @@ public:
   template <class T>
   int decode_resource(T *dest);
 
-  int read();
+  int read(optional_yield y);
 
   int aio_read();
 
@@ -325,7 +325,7 @@ public:
   int wait(T *dest, optional_yield y);
 
   template <class T>
-  int fetch(T *dest);
+  int fetch(T *dest, optional_yield y);
 };
 
 
@@ -344,9 +344,9 @@ int RGWRESTReadResource::decode_resource(T *dest)
 }
 
 template <class T>
-int RGWRESTReadResource::fetch(T *dest)
+int RGWRESTReadResource::fetch(T *dest, optional_yield y)
 {
-  int ret = read();
+  int ret = read(y);
   if (ret < 0) {
     return ret;
   }
@@ -417,7 +417,7 @@ public:
     return req.get_io_user_info();
   }
 
-  int send(bufferlist& bl);
+  int send(bufferlist& bl, optional_yield y);
 
   int aio_send(bufferlist& bl);
 

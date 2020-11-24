@@ -964,7 +964,7 @@ int execute(const po::variables_map &vm,
   if (vm.count(at::IMAGE_NAME)) {
     deprecated_image_name = vm[at::IMAGE_NAME].as<std::string>();
   } else {
-    deprecated_image_name = path.substr(path.find_last_of("/") + 1);
+    deprecated_image_name = path.substr(path.find_last_of("/\\") + 1);
   }
 
   std::string deprecated_snap_name;

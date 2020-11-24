@@ -71,19 +71,19 @@ public:
            RGWSI_SysObj *_sysobj_svc,
            RGWSI_Cls *_cls_svc);
 
-  int do_start() override;
+  int do_start(optional_yield y) override;
 
   // traverse all the way back to the beginning of the period history, and
   // return a cursor to the first period in a fully attached history
-  RGWPeriodHistory::Cursor find_oldest_period();
+  RGWPeriodHistory::Cursor find_oldest_period(optional_yield y);
 
   /// initialize the oldest log period if it doesn't exist, and attach it to
   /// our current history
-  RGWPeriodHistory::Cursor init_oldest_log_period();
+  RGWPeriodHistory::Cursor init_oldest_log_period(optional_yield y);
 
   /// read the oldest log period, and return a cursor to it in our existing
   /// period history
-  RGWPeriodHistory::Cursor read_oldest_log_period() const;
+  RGWPeriodHistory::Cursor read_oldest_log_period(optional_yield y) const;
 
   /// read the oldest log period asynchronously and write its result to the
   /// given cursor pointer
@@ -94,10 +94,10 @@ public:
   /// using a rados lock to provide atomicity
   RGWCoroutine* trim_log_period_cr(RGWPeriodHistory::Cursor period,
                                    RGWObjVersionTracker *objv) const;
-  int read_history(RGWMetadataLogHistory *state, RGWObjVersionTracker *objv_tracker) const;
+  int read_history(RGWMetadataLogHistory *state, RGWObjVersionTracker *objv_tracker,optional_yield y) const;
   int write_history(const RGWMetadataLogHistory& state,
                     RGWObjVersionTracker *objv_tracker,
-                    bool exclusive = false);
+		    optional_yield y, bool exclusive = false);
 
   int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
 
@@ -107,7 +107,7 @@ public:
     return period_history.get();
   }
 
-  int pull_period(const std::string& period_id, RGWPeriod& period);
+  int pull_period(const std::string& period_id, RGWPeriod& period, optional_yield y);
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);

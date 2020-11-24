@@ -20,7 +20,7 @@
 #include "msg/Message.h"
 #include "include/encoding.h"
 
-class MRoute : public Message {
+class MRoute final : public Message {
 public:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
@@ -39,7 +39,7 @@ public:
       msg(m),
       send_osdmap_first(0) {}
 private:
-  ~MRoute() override {
+  ~MRoute() final {
     if (msg)
       msg->put();
   }

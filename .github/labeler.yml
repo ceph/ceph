@@ -1,3 +1,75 @@
+documentation:
+  - AUTHORS
+  - CONTRIBUTING.rst
+  - COPYING*
+  - CodingStyle
+  - PendingReleaseNotes
+  - README.*
+  - SubmittingPatches*
+  - doc/**
+  - doc_deps.deb.txt
+  - man/**
+  - "**/*.+(rst|md)"
+
+pybind:
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/**
+  - src/pybind/rados/**
+  - src/pybind/rbd/**
+  - src/pybind/rgw/**
+  - src/pybind/**
+
+common:
+  - src/common/**
+  - src/global/**
+  - src/log/**
+
+cephadm:
+  - src/cephadm/**
+  - src/pybind/mgr/cephadm/**
+  - qa/suites/rados/cephadm/**
+
+bluestore:
+  - src/os/bluestore/**
+
+core:
+  - doc/man/8/ceph-authtool.rst
+  - doc/man/8/ceph-conf.rst
+  - doc/man/8/ceph-create-keys.rst
+  - doc/man/8/ceph-kvstore-tool.rst
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/ceph-objectstore-tool.rst
+  - doc/man/8/ceph-osd.rst
+  - doc/man/8/ceph.rst
+  - doc/man/8/crushtool.rst
+  - doc/man/8/monmaptool.rst
+  - doc/man/8/rados.rst
+  - doc/rados/**
+  - qa/standalone/**
+  - qa/suites/rados/**
+  - qa/workunits/erasure-code/**
+  - qa/workunits/mgr/**
+  - qa/workunits/mon/**
+  - qa/workunits/objectstore/**
+  - qa/workunits/rados/**
+  - src/blk/**
+  - src/crush/*
+  - src/erasure-code/**
+  - src/kv/**
+  - src/librados/**
+  - src/mgr/**
+  - src/mon/**
+  - src/msg/**
+  - src/os/**
+  - src/osd/**
+  - src/tools/rados/**
+
+crimson:
+  - doc/dev/crimson/**
+  - src/crimson/**
+  - src/test/crimson/**
+  - qa/suites/crimson-rados/**
+
 dashboard:
   - src/pybind/mgr/dashboard/**
   - qa/suites/rados/dashboard/**
@@ -7,5 +79,66 @@ dashboard:
   - doc/mgr/dashboard.rst
   - doc/dev/developer_guide/dash-devel.rst
 
+cephfs:
+  - doc/cephfs/**
+  - doc/man/8/ceph-fuse.rst
+  - doc/man/8/ceph-mds.rst
+  - doc/man/8/ceph-syn.rst
+  - doc/man/8/mount.ceph.rst
+  - doc/man/8/mount.fuse.ceph.rst
+  - qa/suites/fs/**
+  - qa/suites/multimds/**
+  - qa/tasks/ceph_fuse.py
+  - qa/tasks/cephfs/**
+  - qa/tasks/cephfs_test_runner.py
+  - qa/tasks/fs.py
+  - qa/tasks/kclient.py
+  - qa/tasks/mds_creation_failure.py
+  - qa/tasks/mds_thrash.py
+  - src/ceph_fuse.cc
+  - src/ceph_mds.cc
+  - src/ceph_syn.cc
+  - src/client/**
+  - src/include/ceph_fs.h
+  - src/include/ceph_fuse.h
+  - src/include/cephfs/**
+  - src/include/filepath.h
+  - src/include/frag.h
+  - src/include/fs_types.h
+  - src/libcephfs.cc
+  - src/mds/**
+  - src/pybind/ceph_volume_client.py
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/mds_autoscaler/**
+  - src/pybind/mgr/status/**
+  - src/pybind/mgr/volumes/**
+  - src/test/fs/**
+  - src/test/libcephfs/**
+  - src/tools/cephfs/**
+  - src/tools/cephfs_mirror/**
+
 CI:
   - .github/**
+
+rbd:
+  - doc/man/8/rbd*
+  - doc/rbd/**
+  - qa/suites/rbd/**
+  - qa/workunits/rbd/**
+  - src/include/rbd/**
+  - src/librbd/**
+  - src/pybind/mgr/rbd_support/**
+  - src/pybind/rbd/**
+  - src/test/librbd/**
+  - src/test/rbd_mirror/**
+  - src/tools/rbd/**
+  - src/tools/rbd_mirror/**
+  - src/tools/rbd_nbd/**
+
+ceph-volume:
+  - src/ceph-volume/**
+  - doc/ceph-volume/**
+
+tests:
+  - qa/tasks/**
+  - qa/workunits/**

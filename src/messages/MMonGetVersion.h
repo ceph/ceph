@@ -25,7 +25,7 @@
  * can be used to determine whether a pool actually does not exist, or
  * if it may have been created but the map was not received yet.
  */
-class MMonGetVersion : public Message {
+class MMonGetVersion final : public Message {
 public:
   MMonGetVersion() : Message{CEPH_MSG_MON_GET_VERSION} {}
 
@@ -54,7 +54,7 @@ public:
   std::string what;
 
 private:
-  ~MMonGetVersion() override {}
+  ~MMonGetVersion() final {}
 };
 
 #endif

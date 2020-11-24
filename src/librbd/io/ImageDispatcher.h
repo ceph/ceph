@@ -45,6 +45,9 @@ public:
   void unblock_writes() override;
   void wait_on_writes_unblocked(Context *on_unblocked) override;
 
+  void remap_extents(Extents&& image_extents,
+                     ImageExtentsMapType type) override;
+
 protected:
   bool send_dispatch(
     ImageDispatchInterface* image_dispatch,

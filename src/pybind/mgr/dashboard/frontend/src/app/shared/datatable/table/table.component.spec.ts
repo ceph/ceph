@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -8,6 +9,7 @@ import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import _ from 'lodash';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -511,6 +513,56 @@ describe('TableComponent', () => {
 
     afterEach(() => {
       clearLocalStorage();
+    });
+  });
+
+  describe('test cell transformations', () => {
+    interface ExecutingTemplateConfig {
+      valueClass?: string;
+      executingClass?: string;
+    }
+
+    const testExecutingTemplate = (templateConfig?: ExecutingTemplateConfig) => {
+      const state = 'updating';
+      const value = component.data[0].a;
+
+      component.autoReload = -1;
+      component.columns[0].cellTransformation = CellTemplate.executing;
+      if (templateConfig) {
+        component.columns[0].customTemplateConfig = templateConfig;
+      }
+      component.data[0].cdExecuting = state;
+      fixture.detectChanges();
+
+      const elements = fixture.debugElement
+        .query(By.css('datatable-body-row datatable-body-cell'))
+        .queryAll(By.css('span'));
+      expect(elements.length).toBe(2);
+
+      // Value
+      const valueElement = elements[0];
+      if (templateConfig?.valueClass) {
+        templateConfig.valueClass.split(' ').forEach((clz) => {
+          expect(valueElement.classes).toHaveProperty(clz);
+        });
+      }
+      expect(valueElement.nativeElement.textContent.trim()).toBe(`${value}`);
+      // Executing state
+      const executingElement = elements[1];
+      if (templateConfig?.executingClass) {
+        templateConfig.executingClass.split(' ').forEach((clz) => {
+          expect(executingElement.classes).toHaveProperty(clz);
+        });
+      }
+      expect(executingElement.nativeElement.textContent.trim()).toBe(`(${state})`);
+    };
+
+    it.only('should display executing template', () => {
+      testExecutingTemplate();
+    });
+
+    it.only('should display executing template with custom classes', () => {
+      testExecutingTemplate({ valueClass: 'a b', executingClass: 'c d' });
     });
   });
 

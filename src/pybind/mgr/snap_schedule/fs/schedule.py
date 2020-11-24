@@ -13,10 +13,6 @@ from typing import Tuple, Any
 
 log = logging.getLogger(__name__)
 
-
-TESTING = 'SNAP_SCHED_TESTING' in environ
-
-
 # Work around missing datetime.fromisoformat for < python3.7
 SNAP_DB_TS_FORMAT = '%Y-%m-%dT%H:%M:%S'
 try:
@@ -150,7 +146,8 @@ class Schedule(object):
                    table_row['last_pruned'],
                    table_row['created_count'],
                    table_row['pruned_count'],
-                   table_row['active'])
+                   table_row['active'],
+                  )
 
     def __str__(self):
         return f'''{self.path} {self.schedule} {dump_retention(self.retention)}'''
@@ -187,7 +184,7 @@ class Schedule(object):
         s.retention,
         sm.repeat - (strftime("%s", "now") - strftime("%s", sm.start)) %
         sm.repeat "until",
-        sm.start, sm.repeat
+        sm.start, sm.repeat, sm.schedule
         FROM schedules s
             INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
         WHERE
@@ -326,6 +323,8 @@ class Schedule(object):
             if not row:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
+            if not retention:
+                raise ValueError(f'Retention spec {retention_spec} is invalid')
             log.debug(f'db result is {tuple(row)}')
             current = row['retention']
             current_retention = json.loads(current)
@@ -359,11 +358,14 @@ class Schedule(object):
         return json.dumps(dict(self.__dict__),
                           default=lambda o: o.strftime(SNAP_DB_TS_FORMAT))
 
+    @classmethod
+    def parse_schedule(cls, schedule):
+        return int(schedule[0:-1]), schedule[-1]
+
     @property
     def repeat(self):
-        mult = self.schedule[-1]
-        period = int(self.schedule[0:-1])
-        if TESTING and mult == 'M':
+        period, mult = self.parse_schedule(self.schedule)
+        if mult == 'M':
             return period * 60
         elif mult == 'h':
             return period * 60 * 60

@@ -27,7 +27,7 @@
  *
  */
 
-class MOSDRepOpReply : public MOSDFastDispatchOp {
+class MOSDRepOpReply final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -136,7 +136,7 @@ public:
       ack_type(0), result(0),
       final_decode_needed(true) {}
 private:
-  ~MOSDRepOpReply() override {}
+  ~MOSDRepOpReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "osd_repop_reply"; }
