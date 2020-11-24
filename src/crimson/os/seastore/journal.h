@@ -338,32 +338,6 @@ private:
     paddr_t start,
     segment_nonce_t nonce);
 
-  /**
-   * scan_segment
-   *
-   * Scans bytes_to_read forward from addr to the first record after
-   * addr+bytes_to_read invoking delta_handler and extent_info_handler
-   * on deltas and extent_infos respectively.  deltas, extent_infos
-   * will only be decoded if the corresponding handler is included.
-   *
-   * @return next address to read from, P_ADDR_NULL if segment complete
-   */
-  using scan_segment_ertr = SegmentManager::read_ertr;
-  using scan_segment_ret = scan_segment_ertr::future<paddr_t>;
-  using delta_scan_handler_t = std::function<
-    replay_ret(paddr_t record_start,
-	       paddr_t record_block_base,
-	       const delta_info_t&)>;
-  using extent_handler_t = std::function<
-    scan_segment_ertr::future<>(paddr_t addr,
-				const extent_info_t &info)>;
-  scan_segment_ret scan_segment(
-    paddr_t addr,
-    extent_len_t bytes_to_read,
-    segment_nonce_t nonce,
-    delta_scan_handler_t *delta_handler,
-    extent_handler_t *extent_info_handler
-  );
 public:
   /// scan segment for end incrementally
   struct scan_valid_records_cursor {
