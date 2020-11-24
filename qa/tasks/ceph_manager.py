@@ -15,8 +15,7 @@ import traceback
 import os
 import six
 
-from io import BytesIO
-from six import StringIO
+from io import BytesIO, StringIO
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from tasks.util.rados import cmd_erasure_code_profile
@@ -314,7 +313,7 @@ class OSDThrasher(Thrasher):
                                         "exp list-pgs failure with status {ret}".
                                         format(ret=proc.exitstatus))
 
-            pgs = six.ensure_str(proc.stdout.getvalue()).split('\n')[:-1]
+            pgs = proc.stdout.getvalue().split('\n')[:-1]
             if len(pgs) == 0:
                 self.log("No PGs found for osd.{osd}".format(osd=exp_osd))
                 return
@@ -379,7 +378,7 @@ class OSDThrasher(Thrasher):
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
                                     format(ret=proc.exitstatus))
-                pgs = six.ensure_str(proc.stdout.getvalue()).split('\n')[:-1]
+                pgs = proc.stdout.getvalue().split('\n')[:-1]
                 if pg not in pgs:
                     self.log("Moving pg {pg} from osd.{fosd} to osd.{tosd}".
                              format(pg=pg, fosd=exp_osd, tosd=imp_osd))
@@ -1268,22 +1267,20 @@ class ObjectStoreTool:
         lines.append(cmd)
         return "\n".join(lines)
 
-    def run(self, options, args, stdin=None, stdout=None):
-        if stdout is None:
-            stdout = BytesIO()
+    def run(self, options, args):
         self.manager.kill_osd(self.osd)
-        cmd = self.build_cmd(options, args, stdin)
+        cmd = self.build_cmd(options, args, None)
         self.manager.log(cmd)
         try:
             proc = self.remote.run(args=['bash', '-e', '-x', '-c', cmd],
                                    check_status=False,
-                                   stdout=stdout,
+                                   stdout=BytesIO(),
                                    stderr=BytesIO())
             proc.wait()
             if proc.exitstatus != 0:
                 self.manager.log("failed with " + str(proc.exitstatus))
-                error = six.ensure_str(proc.stdout.getvalue())  + " " + \
-                        six.ensure_str(proc.stderr.getvalue())
+                error = proc.stdout.getvalue().decode()  + " " + \
+                        proc.stderr.getvalue().decode()
                 raise Exception(error)
         finally:
             if self.do_revive:
@@ -1901,7 +1898,7 @@ class CephManager:
         :param erasure_code_use_overwrites: if true, allow overwrites
         """
         with self.lock:
-            assert isinstance(pool_name, six.string_types)
+            assert isinstance(pool_name, str)
             assert isinstance(pg_num, int)
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
@@ -1953,7 +1950,7 @@ class CephManager:
         :param pool_name: Pool to be removed
         """
         with self.lock:
-            assert isinstance(pool_name, six.string_types)
+            assert isinstance(pool_name, str)
             assert pool_name in self.pools
             self.log("removing pool_name %s" % (pool_name,))
             del self.pools[pool_name]
@@ -1973,7 +1970,7 @@ class CephManager:
         Return the number of pgs in the pool specified.
         """
         with self.lock:
-            assert isinstance(pool_name, six.string_types)
+            assert isinstance(pool_name, str)
             if pool_name in self.pools:
                 return self.pools[pool_name]
             return 0
@@ -1985,8 +1982,8 @@ class CephManager:
         :returns: property as string
         """
         with self.lock:
-            assert isinstance(pool_name, six.string_types)
-            assert isinstance(prop, six.string_types)
+            assert isinstance(pool_name, str)
+            assert isinstance(prop, str)
             output = self.raw_cluster_cmd(
                 'osd',
                 'pool',
@@ -2007,8 +2004,8 @@ class CephManager:
         This routine retries if set operation fails.
         """
         with self.lock:
-            assert isinstance(pool_name, six.string_types)
-            assert isinstance(prop, six.string_types)
+            assert isinstance(pool_name, str)
+            assert isinstance(prop, str)
             assert isinstance(val, int)
             tries = 0
             while True:
@@ -2035,7 +2032,7 @@ class CephManager:
         Increase the number of pgs in a pool
         """
         with self.lock:
-            assert isinstance(pool_name, six.string_types)
+            assert isinstance(pool_name, str)
             assert isinstance(by, int)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
@@ -2055,7 +2052,7 @@ class CephManager:
         with self.lock:
             self.log('contract_pool %s by %s min %s' % (
                      pool_name, str(by), str(min_pgs)))
-            assert isinstance(pool_name, six.string_types)
+            assert isinstance(pool_name, str)
             assert isinstance(by, int)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
@@ -2095,7 +2092,7 @@ class CephManager:
         Set pgpnum property of pool_name pool.
         """
         with self.lock:
-            assert isinstance(pool_name, six.string_types)
+            assert isinstance(pool_name, str)
             assert pool_name in self.pools
             if not force and self.get_num_creating() > 0:
                 return False
