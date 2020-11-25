@@ -1,7 +1,9 @@
 import json
 import re
 import logging
+import secrets
 import subprocess
+import collections
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic, \
     Optional, Dict, Any, Tuple, NewType
@@ -12,9 +14,7 @@ from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
-import secrets
 from mgr_util import create_self_signed_cert, ServerConfigException, verify_tls
-import collections
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
-ExporterConfig = collections.namedtuple('ExporterConfig', 'crt key token port')
 
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
@@ -775,35 +774,107 @@ class CrashService(CephService):
         return daemon_spec
 
 
+class CephadmExporterConfig:
+    required_keys = ['crt', 'key', 'token', 'port']
+    DEFAULT_PORT = '9443'
+
+    def __init__(self, mgr, crt="", key="", token="", port=""):
+        # type: (CephadmOrchestrator, str, str, str, str) -> None
+        self.mgr = mgr
+        self.crt = crt
+        self.key = key
+        self.token = token
+        self.port = port
+
+    @property
+    def ready(self) -> bool:
+        return all([self.crt, self.key, self.token, self.port])
+
+    def load_from_store(self) -> None:
+        cfg = self.mgr._get_exporter_config()
+
+        assert isinstance(cfg, dict)
+        self.crt = cfg.get('crt', "")
+        self.key = cfg.get('key', "")
+        self.token = cfg.get('token', "")
+        self.port = cfg.get('port', "")
+
+    def load_from_json(self, json_str: str) -> Tuple[int, str]:
+        try:
+            cfg = json.loads(json_str)
+        except ValueError:
+            return 1, "Invalid JSON provided - unable to load"
+
+        if not all([k in cfg for k in CephadmExporterConfig.required_keys]):
+            return 1, "JSON file must contain crt, key, token and port"
+
+        self.crt = cfg.get('crt')
+        self.key = cfg.get('key')
+        self.token = cfg.get('token')
+        self.port = cfg.get('port')
+
+        return 0, ""
+
+    def validate_config(self) -> Tuple[int, str]:
+        if not self.ready:
+            return 1, "Incomplete configuration. cephadm-exporter needs crt, key, token and port to be set"
+
+        for check in [self._validate_tls, self._validate_token, self._validate_port]:
+            rc, reason = check()
+            if rc:
+                return 1, reason
+
+        return 0, ""
+
+    def _validate_tls(self) -> Tuple[int, str]:
+
+        try:
+            verify_tls(self.crt, self.key)
+        except ServerConfigException as e:
+            return 1, str(e)
+
+        return 0, ""
+
+    def _validate_token(self) -> Tuple[int, str]:
+        if not isinstance(self.token, str):
+            return 1, "token must be a string"
+        if len(self.token) < 8:
+            return 1, "Token must be a string of at least 8 chars in length"
+
+        return 0, ""
+
+    def _validate_port(self) -> Tuple[int, str]:
+        try:
+            p = int(str(self.port))
+            if p <= 1024:
+                raise ValueError
+        except ValueError:
+            return 1, "Port must be a integer (>1024)"
+
+        return 0, ""
+
+
 class CephadmExporter(CephadmService):
     TYPE = 'cephadm-exporter'
-
-    def _fetch_config(self) -> ExporterConfig:
-        return ExporterConfig(
-            crt=self.mgr._get_exporter_option('crt'),
-            key=self.mgr._get_exporter_option('key'),
-            token=self.mgr._get_exporter_option('token'),
-            port=self.mgr._get_exporter_option('port'))
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
 
-        cfg = self._fetch_config()
-        if cfg.crt and cfg.key:
-            try:
-                verify_tls(cfg.crt, cfg.key)
-            except ServerConfigException:
-                raise OrchestratorError(f"Exporter's crt and key settings are invalid")
-            if not cfg.token:
-                raise OrchestratorError(
-                    "Missing exporter token setting. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-token'")
+        cfg = CephadmExporterConfig(self.mgr)
+        cfg.load_from_store()
+
+        if cfg.ready:
+            rc, reason = cfg.validate_config()
+            if rc:
+                raise OrchestratorError(reason)
         else:
-            logger.info("Using default TLS configuration for cephadm-exporter")
-            self.mgr._generate_exporter_config()
-            cfg = self._fetch_config()
+            logger.info(
+                "Incomplete/Missing configuration, applying defaults")
+            self.mgr._set_exporter_defaults()
+            cfg.load_from_store()
 
         if not daemon_spec.ports:
-            daemon_spec.ports = [cfg.port]
+            daemon_spec.ports = [int(cfg.port)]
 
         return daemon_spec
 
@@ -812,20 +883,17 @@ class CephadmExporter(CephadmService):
         assert daemon_spec.spec
         deps: List[str] = []
 
-        cfg = self._fetch_config()
+        cfg = CephadmExporterConfig(self.mgr)
+        cfg.load_from_store()
 
-        if cfg.crt and cfg.key:
-            try:
-                verify_tls(cfg.crt, cfg.key)
-            except ServerConfigException:
-                raise OrchestratorError(f"Exporter's crt and key settings are invalid")
-            if not cfg.token:
-                raise OrchestratorError(
-                    "Missing exporter token setting. Use 'cephadm generate-exporter-config' or 'cephadm set-exporter-token'")
+        if cfg.ready:
+            rc, reason = cfg.validate_config()
+            if rc:
+                raise OrchestratorError(reason)
         else:
-            logger.info("Using default TLS configuration for cephadm-exporter")
-            self.mgr._generate_exporter_config()
-            cfg = self._fetch_config()
+            logger.info("Using default configuration for cephadm-exporter")
+            self.mgr._set_exporter_defaults()
+            cfg.load_from_store()
 
         config = {
             "crt": cfg.crt,
