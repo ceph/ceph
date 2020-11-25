@@ -1218,7 +1218,12 @@ Option::value_t md_config_t::_expand_meta(
       } else if (var == "id") {
 	out += values.name.get_id();
       } else if (var == "pid") {
-	out += stringify(getpid());
+        char *_pid = getenv("PID");
+        if (_pid) {
+          out += _pid;
+        } else {
+          out += stringify(getpid());
+        }
         if (o) {
           may_reexpand_meta.push_back(o->name);
         }
