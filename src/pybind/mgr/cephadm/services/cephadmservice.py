@@ -614,7 +614,7 @@ class RgwService(CephService):
 
     def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str) -> None:
         if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
-            raise OrchestratorError('Health not ok, will try agin when health ok')
+            raise OrchestratorError('Health not ok, will try again when health ok')
 
         # get keyring needed to run rados commands and strip out just the keyring
         keyring = self.get_keyring(rgw_id).split('key = ', 1)[1].rstrip()
