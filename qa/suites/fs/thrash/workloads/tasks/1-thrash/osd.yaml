@@ -4,5 +4,6 @@ overrides:
       - but it is still running
       - objects unfound and apparently lost
       - MDS_SLOW_METADATA_IO
+      - Throttler Limit has been hit. Some message processing may be significantly delayed.
 tasks:
 - thrashosds:
