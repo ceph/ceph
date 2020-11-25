@@ -188,11 +188,12 @@ class MetricCollectionThread(threading.Thread):
     def __init__(self, module):
         # type: (Module) -> None
         self.mod = module
+        self.active = True
         super(MetricCollectionThread, self).__init__(target=self.collect)
 
     def collect(self):
         self.mod.log.info('starting metric collection thread')
-        while True:
+        while self.active:
             self.mod.log.debug('collecting cache in thread')
             if self.mod.have_mon_connection():
                 start_time = time.time()
@@ -223,6 +224,8 @@ class MetricCollectionThread(threading.Thread):
                 self.mod.log.error('No MON connection')
                 time.sleep(self.mod.scrape_interval)
 
+    def stop(self):
+        self.active = False
 
 class Module(MgrModule):
     COMMANDS = [
@@ -274,7 +277,7 @@ class Module(MgrModule):
         }  # type: Dict[str, Any]
         global _global_instance
         _global_instance = self
-        MetricCollectionThread(_global_instance).start()
+        self.metrics_thread = MetricCollectionThread(_global_instance)
 
     def _setup_static_metrics(self):
         metrics = {}
@@ -1247,6 +1250,8 @@ class Module(MgrModule):
             (server_addr, server_port)
         )
 
+        self.metrics_thread.start()
+
         # Publish the URI that others may use to access the service we're
         # about to start serving
         self.set_uri('http://{0}:{1}/'.format(
@@ -1266,9 +1271,13 @@ class Module(MgrModule):
         # wait for the shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
+        # tell metrics collection thread to stop collecting new metrics
+        self.metrics_thread.stop()
         cherrypy.engine.stop()
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
+        # wait for the metrics collection thread to stop
+        self.metrics_thread.join()
 
     def shutdown(self):
         self.log.info('Stopping engine...')
