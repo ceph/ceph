@@ -110,6 +110,7 @@ class CephadmServe:
 
         @forall_hosts
         def refresh(host):
+
             if self.mgr.cache.host_needs_check(host):
                 r = self._check_host(host)
                 if r is not None:
@@ -130,6 +131,12 @@ class CephadmServe:
             if self.mgr.cache.host_needs_device_refresh(host):
                 self.log.debug('refreshing %s devices' % host)
                 r = self._refresh_host_devices(host)
+                if r:
+                    failures.append(r)
+
+            if self.mgr.cache.host_needs_facts_refresh(host):
+                self.log.info(('refreshing %s facts' % host))
+                r = self._refresh_facts(host)
                 if r:
                     failures.append(r)
 
@@ -245,6 +252,20 @@ class CephadmServe:
         self.mgr.cache.update_host_daemons(host, dm)
         self.mgr.cache.save_host(host)
         return None
+
+    def _refresh_facts(self, host):
+        try:
+            out, err, code = self.mgr._run_cephadm(
+                host, cephadmNoImage, 'gather-facts', [],
+                error_ok=True, no_fsid=True)
+
+            if code:
+                return 'host %s gather-facts returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s gather facts failed: %s' % (host, e)
+        self.log.debug('Refreshed host %s facts' % (host))
+        self.mgr.cache.update_host_facts(host, json.loads(''.join(out)))
 
     def _refresh_host_devices(self, host) -> Optional[str]:
         try:
