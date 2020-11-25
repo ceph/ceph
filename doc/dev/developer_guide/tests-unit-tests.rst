@@ -1,28 +1,24 @@
 Testing - unit tests
 ====================
 
-Ceph has two types of tests: 
-
-#. unit tests (also called ``make check`` tests)
-#. integration tests. 
-   
-What are here called ``make check`` tests are not, strictly speaking, "unit
-tests". They are tests that can be easily run on a single-build machine
-after Ceph has been compiled from source. Such ``make check`` tests do
-not require packages or a multi-machine cluster.
-
-Integration tests, however, require packages and multi-machine clusters.
+The Ceph GitHub repository has two types of tests: unit tests (also called
+``make check`` tests) and integration tests. Strictly speaking, the
+``make check`` tests are not "unit tests", but rather tests that can be run
+easily on a single build machine after compiling Ceph from source, whereas
+integration tests require package installation and multi-machine clusters to
+run.
 
 .. _make-check:
 
 What does "make check" mean?
 ----------------------------
 
-After Ceph has been compiled, its code can be run through a battery of
-tests that cover various aspects of Ceph. For historical reasons, this
-battery of tests is often referred to as ``make check`` even though the
-actual command used to run the tests is now ``ctest``. In order to be
-included in this battery of tests, a test must:
+After compiling Ceph, the code can be run through a battery of tests
+For historical reasons, this is
+often referred to as ``make check`` even though the actual command used to run
+the tests is now ``ctest``. For inclusion in this group of tests, a test
+must:
+
 
 * bind ports that do not conflict with other tests
 * not require root access
@@ -34,20 +30,18 @@ check tests" or "unit tests". This is meant to distinguish these tests from
 the more complex "integration tests" that are run via the `teuthology
 framework`_.
 
-While it is possible to run ``ctest`` directly, it can be tricky to
-correctly set up your environment for it. Fortunately, a script is provided
-to make it easier to run the unit tests on your code. This script can be
-run from the top-level directory of the Ceph source tree by running the
-following command:
+While it is possible to run ``ctest`` directly, it can be tricky to correctly
+set up your environment. Fortunately, a script is provided to make it easier
+run the unit tests on your code. It can be run from the top-level directory of
+the Ceph source tree by invoking::
 
 .. prompt:: bash $
 
-   ./run-make-check.sh
+You will need a minimum of 8GB of RAM and 32GB of free drive space for this
+command to complete successfully on x86_64; other architectures may have
+different requirements. Depending on your hardware, it can take from twenty
+minutes to three hours to complete, but it's worth the wait.
 
-You will need a minimum of 8GB of RAM and 32GB of free disk space for this
-command to complete successfully on x86_64 (other architectures may have
-different constraints). Depending on your hardware, it can take from 20
-minutes to three hours to complete.
 
 How unit tests are declared
 ---------------------------
@@ -84,10 +78,10 @@ Most python modules can be found under ``./src/pybind/``.
 Many modules use **tox** to run their unit tests.
 **tox** itself is a generic virtualenv management and test command line tool.
 
-To find out quickly if tox can be run you can either just try to run ``tox``
-or find out if a ``tox.ini`` exists.
+To find out quickly if **tox** can be run you can either just try to run ``tox``
+or check for the existence of a ``tox.ini`` file.
 
-Currently the following modules use tox:
+Currently the following modules use **tox**:
 
 - Cephadm (``./src/pybind/mgr/cephadm``)
 - Insights (``./src/pybind/mgr/insights``)
@@ -96,15 +90,14 @@ Currently the following modules use tox:
 - Python common (``./src/python-common/tox.ini``)
 
 
-Most tox configuration support multiple environments and tasks. You can see
-which environments and tasks are supported by looking into the ``tox.ini``
-file to see what ``envlist`` is assigned.
-To run **tox**, just execute ``tox`` in the directory where ``tox.ini`` lies.
-Without any specified environments ``-e $env1,$env2``, all environments will
-be run. Jenkins will run ``tox`` by executing ``run_tox.sh`` which lies under
+Most **tox** configurations support multiple environments and tasks. You can see
+which are supported by examining the ``envlist`` assignment within ``tox.ini``
+To run **tox**, just execute ``tox`` in the directory where ``tox.ini`` is found.
+If no environments are specified with e.g. ``-e $env1,$env2``, all environments
+will be run. Jenkins will run ``tox`` by executing ``run_tox.sh`` which is under
 ``./src/script``.
 
-Here some examples from ceph dashboard on how to specify different
+Here some examples from the Ceph Dashboard on how to specify
 environments and run options::
 
   ## Run Python 2+3 tests+lint commands:
@@ -122,17 +115,17 @@ Manager core unit tests
 
 Currently only doctests_ inside ``mgr_util.py`` are run.
 
-To add more files that should be tested inside the core of the manager add
-them at the end of the line that includes ``mgr_util.py`` inside ``tox.ini``.
+To add test additional files inside the core of the manager, add
+them at the end of the line that includes ``mgr_util.py`` within ``tox.ini``.
 
 .. _doctests: https://docs.python.org/3/library/doctest.html
 
 Unit test caveats
 -----------------
 
-1. Unlike the various Ceph daemons and ``ceph-fuse``, the unit tests
+1. Unlike the various Ceph daemons and ``ceph-fuse``, unit tests
    are linked against the default memory allocator (glibc) unless explicitly
-   linked against something else. This enables tools like valgrind to be used
+   linked against something else. This enables tools like **valgrind** to be used
    in the tests.
 
 .. _make check:
