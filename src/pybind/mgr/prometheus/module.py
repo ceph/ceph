@@ -189,6 +189,7 @@ class MetricCollectionThread(threading.Thread):
         # type: (Module) -> None
         self.mod = module
         self.active = True
+        self.event = threading.Event()
         super(MetricCollectionThread, self).__init__(target=self.collect)
 
     def collect(self):
@@ -203,7 +204,7 @@ class MetricCollectionThread(threading.Thread):
                 except Exception as e:
                     # Log any issues encountered during the data collection and continue
                     self.mod.log.exception("failed to collect metrics:")
-                    time.sleep(self.mod.scrape_interval)
+                    self.event.wait(self.mod.scrape_interval)
                     continue
 
                 duration = time.time() - start_time
@@ -227,13 +228,14 @@ class MetricCollectionThread(threading.Thread):
                     self.mod.collect_cache = data
                     self.mod.collect_time = duration
 
-                time.sleep(sleep_time)
+                self.event.wait(sleep_time)
             else:
                 self.mod.log.error('No MON connection')
-                time.sleep(self.mod.scrape_interval)
+                self.event.wait(self.mod.scrape_interval)
 
     def stop(self):
         self.active = False
+        self.event.set()
 
 class Module(MgrModule):
     COMMANDS = [
