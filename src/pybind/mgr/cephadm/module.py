@@ -143,6 +143,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'desc': 'seconds to cache service (daemon) inventory',
         },
         {
+            'name': 'facts_cache_timeout',
+            'type': 'secs',
+            'default': 1 * 60,
+            'desc': 'seconds to cache host facts data',
+        },
+        {
             'name': 'host_check_interval',
             'type': 'secs',
             'default': 10 * 60,
@@ -293,6 +299,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh_config_file = None  # type: Optional[str]
             self.device_cache_timeout = 0
             self.daemon_cache_timeout = 0
+            self.facts_cache_timeout = 0
             self.host_check_interval = 0
             self.mode = ''
             self.container_image_base = ''

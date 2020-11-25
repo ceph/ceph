@@ -5436,7 +5436,6 @@ class HostFacts():
         up_secs, _ = raw_time.split()
         return float(up_secs)
 
-    @property
     def kernel_security(self):
         # type: () -> Dict[str, str]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
@@ -5500,6 +5499,23 @@ class HostFacts():
             "type": "None",
             "description": "Linux Security Module framework is not available"
         }
+
+    @property
+    def kernel_parameters(self):
+        # type: () -> Dict[str, str]
+        """Get kernel parameters required/used in Ceph clusters"""
+
+        k_param = {}
+        out, _, _ = call_throws(['sysctl', '-a'])
+        if out:
+            param_list = out.split('\n')
+            param_dict = { param.split(" = ")[0]:param.split(" = ")[-1] for param in param_list}
+
+            # return only desired parameters
+            if 'net.ipv4.ip_nonlocal_bind' in param_dict:
+                k_param['net.ipv4.ip_nonlocal_bind'] = param_dict['net.ipv4.ip_nonlocal_bind']
+
+        return k_param
 
     def dump(self):
         # type: () -> str
