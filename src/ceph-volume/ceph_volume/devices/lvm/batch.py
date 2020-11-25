@@ -175,28 +175,28 @@ class Batch(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs',
         )
         parser.add_argument(
             '--db-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs db volumes',
         )
         parser.add_argument(
             '--wal-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs wal volumes',
         )
         parser.add_argument(
             '--journal-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs journal volumes',
         )

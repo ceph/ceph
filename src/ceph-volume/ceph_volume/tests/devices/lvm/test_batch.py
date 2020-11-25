@@ -1,7 +1,12 @@
 import pytest
 import json
 import random
+
+from argparse import ArgumentError
+from mock import MagicMock, patch
+
 from ceph_volume.devices.lvm import batch
+from ceph_volume.util import arg_validators
 
 
 class TestBatch(object):
@@ -18,6 +23,15 @@ class TestBatch(object):
         with pytest.raises(Exception) as disjoint_ex:
             batch.ensure_disjoint_device_lists(devices, db_devices)
         assert 'Device lists are not disjoint' in str(disjoint_ex.value)
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    def test_reject_partition(self, mocked_device):
+        mocked_device.return_value = MagicMock(
+            is_partition=True,
+            has_gpt_headers=False,
+        )
+        with pytest.raises(ArgumentError):
+            arg_validators.ValidBatchDevice()('foo')
 
     @pytest.mark.parametrize('format_', ['pretty', 'json', 'json-pretty'])
     def test_report(self, format_, factory, conf_ceph_stub, mock_device_generator):
