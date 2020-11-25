@@ -150,6 +150,24 @@ rbd:
   - src/tools/rbd_nbd/**
   - src/tools/rbd_wnbd/**
 
+rgw:
+  - qa/suites/rgw/**
+  - qa/tasks/rgw*
+  - qa/tasks/s3*
+  - src/cls/cmpomap/**
+  - src/cls/fifo/**
+  - src/cls/otp/**
+  - src/cls/queue/**
+  - src/cls/rgw/**
+  - src/cls/rgw_gc/**
+  - src/cls/timeindex/**
+  - src/mrgw.sh
+  - src/rgw/**
+  - src/test/cls_rgw/**
+  - src/test/librgw_*
+  - src/test/rgw/**
+  - src/test/test_rgw*
+
 ceph-volume:
   - src/ceph-volume/**
   - doc/ceph-volume/**
