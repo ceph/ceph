@@ -5,3 +5,4 @@ overrides:
   ceph:
     log-ignorelist:
       - Replacing daemon mds
+      - Throttler Limit has been hit. Some message processing may be significantly delayed.
