@@ -213,6 +213,7 @@ CEPHFSVOLUMECLIENT_VERSION_HISTORY = """
     * 2 - Added get_object, put_object, delete_object methods to CephFSVolumeClient
     * 3 - Allow volumes to be created without RADOS namespace isolation
     * 4 - Added get_object_and_version, put_object_versioned method to CephFSVolumeClient
+    * 5 - Disallow authorize API for users not created by CephFSVolumeClient
 """
 
 
@@ -236,7 +237,7 @@ class CephFSVolumeClient(object):
     """
 
     # Current version
-    version = 4
+    version = 5
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
@@ -359,7 +360,18 @@ class CephFSVolumeClient(object):
                     continue
 
                 readonly = access_level == 'r'
-                self._authorize_volume(volume_path, auth_id, readonly)
+                client_entity = "client.{0}".format(auth_id)
+                try:
+                    existing_caps = self._rados_command(
+                        'auth get',
+                        {
+                            'entity': client_entity
+                        }
+                    )
+                    # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
+                except rados.Error:
+                    existing_caps = None
+                self._authorize_volume(volume_path, auth_id, readonly, existing_caps)
 
             # Recovered from partial auth updates for the auth ID's access
             # to a volume.
@@ -943,6 +955,18 @@ class CephFSVolumeClient(object):
         """
 
         with self._auth_lock(auth_id):
+            client_entity = "client.{0}".format(auth_id)
+            try:
+                existing_caps = self._rados_command(
+                    'auth get',
+                    {
+                        'entity': client_entity
+                    }
+                )
+                # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
+            except rados.Error:
+                existing_caps = None
+
             # Existing meta, or None, to be updated
             auth_meta = self._auth_metadata_get(auth_id)
 
@@ -956,7 +980,14 @@ class CephFSVolumeClient(object):
                     'dirty': True,
                 }
             }
+
             if auth_meta is None:
+                if existing_caps is not None:
+                    msg = "auth ID: {0} exists and not created by ceph_volume_client. Not allowed to modify".format(auth_id)
+                    log.error(msg)
+                    raise CephFSVolumeClientError(msg)
+
+                # non-existent auth IDs
                 sys.stderr.write("Creating meta for ID {0} with tenant {1}\n".format(
                     auth_id, tenant_id
                 ))
@@ -966,14 +997,6 @@ class CephFSVolumeClient(object):
                     'tenant_id': tenant_id.__str__() if tenant_id else None,
                     'volumes': volume
                 }
-
-                # Note: this is *not* guaranteeing that the key doesn't already
-                # exist in Ceph: we are allowing VolumeClient tenants to
-                # 'claim' existing Ceph keys.  In order to prevent VolumeClient
-                # tenants from reading e.g. client.admin keys, you need to
-                # have configured your VolumeClient user (e.g. Manila) to
-                # have mon auth caps that prevent it from accessing those keys
-                # (e.g. limit it to only access keys with a manila.* prefix)
             else:
                 # Disallow tenants to share auth IDs
                 if auth_meta['tenant_id'].__str__() != tenant_id.__str__():
@@ -993,7 +1016,7 @@ class CephFSVolumeClient(object):
             self._auth_metadata_set(auth_id, auth_meta)
 
             with self._volume_lock(volume_path):
-                key = self._authorize_volume(volume_path, auth_id, readonly)
+                key = self._authorize_volume(volume_path, auth_id, readonly, existing_caps)
 
             auth_meta['dirty'] = False
             auth_meta['volumes'][volume_path_str]['dirty'] = False
@@ -1010,7 +1033,7 @@ class CephFSVolumeClient(object):
                     'auth_key': None
                 }
 
-    def _authorize_volume(self, volume_path, auth_id, readonly):
+    def _authorize_volume(self, volume_path, auth_id, readonly, existing_caps):
         vol_meta = self._volume_metadata_get(volume_path)
 
         access_level = 'r' if readonly else 'rw'
@@ -1029,14 +1052,14 @@ class CephFSVolumeClient(object):
             vol_meta['auths'].update(auth)
             self._volume_metadata_set(volume_path, vol_meta)
 
-        key = self._authorize_ceph(volume_path, auth_id, readonly)
+        key = self._authorize_ceph(volume_path, auth_id, readonly, existing_caps)
 
         vol_meta['auths'][auth_id]['dirty'] = False
         self._volume_metadata_set(volume_path, vol_meta)
 
         return key
 
-    def _authorize_ceph(self, volume_path, auth_id, readonly):
+    def _authorize_ceph(self, volume_path, auth_id, readonly, existing_caps):
         path = self._get_path(volume_path)
         log.debug("Authorizing Ceph id '{0}' for path '{1}'".format(
             auth_id, path
@@ -1064,15 +1087,7 @@ class CephFSVolumeClient(object):
             want_osd_cap = 'allow {0} pool={1}'.format(want_access_level,
                                                        pool_name)
 
-        try:
-            existing = self._rados_command(
-                'auth get',
-                {
-                    'entity': client_entity
-                }
-            )
-            # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
-        except rados.Error:
+        if existing_caps is None:
             caps = self._rados_command(
                 'auth get-or-create',
                 {
@@ -1084,7 +1099,7 @@ class CephFSVolumeClient(object):
                 })
         else:
             # entity exists, update it
-            cap = existing[0]
+            cap = existing_caps[0]
 
             # Construct auth caps that if present might conflict with the desired
             # auth caps.
