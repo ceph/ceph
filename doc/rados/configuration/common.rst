@@ -186,13 +186,30 @@ Example ceph.conf
 Running Multiple Clusters (DEPRECATED)
 ======================================
 
-Some Ceph CLI commands take a ``-c`` (cluster name) option. This option is
-present purely for backward compatibility. You should not attempt to deploy
-or run multiple clusters on the same hardware, and it is recommended to always
-leave the cluster name as the default ("ceph").
+Each Ceph cluster has an internal name that is used as part of configuration
+and log file names as well as directory and mountpoint names.  This name
+defaults to "ceph".  Previous releases of Ceph allowed one to specify a custom
+name instead, for example "ceph2".  This was intended to faciliate running
+multiple logical clusters on the same physical hardware, but in practice this
+was rarely exploited and should no longer be attempted.  Prior documentation
+could also be misinterpreted as requiring unique cluster names in order to
+use ``rbd-mirror``.
 
-If you need to allow multiple clusters to exist on the same host, please use
+Custom cluster names are now considered deprecated and the ability to deploy
+them has already been removed from some tools, though existing custom name
+deployments continue to operate.  The ability to run and manage clusters with
+custom names may be progressively removed by future Ceph releases, so it is
+strongly recommended to deploy all new clusters with the default name "ceph".
+
+Some Ceph CLI commands accept an optional ``--cluster`` (cluster name) option. This
+option is present purely for backward compatibility and need not be accomodated
+by new tools and deployments.
+
+If you do need to allow multiple clusters to exist on the same host, please use
 :ref:`cephadm`, which uses containers to fully isolate each cluster.
+
+
+
 
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
