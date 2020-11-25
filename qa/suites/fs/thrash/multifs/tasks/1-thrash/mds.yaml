@@ -5,3 +5,4 @@ overrides:
   ceph:
     log-ignorelist:
       - Replacing daemon mds
+      - DISPATCH_QUEUE_THROTTLE
