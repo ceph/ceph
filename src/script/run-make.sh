@@ -23,7 +23,11 @@ function clean_up_after_myself() {
 function get_processors() {
     # get_processors() depends on coreutils nproc.
     if test -n "$NPROC" ; then
-        echo $NPROC
+        if test "$NPROC" -eq 0; then
+            nproc
+        else
+            echo $NPROC
+        fi
     else
         if test $(nproc) -ge 2 ; then
             expr $(nproc) / 2
@@ -43,7 +47,7 @@ function detect_ceph_dev_pkgs() {
     fi
 
     source /etc/os-release
-    if [[ "$ID" == "ubuntu" ]] && [[ "$VERSION" =~ .*Xenial*. ]]; then 
+    if [[ "$ID" == "ubuntu" ]] && [[ "$VERSION" =~ .*Xenial*. ]]; then
         cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=NO"
     fi
     echo "$cmake_opts"
@@ -55,7 +59,7 @@ function prepare() {
     source /etc/os-release
     if test -f /etc/redhat-release ; then
         if ! type bc > /dev/null 2>&1 ; then
-            echo "Please install bc and re-run." 
+            echo "Please install bc and re-run."
             exit 1
         fi
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
@@ -72,7 +76,7 @@ function prepare() {
 
     if ! type sudo > /dev/null 2>&1 ; then
         echo "Please install sudo and re-run. This script assumes it is running"
-        echo "as a normal user with the ability to run commands as root via sudo." 
+        echo "as a normal user with the ability to run commands as root via sudo."
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
@@ -91,7 +95,9 @@ function prepare() {
 	    $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
+  }
 
+  function configure() {
     cat <<EOM
 Note that the binaries produced by this script do not contain correct time
 and git version information, which may make them unsuitable for debugging
@@ -112,10 +118,15 @@ EOM
         ccache -p | grep max_size
     fi
     $DRY_RUN ccache -sz # Reset the ccache statistics and show the current configuration
-}
 
-function configure() {
     local cmake_build_opts=$(detect_ceph_dev_pkgs)
+    cmake_build_opts+=" -DWITH_PYTHON3=3 -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
+    if [ $WITH_SEASTAR ]; then
+        cmake_build_opts+=" -DWITH_SEASTAR=ON"
+    fi
+    if [ $WITH_ZBD ]; then
+        cmake_build_opts+=" -DWITH_ZBD=ON"
+    fi
     $DRY_RUN ./do_cmake.sh $cmake_build_opts $@ || return 1
 }
 
