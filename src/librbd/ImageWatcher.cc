@@ -383,7 +383,7 @@ template <typename I>
 void ImageWatcher<I>::notify_quiesce(uint64_t *request_id,
                                      ProgressContext &prog_ctx,
                                      Context *on_finish) {
-  *request_id = m_image_ctx.operations->reserve_async_request_id();
+  *request_id = util::reserve_async_request_id();
 
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": request_id="
                              << request_id << dendl;

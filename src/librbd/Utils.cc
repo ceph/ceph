@@ -194,5 +194,11 @@ SnapContext get_snap_context(
   return snapc;
 }
 
+uint64_t reserve_async_request_id() {
+  static std::atomic<uint64_t> async_request_seq = 0;
+
+  return ++async_request_seq;
+}
+
 } // namespace util
 } // namespace librbd
