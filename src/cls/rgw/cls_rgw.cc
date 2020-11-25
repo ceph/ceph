@@ -1455,8 +1455,12 @@ public:
     return true;
   }
 
-  uint64_t get_epoch() {
+  uint64_t get_epoch() const {
     return olh_data_entry.epoch;
+  }
+
+  void set_epoch(uint64_t new_epoch) {
+    olh_data_entry.epoch = new_epoch;
   }
 
   rgw_bucket_olh_entry& get_entry() {
@@ -1486,7 +1490,9 @@ public:
     update_olh_log(olh_data_entry, op, op_tag, key, delete_marker, epoch);
   }
 
-  bool exists() { return olh_data_entry.exists; }
+  bool exists() const {
+    return olh_data_entry.exists;
+  }
 
   void set_exists(bool exists) {
     olh_data_entry.exists = exists;
@@ -1708,7 +1714,22 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     olh_read_attempt = true;
   }
 
+  if (olh.pending_removal()) {
+    olh.set_epoch(0);
+  }
+
   const uint64_t prev_epoch = olh.get_epoch();
+
+  CLS_LOG(20, "%s(): cur olh: key=%s[%s] epoch=%lld pending_removal=%d tag=%s", __func__,
+             olh.get_entry().key.name.c_str(), olh.get_entry().key.instance.c_str(),
+             (long long)prev_epoch,
+             (int)olh.pending_removal(),
+             olh.get_tag().c_str());
+  CLS_LOG(20, "%s(): op: key=%s[%s] olh_epoch=%lld delete_marker=%d tag=%s", __func__,
+             op.key.name.c_str(), op.key.instance.c_str(),
+             (long long)op.olh_epoch,
+             (int)op.delete_marker,
+             op.op_tag.c_str());
 
   if (!olh.start_modify(op.olh_epoch)) {
     bool is_current = (op.key.instance == olh.get_entry().key.instance);
@@ -1721,6 +1742,13 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
     return 0;
   }
+
+  CLS_LOG(20, "%s(): after start_modify olh: key=%s[%s] epoch=%lld found=%d pending_removal=%d tag=%s", __func__,
+             olh.get_entry().key.name.c_str(), olh.get_entry().key.instance.c_str(),
+             (long long)prev_epoch,
+             (int)olh_found,
+             (int)olh.pending_removal(),
+             olh.get_tag().c_str());
 
   // promote this version to current if it's a newer epoch, or if it matches the
   // current epoch and sorts after the current instance
