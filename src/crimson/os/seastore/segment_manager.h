@@ -103,7 +103,8 @@ public:
   read_ertr::future<ceph::bufferptr> read(
     paddr_t addr,
     size_t len) {
-    auto ptrref = std::make_unique<ceph::bufferptr>(len);
+    auto ptrref = std::make_unique<ceph::bufferptr>(
+      buffer::create_page_aligned(len));
     return read(addr, len, *ptrref).safe_then(
       [ptrref=std::move(ptrref)]() mutable {
 	return read_ertr::make_ready_future<bufferptr>(std::move(*ptrref));
