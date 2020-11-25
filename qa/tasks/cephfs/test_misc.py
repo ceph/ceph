@@ -216,6 +216,20 @@ class TestMisc(CephFSTestCase):
         self.assertEqual(lsflags["allow_multimds_snaps"], True)
         self.assertEqual(lsflags["allow_standby_replay"], True)
 
+    def test_dispatch_queue_throttle_message(self):
+        """
+        That cluster log a warning when the Dispatch Queue Throttle Limit hits
+        """
+        self.config_set('global', 'ms_dispatch_throttle_bytes', 500)
+        self.config_set('global', 'ms_dispatch_throttle_log_interval', 5)
+        self.config_set('global', 'ms_dispatch_throttle_clog_interval', 5)
+        # Create files & split across 10 directories, 1000 each.
+        with self.assert_cluster_log("Throttler Limit has been hit. "
+                                     "Some message processing may be significantly delayed.",
+                                     invert_match=False, watch_channel="cluster"):
+            for i in range(0, 10):
+                self.mount_a.create_n_files("dir{0}/file".format(i), 1000, sync=False)
+
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
