@@ -269,6 +269,7 @@ int open_images(librados::IoCtx& io_ctx, const std::string &image_name,
       ldout(cct, 10) << "re-opening the destination image" << dendl;
       r = image_ctx->state->open(0);
       if (r < 0) {
+        image_ctx = nullptr;
         lderr(cct) << "failed to re-open destination image: " << cpp_strerror(r)
                    << dendl;
         return r;
