@@ -11904,6 +11904,7 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
   for (const auto& dir : info.resultfrags) {
     dout(10) << " storing result frag " << *dir << dendl;
 
+    dir->mark_dirty(mdr->ls);
     dir->mark_new(mdr->ls);
 
     // freeze and store them too
