@@ -527,6 +527,28 @@ class TestMisc(CephFSTestCase):
             self.run_ceph_cmd('tell', 'cephfs.c', 'something')
         self.assertEqual(ce.exception.exitstatus, 1)
 
+    def test_dispatch_queue_throttle_cluster_log(self):
+        """
+        That cluster log a warning when the Dispatch Queue Throttle Limit hits.
+        """
+        self.config_set('global', 'ms_dispatch_throttle_bytes', 10)
+        self.config_set('global', 'ms_dispatch_throttle_log_interval', 1)
+        # Create files & split across 10 directories, 1000 each.
+        with self.assert_cluster_log("DISPATCH_QUEUE_THROTTLE",
+                                     invert_match=False, watch_channel="cluster"):
+            for i in range(0, 10):
+                self.mount_a.create_n_files("dir{0}/file".format(i), 1000, sync=False)
+
+    def test_dispatch_queue_throttle_health_warn(self):
+        """
+        That a health warning is generated when the Dispatch Queue Throttle Limit hits.
+        """
+        self.config_set('global', 'ms_dispatch_throttle_bytes', 10)
+        self.config_set('global', 'ms_dispatch_throttle_log_interval', 1)
+        # Create files & split across 10 directories, 1000 each.
+        for i in range(0, 10):
+            self.mount_a.create_n_files("dir{0}/file".format(i), 1000, sync=False)
+        self.wait_for_health("DISPATCH_QUEUE_THROTTLE", 120)
 
 @classhook('_add_session_client_evictions')
 class TestSessionClientEvict(CephFSTestCase):
