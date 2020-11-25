@@ -145,8 +145,10 @@ rbd:
   - src/test/librbd/**
   - src/test/rbd_mirror/**
   - src/tools/rbd/**
+  - src/tools/rbd_ggate/**
   - src/tools/rbd_mirror/**
   - src/tools/rbd_nbd/**
+  - src/tools/rbd_wnbd/**
 
 ceph-volume:
   - src/ceph-volume/**
