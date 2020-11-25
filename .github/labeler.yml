@@ -52,6 +52,9 @@ core:
   - qa/workunits/mon/**
   - qa/workunits/objectstore/**
   - qa/workunits/rados/**
+  - src/ceph.in
+  - src/ceph_osd.cc
+  - src/ceph_mon.cc
   - src/blk/**
   - src/crush/*
   - src/erasure-code/**
@@ -63,6 +66,7 @@ core:
   - src/os/**
   - src/osd/**
   - src/tools/rados/**
+  - src/test/osd/**
 
 crimson:
   - doc/dev/crimson/**
@@ -137,6 +141,24 @@ rbd:
   - src/tools/rbd_nbd/**
   - src/tools/rbd_wnbd/**
 
+rgw:
+  - qa/suites/rgw/**
+  - qa/tasks/rgw*
+  - qa/tasks/s3*
+  - src/cls/cmpomap/**
+  - src/cls/fifo/**
+  - src/cls/otp/**
+  - src/cls/queue/**
+  - src/cls/rgw/**
+  - src/cls/rgw_gc/**
+  - src/cls/timeindex/**
+  - src/mrgw.sh
+  - src/rgw/**
+  - src/test/cls_rgw/**
+  - src/test/librgw_*
+  - src/test/rgw/**
+  - src/test/test_rgw*
+
 ceph-volume:
   - src/ceph-volume/**
   - doc/ceph-volume/**
@@ -144,3 +166,4 @@ ceph-volume:
 tests:
   - qa/tasks/**
   - qa/workunits/**
+  - src/test/**
