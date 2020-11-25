@@ -404,7 +404,7 @@ bool needs_invalidate(I& image_ctx, uint64_t object_no,
 
 template <typename I>
 Operations<I>::Operations(I &image_ctx)
-  : m_image_ctx(image_ctx), m_async_request_seq(0),
+  : m_image_ctx(image_ctx),
     m_queue_lock(ceph::make_mutex(
                    util::unique_lock_name("librbd::Operations::m_queue_lock",
                                           this))) {
@@ -492,7 +492,7 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
     }
   }
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   r = invoke_async_request(OPERATION_FLATTEN,
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                            false,
@@ -566,7 +566,7 @@ int Operations<I>::rebuild_object_map(ProgressContext &prog_ctx) {
     return r;
   }
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   r = invoke_async_request(OPERATION_REBUILD_OBJECT_MAP,
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true,
                            boost::bind(&Operations<I>::execute_rebuild_object_map,
@@ -672,7 +672,7 @@ int Operations<I>::rename(const char *dstname) {
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    uint64_t request_id = ++m_async_request_seq;
+    uint64_t request_id = util::reserve_async_request_id();
     r = invoke_async_request(OPERATION_RENAME,
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
@@ -771,7 +771,7 @@ int Operations<I>::resize(uint64_t size, bool allow_shrink, ProgressContext& pro
     return -EINVAL;
   }
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   r = invoke_async_request(OPERATION_RESIZE,
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                            false,
@@ -866,7 +866,7 @@ void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespac
   }
   m_image_ctx.image_lock.unlock_shared();
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
     m_image_ctx, OPERATION_SNAP_CREATE,
     exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true,
@@ -1065,7 +1065,7 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
   m_image_ctx.image_lock.unlock_shared();
 
   if (proxy_op) {
-    uint64_t request_id = ++m_async_request_seq;
+    uint64_t request_id = util::reserve_async_request_id();
     auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
     if (cls::rbd::get_snap_namespace_type(snap_namespace) ==
         cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
@@ -1165,7 +1165,7 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    uint64_t request_id = ++m_async_request_seq;
+    uint64_t request_id = util::reserve_async_request_id();
     r = invoke_async_request(OPERATION_SNAP_RENAME,
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
@@ -1267,7 +1267,7 @@ int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespac
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    uint64_t request_id = ++m_async_request_seq;
+    uint64_t request_id = util::reserve_async_request_id();
     r = invoke_async_request(OPERATION_SNAP_PROTECT,
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
@@ -1365,7 +1365,7 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
   }
 
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-    uint64_t request_id = ++m_async_request_seq;
+    uint64_t request_id = util::reserve_async_request_id();
     r = invoke_async_request(OPERATION_SNAP_UNPROTECT,
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              true,
@@ -1566,7 +1566,7 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
 
     r = cond_ctx.wait();
   } else {
-    uint64_t request_id = ++m_async_request_seq;
+    uint64_t request_id = util::reserve_async_request_id();
     r = invoke_async_request(OPERATION_UPDATE_FEATURES,
                              exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                              false,
@@ -1641,7 +1641,7 @@ int Operations<I>::metadata_set(const std::string &key,
     return -EROFS;
   }
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   r = invoke_async_request(OPERATION_METADATA_UPDATE,
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                            false,
@@ -1701,7 +1701,7 @@ int Operations<I>::metadata_remove(const std::string &key) {
   if(r < 0)
     return r;
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   r = invoke_async_request(OPERATION_METADATA_UPDATE,
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                            false,
@@ -1766,7 +1766,7 @@ int Operations<I>::migrate(ProgressContext &prog_ctx) {
     }
   }
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   r = invoke_async_request(OPERATION_MIGRATE,
                            exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                            false,
@@ -1832,7 +1832,7 @@ int Operations<I>::sparsify(size_t sparse_size, ProgressContext &prog_ctx) {
     return -EINVAL;
   }
 
-  uint64_t request_id = ++m_async_request_seq;
+  uint64_t request_id = util::reserve_async_request_id();
   int r = invoke_async_request(OPERATION_SPARSIFY,
                                exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
                                false,
