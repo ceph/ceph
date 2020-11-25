@@ -65,6 +65,9 @@ core:
   - qa/workunits/mon/**
   - qa/workunits/objectstore/**
   - qa/workunits/rados/**
+  - src/ceph.in
+  - src/ceph_osd.cc
+  - src/ceph_mon.cc
   - src/blk/**
   - src/crush/*
   - src/erasure-code/**
@@ -76,6 +79,7 @@ core:
   - src/os/**
   - src/osd/**
   - src/tools/rados/**
+  - src/test/osd/**
 
 crimson:
   - doc/dev/crimson/**
@@ -175,3 +179,4 @@ ceph-volume:
 tests:
   - qa/tasks/**
   - qa/workunits/**
+  - src/test/**
