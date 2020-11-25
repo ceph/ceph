@@ -6,10 +6,11 @@
 #include "include/rbd_types.h"
 #include "common/ceph_mutex.h"
 #include "librbd/migration/HttpClient.h"
-#include "librbd/migration/HttpStream.h"
+#include "librbd/migration/S3Stream.h"
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include "json_spirit/json_spirit.h"
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/beast/http.hpp>
 
 namespace librbd {
@@ -32,6 +33,11 @@ struct HttpClient<MockTestImageCtx> {
     return s_instance;
   }
 
+  HttpProcessorInterface* http_processor = nullptr;
+  void set_http_processor(HttpProcessorInterface* http_processor) {
+    this->http_processor = http_processor;
+  }
+
   MOCK_METHOD1(open, void(Context*));
   MOCK_METHOD1(close, void(Context*));
   MOCK_METHOD2(get_size, void(uint64_t*, Context*));
@@ -50,7 +56,7 @@ HttpClient<MockTestImageCtx>* HttpClient<MockTestImageCtx>::s_instance = nullptr
 } // namespace migration
 } // namespace librbd
 
-#include "librbd/migration/HttpStream.cc"
+#include "librbd/migration/S3Stream.cc"
 
 namespace librbd {
 namespace migration {
@@ -60,10 +66,13 @@ using ::testing::Invoke;
 using ::testing::InSequence;
 using ::testing::WithArgs;
 
-class TestMockMigrationHttpStream : public TestMockFixture {
+class TestMockMigrationS3Stream : public TestMockFixture {
 public:
-  typedef HttpStream<MockTestImageCtx> MockHttpStream;
+  typedef S3Stream<MockTestImageCtx> MockS3Stream;
   typedef HttpClient<MockTestImageCtx> MockHttpClient;
+
+  using EmptyBody = boost::beast::http::empty_body;
+  using EmptyRequest = boost::beast::http::request<EmptyBody>;
 
   librbd::ImageCtx *m_image_ctx;
 
@@ -71,7 +80,9 @@ public:
     TestMockFixture::SetUp();
 
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
-    json_object["url"] = "http://some.site/file";
+    json_object["url"] = "http://some.site/bucket/file";
+    json_object["access_key"] = "0555b35654ad1656d804";
+    json_object["secret_key"] = "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==";
   }
 
   void expect_open(MockHttpClient& mock_http_client, int r) {
@@ -109,7 +120,7 @@ public:
   json_spirit::mObject json_object;
 };
 
-TEST_F(TestMockMigrationHttpStream, OpenClose) {
+TEST_F(TestMockMigrationS3Stream, OpenClose) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
@@ -119,7 +130,7 @@ TEST_F(TestMockMigrationHttpStream, OpenClose) {
 
   expect_close(*mock_http_client, 0);
 
-  MockHttpStream mock_http_stream(&mock_image_ctx, json_object);
+  MockS3Stream mock_http_stream(&mock_image_ctx, json_object);
 
   C_SaferCond ctx1;
   mock_http_stream.open(&ctx1);
@@ -130,7 +141,7 @@ TEST_F(TestMockMigrationHttpStream, OpenClose) {
   ASSERT_EQ(0, ctx2.wait());
 }
 
-TEST_F(TestMockMigrationHttpStream, GetSize) {
+TEST_F(TestMockMigrationS3Stream, GetSize) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
@@ -142,7 +153,7 @@ TEST_F(TestMockMigrationHttpStream, GetSize) {
 
   expect_close(*mock_http_client, 0);
 
-  MockHttpStream mock_http_stream(&mock_image_ctx, json_object);
+  MockS3Stream mock_http_stream(&mock_image_ctx, json_object);
 
   C_SaferCond ctx1;
   mock_http_stream.open(&ctx1);
@@ -159,7 +170,7 @@ TEST_F(TestMockMigrationHttpStream, GetSize) {
   ASSERT_EQ(0, ctx3.wait());
 }
 
-TEST_F(TestMockMigrationHttpStream, Read) {
+TEST_F(TestMockMigrationS3Stream, Read) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
@@ -173,7 +184,7 @@ TEST_F(TestMockMigrationHttpStream, Read) {
 
   expect_close(*mock_http_client, 0);
 
-  MockHttpStream mock_http_stream(&mock_image_ctx, json_object);
+  MockS3Stream mock_http_stream(&mock_image_ctx, json_object);
 
   C_SaferCond ctx1;
   mock_http_stream.open(&ctx1);
@@ -188,6 +199,39 @@ TEST_F(TestMockMigrationHttpStream, Read) {
   C_SaferCond ctx3;
   mock_http_stream.close(&ctx3);
   ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationS3Stream, ProcessRequest) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
+  InSequence seq;
+
+  auto mock_http_client = new MockHttpClient();
+  expect_open(*mock_http_client, 0);
+
+  expect_close(*mock_http_client, 0);
+
+  MockS3Stream mock_http_stream(&mock_image_ctx, json_object);
+
+  C_SaferCond ctx1;
+  mock_http_stream.open(&ctx1);
+  ASSERT_EQ(0, ctx1.wait());
+
+  EmptyRequest request;
+  request.method(boost::beast::http::verb::get);
+  request.target("/bucket/resource");
+  mock_http_client->http_processor->process_request(request);
+
+  // basic test for date and known portion of authorization
+  ASSERT_EQ(1U, request.count(boost::beast::http::field::date));
+  ASSERT_EQ(1U, request.count(boost::beast::http::field::authorization));
+  ASSERT_TRUE(boost::algorithm::starts_with(
+    request[boost::beast::http::field::authorization],
+    "AWS 0555b35654ad1656d804:"));
+
+  C_SaferCond ctx2;
+  mock_http_stream.close(&ctx2);
+  ASSERT_EQ(0, ctx2.wait());
 }
 
 } // namespace migration

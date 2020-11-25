@@ -6,7 +6,10 @@
 #include "common/errno.h"
 #include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/Utils.h"
 #include "librbd/asio/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ReadResult.h"
 #include "librbd/migration/Utils.h"
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/post.hpp>
@@ -14,7 +17,6 @@
 #include <boost/asio/read.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/core.hpp>
-#include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/read.hpp>
 #include <boost/lexical_cast.hpp>
 #include <deque>
@@ -108,7 +110,7 @@ public:
     ldout(cct, 20) << "work=" << work.get() << dendl;
 
     ++m_in_flight_requests;
-    (*work)(this, derived().stream());
+    (*work)(derived().stream());
   }
 
   void handle_issue(boost::system::error_code ec,
@@ -216,8 +218,7 @@ private:
   std::deque<std::shared_ptr<Work>> m_receive_queue;
 
   boost::beast::flat_buffer m_buffer;
-  std::optional<boost::beast::http::parser<
-    false, boost::beast::http::empty_body>> m_header_parser;
+  std::optional<boost::beast::http::parser<false, EmptyBody>> m_header_parser;
   std::optional<boost::beast::http::parser<false, StringBody>> m_parser;
 
   D& derived() {
@@ -455,14 +456,33 @@ private:
       return;
     }
 
-    boost::beast::http::response<StringBody> response;
+    Response response;
     if (work->header_only()) {
       m_parser.emplace(std::move(*m_header_parser));
     }
     response = std::move(m_parser->release());
 
+    // basic response code handling in a common location
+    int r = 0;
+    auto result = response.result();
+    if (result == boost::beast::http::status::not_found) {
+      lderr(cct) << "requested resource does not exist" << dendl;
+      r = -ENOENT;
+    } else if (result == boost::beast::http::status::forbidden) {
+      lderr(cct) << "permission denied attempting to access resource" << dendl;
+      r = -EACCES;
+    } else if (boost::beast::http::to_status_class(result) !=
+                 boost::beast::http::status_class::successful) {
+      lderr(cct) << "failed to retrieve size: HTTP " << result << dendl;
+      r = -EIO;
+    }
+
     bool need_eof = response.need_eof();
-    work->complete(0, std::move(response));
+    if (r < 0) {
+      work->complete(r, {});
+    } else {
+      work->complete(0, std::move(response));
+    }
 
     if (need_eof) {
       ldout(cct, 20) << "reset required for non-pipelined response: "
@@ -534,8 +554,7 @@ private:
     ceph_assert(false);
   }
 
-  void complete_work(std::shared_ptr<Work> work, int r,
-                     boost::beast::http::response<StringBody>&& response) {
+  void complete_work(std::shared_ptr<Work> work, int r, Response&& response) {
     auto cct = m_http_client->m_cct;
     ldout(cct, 20) << "work=" << work.get() << ", r=" << r << dendl;
 
@@ -744,8 +763,8 @@ private:
 
 template <typename I>
 HttpClient<I>::HttpClient(I* image_ctx, const std::string& url)
-  : m_cct(image_ctx->cct), m_asio_engine(image_ctx->asio_engine), m_url(url),
-    m_strand(*m_asio_engine),
+  : m_cct(image_ctx->cct), m_image_ctx(image_ctx),
+    m_asio_engine(image_ctx->asio_engine), m_url(url), m_strand(*m_asio_engine),
     m_ssl_context(boost::asio::ssl::context::sslv23_client) {
     m_ssl_context.set_default_verify_paths();
 }
@@ -776,36 +795,23 @@ template <typename I>
 void HttpClient<I>::get_size(uint64_t* size, Context* on_finish) {
   ldout(m_cct, 10) << dendl;
 
-  boost::beast::http::request<boost::beast::http::empty_body> req;
+  Request req;
   req.method(boost::beast::http::verb::head);
 
   issue(
-    std::move(req), [this, size, on_finish]
-    (int r, boost::beast::http::response<StringBody>&& response) {
+    std::move(req), [this, size, on_finish](int r, Response&& response) {
       handle_get_size(r, std::move(response), size, on_finish);
     });
 }
 
 template <typename I>
-void HttpClient<I>::handle_get_size(
-    int r, boost::beast::http::response<StringBody>&& response,
-    uint64_t* size, Context* on_finish) {
+void HttpClient<I>::handle_get_size(int r, Response&& response, uint64_t* size,
+                                    Context* on_finish) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(m_cct) << "failed to retrieve size: " << cpp_strerror(r) << dendl;
     on_finish->complete(r);
-    return;
-  } else if (response.result() == boost::beast::http::status::not_found) {
-    lderr(m_cct) << "failed to retrieve size: " << cpp_strerror(-ENOENT)
-                 << dendl;
-    on_finish->complete(-ENOENT);
-    return;
-  } else if (boost::beast::http::to_status_class(response.result()) !=
-               boost::beast::http::status_class::successful) {
-    lderr(m_cct) << "failed to retrieve size: HTTP " << response.result()
-                 << dendl;
-    on_finish->complete(-EIO);
     return;
   } else if (!response.has_content_length()) {
     lderr(m_cct) << "failed to retrieve size: missing content-length" << dendl;
@@ -823,6 +829,76 @@ void HttpClient<I>::handle_get_size(
   }
 
   on_finish->complete(0);
+}
+
+template <typename I>
+void HttpClient<I>::read(io::Extents&& byte_extents, bufferlist* data,
+                         Context* on_finish) {
+  ldout(m_cct, 20) << dendl;
+
+  auto aio_comp = io::AioCompletion::create_and_start(
+    on_finish, librbd::util::get_image_ctx(m_image_ctx), io::AIO_TYPE_READ);
+  aio_comp->set_request_count(byte_extents.size());
+
+  // utilize ReadResult to assemble multiple byte extents into a single bl
+  // since boost::beast doesn't support multipart responses out-of-the-box
+  io::ReadResult read_result{data};
+  aio_comp->read_result = std::move(read_result);
+  aio_comp->read_result.set_image_extents(byte_extents);
+
+  // issue a range get request for each extent
+  uint64_t buffer_offset = 0;
+  for (auto [byte_offset, byte_length] : byte_extents) {
+    auto ctx = new io::ReadResult::C_ImageReadRequest(
+      aio_comp, buffer_offset, {{byte_offset, byte_length}});
+    buffer_offset += byte_length;
+
+    Request req;
+    req.method(boost::beast::http::verb::get);
+
+    std::stringstream range;
+    ceph_assert(byte_length > 0);
+    range << "bytes=" << byte_offset << "-" << (byte_offset + byte_length - 1);
+    req.set(boost::beast::http::field::range, range.str());
+
+    issue(
+      std::move(req),
+      [this, byte_offset=byte_offset, byte_length=byte_length, ctx]
+      (int r, Response&& response) {
+        handle_read(r, std::move(response), byte_offset, byte_length, &ctx->bl,
+                    ctx);
+     });
+  }
+}
+
+template <typename I>
+void HttpClient<I>::handle_read(int r, Response&& response,
+                                uint64_t byte_offset, uint64_t byte_length,
+                                bufferlist* data, Context* on_finish) {
+  ldout(m_cct, 20) << "bytes=" << byte_offset << "~" << byte_length << ", "
+                   << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to read requested byte range: "
+                 << cpp_strerror(r) << dendl;
+    on_finish->complete(r);
+    return;
+  } else if (response.result() != boost::beast::http::status::partial_content) {
+    lderr(m_cct) << "failed to retrieve requested byte range: HTTP "
+                 << response.result() << dendl;
+    on_finish->complete(-EIO);
+    return;
+  } else if (byte_length != response.body().size()) {
+    lderr(m_cct) << "unexpected short range read: "
+                 << "wanted=" << byte_length << ", "
+                 << "received=" << response.body().size() << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  data->clear();
+  data->append(response.body());
+  on_finish->complete(data->length());
 }
 
 template <typename I>
