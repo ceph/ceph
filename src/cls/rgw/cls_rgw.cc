@@ -1885,6 +1885,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     }
 
     if (obj.is_delete_marker()) {
+      ret = obj.unlink();
+      if (ret < 0) {
+        return ret;
+      }
       return 0;
     }
 
