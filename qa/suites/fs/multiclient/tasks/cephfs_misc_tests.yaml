@@ -12,3 +12,4 @@ overrides:
       - MDS_CLIENT_LATE_RELEASE
       - responding to mclientcaps
       - RECENT_CRASH
+      - Throttler Limit has been hit. Some message processing may be significantly delayed.
