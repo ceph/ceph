@@ -308,12 +308,6 @@ void Mgr::init()
   // Load module KV store
   auto kv_store = load_store();
 
-  // Migrate config from KV store on luminous->mimic
-  // drop lock because we do blocking config sets to mon
-  lock.unlock();
-  py_module_registry->upgrade_config(monc, kv_store);
-  lock.lock();
-
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
   py_module_registry->active_start(daemon_state, cluster_state,
