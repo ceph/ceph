@@ -1,8 +1,10 @@
 import logging
+import ssl
+
 import requests
+from requests.adapters import HTTPAdapter
 
 from .mgr_test_case import MgrTestCase
-
 
 log = logging.getLogger(__name__)
 
@@ -122,3 +124,32 @@ class TestDashboard(MgrTestCase):
             ))
 
         self.assertListEqual(failures, [])
+
+    def test_tls(self):
+        class CustomHTTPAdapter(HTTPAdapter):
+            def __init__(self, ssl_version):
+                self.ssl_version = ssl_version
+                super().__init__()
+
+            def init_poolmanager(self, *args, **kwargs):
+                kwargs['ssl_version'] = self.ssl_version
+                return super().init_poolmanager(*args, **kwargs)
+
+        uri = self._get_uri("dashboard")
+
+        # TLSv1
+        with self.assertRaises(requests.exceptions.SSLError):
+            session = requests.Session()
+            session.mount(uri, CustomHTTPAdapter(ssl.PROTOCOL_TLSv1))
+            session.get(uri, allow_redirects=False, verify=False)
+
+        # TLSv1.1
+        with self.assertRaises(requests.exceptions.SSLError):
+            session = requests.Session()
+            session.mount(uri, CustomHTTPAdapter(ssl.PROTOCOL_TLSv1_1))
+            session.get(uri, allow_redirects=False, verify=False)
+
+        session = requests.Session()
+        session.mount(uri, CustomHTTPAdapter(ssl.PROTOCOL_TLS))
+        r = session.get(uri, allow_redirects=False, verify=False)
+        self.assertEqual(r.status_code, 200)
