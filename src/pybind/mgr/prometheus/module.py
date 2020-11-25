@@ -197,7 +197,15 @@ class MetricCollectionThread(threading.Thread):
             self.mod.log.debug('collecting cache in thread')
             if self.mod.have_mon_connection():
                 start_time = time.time()
-                data = self.mod.collect()
+
+                try:
+                    data = self.mod.collect()
+                except Exception as e:
+                    # Log any issues encountered during the data collection and continue
+                    self.mod.log.exception("failed to collect metrics:")
+                    time.sleep(self.mod.scrape_interval)
+                    continue
+
                 duration = time.time() - start_time
                 self.mod.log.debug('collecting cache in thread done')
 
