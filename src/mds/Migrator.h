@@ -240,7 +240,7 @@ public:
 			CDir *dir,
 			std::map<client_t,entity_inst_t>& exported_client_map,
 			std::map<client_t,client_metadata_t>& exported_client_metadata_map,
-                        uint64_t &num_exported);
+                        size_t &num_exported);
   void finish_export_dir(CDir *dir, mds_rank_t target,
 			 std::map<inodeno_t,std::map<client_t,Capability::Import> >& peer_imported,
 			 MDSContext::vec& finished, int *num_dentries);
@@ -316,7 +316,9 @@ protected:
     std::map<inodeno_t,std::map<client_t,Capability::Import> > peer_imported;
     MutationRef mut;
     LogSegment *ls = nullptr;
+
     size_t approx_size = 0;
+    size_t num_inodes = 0;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins = 0;
@@ -347,6 +349,7 @@ protected:
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
   friend class C_MDS_ExportDirCommitted;
+  friend class C_MDS_ExportFastLogged;
   friend class C_M_ExportGo;
   friend class C_M_ExportSessionsFlushed;
   friend class C_MDS_ExportDiscover;
@@ -363,6 +366,8 @@ protected:
   void export_sessions_flushed(dirfrag_t df, uint64_t tid);
   void export_go(export_state_t& stat);
   void export_go_synced(dirfrag_t df, uint64_t tid);
+  bool maybe_export_fast(export_state_t& stat);
+  void logged_export_fast(CDir *dir);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
   void export_cancel_finish(export_state_iterator& it);
   void export_reverse(export_state_t& stat);
@@ -373,6 +378,7 @@ protected:
   void export_logged_committed(dirfrag_t df);
   void handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m);
   void export_finish(CDir *dir);
+  void export_finish(CDir *dir, export_state_iterator it);
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
   void encode_export_prep_trace(bufferlist& bl, CDir *bound, export_state_t &stat,
                                set<inodeno_t> &inodes_added, set<dirfrag_t> &dirfrags_added);

@@ -24,6 +24,8 @@ public:
   ceph::buffer::list export_data;
   std::vector<dirfrag_t> bounds;
   ceph::buffer::list client_map;
+private:
+  bool fast = false;
 
 protected:
   MExportDir() : MMDSOp{MSG_MDS_EXPORTDIR} {}
@@ -39,12 +41,16 @@ public:
     o << "export(" << dirfrag << ")";
   }
 
+  void mark_fast() { fast = true; }
+  bool is_fast() const { return fast; }
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(dirfrag, payload);
     encode(bounds, payload);
     encode(export_data, payload);
     encode(client_map, payload);
+    encode(fast, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -53,6 +59,7 @@ public:
     decode(bounds, p);
     decode(export_data, p);
     decode(client_map, p);
+    decode(fast, p);
   }
 private:
   template<class T, typename... Args>

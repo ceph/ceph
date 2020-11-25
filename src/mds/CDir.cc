@@ -2806,6 +2806,7 @@ void CDir::abort_import()
   set_replica_nonce(CDir::EXPORT_NONCE);
   if (is_dirty())
     mark_clean();
+  state_clear(STATE_DIRTYDFT);
 
   pop_nested.sub(pop_auth_subtree);
   pop_auth_subtree_nested.sub(pop_auth_subtree);
