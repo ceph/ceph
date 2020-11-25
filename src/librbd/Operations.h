@@ -45,10 +45,6 @@ class Operations {
 public:
   Operations(ImageCtxT &image_ctx);
 
-  uint64_t reserve_async_request_id() {
-    return ++m_async_request_seq;
-  }
-
   void start_op(enum Operation op, Context *ctx);
   void finish_op(enum Operation op, int r);
 
@@ -143,7 +139,6 @@ public:
 
 private:
   ImageCtxT &m_image_ctx;
-  std::atomic<uint64_t> m_async_request_seq;
 
   mutable ceph::mutex m_queue_lock;
   std::set<Operation> m_in_flight_ops;
