@@ -62,6 +62,14 @@ void entity_inst_t::generate_test_instances(list<entity_inst_t*>& o)
   o.push_back(a);
 }
 
+bool entity_addr_t::parse(const std::string_view s)
+{
+  const char* start = s.data();
+  const char* end = nullptr;
+  bool got = parse(start, &end);
+  return got && end == start + s.size();
+}
+
 bool entity_addr_t::parse(const char *s, const char **end, int default_type)
 {
   *this = entity_addr_t();
