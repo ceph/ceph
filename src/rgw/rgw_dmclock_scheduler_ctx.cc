@@ -168,6 +168,7 @@ PerfCountersRef build(CephContext *cct, const std::string& name)
 
   PerfCountersBuilder b(cct, name, l_first, l_last);
   b.add_u64(l_throttle, "throttle", "Requests throttled");
+  b.add_u64(l_outstanding, "outstanding", "Outstanding Requests");
 
   auto logger = PerfCountersRef{ b.create_perf_counters(), cct };
   cct->get_perfcounters_collection()->add(logger.get());
