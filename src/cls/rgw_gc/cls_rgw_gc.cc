@@ -191,18 +191,21 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
           real_time now = ceph::real_clock::now();
           if (info.time <= now) {
             list_ret.entries.emplace_back(info);
+          } else {
+            //Can break out here if info.time > now
+            is_truncated = false;
+            break;
           }
-          //Can break out here if info.time > now, since all subsequent entries won't have expired
         } else {
           list_ret.entries.emplace_back(info);
         }
         num_entries++;
       }
       CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): num_entries: %u and op.max: %u\n", num_entries, op.max);
-      if (num_entries < op.max) {
-        list_op.max = (op.max - num_entries);
-        list_op.start_marker = op_ret.next_marker;
-        out->clear();
+      if (num_entries < op.max && is_truncated) {
+          list_op.max = (op.max - num_entries);
+          list_op.start_marker = op_ret.next_marker;
+          out->clear();
       } else {
         //We've reached the max number of entries needed
         break;
