@@ -17,10 +17,8 @@
 void usage() {
   std::cout << "usage: cephfs-mirror [options...]" << std::endl;
   std::cout << "options:\n";
-  std::cout << "  --remote/-r FILE      remote cluster configuration\n";
-  std::cout << "  --keyring=<path>      path to keyring for remote cluster\n";
   std::cout << "  --log-file=<logfile>  file to log debug output\n";
-  std::cout << "  --debug-cephfs-mirror=<log-level>/<memory-level>  set cephfs-sync debug level\n";
+  std::cout << "  --debug-cephfs-mirror=<log-level>/<memory-level>  set cephfs-mirror debug level\n";
   generic_server_usage();
 }
 
