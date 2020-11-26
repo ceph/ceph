@@ -562,7 +562,7 @@ struct entity_addrvec_t {
   std::vector<entity_addr_t> v;
 
   entity_addrvec_t() {}
-  explicit entity_addrvec_t(const entity_addr_t& a) : v({ a }) {}
+  explicit entity_addrvec_t(const entity_addr_t& a) : v{a} {}
 
   unsigned size() const { return v.size(); }
   bool empty() const { return v.empty(); }
