@@ -11670,7 +11670,8 @@ void BlueStore::_kv_sync_thread()
       kv_sync_in_progress = false;
       kv_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
-    } else {
+    }
+    {
       deque<TransContext*> kv_submitting;
       deque<DeferredBatch*> deferred_done, deferred_stable;
       uint64_t aios = 0, costs = 0;
@@ -15511,6 +15512,13 @@ void BlueStore::_shutdown_cache()
 int BlueStore::flush_cache(ostream *os)
 {
   dout(10) << __func__ << dendl;
+  {
+    std::lock_guard l(kv_lock);
+    if (kv_sync_in_progress == false) {
+      kv_sync_in_progress = true;
+      kv_cond.notify_one();
+    }
+  }
   for (auto i : onode_cache_shards) {
     i->flush();
   }
