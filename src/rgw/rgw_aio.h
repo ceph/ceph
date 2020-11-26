@@ -73,7 +73,7 @@ inline int check_for_errors(const AioResultList& results) {
 // each call returns a list of results from prior completions
 class Aio {
  public:
-  using OpFunc = fu2::unique_function<void(Aio*, AioResult&) &&>;
+  using OpFunc = fu2::unique_function<void(Aio*, AioResult&)>;
 
   virtual ~Aio() {}
 

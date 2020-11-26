@@ -56,7 +56,7 @@ AioResultList BlockingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
     p->parent = this;
     pending.push_back(*p);
     lock.unlock();
-    std::move(f)(this, *static_cast<AioResult*>(p.get()));
+    f(this, *static_cast<AioResult*>(p.get()));
     lock.lock();
   }
   p.release();
@@ -146,7 +146,7 @@ AioResultList YieldingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
 
     // register the pending write and initiate the operation
     pending.push_back(*p);
-    std::move(f)(this, *static_cast<AioResult*>(p.get()));
+    f(this, *static_cast<AioResult*>(p.get()));
   }
   p.release();
   return std::move(completed);
