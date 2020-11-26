@@ -4791,6 +4791,14 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Enables Linux io_uring API instead of libaio"),
 
+    Option("bdev_ioring_hipri", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enables Linux io_uring API Use polled IO completions"),
+
+    Option("bdev_ioring_sqthread_poll", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enables Linux io_uring API Offload submission/completion to kernel thread"),
+
     // -----------------------------------------
     // kstore
 
