@@ -74,9 +74,6 @@ class SocketMessenger final : public Messenger {
                              uint32_t min_port, uint32_t max_port) override;
 
   seastar::future<> start(ChainedDispatchersRef dispatchers) override;
-  void add_dispatcher(Dispatcher& disp) {
-    dispatchers->push_back(disp);
-  }
 
   ConnectionRef connect(const entity_addr_t& peer_addr,
                         const entity_name_t& peer_name) override;
