@@ -242,7 +242,7 @@ void *RGWLC::LCWorker::entry() {
 void RGWLC::initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store) {
   cct = _cct;
   store = _store;
-  sal_lc = std::move(store->get_lifecycle());
+  sal_lc = store->get_lifecycle();
   max_objs = cct->_conf->rgw_lc_max_objs;
   if (max_objs > HASH_PRIME)
     max_objs = HASH_PRIME;
