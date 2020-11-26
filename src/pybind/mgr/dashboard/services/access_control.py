@@ -290,6 +290,7 @@ class User(object):
         self.password = password
         self.name = name
         self.email = email
+        self.invalid_auth_attempt = 0
         if roles is None:
             self.roles = set()
         else:
@@ -328,6 +329,7 @@ class User(object):
         self.set_password_hash(password_hash(password))
 
     def set_password_hash(self, hashed_password):
+        self.invalid_auth_attempt = 0
         self.password = hashed_password
         self.refresh_last_update()
         self.refresh_pwd_expiration_date()
@@ -431,6 +433,23 @@ class AccessControlDB(object):
             if name not in self.roles:
                 raise RoleDoesNotExist(name)
             return self.roles[name]
+
+    def increment_attempt(self, username):
+        with self.lock:
+            if username in self.users:
+                self.users[username].invalid_auth_attempt += 1
+
+    def reset_attempt(self, username):
+        with self.lock:
+            if username in self.users:
+                self.users[username].invalid_auth_attempt = 0
+
+    def get_attempt(self, username):
+        with self.lock:
+            try:
+                return self.users[username].invalid_auth_attempt
+            except KeyError:
+                return 0
 
     def delete_role(self, name):
         with self.lock:
@@ -738,6 +757,7 @@ def ac_user_enable(_, username):
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.enabled = True
+        mgr.ACCESS_CTRL_DB.reset_attempt(username)
 
         mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''

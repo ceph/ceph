@@ -71,6 +71,31 @@ class AuthTest(DashboardTestCase):
         })
         self.delete_user('admin2')
 
+    def test_lockout_user(self):
+        self._ceph_cmd(['dashboard', 'set-account-lockout-attempts', '3'])
+        for _ in range(3):
+            self._post("/api/auth", {'username': 'admin', 'password': 'inval'})
+        self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
+        self.assertStatus(400)
+        self.assertJsonBody({
+            "component": "auth",
+            "code": "invalid_credentials",
+            "detail": "Invalid credentials"
+        })
+        self._ceph_cmd(['dashboard', 'ac-user-enable', 'admin'])
+        self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
+        self.assertStatus(201)
+        data = self.jsonBody()
+        self.assertSchema(data, JObj(sub_elems={
+            'token': JLeaf(str),
+            'username': JLeaf(str),
+            'permissions': JObj(sub_elems={}, allow_unknown=True),
+            'sso': JLeaf(bool),
+            'pwdExpirationDate': JLeaf(int, none=True),
+            'pwdUpdateRequired': JLeaf(bool)
+        }, allow_unknown=False))
+        self._validate_jwt_token(data['token'], "admin", data['permissions'])
+
     def test_logout(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
         self.assertStatus(201)
