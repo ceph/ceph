@@ -21,6 +21,10 @@ SPEC_STORE_PREFIX = "spec."
 
 
 class Inventory:
+    """
+    The inventory stores a HostSpec for all hosts persistently.
+    """
+
     def __init__(self, mgr: 'CephadmOrchestrator'):
         self.mgr = mgr
         # load inventory
@@ -164,6 +168,36 @@ class SpecStore():
 
 
 class HostCache():
+    """
+    HostCache stores different things:
+
+    1. `daemons`: Deployed daemons O(daemons)
+
+    They're part of the configuration nowadays and need to be
+    persistent. The name "daemon cache" is unfortunately a bit misleading.
+    Like for example we really need to know where daemons are deployed on
+    hosts that are offline.
+
+    2. `devices`: ceph-volume inventory cache O(hosts)
+
+    As soon as this is populated, it becomes more or less read-only.
+
+    3. `networks`: network interfaces for each host. O(hosts)
+
+    This is needed in order to deploy MONs. As this is mostly read-only.
+
+    4. `last_etc_ceph_ceph_conf` O(hosts)
+
+    Stores the last refresh time for the /etc/ceph/ceph.conf. Used 
+    to avoid deploying new configs when failing over to a new mgr.
+
+    5. `scheduled_daemon_actions`: O(daemons)
+
+    Used to run daemon actions after deploying a daemon. We need to
+    store it persistently, in order to stay consistent across
+    MGR failovers.   
+    """
+
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr: CephadmOrchestrator = mgr
