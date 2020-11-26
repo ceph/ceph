@@ -90,8 +90,6 @@ public:
   // wait for messenger shutdown
   virtual seastar::future<> wait() = 0;
 
-  virtual void add_dispatcher(Dispatcher&) = 0;
-
   virtual void remove_dispatcher(Dispatcher&) = 0;
 
   virtual bool dispatcher_chain_empty() const = 0;
