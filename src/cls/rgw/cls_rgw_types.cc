@@ -414,6 +414,7 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("tag", tag, f);
   encode_json("exists", exists, f);
   encode_json("pending_removal", pending_removal, f);
+  encode_json("log_epoch", log_epoch, f);
 }
 
 void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
@@ -425,6 +426,7 @@ void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tag", tag, obj);
   JSONDecoder::decode_json("exists", exists, obj);
   JSONDecoder::decode_json("pending_removal", pending_removal, obj);
+  JSONDecoder::decode_json("log_epoch", log_epoch, obj);
 }
 
 void rgw_bucket_olh_log_entry::generate_test_instances(list<rgw_bucket_olh_log_entry*>& o)
