@@ -1216,8 +1216,3 @@ This warning can silenced by setting the
 
   ceph config global mon mon_warn_on_osd_down_out_interval_zero false
 
-<<<<<<< HEAD
-.. _Storage Capacity: ../configuration/mon-config-ref/#storage-capacity
-.. _No Free Drive Space: ../troubleshooting/troubleshooting-osd/#no-free-drive-space
-=======
->>>>>>> upstream/master
