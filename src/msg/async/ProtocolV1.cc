@@ -1996,7 +1996,8 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   // require signatures for cephx?
   if (connect_msg.authorizer_protocol == CEPH_AUTH_CEPHX) {
     if (connection->peer_type == CEPH_ENTITY_TYPE_OSD ||
-        connection->peer_type == CEPH_ENTITY_TYPE_MDS) {
+        connection->peer_type == CEPH_ENTITY_TYPE_MDS ||
+        connection->peer_type == CEPH_ENTITY_TYPE_MGR) {
       if (cct->_conf->cephx_require_signatures ||
           cct->_conf->cephx_cluster_require_signatures) {
         ldout(cct, 10)
@@ -2004,6 +2005,14 @@ CtPtr ProtocolV1::handle_connect_message_2() {
             << " using cephx, requiring MSG_AUTH feature bit for cluster"
             << dendl;
         connection->policy.features_required |= CEPH_FEATURE_MSG_AUTH;
+      }
+      if (cct->_conf->cephx_require_version >= 2 ||
+          cct->_conf->cephx_cluster_require_version >= 2) {
+        ldout(cct, 10)
+            << __func__
+            << " using cephx, requiring cephx v2 feature bit for cluster"
+            << dendl;
+        connection->policy.features_required |= CEPH_FEATUREMASK_CEPHX_V2;
       }
     } else {
       if (cct->_conf->cephx_require_signatures ||
@@ -2013,6 +2022,14 @@ CtPtr ProtocolV1::handle_connect_message_2() {
             << " using cephx, requiring MSG_AUTH feature bit for service"
             << dendl;
         connection->policy.features_required |= CEPH_FEATURE_MSG_AUTH;
+      }
+      if (cct->_conf->cephx_require_version >= 2 ||
+          cct->_conf->cephx_service_require_version >= 2) {
+        ldout(cct, 10)
+            << __func__
+            << " using cephx, requiring cephx v2 feature bit for service"
+            << dendl;
+        connection->policy.features_required |= CEPH_FEATUREMASK_CEPHX_V2;
       }
     }
   }
@@ -2029,6 +2046,10 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   ceph::buffer::list auth_bl_copy = authorizer_buf;
   auto am = auth_meta;
   am->auth_method = connect_msg.authorizer_protocol;
+  if (!HAVE_FEATURE((uint64_t)connect_msg.features, CEPHX_V2)) {
+    // peer doesn't support it and we won't get here if we require it
+    am->skip_authorizer_challenge = true;
+  }
   connection->lock.unlock();
   ldout(cct,10) << __func__ << " authorizor_protocol "
 		<< connect_msg.authorizer_protocol

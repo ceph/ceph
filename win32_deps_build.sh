@@ -37,8 +37,10 @@ snappyTag="1.1.7"
 # Additional Windows libraries, which aren't provided by Mingw
 winLibDir="${depsToolsetDir}/windows/lib"
 
-
-MINGW_PREFIX="x86_64-w64-mingw32-"
+wnbdUrl="https://github.com/cloudbase/wnbd"
+wnbdTag="master"
+wnbdSrcDir="${depsSrcDir}/wnbd"
+wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 
 function _make() {
   make -j $NUM_WORKERS $@

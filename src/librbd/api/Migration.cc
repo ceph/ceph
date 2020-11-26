@@ -269,6 +269,7 @@ int open_images(librados::IoCtx& io_ctx, const std::string &image_name,
       ldout(cct, 10) << "re-opening the destination image" << dendl;
       r = image_ctx->state->open(0);
       if (r < 0) {
+        image_ctx = nullptr;
         lderr(cct) << "failed to re-open destination image: " << cpp_strerror(r)
                    << dendl;
         return r;
@@ -817,19 +818,38 @@ int Migration<I>::get_source_spec(I* image_ctx, std::string* source_spec) {
   auto cct = image_ctx->cct;
   ldout(cct, 10) << dendl;
 
-  if (image_ctx->migration_info.empty()) {
-    return -ENOENT;
+  image_ctx->image_lock.lock_shared();
+  auto migration_info = image_ctx->migration_info;
+  image_ctx->image_lock.unlock_shared();
+
+  if (migration_info.empty()) {
+    // attempt to directly read the spec in case the state is EXECUTED
+    cls::rbd::MigrationSpec migration_spec;
+    int r = cls_client::migration_get(&image_ctx->md_ctx, image_ctx->header_oid,
+                                      &migration_spec);
+    if (r == -ENOENT) {
+      return r;
+    } else if (r < 0) {
+      lderr(cct) << "failed retrieving migration header: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    migration_info = {
+      migration_spec.pool_id, migration_spec.pool_namespace,
+      migration_spec.image_name, migration_spec.image_id,
+      migration_spec.source_spec, {}, 0, false};
   }
 
-  if (!image_ctx->migration_info.source_spec.empty()) {
-    *source_spec = image_ctx->migration_info.source_spec;
+  if (!migration_info.source_spec.empty()) {
+    *source_spec = migration_info.source_spec;
   } else {
     // legacy migration source
     *source_spec = migration::NativeFormat<I>::build_source_spec(
-      image_ctx->migration_info.pool_id,
-      image_ctx->migration_info.pool_namespace,
-      image_ctx->migration_info.image_name,
-      image_ctx->migration_info.image_id);
+      migration_info.pool_id,
+      migration_info.pool_namespace,
+      migration_info.image_name,
+      migration_info.image_id);
   }
 
   return 0;

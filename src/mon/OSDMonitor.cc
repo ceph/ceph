@@ -891,9 +891,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd_state.first);
       }
-      if (osd_state.second & CEPH_OSD_EXISTS) {
-	// could be created *or* destroyed, but we can safely drop it
-	osd_epochs.erase(osd_state.first);
+      if (osd_state.second & CEPH_OSD_OUT) {
+        // could be marked in *or* out, but we can safely drop it
+        osd_epochs.erase(osd_state.first);
       }
     }
   }
@@ -2248,13 +2248,14 @@ void OSDMonitor::share_map_with_random_osd()
 version_t OSDMonitor::get_trim_to() const
 {
   if (mon->get_quorum().empty()) {
-    dout(10) << __func__ << ": quorum not formed" << dendl;
+    dout(10) << __func__ << " quorum not formed, trim_to = 0" << dendl;
     return 0;
   }
 
   {
     std::lock_guard<std::mutex> l(creating_pgs_lock);
     if (!creating_pgs.pgs.empty()) {
+      dout(10) << __func__ << " pgs creating, trim_to = 0" << dendl;
       return 0;
     }
   }
@@ -2262,8 +2263,8 @@ version_t OSDMonitor::get_trim_to() const
   if (g_conf().get_val<bool>("mon_debug_block_osdmap_trim")) {
     dout(0) << __func__
             << " blocking osdmap trim"
-               " ('mon_debug_block_osdmap_trim' set to 'true')"
-            << dendl;
+            << " ('mon_debug_block_osdmap_trim' set to 'true')"
+            << " trim_to = 0" << dendl;
     return 0;
   }
 
@@ -2273,7 +2274,8 @@ version_t OSDMonitor::get_trim_to() const
     if (g_conf()->mon_osd_force_trim_to > 0 &&
 	g_conf()->mon_osd_force_trim_to < (int)get_last_committed()) {
       floor = g_conf()->mon_osd_force_trim_to;
-      dout(10) << " explicit mon_osd_force_trim_to = " << floor << dendl;
+      dout(10) << __func__
+               << " explicit mon_osd_force_trim_to = " << floor << dendl;
     }
     unsigned min = g_conf()->mon_min_osdmap_epochs;
     if (floor + min > get_last_committed()) {
@@ -2282,9 +2284,12 @@ version_t OSDMonitor::get_trim_to() const
       else
 	floor = 0;
     }
-    if (floor > get_first_committed())
+    if (floor > get_first_committed()) {
+      dout(10) << __func__ << " trim_to = " << floor << dendl;
       return floor;
+    }
   }
+  dout(10) << __func__ << " trim_to = 0" << dendl;
   return 0;
 }
 
@@ -2294,8 +2299,7 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   // also scan osd epochs
   // don't trim past the oldest reported osd epoch
   for (auto [osd, epoch] : osd_epochs) {
-    if (epoch < floor &&
-        osdmap.is_in(osd)) {
+    if (epoch < floor) {
       floor = epoch;
     }
   }
@@ -2529,7 +2533,7 @@ bool OSDMonitor::_prune_sanitize_options() const
 
   if (txsize < prune_interval - 1) {
     derr << __func__
-         << "'mon_osdmap_full_prune_txsize' (" << txsize
+         << " 'mon_osdmap_full_prune_txsize' (" << txsize
          << ") < 'mon_osdmap_full_prune_interval-1' (" << prune_interval - 1
          << "); abort." << dendl;
     r = false;

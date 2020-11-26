@@ -49,7 +49,7 @@ static inline void frame_metadata_key(req_state *s, string& out) {
   }
 }
 
-void RGWOp_Metadata_Get::execute() {
+void RGWOp_Metadata_Get::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
@@ -66,16 +66,16 @@ void RGWOp_Metadata_Get::execute() {
   op_ret = 0;
 }
 
-void RGWOp_Metadata_Get_Myself::execute() {
+void RGWOp_Metadata_Get_Myself::execute(optional_yield y) {
   string owner_id;
 
   owner_id = s->owner.get_id().to_str();
   s->info.args.append("key", owner_id);
 
-  return RGWOp_Metadata_Get::execute();
+  return RGWOp_Metadata_Get::execute(y);
 }
 
-void RGWOp_Metadata_List::execute() {
+void RGWOp_Metadata_List::execute(optional_yield y) {
   string marker;
   ldout(s->cct, 16) << __func__
 		    << " raw marker " << s->info.args.get("marker")
@@ -234,7 +234,7 @@ static bool string_to_sync_type(const string& sync_string,
   return true;
 }
 
-void RGWOp_Metadata_Put::execute() {
+void RGWOp_Metadata_Put::execute(optional_yield y) {
   bufferlist bl;
   string metadata_key;
 
@@ -247,7 +247,7 @@ void RGWOp_Metadata_Put::execute() {
   if (op_ret < 0) {
     return;
   }
-  
+
   frame_metadata_key(s, metadata_key);
 
   RGWMDLogSyncType sync_type = RGWMDLogSyncType::APPLY_ALWAYS;
@@ -264,7 +264,7 @@ void RGWOp_Metadata_Put::execute() {
   }
 
   op_ret = store->ctl()->meta.mgr->put(metadata_key, bl, s->yield, sync_type,
-				  &ondisk_version);
+				       &ondisk_version);
   if (op_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(op_ret) << dendl;
     return;
@@ -290,7 +290,7 @@ void RGWOp_Metadata_Put::send_response() {
   end_header(s);
 }
 
-void RGWOp_Metadata_Delete::execute() {
+void RGWOp_Metadata_Delete::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);

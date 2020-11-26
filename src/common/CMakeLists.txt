@@ -8,7 +8,7 @@ add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
 
 if(WIN32)
-  add_library(dlfcn_win32 STATIC dlfcn_win32.cc)
+  add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
 endif()
 
 set(common_srcs
@@ -105,10 +105,12 @@ set(common_srcs
 
 if(WIN32)
   list(APPEND common_srcs
-    blkdev_win32.cc
-    dns_resolve_win32.cc
-    SubProcess_win32.cc
-    ifaddrs_win32.c)
+    win32/blkdev.cc
+    win32/dns_resolve.cc
+    win32/ifaddrs.cc
+    win32/registry.cc
+    win32/service.cc
+    win32/SubProcess.cc)
 else()
   list(APPEND common_srcs
     blkdev.cc
@@ -136,7 +138,7 @@ elseif(SUN)
 elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
 elseif(WIN32)
-  list(APPEND common_srcs win32_errno.c)
+  list(APPEND common_srcs win32/errno.cc)
 endif()
 
 if(WITH_EVENTTRACE)

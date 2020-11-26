@@ -4645,10 +4645,6 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Cache writes by default (unless hinted NOCACHE or WONTNEED)"),
 
-    Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(false)
-    .set_description(""),
-
     Option("bluestore_debug_no_reuse_blocks", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
@@ -4794,6 +4790,14 @@ std::vector<Option> get_global_options() {
     Option("bdev_ioring", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Enables Linux io_uring API instead of libaio"),
+
+    Option("bdev_ioring_hipri", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enables Linux io_uring API Use polled IO completions"),
+
+    Option("bdev_ioring_sqthread_poll", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enables Linux io_uring API Offload submission/completion to kernel thread"),
 
     // -----------------------------------------
     // kstore
@@ -8567,8 +8571,8 @@ std::vector<Option> get_mds_client_options() {
     .set_default(300.0)
     .set_description("timeout for mounting CephFS (seconds)"),
 
-    Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
-    .set_default(1.0)
+    Option("client_tick_interval", Option::TYPE_SECS, Option::LEVEL_DEV)
+    .set_default(1)
     .set_description("seconds between client upkeep ticks"),
 
     Option("client_trace", Option::TYPE_STR, Option::LEVEL_DEV)
@@ -8657,7 +8661,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("client_debug_inject_tick_delay", Option::TYPE_INT, Option::LEVEL_DEV)
+    Option("client_debug_inject_tick_delay", Option::TYPE_SECS, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 

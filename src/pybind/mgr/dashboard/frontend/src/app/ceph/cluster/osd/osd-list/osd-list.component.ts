@@ -267,7 +267,15 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       }
     ];
     this.columns = [
-      { prop: 'id', name: $localize`ID`, flexGrow: 1, cellTransformation: CellTemplate.bold },
+      {
+        prop: 'id',
+        name: $localize`ID`,
+        flexGrow: 1,
+        cellTransformation: CellTemplate.executing,
+        customTemplateConfig: {
+          valueClass: 'bold'
+        }
+      },
       { prop: 'host.name', name: $localize`Host` },
       {
         prop: 'collectedStates',
@@ -339,8 +347,19 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
-    if (action === 'delete' && !selection.hasSelection) {
-      return true;
+    if (action === 'delete') {
+      if (!selection.hasSelection) {
+        return true;
+      } else {
+        // Disable delete action if any selected OSDs are under deleting or unmanaged.
+        const deletingOSDs = _.some(this.getSelectedOsds(), (osd) => {
+          const status = _.get(osd, 'operational_status');
+          return status === 'deleting' || status === 'unmanaged';
+        });
+        if (deletingOSDs) {
+          return true;
+        }
+      }
     }
     return this.orchService.getTableActionDisableDesc(
       this.orchStatus,
@@ -403,6 +422,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         osd.cdIsBinary = true;
         osd.cdIndivFlags = osd.state.filter((f: string) => this.indivFlagNames.includes(f));
         osd.cdClusterFlags = resp[1].filter((f: string) => !this.disabledFlags.includes(f));
+        const deploy_state = _.get(osd, 'operational_status', 'unmanaged');
+        if (deploy_state !== 'unmanaged' && deploy_state !== 'working') {
+          osd.cdExecuting = deploy_state;
+        }
         return osd;
       });
     });

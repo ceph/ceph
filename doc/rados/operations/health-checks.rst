@@ -995,7 +995,7 @@ Setting the quota value to 0 will disable the quota.
 
 Other thresholds that can trigger the above two warning conditions are
 ``mon_osd_nearfull_ratio`` and ``mon_osd_full_ratio``.  Visit the
-`Storage Capacity`_ and `No Free Drive Space`_ documents for details
+:ref:`storage-capacity` and :ref:`no-free-drive-space` documents for details
 and resolution.
 
 OBJECT_MISPLACED
@@ -1054,7 +1054,10 @@ PG_NOT_SCRUBBED
 _______________
 
 One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
-within every ``osd_scrub_max_interval``, and this warning triggers when
+within every configured interval specified by
+:ref:`osd_scrub_max_interval <osd_scrub_max_interval>` globally. This
+interval can be overriden on per-pool basis with
+:ref:`scrub_max_interval <scrub_max_interval>`. The warning triggers when
 ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
 scrub since it was due.
 
@@ -1213,5 +1216,8 @@ This warning can silenced by setting the
 
   ceph config global mon mon_warn_on_osd_down_out_interval_zero false
 
+<<<<<<< HEAD
 .. _Storage Capacity: ../configuration/mon-config-ref/#storage-capacity
 .. _No Free Drive Space: ../troubleshooting/troubleshooting-osd/#no-free-drive-space
+=======
+>>>>>>> upstream/master

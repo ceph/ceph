@@ -646,6 +646,16 @@ public:
   virtual void upper_bound(const ghobject_t &oid) = 0;
   virtual void next() = 0;
 
+  virtual int cmp(const ghobject_t &oid) const = 0;
+
+  bool is_ge(const ghobject_t &oid) const {
+    return cmp(oid) >= 0;
+  }
+
+  bool is_lt(const ghobject_t &oid) const {
+    return cmp(oid) < 0;
+  }
+
 protected:
   KeyValueDB::Iterator m_it;
 };
@@ -687,6 +697,15 @@ public:
 
     m_it->next();
     get_oid();
+  }
+
+  int cmp(const ghobject_t &oid) const override {
+    ceph_assert(valid());
+
+    string key;
+    get_object_key(m_cct, oid, &key);
+
+    return m_it->key().compare(key);
   }
 
 private:
@@ -760,6 +779,18 @@ public:
     if (m_chunk_iter == m_chunk.end()) {
       get_next_chunk();
     }
+  }
+
+  int cmp(const ghobject_t &oid) const override {
+    ceph_assert(valid());
+
+    if (this->oid() < oid) {
+      return -1;
+    }
+    if (this->oid() > oid) {
+      return 1;
+    }
+    return 0;
   }
 
 private:
@@ -1571,12 +1602,13 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl, b->flags);
 	  nb->maybe_rebuild();
 	  _add_buffer(cache, nb, 0, b);
 	} else {
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail),
-		      0, b);
+	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail,
+                                        b->flags),
+	              0, b);
 	}
 	if (!b->is_writing()) {
 	  cache->_adjust_size(b, front - (int64_t)b->length);
@@ -1606,11 +1638,13 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+      Buffer *nb = new Buffer(this, b->state, b->seq, end, bl, b->flags);
       nb->maybe_rebuild();
       _add_buffer(cache, nb, 0, b);
     } else {
-      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep), 0, b);
+      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep,
+                                    b->flags),
+                  0, b);
     }
     _rm_buffer(cache, i);
     cache->_audit("discard end 2");
@@ -1655,7 +1689,7 @@ void BlueStore::BufferSpace::read(
 	  length -= l;
 	  if (!b->is_writing()) {
 	    cache->_touch(b);
-	  }
+          }
 	  continue;
         }
         if (b->offset > offset) {
@@ -1742,10 +1776,12 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
       if (p->second->data.length()) {
 	bufferlist bl;
 	bl.substr_of(p->second->data, left, right);
-	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq, 0, bl),
+	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
+                                        0, bl, p->second->flags),
 		      0, p->second.get());
       } else {
-	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq, 0, right),
+	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
+                                        0, right, p->second->flags),
 		      0, p->second.get());
       }
       cache->_adjust_size(p->second.get(), -right);
@@ -1757,11 +1793,11 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
     ldout(cache->cct, 30) << __func__ << " move " << *p->second << dendl;
     if (p->second->data.length()) {
       r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                               p->second->offset - pos, p->second->data),
+                               p->second->offset - pos, p->second->data, p->second->flags),
                     0, p->second.get());
     } else {
       r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                               p->second->offset - pos, p->second->length),
+                               p->second->offset - pos, p->second->length, p->second->flags),
                     0, p->second.get());
     }
     if (p == buffer_map.begin()) {
@@ -3888,8 +3924,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
   if (v.length() == 0) {
     ceph_assert(r == -ENOENT);
-    if (!store->cct->_conf->bluestore_debug_misc &&
-	!create)
+    if (!create)
       return OnodeRef();
 
     // new object, new onode
@@ -10256,14 +10291,14 @@ int BlueStore::_collection_list(
   }
   dout(20) << __func__ << " pend " << pend << dendl;
   while (true) {
-    if (!it->valid() || it->oid() >= pend) {
+    if (!it->valid() || it->is_ge(pend)) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
 	dout(20) << __func__ << " oid " << it->oid() << " >= " << pend << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
-          if (it->valid() && it->oid() < coll_range_temp_end) {
+          if (it->valid() && it->is_lt(coll_range_temp_end)) {
             *pnext = it->oid();
             set_next = true;
           }
@@ -10279,7 +10314,7 @@ int BlueStore::_collection_list(
 	dout(30) << __func__ << " pend " << pend << dendl;
 	continue;
       }
-      if (it->valid() && it->oid() < coll_range_end) {
+      if (it->valid() && it->is_lt(coll_range_end)) {
         *pnext = it->oid();
         set_next = true;
       }
@@ -13791,7 +13826,7 @@ void BlueStore::_wctx_finish(
     auto& r = lo.r;
     txc->statfs_delta.stored() -= lo.e.length;
     if (!r.empty()) {
-      dout(20) << __func__ << "  blob release " << r << dendl;
+      dout(20) << __func__ << "  blob " << *b << " release " << r << dendl;
       if (blob.is_shared()) {
 	PExtentVector final;
         c->load_shared_blob(b->shared_blob);
@@ -14324,7 +14359,7 @@ int BlueStore::_do_remove(
 	   << maybe_unshared_blobs << dendl;
   ghobject_t nogen = o->oid;
   nogen.generation = ghobject_t::NO_GEN;
-  OnodeRef h = c->onode_map.lookup(nogen);
+  OnodeRef h = c->get_onode(nogen, false);
 
   if (!h || !h->exists) {
     return 0;

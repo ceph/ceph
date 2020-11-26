@@ -19,7 +19,7 @@
 #include <sys/statvfs.h>    /* or <sys/statfs.h> */
 #include "messages/PaxosServiceMessage.h"
 
-class MStatfs : public PaxosServiceMessage {
+class MStatfs final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -37,7 +37,7 @@ public:
   }
 
 private:
-  ~MStatfs() override {}
+  ~MStatfs() final {}
 
 public:
   std::string_view get_type_name() const override { return "statfs"; }

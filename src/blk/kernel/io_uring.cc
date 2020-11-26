@@ -3,15 +3,10 @@
 
 #include "io_uring.h"
 
-#if defined(HAVE_LIBURING) && defined(__x86_64__)
+#if defined(HAVE_LIBURING)
 
 #include "liburing.h"
 #include <sys/epoll.h>
-
-/* Options */
-
-static bool hipri = false;      /* use IO polling */
-static bool sq_thread = false;  /* use kernel submission/poller thread */
 
 struct ioring_data {
   struct io_uring io_uring;
@@ -108,9 +103,11 @@ static void build_fixed_fds_map(struct ioring_data *d,
   }
 }
 
-ioring_queue_t::ioring_queue_t(unsigned iodepth_) :
+ioring_queue_t::ioring_queue_t(unsigned iodepth_, bool hipri_, bool sq_thread_) :
   d(make_unique<ioring_data>()),
-  iodepth(iodepth_)
+  iodepth(iodepth_),
+  hipri(hipri_),
+  sq_thread(sq_thread_)
 {
 }
 
@@ -220,7 +217,7 @@ bool ioring_queue_t::supported()
   return true;
 }
 
-#else // #if defined(HAVE_LIBURING) && defined(__x86_64__)
+#else // #if defined(HAVE_LIBURING)
 
 struct ioring_data {};
 
@@ -261,4 +258,4 @@ bool ioring_queue_t::supported()
   return false;
 }
 
-#endif // #if defined(HAVE_LIBURING) && defined(__x86_64__)
+#endif // #if defined(HAVE_LIBURING)

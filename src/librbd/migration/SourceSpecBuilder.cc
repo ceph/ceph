@@ -5,6 +5,8 @@
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/migration/FileStream.h"
+#include "librbd/migration/HttpStream.h"
+#include "librbd/migration/S3Stream.h"
 #include "librbd/migration/NativeFormat.h"
 #include "librbd/migration/RawFormat.h"
 
@@ -96,6 +98,10 @@ int SourceSpecBuilder<I>::build_stream(
   auto& type = type_value_it->second.get_str();
   if (type == "file") {
     stream->reset(FileStream<I>::create(m_image_ctx, stream_obj));
+  } else if (type == "http") {
+    stream->reset(HttpStream<I>::create(m_image_ctx, stream_obj));
+  } else if (type == "s3") {
+    stream->reset(S3Stream<I>::create(m_image_ctx, stream_obj));
   } else {
     lderr(cct) << "unknown or unsupported stream type '" << type << "'"
                << dendl;

@@ -261,6 +261,25 @@ void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
 }
 
 template <typename I>
+void ImageDispatcher<I>::remap_extents(Extents&& image_extents,
+                                       ImageExtentsMapType type) {
+  auto loop = [&image_extents, type](auto begin, auto end) {
+      for (auto it = begin; it != end; ++it) {
+        auto& image_dispatch_meta = it->second;
+        auto image_dispatch = image_dispatch_meta.dispatch;
+        image_dispatch->remap_extents(std::move(image_extents), type);
+      }
+  };
+
+  std::shared_lock locker{this->m_lock};
+  if (type == IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL) {
+    loop(this->m_dispatches.cbegin(), this->m_dispatches.cend());
+  } else if (type == IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL) {
+    loop(this->m_dispatches.crbegin(), this->m_dispatches.crend());
+  }
+}
+
+template <typename I>
 bool ImageDispatcher<I>::send_dispatch(
     ImageDispatchInterface* image_dispatch,
     ImageDispatchSpec* image_dispatch_spec) {

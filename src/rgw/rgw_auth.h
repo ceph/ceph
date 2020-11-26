@@ -293,7 +293,7 @@ public:
    *    interface.
    *
    * On error throws rgw::auth::Exception containing the reason. */
-  virtual result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const = 0;
+  virtual result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s, optional_yield y) const = 0;
 };
 
 
@@ -336,13 +336,13 @@ public:
     FALLBACK,
   };
 
-  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s, optional_yield y) const override final;
 
   bool is_empty() const {
     return auth_stack.empty();
   }
 
-  static int apply(const DoutPrefixProvider* dpp, const Strategy& auth_strategy, req_state* s) noexcept;
+  static int apply(const DoutPrefixProvider* dpp, const Strategy& auth_strategy, req_state* s, optional_yield y) noexcept;
 
 private:
   /* Using the reference wrapper here to explicitly point out we are not
@@ -717,7 +717,7 @@ public:
     return "rgw::auth::AnonymousEngine";
   }
 
-  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s, optional_yield y) const override final;
 
 protected:
   virtual bool is_applicable(const req_state*) const noexcept {

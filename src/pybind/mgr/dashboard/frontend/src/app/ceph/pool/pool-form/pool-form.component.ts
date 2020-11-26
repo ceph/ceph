@@ -1,10 +1,10 @@
-import { Component, EventEmitter, OnInit, Type, ViewChild } from '@angular/core';
+import { Component, OnInit, Type, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, ReplaySubject, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -70,10 +70,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
   current: Record<string, any> = {
     rules: []
   };
-  initializeConfigData = new EventEmitter<{
+  initializeConfigData = new ReplaySubject<{
     initialData: RbdConfigurationEntry[];
     sourceType: RbdConfigurationSourceField;
-  }>();
+  }>(1);
   currentConfigurationValues: { [configKey: string]: any } = {};
   action: string;
   resource: string;
@@ -252,7 +252,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private initEditFormData(pool: Pool) {
-    this.initializeConfigData.emit({
+    this.initializeConfigData.next({
       initialData: pool.configuration,
       sourceType: RbdConfigurationSourceField.pool
     });

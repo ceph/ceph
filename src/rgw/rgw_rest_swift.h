@@ -21,9 +21,9 @@ public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() override {}
 
-  int verify_permission() override;
-  int get_params() override;
-  int send_response_data_error() override;
+  int verify_permission(optional_yield y) override;
+  int get_params(optional_yield y) override;
+  int send_response_data_error(optional_yield y) override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
 
   void set_custom_http_response(const int http_ret) {
@@ -52,7 +52,7 @@ public:
   }
   ~RGWListBuckets_ObjStore_SWIFT() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
   void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets) override;
   void send_response_begin(bool has_buckets) override;
   void send_response_data(rgw::sal::RGWBucketList& buckets) override;
@@ -72,7 +72,7 @@ public:
   }
   ~RGWListBucket_ObjStore_SWIFT() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
   void send_response() override;
   bool need_container_stats() override { return true; }
 };
@@ -84,7 +84,7 @@ public:
   }
   ~RGWStatAccount_ObjStore_SWIFT() override {}
 
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
 };
 
@@ -103,7 +103,7 @@ public:
   RGWCreateBucket_ObjStore_SWIFT() {}
   ~RGWCreateBucket_ObjStore_SWIFT() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
   void send_response() override;
 };
 
@@ -123,8 +123,8 @@ public:
 
   int update_slo_segment_size(rgw_slo_entry& entry);
 
-  int verify_permission() override;
-  int get_params() override;
+  int verify_permission(optional_yield y) override;
+  int get_params(optional_yield y) override;
   void send_response() override;
 };
 
@@ -133,7 +133,7 @@ public:
   RGWPutMetadataAccount_ObjStore_SWIFT() {}
   ~RGWPutMetadataAccount_ObjStore_SWIFT() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
   void send_response() override;
 };
 
@@ -142,7 +142,7 @@ public:
   RGWPutMetadataBucket_ObjStore_SWIFT() {}
   ~RGWPutMetadataBucket_ObjStore_SWIFT() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
   void send_response() override;
 };
 
@@ -151,7 +151,7 @@ public:
   RGWPutMetadataObject_ObjStore_SWIFT() {}
   ~RGWPutMetadataObject_ObjStore_SWIFT() override {}
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
   void send_response() override;
   bool need_object_expiration() override { return true; }
 };
@@ -161,8 +161,8 @@ public:
   RGWDeleteObj_ObjStore_SWIFT() {}
   ~RGWDeleteObj_ObjStore_SWIFT() override {}
 
-  int verify_permission() override;
-  int get_params() override;
+  int verify_permission(optional_yield y) override;
+  int get_params(optional_yield y) override;
   bool need_object_expiration() override { return true; }
   void send_response() override;
 };
@@ -176,7 +176,7 @@ public:
   ~RGWCopyObj_ObjStore_SWIFT() override {}
 
   int init_dest_policy() override;
-  int get_params() override;
+  int get_params(optional_yield y) override;
   void send_response() override;
   void send_partial_response(off_t ofs) override;
 };
@@ -243,7 +243,7 @@ public:
   RGWInfo_ObjStore_SWIFT() {}
   ~RGWInfo_ObjStore_SWIFT() override {}
 
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   static void list_swift_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
@@ -277,7 +277,7 @@ public:
             req_state* s,
             RGWHandler* dialect_handler) override;
 
-  int get_params() override;
+  int get_params(optional_yield y) override;
   int get_data(ceph::bufferlist& bl, bool& again) override;
   void send_response() override;
 
@@ -353,7 +353,7 @@ class RGWSwiftWebsiteHandler {
   bool is_web_dir() const;
   bool is_index_present(const std::string& index) const;
 
-  int serve_errordoc(int http_ret, std::string error_doc);
+  int serve_errordoc(int http_ret, std::string error_doc, optional_yield y);
 
   RGWOp* get_ws_redirect_op();
   RGWOp* get_ws_index_op();
@@ -368,7 +368,8 @@ public:
   }
 
   int error_handler(const int err_no,
-                    std::string* const error_content);
+                    std::string* const error_content,
+		    optional_yield y);
   int retarget_bucket(RGWOp* op, RGWOp** new_op);
   int retarget_object(RGWOp* op, RGWOp** new_op);
 };
@@ -395,8 +396,8 @@ public:
   int validate_bucket_name(const string& bucket);
 
   int init(rgw::sal::RGWRadosStore *store, struct req_state *s, rgw::io::BasicClient *cio) override;
-  int authorize(const DoutPrefixProvider *dpp) override;
-  int postauth_init() override;
+  int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
+  int postauth_init(optional_yield y) override;
 
   RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
@@ -434,11 +435,11 @@ public:
   using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
   ~RGWHandler_REST_Bucket_SWIFT() override = default;
 
-  int error_handler(int err_no, std::string *error_content) override {
-    return website_handler->error_handler(err_no, error_content);
+  int error_handler(int err_no, std::string *error_content, optional_yield y) override {
+    return website_handler->error_handler(err_no, error_content, y);
   }
 
-  int retarget(RGWOp* op, RGWOp** new_op) override {
+  int retarget(RGWOp* op, RGWOp** new_op, optional_yield) override {
     return website_handler->retarget_bucket(op, new_op);
   }
 
@@ -472,11 +473,12 @@ public:
   using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
   ~RGWHandler_REST_Obj_SWIFT() override = default;
 
-  int error_handler(int err_no, std::string *error_content) override {
-    return website_handler->error_handler(err_no, error_content);
+  int error_handler(int err_no, std::string *error_content,
+		    optional_yield y) override {
+    return website_handler->error_handler(err_no, error_content, y);
   }
 
-  int retarget(RGWOp* op, RGWOp** new_op) override {
+  int retarget(RGWOp* op, RGWOp** new_op, optional_yield) override {
     return website_handler->retarget_object(op, new_op);
   }
 
@@ -544,15 +546,15 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize(const DoutPrefixProvider *dpp) override {
+  int authorize(const DoutPrefixProvider *dpp, optional_yield) override {
     return 0;
   }
 
-  int postauth_init() override {
+  int postauth_init(optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp *) override {
+  int read_permissions(RGWOp *, optional_yield y) override {
     return 0;
   }
 
@@ -601,15 +603,15 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize(const DoutPrefixProvider *dpp) override {
+  int authorize(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  int postauth_init() override {
+  int postauth_init(optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp *) override {
+  int read_permissions(RGWOp *, optional_yield y) override {
     return 0;
   }
 
@@ -658,15 +660,15 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize(const DoutPrefixProvider *dpp) override {
+  int authorize(const DoutPrefixProvider *dpp, optional_yield) override {
     return 0;
   }
 
-  int postauth_init() override {
+  int postauth_init(optional_yield) override {
     return 0;
   }
 
-  int read_permissions(RGWOp *) override {
+  int read_permissions(RGWOp *, optional_yield y) override {
     return 0;
   }
 };
