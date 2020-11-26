@@ -20,6 +20,8 @@
 
 source src/script/run-make.sh
 
+set -e
+
 function run() {
     # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
     $DRY_RUN ulimit -n $(ulimit -Hn)
