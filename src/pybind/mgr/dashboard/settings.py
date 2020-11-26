@@ -21,6 +21,9 @@ class Options(object):
     ENABLE_BROWSABLE_API = (True, bool)
     REST_REQUESTS_TIMEOUT = (45, int)
 
+    # AUTHENTICATION ATTEMPTS
+    ACCOUNT_LOCKOUT_ATTEMPTS = (10, int)
+
     # API auditing
     AUDIT_API_ENABLED = (False, bool)
     AUDIT_API_LOG_PAYLOAD = (True, bool)
