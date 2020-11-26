@@ -6161,29 +6161,31 @@ td,th {{
             assert tasks
 
             # We're using the http status code to help indicate thread health
-            # - all threads inactive returns a 500 (Internal Server Error)
-            # - some threads inactive returns a 503 (Service Unavailable)
+            # - 200 (OK): request successful
+            # - 204 (No Content): access to a cache relating to a dead thread
+            # - 206 (Partial content): one or more theads are inactive
+            # - 500 (Server Error): all threads inactive
             if u == 'metadata':
                 data = json.dumps(self.server.cephadm_cache.to_json())
                 if all([tasks[task_name] == 'inactive' for task_name in tasks if task_name != 'http_server']):
-                    # the subtasks are dead
+                    # All the subtasks are dead!
                     status_code = 500
                 elif any([tasks[task_name] == 'inactive' for task_name in tasks if task_name != 'http_server']):
-                    status_code = 503
+                    status_code = 206
 
             # Individual GETs against the a tasks endpoint will also return a 503 if the corresponding thread is inactive
             elif u == 'daemons':
                 data = json.dumps(self.server.cephadm_cache.daemons)
                 if tasks['daemons'] == 'inactive':
-                    status_code = 503
+                    status_code = 204
             elif u == 'disks':
                 data = json.dumps(self.server.cephadm_cache.disks)
                 if tasks['disks'] == 'inactive':
-                    status_code = 503
+                    status_code = 204
             elif u == 'host':
                 data = json.dumps(self.server.cephadm_cache.host)
                 if tasks['host'] == 'inactive':
-                    status_code = 503
+                    status_code = 204
 
             # a GET against health will always return a 200, since the op is always successful
             elif u == 'health':
@@ -6312,13 +6314,16 @@ class CephadmDaemon():
 
     def _handle_thread_exception(self, exc, thread_type):
         e_msg = f"{exc.__class__.__name__} exception: {str(exc)}"
-        errors = [e_msg]
+        thread_info = getattr(self.cephadm_cache, thread_type)
+        errors = thread_info.get('scrape_errors', [])
+        errors.append(e_msg)
         logger.error(e_msg)
-        logger.exception(e)
+        logger.exception(exc)
         self.cephadm_cache.update_task(
             thread_type,
                 {
                     "scrape_errors": errors,
+                    "data": None,
                 }
         )
 
