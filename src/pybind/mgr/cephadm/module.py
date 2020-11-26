@@ -41,7 +41,7 @@ from . import remotes
 from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, CephadmExporter
+    RbdMirrorService, CrashService, CephadmService, CephadmExporter, CephadmExporterConfig
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
@@ -92,8 +92,6 @@ Host *
 CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
-
-CEPHADM_EXPORTER_PORT = '9443'
 
 
 class CephadmCompletion(orchestrator.Completion[T]):
@@ -935,11 +933,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_extra_ceph_conf(self) -> HandleCommandResult:
         return HandleCommandResult(stdout=self.extra_ceph_conf().conf)
 
-    def _set_exporter_option(self, option: str, value: Union[str, None]) -> None:
+    def _set_exporter_config(self, config: Dict[str, str]) -> None:
+        self.set_store('exporter_config', json.dumps(config))
+
+    def _get_exporter_config(self) -> Dict[str, str]:
+        cfg_str = self.get_store('exporter_config')
+        return json.loads(cfg_str) if cfg_str else {}
+
+    def _set_exporter_option(self, option: str, value: Optional[str] = None) -> None:
         kv_option = f'exporter_{option}'
         self.set_store(kv_option, value)
 
-    def _get_exporter_option(self, option: str) -> Union[str, None]:
+    def _get_exporter_option(self, option: str) -> Optional[str]:
         kv_option = f'exporter_{option}'
         return self.get_store(kv_option)
 
@@ -948,19 +953,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         desc='Generate default SSL crt/key and token for cephadm exporter daemons')
     @service_inactive('cephadm-exporter')
     def _generate_exporter_config(self):
-        # if self._spec_exists():
-        #     return 1, "", f"cephadm-exporter is already deployed. Changing configuration against an active service is not permitted."
+        self._set_exporter_defaults()
+        self.log.info('Default settings created for cephadm exporter(s)')
+        return 0, "", ""
 
+    def _set_exporter_defaults(self):
         crt, key = self._generate_exporter_ssl()
         token = self._generate_exporter_token()
-        self._set_exporter_option('crt', crt)
-        self._set_exporter_option('key', key)
-        self._set_exporter_option('token', token)
-
-        self._set_exporter_option('port', CEPHADM_EXPORTER_PORT)
+        self._set_exporter_config({
+            "crt": crt,
+            "key": key,
+            "token": token,
+            "port": CephadmExporterConfig.DEFAULT_PORT
+        })
         self._set_exporter_option('enabled', 'true')
-        self.log.info('Default SSL settings created for cephadm exporter(s)')
-        return 0, "", ""
 
     def _generate_exporter_ssl(self):
         return create_self_signed_cert(dname={"O": "Ceph", "OU": "cephadm-exporter"})
@@ -978,84 +984,41 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, "", ""
 
     def _clear_exporter_config_settings(self) -> None:
-        self._set_exporter_option('crt', None)
-        self._set_exporter_option('key', None)
-        self._set_exporter_option('token', None)
-        self._set_exporter_option('port', None)
+        self.set_store('exporter_config', None)
         self._set_exporter_option('enabled', None)
 
     @orchestrator._cli_write_command(
-        prefix='cephadm set-exporter-tls',
-        desc='Set custom cephadm-exporter TLS configuration from a json file (-i <file>). JSON must contain crt and key')
+        prefix='cephadm set-exporter-config',
+        desc='Set custom cephadm-exporter configuration from a json file (-i <file>). JSON must contain crt, key, token and port')
     @service_inactive('cephadm-exporter')
-    def _set_exporter_tls(self, inbuf=None):
-        # if self._spec_exists():
-        #     return 1, "", f"cephadm-exporter is already deployed. Changing configuration against an active service is not permitted."
+    def _store_exporter_config(self, inbuf=None):
 
         if not inbuf:
-            return 1, "", "TLS configuration has not been provided (-i <filename>)"
+            return 1, "", "JSON configuration has not been provided (-i <filename>)"
 
-        try:
-            cfg = json.loads(inbuf)
-        except ValueError:
-            return 1, "", "Invalid JSON file, parsing error"
+        cfg = CephadmExporterConfig(self)
+        rc, reason = cfg.load_from_json(inbuf)
+        if rc:
+            return 1, "", reason
 
-        if not all(k in cfg for k in ['crt', 'key']):
-            return 1, "", "JSON file must contain crt and key"
+        rc, reason = cfg.validate_config()
+        if rc:
+            return 1, "", reason
 
-        try:
-            verify_tls(cfg['crt'], cfg['key'])
-        except ServerConfigException as e:
-            return 1, "", str(e)
-        self._set_exporter_option('crt', cfg['crt'])
-        self._set_exporter_option('key', cfg['key'])
+        self._set_exporter_config({
+            "crt": cfg.crt,
+            "key": cfg.key,
+            "token": cfg.token,
+            "port": cfg.port
+        })
         self.log.info("Loaded and verified the TLS configuration")
-        return 0, "", ""
-
-    @orchestrator._cli_read_command(
-        'cephadm set-exporter-config',
-        "name=token,type=CephString,req=false "
-        "name=port,type=CephString,req=false",
-        'Set custom cephadm-exporter settings for token and tcp port')
-    @service_inactive('cephadm-exporter')
-    def _set_exporter_config(self, token=None, port=None):
-        # if self._spec_exists():
-        #     return 1, "", f"cephadm-exporter is already deployed. Changing configuration against an active service is not permitted."
-
-        if not token and not port:
-            return 1, "", "Missing token or port"
-
-        changes = []
-
-        if token:
-            if len(token) < 8:
-                return 1, "", f"token({token}) must be at least 8 characters long"
-            changes.append('token')
-            self._set_exporter_option('token', token)
-        if port:
-            try:
-                p = int(port)
-                if p <= 1024:
-                    raise ValueError
-            except ValueError:
-                return 1, "", "Port must be a integer (>1024)"
-            else:
-                changes.append('port')
-                self._set_exporter_option('port', port)
-
-        self.log.info("cephadm-exporter config ({}) updated".format(', '.join(changes)))
         return 0, "", ""
 
     @orchestrator._cli_read_command(
         'cephadm get-exporter-config',
         desc='Show the current cephadm-exporter configuraion (JSON)')
-    def _get_exporter_config(self):
-        cfg = {
-            'crt': self._get_exporter_option('crt'),
-            'key': self._get_exporter_option('key'),
-            'token': self._get_exporter_option('token'),
-            'port': self._get_exporter_option('port'),
-        }
+    def _show_exporter_config(self):
+        cfg = self._get_exporter_config()
         return 0, json.dumps(cfg, indent=2), ""
 
     class ExtraCephConf(NamedTuple):
