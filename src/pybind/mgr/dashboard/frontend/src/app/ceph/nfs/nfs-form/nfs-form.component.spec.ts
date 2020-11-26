@@ -113,6 +113,7 @@ describe('NfsFormComponent', () => {
       transportTCP: true,
       transportUDP: true
     });
+    expect(component.nfsForm.get('cluster_id').disabled).toBeFalsy();
   });
 
   it('should prepare data when selecting an cluster', () => {
@@ -134,6 +135,12 @@ describe('NfsFormComponent', () => {
     component.onClusterChange();
 
     expect(component.nfsForm.getValue('daemons')).toEqual([]);
+  });
+
+  it('should not allow changing cluster in edit mode', () => {
+    component.isEdit = true;
+    component.ngOnInit();
+    expect(component.nfsForm.get('cluster_id').disabled).toBeTruthy();
   });
 
   describe('should submit request', () => {
