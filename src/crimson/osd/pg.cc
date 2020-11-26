@@ -795,7 +795,7 @@ std::optional<hobject_t> PG::resolve_oid(
 }
 
 template<RWState::State State>
-seastar::future<>
+PG::load_obc_ertr::future<>
 PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
 {
   assert(oid.is_head());
@@ -803,7 +803,7 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
   return obc->with_lock<State>(
     [oid=std::move(oid), existed=existed, obc=std::move(obc),
      func=std::move(func), this] {
-    auto loaded = seastar::make_ready_future<ObjectContextRef>(obc);
+    auto loaded = load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
     if (existed) {
       logger().debug("with_head_obc: found {} in cache", oid);
     } else {
@@ -812,30 +812,31 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
         return load_head_obc(obc);
       });
     }
-    return loaded.then([func = std::move(func)](auto obc) {
+    return loaded.safe_then([func=std::move(func)](auto obc) {
       return func(std::move(obc));
     });
   });
 }
 
 template<RWState::State State>
-seastar::future<>
+PG::load_obc_ertr::future<>
 PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
 {
   assert(!oid.is_head());
   return with_head_obc<RWState::RWREAD>(oid.get_head(),
-    [oid, func=std::move(func), this](auto head) {
+    [oid, func=std::move(func), this](auto head) -> load_obc_ertr::future<> {
     auto coid = resolve_oid(head->get_ro_ss(), oid);
     if (!coid) {
       // TODO: return crimson::ct_error::enoent::make();
       logger().error("with_clone_obc: {} clone not found", coid);
-      return seastar::make_ready_future<>();
+      return load_obc_ertr::make_ready_future<>();
     }
     auto [clone, existed] = shard_services.obc_registry.get_cached_obc(*coid);
     return clone->template with_lock<State>(
       [coid=*coid, existed=existed,
-      head=std::move(head), clone=std::move(clone), func=std::move(func), this] {
-      auto loaded = seastar::make_ready_future<ObjectContextRef>(clone);
+       head=std::move(head), clone=std::move(clone),
+       func=std::move(func), this]() -> load_obc_ertr::future<> {
+      auto loaded = load_obc_ertr::make_ready_future<ObjectContextRef>(clone);
       if (existed) {
         logger().debug("with_clone_obc: found {} in cache", coid);
       } else {
@@ -849,7 +850,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
           });
         });
       }
-      return loaded.then([func = std::move(func)](auto clone) {
+      return loaded.safe_then([func=std::move(func)](auto clone) {
         return func(std::move(clone));
       });
     });
@@ -857,7 +858,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
 }
 
 // explicitly instantiate the used instantiations
-template seastar::future<>
+template PG::load_obc_ertr::future<>
 PG::with_head_obc<RWState::RWNONE>(hobject_t, with_obc_func_t&&);
 
 PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
