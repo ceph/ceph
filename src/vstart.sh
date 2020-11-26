@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # abort on failure
-set -e
+set -xe
 
 if [ -n "$VSTART_DEST" ]; then
   SRC_PATH=`dirname $0`
