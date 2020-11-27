@@ -221,7 +221,7 @@ bool ioring_queue_t::supported()
 
 struct ioring_data {};
 
-ioring_queue_t::ioring_queue_t(unsigned iodepth_)
+ioring_queue_t::ioring_queue_t(unsigned iodepth_, bool hipri_, bool sq_thread_)
 {
   ceph_assert(0);
 }
