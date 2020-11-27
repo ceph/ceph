@@ -626,7 +626,7 @@ set(WITH_MGR_ROOK_CLIENT WITH_MGR_DASHBOARD_FRONTEND)
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
-find_package(StdFilesystem)
+find_package(StdFilesystem REQUIRED)
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)
