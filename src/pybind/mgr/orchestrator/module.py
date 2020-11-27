@@ -405,7 +405,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for host_ in completion.result:  # type: InventoryHost
+            for host_ in sorted(completion.result, key=lambda h: h.name):  # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
 
                     led_ident = 'N/A'
