@@ -1387,7 +1387,7 @@ Set a Zone
 Configuring a zone involves specifying a series of Ceph Object Gateway
 pools. For consistency, we recommend using a pool prefix that is the
 same as the zone name. See
-`Pools <http://docs.ceph.com/docs/master/rados/operations/pools/#pools>`__
+`Pools <http://docs.ceph.com/en/latest/rados/operations/pools/#pools>`__
 for details of configuring pools.
 
 To set a zone, create a JSON object consisting of the pools, save the
