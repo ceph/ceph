@@ -196,3 +196,20 @@ void BlockDevice::reap_ioc()
     --ioc_reap_count;
   }
 }
+
+bool BlockDevice::is_valid_io(uint64_t off, uint64_t len) const {
+  bool ret = (off % block_size == 0 &&
+    len % block_size == 0 &&
+    len > 0 &&
+    off < size &&
+    off + len <= size);
+
+  if (!ret) {
+    derr << __func__ << " " << std::hex
+         << off << "~" << len
+         << " block_size " << block_size
+         << " size " << size
+         << std::dec << dendl;
+  }
+  return ret;
+}
