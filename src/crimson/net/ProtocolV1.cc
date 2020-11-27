@@ -874,12 +874,9 @@ seastar::future<> ProtocolV1::read_message()
         return;
       }
 
-      // start dispatch, ignoring exceptions from the application layer
-      gate.dispatch_in_background("ms_dispatch", *this, [this, msg = std::move(msg_ref)] {
-        logger().debug("{} <== #{} === {} ({})",
-                       conn, msg->get_seq(), *msg, msg->get_type());
-        return dispatcher->ms_dispatch(&conn, std::move(msg));
-      });
+      logger().debug("{} <== #{} === {} ({})",
+                     conn, msg_ref->get_seq(), *msg_ref, msg_ref->get_type());
+      std::ignore = dispatcher->ms_dispatch(&conn, std::move(msg_ref));
     });
 }
 
@@ -919,15 +916,11 @@ void ProtocolV1::execute_open(open_t type)
   set_write_state(write_state_t::open);
 
   if (type == open_t::connected) {
-    gate.dispatch_in_background("ms_handle_connect", *this, [this] {
-      return dispatcher->ms_handle_connect(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatcher->ms_handle_connect(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   } else { // type == open_t::accepted
-    gate.dispatch_in_background("ms_handle_accept", *this, [this] {
-      return dispatcher->ms_handle_accept(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatcher->ms_handle_accept(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 
   gate.dispatch_in_background("execute_open", *this, [this] {
