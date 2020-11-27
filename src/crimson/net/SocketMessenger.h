@@ -14,9 +14,10 @@
 
 #pragma once
 
+#include <list>
 #include <map>
-#include <optional>
 #include <set>
+#include <vector>
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
@@ -35,15 +36,7 @@ class SocketMessenger final : public Messenger {
   seastar::promise<> shutdown_promise;
 
   FixedCPUServerSocket* listener = nullptr;
-  // as we want to unregister a dispatcher from the messengers when stopping
-  // that dispatcher, we have to use intrusive slist which, when used with
-  // "boost::intrusive::linear<true>", can tolerate ongoing iteration of the
-  // list when removing an element. However, the downside of this is that an
-  // element can only be attached to one slist. So, as we need to make multiple
-  // messenger reference the same set of dispatchers, we have to make them share
-  // the same ChainedDispatchers, which means registering/unregistering an element
-  // to one messenger will affect other messengers that share the same ChainedDispatchers.
-  ChainedDispatchersRef dispatchers;
+  ChainedDispatchers dispatchers;
   std::map<entity_addr_t, SocketConnectionRef> connections;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
@@ -73,7 +66,7 @@ class SocketMessenger final : public Messenger {
   seastar::future<> try_bind(const entity_addrvec_t& addr,
                              uint32_t min_port, uint32_t max_port) override;
 
-  seastar::future<> start(ChainedDispatchersRef dispatchers) override;
+  seastar::future<> start(const std::list<Dispatcher*>& dispatchers) override;
 
   ConnectionRef connect(const entity_addr_t& peer_addr,
                         const entity_name_t& peer_name) override;
@@ -83,12 +76,14 @@ class SocketMessenger final : public Messenger {
     return shutdown_promise.get_future();
   }
 
-  void remove_dispatcher(Dispatcher& disp) override {
-    dispatchers->erase(disp);
+  void stop() override {
+    dispatchers.clear();
   }
-  bool dispatcher_chain_empty() const override {
-    return !dispatchers || dispatchers->empty();
+
+  bool is_started() const override {
+    return !dispatchers.empty();
   }
+
   seastar::future<> shutdown() override;
 
   void print(ostream& out) const override {

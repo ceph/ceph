@@ -13,7 +13,6 @@
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/auth_handler.h"
 #include "crimson/common/gated.h"
-#include "crimson/net/chained_dispatchers.h"
 #include "crimson/admin/admin_socket.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
