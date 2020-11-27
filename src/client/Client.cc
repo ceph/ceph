@@ -2776,8 +2776,6 @@ void Client::cancel_commands(const MDSMap& newmap)
 
 void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 {
-  mds_gid_t old_inc, new_inc;
-
   std::unique_lock cl(client_lock);
   if (m->get_epoch() <= mdsmap->get_epoch()) {
     ldout(cct, 1) << __func__ << " epoch " << m->get_epoch()
@@ -2806,8 +2804,8 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
     if (!mdsmap->is_up(mds)) {
       session->con->mark_down();
     } else if (mdsmap->get_addrs(mds) != session->addrs) {
-      old_inc = _mdsmap->get_incarnation(mds);
-      new_inc = mdsmap->get_incarnation(mds);
+      auto old_inc = _mdsmap->get_incarnation(mds);
+      auto new_inc = mdsmap->get_incarnation(mds);
       if (old_inc != new_inc) {
         ldout(cct, 1) << "mds incarnation changed from "
 		      << old_inc << " to " << new_inc << dendl;
@@ -15149,7 +15147,7 @@ void intrusive_ptr_add_ref(Inode *in)
 {
   in->get();
 }
-		
+
 void intrusive_ptr_release(Inode *in)
 {
   in->client->put_inode(in);
