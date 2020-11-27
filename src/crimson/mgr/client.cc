@@ -47,19 +47,22 @@ seastar::future<> Client::stop()
   return fut;
 }
 
-seastar::future<> Client::ms_dispatch(crimson::net::Connection* conn,
-                                      MessageRef m)
+std::tuple<bool, seastar::future<>>
+Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
 {
-  return gate.dispatch(__func__, *this, [this, conn, &m] {
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
     switch(m->get_type()) {
     case MSG_MGR_MAP:
       return handle_mgr_map(conn, boost::static_pointer_cast<MMgrMap>(m));
     case MSG_MGR_CONFIGURE:
       return handle_mgr_conf(conn, boost::static_pointer_cast<MMgrConfigure>(m));
     default:
+      dispatched = false;
       return seastar::now();
     }
   });
+  return {dispatched, seastar::now()};
 }
 
 void Client::ms_handle_connect(crimson::net::ConnectionRef c)

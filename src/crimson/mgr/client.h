@@ -37,8 +37,8 @@ public:
   void report();
 
 private:
-  seastar::future<> ms_dispatch(crimson::net::Connection* conn,
-				Ref<Message> m) override;
+  std::tuple<bool, seastar::future<>> ms_dispatch(
+      crimson::net::Connection* conn, Ref<Message> m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
   void ms_handle_connect(crimson::net::ConnectionRef conn) final;
   seastar::future<> handle_mgr_map(crimson::net::Connection* conn,

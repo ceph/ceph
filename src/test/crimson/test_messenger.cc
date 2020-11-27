@@ -48,13 +48,14 @@ static seastar::future<> test_echo(unsigned rounds,
       crimson::net::MessengerRef msgr;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
-      seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                    MessageRef m) override {
+      std::tuple<bool, seastar::future<>> ms_dispatch(
+          crimson::net::Connection* c, MessageRef m) override {
         if (verbose) {
           logger().info("server got {}", *m);
         }
         // reply with a pong
-        return c->send(make_message<MPing>());
+        std::ignore = c->send(make_message<MPing>());
+        return {true, seastar::now()};
       }
 
       seastar::future<> init(const entity_name_t& name,
@@ -114,8 +115,8 @@ static seastar::future<> test_echo(unsigned rounds,
         ceph_assert(added);
         session->connected_time = mono_clock::now();
       }
-      seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                    MessageRef m) override {
+      std::tuple<bool, seastar::future<>> ms_dispatch(
+          crimson::net::Connection* c, MessageRef m) override {
         auto session = find_session(c);
         ++(session->count);
         if (verbose) {
@@ -129,7 +130,7 @@ static seastar::future<> test_echo(unsigned rounds,
           ceph_assert(found != pending_conns.end());
           found->second.set_value();
         }
-        return seastar::now();
+        return {true, seastar::now()};
       }
 
       seastar::future<> init(const entity_name_t& name,
@@ -268,20 +269,20 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
       seastar::promise<> on_done; // satisfied when first dispatch unblocks
       crimson::auth::DummyAuthClientServer dummy_auth;
 
-      seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                    MessageRef m) override {
+      std::tuple<bool, seastar::future<>> ms_dispatch(
+          crimson::net::Connection* c, MessageRef m) override {
         switch (++count) {
         case 1:
           // block on the first request until we reenter with the second
-          return on_second.get_future().then([this] {
-            on_done.set_value();
-          });
+          std::ignore = on_second.get_future().then([this] { on_done.set_value(); });
+          break;
         case 2:
           on_second.set_value();
-          return seastar::now();
+          break;
         default:
           throw std::runtime_error("unexpected count");
         }
+        return {true, seastar::now()};
       }
 
       seastar::future<> wait() { return on_done.get_future(); }
@@ -364,9 +365,10 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       crimson::net::MessengerRef msgr;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
-      seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                    MessageRef m) override {
-        return c->send(make_message<MPing>());
+      std::tuple<bool, seastar::future<>> ms_dispatch(
+          crimson::net::Connection* c, MessageRef m) override {
+        std::ignore = c->send(make_message<MPing>());
+        return {true, seastar::now()};
       }
 
      public:
@@ -401,9 +403,9 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       bool stop_send = false;
       seastar::promise<> stopped_send_promise;
 
-      seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                    MessageRef m) override {
-        return seastar::now();
+      std::tuple<bool, seastar::future<>> ms_dispatch(
+          crimson::net::Connection* c, MessageRef m) override {
+        return {true, seastar::now()};
       }
 
      public:
@@ -798,7 +800,7 @@ class FailoverSuite : public Dispatcher {
   unsigned pending_peer_receive = 0;
   unsigned pending_receive = 0;
 
-  seastar::future<> ms_dispatch(Connection* c, MessageRef m) override {
+  std::tuple<bool, seastar::future<>> ms_dispatch(Connection* c, MessageRef m) override {
     auto result = interceptor.find_result(c->shared_from_this());
     if (result == nullptr) {
       logger().error("Untracked ms dispatched connection: {}", *c);
@@ -820,7 +822,7 @@ class FailoverSuite : public Dispatcher {
     }
     logger().info("[Test] got op, left {} ops -- [{}] {}",
                   pending_receive, result->index, *c);
-    return seastar::now();
+    return {true, seastar::now()};
   }
 
   void ms_handle_accept(ConnectionRef conn) override {
@@ -1192,29 +1194,30 @@ class FailoverTest : public Dispatcher {
 
   std::unique_ptr<FailoverSuite> test_suite;
 
-  seastar::future<> ms_dispatch(Connection* c, MessageRef m) override {
+  std::tuple<bool, seastar::future<>> ms_dispatch(Connection* c, MessageRef m) override {
     switch (m->get_type()) {
      case CEPH_MSG_PING:
       ceph_assert(recv_pong);
       recv_pong->set_value();
       recv_pong = std::nullopt;
-      return seastar::now();
+      break;
      case MSG_COMMAND_REPLY:
       ceph_assert(recv_cmdreply);
       recv_cmdreply->set_value();
       recv_cmdreply = std::nullopt;
-      return seastar::now();
+      break;
      case MSG_COMMAND: {
       auto m_cmd = boost::static_pointer_cast<MCommand>(m);
       ceph_assert(static_cast<cmd_t>(m_cmd->cmd[0][0]) == cmd_t::suite_recv_op);
       ceph_assert(test_suite);
       test_suite->notify_peer_reply();
-      return seastar::now();
+      break;
      }
      default:
       logger().error("{} got unexpected msg from cmd server: {}", *c, *m);
       ceph_abort();
     }
+    return {true, seastar::now()};
   }
 
  private:
@@ -1391,11 +1394,12 @@ class FailoverSuitePeer : public Dispatcher {
   ConnectionRef tracked_conn;
   unsigned pending_send = 0;
 
-  seastar::future<> ms_dispatch(Connection* c, MessageRef m) override {
+  std::tuple<bool, seastar::future<>> ms_dispatch(Connection* c, MessageRef m) override {
     logger().info("[TestPeer] got op from Test");
     ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
     ceph_assert(tracked_conn == c->shared_from_this());
-    return op_callback();
+    std::ignore = op_callback();
+    return {true, seastar::now()};
   }
 
   void ms_handle_accept(ConnectionRef conn) override {
@@ -1518,29 +1522,32 @@ class FailoverTestPeer : public Dispatcher {
   const entity_addr_t test_peer_addr;
   std::unique_ptr<FailoverSuitePeer> test_suite;
 
-  seastar::future<> ms_dispatch(Connection* c, MessageRef m) override {
+  std::tuple<bool, seastar::future<>> ms_dispatch(Connection* c, MessageRef m) override {
     ceph_assert(cmd_conn == c->shared_from_this());
     switch (m->get_type()) {
      case CEPH_MSG_PING:
-      return c->send(make_message<MPing>());
+      std::ignore = c->send(make_message<MPing>());
+      break;
      case MSG_COMMAND: {
       auto m_cmd = boost::static_pointer_cast<MCommand>(m);
       auto cmd = static_cast<cmd_t>(m_cmd->cmd[0][0]);
       if (cmd == cmd_t::shutdown) {
         logger().info("CmdSrv shutdown...");
         // forwarded to FailoverTestPeer::wait()
-	cmd_msgr->remove_dispatcher(*this);
-        (void) cmd_msgr->shutdown();
-        return seastar::now();
+        cmd_msgr->stop();
+        std::ignore = cmd_msgr->shutdown();
+      } else {
+        std::ignore = handle_cmd(cmd, m_cmd).then([c] {
+          return c->send(make_message<MCommandReply>());
+        });
       }
-      return handle_cmd(cmd, m_cmd).then([c] {
-        return c->send(make_message<MCommandReply>());
-      });
+      break;
      }
      default:
       logger().error("{} got unexpected msg from cmd client: {}", *c, m);
       ceph_abort();
     }
+    return {true, seastar::now()};
   }
 
   void ms_handle_accept(ConnectionRef conn) override {
