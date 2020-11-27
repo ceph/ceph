@@ -36,9 +36,7 @@ class Dispatcher : public boost::intrusive::slist_base_hook<
   // to prevent other dispatchers from processing it, and returns a future
   // to throttle the connection if it's too busy. Else, it returns false and
   // the second future is ignored.
-  virtual std::tuple<bool, seastar::future<>> ms_dispatch(Connection* conn, MessageRef m) {
-    return {false, seastar::now<>()};
-  }
+  virtual std::tuple<bool, seastar::future<>> ms_dispatch(Connection*, MessageRef) = 0;
 
   virtual void ms_handle_accept(ConnectionRef conn) {}
 

@@ -308,6 +308,11 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
       crimson::net::MessengerRef msgr;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
+      std::tuple<bool, seastar::future<>> ms_dispatch(
+          crimson::net::Connection* c, MessageRef m) override {
+        return {true, seastar::now()};
+      }
+
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
