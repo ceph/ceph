@@ -308,9 +308,9 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
       CLS_LOG(5, "ERROR: queue_list_entries(): returned error %d\n", ret);
       return ret;
     }
-
     is_truncated = op_ret.is_truncated;
     unsigned int index = 0;
+    std::optional<std::pair<string, ceph::real_time>> last_urgent_data_entry, last_xattr_entry;
     // If data is not empty
     if (op_ret.entries.size()) {
       for (const auto& it : op_ret.entries) {
@@ -330,6 +330,9 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
         //Search for tag in urgent data map
         if (auto i = urgent_data.urgent_data_map.find(info.tag);
             i != urgent_data.urgent_data_map.end()) {
+          if (index == op_ret.entries.size()) {
+            last_urgent_data_entry = std::make_pair(i->first, i->second);
+          }
           const auto defer_time = i->second;
           CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
           urgent_data.urgent_data_map.erase(i);
@@ -345,6 +348,9 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
         // Search the xattr urgent data map
         } else if (auto i = xattr_urgent_data_map.find(info.tag);
                    i != xattr_urgent_data_map.end()) {
+          if (index == op_ret.entries.size()) {
+            last_xattr_entry = std::make_pair(i->first, i->second);
+          }
           const auto defer_time = i->second;
           CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
           xattr_urgent_data_map.erase(i);
@@ -372,6 +378,20 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
           out->clear();
         }
       } else {
+        if (last_urgent_data_entry) {
+          urgent_data.urgent_data_map.insert(*last_urgent_data_entry);
+          //Remove last entry from requeue_buffers
+          if (!requeue_buffers.empty()) {
+            requeue_buffers.pop_back();
+          }
+        }
+        if (last_xattr_entry) {
+          xattr_urgent_data_map.insert(*last_xattr_entry);
+          //Remove last entry from requeue_buffers
+          if (!requeue_buffers.empty()) {
+            requeue_buffers.pop_back();
+          }
+        }
         end_marker = op_ret.entries[index - 1].marker;
         CLS_LOG(1, "INFO: cls_rgw_gc_queue_remove_entries(): index is %u and end_offset is: %s\n", index, end_marker.c_str());
         break;
