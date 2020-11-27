@@ -3,27 +3,24 @@
 
 #pragma once
 
-#include <boost/intrusive/slist.hpp>
+#include <list>
 
-#include "crimson/net/Dispatcher.h"
+#include "Fwd.h"
 #include "crimson/common/log.h"
 
-using crimson::net::Dispatcher;
+namespace crimson::net {
+
+class Dispatcher;
 
 class ChainedDispatchers {
-  boost::intrusive::slist<
-    Dispatcher,
-    boost::intrusive::linear<true>,
-    boost::intrusive::cache_last<true>> dispatchers;
 public:
-  void push_front(Dispatcher& dispatcher) {
-    dispatchers.push_front(dispatcher);
+  void assign(const std::list<Dispatcher*> _dispatchers) {
+    assert(empty());
+    assert(!_dispatchers.empty());
+    dispatchers = _dispatchers;
   }
-  void push_back(Dispatcher& dispatcher) {
-    dispatchers.push_back(dispatcher);
-  }
-  void erase(Dispatcher& dispatcher) {
-    dispatchers.erase(dispatchers.iterator_to(dispatcher));
+  void clear() {
+    dispatchers.clear();
   }
   bool empty() const {
     return dispatchers.empty();
@@ -33,6 +30,9 @@ public:
   void ms_handle_connect(crimson::net::ConnectionRef conn);
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace);
   void ms_handle_remote_reset(crimson::net::ConnectionRef conn);
+
+ private:
+  std::list<Dispatcher*> dispatchers;
 };
 
-using ChainedDispatchersRef = seastar::lw_shared_ptr<ChainedDispatchers>;
+}

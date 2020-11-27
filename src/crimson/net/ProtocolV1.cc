@@ -15,7 +15,7 @@
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/log.h"
-#include "Dispatcher.h"
+#include "chained_dispatchers.h"
 #include "Errors.h"
 #include "Socket.h"
 #include "SocketConnection.h"
@@ -125,10 +125,10 @@ void discard_up_to(std::deque<MessageRef>* queue,
 
 namespace crimson::net {
 
-ProtocolV1::ProtocolV1(ChainedDispatchersRef& dispatcher,
+ProtocolV1::ProtocolV1(ChainedDispatchers& dispatchers,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(proto_t::v1, dispatcher, conn), messenger{messenger} {}
+  : Protocol(proto_t::v1, dispatchers, conn), messenger{messenger} {}
 
 ProtocolV1::~ProtocolV1() {}
 
@@ -917,10 +917,10 @@ void ProtocolV1::execute_open(open_t type)
   set_write_state(write_state_t::open);
 
   if (type == open_t::connected) {
-    dispatcher->ms_handle_connect(
+    dispatchers.ms_handle_connect(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   } else { // type == open_t::accepted
-    dispatcher->ms_handle_accept(
+    dispatchers.ms_handle_accept(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 

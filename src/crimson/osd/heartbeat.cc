@@ -57,14 +57,10 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
                          SocketPolicy::lossy_client(0));
   back_msgr->set_policy(entity_name_t::TYPE_OSD,
                         SocketPolicy::lossy_client(0));
-  auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
-  chained_dispatchers->push_back(*this);
   return seastar::when_all_succeed(start_messenger(*front_msgr,
-						   front_addrs,
-						   chained_dispatchers),
+						   front_addrs),
                                    start_messenger(*back_msgr,
-						   back_addrs,
-						   chained_dispatchers))
+						   back_addrs))
     .then_unpack([this] {
       timer.arm_periodic(
         std::chrono::seconds(local_conf()->osd_heartbeat_interval));
@@ -73,14 +69,13 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
 
 seastar::future<>
 Heartbeat::start_messenger(crimson::net::Messenger& msgr,
-                           const entity_addrvec_t& addrs,
-			   ChainedDispatchersRef chained_dispatchers)
+                           const entity_addrvec_t& addrs)
 {
   return msgr.try_bind(addrs,
                        local_conf()->ms_bind_port_min,
                        local_conf()->ms_bind_port_max)
-  .then([&msgr, chained_dispatchers]() mutable {
-    return msgr.start(chained_dispatchers);
+  .then([this, &msgr]() mutable {
+    return msgr.start(*this);
   });
 }
 
@@ -88,10 +83,8 @@ seastar::future<> Heartbeat::stop()
 {
   logger().info("{}", __func__);
   timer.cancel();
-  if (!front_msgr->dispatcher_chain_empty())
-    front_msgr->remove_dispatcher(*this);
-  if (!back_msgr->dispatcher_chain_empty())
-    back_msgr->remove_dispatcher(*this);
+  front_msgr->stop();
+  back_msgr->stop();
   return gate.close().then([this] {
     return seastar::when_all_succeed(front_msgr->shutdown(),
 				     back_msgr->shutdown());

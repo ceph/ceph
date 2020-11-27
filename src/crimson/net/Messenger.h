@@ -14,11 +14,10 @@
 
 #pragma once
 
-#include <seastar/core/future.hh>
+#include <list>
 
 #include "Fwd.h"
 #include "crimson/common/throttle.h"
-#include "crimson/net/chained_dispatchers.h"
 #include "msg/Message.h"
 #include "msg/Policy.h"
 
@@ -34,6 +33,8 @@ namespace crimson::net {
 #ifdef UNIT_TESTS_BUILT
 class Interceptor;
 #endif
+
+class Dispatcher;
 
 using Throttle = crimson::common::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
@@ -77,7 +78,13 @@ public:
                                      uint32_t min_port, uint32_t max_port) = 0;
 
   /// start the messenger
-  virtual seastar::future<> start(ChainedDispatchersRef) = 0;
+  virtual seastar::future<> start(const std::list<Dispatcher*>&) = 0;
+
+  seastar::future<> start(Dispatcher& dispatcher) {
+    std::list<Dispatcher*> dispatchers;
+    dispatchers.push_back(&dispatcher);
+    return start(dispatchers);
+  }
 
   /// either return an existing connection to the peer,
   /// or a new pending connection
@@ -94,11 +101,13 @@ public:
   // wait for messenger shutdown
   virtual seastar::future<> wait() = 0;
 
-  virtual void remove_dispatcher(Dispatcher&) = 0;
+  // stop dispatching events and messages
+  virtual void stop() = 0;
 
-  virtual bool dispatcher_chain_empty() const = 0;
-  /// stop listenening and wait for all connections to close. safe to destruct
-  /// after this future becomes available
+  virtual bool is_started() const = 0;
+
+  // free internal resources before destruction, must be called after stopped,
+  // and must be called if is bound.
   virtual seastar::future<> shutdown() = 0;
 
   uint32_t get_crc_flags() const {

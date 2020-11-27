@@ -265,22 +265,22 @@ seastar::future<> OSD::start()
     cluster_msgr->set_policy(entity_name_t::TYPE_CLIENT,
                              SocketPolicy::stateless_server(0));
 
-    auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
-    chained_dispatchers->push_front(*mgrc);
-    chained_dispatchers->push_front(*monc);
-    chained_dispatchers->push_front(*this);
+    std::list<Dispatcher*> dispatchers;
+    dispatchers.push_front(mgrc.get());
+    dispatchers.push_front(monc.get());
+    dispatchers.push_front(this);
     return seastar::when_all_succeed(
       cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
                              local_conf()->ms_bind_port_min,
                              local_conf()->ms_bind_port_max)
-        .then([this, chained_dispatchers]() mutable {
-	  return cluster_msgr->start(chained_dispatchers);
+        .then([this, dispatchers]() mutable {
+	  return cluster_msgr->start(dispatchers);
 	}),
       public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             local_conf()->ms_bind_port_min,
                             local_conf()->ms_bind_port_max)
-        .then([this, chained_dispatchers]() mutable {
-	  return public_msgr->start(chained_dispatchers);
+        .then([this, dispatchers]() mutable {
+	  return public_msgr->start(dispatchers);
 	}));
   }).then_unpack([this] {
     return seastar::when_all_succeed(monc->start(),
@@ -452,16 +452,8 @@ seastar::future<> OSD::stop()
   return prepare_to_stop().then([this] {
     state.set_stopping();
     logger().debug("prepared to stop");
-    if (!public_msgr->dispatcher_chain_empty()) {
-      public_msgr->remove_dispatcher(*this);
-      public_msgr->remove_dispatcher(*mgrc);
-      public_msgr->remove_dispatcher(*monc);
-    }
-    if (!cluster_msgr->dispatcher_chain_empty()) {
-      cluster_msgr->remove_dispatcher(*this);
-      cluster_msgr->remove_dispatcher(*mgrc);
-      cluster_msgr->remove_dispatcher(*monc);
-    }
+    public_msgr->stop();
+    cluster_msgr->stop();
     auto gate_close_fut = gate.close();
     return asok->stop().then([this] {
       return heartbeat->stop();
