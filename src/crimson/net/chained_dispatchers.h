@@ -10,13 +10,6 @@
 
 using crimson::net::Dispatcher;
 
-// in existing Messenger, dispatchers are put into a chain as described by
-// chain-of-responsibility pattern. we could do the same to stop processing
-// the message once any of the dispatchers claims this message, and prevent
-// other dispatchers from reading it. but this change is more involved as
-// it requires changing the ms_ methods to return a bool. so as an intermediate 
-// solution, we are using an observer dispatcher to notify all the interested
-// or unintersted parties.
 class ChainedDispatchers {
   boost::intrusive::slist<
     Dispatcher,

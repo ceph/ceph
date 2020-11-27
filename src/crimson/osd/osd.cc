@@ -617,12 +617,14 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   });
 }
 
-seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
+std::tuple<bool, seastar::future<>>
+OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
 {
-  return gate.dispatch(__func__, *this, [this, conn, &m] {
-    if (state.is_stopping()) {
-      return seastar::now();
-    }
+  if (state.is_stopping()) {
+    return {false, seastar::now()};
+  }
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
       return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
@@ -675,10 +677,11 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
     case MSG_OSD_SCRUB2:
       return handle_scrub(conn, boost::static_pointer_cast<MOSDScrub2>(m));
     default:
-      logger().info("ms_dispatch unhandled message {}", *m);
+      dispatched = false;
       return seastar::now();
     }
   });
+  return {dispatched, seastar::now()};
 }
 
 void OSD::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)

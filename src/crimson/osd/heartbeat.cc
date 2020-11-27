@@ -206,17 +206,20 @@ void Heartbeat::remove_peer(osd_id_t peer)
   peers.erase(peer);
 }
 
-seastar::future<> Heartbeat::ms_dispatch(crimson::net::Connection* conn,
-                                         MessageRef m)
+std::tuple<bool, seastar::future<>>
+Heartbeat::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
 {
-  return gate.dispatch(__func__, *this, [this, conn, &m] {
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
     switch (m->get_type()) {
     case MSG_OSD_PING:
       return handle_osd_ping(conn, boost::static_pointer_cast<MOSDPing>(m));
     default:
+      dispatched = false;
       return seastar::now();
     }
   });
+  return {dispatched, seastar::now()};
 }
 
 void Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)

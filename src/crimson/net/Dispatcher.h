@@ -31,9 +31,15 @@ class Dispatcher : public boost::intrusive::slist_base_hook<
  public:
   virtual ~Dispatcher() {}
 
-  virtual seastar::future<> ms_dispatch(Connection* conn, MessageRef m) {
-    return seastar::make_ready_future<>();
+  // Dispatchers are put into a chain as described by chain-of-responsibility
+  // pattern. If any of the dispatchers claims this message, it returns true
+  // to prevent other dispatchers from processing it, and returns a future
+  // to throttle the connection if it's too busy. Else, it returns false and
+  // the second future is ignored.
+  virtual std::tuple<bool, seastar::future<>> ms_dispatch(Connection* conn, MessageRef m) {
+    return {false, seastar::now<>()};
   }
+
   virtual void ms_handle_accept(ConnectionRef conn) {}
 
   virtual void ms_handle_connect(ConnectionRef conn) {}

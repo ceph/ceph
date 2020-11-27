@@ -13,19 +13,27 @@ seastar::future<>
 ChainedDispatchers::ms_dispatch(crimson::net::Connection* conn,
                                 MessageRef m) {
   try {
-    return seastar::do_for_each(dispatchers, [conn, m](Dispatcher& dispatcher) {
-      return dispatcher.ms_dispatch(conn, m);
-    }).handle_exception([conn] (std::exception_ptr eptr) {
-      logger().error("{} got unexpected exception in ms_dispatch() throttling {}",
-                     *conn, eptr);
-      ceph_abort();
-    });
+    for (auto& dispatcher : dispatchers) {
+      auto [dispatched, throttle_future] = dispatcher.ms_dispatch(conn, m);
+      if (dispatched) {
+        return std::move(throttle_future
+        ).handle_exception([conn] (std::exception_ptr eptr) {
+          logger().error("{} got unexpected exception in ms_dispatch() throttling {}",
+                         *conn, eptr);
+          ceph_abort();
+        });
+      }
+      assert(throttle_future.available());
+    }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_dispatch() {}",
                    *conn, std::current_exception());
     ceph_abort();
-    return seastar::now();
   }
+  if (!dispatchers.empty()) {
+    logger().error("ms_dispatch unhandled message {}", *m);
+  }
+  return seastar::now();
 }
 
 void
