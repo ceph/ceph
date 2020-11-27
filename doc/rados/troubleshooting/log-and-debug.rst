@@ -152,7 +152,7 @@ verbose [#]_ . In general, the logs in-memory are not sent to the output log unl
 
 - a fatal signal is raised or
 - an ``assert`` in source code is triggered or
-- upon requested. Please consult `document on admin socket <http://docs.ceph.com/docs/master/man/8/ceph/#daemon>`_ for more details.
+- upon requested. Please consult `document on admin socket <http://docs.ceph.com/en/latest/man/8/ceph/#daemon>`_ for more details.
 
 A debug logging setting can take a single value for the log level and the
 memory level, which sets them both as the same value. For example, if you
