@@ -370,7 +370,7 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.health_checks['CEPHADM_STRAY_DAEMON'] = {
                     'severity': 'warning',
-                    'summary': '%d stray daemons(s) not managed by cephadm' % (
+                    'summary': '%d stray daemon(s) not managed by cephadm' % (
                         len(daemon_detail)),
                     'count': len(daemon_detail),
                     'detail': daemon_detail,
