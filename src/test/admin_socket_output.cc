@@ -14,7 +14,6 @@
 
 #include <iostream>
 #include <regex>                 // For regex, regex_search
-#include <experimental/filesystem> // For extension
 
 #include "common/admin_socket_client.h"     // For AdminSocketClient
 #include "common/ceph_json.h"               // For JSONParser, JSONObjIter
