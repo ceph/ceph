@@ -14,20 +14,13 @@
 
 #pragma once
 
-#include <seastar/core/future.hh>
-#include <seastar/core/sharded.hh>
-#include <boost/intrusive/slist.hpp>
-
-#include "crimson/common/gated.h"
 #include "Fwd.h"
 
 class AuthAuthorizer;
 
 namespace crimson::net {
 
-class Dispatcher : public boost::intrusive::slist_base_hook<
-			    boost::intrusive::link_mode<
-			      boost::intrusive::safe_link>> {
+class Dispatcher {
  public:
   virtual ~Dispatcher() {}
 

@@ -19,7 +19,6 @@
 
 #include "auth/Auth.h"
 #include "Errors.h"
-#include "Dispatcher.h"
 #include "Socket.h"
 
 namespace {
@@ -111,10 +110,10 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
   });
 }
 
-seastar::future<> SocketMessenger::start(ChainedDispatchersRef chained_dispatchers) {
+seastar::future<> SocketMessenger::start(const std::list<Dispatcher*>& _dispatchers) {
   assert(seastar::this_shard_id() == master_sid);
 
-  dispatchers = chained_dispatchers;
+  dispatchers.assign(_dispatchers);
   if (listener) {
     // make sure we have already bound to a valid address
     ceph_assert(get_myaddr().is_legacy() || get_myaddr().is_msgr2());
@@ -154,9 +153,7 @@ seastar::future<> SocketMessenger::shutdown()
 {
   assert(seastar::this_shard_id() == master_sid);
   return seastar::futurize_invoke([this] {
-    if (dispatchers) {
-      assert(dispatchers->empty());
-    }
+    assert(dispatchers.empty());
     if (listener) {
       auto d_listener = listener;
       listener = nullptr;

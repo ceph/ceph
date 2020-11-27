@@ -1,6 +1,7 @@
 #include "crimson/common/log.h"
 #include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/Connection.h"
+#include "crimson/net/Dispatcher.h"
 #include "msg/Message.h"
 
 namespace {
@@ -9,12 +10,14 @@ namespace {
   }
 }
 
+namespace crimson::net {
+
 seastar::future<>
 ChainedDispatchers::ms_dispatch(crimson::net::Connection* conn,
                                 MessageRef m) {
   try {
     for (auto& dispatcher : dispatchers) {
-      auto [dispatched, throttle_future] = dispatcher.ms_dispatch(conn, m);
+      auto [dispatched, throttle_future] = dispatcher->ms_dispatch(conn, m);
       if (dispatched) {
         return std::move(throttle_future
         ).handle_exception([conn] (std::exception_ptr eptr) {
@@ -40,7 +43,7 @@ void
 ChainedDispatchers::ms_handle_accept(crimson::net::ConnectionRef conn) {
   try {
     for (auto& dispatcher : dispatchers) {
-      dispatcher.ms_handle_accept(conn);
+      dispatcher->ms_handle_accept(conn);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_accept() {}",
@@ -53,7 +56,7 @@ void
 ChainedDispatchers::ms_handle_connect(crimson::net::ConnectionRef conn) {
   try {
     for(auto& dispatcher : dispatchers) {
-      dispatcher.ms_handle_connect(conn);
+      dispatcher->ms_handle_connect(conn);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_connect() {}",
@@ -66,7 +69,7 @@ void
 ChainedDispatchers::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) {
   try {
     for (auto& dispatcher : dispatchers) {
-      dispatcher.ms_handle_reset(conn, is_replace);
+      dispatcher->ms_handle_reset(conn, is_replace);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_reset() {}",
@@ -79,11 +82,13 @@ void
 ChainedDispatchers::ms_handle_remote_reset(crimson::net::ConnectionRef conn) {
   try {
     for (auto& dispatcher : dispatchers) {
-      dispatcher.ms_handle_remote_reset(conn);
+      dispatcher->ms_handle_remote_reset(conn);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_remote_reset() {}",
                    *conn, std::current_exception());
     ceph_abort();
   }
+}
+
 }

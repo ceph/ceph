@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <seastar/core/future.hh>
+#include <seastar/core/future-util.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sharded.hh>
 
@@ -34,7 +36,7 @@ using stop_t = seastar::stop_iteration;
 class Connection;
 using ConnectionRef = seastar::shared_ptr<Connection>;
 
-class Dispatcher;
+class ChainedDispatchers;
 
 class Messenger;
 using MessengerRef = seastar::shared_ptr<Messenger>;

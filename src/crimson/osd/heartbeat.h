@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <seastar/core/future.hh>
 #include "common/ceph_time.h"
-#include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 
@@ -71,8 +70,7 @@ private:
   void add_reporter_peers(int whoami);
 
   seastar::future<> start_messenger(crimson::net::Messenger& msgr,
-				    const entity_addrvec_t& addrs,
-				    ChainedDispatchersRef);
+				    const entity_addrvec_t& addrs);
 private:
   const osd_id_t whoami;
   const crimson::osd::ShardServices& service;

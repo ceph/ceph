@@ -12,7 +12,7 @@
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/formatter.h"
 
-#include "Dispatcher.h"
+#include "chained_dispatchers.h"
 #include "Errors.h"
 #include "Socket.h"
 #include "SocketConnection.h"
@@ -143,10 +143,10 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
   });
 }
 
-ProtocolV2::ProtocolV2(ChainedDispatchersRef& dispatcher,
+ProtocolV2::ProtocolV2(ChainedDispatchers& dispatchers,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(proto_t::v2, dispatcher, conn),
+  : Protocol(proto_t::v2, dispatchers, conn),
     messenger{messenger},
     protocol_timer{conn}
 {}
@@ -385,7 +385,7 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
     reset_write();
-    dispatcher->ms_handle_remote_reset(
+    dispatchers.ms_handle_remote_reset(
 	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 }
@@ -1601,7 +1601,7 @@ void ProtocolV2::execute_establishing(
     accept_me();
   }
 
-  dispatcher->ms_handle_accept(
+  dispatchers.ms_handle_accept(
       seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 
   gated_execute("execute_establishing", [this] {
@@ -1699,7 +1699,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   if (socket) {
     socket->shutdown();
   }
-  dispatcher->ms_handle_accept(
+  dispatchers.ms_handle_accept(
       seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   gate.dispatch_in_background("trigger_replacing", *this,
                  [this,
@@ -1942,7 +1942,7 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
   if (dispatch_connect) {
-    dispatcher->ms_handle_connect(
+    dispatchers.ms_handle_connect(
 	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 #ifdef UNIT_TESTS_BUILT
