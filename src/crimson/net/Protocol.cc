@@ -73,14 +73,9 @@ void Protocol::close(bool dispatch_reset,
   auto gate_closed = gate.close();
 
   if (dispatch_reset) {
-    try {
-        dispatcher->ms_handle_reset(
-            seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
-            is_replace);
-    } catch (...) {
-      logger().error("{} got unexpected exception in ms_handle_reset() {}",
-                     conn, std::current_exception());
-    }
+    dispatcher->ms_handle_reset(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
+        is_replace);
   }
 
   // asynchronous operations
