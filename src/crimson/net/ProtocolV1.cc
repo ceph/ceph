@@ -871,12 +871,13 @@ seastar::future<> ProtocolV1::read_message()
 
       if (unlikely(!conn.update_rx_seq(msg->get_seq()))) {
         // skip this message
-        return;
+        return seastar::now();
       }
 
       logger().debug("{} <== #{} === {} ({})",
                      conn, msg_ref->get_seq(), *msg_ref, msg_ref->get_type());
-      std::ignore = dispatcher->ms_dispatch(&conn, std::move(msg_ref));
+      // throttle the reading process by the returned future
+      return dispatchers.ms_dispatch(&conn, std::move(msg_ref));
     });
 }
 
