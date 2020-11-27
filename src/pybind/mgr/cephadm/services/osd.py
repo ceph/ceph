@@ -27,17 +27,19 @@ class OSDService(CephService):
     def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
         logger.debug(f"Processing DriveGroup {drive_group}")
         osd_id_claims = self.find_destroyed_osds()
-        logger.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims}")
+        if osd_id_claims:
+            logger.info(
+                f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims}")
 
         @forall_hosts
         def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
-            logger.info('Applying %s on host %s...' % (drive_group.service_id, host))
             cmd = self.driveselection_to_ceph_volume(drive_selection,
                                                      osd_id_claims.get(host, []))
             if not cmd:
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(
                     drive_group.service_id))
                 return None
+            logger.info('Applying drive group %s on host %s...' % (drive_group.service_id, host))
             env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = self.create_single_host(
                 host, cmd, replace_osd_ids=osd_id_claims.get(host, []), env_vars=env_vars
@@ -284,8 +286,8 @@ class OSDService(CephService):
                 osd_host_map.update(
                     {node.get('name'): [str(_id) for _id in node.get('children', list())]}
                 )
-        self.mgr.log.info(
-            f"Found osd claims -> {osd_host_map}")
+        if osd_host_map:
+            self.mgr.log.info(f"Found osd claims -> {osd_host_map}")
         return osd_host_map
 
 
