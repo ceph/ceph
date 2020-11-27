@@ -100,7 +100,7 @@ public:
   std::map<std::string,std::string> ignored_mon_values;
 
   /// original raw values saved that may need to re-expand at certain time
-  mutable std::map<std::string, std::string> may_reexpand_meta;
+  mutable std::vector<std::string> may_reexpand_meta;
 
   /// encoded, cached copy of of values + ignored_mon_values
   ceph::bufferlist values_bl;
