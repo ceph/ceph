@@ -451,7 +451,8 @@ void Journal<I>::is_tag_owner(I *image_ctx, bool *owner,
 }
 
 template <typename I>
-void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx,
+                              const std::string& image_id,
                               bool *is_tag_owner,
                               asio::ContextWQ *op_work_queue,
                               Context *on_finish) {
@@ -466,7 +467,7 @@ void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
 }
 
 template <typename I>
-void Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
+void Journal<I>::get_tag_owner(IoCtx& io_ctx, const std::string& image_id,
                                std::string *mirror_uuid,
                                asio::ContextWQ *op_work_queue,
                                Context *on_finish) {
