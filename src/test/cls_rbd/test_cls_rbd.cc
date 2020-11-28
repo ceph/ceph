@@ -92,6 +92,14 @@ static bool is_sparse_read_supported(librados::IoCtx &ioctx,
           outbl.contents_equal(expected_outbl));
 }
 
+static void set_mirror_group_status_up(cls::rbd::MirrorGroupSiteStatus *status,
+                                       bool up) {
+  status->up = up;
+  for (auto &[_, image_status] : status->mirror_images) {
+    image_status.up = up;
+  }
+}
+
 class TestClsRbd : public ::testing::Test {
 public:
 
@@ -2315,6 +2323,417 @@ TEST_F(TestClsRbd, mirror_snapshot) {
 
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 1));
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 2));
+}
+
+TEST_F(TestClsRbd, mirror_group) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_MIRRORING);
+
+  std::map<std::string, cls::rbd::MirrorGroup> groups;
+  ASSERT_EQ(-ENOENT, mirror_group_list(&ioctx, "", 0, &groups));
+
+  cls::rbd::MirrorGroup group1("uuid1", cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                               cls::rbd::MIRROR_GROUP_STATE_ENABLED);
+  cls::rbd::MirrorGroup group2("uuid2", cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                               cls::rbd::MIRROR_GROUP_STATE_DISABLING);
+  cls::rbd::MirrorGroup group3("uuid3", cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                               cls::rbd::MIRROR_GROUP_STATE_ENABLED);
+
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id1", group1));
+  ASSERT_EQ(-ENOENT, mirror_group_set(&ioctx, "group_id2", group2));
+  group2.state = cls::rbd::MIRROR_GROUP_STATE_ENABLED;
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id2", group2));
+  group2.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id2", group2));
+  ASSERT_EQ(-EINVAL, mirror_group_set(&ioctx, "group_id1", group2));
+  ASSERT_EQ(-EEXIST, mirror_group_set(&ioctx, "group_id3", group2));
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id3", group3));
+
+  std::string group_id;
+  ASSERT_EQ(0, mirror_group_get_group_id(&ioctx, "uuid2", &group_id));
+  ASSERT_EQ("group_id2", group_id);
+
+  cls::rbd::MirrorGroup read_group;
+  ASSERT_EQ(0, mirror_group_get(&ioctx, "group_id1", &read_group));
+  ASSERT_EQ(read_group, group1);
+  ASSERT_EQ(0, mirror_group_get(&ioctx, "group_id2", &read_group));
+  ASSERT_EQ(read_group, group2);
+  ASSERT_EQ(0, mirror_group_get(&ioctx, "group_id3", &read_group));
+  ASSERT_EQ(read_group, group3);
+
+  std::map<std::string, cls::rbd::MirrorGroup> expected_groups;
+  ASSERT_EQ(0, mirror_group_list(&ioctx, "", 1, &groups));
+  expected_groups = {{"group_id1", group1}};
+  ASSERT_EQ(expected_groups, groups);
+
+  ASSERT_EQ(0, mirror_group_list(&ioctx, "group_id1", 2, &groups));
+  expected_groups = {{"group_id2", group2}, {"group_id3", group3}};
+  ASSERT_EQ(expected_groups, groups);
+
+  ASSERT_EQ(0, mirror_group_remove(&ioctx, "group_id2"));
+  ASSERT_EQ(-ENOENT, mirror_group_get_group_id(&ioctx, "uuid2", &group_id));
+  ASSERT_EQ(-EBUSY, mirror_group_remove(&ioctx, "group_id1"));
+
+  ASSERT_EQ(0, mirror_group_list(&ioctx, "", 3, &groups));
+  expected_groups = {{"group_id1", group1}, {"group_id3", group3}};
+  ASSERT_EQ(expected_groups, groups);
+
+  group1.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
+  group3.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id1", group1));
+  ASSERT_EQ(0, mirror_group_get(&ioctx, "group_id1", &read_group));
+  ASSERT_EQ(read_group, group1);
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id3", group3));
+  ASSERT_EQ(0, mirror_group_remove(&ioctx, "group_id1"));
+  ASSERT_EQ(0, mirror_group_remove(&ioctx, "group_id3"));
+
+  ASSERT_EQ(0, mirror_group_list(&ioctx, "", 3, &groups));
+  expected_groups = {};
+  ASSERT_EQ(expected_groups, groups);
+}
+
+TEST_F(TestClsRbd, mirror_group_status) {
+  struct WatchCtx : public librados::WatchCtx2 {
+    librados::IoCtx *m_ioctx;
+
+    explicit WatchCtx(librados::IoCtx *ioctx) : m_ioctx(ioctx) {}
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+                       uint64_t notifier_id, bufferlist& bl_) override {
+      bufferlist bl;
+      m_ioctx->notify_ack(RBD_MIRRORING, notify_id, cookie, bl);
+    }
+    void handle_error(uint64_t cookie, int err) override {}
+  };
+
+  map<std::string, cls::rbd::MirrorGroup> groups;
+  map<std::string, cls::rbd::MirrorGroupStatus> statuses;
+  std::map<cls::rbd::MirrorGroupStatusState, int32_t> states;
+  std::map<std::string, entity_inst_t> instances;
+  cls::rbd::MirrorGroupStatus read_status;
+  entity_inst_t read_instance;
+  uint64_t watch_handle;
+  librados::IoCtx ioctx;
+
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_MIRRORING);
+
+  int64_t instance_id = librados::Rados(ioctx).get_instance_id();
+
+  // Test list fails on nonexistent RBD_MIRRORING object
+
+  ASSERT_EQ(-ENOENT, mirror_group_status_list(&ioctx, "", 1024, &groups,
+	  &statuses));
+
+  // Test status set
+
+  cls::rbd::MirrorGroup group1("uuid1", cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                               cls::rbd::MIRROR_GROUP_STATE_ENABLED);
+  cls::rbd::MirrorGroup group2("uuid2", cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                               cls::rbd::MIRROR_GROUP_STATE_ENABLED);
+  cls::rbd::MirrorGroup group3("uuid3", cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                               cls::rbd::MIRROR_GROUP_STATE_ENABLED);
+
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id1", group1));
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id2", group2));
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id3", group3));
+
+  cls::rbd::MirrorGroupSiteStatus status1(
+    "", cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN, "", {});
+  cls::rbd::MirrorGroupSiteStatus status2(
+    "", cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING, "", {{{}, {}}});
+  cls::rbd::MirrorGroupSiteStatus status3(
+    "", cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR, "", {{{}, {}}});
+
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid1", status1));
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, "", 1024, &groups, &statuses));
+  ASSERT_EQ(3U, groups.size());
+  ASSERT_EQ(1U, statuses.size());
+
+  // Test status is down due to RBD_MIRRORING is not watched
+
+  set_mirror_group_status_up(&status1, false);
+  ASSERT_EQ(statuses["group_id1"], cls::rbd::MirrorGroupStatus{{status1}});
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+  ASSERT_EQ(read_status, cls::rbd::MirrorGroupStatus{{status1}});
+
+  // Test status summary. All statuses are unknown due to down.
+  states.clear();
+  cls::rbd::MirrorPeer mirror_peer{
+    "uuid", cls::rbd::MIRROR_PEER_DIRECTION_RX, "siteA", "client", "fsidA"};
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(1U, states.size());
+  ASSERT_EQ(3, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN]);
+
+  // Test get instance return -ESTALE due to down.
+
+  ASSERT_EQ(-ESTALE, mirror_group_instance_get(&ioctx, "uuid1", &read_instance));
+  instances.clear();
+  ASSERT_EQ(0, mirror_group_instance_list(&ioctx, "", 1024, &instances));
+  ASSERT_TRUE(instances.empty());
+
+  // Test remove_down removes stale statuses
+
+  ASSERT_EQ(0, mirror_group_status_remove_down(&ioctx));
+  ASSERT_EQ(-ENOENT, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+  ASSERT_EQ(-ENOENT, mirror_group_instance_get(&ioctx, "uuid1", &read_instance));
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, "", 1024, &groups, &statuses));
+  ASSERT_EQ(3U, groups.size());
+  ASSERT_TRUE(statuses.empty());
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(1U, states.size());
+  ASSERT_EQ(3, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN]);
+
+  // Test statuses are not down after watcher is started
+
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid1", status1));
+
+  WatchCtx watch_ctx(&ioctx);
+  ASSERT_EQ(0, ioctx.watch2(RBD_MIRRORING, &watch_handle, &watch_ctx));
+
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid2", status2));
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid3", status3));
+
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+  set_mirror_group_status_up(&status1, true);
+  ASSERT_EQ(read_status, cls::rbd::MirrorGroupStatus{{status1}});
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid2", &read_status));
+  set_mirror_group_status_up(&status2, true);
+  ASSERT_EQ(read_status, cls::rbd::MirrorGroupStatus{{status2}});
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid3", &read_status));
+  set_mirror_group_status_up(&status3, true);
+  ASSERT_EQ(read_status, cls::rbd::MirrorGroupStatus{{status3}});
+
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, "", 1024, &groups, &statuses));
+  ASSERT_EQ(3U, groups.size());
+  ASSERT_EQ(3U, statuses.size());
+  ASSERT_EQ(statuses["group_id1"], cls::rbd::MirrorGroupStatus{{status1}});
+  ASSERT_EQ(statuses["group_id2"], cls::rbd::MirrorGroupStatus{{status2}});
+  ASSERT_EQ(statuses["group_id3"], cls::rbd::MirrorGroupStatus{{status3}});
+
+  read_instance = {};
+  ASSERT_EQ(0, mirror_group_instance_get(&ioctx, "uuid1", &read_instance));
+  ASSERT_EQ(read_instance.name.num(), instance_id);
+  instances.clear();
+  ASSERT_EQ(0, mirror_group_instance_list(&ioctx, "", 1024, &instances));
+  ASSERT_EQ(3U, instances.size());
+  ASSERT_EQ(instances["group_id1"].name.num(), instance_id);
+  ASSERT_EQ(instances["group_id2"].name.num(), instance_id);
+  ASSERT_EQ(instances["group_id3"].name.num(), instance_id);
+
+  ASSERT_EQ(0, mirror_group_status_remove_down(&ioctx));
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+  ASSERT_EQ(read_status, cls::rbd::MirrorGroupStatus{{status1}});
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, "", 1024, &groups, &statuses));
+  ASSERT_EQ(3U, groups.size());
+  ASSERT_EQ(3U, statuses.size());
+  ASSERT_EQ(statuses["group_id1"], cls::rbd::MirrorGroupStatus{{status1}});
+  ASSERT_EQ(statuses["group_id2"], cls::rbd::MirrorGroupStatus{{status2}});
+  ASSERT_EQ(statuses["group_id3"], cls::rbd::MirrorGroupStatus{{status3}});
+
+  states.clear();
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(3U, states.size());
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR]);
+
+  // Test update
+
+  status1.state = status3.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING;
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid1", status1));
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid3", status3));
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid3", &read_status));
+  ASSERT_EQ(read_status, cls::rbd::MirrorGroupStatus{{status3}});
+
+  states.clear();
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(1U, states.size());
+  ASSERT_EQ(3, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING]);
+
+  // Remote status
+
+  ASSERT_EQ(0, mirror_uuid_set(&ioctx, "mirror-uuid"));
+  ASSERT_EQ(0, mirror_mode_set(&ioctx, cls::rbd::MIRROR_MODE_POOL));
+
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+  cls::rbd::MirrorGroupStatus expected_status1({status1});
+  ASSERT_EQ(expected_status1, read_status);
+
+  cls::rbd::MirrorGroupSiteStatus remote_status1(
+    "fsidA", cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING, "", {});
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid1", remote_status1));
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+  set_mirror_group_status_up(&remote_status1, true);
+  expected_status1 = {{status1, remote_status1}};
+  ASSERT_EQ(expected_status1, read_status);
+
+  // summary under different modes
+  cls::rbd::MirrorGroupSiteStatus remote_status2(
+    "fsidA", cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING, "", {});
+  set_mirror_group_status_up(&remote_status2, true);
+  cls::rbd::MirrorGroupSiteStatus remote_status3(
+    "fsidA", cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN, "", {{}, {}});
+  set_mirror_group_status_up(&remote_status3, true);
+
+  status1.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR;
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid1", status1));
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid2", status2));
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid3", status3));
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid2", remote_status2));
+  ASSERT_EQ(0, mirror_group_status_set(&ioctx, "uuid3", remote_status3));
+
+  expected_status1 = {{status1, remote_status1}};
+  cls::rbd::MirrorGroupStatus expected_status2({status2, remote_status2});
+  cls::rbd::MirrorGroupStatus expected_status3({status3, remote_status3});
+
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, "", 1024, &groups, &statuses));
+  ASSERT_EQ(3U, groups.size());
+  ASSERT_EQ(3U, statuses.size());
+  ASSERT_EQ(statuses["group_id1"], expected_status1);
+  ASSERT_EQ(statuses["group_id2"], expected_status2);
+  ASSERT_EQ(statuses["group_id3"], expected_status3);
+
+  states.clear();
+  mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX;
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(2U, states.size());
+  ASSERT_EQ(2, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR]);
+
+  states.clear();
+  mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_TX;
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(2U, states.size());
+  ASSERT_EQ(2, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN]);
+
+  states.clear();
+  mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX_TX;
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(3U, states.size());
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN]);
+  ASSERT_EQ(1, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR]);
+
+  // Test statuses are down after removing watcher
+  ioctx.unwatch2(watch_handle);
+
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, "", 1024, &groups, &statuses));
+  ASSERT_EQ(3U, groups.size());
+  ASSERT_EQ(3U, statuses.size());
+  set_mirror_group_status_up(&status1, false);
+  set_mirror_group_status_up(&remote_status1, false);
+  expected_status1 = {{status1, remote_status1}};
+  ASSERT_EQ(statuses["group_id1"], expected_status1);
+  set_mirror_group_status_up(&status2, false);
+  set_mirror_group_status_up(&remote_status2, false);
+  expected_status2 = {{status2, remote_status2}};
+  ASSERT_EQ(statuses["group_id2"], expected_status2);
+  set_mirror_group_status_up(&status3, false);
+  set_mirror_group_status_up(&remote_status3, false);
+  expected_status3 = {{status3, remote_status3}};
+  ASSERT_EQ(statuses["group_id3"], expected_status3);
+
+  ASSERT_EQ(0, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+  ASSERT_EQ(read_status, expected_status1);
+
+  states.clear();
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(1U, states.size());
+  ASSERT_EQ(3, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN]);
+
+  ASSERT_EQ(-ESTALE, mirror_group_instance_get(&ioctx, "uuid1", &read_instance));
+  instances.clear();
+  ASSERT_EQ(0, mirror_group_instance_list(&ioctx, "", 1024, &instances));
+  ASSERT_TRUE(instances.empty());
+
+  ASSERT_EQ(0, mirror_group_status_remove_down(&ioctx));
+  ASSERT_EQ(-ENOENT, mirror_group_status_get(&ioctx, "uuid1", &read_status));
+
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, "", 1024, &groups, &statuses));
+  ASSERT_EQ(3U, groups.size());
+  ASSERT_TRUE(statuses.empty());
+
+  states.clear();
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {mirror_peer}, &states));
+  ASSERT_EQ(1U, states.size());
+  ASSERT_EQ(3, states[cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN]);
+
+  // Remove groups
+
+  group1.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
+  group2.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
+  group3.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
+
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id1", group1));
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id2", group2));
+  ASSERT_EQ(0, mirror_group_set(&ioctx, "group_id3", group3));
+
+  ASSERT_EQ(0, mirror_group_remove(&ioctx, "group_id1"));
+  ASSERT_EQ(0, mirror_group_remove(&ioctx, "group_id2"));
+  ASSERT_EQ(0, mirror_group_remove(&ioctx, "group_id3"));
+
+  states.clear();
+  ASSERT_EQ(0, mirror_group_status_get_summary(&ioctx, {}, &states));
+  ASSERT_EQ(0U, states.size());
+
+  // Test status list with large number of groups
+
+  size_t N = 1024;
+  ASSERT_EQ(0U, N % 2);
+
+  for (size_t i = 0; i < N; i++) {
+    std::string id = "id" + stringify(i);
+    std::string uuid = "uuid" + stringify(i);
+    cls::rbd::MirrorGroup group(uuid, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+                                cls::rbd::MIRROR_GROUP_STATE_ENABLED);
+    cls::rbd::MirrorGroupSiteStatus status(
+      "", cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN, "", {});
+    ASSERT_EQ(0, mirror_group_set(&ioctx, id, group));
+    ASSERT_EQ(0, mirror_group_status_set(&ioctx, uuid, status));
+  }
+
+  std::string last_read = "";
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, last_read, N * 2, &groups,
+	  &statuses));
+  ASSERT_EQ(N, groups.size());
+  ASSERT_EQ(N, statuses.size());
+
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, last_read, N / 2, &groups,
+	  &statuses));
+  ASSERT_EQ(N / 2, groups.size());
+  ASSERT_EQ(N / 2, statuses.size());
+
+  last_read = groups.rbegin()->first;
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, last_read, N / 2, &groups,
+	  &statuses));
+  ASSERT_EQ(N / 2, groups.size());
+  ASSERT_EQ(N / 2, statuses.size());
+
+  last_read = groups.rbegin()->first;
+  groups.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_group_status_list(&ioctx, last_read, N / 2, &groups,
+	  &statuses));
+  ASSERT_EQ(0U, groups.size());
+  ASSERT_EQ(0U, statuses.size());
 }
 
 TEST_F(TestClsRbd, group_dir_list) {
