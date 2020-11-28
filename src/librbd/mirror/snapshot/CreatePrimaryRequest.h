@@ -29,17 +29,35 @@ public:
                                       const std::string& global_image_id,
                                       uint64_t clean_since_snap_id,
                                       uint64_t snap_create_flags,
+                                      uint32_t flags, int64_t group_pool_id,
+                                      const std::string &group_id,
+                                      const std::string &group_snap_id,
+                                      uint64_t *snap_id,
+                                      Context *on_finish) {
+    return new CreatePrimaryRequest(image_ctx, global_image_id,
+                                    clean_since_snap_id, snap_create_flags,
+                                    flags, group_pool_id, group_id,
+                                    group_snap_id, snap_id, on_finish);
+  }
+
+  static CreatePrimaryRequest *create(ImageCtxT *image_ctx,
+                                      const std::string& global_image_id,
+                                      uint64_t clean_since_snap_id,
+                                      uint64_t snap_create_flags,
                                       uint32_t flags, uint64_t *snap_id,
                                       Context *on_finish) {
     return new CreatePrimaryRequest(image_ctx, global_image_id,
-                                    clean_since_snap_id, snap_create_flags, flags,
-                                    snap_id, on_finish);
+                                    clean_since_snap_id, snap_create_flags,
+                                    flags, -1, {}, {}, snap_id, on_finish);
   }
 
   CreatePrimaryRequest(ImageCtxT *image_ctx,
                        const std::string& global_image_id,
                        uint64_t clean_since_snap_id, uint64_t snap_create_flags,
-                       uint32_t flags, uint64_t *snap_id, Context *on_finish);
+                       uint32_t flags, int64_t group_pool_id,
+                       const std::string &group_id,
+                       const std::string &group_snap_id, uint64_t *snap_id,
+                       Context *on_finish);
 
   void send();
 
@@ -68,10 +86,13 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
-  std::string m_global_image_id;
-  uint64_t m_clean_since_snap_id;
+  const std::string m_global_image_id;
+  const uint64_t m_clean_since_snap_id;
   const uint64_t m_snap_create_flags;
   const uint32_t m_flags;
+  const int64_t m_group_pool_id;
+  const std::string m_group_id;
+  const std::string m_group_snap_id;
   uint64_t *m_snap_id;
   Context *m_on_finish;
 
