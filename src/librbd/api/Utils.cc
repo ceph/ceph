@@ -2,8 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/api/Utils.h"
+#include "common/Cond.h"
 #include "common/dout.h"
 
+#include "librbd/ImageWatcher.h"
 #if defined(HAVE_LIBCRYPTSETUP)
 #include "librbd/crypto/luks/EncryptionFormat.h"
 #endif
@@ -74,6 +76,57 @@ int create_encryption_format(
   return 0;
 }
 
+template <typename I>
+int notify_quiesce(std::vector<I *> &ictxs, ProgressContext &prog_ctx,
+                   std::vector<uint64_t> *requests) {
+  int image_count = ictxs.size();
+  std::vector<C_SaferCond> on_finishes(image_count);
+
+  requests->resize(image_count);
+  for (int i = 0; i < image_count; ++i) {
+    auto ictx = ictxs[i];
+
+    ictx->image_watcher->notify_quiesce(&(*requests)[i], prog_ctx,
+                                        &on_finishes[i]);
+  }
+
+  int ret_code = 0;
+  for (int i = 0; i < image_count; ++i) {
+    int r = on_finishes[i].wait();
+    if (r < 0) {
+      ret_code = r;
+    }
+  }
+
+  if (ret_code != 0) {
+    notify_unquiesce(ictxs, *requests);
+  }
+
+  return ret_code;
+}
+
+template <typename I>
+void notify_unquiesce(std::vector<I *> &ictxs,
+                      const std::vector<uint64_t> &requests) {
+  if (requests.empty()) {
+    return;
+  }
+
+  ceph_assert(requests.size() == ictxs.size());
+  int image_count = ictxs.size();
+  std::vector<C_SaferCond> on_finishes(image_count);
+
+  for (int i = 0; i < image_count; ++i) {
+    ImageCtx *ictx = ictxs[i];
+
+    ictx->image_watcher->notify_unquiesce(requests[i], &on_finishes[i]);
+  }
+
+  for (int i = 0; i < image_count; ++i) {
+    on_finishes[i].wait();
+  }
+}
+
 } // namespace util
 } // namespace api
 } // namespace librbd
@@ -82,3 +135,10 @@ template int librbd::api::util::create_encryption_format(
     CephContext* cct, encryption_format_t format, encryption_options_t opts,
     size_t opts_size, bool c_api,
     crypto::EncryptionFormat<librbd::ImageCtx>** result_format);
+
+template int librbd::api::util::notify_quiesce(
+    std::vector<librbd::ImageCtx *> &ictxs, librbd::ProgressContext &prog_ctx,
+    std::vector<uint64_t> *requests);
+template void librbd::api::util::notify_unquiesce(
+    std::vector<librbd::ImageCtx *> &ictxs,
+    const std::vector<uint64_t> &requests);

@@ -21,6 +21,8 @@ struct Group {
   static int create(librados::IoCtx& io_ctx, const char *group_name);
   static int remove(librados::IoCtx& io_ctx, const char *group_name);
   static int list(librados::IoCtx& io_ctx, std::vector<std::string> *names);
+  static int list(librados::IoCtx& io_ctx,
+                  std::map<std::string, std::string> *name_to_id_map);
   static int rename(librados::IoCtx& io_ctx, const char *src_group_name,
                     const char *dest_group_name);
 
@@ -49,7 +51,6 @@ struct Group {
   static int snap_rollback(librados::IoCtx& group_ioctx,
                            const char *group_name, const char *snap_name,
                            ProgressContext& pctx);
-
 };
 
 } // namespace api
