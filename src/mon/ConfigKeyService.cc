@@ -62,7 +62,7 @@ static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
                         const ConfigKeyService *service)
 {
   return *_dout << "mon." << mon.name << "@" << mon.rank
-		<< "(" << mon.get_state_name() << ")." << service->get_name();
+		<< "(" << mon.get_state_name() << ").config_key";
 }
 
 const string CONFIG_PREFIX = "mon_config_key";
