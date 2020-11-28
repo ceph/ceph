@@ -59,35 +59,18 @@ using ceph::parse_timespan;
 using ceph::timespan_str;
 
 static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
-                        const ConfigKeyService *service) {
+                        const ConfigKeyService *service)
+{
   return *_dout << "mon." << mon.name << "@" << mon.rank
-		<< "(" << mon.get_state_name() << ")." << service->get_name()
-                << "(" << service->get_epoch() << ") ";
+		<< "(" << mon.get_state_name() << ")." << service->get_name();
 }
 
 const string CONFIG_PREFIX = "mon_config_key";
 
 ConfigKeyService::ConfigKeyService(Monitor &m, Paxos &p)
   : mon(m),
-    paxos(p),
-    tick_period(g_conf()->mon_tick_interval)
+    paxos(p)
 {}
-
-void ConfigKeyService::start(epoch_t new_epoch)
-{
-  epoch = new_epoch;
-  start_epoch();
-}
-
-void ConfigKeyService::finish()
-{
-  generic_dout(20) << "ConfigKeyService::finish" << dendl;
-  finish_epoch();
-}
-
-epoch_t ConfigKeyService::get_epoch() const {
-  return epoch;
-}
 
 bool ConfigKeyService::dispatch(MonOpRequestRef op) {
   return service_dispatch(op);
@@ -96,48 +79,6 @@ bool ConfigKeyService::dispatch(MonOpRequestRef op) {
 bool ConfigKeyService::in_quorum() const
 {
   return (mon.is_leader() || mon.is_peon());
-}
-
-void ConfigKeyService::start_tick()
-{
-  generic_dout(10) << __func__ << dendl;
-
-  cancel_tick();
-  if (tick_period <= 0)
-    return;
-
-  tick_event = new C_MonContext{&mon, [this](int r) {
-    if (r < 0) {
-      return;
-    }
-    tick();
-  }};
-  mon.timer.add_event_after(tick_period, tick_event);
-}
-
-void ConfigKeyService::set_update_period(double t)
-{
-  tick_period = t;
-}
-
-void ConfigKeyService::cancel_tick()
-{
-  if (tick_event)
-    mon.timer.cancel_event(tick_event);
-  tick_event = nullptr;
-}
-
-void ConfigKeyService::tick()
-{
-  service_tick();
-  start_tick();
-}
-
-void ConfigKeyService::shutdown()
-{
-  generic_dout(0) << "quorum service shutdown" << dendl;
-  cancel_tick();
-  service_shutdown();
 }
 
 int ConfigKeyService::store_get(const string &key, bufferlist &bl)
