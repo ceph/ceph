@@ -69,14 +69,15 @@ struct GroupUpdatedPayload {
     cls::rbd::MIRROR_GROUP_STATE_ENABLED;
   std::string group_id;
   std::string global_group_id;
+  size_t image_count = 0;
 
   GroupUpdatedPayload() {
   }
   GroupUpdatedPayload(cls::rbd::MirrorGroupState mirror_group_state,
                       const std::string &group_id,
-                      const std::string &global_group_id)
+                      const std::string &global_group_id, size_t image_count)
     : mirror_group_state(mirror_group_state), group_id(group_id),
-      global_group_id(global_group_id) {
+      global_group_id(global_group_id), image_count(image_count) {
   }
 
   void encode(bufferlist &bl) const;

@@ -73,6 +73,7 @@ void GroupUpdatedPayload::encode(bufferlist &bl) const {
   encode(static_cast<uint32_t>(mirror_group_state), bl);
   encode(group_id, bl);
   encode(global_group_id, bl);
+  encode(image_count, bl);
 }
 
 void GroupUpdatedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
@@ -83,12 +84,14 @@ void GroupUpdatedPayload::decode(__u8 version, bufferlist::const_iterator &iter)
     mirror_group_state_decode);
   decode(group_id, iter);
   decode(global_group_id, iter);
+  decode(image_count, iter);
 }
 
 void GroupUpdatedPayload::dump(Formatter *f) const {
   f->dump_stream("mirror_group_state") << mirror_group_state;
   f->dump_string("group_id", group_id);
   f->dump_string("global_group_id", global_group_id);
+  f->dump_unsigned("image_count", image_count);
 }
 
 void UnknownPayload::encode(bufferlist &bl) const {
@@ -142,7 +145,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(ImageUpdatedPayload(cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
                                                     "image id", "global image id")));
   o.push_back(new NotifyMessage(GroupUpdatedPayload(cls::rbd::MIRROR_GROUP_STATE_DISABLING,
-                                                    "group id", "global group id")));
+                                                    "group id", "global group id", 2)));
 }
 
 std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
