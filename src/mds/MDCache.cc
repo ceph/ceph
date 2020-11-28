@@ -398,6 +398,8 @@ void MDCache::mark_inode_reconnected(CInode *in)
   for (auto& dir : ls) {
     if (try_subtree_merge_at(dir, nullptr))
       any_merged = true;
+    if (dir->is_subtree_root())
+      adjust_subtree_pin(dir, sub->get_dir_auth());
   }
 
   if (mds->is_rejoin()) {
@@ -964,6 +966,20 @@ mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
 // ====================================================================
 // subtree management
 
+void MDCache::adjust_subtree_pin(CDir *dir, mds_authority_t parent_auth)
+{
+  mds_rank_t whoami = mds->get_nodeid();
+
+  // only pin base auth subtrees and auth subtrees' bounds
+  CInode *diri = dir->inode;
+  if (diri->is_root() ||
+      (diri->is_mdsdir() && MDS_INO_MDSDIR_OWNER(diri->ino()) == whoami) ||
+      (dir->get_dir_auth().first != whoami && parent_auth.first == whoami))
+    dir->pin_subtree();
+  else
+    dir->unpin_subtree();
+}
+
 /*
  * adjust the dir_auth of a subtree.
  * merge with parent and/or child subtrees, if is it appropriate.
@@ -977,25 +993,39 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
   show_subtrees();
 
   CDir *root;
+  mds_authority_t parent_auth;
   if (dir->inode->is_base() || dir->inode->is_unconnected()) {
     root = dir;  // bootstrap hack.
+    parent_auth = dir->inode->inode_auth;
     if (subtrees.count(root) == 0) {
+      ceph_assert(!root->state_test(CDir::STATE_EXPIRABLETREE));
       subtrees[root];
       root->get(CDir::PIN_SUBTREE);
     }
   } else {
     root = get_subtree_root(dir);  // subtree root
+    parent_auth = root->get_dir_auth();
   }
   ceph_assert(root);
   dout(7) << " current root is " << *root << dendl;
 
   if (root == dir) {
     // i am already a subtree.
+
+    mds_authority_t oldauth = dir->get_dir_auth();
     dir->set_dir_auth(auth);
+
+    adjust_subtree_pin(dir, parent_auth);
+    if (oldauth.first != auth.first) {
+      auto& dir_bounds = subtrees.at(dir);
+      for (auto& d : dir_bounds)
+	adjust_subtree_pin(d, dir->get_dir_auth());
+    }
   } else {
     // i am a new subtree.
     dout(10) << "  new subtree at " << *dir << dendl;
     ceph_assert(subtrees.count(dir) == 0);
+    ceph_assert(!dir->state_test(CDir::STATE_EXPIRABLETREE));
     auto& dir_bounds = subtrees[dir];      // create empty subtree bounds list for me.
     dir->get(CDir::PIN_SUBTREE);
 
@@ -1018,6 +1048,12 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
     
     // i am a bound of the parent subtree.
     root_bounds.insert(dir);
+
+    adjust_subtree_pin(dir, parent_auth);
+    if (parent_auth.first != auth.first) {
+      for (auto& d : dir_bounds)
+	adjust_subtree_pin(d, dir->get_dir_auth());
+    }
 
     // adjust recursive pop counters
     if (adjust_pop && dir->is_auth()) {
@@ -1074,6 +1110,7 @@ bool MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust
       parent->dir_auth == dir->dir_auth) {	// auth matches,
     // merge with parent.
     dout(10) << "  subtree merge at " << *dir << dendl;
+    dir->pin_subtree();
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
     
     auto& parent_bounds = subtrees.at(parent);
@@ -1318,6 +1355,7 @@ void MDCache::remove_subtree(CDir *dir)
   dout(10) << "remove_subtree " << *dir << dendl;
   auto it = subtrees.find(dir);
   ceph_assert(it != subtrees.end());
+  dir->pin_subtree();
   subtrees.erase(it);
   dir->put(CDir::PIN_SUBTREE);
   if (dir->get_parent_dir()) {
@@ -1403,25 +1441,29 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 
   CDir *newdir = diri->get_parent_dir();
   // adjust total auth pin of freezing subtree
-  if (olddir != newdir) {
-    auto&& dfls = diri->get_nested_dirfrags();
-    for (const auto& dir : dfls)
-      olddir->adjust_freeze_after_rename(dir);
-  }
+  if (olddir == newdir)
+    return;
+
+  auto dfls = diri->get_nested_dirfrags();
+  for (const auto& dir : dfls)
+    olddir->adjust_freeze_after_rename(dir);
+
+  diri->get_subtree_dirfrags(dfls);
+  // make sure subtree dirfrags are at the front of the list
+  std::reverse(dfls.begin(), dfls.end());
+  if (dfls.empty())
+    return;
+
+  CDir *oldparent = get_subtree_root(olddir);
+  dout(10) << " old parent " << *oldparent << dendl;
+  CDir *newparent = get_subtree_root(newdir);
+  dout(10) << " new parent " << *newparent << dendl;
+  auto& oldbounds = subtrees.at(oldparent);
+  auto& newbounds = subtrees.at(newparent);
 
   // adjust subtree
-  // N.B. make sure subtree dirfrags are at the front of the list
-  auto dfls = diri->get_subtree_dirfrags();
-  diri->get_nested_dirfrags(dfls);
   for (const auto& dir : dfls) {
     dout(10) << "dirfrag " << *dir << dendl;
-    CDir *oldparent = get_subtree_root(olddir);
-    dout(10) << " old parent " << *oldparent << dendl;
-    CDir *newparent = get_subtree_root(newdir);
-    dout(10) << " new parent " << *newparent << dendl;
-
-    auto& oldbounds = subtrees[oldparent];
-    auto& newbounds = subtrees[newparent];
 
     if (olddir != newdir)
       mds->balancer->adjust_pop_for_rename(olddir, dir, false);
@@ -1438,6 +1480,8 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
       newbounds.insert(dir);
       // caller is responsible for 'eval diri'
       try_subtree_merge_at(dir, NULL, false);
+      if (dir->is_subtree_root())
+	adjust_subtree_pin(dir, newparent->get_dir_auth());
     } else {
       // mid-subtree.
 
@@ -3498,7 +3542,7 @@ void MDCache::remove_inode_recursive(CInode *in)
   remove_inode(in);
 }
 
-bool MDCache::expire_recursive(CInode *in, expiremap &expiremap)
+bool MDCache::expire_recursive(CInode *in, expiremap_t &expiremap)
 {
   ceph_assert(!in->is_auth());
 
@@ -6521,7 +6565,7 @@ void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegment *ls)
 // ================================================================================
 // cache trimming
 
-std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap)
+std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap_t& expiremap)
 {
   bool is_standby_replay = mds->is_standby_replay();
   std::vector<CDentry *> unexpirables;
@@ -6599,7 +6643,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
 {
   uint64_t used = cache_size();
   uint64_t limit = cache_memory_limit;
-  expiremap expiremap;
+  expiremap_t expiremap;
 
   dout(7) << "trim bytes_used=" << bytes2str(used)
           << " limit=" << bytes2str(limit)
@@ -6612,52 +6656,12 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
   auto result = trim_lru(count, expiremap);
   auto& trimmed = result.second;
 
-  // trim non-auth, non-bound subtrees
-  for (auto p = subtrees.begin(); p != subtrees.end();) {
-    CDir *dir = p->first;
-    ++p;
-    CInode *diri = dir->get_inode();
-    if (dir->is_auth()) {
-      if (diri->is_auth() && !diri->is_base()) {
-        /* this situation should correspond to an export pin */
-        if (dir->get_num_head_items() == 0 && dir->get_num_ref() == 1) {
-          /* pinned empty subtree, try to drop */
-          if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
-            dout(20) << "trimming empty pinned subtree " << *dir << dendl;
-            dir->state_clear(CDir::STATE_AUXSUBTREE);
-            remove_subtree(dir);
-            diri->close_dirfrag(dir->dirfrag().frag);
-          }
-        }
-      } else if (!diri->is_auth() && !diri->is_base() && dir->get_num_head_items() == 0) {
-        if (dir->state_test(CDir::STATE_EXPORTING) ||
-           !(mds->is_active() || mds->is_stopping()) ||
-           dir->is_freezing() || dir->is_frozen())
-          continue;
-
-        migrator->export_empty_import(dir);
-        ++trimmed;
-      }
-    } else if (!diri->is_auth() && dir->get_num_ref() <= 1) {
-      // only subtree pin
-      if (diri->get_num_ref() > diri->get_num_subtree_roots()) {
-        continue;
-      }
-
-      // don't trim subtree root if its auth MDS is recovering.
-      // This simplify the cache rejoin code.
-      if (dir->is_subtree_root() && rejoin_ack_gather.count(dir->get_dir_auth().first))
-        continue;
-      trim_dirfrag(dir, 0, expiremap);
-      ++trimmed;
-    }
-  }
-
   // trim root?
   if (mds->is_stopping() && root) {
     auto&& ls = root->get_dirfrags();
     for (const auto& dir : ls) {
-      if (dir->get_num_ref() == 1) { // subtree pin
+      if (dir->get_num_ref() ==
+	  (int)(dir->state_test(CDir::STATE_EXPIRABLETREE) ? 0 : 1)) { // subtree pin
 	trim_dirfrag(dir, 0, expiremap);
         ++trimmed;
       }
@@ -6688,7 +6692,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
       dout(20) << __func__ << ": successfully expired mdsdir" << dendl;
       auto&& ls = mdsdir_in->get_dirfrags();
       for (auto dir : ls) {
-	if (dir->get_num_ref() == 1) {  // subtree pin
+	if (dir->get_num_ref() == 0) {  // subtree pin
 	  trim_dirfrag(dir, dir, expiremap);
           ++trimmed;
         }
@@ -6725,7 +6729,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
   return result;
 }
 
-void MDCache::send_expire_messages(expiremap& expiremap)
+void MDCache::send_expire_messages(expiremap_t& expiremap)
 {
   // send expires
   for (const auto &p : expiremap) {
@@ -6742,7 +6746,7 @@ void MDCache::send_expire_messages(expiremap& expiremap)
 }
 
 
-bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
+bool MDCache::trim_dentry(CDentry *dn, expiremap_t& expiremap)
 {
   dout(12) << "trim_dentry " << *dn << dendl;
   
@@ -6825,7 +6829,7 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
 }
 
 
-void MDCache::trim_dirfrag(CDir *dir, CDir *con, expiremap& expiremap)
+void MDCache::trim_dirfrag(CDir *dir, CDir *con, expiremap_t& expiremap)
 {
   dout(15) << "trim_dirfrag " << *dir << dendl;
 
@@ -6876,7 +6880,7 @@ void MDCache::trim_dirfrag(CDir *dir, CDir *con, expiremap& expiremap)
  *
  * @return true if the inode is still in cache, else false if it was trimmed
  */
-bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap& expiremap)
+bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap_t& expiremap)
 {
   dout(15) << "trim_inode " << *in << dendl;
   ceph_assert(in->get_num_ref() == 0);
@@ -6896,9 +6900,29 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap& expirema
     // DIR
     auto&& dfls = in->get_dirfrags();
     for (const auto& dir : dfls) {
-      ceph_assert(!dir->is_subtree_root());
-      trim_dirfrag(dir, con ? con:dir, expiremap);  // if no container (e.g. root dirfrag), use *p
+      if (!dir->is_subtree_root()) {
+	trim_dirfrag(dir, con ? con:dir, expiremap);  // if no container (e.g. root dirfrag), use *p
+	continue;
+      }
+
+      if (dir->is_auth()) {
+	if (in->is_auth()) {
+	  dout(0) << __func__ << " unexpected subtree " << *dir << dendl;
+	  ceph_assert(0);
+	} else if (mds->is_active() || mds->is_stopping()) {
+	  migrator->export_empty_import(dir);
+	}
+      } else if (!in->is_auth()) {
+	// don't trim subtree root if its auth MDS is recovering.
+	// This simplify the cache rejoin code.
+	if (rejoin_ack_gather.count(dir->get_dir_auth().first))
+	  continue;
+	trim_dirfrag(dir, dir, expiremap);  // if no container (e.g. root dirfrag), use *p
+      }
     }
+
+    if (in->get_num_dirfrags())
+      return true;
   }
   
   // INODE
@@ -11054,7 +11078,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
   if (straydn) {
     ceph_assert(straydn->get_num_ref() == 0);
     ceph_assert(straydn->get_linkage()->is_null());
-    expiremap ex;
+    expiremap_t ex;
     trim_dentry(straydn, ex);
     send_expire_messages(ex);
   }
