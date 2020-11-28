@@ -337,6 +337,21 @@ int mirror_image_global_status_cpp_to_c(
 
 #pragma GCC diagnostic pop
 
+void mirror_image_site_status_cpp_to_c(
+    const librbd::mirror_image_site_status_t &cpp_status,
+    rbd_mirror_image_site_status_t *c_status) {
+  c_status->mirror_uuid = strdup(cpp_status.mirror_uuid.c_str());
+  c_status->state = cpp_status.state;
+  c_status->description = strdup(cpp_status.description.c_str());
+  c_status->last_update = cpp_status.last_update;
+  c_status->up = cpp_status.up;
+}
+
+void mirror_image_site_status_cleanup(rbd_mirror_image_site_status_t *status) {
+  free(status->mirror_uuid);
+  free(status->description);
+}
+
 void mirror_image_global_status_cpp_to_c(
     const librbd::mirror_image_global_status_t &cpp_status,
     rbd_mirror_image_global_status_t *c_status) {
@@ -348,14 +363,75 @@ void mirror_image_global_status_cpp_to_c(
     cpp_status.site_statuses.size(), sizeof(rbd_mirror_image_site_status_t));
 
   auto idx = 0U;
-  for (auto it = cpp_status.site_statuses.begin();
-       it != cpp_status.site_statuses.end(); ++it) {
-    auto& s_status = c_status->site_statuses[idx++];
-    s_status.mirror_uuid = strdup(it->mirror_uuid.c_str());
-    s_status.state = it->state;
-    s_status.description = strdup(it->description.c_str());
-    s_status.last_update = it->last_update;
-    s_status.up = it->up;
+  for (auto &site_status : cpp_status.site_statuses) {
+    mirror_image_site_status_cpp_to_c(site_status,
+                                      &c_status->site_statuses[idx++]);
+  }
+}
+
+void mirror_group_info_cpp_to_c(const librbd::mirror_group_info_t &cpp_info,
+				rbd_mirror_group_info_t *c_info) {
+  c_info->global_id = strdup(cpp_info.global_id.c_str());
+  c_info->mirror_image_mode = cpp_info.mirror_image_mode;
+  c_info->state = cpp_info.state;
+  c_info->primary = cpp_info.primary;
+}
+
+void mirror_group_site_status_cpp_to_c(
+    const librbd::mirror_group_site_status_t &cpp_status,
+    rbd_mirror_group_site_status_t *c_status) {
+
+  c_status->mirror_uuid = strdup(cpp_status.mirror_uuid.c_str());
+  c_status->state = cpp_status.state;
+  c_status->description = strdup(cpp_status.description.c_str());
+
+  c_status->mirror_image_count = cpp_status.mirror_images.size();
+  c_status->mirror_image_pool_ids = (int64_t *)calloc(
+      c_status->mirror_image_count, sizeof(int64_t));
+  c_status->mirror_image_global_ids = (char **)calloc(
+      c_status->mirror_image_count, sizeof(char *));
+  c_status->mirror_images = (rbd_mirror_image_site_status_t*)calloc(
+      c_status->mirror_image_count, sizeof(rbd_mirror_image_site_status_t));
+
+  auto idx = 0U;
+  for (auto &[p, image] : cpp_status.mirror_images) {
+    c_status->mirror_image_pool_ids[idx] = p.first;
+    c_status->mirror_image_global_ids[idx] = strdup(p.second.c_str());
+    mirror_image_site_status_cpp_to_c(image, &c_status->mirror_images[idx++]);
+  }
+
+  c_status->last_update = cpp_status.last_update;
+  c_status->up = cpp_status.up;
+}
+
+void mirror_group_site_status_cleanup(rbd_mirror_group_site_status_t *status) {
+  free(status->mirror_uuid);
+  free(status->description);
+
+  for (auto idx = 0U; idx < status->mirror_image_count; ++idx) {
+    free(status->mirror_image_global_ids[idx]);
+    mirror_image_site_status_cleanup(&status->mirror_images[idx]);
+  }
+
+  free(status->mirror_image_pool_ids);
+  free(status->mirror_image_global_ids);
+  free(status->mirror_images);
+}
+
+void mirror_group_status_cpp_to_c(
+    const librbd::mirror_group_global_status_t &cpp_status,
+    rbd_mirror_group_global_status_t *c_status) {
+  c_status->name = strdup(cpp_status.name.c_str());
+  mirror_group_info_cpp_to_c(cpp_status.info, &c_status->info);
+
+  c_status->site_statuses_count = cpp_status.site_statuses.size();
+  c_status->site_statuses = (rbd_mirror_group_site_status_t*)calloc(
+    cpp_status.site_statuses.size(), sizeof(rbd_mirror_group_site_status_t));
+
+  auto idx = 0U;
+  for (auto &cpp_site_status : cpp_status.site_statuses) {
+    mirror_group_site_status_cpp_to_c(cpp_site_status,
+                                      &c_status->site_statuses[idx++]);
   }
 }
 
@@ -1302,6 +1378,33 @@ namespace librbd {
                                                   max, entries);
   }
 
+  int RBD::mirror_group_info_list(
+      IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+      const std::string &start_id, size_t max,
+      std::map<std::string, mirror_group_info_t> *entries) {
+    return librbd::api::Mirror<>::group_info_list(io_ctx, mode_filter, start_id,
+                                                  max, entries);
+  }
+
+  int RBD::mirror_group_global_status_list(
+      IoCtx& io_ctx, const std::string &start_id, size_t max,
+      std::map<std::string, mirror_group_global_status_t> *groups) {
+    return librbd::api::Mirror<>::group_status_list(io_ctx, start_id, max,
+                                                    groups);
+  }
+
+  int RBD::mirror_group_status_summary(
+      IoCtx& io_ctx, std::map<mirror_group_status_state_t, int> *states) {
+    return librbd::api::Mirror<>::group_status_summary(io_ctx, states);
+  }
+
+  int RBD::mirror_group_instance_id_list(
+      IoCtx& io_ctx, const std::string &start_id, size_t max,
+      std::map<std::string, std::string> *instance_ids) {
+    return librbd::api::Mirror<>::group_instance_id_list(io_ctx, start_id, max,
+                                                         instance_ids);
+  }
+
   int RBD::group_create(IoCtx& io_ctx, const char *group_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -1537,6 +1640,70 @@ namespace librbd {
                                                 snap_name, prog_ctx);
     tracepoint(librbd, group_snap_rollback_exit, r);
     return r;
+  }
+
+  int RBD::mirror_group_list(IoCtx& io_ctx, std::vector<std::string> *names) {
+    return librbd::api::Mirror<>::group_list(io_ctx, names);
+  }
+
+  int RBD::mirror_group_enable(IoCtx& group_ioctx, const char *group_name,
+                               mirror_image_mode_t mirror_image_mode) {
+    return librbd::api::Mirror<>::group_enable(group_ioctx, group_name,
+                                               mirror_image_mode);
+  }
+
+  int RBD::mirror_group_disable(IoCtx& group_ioctx, const char *group_name,
+                                bool force) {
+    return librbd::api::Mirror<>::group_disable(group_ioctx, group_name, force);
+  }
+
+  int RBD::mirror_group_promote(IoCtx& group_ioctx, const char *group_name,
+                                bool force) {
+    return librbd::api::Mirror<>::group_promote(group_ioctx, group_name, force);
+  }
+
+  int RBD::mirror_group_demote(IoCtx& group_ioctx, const char *group_name) {
+    return librbd::api::Mirror<>::group_demote(group_ioctx, group_name);
+  }
+
+  int RBD::mirror_group_resync(IoCtx& group_ioctx, const char *group_name) {
+    return librbd::api::Mirror<>::group_resync(group_ioctx, group_name);
+  }
+
+  int RBD::mirror_group_create_snapshot(IoCtx& group_ioctx,
+                                        const char *group_name,
+                                        uint32_t flags, std::string *snap_id) {
+    return librbd::api::Mirror<>::group_snapshot_create(group_ioctx, group_name,
+                                                        flags, snap_id);
+  }
+
+  int RBD::mirror_group_get_info(IoCtx& group_ioctx, const char *group_name,
+                                 mirror_group_info_t *mirror_group_info,
+                                 size_t info_size) {
+    if (sizeof(mirror_group_info_t) != info_size) {
+      return -ERANGE;
+    }
+
+    return librbd::api::Mirror<>::group_get_info(group_ioctx, group_name,
+                                                 mirror_group_info);
+  }
+
+  int RBD::mirror_group_get_status(IoCtx& group_ioctx, const char *group_name,
+                                   mirror_group_global_status_t *status,
+                                   size_t status_size) {
+    if (sizeof(mirror_group_global_status_t) != status_size) {
+      return -ERANGE;
+    }
+
+    return librbd::api::Mirror<>::group_get_status(group_ioctx, group_name,
+                                                  status);
+  }
+
+  int RBD::mirror_group_get_instance_id(IoCtx& group_ioctx,
+                                        const char *group_name,
+                                        std::string *instance_id) {
+    return librbd::api::Mirror<>::group_get_instance_id(group_ioctx, group_name,
+                                                        instance_id);
   }
 
   int RBD::pool_metadata_get(IoCtx& ioctx, const std::string &key,
@@ -3676,8 +3843,7 @@ extern "C" void rbd_mirror_image_global_status_cleanup(
   free(global_status->name);
   rbd_mirror_image_get_info_cleanup(&global_status->info);
   for (auto idx = 0U; idx < global_status->site_statuses_count; ++idx) {
-    free(global_status->site_statuses[idx].mirror_uuid);
-    free(global_status->site_statuses[idx].description);
+    mirror_image_site_status_cleanup(&global_status->site_statuses[idx]);
   }
   free(global_status->site_statuses);
 }
@@ -3807,19 +3973,21 @@ extern "C" int rbd_mirror_image_status_summary(rados_ioctx_t p,
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
 
-  std::map<librbd::mirror_image_status_state_t, int> states_;
-  int r = librbd::api::Mirror<>::image_status_summary(io_ctx, &states_);
+  std::map<librbd::mirror_image_status_state_t, int> cpp_states;
+  int r = librbd::api::Mirror<>::image_status_summary(io_ctx, &cpp_states);
   if (r < 0) {
     return r;
   }
 
+  if (cpp_states.size() > *maxlen) {
+    *maxlen = cpp_states.size();
+    return -ERANGE;
+  }
+
   size_t i = 0;
-  for (auto &it : states_) {
-    if (i == *maxlen) {
-      return -ERANGE;
-    }
-    states[i] = it.first;
-    counts[i] = it.second;
+  for (auto &[state, count] : cpp_states) {
+    states[i] = state;
+    counts[i] = count;
     i++;
   }
   *maxlen = i;
@@ -3892,6 +4060,145 @@ extern "C" void rbd_mirror_image_info_list_cleanup(
   for (size_t i = 0; i < num_entries; i++) {
     free(*(image_ids++));
     rbd_mirror_image_get_info_cleanup(info_entries++);
+  }
+}
+
+extern "C" int rbd_mirror_group_global_status_list(rados_ioctx_t p,
+    const char *start_id, size_t max, char **group_ids,
+    rbd_mirror_group_global_status_t *groups, size_t *len) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  std::map<std::string, librbd::mirror_group_global_status_t> cpp_groups;
+
+  int r = librbd::api::Mirror<>::group_status_list(io_ctx, start_id, max,
+                                                   &cpp_groups);
+  if (r < 0) {
+    return r;
+  }
+
+  size_t i = 0;
+  for (auto &[group_id, cpp_group] : cpp_groups) {
+    ceph_assert(i < max);
+    group_ids[i] = strdup(group_id.c_str());
+    mirror_group_status_cpp_to_c(cpp_group, &groups[i]);
+    i++;
+  }
+  *len = i;
+  return 0;
+}
+
+extern "C" void rbd_mirror_group_status_cleanup(
+    rbd_mirror_group_global_status_t *status) {
+  free(status->name);
+  rbd_mirror_group_get_info_cleanup(&status->info);
+  for (auto idx = 0U; idx < status->site_statuses_count; ++idx) {
+    mirror_group_site_status_cleanup(&status->site_statuses[idx]);
+  }
+  free(status->site_statuses);
+}
+
+extern "C" void rbd_mirror_group_global_status_list_cleanup(
+    char **group_ids, rbd_mirror_group_global_status_t *groups, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    free(group_ids[i]);
+    rbd_mirror_group_status_cleanup(&groups[i]);
+  }
+}
+
+extern "C" int rbd_mirror_group_status_summary(
+    rados_ioctx_t p, rbd_mirror_group_status_state_t *states, int *counts,
+    size_t *maxlen) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::map<librbd::mirror_group_status_state_t, int> cpp_states;
+  int r = librbd::api::Mirror<>::group_status_summary(io_ctx, &cpp_states);
+  if (r < 0) {
+    return r;
+  }
+
+  if (cpp_states.size() > *maxlen) {
+    *maxlen = cpp_states.size();
+    return -ERANGE;
+  }
+
+  size_t i = 0;
+  for (auto &[state, count] : cpp_states) {
+    states[i] = state;
+    counts[i] = count;
+    i++;
+  }
+  *maxlen = i;
+  return 0;
+}
+
+extern "C" int rbd_mirror_group_instance_id_list(rados_ioctx_t p,
+                                                 const char *start_id,
+                                                 size_t max, char **group_ids,
+                                                 char **instance_ids,
+                                                 size_t *len) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  std::map<std::string, std::string> cpp_instance_ids;
+
+  int r = librbd::api::Mirror<>::group_instance_id_list(io_ctx, start_id, max,
+                                                        &cpp_instance_ids);
+  if (r < 0) {
+    return r;
+  }
+
+  ceph_assert(cpp_instance_ids.size() <= max);
+
+  size_t i = 0;
+  for (auto &[group_id, instance_id] : cpp_instance_ids) {
+    group_ids[i] = strdup(group_id.c_str());
+    instance_ids[i] = strdup(instance_id.c_str());
+    i++;
+  }
+  *len = i;
+  return 0;
+}
+
+extern "C" void rbd_mirror_group_instance_id_list_cleanup(char **group_ids,
+                                                          char **instance_ids,
+                                                          size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    free(group_ids[i]);
+    free(instance_ids[i]);
+  }
+}
+
+extern "C" int rbd_mirror_group_info_list(
+    rados_ioctx_t p, rbd_mirror_image_mode_t *mode_filter,
+    const char *start_id, size_t max, char **group_ids,
+    rbd_mirror_group_info_t *info_entries, size_t *num_entries) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  std::map<std::string, librbd::mirror_group_info_t> cpp_entries;
+
+  int r = librbd::api::Mirror<>::group_info_list(io_ctx, mode_filter, start_id,
+                                                 max, &cpp_entries);
+  if (r < 0) {
+    return r;
+  }
+
+  ceph_assert(cpp_entries.size() <= max);
+
+  for (auto &[group_id, info] : cpp_entries) {
+    *(group_ids++) = strdup(group_id.c_str());
+    mirror_group_info_cpp_to_c(info, info_entries++);
+  }
+  *num_entries = cpp_entries.size();
+
+  return 0;
+}
+
+CEPH_RBD_API void rbd_mirror_group_info_list_cleanup(
+    char **group_ids, rbd_mirror_group_info_t *info_entries,
+    size_t num_entries) {
+  for (size_t i = 0; i < num_entries; i++) {
+    free(group_ids[i]);
+    rbd_mirror_group_get_info_cleanup(&info_entries[i]);
   }
 }
 
@@ -7487,6 +7794,180 @@ extern "C" int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
   tracepoint(librbd, group_snap_rollback_exit, r);
 
   return r;
+}
+
+extern "C" int rbd_mirror_group_list(rados_ioctx_t p, char *names,
+                                     size_t *size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::vector<std::string> cpp_names;
+  int r = librbd::api::Mirror<>::group_list(io_ctx, &cpp_names);
+
+  if (r < 0) {
+    return r;
+  }
+
+  size_t expected_size = 0;
+
+  for (size_t i = 0; i < cpp_names.size(); i++) {
+    expected_size += cpp_names[i].size() + 1;
+  }
+  if (*size < expected_size) {
+    *size = expected_size;
+    return -ERANGE;
+  }
+
+  if (names == NULL) {
+    return -EINVAL;
+  }
+
+  for (int i = 0; i < (int)cpp_names.size(); i++) {
+    const char* name = cpp_names[i].c_str();
+    strcpy(names, name);
+    names += strlen(names) + 1;
+  }
+  return expected_size;
+}
+
+extern "C" int rbd_mirror_group_enable(rados_ioctx_t group_p,
+                                       const char *group_name,
+                                       rbd_mirror_image_mode_t mirror_image_mode)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  return librbd::api::Mirror<>::group_enable(group_ioctx, group_name,
+                                             mirror_image_mode);
+}
+
+extern "C" int rbd_mirror_group_disable(rados_ioctx_t group_p,
+                                        const char *group_name, bool force)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  return librbd::api::Mirror<>::group_disable(group_ioctx, group_name, force);
+}
+
+extern "C" int rbd_mirror_group_promote(rados_ioctx_t group_p,
+                                        const char *group_name, bool force)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  return librbd::api::Mirror<>::group_promote(group_ioctx, group_name, force);
+}
+
+extern "C" int rbd_mirror_group_demote(rados_ioctx_t group_p,
+                                       const char *group_name)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  return librbd::api::Mirror<>::group_demote(group_ioctx, group_name);
+}
+
+extern "C" int rbd_mirror_group_resync(rados_ioctx_t group_p,
+                                       const char *group_name)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  return librbd::api::Mirror<>::group_resync(group_ioctx, group_name);
+}
+
+extern "C" int rbd_mirror_group_create_snapshot(rados_ioctx_t group_p,
+                                                const char *group_name,
+                                                uint32_t flags,
+                                                char **snap_id)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  std::string cpp_snap_id;
+  int r = librbd::api::Mirror<>::group_snapshot_create(group_ioctx, group_name,
+                                                       flags, &cpp_snap_id);
+  if (r < 0) {
+    return r;
+  }
+
+  if (snap_id != NULL) {
+    *snap_id = strdup(cpp_snap_id.c_str());
+  }
+
+  return 0;
+}
+
+extern "C" int rbd_mirror_group_get_info(
+    rados_ioctx_t group_p, const char *group_name,
+    rbd_mirror_group_info_t *mirror_group_info, size_t info_size) {
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  if (sizeof(rbd_mirror_group_info_t) != info_size) {
+    return -ERANGE;
+  }
+
+  librbd::mirror_group_info_t cpp_mirror_group;
+  int r = librbd::api::Mirror<>::group_get_info(group_ioctx, group_name,
+                                                &cpp_mirror_group);
+  if (r < 0) {
+    return r;
+  }
+
+  mirror_group_info_cpp_to_c(cpp_mirror_group, mirror_group_info);
+  return 0;
+}
+
+extern "C" void rbd_mirror_group_get_info_cleanup(
+    rbd_mirror_group_info_t *mirror_group_info) {
+  free(mirror_group_info->global_id);
+}
+
+extern "C" int rbd_mirror_group_get_global_status(
+    rados_ioctx_t group_p, const char *group_name,
+    rbd_mirror_group_global_status_t *status, size_t status_size) {
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  if (sizeof(rbd_mirror_group_global_status_t) != status_size) {
+    return -ERANGE;
+  }
+
+  librbd::mirror_group_global_status_t cpp_status;
+  int r = librbd::api::Mirror<>::group_get_status(group_ioctx, group_name,
+                                                  &cpp_status);
+  if (r < 0) {
+    return r;
+  }
+
+  mirror_group_status_cpp_to_c(cpp_status, status);
+  return 0;
+}
+
+extern "C" int rbd_mirror_group_get_instance_id(
+    rados_ioctx_t group_p, const char *group_name, char *instance_id,
+    size_t *instance_id_max_length) {
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  std::string cpp_instance_id;
+  int r = librbd::api::Mirror<>::group_get_instance_id(group_ioctx, group_name,
+                                                       &cpp_instance_id);
+  if (r < 0) {
+    return r;
+  }
+
+  if (cpp_instance_id.size() >= *instance_id_max_length) {
+    *instance_id_max_length = cpp_instance_id.size() + 1;
+    return -ERANGE;
+  }
+
+  strcpy(instance_id, cpp_instance_id.c_str());
+  *instance_id_max_length = cpp_instance_id.size() + 1;
+  return 0;
 }
 
 extern "C" int rbd_snap_get_namespace_type(rbd_image_t image,
