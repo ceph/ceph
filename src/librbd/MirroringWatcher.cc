@@ -92,10 +92,11 @@ void MirroringWatcher<I>::notify_image_updated(
 template <typename I>
 int MirroringWatcher<I>::notify_group_updated(
     librados::IoCtx &io_ctx, cls::rbd::MirrorGroupState mirror_group_state,
-    const std::string &group_id, const std::string &global_group_id) {
+    const std::string &group_id, const std::string &global_group_id,
+    size_t image_count) {
   C_SaferCond ctx;
   notify_group_updated(io_ctx, mirror_group_state, group_id, global_group_id,
-                       &ctx);
+                       image_count, &ctx);
   return ctx.wait();
 }
 
@@ -103,7 +104,7 @@ template <typename I>
 void MirroringWatcher<I>::notify_group_updated(
     librados::IoCtx &io_ctx, cls::rbd::MirrorGroupState mirror_group_state,
     const std::string &group_id, const std::string &global_group_id,
-    Context *on_finish) {
+    size_t image_count, Context *on_finish) {
 
   CephContext *cct = reinterpret_cast<CephContext*>(io_ctx.cct());
   ldout(cct, 20) << io_ctx.get_pool_name() << " " << group_id << " "
@@ -111,7 +112,7 @@ void MirroringWatcher<I>::notify_group_updated(
 
   bufferlist bl;
   encode(NotifyMessage{GroupUpdatedPayload{
-      mirror_group_state, group_id, global_group_id}}, bl);
+    mirror_group_state, group_id, global_group_id, image_count}}, bl);
 
   librados::AioCompletion *comp = create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
@@ -169,7 +170,7 @@ bool MirroringWatcher<I>::handle_payload(const GroupUpdatedPayload &payload,
   CephContext *cct = this->m_cct;
   ldout(cct, 20) << ": group state updated" << dendl;
   handle_group_updated(payload.mirror_group_state, payload.group_id,
-                       payload.global_group_id);
+                       payload.global_group_id, payload.image_count);
   return true;
 }
 

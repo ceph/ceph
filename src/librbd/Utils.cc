@@ -242,5 +242,15 @@ int get_config_key(librados::Rados& rados, const std::string& uri,
   return 0;
 }
 
+const std::string generate_uuid(librados::IoCtx& io_ctx) {
+  librados::Rados rados(io_ctx);
+  uint64_t bid = rados.get_instance_id();
+
+  uint32_t extra = rand() % 0xFFFFFFFF;
+  std::ostringstream bid_ss;
+  bid_ss << std::hex << bid << std::hex << extra;
+  return bid_ss.str();
+}
+
 } // namespace util
 } // namespace librbd

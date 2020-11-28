@@ -30,11 +30,16 @@ EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
                                 const std::string &non_primary_global_image_id,
                                 bool image_clean,
                                 asio::ContextWQ *op_work_queue,
+                                int64_t group_pool_id,
+                                const std::string &group_id,
+                                const std::string &group_snap_id,
+                                uint64_t *snap_id,
                                 Context *on_finish)
   : m_io_ctx(io_ctx), m_image_id(image_id), m_image_ctx(image_ctx),
     m_mode(mode), m_non_primary_global_image_id(non_primary_global_image_id),
     m_image_clean(image_clean), m_op_work_queue(op_work_queue),
-    m_on_finish(on_finish),
+    m_group_pool_id(group_pool_id), m_group_id(group_id),
+    m_group_snap_id(group_snap_id), m_snap_id(snap_id), m_on_finish(on_finish),
     m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())) {
 }
 
@@ -86,14 +91,16 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
     }
     finish(r);
     return;
-  } else if (r != -ENOENT) {
+  } else if (r == -ENOENT) {
+    r = 0;
+    m_mirror_image.group_spec = {m_group_id, m_group_pool_id};
+  } else {
     lderr(m_cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
                  << dendl;
     finish(r);
     return;
   }
 
-  r = 0;
   m_mirror_image.mode = m_mode;
   if (m_non_primary_global_image_id.empty()) {
     uuid_d uuid_gen;
@@ -197,7 +204,8 @@ void EnableRequest<I>::create_primary_snapshot() {
   auto req = snapshot::CreatePrimaryRequest<I>::create(
     m_image_ctx, m_mirror_image.global_image_id,
     (m_image_clean ? 0 : CEPH_NOSNAP), snap_create_flags,
-    snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS, &m_snap_id, ctx);
+    snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS, m_group_pool_id,
+    m_group_id, m_group_snap_id, m_snap_id, ctx);
   req->send();
 }
 
