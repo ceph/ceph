@@ -228,7 +228,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, Success) {
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -258,7 +258,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessPrimary) {
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -288,7 +288,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessPrimaryDemoted) {
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -319,7 +319,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessNonPrimaryDemoted) {
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -352,7 +352,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessPrimaryBelowMaxSnapsho
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -386,8 +386,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessPrimaryBelowMaxSnapsho
   expect_refresh_image(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+  auto req = MockCreatePrimaryRequest::create(&mock_image_ctx, "gid",
+                                              CEPH_NOSNAP, 0U, 0U, -1, {}, {},
+                                              nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -407,8 +408,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, CanNotError) {
   expect_can_create_primary_snapshot(mock_utils, false, false, false);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+  auto req = MockCreatePrimaryRequest::create(&mock_image_ctx, "gid",
+                                              CEPH_NOSNAP, 0U, 0U, -1, {}, {},
+                                              nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -431,8 +433,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, GetMirrorPeersError) {
                             "mirror", "mirror uuid"}}, -EINVAL);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+  auto req = MockCreatePrimaryRequest::create(&mock_image_ctx, "gid",
+                                              CEPH_NOSNAP, 0U, 0U, -1, {}, {},
+                                              nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -456,8 +459,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, CreateSnapshotError) {
   expect_create_snapshot(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+  auto req = MockCreatePrimaryRequest::create(&mock_image_ctx, "gid",
+                                              CEPH_NOSNAP, 0U, 0U, -1, {}, {},
+                                              nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -492,7 +496,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPrimaryNoPeer) {
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -527,7 +531,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPrimaryDemotedNo
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -563,7 +567,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkNonPrimaryDemote
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -598,7 +602,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkOrphanNoPeer) {
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -633,7 +637,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPrimaryIncomplet
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -670,8 +674,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPrimaryMaxSnapsh
                      true, true, true, 0);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+  auto req = MockCreatePrimaryRequest::create(&mock_image_ctx, "gid",
+                                              CEPH_NOSNAP, 0U, 0U, -1, {}, {},
+                                              nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -710,8 +715,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPrimaryMaxSnapsh
                      true, true, true, 0);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+  auto req = MockCreatePrimaryRequest::create(&mock_image_ctx, "gid",
+                                              CEPH_NOSNAP, 0U, 0U, -1, {}, {},
+                                              nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -754,7 +760,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkMultiplePeers) {
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+                                          0U, 0U, -1, {}, {}, nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -795,8 +801,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkMultipleSnapshot
                      false, true, true, 0);
 
   C_SaferCond ctx;
-  auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
-                                          0U, 0U, nullptr, &ctx);
+  auto req = MockCreatePrimaryRequest::create(&mock_image_ctx, "gid",
+                                              CEPH_NOSNAP, 0U, 0U, -1, {}, {},
+                                              nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
