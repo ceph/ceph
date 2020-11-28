@@ -23,7 +23,9 @@ struct Mirror {
   typedef std::map<std::string, std::string> Attributes;
   typedef std::map<std::string, mirror_image_global_status_t>
     IdToMirrorImageGlobalStatus;
+  typedef std::map<std::string, mirror_group_global_status_t> IdToMirrorGroupStatus;
   typedef std::map<mirror_image_status_state_t, int> MirrorImageStatusStates;
+  typedef std::map<mirror_group_status_state_t, int> MirrorGroupStatusStates;
 
   static int site_name_get(librados::Rados& rados, std::string* name);
   static int site_name_set(librados::Rados& rados, const std::string& name);
@@ -67,6 +69,7 @@ struct Mirror {
   static int peer_site_set_attributes(librados::IoCtx& io_ctx,
                                       const std::string &uuid,
                                       const Attributes& attributes);
+  static const char *pool_or_namespace(ImageCtxT *ictx);
 
   static int image_global_status_list(librados::IoCtx& io_ctx,
                                       const std::string &start_id, size_t max,
@@ -87,11 +90,22 @@ struct Mirror {
 
   static int image_enable(ImageCtxT *ictx, mirror_image_mode_t mode,
                           bool relax_same_pool_parent_check);
+  static int image_enable(ImageCtxT *ictx,
+                          const std::string &group_snap_id,
+                          mirror_image_mode_t mode,
+                          bool relax_same_pool_parent_check,
+                          uint64_t *snap_id);
   static int image_disable(ImageCtxT *ictx, bool force);
   static int image_promote(ImageCtxT *ictx, bool force);
   static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);
+  static void image_promote(ImageCtxT *ictx,
+                            const std::string &group_snap_id, bool force,
+                            uint64_t *snap_id, Context *on_finish);
   static int image_demote(ImageCtxT *ictx);
   static void image_demote(ImageCtxT *ictx, Context *on_finish);
+  static void image_demote(ImageCtxT *ictx,
+                           const std::string &group_snap_id, uint64_t *snap_id,
+                           Context *on_finish);
   static int image_resync(ImageCtxT *ictx);
   static int image_get_info(ImageCtxT *ictx,
                             mirror_image_info_t *mirror_image_info);
@@ -121,6 +135,51 @@ struct Mirror {
                                    uint64_t *snap_id);
   static void image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
                                     uint64_t *snap_id, Context *on_finish);
+  static void image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
+                                    const std::string &group_snap_id,
+                                    uint64_t *snap_id, Context *on_finish);
+
+  static int group_list(IoCtx &io_ctx, std::vector<std::string> *names);
+  static int group_enable(IoCtx &group_ioctx, const char *group_name,
+                          mirror_image_mode_t group_image_mode);
+  static int group_disable(IoCtx &group_ioctx, const char *group_name,
+                           bool force);
+  static int group_promote(IoCtx &group_ioctx, const char *group_name,
+                           bool force);
+  static int group_demote(IoCtx &group_ioctx, const char *group_name);
+  static int group_resync(IoCtx &group_ioctx, const char *group_name);
+  static int group_snapshot_create(IoCtx& group_ioctx, const char *group_name,
+                                   uint32_t flags, std::string *snap_id);
+
+  static int group_image_add(IoCtx &group_ioctx, const std::string &group_id,
+                             IoCtx &image_ioctx, const std::string &image_id);
+  static int group_image_remove(IoCtx &group_ioctx, const std::string &group_id,
+                                IoCtx &image_ioctx, const std::string &image_id);
+
+  static int group_status_list(librados::IoCtx& io_ctx,
+                               const std::string &start_id, size_t max,
+                               IdToMirrorGroupStatus *groups);
+  static int group_status_summary(librados::IoCtx& io_ctx,
+                                  MirrorGroupStatusStates *states);
+  static int group_instance_id_list(librados::IoCtx& io_ctx,
+                                    const std::string &start_group_id,
+                                    size_t max,
+                                    std::map<std::string, std::string> *ids);
+  static int group_info_list(librados::IoCtx& io_ctx,
+                             mirror_image_mode_t *mode_filter,
+                             const std::string &start_id,
+                             size_t max,
+                             std::map<std::string,
+                             mirror_group_info_t> *entries);
+  static int group_get_info(librados::IoCtx& io_ctx,
+                            const std::string &group_name,
+                            mirror_group_info_t *mirror_group_info);
+  static int group_get_status(librados::IoCtx& io_ctx,
+                              const std::string &group_name,
+                              mirror_group_global_status_t *status);
+  static int group_get_instance_id(librados::IoCtx& io_ctx,
+                                   const std::string &group_name,
+                                   std::string *instance_id);
 };
 
 } // namespace api
