@@ -14,33 +14,37 @@
 #ifndef CEPH_MON_CONFIG_KEY_SERVICE_H
 #define CEPH_MON_CONFIG_KEY_SERVICE_H
 
-#include "mon/QuorumService.h"
+#include "include/Context.h"
+#include "mon/MonOpRequest.h"
 #include "mon/MonitorDBStore.h"
 
 class Paxos;
 class Monitor;
 
-class ConfigKeyService : public QuorumService
+class ConfigKeyService
 {
 public:
-  ConfigKeyService(Monitor *m, Paxos *p) :
-    QuorumService(m),
-    paxos(p)
-  { }
-  ~ConfigKeyService() override { }
+  enum {
+    SERVICE_HEALTH     = 0x01,
+    SERVICE_TIMECHECK  = 0x02,
+    SERVICE_CONFIG_KEY = 0x03,
+  };
+  ConfigKeyService(Monitor *m, Paxos *p);
+  ~ConfigKeyService() {}
 
+  void start(epoch_t new_epoch);
+  void finish();
+  void shutdown();
 
-  /**
-   * @defgroup ConfigKeyService_Inherited_h Inherited abstract methods
-   * @{
-   */
-  void init() override { }
-  bool service_dispatch(MonOpRequestRef op) override;
+  void init() { }
+  bool dispatch(MonOpRequestRef op);
+  bool service_dispatch(MonOpRequestRef op);
 
-  void start_epoch() override { }
-  void finish_epoch() override { }
-  void cleanup() override { }
-  void service_tick() override { }
+  void start_epoch() { }
+  void finish_epoch() { }
+  epoch_t get_epoch() const;
+  void cleanup() { }
+  void service_tick() { }
 
   int validate_osd_destroy(const int32_t id, const uuid_d& uuid);
   void do_osd_destroy(int32_t id, uuid_d& uuid);
@@ -50,21 +54,32 @@ public:
       std::stringstream& ss);
   void do_osd_new(const uuid_d& uuid, const std::string& dmcrypt_key);
 
-  int get_type() override {
-    return QuorumService::SERVICE_CONFIG_KEY;
+  int get_type() {
+    return SERVICE_CONFIG_KEY;
   }
 
-  std::string get_name() const override {
+  std::string get_name() const {
     return "config_key";
   }
   void get_store_prefixes(std::set<std::string>& s) const;
-  /**
-   * @} // ConfigKeyService_Inherited_h
-   */
+
 protected:
-  void service_shutdown() override { }
+  void service_shutdown() { }
+
 private:
+  Monitor *mon;
   Paxos *paxos;
+  epoch_t epoch = 0;
+
+  bool in_quorum() const;
+
+  void start_tick();
+  void cancel_tick();
+  void tick();
+  void set_update_period(double t);
+
+  Context *tick_event = nullptr;
+  double tick_period;
 
   int store_get(const std::string &key, ceph::buffer::list &bl);
   void store_put(const std::string &key, ceph::buffer::list &bl, Context *cb = NULL);
