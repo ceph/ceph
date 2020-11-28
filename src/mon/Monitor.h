@@ -218,7 +218,7 @@ public:
 
   // -- elector --
 private:
-  Paxos *paxos;
+  std::unique_ptr<Paxos> paxos;
   Elector elector;
   friend class Elector;
 
@@ -684,7 +684,7 @@ public:
   friend class LogMonitor;
   friend class ConfigKeyService;
 
-  QuorumService *config_key_service;
+  std::unique_ptr<QuorumService> config_key_service;
 
   // -- sessions --
   MonSessionMap session_map;

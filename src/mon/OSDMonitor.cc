@@ -9409,7 +9409,7 @@ int OSDMonitor::prepare_command_osd_new(
     }
 
     if (has_lockbox) {
-      svc = (ConfigKeyService*)mon->config_key_service;
+      svc = (ConfigKeyService*)(mon->config_key_service.get());
       err = svc->validate_osd_new(uuid, dmcrypt_key, ss);
       if (err < 0) {
         return err;
@@ -9594,7 +9594,7 @@ int OSDMonitor::prepare_command_osd_destroy(
     }
   }
 
-  ConfigKeyService *svc = (ConfigKeyService*)mon->config_key_service;
+  auto svc = (ConfigKeyService*)(mon->config_key_service.get());
   err = svc->validate_osd_destroy(id, uuid);
   if (err < 0) {
     ceph_assert(err == -ENOENT);
