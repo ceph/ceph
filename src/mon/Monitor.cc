@@ -249,7 +249,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
   paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
 
-  config_key_service = std::make_unique<ConfigKeyService>(this, paxos.get());
+  config_key_service = std::make_unique<ConfigKeyService>(*this, *paxos);
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);
