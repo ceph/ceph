@@ -22,25 +22,6 @@ class Monitor;
 
 class ConfigKeyService : public QuorumService
 {
-  Paxos *paxos;
-
-  int store_get(const std::string &key, ceph::buffer::list &bl);
-  void store_put(const std::string &key, ceph::buffer::list &bl, Context *cb = NULL);
-  void store_delete(MonitorDBStore::TransactionRef t, const std::string &key);
-  void store_delete(const std::string &key, Context *cb = NULL);
-  void store_delete_prefix(
-      MonitorDBStore::TransactionRef t,
-      const std::string &prefix);
-  void store_list(std::stringstream &ss);
-  void store_dump(std::stringstream &ss, const std::string& prefix);
-  bool store_exists(const std::string &key);
-  bool store_has_prefix(const std::string &prefix);
-
-  static const std::string STORE_PREFIX;
-
-protected:
-  void service_shutdown() override { }
-
 public:
   ConfigKeyService(Monitor *m, Paxos *p) :
     QuorumService(m),
@@ -80,6 +61,24 @@ public:
   /**
    * @} // ConfigKeyService_Inherited_h
    */
+protected:
+  void service_shutdown() override { }
+private:
+  Paxos *paxos;
+
+  int store_get(const std::string &key, ceph::buffer::list &bl);
+  void store_put(const std::string &key, ceph::buffer::list &bl, Context *cb = NULL);
+  void store_delete(MonitorDBStore::TransactionRef t, const std::string &key);
+  void store_delete(const std::string &key, Context *cb = NULL);
+  void store_delete_prefix(
+      MonitorDBStore::TransactionRef t,
+      const std::string &prefix);
+  void store_list(std::stringstream &ss);
+  void store_dump(std::stringstream &ss, const std::string& prefix);
+  bool store_exists(const std::string &key);
+  bool store_has_prefix(const std::string &prefix);
+
+  static const std::string STORE_PREFIX;
 };
 
 #endif // CEPH_MON_CONFIG_KEY_SERVICE_H
