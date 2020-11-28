@@ -38,9 +38,6 @@ public:
       std::stringstream& ss);
   void do_osd_new(const uuid_d& uuid, const std::string& dmcrypt_key);
 
-  std::string get_name() const {
-    return "config_key";
-  }
   void get_store_prefixes(std::set<std::string>& s) const;
 
 private:
