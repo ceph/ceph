@@ -238,19 +238,19 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
       g_conf().get_val<uint64_t>("mon_op_history_slow_op_size"),
       g_conf().get_val<std::chrono::seconds>("mon_op_history_slow_op_threshold").count());
 
-  paxos = new Paxos(this, "paxos");
+  paxos = std::make_unique<Paxos>(this, "paxos");
 
-  paxos_service[PAXOS_MDSMAP].reset(new MDSMonitor(this, paxos, "mdsmap"));
-  paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(this, paxos, "monmap"));
-  paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, this, paxos, "osdmap"));
-  paxos_service[PAXOS_LOG].reset(new LogMonitor(this, paxos, "logm"));
-  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(this, paxos, "auth"));
-  paxos_service[PAXOS_MGR].reset(new MgrMonitor(this, paxos, "mgr"));
-  paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(this, paxos, "mgrstat"));
-  paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(this, paxos, "health"));
-  paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(this, paxos, "config"));
+  paxos_service[PAXOS_MDSMAP].reset(new MDSMonitor(this, paxos.get(), "mdsmap"));
+  paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(this, paxos.get(), "monmap"));
+  paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, this, paxos.get(), "osdmap"));
+  paxos_service[PAXOS_LOG].reset(new LogMonitor(this, paxos.get(), "logm"));
+  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(this, paxos.get(), "auth"));
+  paxos_service[PAXOS_MGR].reset(new MgrMonitor(this, paxos.get(), "mgr"));
+  paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(this, paxos.get(), "mgrstat"));
+  paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(this, paxos.get(), "health"));
+  paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(this, paxos.get(), "config"));
 
-  config_key_service = new ConfigKeyService(this, paxos);
+  config_key_service = std::make_unique<ConfigKeyService>(this, paxos.get());
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);
@@ -285,8 +285,6 @@ Monitor::~Monitor()
 {
   op_tracker.on_shutdown();
 
-  delete config_key_service;
-  delete paxos;
   delete logger;
   ceph_assert(session_map.sessions.empty());
 }
@@ -1371,7 +1369,7 @@ set<string> Monitor::get_sync_targets_names()
   for (auto& svc : paxos_service) {
     svc->get_store_prefixes(targets);
   }
-  ConfigKeyService *config_key_service_ptr = dynamic_cast<ConfigKeyService*>(config_key_service);
+  auto config_key_service_ptr = dynamic_cast<ConfigKeyService*>(config_key_service.get());
   ceph_assert(config_key_service_ptr);
   config_key_service_ptr->get_store_prefixes(targets);
   return targets;
