@@ -157,21 +157,6 @@ void Migrator::dispatch(const cref_t<Message> &m)
   }
 }
 
-
-class C_MDC_EmptyImport : public MigratorContext {
-  CDir *dir;
-public:
-  C_MDC_EmptyImport(Migrator *m, CDir *d) :
-    MigratorContext(m), dir(d) {
-    dir->get(CDir::PIN_PTRWAITER);
-  }
-  void finish(int r) override {
-    mig->export_empty_import(dir);
-    dir->put(CDir::PIN_PTRWAITER);
-  }
-};
-
-
 void Migrator::export_empty_import(CDir *dir)
 {
   dout(7) << *dir << dendl;
@@ -3316,13 +3301,6 @@ void Migrator::import_finish(CDir *dir, import_state_t& stat, bool last)
     p.first->put(CInode::PIN_IMPORTINGCAPS);
   }
   stat.peer_exports.clear();
-
-  // is it empty?
-  if (dir->get_num_head_items() == 0 &&
-      !dir->inode->is_auth()) {
-    // reexport!
-    export_empty_import(dir);
-  }
 }
 
 void Migrator::import_logged_finish(dirfrag_t base)

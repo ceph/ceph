@@ -979,7 +979,7 @@ void CDir::finish_old_fragment(MDSContext::vec& waiters, bool replay)
     put(PIN_IMPORTBOUND);
   if (state_test(STATE_EXPORTBOUND))
     put(PIN_EXPORTBOUND);
-  if (is_subtree_root())
+  if (is_subtree_root() && !state_test(STATE_EXPIRABLETREE))
     put(PIN_SUBTREE);
 
   if (auth_pins > 0)
@@ -990,7 +990,7 @@ void CDir::finish_old_fragment(MDSContext::vec& waiters, bool replay)
 
 void CDir::init_fragment_pins()
 {
-  if (is_replicated())
+  if (num_replicas() > (int)(state_test(STATE_EXPIRABLETREE) ? 1 : 0))
     get(PIN_REPLICATED);
   if (state_test(STATE_DIRTY))
     get(PIN_DIRTY);
@@ -998,7 +998,7 @@ void CDir::init_fragment_pins()
     get(PIN_EXPORTBOUND);
   if (state_test(STATE_IMPORTBOUND))
     get(PIN_IMPORTBOUND);
-  if (is_subtree_root())
+  if (is_subtree_root() && !state_test(STATE_EXPIRABLETREE))
     get(PIN_SUBTREE);
 }
 
@@ -1035,6 +1035,7 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
     CDir *f = new CDir(inode, fg, mdcache, is_auth());
     f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->get_replicas() = get_replicas();
+
     f->pop_me = pop_me;
     f->pop_me.scale(fac);
 
@@ -1149,19 +1150,19 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     while (!dir->items.empty()) 
       steal_dentry(dir->items.begin()->second);
     
+    // merge state
+    state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
+
     // merge replica map
     for (const auto &p : dir->get_replicas()) {
-      unsigned cur = get_replicas()[p.first];
-      if (p.second > cur)
-	get_replicas()[p.first] = p.second;
+      unsigned& nonce = get_replicas()[p.first];
+      if (p.second > nonce)
+	nonce = p.second;
     }
 
     // merge version
     if (dir->get_version() > _fnode->version)
       _fnode->version = projected_version = dir->get_version();
-
-    // merge state
-    state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
 
     dir->finish_old_fragment(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
@@ -2769,8 +2770,10 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
   pop_auth_subtree_nested.add(pop_auth_subtree);
 
   decode(dir_rep_by, blp);
+  clear_replica_map();
   decode(get_replicas(), blp);
-  if (is_replicated()) get(PIN_REPLICATED);
+  if (num_replicas() > (int)(state_test(STATE_EXPIRABLETREE) ? 1 : 0))
+    get(PIN_REPLICATED);
 
   replica_nonce = 0;  // no longer defined
 

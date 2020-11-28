@@ -224,8 +224,9 @@ class MDSCacheObject {
   bool is_replica(mds_rank_t mds) const { return get_replicas().count(mds); }
   int num_replicas() const { return get_replicas().size(); }
   unsigned add_replica(mds_rank_t mds) {
-    if (get_replicas().count(mds))
-      return ++get_replicas()[mds];  // inc nonce
+    auto it = get_replicas().find(mds);
+    if (it != get_replicas().end())
+      return ++it->second;
     if (get_replicas().empty())
       get(PIN_REPLICATED);
     return get_replicas()[mds] = 1;
@@ -236,12 +237,12 @@ class MDSCacheObject {
     get_replicas()[mds] = nonce;
   }
   unsigned get_replica_nonce(mds_rank_t mds) {
-    ceph_assert(get_replicas().count(mds));
-    return get_replicas()[mds];
+    return get_replicas().at(mds);
   }
   void remove_replica(mds_rank_t mds) {
-    ceph_assert(get_replicas().count(mds));
-    get_replicas().erase(mds);
+    auto it = get_replicas().find(mds);
+    ceph_assert(it != get_replicas().end());
+    get_replicas().erase(it);
     if (get_replicas().empty()) {
       put(PIN_REPLICATED);
     }
