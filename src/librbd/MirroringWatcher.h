@@ -45,11 +45,13 @@ public:
   static int notify_group_updated(librados::IoCtx &io_ctx,
                                   cls::rbd::MirrorGroupState mirror_group_state,
                                   const std::string &group_id,
-                                  const std::string &global_group_id);
+                                  const std::string &global_group_id,
+                                  size_t image_count);
   static void notify_group_updated(librados::IoCtx &io_ctx,
                                    cls::rbd::MirrorGroupState mirror_group_state,
                                    const std::string &group_id,
                                    const std::string &global_group_id,
+                                   size_t image_count,
                                    Context *on_finish);
 
   virtual void handle_mode_updated(cls::rbd::MirrorMode mirror_mode) = 0;
@@ -58,7 +60,8 @@ public:
                                     const std::string &global_image_id) = 0;
   virtual void handle_group_updated(cls::rbd::MirrorGroupState state,
                                     const std::string &group_id,
-                                    const std::string &global_group_id) = 0;
+                                    const std::string &global_group_id,
+                                    size_t image_count) = 0;
 
 private:
   bool handle_payload(const mirroring_watcher::ModeUpdatedPayload &payload,

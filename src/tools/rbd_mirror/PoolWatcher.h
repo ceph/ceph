@@ -149,7 +149,7 @@ private:
                             bool enabled);
   void handle_group_updated(const std::string &group_id,
                             const std::string &global_group_id,
-                            bool enabled);
+                            bool enabled, size_t image_count);
 
   void schedule_listener();
   void notify_listener();
