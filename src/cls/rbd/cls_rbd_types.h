@@ -277,6 +277,176 @@ WRITE_CLASS_ENCODER(MirrorImageStatus);
 
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
 
+enum MirrorGroupState {
+  MIRROR_GROUP_STATE_DISABLING = 0,
+  MIRROR_GROUP_STATE_ENABLING  = 1,
+  MIRROR_GROUP_STATE_ENABLED   = 2,
+  MIRROR_GROUP_STATE_DISABLED  = 3,
+};
+
+struct MirrorGroup {
+  MirrorGroup() {
+  }
+  MirrorGroup(const std::string &global_group_id,
+              MirrorImageMode mirror_image_mode, MirrorGroupState state)
+    : global_group_id(global_group_id), mirror_image_mode(mirror_image_mode),
+      state(state) {
+  }
+
+  std::string global_group_id;
+  MirrorImageMode mirror_image_mode = MIRROR_IMAGE_MODE_SNAPSHOT;
+  MirrorGroupState state = MIRROR_GROUP_STATE_DISABLING;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+  void dump(ceph::Formatter *f) const;
+
+  static void generate_test_instances(std::list<MirrorGroup*> &o);
+
+  bool operator==(const MirrorGroup &rhs) const;
+  bool operator<(const MirrorGroup &rhs) const;
+};
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupState& state);
+std::ostream& operator<<(std::ostream& os, const MirrorGroup& group);
+
+WRITE_CLASS_ENCODER(MirrorGroup);
+
+enum MirrorGroupStatusState {
+  MIRROR_GROUP_STATUS_STATE_UNKNOWN         = 0,
+  MIRROR_GROUP_STATUS_STATE_ERROR           = 1,
+  MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY = 2,
+  MIRROR_GROUP_STATUS_STATE_REPLAYING       = 3,
+  MIRROR_GROUP_STATUS_STATE_STOPPING_REPLAY = 4,
+  MIRROR_GROUP_STATUS_STATE_STOPPED         = 5,
+};
+
+inline void encode(const MirrorGroupStatusState &state, ceph::buffer::list& bl,
+		   uint64_t features=0)
+{
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(MirrorGroupStatusState &state,
+                   ceph::buffer::list::const_iterator& it)
+{
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<MirrorGroupStatusState>(int_state);
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupStatusState& state);
+
+struct MirrorGroupImageSpec {
+  MirrorGroupImageSpec() {}
+
+  MirrorGroupImageSpec(int64_t pool_id, const std::string &global_image_id)
+    : pool_id(pool_id), global_image_id(global_image_id) {
+  }
+
+  int64_t pool_id = -1;
+  std::string global_image_id;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+  void dump(ceph::Formatter *f) const;
+
+  static void generate_test_instances(std::list<MirrorGroupImageSpec*> &o);
+
+  inline bool operator==(const MirrorGroupImageSpec& rhs) const {
+    return pool_id == rhs.pool_id &&
+           global_image_id == rhs.global_image_id;
+  }
+  inline bool operator<(const MirrorGroupImageSpec& rhs) const {
+    if (pool_id != rhs.pool_id) {
+      return pool_id < rhs.pool_id;
+    }
+    return global_image_id < rhs.global_image_id;
+  }
+};
+WRITE_CLASS_ENCODER(MirrorGroupImageSpec);
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupImageSpec& spec);
+
+struct MirrorGroupSiteStatus {
+  static const std::string LOCAL_MIRROR_UUID;
+
+  MirrorGroupSiteStatus() {}
+  MirrorGroupSiteStatus(
+      const std::string& mirror_uuid, MirrorGroupStatusState state,
+      const std::string &description,
+      const std::map<MirrorGroupImageSpec, MirrorImageSiteStatus> &mirror_images)
+    : mirror_uuid(mirror_uuid), state(state), description(description),
+      mirror_images(mirror_images) {
+  }
+
+  std::string mirror_uuid = LOCAL_MIRROR_UUID;
+  MirrorGroupStatusState state = MIRROR_GROUP_STATUS_STATE_UNKNOWN;
+  std::string description;
+  utime_t last_update;
+  bool up = false;
+  std::map<MirrorGroupImageSpec, MirrorImageSiteStatus> mirror_images;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+  void dump(ceph::Formatter *f) const;
+
+  std::string state_to_string() const;
+
+  bool operator==(const MirrorGroupSiteStatus &rhs) const;
+
+  static void generate_test_instances(std::list<MirrorGroupSiteStatus*> &o);
+};
+WRITE_CLASS_ENCODER(MirrorGroupSiteStatus);
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupSiteStatus& status);
+
+struct MirrorGroupSiteStatusOnDisk : cls::rbd::MirrorGroupSiteStatus {
+  entity_inst_t origin;
+
+  MirrorGroupSiteStatusOnDisk() {
+  }
+  MirrorGroupSiteStatusOnDisk(const cls::rbd::MirrorGroupSiteStatus &status) :
+    cls::rbd::MirrorGroupSiteStatus(status) {
+  }
+
+  void encode_meta(ceph::buffer::list &bl, uint64_t features) const;
+  void decode_meta(ceph::buffer::list::const_iterator &it);
+
+  void encode(ceph::buffer::list &bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+
+  static void generate_test_instances(
+      std::list<MirrorGroupSiteStatusOnDisk*> &o);
+};
+WRITE_CLASS_ENCODER_FEATURES(MirrorGroupSiteStatusOnDisk)
+
+struct MirrorGroupStatus {
+  typedef std::list<MirrorGroupSiteStatus> MirrorGroupSiteStatuses;
+
+  MirrorGroupStatus() {}
+  MirrorGroupStatus(const MirrorGroupSiteStatuses& statuses)
+    : mirror_group_site_statuses(statuses) {
+  }
+
+  MirrorGroupSiteStatuses mirror_group_site_statuses;
+
+  int get_local_mirror_group_site_status(MirrorGroupSiteStatus* status) const;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+  void dump(ceph::Formatter *f) const;
+
+  bool operator==(const MirrorGroupStatus& rhs) const;
+
+  static void generate_test_instances(std::list<MirrorGroupStatus*> &o);
+};
+WRITE_CLASS_ENCODER(MirrorGroupStatus);
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupStatus& status);
+
 struct ParentImageSpec {
   int64_t pool_id = -1;
   std::string pool_namespace;
