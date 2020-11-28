@@ -67,6 +67,79 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
 
 const string CONFIG_PREFIX = "mon_config_key";
 
+ConfigKeyService::ConfigKeyService(Monitor *m, Paxos *p)
+  : mon(m),
+    paxos(p),
+    tick_period(g_conf()->mon_tick_interval)
+{}
+
+void ConfigKeyService::start(epoch_t new_epoch)
+{
+  epoch = new_epoch;
+  start_epoch();
+}
+
+void ConfigKeyService::finish()
+{
+  generic_dout(20) << "ConfigKeyService::finish" << dendl;
+  finish_epoch();
+}
+
+epoch_t ConfigKeyService::get_epoch() const {
+  return epoch;
+}
+
+bool ConfigKeyService::dispatch(MonOpRequestRef op) {
+  return service_dispatch(op);
+}
+
+bool ConfigKeyService::in_quorum() const
+{
+  return (mon->is_leader() || mon->is_peon());
+}
+
+void ConfigKeyService::start_tick()
+{
+  generic_dout(10) << __func__ << dendl;
+
+  cancel_tick();
+  if (tick_period <= 0)
+    return;
+
+  tick_event = new C_MonContext{mon, [this](int r) {
+    if (r < 0) {
+      return;
+    }
+    tick();
+  }};
+  mon->timer.add_event_after(tick_period, tick_event);
+}
+
+void ConfigKeyService::set_update_period(double t)
+{
+  tick_period = t;
+}
+
+void ConfigKeyService::cancel_tick()
+{
+  if (tick_event)
+    mon->timer.cancel_event(tick_event);
+  tick_event = nullptr;
+}
+
+void ConfigKeyService::tick()
+{
+  service_tick();
+  start_tick();
+}
+
+void ConfigKeyService::shutdown()
+{
+  generic_dout(0) << "quorum service shutdown" << dendl;
+  cancel_tick();
+  service_shutdown();
+}
+
 int ConfigKeyService::store_get(const string &key, bufferlist &bl)
 {
   return mon->store->get(CONFIG_PREFIX, key, bl);
@@ -272,7 +345,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
     // we'll reply to the message once the proposal has been handled
     store_put(key, data,
-	      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
+	      new Monitor::C_Command(*mon, op, 0, ss.str(), 0));
     // return for now; we'll put the message once it's done.
     return true;
 
@@ -288,7 +361,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       ss << "no such key '" << key << "'";
       goto out;
     }
-    store_delete(key, new Monitor::C_Command(mon, op, 0, "key deleted", 0));
+    store_delete(key, new Monitor::C_Command(*mon, op, 0, "key deleted", 0));
     // return for now; we'll put the message once it's done
     return true;
 
