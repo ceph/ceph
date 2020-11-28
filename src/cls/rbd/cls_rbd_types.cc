@@ -204,6 +204,9 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageState& mirror_state)
   case MIRROR_IMAGE_STATE_DISABLED:
     os << "disabled";
     break;
+  case MIRROR_IMAGE_STATE_CREATING:
+    os << "creating";
+    break;
   default:
     os << "unknown (" << static_cast<uint32_t>(mirror_state) << ")";
     break;
@@ -494,6 +497,362 @@ std::ostream& operator<<(std::ostream& os,
        << "mirror_uuid=" << remote_status.mirror_uuid<< ", "
        << "state=" << remote_status.state_to_string() << ", "
        << "description=" << remote_status.description << ", "
+       << "last_update=" << remote_status.last_update
+       << "}";
+  }
+  os << "]}";
+  return os;
+}
+
+void MirrorGroup::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(global_group_id, bl);
+  encode(static_cast<uint8_t>(mirror_image_mode), bl);
+  encode(static_cast<uint8_t>(state), bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroup::decode(bufferlist::const_iterator &it) {
+  uint8_t tmp;
+  DECODE_START(1, it);
+  decode(global_group_id, it);
+  decode(tmp, it);
+  mirror_image_mode = static_cast<MirrorImageMode>(tmp);
+  decode(tmp, it);
+  state = static_cast<MirrorGroupState>(tmp);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroup::dump(Formatter *f) const {
+  f->dump_string("global_group_id", global_group_id);
+  f->dump_stream("mirror_image_mode") << mirror_image_mode;
+  f->dump_stream("state") << state;
+}
+
+void MirrorGroup::generate_test_instances(std::list<MirrorGroup*> &o) {
+  o.push_back(new MirrorGroup());
+  o.push_back(new MirrorGroup("uuid-123", MIRROR_IMAGE_MODE_SNAPSHOT,
+                              MIRROR_GROUP_STATE_ENABLED));
+}
+
+bool MirrorGroup::operator==(const MirrorGroup &rhs) const {
+  return global_group_id == rhs.global_group_id &&
+         mirror_image_mode == rhs.mirror_image_mode &&
+         state == rhs.state;
+}
+
+bool MirrorGroup::operator<(const MirrorGroup &rhs) const {
+  if (global_group_id != rhs.global_group_id) {
+    return global_group_id < rhs.global_group_id;
+  }
+  if (mirror_image_mode != rhs.mirror_image_mode) {
+    return mirror_image_mode < rhs.mirror_image_mode;
+  }
+  return state < rhs.state;
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupState& state) {
+  switch (state) {
+  case MIRROR_GROUP_STATE_DISABLING:
+    os << "disabling";
+    break;
+  case MIRROR_GROUP_STATE_ENABLING:
+    os << "enabling";
+    break;
+  case MIRROR_GROUP_STATE_ENABLED:
+    os << "enabled";
+    break;
+  case MIRROR_GROUP_STATE_DISABLED:
+    os << "disabled";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroup& group) {
+  os << "["
+     << "global_group_id=" << group.global_group_id << ", "
+     << "mirror_image_mode=" << group.mirror_image_mode << ", "
+     << "state=" << group.state << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupStatusState& state) {
+  switch (state) {
+  case MIRROR_GROUP_STATUS_STATE_UNKNOWN:
+    os << "unknown";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_ERROR:
+    os << "error";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY:
+    os << "starting_replay";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_REPLAYING:
+    os << "replaying";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_STOPPING_REPLAY:
+    os << "stopping_replay";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_STOPPED:
+    os << "stopped";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
+void MirrorGroupImageSpec::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(pool_id, bl);
+  encode(global_image_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupImageSpec::decode(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  decode(pool_id, it);
+  decode(global_image_id, it);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupImageSpec::dump(Formatter *f) const {
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("global_image_id", global_image_id);
+}
+
+void MirrorGroupImageSpec::generate_test_instances(
+    std::list<MirrorGroupImageSpec*> &o) {
+  o.push_back(new MirrorGroupImageSpec());
+  o.push_back(new MirrorGroupImageSpec(1, "global_id"));
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupImageSpec& spec) {
+  os << "{"
+     << "pool_id=" << spec.pool_id << ", "
+     << "global_image_id=" << spec.global_image_id
+     << "}";
+  return os;
+}
+
+const std::string MirrorGroupSiteStatus::LOCAL_MIRROR_UUID(""); // empty mirror uuid
+
+void MirrorGroupSiteStatus::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ceph::encode(mirror_uuid, bl);
+  cls::rbd::encode(state, bl);
+  ceph::encode(description, bl);
+  ceph::encode(mirror_images, bl);
+  ceph::encode(last_update, bl);
+  ceph::encode(up, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupSiteStatus::decode(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  ceph::decode(mirror_uuid, it);
+  cls::rbd::decode(state, it);
+  ceph::decode(description, it);
+  ceph::decode(mirror_images, it);
+  ::decode(last_update, it);
+  ceph::decode(up, it);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupSiteStatus::dump(Formatter *f) const {
+  f->dump_string("mirror_uuid", mirror_uuid);
+  f->dump_string("state", state_to_string());
+  f->dump_string("description", description);
+  f->open_array_section("images");
+  for (auto &[spec, image] : mirror_images) {
+    f->open_object_section("image");
+    spec.dump(f);
+    image.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+ f->dump_stream("last_update") << last_update;
+}
+
+std::string MirrorGroupSiteStatus::state_to_string() const {
+  std::stringstream ss;
+  ss << (up ? "up+" : "down+") << state;
+  return ss.str();
+}
+
+void MirrorGroupSiteStatus::generate_test_instances(
+  std::list<MirrorGroupSiteStatus*> &o) {
+  o.push_back(new MirrorGroupSiteStatus());
+  o.push_back(new MirrorGroupSiteStatus("", MIRROR_GROUP_STATUS_STATE_REPLAYING,
+                                        "", {}));
+  o.push_back(new MirrorGroupSiteStatus("", MIRROR_GROUP_STATUS_STATE_ERROR,
+                                        "error", {{{}, {}}}));
+  o.push_back(new MirrorGroupSiteStatus("2fb68ca9-1ba0-43b3-8cdf-8c5a9db71e65",
+                                        MIRROR_GROUP_STATUS_STATE_STOPPED, "", {{{}, {}}}));
+}
+
+bool MirrorGroupSiteStatus::operator==(const MirrorGroupSiteStatus &rhs) const {
+  return mirror_uuid == rhs.mirror_uuid &&
+         state == rhs.state && up == rhs.up &&
+         description == rhs.description &&
+         mirror_images == rhs.mirror_images;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupSiteStatus& status) {
+  os << "{"
+     << "mirror_uuid=" << status.mirror_uuid << ", "
+     << "state=" << status.state_to_string() << ", "
+     << "description=" << status.description << ", "
+     << "images=[";
+  std::string delimiter;
+  for (auto &[spec, image] : status.mirror_images) {
+    os << delimiter << "{" << spec << ": " << image << "}";
+    delimiter = ", ";
+  }
+  os << "], "
+     << "last_update=" << status.last_update << "}";
+  return os;
+}
+
+void MirrorGroupSiteStatusOnDisk::encode_meta(bufferlist &bl,
+                                              uint64_t features) const {
+  ENCODE_START(1, 1, bl);
+  auto sanitized_origin = origin;
+  sanitize_entity_inst(&sanitized_origin);
+  encode(sanitized_origin, bl, features);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupSiteStatusOnDisk::encode(bufferlist &bl,
+                                         uint64_t features) const {
+  encode_meta(bl, features);
+  cls::rbd::MirrorGroupSiteStatus::encode(bl);
+}
+
+void MirrorGroupSiteStatusOnDisk::decode_meta(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  decode(origin, it);
+  sanitize_entity_inst(&origin);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupSiteStatusOnDisk::decode(bufferlist::const_iterator &it) {
+  decode_meta(it);
+  cls::rbd::MirrorGroupSiteStatus::decode(it);
+}
+
+void MirrorGroupSiteStatusOnDisk::generate_test_instances(
+    std::list<MirrorGroupSiteStatusOnDisk*> &o) {
+  o.push_back(new MirrorGroupSiteStatusOnDisk());
+  o.push_back(new MirrorGroupSiteStatusOnDisk(
+    {"", MIRROR_GROUP_STATUS_STATE_ERROR, "error", {{{}, {}}}}));
+  o.push_back(new MirrorGroupSiteStatusOnDisk(
+    {"siteA", MIRROR_GROUP_STATUS_STATE_STOPPED, "", {{{}, {}}}}));
+}
+
+int MirrorGroupStatus::get_local_mirror_group_site_status(
+    MirrorGroupSiteStatus* status) const {
+  auto it = std::find_if(
+    mirror_group_site_statuses.begin(),
+    mirror_group_site_statuses.end(),
+    [](const MirrorGroupSiteStatus& status) {
+      return status.mirror_uuid == MirrorGroupSiteStatus::LOCAL_MIRROR_UUID;
+    });
+  if (it == mirror_group_site_statuses.end()) {
+    return -ENOENT;
+  }
+
+  *status = *it;
+  return 0;
+}
+
+void MirrorGroupStatus::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ceph::encode(mirror_group_site_statuses, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupStatus::decode(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  decode(mirror_group_site_statuses, it);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupStatus::dump(Formatter *f) const {
+  MirrorGroupSiteStatus local_status;
+  int r = get_local_mirror_group_site_status(&local_status);
+  if (r >= 0) {
+    local_status.dump(f);
+  }
+
+  f->open_array_section("remotes");
+  for (auto& status : mirror_group_site_statuses) {
+    if (status.mirror_uuid == MirrorGroupSiteStatus::LOCAL_MIRROR_UUID) {
+      continue;
+    }
+
+    f->open_object_section("remote");
+    status.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool MirrorGroupStatus::operator==(const MirrorGroupStatus &rhs) const {
+  return (mirror_group_site_statuses == rhs.mirror_group_site_statuses);
+}
+
+void MirrorGroupStatus::generate_test_instances(
+    std::list<MirrorGroupStatus*> &o) {
+  o.push_back(new MirrorGroupStatus());
+  o.push_back(new MirrorGroupStatus({{"", MIRROR_GROUP_STATUS_STATE_ERROR, "", {}}}));
+  o.push_back(new MirrorGroupStatus({{"", MIRROR_GROUP_STATUS_STATE_STOPPED, "", {}},
+                                     {"siteA", MIRROR_GROUP_STATUS_STATE_REPLAYING, "",
+                                      {{{}, {}}}}}));
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupStatus& status) {
+  os << "{";
+  MirrorGroupSiteStatus local_status;
+  int r = status.get_local_mirror_group_site_status(&local_status);
+  if (r >= 0) {
+    os << "state=" << local_status.state_to_string() << ", "
+       << "description=" << local_status.description << ", "
+       << "images=[";
+    std::string delimiter;
+    for (auto &[spec, image] : local_status.mirror_images) {
+      os << delimiter << "{" << spec << ": " << image << "}";
+      delimiter = ", ";
+    }
+    os << "], "
+       << "last_update=" << local_status.last_update << ", ";
+  }
+
+  os << "remotes=[";
+  for (auto& remote_status : status.mirror_group_site_statuses) {
+    if (remote_status.mirror_uuid == MirrorGroupSiteStatus::LOCAL_MIRROR_UUID) {
+      continue;
+    }
+
+    os << "{"
+       << "mirror_uuid=" << remote_status.mirror_uuid<< ", "
+       << "state=" << remote_status.state_to_string() << ", "
+       << "description=" << remote_status.description << ", "
+       << "images=[";
+    std::string delimiter;
+    for (auto &[spec, image] : remote_status.mirror_images) {
+      os << delimiter << "{" << spec << ": " << image << "}";
+      delimiter = ", ";
+    }
+    os << "], "
        << "last_update=" << remote_status.last_update
        << "}";
   }
