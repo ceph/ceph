@@ -29,7 +29,7 @@ public:
     SERVICE_TIMECHECK  = 0x02,
     SERVICE_CONFIG_KEY = 0x03,
   };
-  ConfigKeyService(Monitor *m, Paxos *p);
+  ConfigKeyService(Monitor &m, Paxos &p);
   ~ConfigKeyService() {}
 
   void start(epoch_t new_epoch);
@@ -67,8 +67,8 @@ protected:
   void service_shutdown() { }
 
 private:
-  Monitor *mon;
-  Paxos *paxos;
+  Monitor &mon;
+  Paxos &paxos;
   epoch_t epoch = 0;
 
   bool in_quorum() const;
