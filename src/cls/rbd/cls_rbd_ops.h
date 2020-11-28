@@ -143,6 +143,19 @@ constexpr auto mirror_image_map_update = ClsMethod<WrTag, ClassId>("mirror_image
 constexpr auto mirror_image_map_remove = ClsMethod<WrTag, ClassId>("mirror_image_map_remove");
 constexpr auto mirror_image_snapshot_unlink_peer = ClsMethod<RdWrTag, ClassId>("mirror_image_snapshot_unlink_peer");
 constexpr auto mirror_image_snapshot_set_copy_progress = ClsMethod<RdWrTag, ClassId>("mirror_image_snapshot_set_copy_progress");
+constexpr auto mirror_group_list = ClsMethod<RdTag, ClassId>("mirror_group_list");
+constexpr auto mirror_group_get_group_id = ClsMethod<RdTag, ClassId>("mirror_group_get_group_id");
+constexpr auto mirror_group_get = ClsMethod<RdTag, ClassId>("mirror_group_get");
+constexpr auto mirror_group_set = ClsMethod<RdWrTag, ClassId>("mirror_group_set");
+constexpr auto mirror_group_remove = ClsMethod<RdWrTag, ClassId>("mirror_group_remove");
+constexpr auto mirror_group_status_set = ClsMethod<RdWrPromoteTag, ClassId>("mirror_group_status_set");
+constexpr auto mirror_group_status_remove = ClsMethod<RdWrTag, ClassId>("mirror_group_status_remove");
+constexpr auto mirror_group_status_get = ClsMethod<RdTag, ClassId>("mirror_group_status_get");
+constexpr auto mirror_group_status_list = ClsMethod<RdTag, ClassId>("mirror_group_status_list");
+constexpr auto mirror_group_status_get_summary = ClsMethod<RdTag, ClassId>("mirror_group_status_get_summary");
+constexpr auto mirror_group_status_remove_down = ClsMethod<RdWrTag, ClassId>("mirror_group_status_remove_down");
+constexpr auto mirror_group_instance_get = ClsMethod<RdTag, ClassId>("mirror_group_instance_get");
+constexpr auto mirror_group_instance_list = ClsMethod<RdTag, ClassId>("mirror_group_instance_list");
 
 /* methods for the groups feature */
 constexpr auto group_dir_list = ClsMethod<RdTag, ClassId>("group_dir_list");
