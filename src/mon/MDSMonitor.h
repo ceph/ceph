@@ -32,7 +32,7 @@ class FileSystemCommandHandler;
 
 class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHandler {
  public:
-  MDSMonitor(Monitor *mn, Paxos *p, std::string service_name);
+  MDSMonitor(Monitor &mn, Paxos &p, std::string service_name);
 
   // service methods
   void create_initial() override;
@@ -70,7 +70,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
    */
   bool fail_mds_gid(FSMap &fsmap, mds_gid_t gid);
 
-  bool is_leader() const override { return mon->is_leader(); }
+  bool is_leader() const override { return mon.is_leader(); }
 
  protected:
   using mds_info_t = MDSMap::mds_info_t;
