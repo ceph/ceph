@@ -22,7 +22,7 @@ class MgrStatMonitor : public PaxosService {
   ceph::buffer::list pending_service_map_bl;
 
 public:
-  MgrStatMonitor(Monitor *mn, Paxos *p, const std::string& service_name);
+  MgrStatMonitor(Monitor &mn, Paxos &p, const std::string& service_name);
   ~MgrStatMonitor() override;
 
   void init() override {}
