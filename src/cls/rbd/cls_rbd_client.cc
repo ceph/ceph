@@ -2605,6 +2605,381 @@ int mirror_image_snapshot_set_copy_progress(librados::IoCtx *ioctx,
   return ioctx->operate(oid, &op);
 }
 
+void mirror_group_list_start(librados::ObjectReadOperation *op,
+                             const std::string &start, uint64_t max_return)
+{
+  bufferlist in_bl;
+  encode(start, in_bl);
+  encode(max_return, in_bl);
+  op->exec("rbd", "mirror_group_list", in_bl);
+}
+
+int mirror_group_list_finish(bufferlist::const_iterator *it,
+                             std::map<string, cls::rbd::MirrorGroup> *groups)
+{
+  try {
+    decode(*groups, *it);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_group_list(librados::IoCtx *ioctx,
+                      const std::string &start, uint64_t max_return,
+                      std::map<std::string, cls::rbd::MirrorGroup> *groups) {
+  librados::ObjectReadOperation op;
+  mirror_group_list_start(&op, start, max_return);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto bl_it = out_bl.cbegin();
+  return mirror_group_list_finish(&bl_it, groups);
+}
+
+void mirror_group_get_group_id_start(librados::ObjectReadOperation *op,
+                                     const std::string &global_group_id) {
+  bufferlist in_bl;
+  encode(global_group_id, in_bl);
+  op->exec( "rbd", "mirror_group_get_group_id", in_bl);
+}
+
+int mirror_group_get_group_id_finish(bufferlist::const_iterator *it,
+                                     std::string *group_id) {
+  try {
+    decode(*group_id, *it);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_group_get_group_id(librados::IoCtx *ioctx,
+                              const std::string &global_group_id,
+                              std::string *group_id) {
+  librados::ObjectReadOperation op;
+  mirror_group_get_group_id_start(&op, global_group_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  return mirror_group_get_group_id_finish(&it, group_id);
+}
+
+int mirror_group_get(librados::IoCtx *ioctx, const std::string &group_id,
+                     cls::rbd::MirrorGroup *group) {
+  librados::ObjectReadOperation op;
+  mirror_group_get_start(&op, group_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_group_get_finish(&iter, group);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_get_start(librados::ObjectReadOperation *op,
+                            const std::string &group_id) {
+  bufferlist in_bl;
+  encode(group_id, in_bl);
+
+  op->exec("rbd", "mirror_group_get", in_bl);
+}
+
+int mirror_group_get_finish(bufferlist::const_iterator *iter,
+                            cls::rbd::MirrorGroup *group) {
+  try {
+    decode(*group, *iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+void mirror_group_set(librados::ObjectWriteOperation *op,
+                      const std::string &group_id,
+                      const cls::rbd::MirrorGroup &group) {
+  bufferlist bl;
+  encode(group_id, bl);
+  encode(group, bl);
+
+  op->exec("rbd", "mirror_group_set", bl);
+}
+
+int mirror_group_set(librados::IoCtx *ioctx, const std::string &group_id,
+                     const cls::rbd::MirrorGroup &group) {
+  librados::ObjectWriteOperation op;
+  mirror_group_set(&op, group_id, group);
+
+  int r = ioctx->operate(RBD_MIRRORING, &op);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_remove(librados::ObjectWriteOperation *op,
+                         const std::string &group_id) {
+  bufferlist bl;
+  encode(group_id, bl);
+
+  op->exec("rbd", "mirror_group_remove", bl);
+}
+
+int mirror_group_remove(librados::IoCtx *ioctx, const std::string &group_id) {
+  librados::ObjectWriteOperation op;
+  mirror_group_remove(&op, group_id);
+
+  int r = ioctx->operate(RBD_MIRRORING, &op);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+int mirror_group_status_set(librados::IoCtx *ioctx,
+                            const std::string &global_group_id,
+                            const cls::rbd::MirrorGroupSiteStatus &status) {
+  librados::ObjectWriteOperation op;
+  mirror_group_status_set(&op, global_group_id, status);
+  return ioctx->operate(RBD_MIRRORING, &op);
+}
+
+void mirror_group_status_set(librados::ObjectWriteOperation *op,
+                             const std::string &global_group_id,
+                             const cls::rbd::MirrorGroupSiteStatus &status) {
+  bufferlist bl;
+  encode(global_group_id, bl);
+  encode(status, bl);
+  op->exec("rbd", "mirror_group_status_set", bl);
+}
+
+int mirror_group_status_get(librados::IoCtx *ioctx,
+                            const std::string &global_group_id,
+                            cls::rbd::MirrorGroupStatus *status) {
+  librados::ObjectReadOperation op;
+  mirror_group_status_get_start(&op, global_group_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_group_status_get_finish(&iter, status);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_status_get_start(librados::ObjectReadOperation *op,
+                                   const std::string &global_group_id) {
+  bufferlist bl;
+  encode(global_group_id, bl);
+  op->exec("rbd", "mirror_group_status_get", bl);
+}
+
+int mirror_group_status_get_finish(bufferlist::const_iterator *iter,
+                                   cls::rbd::MirrorGroupStatus *status) {
+  try {
+    decode(*status, *iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_group_status_list(
+    librados::IoCtx *ioctx, const std::string &start, uint64_t max_return,
+    std::map<std::string, cls::rbd::MirrorGroup> *groups,
+    std::map<std::string, cls::rbd::MirrorGroupStatus> *statuses) {
+  librados::ObjectReadOperation op;
+  mirror_group_status_list_start(&op, start, max_return);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_group_status_list_finish(&iter, groups, statuses);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_status_list_start(librados::ObjectReadOperation *op,
+                                    const std::string &start,
+                                    uint64_t max_return) {
+  bufferlist bl;
+  encode(start, bl);
+  encode(max_return, bl);
+  op->exec("rbd", "mirror_group_status_list", bl);
+}
+
+int mirror_group_status_list_finish(
+    bufferlist::const_iterator *iter,
+    std::map<std::string, cls::rbd::MirrorGroup> *groups,
+    std::map<std::string, cls::rbd::MirrorGroupStatus> *statuses) {
+  groups->clear();
+  statuses->clear();
+  try {
+    decode(*groups, *iter);
+    decode(*statuses, *iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_group_status_get_summary(
+    librados::IoCtx *ioctx,
+    const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites,
+    std::map<cls::rbd::MirrorGroupStatusState, int32_t> *states) {
+  librados::ObjectReadOperation op;
+  mirror_group_status_get_summary_start(&op, mirror_peer_sites);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_group_status_get_summary_finish(&iter, states);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_status_get_summary_start(
+    librados::ObjectReadOperation *op,
+    const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites) {
+  bufferlist bl;
+  encode(mirror_peer_sites, bl);
+  op->exec("rbd", "mirror_group_status_get_summary", bl);
+}
+
+int mirror_group_status_get_summary_finish(
+    bufferlist::const_iterator *iter,
+    std::map<cls::rbd::MirrorGroupStatusState, int32_t> *states) {
+  try {
+    decode(*states, *iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_group_status_remove_down(librados::IoCtx *ioctx) {
+  librados::ObjectWriteOperation op;
+  mirror_group_status_remove_down(&op);
+  return ioctx->operate(RBD_MIRRORING, &op);
+}
+
+void mirror_group_status_remove_down(librados::ObjectWriteOperation *op) {
+  bufferlist bl;
+  op->exec("rbd", "mirror_group_status_remove_down", bl);
+}
+
+int mirror_group_instance_get(librados::IoCtx *ioctx,
+                              const std::string &global_group_id,
+                              entity_inst_t *instance) {
+  librados::ObjectReadOperation op;
+  mirror_group_instance_get_start(&op, global_group_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_group_instance_get_finish(&iter, instance);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_instance_get_start(librados::ObjectReadOperation *op,
+                                     const std::string &global_group_id) {
+  bufferlist bl;
+  encode(global_group_id, bl);
+  op->exec("rbd", "mirror_group_instance_get", bl);
+}
+
+int mirror_group_instance_get_finish(bufferlist::const_iterator *iter,
+                                     entity_inst_t *instance) {
+  try {
+    decode(*instance, *iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_group_instance_list(
+    librados::IoCtx *ioctx, const std::string &start, uint64_t max_return,
+    std::map<std::string, entity_inst_t> *instances) {
+  librados::ObjectReadOperation op;
+  mirror_group_instance_list_start(&op, start, max_return);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_group_instance_list_finish(&iter, instances);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_instance_list_start(librados::ObjectReadOperation *op,
+                                      const std::string &start,
+                                      uint64_t max_return) {
+  bufferlist bl;
+  encode(start, bl);
+  encode(max_return, bl);
+  op->exec("rbd", "mirror_group_instance_list", bl);
+}
+
+int mirror_group_instance_list_finish(
+    bufferlist::const_iterator *iter,
+    std::map<std::string, entity_inst_t> *instances) {
+  instances->clear();
+  try {
+    decode(*instances, *iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 // Groups functions
 int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
                    const std::string &start, uint64_t max_return,
