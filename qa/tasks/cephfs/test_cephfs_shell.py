@@ -872,36 +872,89 @@ class TestXattr(TestCephFSShell):
         self.negtest_cephfs_shell_cmd(cmd=['getxattr', self.dir_name, input_val[0]])
         self.negtest_cephfs_shell_cmd(cmd=['listxattr', self.dir_name])
 
-#    def test_ls(self):
-#        """
-#        Test that ls passes
-#        """
-#        o = self.get_cephfs_shell_cmd_output("ls")
-#        log.info("cephfs-shell output:\n{}".format(o))
-#
-#        o = self.mount_a.run_shell(['ls']).stdout.getvalue().strip().replace("\n", " ").split()
-#        log.info("mount_a output:\n{}".format(o))
-#
-#        # ls should not list hidden files without the -a switch
-#        if '.' in o or '..' in o:
-#            log.info('ls failed')
-#        else:
-#            log.info('ls succeeded')
-#
-#    def test_ls_a(self):
-#        """
-#        Test that ls -a passes
-#        """
-#        o = self.get_cephfs_shell_cmd_output("ls -a")
-#        log.info("cephfs-shell output:\n{}".format(o))
-#
-#        o = self.mount_a.run_shell(['ls', '-a']).stdout.getvalue().strip().replace("\n", " ").split()
-#        log.info("mount_a output:\n{}".format(o))
-#
-#        if '.' in o and '..' in o:
-#            log.info('ls -a succeeded')
-#        else:
-#            log.info('ls -a failed')
+class TestLS(TestCephFSShell):
+    dir_name = ('test_dir')
+    hidden_dir_name = ('.test_hidden_dir')
+
+    def test_ls(self):
+        """ Test that ls prints files in CWD. """
+        self.run_cephfs_shell_cmd(f'mkdir {self.dir_name}')
+
+        ls_output = self.get_cephfs_shell_cmd_output("ls")
+        log.info(f"output of ls command:\n{ls_output}")
+
+        self.assertIn(self.dir_name, ls_output)
+
+    def test_ls_a(self):
+        """ Test ls -a prints hidden files in CWD."""
+
+        self.run_cephfs_shell_cmd(f'mkdir {self.hidden_dir_name}')
+
+        ls_a_output = self.get_cephfs_shell_cmd_output(['ls', '-a'])
+        log.info(f"output of ls -a command:\n{ls_a_output}")
+
+        self.assertIn(self.hidden_dir_name, ls_a_output)
+
+    def test_ls_does_not_print_hidden_dir(self):
+        """ Test ls command does not print hidden directory """
+
+        self.run_cephfs_shell_cmd(f'mkdir {self.hidden_dir_name}')
+
+        ls_output = self.get_cephfs_shell_cmd_output("ls")
+        log.info(f"output of ls command:\n{ls_output}")
+
+        self.assertNotIn(self.hidden_dir_name, ls_output)
+
+    def test_ls_a_prints_non_hidden_dir(self):
+        """ Test ls -a command prints non hidden directory """
+
+        self.run_cephfs_shell_cmd(f'mkdir {self.hidden_dir_name} {self.dir_name}')
+
+        ls_a_output = self.get_cephfs_shell_cmd_output(['ls', '-a'])
+        log.info(f"output of ls -a command:\n{ls_a_output}")
+
+        self.assertIn(self.dir_name, ls_a_output)
+
+    def test_ls_H_prints_human_readable_file_size(self):
+        """ Test "ls -lH" prints human readable file size."""
+
+        file_sizes = ['1','1K', '1M', '1G']
+        file_names = ['dump1', 'dump2', 'dump3', 'dump4']
+
+
+        for (file_size, file_name) in zip(file_sizes, file_names):
+            temp_file = self.mount_a.client_remote.mktemp(file_name)
+            self.mount_a.run_shell(f"fallocate -l {file_size} {temp_file}")
+            self.mount_a.run_shell(f'mv {temp_file} ./')
+
+        ls_H_output = self.get_cephfs_shell_cmd_output(['ls', '-lH'])
+
+        ls_H_file_size = set()
+        for line in ls_H_output.split('\n'):
+            ls_H_file_size.add(line.split()[1])
+
+        # test that file sizes are in human readable format
+        self.assertEqual({'1B','1K', '1M', '1G'}, ls_H_file_size)
+
+    def test_ls_s_sort_by_size(self):
+        """ Test "ls -S" sorts file listing by file_size """
+        test_file1 = "test_file1.txt"
+        test_file2 = "test_file2.txt"
+        file1_content = 'A' * 102
+        file2_content = 'B' * 10
+
+        self.run_cephfs_shell_cmd(f"write {test_file1}", stdin=file1_content)
+        self.run_cephfs_shell_cmd(f"write {test_file2}", stdin=file2_content)
+
+        ls_s_output = self.get_cephfs_shell_cmd_output(['ls', '-lS'])
+
+        file_sizes = []
+        for line in ls_s_output.split('\n'):
+            file_sizes.append(line.split()[1])
+
+        #test that file size are in ascending order
+        self.assertEqual(file_sizes, sorted(file_sizes))
+
 
 class TestMisc(TestCephFSShell):
     def test_issue_cephfs_shell_cmd_at_invocation(self):
