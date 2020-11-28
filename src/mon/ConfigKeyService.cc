@@ -72,10 +72,6 @@ ConfigKeyService::ConfigKeyService(Monitor &m, Paxos &p)
     paxos(p)
 {}
 
-bool ConfigKeyService::dispatch(MonOpRequestRef op) {
-  return service_dispatch(op);
-}
-
 bool ConfigKeyService::in_quorum() const
 {
   return (mon.is_leader() || mon.is_peon());
@@ -215,7 +211,7 @@ void ConfigKeyService::store_delete_prefix(
   }
 }
 
-bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
+bool ConfigKeyService::dispatch(MonOpRequestRef op)
 {
   Message *m = op->get_req();
   ceph_assert(m != NULL);

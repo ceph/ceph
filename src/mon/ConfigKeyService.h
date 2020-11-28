@@ -28,7 +28,6 @@ public:
   ~ConfigKeyService() {}
 
   bool dispatch(MonOpRequestRef op);
-  bool service_dispatch(MonOpRequestRef op);
 
   int validate_osd_destroy(const int32_t id, const uuid_d& uuid);
   void do_osd_destroy(int32_t id, uuid_d& uuid);
