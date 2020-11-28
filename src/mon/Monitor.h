@@ -98,7 +98,7 @@ enum {
   l_mon_last,
 };
 
-class QuorumService;
+class ConfigKeyService;
 class PaxosService;
 
 class AdminSocketHook;
@@ -684,7 +684,7 @@ public:
   friend class LogMonitor;
   friend class ConfigKeyService;
 
-  std::unique_ptr<QuorumService> config_key_service;
+  std::unique_ptr<ConfigKeyService> config_key_service;
 
   // -- sessions --
   MonSessionMap session_map;
