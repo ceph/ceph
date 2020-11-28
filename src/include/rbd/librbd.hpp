@@ -146,6 +146,33 @@ namespace librbd {
     std::vector<mirror_image_site_status_t> site_statuses;
   } mirror_image_global_status_t;
 
+  typedef rbd_mirror_group_state_t mirror_group_state_t;
+
+  typedef struct {
+    std::string global_id;
+    mirror_image_mode_t mirror_image_mode;
+    mirror_group_state_t state;
+    bool primary;
+  } mirror_group_info_t;
+
+  typedef rbd_mirror_group_status_state_t mirror_group_status_state_t;
+
+  typedef struct {
+    std::string mirror_uuid;
+    mirror_group_status_state_t state;
+    std::string description;
+    std::map<std::pair<int64_t, std::string>,
+             mirror_image_site_status_t> mirror_images;
+    time_t last_update;
+    bool up;
+  } mirror_group_site_status_t;
+
+  typedef struct {
+    std::string name;
+    mirror_group_info_t info;
+    std::vector<mirror_group_site_status_t> site_statuses;
+  } mirror_group_global_status_t;
+
   typedef rbd_group_image_state_t group_image_state_t;
 
   typedef struct {
@@ -407,6 +434,17 @@ public:
       std::map<std::string, std::pair<mirror_image_mode_t,
                                       mirror_image_info_t>> *entries);
 
+  int mirror_group_info_list(IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+      const std::string &start_id, size_t max,
+      std::map<std::string, mirror_group_info_t> *entries);
+  int mirror_group_global_status_list(
+      IoCtx& io_ctx, const std::string &start_id, size_t max,
+      std::map<std::string, mirror_group_global_status_t> *groups);
+  int mirror_group_status_summary(IoCtx& io_ctx,
+      std::map<mirror_group_status_state_t, int> *states);
+  int mirror_group_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, std::string> *sevice_ids);
+
   /// mirror_peer_ commands are deprecated to mirror_peer_site_ equivalents
   int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
@@ -479,6 +517,25 @@ public:
   int group_snap_rollback_with_progress(IoCtx& io_ctx, const char *group_name,
                                         const char *snap_name,
                                         ProgressContext& pctx);
+
+  // RBD group mirroring support functions
+  int mirror_group_list(IoCtx& io_ctx, std::vector<std::string> *names);
+  int mirror_group_enable(IoCtx& io_ctx, const char *group_name,
+                          mirror_image_mode_t mirror_image_mode);
+  int mirror_group_disable(IoCtx& io_ctx, const char *group_name, bool force);
+  int mirror_group_promote(IoCtx& io_ctx, const char *group_name, bool force);
+  int mirror_group_demote(IoCtx& io_ctx, const char *group_name);
+  int mirror_group_resync(IoCtx& io_ctx, const char *group_name);
+  int mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
+                                   uint32_t flags, std::string *snap_id);
+  int mirror_group_get_info(IoCtx& io_ctx, const char *group_name,
+                            mirror_group_info_t *mirror_group_info,
+                            size_t info_size);
+  int mirror_group_get_status(IoCtx& io_ctx, const char *group_name,
+                              mirror_group_global_status_t *mirror_group_status,
+                              size_t status_size);
+  int mirror_group_get_instance_id(IoCtx& io_ctx, const char *group_name,
+                                   std::string *instance_id);
 
   int namespace_create(IoCtx& ioctx, const char *namespace_name);
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
