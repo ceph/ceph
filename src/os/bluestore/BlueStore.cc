@@ -3561,7 +3561,8 @@ void BlueStore::Onode::get() {
   }
 }
 void BlueStore::Onode::put() {
-  if (--nref == 2) {
+  int n = --nref;
+  if (n == 2) {
     c->get_onode_cache()->unpin(this, [&]() {
         bool was_pinned = pinned;
         pinned = pinned && nref > 2; // intentionally use > not >= as we have
@@ -3569,12 +3570,12 @@ void BlueStore::Onode::put() {
         bool r = was_pinned && !pinned;
         // additional decrement for newly unpinned instance
         if (r) {
-          --nref;
+          n = --nref;
         }
         return cached && r;
       });
   }
-  if (nref == 0) {
+  if (n == 0) {
     delete this;
   }
 }
