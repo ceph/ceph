@@ -138,7 +138,7 @@ public:
   static const unsigned STATE_DIRTYDFT =      (1<<16);  // dirty dirfragtree
   static const unsigned STATE_BADFRAG =       (1<<17);  // bad dirfrag
   static const unsigned STATE_TRACKEDBYOFT =  (1<<18);  // tracked by open file table
-  static const unsigned STATE_AUXSUBTREE =    (1<<19);  // no subtree merge
+  static const unsigned STATE_AUXBOUND =      (1<<19);  // auxiliary export bound
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -167,7 +167,7 @@ public:
   (STATE_DIRTY |
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND |
-   STATE_AUXSUBTREE |
+   STATE_AUXBOUND |
    STATE_REJOINUNDEF);
 
   // -- rep spec --

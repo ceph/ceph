@@ -1059,8 +1059,7 @@ bool MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust
   dout(10) << "try_subtree_merge_at " << *dir << dendl;
 
   if (dir->dir_auth.second != CDIR_AUTH_UNKNOWN ||
-      dir->state_test(CDir::STATE_EXPORTBOUND) ||
-      dir->state_test(CDir::STATE_AUXSUBTREE))
+      dir->state_test(CDir::STATE_EXPORTBOUND))
     return false;
 
   auto it = subtrees.find(dir);
@@ -11240,18 +11239,10 @@ void MDCache::adjust_dir_fragments(CInode *diri,
       else
 	any_non_subtree = true;
     }
-    ceph_assert(!any_subtree || !any_non_subtree);
 
     set<CDir*> new_bounds;
     if (any_subtree)  {
-      for (const auto& dir : srcfrags) {
-	// this simplifies the code that find subtrees underneath the dirfrag
-	if (!dir->is_subtree_root()) {
-	  dir->state_set(CDir::STATE_AUXSUBTREE);
-	  adjust_subtree_auth(dir, mds->get_nodeid());
-	}
-      }
-
+      ceph_assert(!any_non_subtree);
       for (const auto& dir : srcfrags) {
 	ceph_assert(dir->is_subtree_root());
 	dout(10) << " taking srcfrag subtree bounds from " << *dir << dendl;
@@ -11435,18 +11426,7 @@ void MDCache::fragment_freeze_dirs(const std::vector<CDir*>& dirs)
     else
       any_non_subtree = true;
   }
-
-  if (any_subtree && any_non_subtree) {
-    // either all dirfrags are subtree roots or all are not.
-    for (const auto& dir : dirs) {
-      if (dir->is_subtree_root()) {
-	ceph_assert(dir->state_test(CDir::STATE_AUXSUBTREE));
-      } else {
-	dir->state_set(CDir::STATE_AUXSUBTREE);
-	adjust_subtree_auth(dir, mds->get_nodeid());
-      }
-    }
-  }
+  ceph_assert(!any_subtree || !any_non_subtree);
 }
 
 class C_MDC_FragmentMarking : public MDCacheContext {

@@ -5257,19 +5257,18 @@ void CInode::queue_export_pin(mds_rank_t export_pin)
       target = mdcache->hash_into_rank_bucket(ino(), dir->get_frag());
     }
 
-    if (target != MDS_RANK_NONE) {
-      if (dir->is_subtree_root()) {
-	// set auxsubtree bit or export it
-	if (!dir->state_test(CDir::STATE_AUXSUBTREE) ||
-	    target != dir->get_dir_auth().first)
-	  queue = true;
-      } else {
-	// create aux subtree or export it
-	queue = true;
+    if (target == MDS_RANK_NONE) {
+      if (dir->state_test(CDir::STATE_AUXBOUND)) {
+	dout(10) << " clear aux bound on " << *dir << dendl;
+	dir->state_clear(CDir::STATE_AUXBOUND);
       }
     } else {
-      // clear aux subtrees ?
-      queue = dir->state_test(CDir::STATE_AUXSUBTREE);
+      if (!dir->state_test(CDir::STATE_AUXBOUND)) {
+	dout(10) << " create aux bound on " << *dir << dendl;
+	dir->state_set(CDir::STATE_AUXBOUND);
+      }
+      if (target != dir->authority().first)
+	queue = true;
     }
 
     if (queue)
