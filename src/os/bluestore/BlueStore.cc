@@ -3548,32 +3548,36 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 //
 void BlueStore::Onode::get() {
   if (++nref == 2) {
-    c->get_onode_cache()->pin(this, [&]() {
-        bool was_pinned = pinned;
-        pinned = nref >= 2;
-        // additional increment for newly pinned instance
-        bool r = !was_pinned && pinned;
-        if (r) {
-          ++nref;
-        }
-        return cached && r;
-      });
+    OnodeCacheShard* ocs = c->get_onode_cache();
+    std::lock_guard l(ocs->lock);
+    bool was_pinned = pinned;
+    pinned = nref >= 2;
+    // additional increment for newly pinned instance
+    bool r = !was_pinned && pinned;
+    if (r) {
+      ++nref;
+    }
+    if (cached && r) {
+      ocs->_pin(this);
+    }
   }
 }
 void BlueStore::Onode::put() {
   int n = --nref;
   if (n == 2) {
-    c->get_onode_cache()->unpin(this, [&]() {
-        bool was_pinned = pinned;
-        pinned = pinned && nref > 2; // intentionally use > not >= as we have
-                                     // +1 due to pinned state
-        bool r = was_pinned && !pinned;
-        // additional decrement for newly unpinned instance
-        if (r) {
-          n = --nref;
-        }
-        return cached && r;
-      });
+    OnodeCacheShard* ocs = c->get_onode_cache();
+    std::lock_guard l(ocs->lock);
+    bool was_pinned = pinned;
+    pinned = pinned && nref > 2; // intentionally use > not >= as we have
+    // +1 due to pinned state
+    bool r = was_pinned && !pinned;
+    // additional decrement for newly unpinned instance
+    if (r) {
+      n = --nref;
+    }
+    if (cached && r) {
+      ocs->_unpin(this);
+    }
   }
   if (n == 0) {
     delete this;

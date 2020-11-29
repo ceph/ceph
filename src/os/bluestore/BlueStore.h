@@ -1215,20 +1215,6 @@ public:
     virtual void _add(Onode* o, int level) = 0;
     virtual void _rm(Onode* o) = 0;
 
-    void pin(Onode* o, std::function<bool ()> validator) {
-      std::lock_guard l(lock);
-      if (validator()) {
-        _pin(o);
-      }
-    }
-
-    void unpin(Onode* o, std::function<bool()> validator) {
-      std::lock_guard l(lock);
-      if (validator()) {
-        _unpin(o);
-      }
-    }
-
     virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
     virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
     bool empty() {
