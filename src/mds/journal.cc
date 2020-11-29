@@ -335,7 +335,6 @@ void EMetaBlob::add_dir_context(CDir *dir)
 	  if (parent_auth.second == CDIR_AUTH_UNKNOWN &&
 	      !dir->is_ambiguous_dir_auth() &&
 	      !dir->state_test(CDir::STATE_EXPORTBOUND) &&
-	      !dir->state_test(CDir::STATE_AUXSUBTREE) &&
 	      !diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
 	    dout(0) << "EMetaBlob::add_dir_context unexpected subtree " << *dir << dendl;
 	    ceph_abort();

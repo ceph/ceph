@@ -143,40 +143,23 @@ void MDBalancer::handle_export_pins(void)
       }
 
       if (target == MDS_RANK_NONE) {
-	if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
-	  if (dir->is_frozen() || dir->is_freezing()) {
-	    // try again later
-	    remove = false;
-	    continue;
-	  }
-	  dout(10) << " clear auxsubtree on " << *dir << dendl;
-	  dir->state_clear(CDir::STATE_AUXSUBTREE);
-	  mds->mdcache->try_subtree_merge(dir);
-	}
-      } else if (target == mds->get_nodeid()) {
-        if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
-          ceph_assert(dir->is_subtree_root());
-        } else if (dir->state_test(CDir::STATE_CREATING) ||
-	           dir->is_frozen() || dir->is_freezing()) {
-	  // try again later
-	  remove = false;
-	  continue;
-	} else if (!dir->is_subtree_root()) {
-	  dir->state_set(CDir::STATE_AUXSUBTREE);
-	  mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
-	  dout(10) << " create aux subtree on " << *dir << dendl;
-	} else {
-	  dout(10) << " set auxsubtree bit on " << *dir << dendl;
-	  dir->state_set(CDir::STATE_AUXSUBTREE);
+	if (dir->state_test(CDir::STATE_AUXBOUND)) {
+	  dout(10) << " clear aux bound on " << *dir << dendl;
+	  dir->state_clear(CDir::STATE_AUXBOUND);
 	}
       } else {
-        /* Only export a directory if it's non-empty. An empty directory will
-         * be sent back by the importer.
-         */
-        if (dir->get_num_head_items() > 0) {
-	  mds->mdcache->migrator->export_dir(dir, target);
-        }
-	remove = false;
+	if (!dir->state_test(CDir::STATE_AUXBOUND)) {
+	  dout(10) << " create aux bound on " << *dir << dendl;
+	  dir->state_set(CDir::STATE_AUXBOUND);
+	}
+	if (target != mds->get_nodeid()) {
+	  /* Only export a directory if it's non-empty. An empty directory will
+	   * be sent back by the importer.
+	   */
+	  if (dir->get_num_head_items() > 0)
+	    mds->mdcache->migrator->export_dir(dir, target);
+	  remove = false;
+	}
       }
     }
 

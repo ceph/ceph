@@ -845,9 +845,8 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
       CDir *bd = *p;
       if (!(bd->is_frozen() || bd->is_freezing())) {
 	ceph_assert(bd->is_auth());
-	dir->state_set(CDir::STATE_AUXSUBTREE);
-	mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
-	dout(7) << "create aux subtree " << *bd << " under " << *dir << dendl;
+	dir->state_set(CDir::STATE_AUXBOUND);
+	dout(7) << "create aux bound " << *bd << " under " << *dir << dendl;
       }
     }
   }
@@ -940,6 +939,10 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 
 	bool complete = true;
 	for (auto p = ls.begin(); p != ls.end(); ) {
+	  if ((*p)->state_test(CDir::STATE_AUXBOUND)) {
+	    p = ls.erase(p);
+	    continue;
+	  }
 	  if ((*p)->state_test(CDir::STATE_EXPORTING) ||
 	      (*p)->is_freezing_dir() || (*p)->is_frozen_dir()) {
 	    complete = false;
@@ -2281,9 +2284,6 @@ void Migrator::export_finish(CDir *dir, export_state_iterator it)
     bd->put(CDir::PIN_EXPORTBOUND);
     bd->state_clear(CDir::STATE_EXPORTBOUND);
   }
-
-  if (dir->state_test(CDir::STATE_AUXSUBTREE))
-    dir->state_clear(CDir::STATE_AUXSUBTREE);
 
   // discard delayed expires
   mdcache->discard_delayed_expire(dir);

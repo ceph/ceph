@@ -122,7 +122,7 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
   if (dir.state_test(CDir::STATE_FREEZINGTREE)) out << "|freezingtree";
   if (dir.state_test(CDir::STATE_FROZENTREE)) out << "|frozentree";
-  if (dir.state_test(CDir::STATE_AUXSUBTREE)) out << "|auxsubtree";
+  if (dir.state_test(CDir::STATE_AUXBOUND)) out << "|auxbound";
   if (dir.state_test(CDir::STATE_FROZENDIR)) out << "|frozendir";
   if (dir.state_test(CDir::STATE_FREEZINGDIR)) out << "|freezingdir";
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
@@ -3120,6 +3120,8 @@ bool CDir::freeze_tree()
 
   _walk_tree([this](CDir *dir) {
       if (dir->freeze_tree_state)
+	return false;
+      if (dir->state_test(STATE_AUXBOUND) && dir != freeze_tree_state->dir)
 	return false;
       dir->freeze_tree_state = freeze_tree_state;
       freeze_tree_state->auth_pins += dir->get_auth_pins() + dir->get_dir_auth_pins();
