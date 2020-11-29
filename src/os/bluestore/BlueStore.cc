@@ -3455,49 +3455,99 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
 
+// Onode exists in various states depending on how many times it is referenced:
+// 0   destruction
+// 1   Onode reference OnodeRef is only in onode_map
+//     Onode can be weak referenced (Onode*) by OnodeCache, if cached == true,
+//     In this state Onode can be evicted from cache and removed.
+// 2+  Onode is used multiple times. It is removed from OnodeCache.
 //
-// A tricky thing about Onode's ref counter is that we do an additional
-// increment when newly pinned instance is detected. And -1 on unpin.
-// This prevents from a conflict with a delete call (when nref == 0).
-// The latter might happen while the thread is in unpin() function
-// (and e.g. waiting for lock acquisition) since nref is already
-// decremented. And another 'putting' thread on the instance will release it.
+// Value nref is split into parts:
+// bits [32..1] form signed value of reference counter
+// bit  [0] is a flag that indicated need for state transition
 //
+// Reference counter changes are always done by non-locking atomics.
+// When change of reference counter indicates need for state change then 
+// state_change flag is also set as a part of that atomic update.
+//
+// Functions put() and get() will not exit until state change flag is reset,
+// indicating that Onode is now stable in new state.
+//
+
+static const int onode_state_change = 1;
+
 void BlueStore::Onode::get() {
-  if (++nref == 2) {
-    OnodeCacheShard* ocs = c->get_onode_cache();
-    std::lock_guard l(ocs->lock);
-    bool was_pinned = pinned;
-    pinned = nref >= 2;
-    // additional increment for newly pinned instance
-    bool r = !was_pinned && pinned;
-    if (r) {
-      ++nref;
+  int n, was_n, new_n;
+  do {
+    n = nref;
+    was_n = n;
+    if (n / 2 >= 2) {
+      // attempt atomic
+      new_n = n + 2;
+    } else {
+      // this will need active transition
+      new_n = (n + 2) | onode_state_change;
     }
-    if (cached && r) {
-      ocs->_pin(this);
-    }
+    atomic_compare_exchange_strong(&nref, &n, new_n);
+  } while (n != was_n);
+
+  if (new_n & onode_state_change) {
+    put_get_transition();
   }
 }
+
 void BlueStore::Onode::put() {
-  int n = --nref;
-  if (n == 2) {
-    OnodeCacheShard* ocs = c->get_onode_cache();
-    std::lock_guard l(ocs->lock);
-    bool was_pinned = pinned;
-    pinned = pinned && nref > 2; // intentionally use > not >= as we have
-    // +1 due to pinned state
-    bool r = was_pinned && !pinned;
-    // additional decrement for newly unpinned instance
-    if (r) {
-      n = --nref;
+  int n, was_n, new_n;
+  do {
+    n = nref;
+    was_n = n;
+    if (n / 2 >= 3) {
+      // attempt atomic
+      new_n = n - 2;
+    } else {
+      // this will need active transition
+      new_n = (n - 2) | onode_state_change;
     }
-    if (cached && r) {
-      ocs->_unpin(this);
-    }
+    atomic_compare_exchange_strong(&nref, &n, new_n);
+  } while (n != was_n);
+
+  if (new_n & onode_state_change) {
+    put_get_transition();
   }
-  if (n == 0) {
-    delete this;
+}
+
+void BlueStore::Onode::put_get_transition() {
+  OnodeCacheShard* ocs = c->get_onode_cache();
+  std::lock_guard l(ocs->lock);
+  int n;
+  while ((n = nref) & onode_state_change) {
+    int g = n;
+    if (g / 2 >= 2) {
+      // new state is #2+
+      // go for unpin
+      if (!pinned) {
+        pinned = true;
+        if (cached) {
+          ocs->_pin(this);
+        }
+      }
+    } else {
+      // new state is #1 or #0
+      // go for pin
+      if (pinned) {
+        pinned = false;
+        if (cached) {
+          ocs->_unpin(this);
+        }
+      }
+      if (g / 2 == 0) {
+        // new state is #0
+        delete this;
+        break;
+      }
+    }
+    // this will reset transition, if we just synced current state with requested
+    atomic_compare_exchange_strong(&nref, &g, n & ~onode_state_change); 
   }
 }
 

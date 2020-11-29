@@ -1129,6 +1129,7 @@ public:
     void flush();
     void get();
     void put();
+    void put_get_transition();
 
     inline bool put_cache() {
       ceph_assert(!cached);
@@ -1286,8 +1287,9 @@ public:
     mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     friend struct Collection; // for split_cache()
-
     friend struct LruOnodeCacheShard;
+    friend struct Onode; // for put()
+
     void _remove(const ghobject_t& oid);
   public:
     OnodeSpace(OnodeCacheShard *c) : cache(c) {}
