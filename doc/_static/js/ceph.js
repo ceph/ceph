@@ -1,5 +1,5 @@
 $(function() {
-  var releases_url = DOCUMENTATION_OPTIONS.URL_ROOT + 'releases.json';
+  var releases_url = DOCUMENTATION_OPTIONS.URL_ROOT + '_static/releases.json';
 
   function show_edit(branch, data) {
     if (branch) {
@@ -20,8 +20,8 @@ $(function() {
   }
 
   function get_branch() {
-    var url = window.location.href;
-    var res = url.match(/docs.ceph.com\/docs\/([a-z]+)\/?/i)
+    var pathname = window.location.pathname;
+    var res = pathname.match(/en\/([a-z]+)\/?/i)
     if (res) {
       return res[1]
     }
