@@ -64,6 +64,7 @@ setup(
                       'configparser',
                       'ansible>=2.0',
                       'prettytable',
+                      'rocket-python >= 1.2.15',
                       'manhole',
                       'humanfriendly',
                       ],

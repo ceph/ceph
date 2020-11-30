@@ -109,6 +109,9 @@ Scheduler arguments:
                               When tests finish or time out, send an email
                               here. May also be specified in ~/.teuthology.yaml
                               as 'results_email'
+  --rocketchat <rocketchat>   Comma separated list of Rocket.Chat channels where
+                              to send a message when tests finished or time out.
+                              To be used with --sleep-before-teardown option.
   -N <num>, --num <num>       Number of times to run/queue the job
                               [default: 1]
   -l <jobs>, --limit <jobs>   Queue at most this many jobs
