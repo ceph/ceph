@@ -550,7 +550,7 @@ class Remote(object):
         if iflags:
             args += ' iflag=' + ','.join(iflags)
         args = 'set -ex' + '\n' + args
-        proc = self.run(args=args, stdout=stdout, stderr=StringIO(), check_status=False)
+        proc = self.run(args=args, stdout=stdout, stderr=StringIO(), check_status=False, quiet=True)
         if proc.returncode:
             if 'No such file or directory' in proc.stderr.getvalue():
                 raise FileNotFoundError(errno.ENOENT,
@@ -591,7 +591,7 @@ class Remote(object):
             chown = 'sudo chown' if sudo else 'chown'
             args += '\n' + chown + ' ' + owner + ' ' + path
         args = 'set -ex' + '\n' + args
-        self.run(args=args, stdin=data)
+        self.run(args=args, stdin=data, quiet=True)
 
     def sudo_write_file(self, path, data, **kwargs):
         """
