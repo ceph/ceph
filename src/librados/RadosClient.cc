@@ -56,7 +56,9 @@ namespace ca = ceph::async;
 namespace cb = ceph::buffer;
 
 librados::RadosClient::RadosClient(CephContext *cct_)
-  : Dispatcher(cct_->get()) {}
+  : Dispatcher(cct_->get()) {
+  cct_->_conf.add_observer(this);
+}
 
 int64_t librados::RadosClient::lookup_pool(const char *name)
 {
@@ -451,6 +453,7 @@ int librados::RadosClient::get_min_compatible_client(int8_t* min_compat_client,
 
 librados::RadosClient::~RadosClient()
 {
+  cct->_conf.remove_observer(this);
   if (messenger)
     delete messenger;
   if (objecter)
