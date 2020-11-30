@@ -1188,3 +1188,14 @@ def get_lv_by_fullname(full_name):
     except ValueError:
         res_lv = None
     return res_lv
+
+def get_lvs_from_path(devpath):
+    lvs = []
+    if os.path.isabs(devpath):
+        # we have a block device
+        lvs = get_device_lvs(devpath)
+        if not lvs:
+            # maybe this was a LV path /dev/vg_name/lv_name or /dev/mapper/
+            lvs = get_lvs(filters={'path': devpath})
+
+    return lvs
