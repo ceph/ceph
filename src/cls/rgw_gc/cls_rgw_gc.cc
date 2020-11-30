@@ -114,6 +114,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   }
 
   cls_rgw_gc_urgent_data urgent_data;
+  std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
   if (head.bl_urgent_data.length() > 0) {
     auto iter_urgent_data = head.bl_urgent_data.cbegin();
     try {
@@ -123,8 +124,6 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
       return -EINVAL;
     }
   }
-
-  std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
   if (urgent_data.num_xattr_urgent_entries > 0) {
     bufferlist bl;
     ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
@@ -181,7 +180,7 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
           }
         //Search in xattrs
         } else if (auto i = xattr_urgent_data_map.find(info.tag);
-                   i != xattr_urgent_data_map.end()) {
+                  i != xattr_urgent_data_map.end()) {
           if (i->second > info.time) {
             CLS_LOG(1, "INFO: cls_rgw_gc_queue_list_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
             continue;
@@ -257,6 +256,8 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
   }
 
   cls_rgw_gc_urgent_data urgent_data;
+  std::unordered_map<string, ceph::real_time> xattr_urgent_data_map;
+
   if (head.bl_urgent_data.length() > 0) {
     auto iter_urgent_data = head.bl_urgent_data.cbegin();
     try {
@@ -266,8 +267,6 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
       return -EINVAL;
     }
   }
-
-  std::unordered_map<string, ceph::real_time> xattr_urgent_data_map;
   if (urgent_data.num_xattr_urgent_entries > 0) {
     bufferlist bl;
     ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
@@ -347,7 +346,7 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
           }
         // Search the xattr urgent data map
         } else if (auto i = xattr_urgent_data_map.find(info.tag);
-                   i != xattr_urgent_data_map.end()) {
+                  i != xattr_urgent_data_map.end()) {
           if (index == op_ret.entries.size()) {
             last_xattr_entry = std::make_pair(i->first, i->second);
           }
@@ -425,7 +424,6 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
       return ret;
     }
   }
-
   if (head.front == head.tail) {
     // the queue is empty, so we can discard all urgent_data
     urgent_data.urgent_data_map.clear();

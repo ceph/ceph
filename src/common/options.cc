@@ -6434,6 +6434,15 @@ std::vector<Option> get_rgw_options() {
     .set_default(50)
     .set_description("Number of maximum deferred data entries to be stored in queue for gc"),
 
+    Option("rgw_gc_defer_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Turn on/off defer gc")
+    .set_long_description(
+        "This flag can be used to defer the garbage collection of tail objects of an already deleted object"
+        "which is still being read by a client. The expiration time of the tail objects are deferred to a later time,"
+        "so that they are not purged from the system by rgw gc")
+    .add_see_also({"rgw_gc_obj_min_wait"}),
+
     Option("rgw_s3_success_create_obj_status", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("HTTP return code override for object creation")
