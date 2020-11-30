@@ -886,14 +886,20 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       t = MonitorDBStore::TransactionRef();
       tx_size = 0;
     }
-    for (const auto &osd_state : inc.new_state) {
-      if (osd_state.second & CEPH_OSD_UP) {
+    for (const auto [osd, state] : inc.new_state) {
+      if (state & CEPH_OSD_UP) {
 	// could be marked up *or* down, but we're too lazy to check which
-	last_osd_report.erase(osd_state.first);
+	last_osd_report.erase(osd);
       }
-      if (osd_state.second & CEPH_OSD_OUT) {
+      if (state & CEPH_OSD_OUT) {
         // could be marked in *or* out, but we can safely drop it
-        osd_epochs.erase(osd_state.first);
+        osd_epochs.erase(osd);
+      }
+    }
+    for (const auto [osd, weight] : inc.new_weight) {
+      if (weight == CEPH_OSD_OUT) {
+        // manually marked out, so drop it
+        osd_epochs.erase(osd);
       }
     }
   }
@@ -1064,19 +1070,20 @@ void OSDMonitor::start_mapping()
 
 void OSDMonitor::update_msgr_features()
 {
-  set<int> types;
-  types.insert((int)entity_name_t::TYPE_OSD);
-  types.insert((int)entity_name_t::TYPE_CLIENT);
-  types.insert((int)entity_name_t::TYPE_MDS);
-  types.insert((int)entity_name_t::TYPE_MON);
-  for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
+  const int types[] = {
+    entity_name_t::TYPE_OSD,
+    entity_name_t::TYPE_CLIENT,
+    entity_name_t::TYPE_MDS,
+    entity_name_t::TYPE_MON
+  };
+  for (int type : types) {
     uint64_t mask;
-    uint64_t features = osdmap.get_features(*q, &mask);
-    if ((mon->messenger->get_policy(*q).features_required & mask) != features) {
+    uint64_t features = osdmap.get_features(type, &mask);
+    if ((mon->messenger->get_policy(type).features_required & mask) != features) {
       dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
-      ceph::net::Policy p = mon->messenger->get_policy(*q);
+      ceph::net::Policy p = mon->messenger->get_policy(type);
       p.features_required = (p.features_required & ~mask) | features;
-      mon->messenger->set_policy(*q, p);
+      mon->messenger->set_policy(type, p);
     }
   }
 }
