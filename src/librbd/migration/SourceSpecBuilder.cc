@@ -76,7 +76,7 @@ int SourceSpecBuilder<I>::build_format(
 template <typename I>
 int SourceSpecBuilder<I>::build_stream(
     const json_spirit::mObject& source_spec_object,
-    std::unique_ptr<StreamInterface>* stream) const {
+    std::shared_ptr<StreamInterface>* stream) const {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 

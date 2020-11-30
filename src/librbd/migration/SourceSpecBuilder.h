@@ -34,7 +34,7 @@ public:
                    std::unique_ptr<FormatInterface>* format) const;
 
   int build_stream(const json_spirit::mObject& source_spec_object,
-                   std::unique_ptr<StreamInterface>* stream) const;
+                   std::shared_ptr<StreamInterface>* stream) const;
 
 private:
   ImageCtxT* m_image_ctx;

@@ -29,7 +29,7 @@ template<>
 struct SourceSpecBuilder<librbd::MockTestImageCtx> {
 
   MOCK_CONST_METHOD2(build_stream, int(const json_spirit::mObject&,
-                                       std::unique_ptr<StreamInterface>*));
+                                       std::shared_ptr<StreamInterface>*));
 
 };
 
@@ -69,7 +69,7 @@ public:
                            MockStreamInterface* mock_stream_interface, int r) {
     EXPECT_CALL(mock_source_spec_builder, build_stream(_, _))
       .WillOnce(WithArgs<1>(Invoke([mock_stream_interface, r]
-        (std::unique_ptr<StreamInterface>* ptr) {
+        (std::shared_ptr<StreamInterface>* ptr) {
           ptr->reset(mock_stream_interface);
           return r;
         })));
