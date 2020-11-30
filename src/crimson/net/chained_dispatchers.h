@@ -25,7 +25,7 @@ public:
   bool empty() const {
     return dispatchers.empty();
   }
-  seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m);
+  seastar::future<> ms_dispatch(crimson::net::ConnectionRef, MessageRef);
   void ms_handle_accept(crimson::net::ConnectionRef conn);
   void ms_handle_connect(crimson::net::ConnectionRef conn);
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace);

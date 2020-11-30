@@ -48,7 +48,7 @@ seastar::future<> Client::stop()
 }
 
 std::tuple<bool, seastar::future<>>
-Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
+Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
   bool dispatched = true;
   gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
@@ -117,7 +117,7 @@ seastar::future<> Client::reconnect()
   });
 }
 
-seastar::future<> Client::handle_mgr_map(crimson::net::Connection*,
+seastar::future<> Client::handle_mgr_map(crimson::net::ConnectionRef,
                                          Ref<MMgrMap> m)
 {
   mgrmap = m->get_map();
@@ -131,7 +131,7 @@ seastar::future<> Client::handle_mgr_map(crimson::net::Connection*,
   }
 }
 
-seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
+seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
                                           Ref<MMgrConfigure> m)
 {
   logger().info("{} {}", __func__, *m);

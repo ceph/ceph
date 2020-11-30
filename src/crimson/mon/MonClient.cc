@@ -519,7 +519,7 @@ bool Client::is_hunting() const {
 }
 
 std::tuple<bool, seastar::future<>>
-Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
+Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
   bool dispatched = true;
   gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
@@ -785,7 +785,7 @@ int Client::handle_auth_bad_method(crimson::net::ConnectionRef conn,
   }
 }
 
-seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
+seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
                                         Ref<MMonMap> m)
 {
   monmap.decode(m->monmapbl);
@@ -815,8 +815,8 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
   }
 }
 
-seastar::future<> Client::handle_auth_reply(crimson::net::Connection* conn,
-                                               Ref<MAuthReply> m)
+seastar::future<> Client::handle_auth_reply(crimson::net::ConnectionRef conn,
+                                            Ref<MAuthReply> m)
 {
   logger().info(
     "handle_auth_reply mon {} => {} returns {}: {}",

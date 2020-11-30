@@ -123,7 +123,7 @@ seastar::future<> AdminSocket::finalize_response(
 }
 
 
-seastar::future<> AdminSocket::handle_command(crimson::net::Connection* conn,
+seastar::future<> AdminSocket::handle_command(crimson::net::ConnectionRef conn,
 					      boost::intrusive_ptr<MCommand> m)
 {
   return execute_command(m->cmd, std::move(m->get_data())).then(
