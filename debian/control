@@ -62,7 +62,6 @@ Build-Depends: automake,
                libudev-dev,
                libnl-genl-3-dev,
                libxml2-dev,
-               libyaml-cpp-dev,
                librabbitmq-dev,
                librdkafka-dev,
 # Make-Check   libxmlsec1,
@@ -104,6 +103,7 @@ Build-Depends: automake,
 # Make-Check   xmlstarlet,
                nasm [amd64],
                zlib1g-dev,
+Built-Using:   libyaml-cpp-dev (>= 0.6),
 Standards-Version: 4.4.0
 
 Package: ceph
