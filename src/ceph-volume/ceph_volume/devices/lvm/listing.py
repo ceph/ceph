@@ -2,7 +2,6 @@ from __future__ import print_function
 import argparse
 import json
 import logging
-import os.path
 from textwrap import dedent
 from ceph_volume import decorators
 from ceph_volume.api import lvm as api
@@ -140,22 +139,6 @@ class List(object):
         """
         return self.create_report(api.get_lvs())
 
-    def get_lvs_from_path(self, device):
-        lvs = []
-        if os.path.isabs(device):
-            # we have a block device
-            lvs = api.get_device_lvs(device)
-            if not lvs:
-                # maybe this was a LV path /dev/vg_name/lv_name or /dev/mapper/
-                lvs = api.get_lvs(filters={'path': device})
-        else:
-            # vg_name/lv_name was passed
-            vg_name, lv_name = device.split('/')
-            lvs = api.get_lvs(filters={'lv_name': lv_name,
-                                       'vg_name': vg_name})
-
-        return lvs
-
     def single_report(self, arg):
         """
         Generate a report for a single device. This can be either a logical
@@ -167,7 +150,7 @@ class List(object):
         if isinstance(arg, int) or arg.isdigit():
             lv = api.get_lvs_from_osd_id(arg)
         elif arg[0] == '/':
-            lv = self.get_lvs_from_path(arg)
+            lv = api.get_lvs_from_path(arg)
         else:
             lv = [api.get_single_lv(filters={'lv_name': arg.split('/')[1]})]
 
