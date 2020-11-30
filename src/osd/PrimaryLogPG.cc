@@ -10023,7 +10023,6 @@ struct C_Flush : public Context {
 
 int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
 {
-  bufferlist bl;
   const object_info_t& oi = obc->obs.oi;
   const hobject_t& soid = oi.soid;
 
