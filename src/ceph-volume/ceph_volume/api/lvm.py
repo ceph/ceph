@@ -1164,3 +1164,15 @@ def get_device_lvs(device, name_prefix=''):
     lvs = _output_parser(stdout, LV_FIELDS)
     return [Volume(**lv) for lv in lvs if lv['lv_name'] and
             lv['lv_name'].startswith(name_prefix)]
+
+
+def get_lvs_from_path(devpath):
+    lvs = []
+    if os.path.isabs(devpath):
+        # we have a block device
+        lvs = get_device_lvs(devpath)
+        if not lvs:
+            # maybe this was a LV path /dev/vg_name/lv_name or /dev/mapper/
+            lvs = get_lvs(filters={'path': devpath})
+
+    return lvs
