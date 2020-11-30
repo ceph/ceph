@@ -60,7 +60,7 @@ private:
   json_spirit::mObject m_json_object;
   const SourceSpecBuilder<ImageCtxT>* m_source_spec_builder;
 
-  std::unique_ptr<StreamInterface> m_stream;
+  std::shared_ptr<StreamInterface> m_stream;
 
 };
 
