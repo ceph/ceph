@@ -40,7 +40,7 @@ seastar::future<T*> create_sharded(Args... args) {
     auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
     return sharded_obj->start(args...).then([sharded_obj]() {
       seastar::engine().at_exit([sharded_obj]() {
-          return sharded_obj->stop().finally([sharded_obj] {});
+          return sharded_obj->stop().then([sharded_obj] {});
         });
       return sharded_obj.get();
     });
@@ -621,7 +621,7 @@ static seastar::future<> run(
           }
         ).handle_exception_type([] (const DepthBroken& e) {
           // ok, stopped by stop_dispatch_messages()
-        }).finally([this, conn] {
+        }).then([this, conn] {
           std::chrono::duration<double> dur_conn = conn_stats.connected_time - conn_stats.connecting_time;
           std::chrono::duration<double> dur_msg = mono_clock::now() - conn_stats.start_time;
           unsigned ops = conn_stats.received_count - conn_stats.start_count;
@@ -670,9 +670,9 @@ static seastar::future<> run(
       }).then([client, ramptime = client_conf.ramptime,
                msgtime = client_conf.msgtime] {
         return client->dispatch_with_timer(ramptime, msgtime);
-      }).finally([client] {
+      }).then([client] {
         return client->shutdown();
-      }).finally([server, fp_server = std::move(fp_server)] () mutable {
+      }).then([server, fp_server = std::move(fp_server)] () mutable {
         return server->shutdown().then([cleanup = std::move(fp_server)] {});
       });
     } else if (mode == perf_mode_t::client) {
@@ -685,7 +685,7 @@ static seastar::future<> run(
       }).then([client, ramptime = client_conf.ramptime,
                msgtime = client_conf.msgtime] {
         return client->dispatch_with_timer(ramptime, msgtime);
-      }).finally([client] {
+      }).then([client] {
         return client->shutdown();
       });
     } else { // mode == perf_mode_t::server
@@ -696,7 +696,7 @@ static seastar::future<> run(
       ).then([server] {
         return server->wait();
       // shutdown
-      }).finally([server, fp_server = std::move(fp_server)] () mutable {
+      }).then([server, fp_server = std::move(fp_server)] () mutable {
         return server->shutdown().then([cleanup = std::move(fp_server)] {});
       });
     }
