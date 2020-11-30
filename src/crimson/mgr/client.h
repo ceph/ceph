@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <seastar/core/gate.hh>
 #include <seastar/core/timer.hh>
 
+#include "crimson/common/gated.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 #include "mon/MgrMap.h"

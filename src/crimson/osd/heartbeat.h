@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <seastar/core/future.hh>
 #include "common/ceph_time.h"
+#include "crimson/common/gated.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 
