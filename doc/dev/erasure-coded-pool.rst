@@ -31,15 +31,15 @@ cold storage with high latency and slow access time. The replicated
 pool CRUSH rule targets faster hardware to provide better response
 times.
 
-Cheap multidatacenter storage
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Cheap multiple data center storage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Ten datacenters are connected with dedicated network links. Each
-datacenter contains the same amount of storage with no power-supply
+Ten data centers are connected with dedicated network links. Each
+data center contains the same amount of storage with no power-supply
 backup and no air-cooling system.
 
 An erasure-coded pool is created with a CRUSH rule that will
-ensure no data loss if at most three datacenters fail
+ensure no data loss if at most three data centers fail
 simultaneously. The overhead is 50% with erasure code configured to
 split data in six (k=6) and create three coding chunks (m=3). With
 replication the overhead would be 400% (four replicas).

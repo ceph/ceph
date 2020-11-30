@@ -299,7 +299,7 @@ Changing a Monitor's IP address (The Messy Way)
 -----------------------------------------------
 
 There may come a time when the monitors must be moved to a different network,  a
-different part of the datacenter or a different datacenter altogether. While  it
+different part of the data center or a different data center altogether. While  it
 is possible to do it, the process becomes a bit more hazardous.
 
 In such a case, the solution is to generate a new monmap with updated IP

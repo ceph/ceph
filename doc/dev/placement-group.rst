@@ -62,7 +62,7 @@ something like this in pseudocode::
 	replicas = osds_for_pg[1:]
 
 If you want to understand the crush() part in the above, imagine a
-perfectly spherical datacenter in a vacuum ;) that is, if all OSDs
+perfectly spherical data center in a vacuum ;) that is, if all OSDs
 have weight 1.0, and there is no topology to the data center (all OSDs
 are on the top level), and you use defaults, etc, it simplifies to
 consistent hashing; you can think of it as::
