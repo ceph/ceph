@@ -501,10 +501,11 @@ public:
   load_head_obc(ObjectContextRef obc);
 
 public:
-  using with_obc_func_t = std::function<seastar::future<> (ObjectContextRef)>;
+  using with_obc_func_t =
+    std::function<load_obc_ertr::future<> (ObjectContextRef)>;
 
   template<RWState::State State>
-  seastar::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
+  load_obc_ertr::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
 
   load_obc_ertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
@@ -521,7 +522,7 @@ public:
 
 private:
   template<RWState::State State>
-  seastar::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
+  load_obc_ertr::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
 
   load_obc_ertr::future<ObjectContextRef> get_locked_obc(
     Operation *op,

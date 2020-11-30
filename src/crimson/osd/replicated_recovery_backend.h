@@ -117,7 +117,9 @@ private:
     eversion_t need);
 
   /// load object context for recovery if it is not ready yet
-  seastar::future<> load_obc_for_recovery(
+  using load_obc_ertr = crimson::errorator<
+    crimson::ct_error::object_corrupted>;
+  load_obc_ertr::future<> load_obc_for_recovery(
     const hobject_t& soid,
     bool pulled);
 
