@@ -23,6 +23,8 @@
 #include "msg/MessageRef.h"
 #include "msg/msg_types.h"
 
+#include "crimson/common/errorator.h"
+
 using auth_proto_t = int;
 
 class AuthConnectionMeta;
