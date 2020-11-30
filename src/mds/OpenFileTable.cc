@@ -725,6 +725,21 @@ void OpenFileTable::_recover_finish(int r)
   waiting_for_load.clear();
 }
 
+void OpenFileTable::_read_omap_values(const std::string& key, unsigned idx,
+                                      bool first)
+{
+    object_t oid = get_object_name(idx);
+    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    C_IO_OFT_Load *c = new C_IO_OFT_Load(this, idx, first);
+    ObjectOperation op;
+    if (first)
+      op.omap_get_header(&c->header_bl, &c->header_r);
+    op.omap_get_vals(key, "", uint64_t(-1),
+		     &c->values, &c->more, &c->values_r);
+    mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0,
+			new C_OnFinisher(c, mds->finisher));
+}
+
 void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 				 unsigned idx, bool first, bool more,
 				 bufferlist &header_bl,
@@ -842,16 +857,8 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
     else
       idx++;
     dout(10) << __func__ << ": continue to load from '" << last_key << "'" << dendl;
-    object_t oid = get_object_name(idx);
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-    C_IO_OFT_Load *c = new C_IO_OFT_Load(this, idx, !more);
-    ObjectOperation op;
-    if (!more)
-      op.omap_get_header(&c->header_bl, &c->header_r);
-    op.omap_get_vals(last_key, "", uint64_t(-1),
-		     &c->values, &c->more, &c->values_r);
-    mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0,
-			new C_OnFinisher(c, mds->finisher));
+
+    _read_omap_values(last_key, idx, !more);
     return;
   }
 
@@ -962,17 +969,7 @@ void OpenFileTable::load(MDSContext *onload)
   if (onload)
     waiting_for_load.push_back(onload);
 
-  C_IO_OFT_Load *c = new C_IO_OFT_Load(this, 0, true);
-  object_t oid = get_object_name(0);
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-
-  ObjectOperation op;
-  op.omap_get_header(&c->header_bl, &c->header_r);
-  op.omap_get_vals("", "", uint64_t(-1),
-		   &c->values, &c->more, &c->values_r);
-
-  mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0,
-		      new C_OnFinisher(c, mds->finisher));
+  _read_omap_values("", 0, true);
 }
 
 void OpenFileTable::_get_ancestors(const Anchor& parent,

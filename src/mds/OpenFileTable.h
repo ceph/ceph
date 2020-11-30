@@ -93,6 +93,7 @@ protected:
     loaded_journals.clear();
     loaded_anchor_map.clear();
   }
+  void _read_omap_values(const std::string& key, unsigned idx, bool first);
   void _load_finish(int op_r, int header_r, int values_r,
 		    unsigned idx, bool first, bool more,
                     bufferlist &header_bl,
