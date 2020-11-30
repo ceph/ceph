@@ -156,7 +156,6 @@ private:
         boost::beast::ssl_stream<boost::beast::tcp_stream>& stream) = 0;
   };
 
-  struct HttpSessionInterface;
   template <typename D> struct HttpSession;
   struct PlainHttpSession;
   struct SslHttpSession;
