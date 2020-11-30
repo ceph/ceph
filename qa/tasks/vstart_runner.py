@@ -742,6 +742,7 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
         self.metadata_overlay = False
         self.data_pool_name = None
         self.data_pools = None
+        self.fs_config = None
 
         # Hack: cheeky inspection of ceph.conf to see what MDSs exist
         self.mds_ids = set()
