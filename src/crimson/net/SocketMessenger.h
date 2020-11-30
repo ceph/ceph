@@ -49,7 +49,7 @@ class SocketMessenger final : public Messenger {
   uint32_t global_seq = 0;
   bool started = false;
 
-  seastar::future<> do_bind(const entity_addrvec_t& addr);
+  bind_ertr::future<> do_bind(const entity_addrvec_t& addr);
 
  public:
   SocketMessenger(const entity_name_t& myname,
@@ -61,10 +61,10 @@ class SocketMessenger final : public Messenger {
 
   // Messenger interfaces are assumed to be called from its own shard, but its
   // behavior should be symmetric when called from any shard.
-  seastar::future<> bind(const entity_addrvec_t& addr) override;
+  bind_ertr::future<> bind(const entity_addrvec_t& addr) override;
 
-  seastar::future<> try_bind(const entity_addrvec_t& addr,
-                             uint32_t min_port, uint32_t max_port) override;
+  bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
+                               uint32_t min_port, uint32_t max_port) override;
 
   seastar::future<> start(const std::list<Dispatcher*>& dispatchers) override;
 

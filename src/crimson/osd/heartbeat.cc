@@ -74,9 +74,13 @@ Heartbeat::start_messenger(crimson::net::Messenger& msgr,
   return msgr.try_bind(addrs,
                        local_conf()->ms_bind_port_min,
                        local_conf()->ms_bind_port_max)
-  .then([this, &msgr]() mutable {
+  .safe_then([this, &msgr]() mutable {
     return msgr.start(*this);
-  });
+  }, crimson::net::Messenger::bind_ertr::all_same_way(
+      [] (const std::error_code& e) {
+    logger().error("heartbeat messenger try_bind(): address range is unavailable.");
+    ceph_abort();
+  }));
 }
 
 seastar::future<> Heartbeat::stop()

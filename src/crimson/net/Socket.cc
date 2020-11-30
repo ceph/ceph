@@ -198,7 +198,8 @@ void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocke
 }
 #endif
 
-seastar::future<> FixedCPUServerSocket::listen(entity_addr_t addr)
+FixedCPUServerSocket::listen_ertr::future<>
+FixedCPUServerSocket::listen(entity_addr_t addr)
 {
   assert(seastar::this_shard_id() == cpu);
   logger().trace("FixedCPUServerSocket::listen({})...", addr);
@@ -209,14 +210,22 @@ seastar::future<> FixedCPUServerSocket::listen(entity_addr_t addr)
     lo.reuse_address = true;
     lo.set_fixed_cpu(ss.cpu);
     ss.listener = seastar::listen(s_addr, lo);
+  }).then([] {
+    return true;
   }).handle_exception_type([addr] (const std::system_error& e) {
     if (e.code() == std::errc::address_in_use) {
       logger().trace("FixedCPUServerSocket::listen({}): address in use", addr);
-      throw;
     } else {
       logger().error("FixedCPUServerSocket::listen({}): "
                      "got unexpeted error {}", addr, e);
       ceph_abort();
+    }
+    return false;
+  }).then([] (bool success) -> listen_ertr::future<> {
+    if (success) {
+      return listen_ertr::now();
+    } else {
+      return crimson::ct_error::address_in_use::make();
     }
   });
 }

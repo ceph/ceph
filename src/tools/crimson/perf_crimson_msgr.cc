@@ -181,9 +181,14 @@ static seastar::future<> run(
             msgr->set_crc_header();
             msgr->set_crc_data();
           }
-          return msgr->bind(entity_addrvec_t{addr}).then([this] {
+          return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
             return msgr->start(*this);
-          });
+          }, crimson::net::Messenger::bind_ertr::all_same_way(
+              [addr] (const std::error_code& e) {
+            logger().error("Server: "
+                           "there is another instance running at {}", addr);
+            ceph_abort();
+          }));
         });
       }
       seastar::future<> shutdown() {
