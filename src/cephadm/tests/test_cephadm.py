@@ -591,3 +591,53 @@ iMN28C2bKGao5UHvdER1rGy7
         assert exporter.cephadm_cache.host['scrape_errors']
         assert exporter.cephadm_cache.host['scrape_errors'] == ['ValueError exception: wah']
         assert exporter.cephadm_cache.errors == ['host thread stopped']
+
+    # Test the requesthandler does the right thing with invalid methods...
+    # ie. return a "501" - Not Implemented / Unsupported Method
+    def test_invalid_method_HEAD(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="HEAD")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
+
+    def test_invalid_method_DELETE(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="DELETE")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
+
+    def test_invalid_method_POST(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="POST")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
+
+    def test_invalid_method_PUT(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="PUT")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
+
+    def test_invalid_method_CONNECT(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="CONNECT")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
+
+    def test_invalid_method_TRACE(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="TRACE")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
+
+    def test_invalid_method_OPTIONS(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="OPTIONS")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
+
+    def test_invalid_method_PATCH(self):
+        hdrs={"Authorization":f"Bearer {TestCephadmExporter.token}"}
+        req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="PATCH")
+        with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
+            urlopen(req)
