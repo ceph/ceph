@@ -590,7 +590,7 @@ class VolumeGroup(object):
         '''
         Return a how many extents we can fit into a size in bytes.
         '''
-        return int(size / int(self.vg_extent_size))
+        return int(size / int(round(self.vg_extent_size)))
 
     def slots_to_extents(self, slots):
         '''
