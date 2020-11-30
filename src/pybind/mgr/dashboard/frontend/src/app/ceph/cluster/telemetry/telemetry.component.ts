@@ -7,6 +7,7 @@ import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { TelemetryService } from '~/app/shared/api/telemetry.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -43,6 +44,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
   step = 1;
 
   constructor(
+    public actionLabels: ActionLabelsI18n,
     private formBuilder: CdFormBuilder,
     private mgrModuleService: MgrModuleService,
     private notificationService: NotificationService,

@@ -3487,7 +3487,7 @@ int process_pg_map_command(
   string omap_stats_note =
       "\n* NOTE: Omap statistics are gathered during deep scrub and "
       "may be inaccurate soon afterwards depending on utilization. See "
-      "http://docs.ceph.com/docs/master/dev/placement-group/#omap-statistics "
+      "http://docs.ceph.com/en/latest/dev/placement-group/#omap-statistics "
       "for further details.\n";
   bool omap_stats_note_required = false;
 
@@ -3496,13 +3496,11 @@ int process_pg_map_command(
   if (prefix == "pg dump_json") {
     vector<string> v;
     v.push_back(string("all"));
-    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   } else if (prefix == "pg dump_pools_json") {
     vector<string> v;
     v.push_back(string("pools"));
-    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   } else if (prefix == "pg ls-by-primary") {

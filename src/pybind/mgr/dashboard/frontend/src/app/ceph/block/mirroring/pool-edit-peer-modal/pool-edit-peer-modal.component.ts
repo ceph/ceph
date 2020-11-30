@@ -4,6 +4,7 @@ import { AbstractControl, FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -29,6 +30,7 @@ export class PoolEditPeerModalComponent implements OnInit {
 
   constructor(
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {

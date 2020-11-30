@@ -482,6 +482,7 @@ void Client::dump_status(Formatter *f)
     f->dump_int("osd_epoch", osd_epoch);
     f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
     f->dump_bool("blocklisted", blocklisted);
+    f->dump_string("fs_name", mdsmap->get_fs_name());
   }
 }
 
@@ -6524,13 +6525,6 @@ void Client::start_tick_thread()
       auto t_interval = clock::duration(cct->_conf.get_val<sec>("client_tick_interval"));
       auto d_interval = clock::duration(cct->_conf.get_val<sec>("client_debug_inject_tick_delay"));
 
-      // Clear the debug inject tick delay
-      if (unlikely(d_interval.count() > 0)) {
-        ldout(cct, 20) << "clear debug inject tick delay: " << d_interval << dendl;
-        ceph_assert(0 == cct->_conf.set_val("client_debug_inject_tick_delay", "0"));
-        cct->_conf.apply_changes(nullptr);
-      }
-
       auto interval = std::max(t_interval, d_interval);
       if (likely(since >= interval)) {
         tick();
@@ -10182,6 +10176,8 @@ int Client::ftruncate(int fd, loff_t length, const UserPerm& perms)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
+  if ((f->mode & CEPH_FILE_MODE_WR) == 0)
+    return -EBADF;
   struct stat attr;
   attr.st_size = length;
   return _setattr(f->inode, &attr, CEPH_SETATTR_SIZE, perms);

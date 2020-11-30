@@ -100,16 +100,10 @@
         </div>
       </div>
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button (submitAction)="onSubmit()"
-                            [form]="mgrModuleForm">
-            <ng-container i18n>Update</ng-container>
-          </cd-submit-button>
-          <button type="button"
-                  class="btn btn-light"
-                  routerLink="/mgr-modules"
-                  i18n>Back</button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="mgrModuleForm"
+                              [submitText]="actionLabels.UPDATE"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

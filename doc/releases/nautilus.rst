@@ -1,3 +1,67 @@
+v14.2.15 Nautilus
+=================
+
+This is the 15th backport release in the Nautilus series. This release fixes a
+ceph-volume regression introduced in v14.2.13 and includes few other fixes. We
+recommend users to update to this release.
+
+Notable Changes
+---------------
+
+* ceph-volume: Fixes lvm batch --auto, which breaks backward compatibility
+  when using non rotational devices only (SSD and/or NVMe).
+* BlueStore: Fixes a bug in collection_list_legacy which makes pgs inconsistent
+  during scrub when running mixed versions of osds, prior to 14.2.12 with newer.
+* MGR: progress module can now be turned on/off, using the commands:
+  ``ceph progress on`` and ``ceph progress off``.
+
+Changelog
+---------
+
+* ceph-volume: fix filestore/dmcrypt activate (`pr#38198 <https://github.com/ceph/ceph/pull/38198>`_, Guillaume Abrioux)
+* ceph-volume: fix lvm batch auto with full SSDs (`pr#38046 <https://github.com/ceph/ceph/pull/38046>`_, Dimitri Savineau, Guillaume Abrioux)
+* os/bluestore: fix "end reached" check in collection_list_legacy (`pr#38100 <https://github.com/ceph/ceph/pull/38100>`_, Mykola Golub)
+* mgr/progress: introduce turn off/on feature (`pr#38173 <https://github.com/ceph/ceph/pull/38173>`_, kamoltat)
+
+
+v14.2.14 Nautilus
+=================
+
+This is the 14th backport release in the Nautilus series. This release fixes
+a security flaw affecting Messenger v2, among other fixes across components.
+We recommend users to update to this release.
+
+Notable Changes
+---------------
+
+* CVE 2020-25660: CEPHX_V2 replay attack protection lost, for Messenger v2 (Ilya Dryomov)
+
+Changelog
+---------
+
+* mgr/dashboard: Strange iSCSI discovery auth behavior (`pr#37333 <https://github.com/ceph/ceph/pull/37333>`_, Volker Theile)
+* mgr/dashboard: redirect to original URL after successful login (`pr#36834 <https://github.com/ceph/ceph/pull/36834>`_, Avan Thakkar)
+* mgr/prometheus: add pool compression stats (`pr#37563 <https://github.com/ceph/ceph/pull/37563>`_, Paul Cuzner)
+* bluestore: test/objectstore/store_test: kill ExcessiveFragmentation test case (`pr#37824 <https://github.com/ceph/ceph/pull/37824>`_, Igor Fedotov)
+* bluestore: BlockDevice.cc: use pending_aios instead of iovec size as ios num (`pr#37823 <https://github.com/ceph/ceph/pull/37823>`_, weixinwei)
+* bluestore: Support flock retry (`pr#37842 <https://github.com/ceph/ceph/pull/37842>`_, Kefu Chai, wanghongxu)
+* bluestore: attach csum for compressed blobs (`pr#37843 <https://github.com/ceph/ceph/pull/37843>`_, Igor Fedotov)
+* osdc/ObjectCacher: overwrite might cause stray read request callbacks (`pr#37813 <https://github.com/ceph/ceph/pull/37813>`_, Jason Dillaman)
+* mgr: avoid false alarm of MGR_MODULE_ERROR (`pr#38069 <https://github.com/ceph/ceph/pull/38069>`_, Kefu Chai, Sage Weil)
+* mgr: fix race between module load and notify (`pr#37844 <https://github.com/ceph/ceph/pull/37844>`_, Mykola Golub, Patrick Donnelly)
+* mon: set session_timeout when adding to session_map (`pr#37554 <https://github.com/ceph/ceph/pull/37554>`_, Ilya Dryomov)
+* mon/MonClient: bring back CEPHX_V2 authorizer challenges (Ilya Dryomov)
+* osd/osd-rep-recov-eio.sh: TEST_rados_repair_warning:  return 1 (`pr#37815 <https://github.com/ceph/ceph/pull/37815>`_, David Zafman)
+* rbd: librbd: ignore -ENOENT error when disabling object-map (`pr#37814 <https://github.com/ceph/ceph/pull/37814>`_, Jason Dillaman)
+* rbd: rbd-nbd: don't ignore namespace when unmapping by image spec (`pr#37811 <https://github.com/ceph/ceph/pull/37811>`_, Mykola Golub)
+* rgw/rgw_file: Fix the incorrect lru object eviction (`pr#37804 <https://github.com/ceph/ceph/pull/37804>`_, luo rixin)
+* rgw: fix expiration header returned even if there is only one tag in the object the same as the rule (`pr#37806 <https://github.com/ceph/ceph/pull/37806>`_, Or Friedmann)
+* rgw: fix: S3 API KeyCount incorrect return (`pr#37810 <https://github.com/ceph/ceph/pull/37810>`_, 胡玮文)
+* rgw: radosgw-admin should paginate internally when listing bucket (`pr#37802 <https://github.com/ceph/ceph/pull/37802>`_, J. Eric Ivancich)
+* rgw: rgw_file: avoid long-ish delay on shutdown (`pr#37552 <https://github.com/ceph/ceph/pull/37552>`_, Matt Benjamin)
+* rgw: use yum rather than dnf for teuthology testing of rgw-orphan-list (`pr#37805 <https://github.com/ceph/ceph/pull/37805>`_, J. Eric Ivancich)
+
+
 v14.2.13 Nautilus
 =================
 

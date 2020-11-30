@@ -1,4 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -26,6 +27,7 @@ describe('OsdReweightModalComponent', () => {
       SubmitButtonComponent,
       BackButtonComponent
     ],
+    schemas: [NO_ERRORS_SCHEMA],
     providers: [OsdService, NgbActiveModal, CdFormBuilder]
   });
 
