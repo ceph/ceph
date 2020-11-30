@@ -31,14 +31,10 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button *ngIf="permissions.osd.update"
-                          (submitAction)="submitAction()"
-                          [form]="osdFlagsForm"
-                          i18n>Submit</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="submitAction()"
+                              [form]="osdFlagsForm"
+                              [showSubmit]="permissions.osd.update"
+                              [submitText]="actionLabels.UPDATE"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

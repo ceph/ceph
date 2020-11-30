@@ -4,6 +4,7 @@ import { FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -27,6 +28,7 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private iscsiService: IscsiService,
     private notificationService: NotificationService
   ) {

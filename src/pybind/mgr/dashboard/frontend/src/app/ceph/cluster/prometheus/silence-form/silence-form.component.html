@@ -205,12 +205,9 @@
 
       <div class="card-footer">
         <div class="text-right">
-          <cd-submit-button (submitAction)="submit()"
-                            [form]="formDir"
-                            i18n="@@formTitle">
-            {{ action | titlecase }} {{ resource | upperFirst }}
-          </cd-submit-button>
-          <cd-back-button></cd-back-button>
+          <cd-form-button-panel (submitActionEvent)="submit()"
+                                [form]="form"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
         </div>
       </div>
     </div>

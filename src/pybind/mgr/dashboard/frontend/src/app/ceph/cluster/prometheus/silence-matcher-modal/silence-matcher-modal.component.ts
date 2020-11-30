@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
 
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
@@ -54,7 +55,8 @@ export class SilenceMatcherModalComponent {
   constructor(
     private formBuilder: CdFormBuilder,
     private silenceMatcher: PrometheusSilenceMatcherService,
-    public activeModal: NgbActiveModal
+    public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.createForm();
     this.subscribeToChanges();
@@ -88,6 +90,10 @@ export class SilenceMatcherModalComponent {
     this.possibleValues = _.sortedUniq(
       this.rules.map((r) => _.get(r, this.silenceMatcher.getAttributePath(name))).filter((x) => x)
     );
+  }
+
+  getMode() {
+    return this.editMode ? this.actionLabels.EDIT : this.actionLabels.ADD;
   }
 
   preFillControls(matcher: AlertmanagerSilenceMatcher) {

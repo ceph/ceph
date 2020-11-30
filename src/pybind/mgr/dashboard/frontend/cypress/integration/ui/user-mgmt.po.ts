@@ -17,7 +17,7 @@ export class UserMgmtPageHelper extends PageHelper {
     cy.get('#email').type(email);
 
     // Click the create button and wait for user to be made
-    cy.contains('button', 'Create User').click();
+    cy.get('[data-cy=submitBtn]').click();
     this.getFirstTableCell(username).should('exist');
   }
 
@@ -31,7 +31,7 @@ export class UserMgmtPageHelper extends PageHelper {
     cy.get('#email').clear().type(email);
 
     // Click the edit button and check new values are present in table
-    const editButton = cy.contains('button', 'Edit User');
+    const editButton = cy.get('[data-cy=submitBtn]');
     editButton.click();
     this.getFirstTableCell(email).should('exist');
     this.getFirstTableCell(name).should('exist');
