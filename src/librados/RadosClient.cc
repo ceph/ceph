@@ -57,7 +57,9 @@ namespace cb = ceph::buffer;
 
 librados::RadosClient::RadosClient(CephContext *cct_)
   : Dispatcher(cct_->get()) {
-  cct_->_conf.add_observer(this);
+  auto& conf = cct->_conf;
+  conf.add_observer(this);
+  rados_mon_op_timeout = conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
 }
 
 int64_t librados::RadosClient::lookup_pool(const char *name)
