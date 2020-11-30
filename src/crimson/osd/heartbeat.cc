@@ -204,7 +204,7 @@ void Heartbeat::remove_peer(osd_id_t peer)
 }
 
 std::tuple<bool, seastar::future<>>
-Heartbeat::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
+Heartbeat::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
   bool dispatched = true;
   gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
@@ -258,7 +258,7 @@ void Heartbeat::ms_handle_accept(crimson::net::ConnectionRef conn)
   }
 }
 
-seastar::future<> Heartbeat::handle_osd_ping(crimson::net::Connection* conn,
+seastar::future<> Heartbeat::handle_osd_ping(crimson::net::ConnectionRef conn,
                                              Ref<MOSDPing> m)
 {
   switch (m->op) {
@@ -273,7 +273,7 @@ seastar::future<> Heartbeat::handle_osd_ping(crimson::net::Connection* conn,
   }
 }
 
-seastar::future<> Heartbeat::handle_ping(crimson::net::Connection* conn,
+seastar::future<> Heartbeat::handle_ping(crimson::net::ConnectionRef conn,
                                          Ref<MOSDPing> m)
 {
   auto min_message = static_cast<uint32_t>(
@@ -291,7 +291,7 @@ seastar::future<> Heartbeat::handle_ping(crimson::net::Connection* conn,
   return conn->send(reply);
 }
 
-seastar::future<> Heartbeat::handle_reply(crimson::net::Connection* conn,
+seastar::future<> Heartbeat::handle_reply(crimson::net::ConnectionRef conn,
                                           Ref<MOSDPing> m)
 {
   const osd_id_t from = m->get_source().num();
@@ -373,9 +373,9 @@ Heartbeat::Connection::~Connection()
   }
 }
 
-bool Heartbeat::Connection::matches(crimson::net::Connection* _conn) const
+bool Heartbeat::Connection::matches(crimson::net::ConnectionRef _conn) const
 {
-  return (conn && conn.get() == _conn);
+  return (conn && conn == _conn);
 }
 
 void Heartbeat::Connection::accepted(crimson::net::ConnectionRef accepted_conn)
@@ -551,7 +551,7 @@ void Heartbeat::Peer::send_heartbeat(
 }
 
 seastar::future<> Heartbeat::Peer::handle_reply(
-    crimson::net::Connection* conn, Ref<MOSDPing> m)
+    crimson::net::ConnectionRef conn, Ref<MOSDPing> m)
 {
   if (!session.is_started()) {
     // we haven't sent any ping yet

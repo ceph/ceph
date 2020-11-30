@@ -1883,11 +1883,10 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     ceph_msg_footer footer{init_le32(0), init_le32(0),
                            init_le32(0), init_le64(0), current_header.flags};
 
-    auto pconn = seastar::static_pointer_cast<SocketConnection>(
+    auto conn_ref = seastar::static_pointer_cast<SocketConnection>(
         conn.shared_from_this());
     Message *message = decode_message(nullptr, 0, header, footer,
-        msg_frame.front(), msg_frame.middle(), msg_frame.data(),
-        std::move(pconn));
+        msg_frame.front(), msg_frame.middle(), msg_frame.data(), conn_ref);
     if (!message) {
       logger().warn("{} decode message failed", conn);
       abort_in_fault();
@@ -1933,7 +1932,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
     // throttle the reading process by the returned future
-    return dispatchers.ms_dispatch(&conn, std::move(msg_ref));
+    return dispatchers.ms_dispatch(conn_ref, std::move(msg_ref));
   });
 }
 

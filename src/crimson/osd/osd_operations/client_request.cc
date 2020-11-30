@@ -70,7 +70,7 @@ seastar::future<> ClientRequest::start()
       }).then([this, opref](Ref<PG> pgref) {
 	PG &pg = *pgref;
 	if (pg.can_discard_op(*m)) {
-	  return osd.send_incremental_map(conn.get(), m->get_map_epoch());
+	  return osd.send_incremental_map(conn, m->get_map_epoch());
 	}
 	return with_blocking_future(
 	  handle.enter(pp(pg).await_map)

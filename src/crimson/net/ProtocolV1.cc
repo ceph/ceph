@@ -848,10 +848,10 @@ seastar::future<> ProtocolV1::read_message()
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(m.footer, p);
-      auto pconn = seastar::static_pointer_cast<SocketConnection>(
+      auto conn_ref = seastar::static_pointer_cast<SocketConnection>(
         conn.shared_from_this());
       auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
-                                  m.front, m.middle, m.data, std::move(pconn));
+                                  m.front, m.middle, m.data, conn_ref);
       if (unlikely(!msg)) {
         logger().warn("{} decode message failed", conn);
         throw std::system_error{make_error_code(error::corrupted_message)};
@@ -877,7 +877,7 @@ seastar::future<> ProtocolV1::read_message()
       logger().debug("{} <== #{} === {} ({})",
                      conn, msg_ref->get_seq(), *msg_ref, msg_ref->get_type());
       // throttle the reading process by the returned future
-      return dispatchers.ms_dispatch(&conn, std::move(msg_ref));
+      return dispatchers.ms_dispatch(conn_ref, std::move(msg_ref));
     });
 }
 
