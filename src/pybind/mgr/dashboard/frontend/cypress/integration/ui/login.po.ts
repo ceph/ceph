@@ -9,7 +9,7 @@ export class LoginPageHelper extends PageHelper {
   doLogin() {
     cy.get('[name=username]').type('admin');
     cy.get('#password').type('admin');
-    cy.contains('input', 'Login').click();
+    cy.get('[type=submit]').click();
     cy.get('cd-dashboard').should('exist');
   }
 
