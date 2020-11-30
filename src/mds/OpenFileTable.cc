@@ -729,6 +729,7 @@ void OpenFileTable::_read_omap_values(const std::string& key, unsigned idx,
                                       bool first)
 {
     object_t oid = get_object_name(idx);
+    dout(10) << __func__ << ": load from '" << oid << ":" << key << "'" << dendl;
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
     C_IO_OFT_Load *c = new C_IO_OFT_Load(this, idx, first);
     ObjectOperation op;
@@ -856,7 +857,6 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
       last_key = values.rbegin()->first;
     else
       idx++;
-    dout(10) << __func__ << ": continue to load from '" << last_key << "'" << dendl;
 
     _read_omap_values(last_key, idx, !more);
     return;
