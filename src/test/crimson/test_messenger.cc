@@ -38,6 +38,15 @@ static std::random_device rd;
 static std::default_random_engine rng{rd()};
 static bool verbose = false;
 
+static entity_addr_t get_server_addr() {
+  static int port = 9030;
+  ++port;
+  entity_addr_t saddr;
+  saddr.parse("127.0.0.1", nullptr);
+  saddr.set_port(port);
+  return saddr;
+}
+
 static seastar::future<> test_echo(unsigned rounds,
                                    double keepalive_ratio,
                                    bool v2)
@@ -217,10 +226,8 @@ static seastar::future<> test_echo(unsigned rounds,
   auto client1 = seastar::make_shared<test_state::Client>(rounds, keepalive_ratio);
   auto client2 = seastar::make_shared<test_state::Client>(rounds, keepalive_ratio);
   // start servers and clients
-  entity_addr_t addr1;
-  addr1.parse("127.0.0.1:9010", nullptr);
-  entity_addr_t addr2;
-  addr2.parse("127.0.0.1:9011", nullptr);
+  auto addr1 = get_server_addr();
+  auto addr2 = get_server_addr();
   if (v2) {
     addr1.set_type(entity_addr_t::TYPE_MSGR2);
     addr2.set_type(entity_addr_t::TYPE_MSGR2);
@@ -332,8 +339,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
   logger().info("test_concurrent_dispatch(v2={}):", v2);
   auto server = seastar::make_shared<test_state::Server>();
   auto client = seastar::make_shared<test_state::Client>();
-  entity_addr_t addr;
-  addr.parse("127.0.0.1:9010", nullptr);
+  auto addr = get_server_addr();
   if (v2) {
     addr.set_type(entity_addr_t::TYPE_MSGR2);
   } else {
@@ -455,8 +461,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
   logger().info("test_preemptive_shutdown(v2={}):", v2);
   auto server = seastar::make_shared<test_state::Server>();
   auto client = seastar::make_shared<test_state::Client>();
-  entity_addr_t addr;
-  addr.parse("127.0.0.1:9010", nullptr);
+  auto addr = get_server_addr();
   if (v2) {
     addr.set_type(entity_addr_t::TYPE_MSGR2);
   } else {
