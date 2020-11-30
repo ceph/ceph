@@ -8,3 +8,4 @@ rstcheck==3.3.1; python_version >= '3'
 autopep8; python_version >= '3'
 pyfakefs; python_version >= '3'
 isort==5.5.3
+pytest
