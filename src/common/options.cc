@@ -2447,6 +2447,16 @@ std::vector<Option> get_global_options() {
     .set_default(10.0)
     .set_description("Seconds before in-flight op is considered 'laggy' and we query mon for the latest OSDMap"),
 
+    Option("objecter_fastfail_timeout", Option::TYPE_SECS, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Timeout session on inactive pg: Duration (in seconds) after which the op is cancelled if the pg is inactive")
+    .set_long_description("It will cancel the op associated with a session that should be sent to a "
+                          "pg that is inactive after the specified duration. "
+                          "fastfail means that after the timeout configured the pg will be marked as invalid and "
+                          "all requests sent to it will be cancelled immediately "
+                          "For using this option the application must be able to handle the timeouts otherwise it may lead to "
+                          "data corruption"),
+
     Option("objecter_inflight_op_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Max in-flight data in bytes (both directions)"),
