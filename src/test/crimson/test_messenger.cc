@@ -157,7 +157,7 @@ static seastar::future<> test_echo(unsigned rounds,
         auto conn = msgr->connect(peer_addr, entity_name_t::TYPE_OSD);
         return seastar::futurize_invoke([this, conn] {
           return do_dispatch_pingpong(conn.get());
-        }).finally([this, conn, start_time] {
+        }).then([this, conn, start_time] {
           auto session = find_session(conn.get());
           std::chrono::duration<double> dur_handshake = session->connected_time - start_time;
           std::chrono::duration<double> dur_pingpong = session->finish_time - session->connected_time;
@@ -242,19 +242,19 @@ static seastar::future<> test_echo(unsigned rounds,
   // shutdown
   }).then_unpack([] {
     return seastar::now();
-  }).finally([client1] {
+  }).then([client1] {
     logger().info("client1 shutdown...");
     return client1->shutdown();
-  }).finally([client2] {
+  }).then([client2] {
     logger().info("client2 shutdown...");
     return client2->shutdown();
-  }).finally([server1] {
+  }).then([server1] {
     logger().info("server1 shutdown...");
     return server1->shutdown();
-  }).finally([server2] {
+  }).then([server2] {
     logger().info("server2 shutdown...");
     return server2->shutdown();
-  }).finally([server1, server2, client1, client2] {
+  }).then([server1, server2, client1, client2] {
     logger().info("test_echo() done!\n");
   });
 }
@@ -352,15 +352,15 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
     });
   }).then([server] {
     return server->wait();
-  }).finally([client] {
+  }).then([client] {
     logger().info("client shutdown...");
     client->msgr->stop();
     return client->msgr->shutdown();
-  }).finally([server] {
+  }).then([server] {
     logger().info("server shutdown...");
     server->msgr->stop();
     return server->msgr->shutdown();
-  }).finally([server, client] {
+  }).then([server, client] {
     logger().info("test_concurrent_dispatch() done!\n");
   });
 }
@@ -472,10 +472,10 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
   }).then([client] {
     logger().info("client shutdown...");
     return client->shutdown();
-  }).finally([server] {
+  }).then([server] {
     logger().info("server shutdown...");
     return server->shutdown();
-  }).finally([server, client] {
+  }).then([server, client] {
     logger().info("test_preemptive_shutdown() done!\n");
   });
 }
@@ -1293,7 +1293,7 @@ class FailoverTest : public Dispatcher {
     m->cmd.emplace_back(1, static_cast<char>(cmd_t::shutdown));
     return cmd_conn->send(m).then([] {
       return seastar::sleep(200ms);
-    }).finally([this] {
+    }).then([this] {
       cmd_msgr->stop();
       return cmd_msgr->shutdown();
     });
@@ -1340,9 +1340,9 @@ class FailoverTest : public Dispatcher {
         logger().info("\n[FAIL: {}]", eptr);
         test_suite->dump_results();
         throw;
-      }).finally([this] {
+      }).then([this] {
         return stop_peer();
-      }).finally([this] {
+      }).then([this] {
         return test_suite->shutdown().then([this] {
           test_suite.reset();
         });
@@ -3462,7 +3462,7 @@ test_v2_protocol(entity_addr_t test_addr,
     return FailoverTestPeer::create(test_peer_addr
     ).then([test_addr, test_peer_addr] (auto peer) {
       return test_v2_protocol(test_addr, test_peer_addr, false
-      ).finally([peer = std::move(peer)] () mutable {
+      ).then([peer = std::move(peer)] () mutable {
         return peer->wait().then([peer = std::move(peer)] {});
       });
     }).handle_exception([] (auto eptr) {
@@ -3558,7 +3558,7 @@ test_v2_protocol(entity_addr_t test_addr,
       return test_v2_lossless_peer_connector(*test);
     }).then([test] {
       return test_v2_lossless_peer_acceptor(*test);
-    }).finally([test] {
+    }).then([test] {
       return test->shutdown().then([test] {});
     });
   }).handle_exception([] (auto eptr) {

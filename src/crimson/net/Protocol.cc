@@ -80,7 +80,7 @@ void Protocol::close(bool dispatch_reset,
 
   // asynchronous operations
   assert(!close_ready.valid());
-  close_ready = std::move(gate_closed).finally([this] {
+  close_ready = std::move(gate_closed).then([this] {
     if (socket) {
       return socket->close();
     } else {
