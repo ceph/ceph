@@ -1017,6 +1017,7 @@ namespace ct_error {
     ct_error_code<std::errc::resource_unavailable_try_again>;
   using file_too_large =
     ct_error_code<std::errc::file_too_large>;
+  using address_in_use = ct_error_code<std::errc::address_in_use>;
 
   struct pass_further_all {
     template <class ErrorT>

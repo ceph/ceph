@@ -66,16 +66,15 @@ public:
     return seastar::now();
   }
 
+  using bind_ertr = crimson::errorator<
+    crimson::ct_error::address_in_use // The address (range) is already bound
+    >;
   /// bind to the given address
-  /// throws std::system_error with address_in_use if the addr is already bound
-  // TODO: use errorated future
-  virtual seastar::future<> bind(const entity_addrvec_t& addr) = 0;
+  virtual bind_ertr::future<> bind(const entity_addrvec_t& addr) = 0;
 
   /// try to bind to the first unused port of given address
-  /// throws std::system_error with address_in_use if the range is unavailable
-  // TODO: use errorated future
-  virtual seastar::future<> try_bind(const entity_addrvec_t& addr,
-                                     uint32_t min_port, uint32_t max_port) = 0;
+  virtual bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
+                                       uint32_t min_port, uint32_t max_port) = 0;
 
   /// start the messenger
   virtual seastar::future<> start(const std::list<Dispatcher*>&) = 0;

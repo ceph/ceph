@@ -273,15 +273,23 @@ seastar::future<> OSD::start()
       cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
                              local_conf()->ms_bind_port_min,
                              local_conf()->ms_bind_port_max)
-        .then([this, dispatchers]() mutable {
+        .safe_then([this, dispatchers]() mutable {
 	  return cluster_msgr->start(dispatchers);
-	}),
+        }, crimson::net::Messenger::bind_ertr::all_same_way(
+            [] (const std::error_code& e) {
+          logger().error("cluster messenger try_bind(): address range is unavailable.");
+          ceph_abort();
+        })),
       public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
                             local_conf()->ms_bind_port_min,
                             local_conf()->ms_bind_port_max)
-        .then([this, dispatchers]() mutable {
+        .safe_then([this, dispatchers]() mutable {
 	  return public_msgr->start(dispatchers);
-	}));
+        }, crimson::net::Messenger::bind_ertr::all_same_way(
+            [] (const std::error_code& e) {
+          logger().error("public messenger try_bind(): address range is unavailable.");
+          ceph_abort();
+        })));
   }).then_unpack([this] {
     return seastar::when_all_succeed(monc->start(),
                                      mgrc->start());
