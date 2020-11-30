@@ -126,7 +126,7 @@ future<> test_accept() {
       return seastar::sleep(50ms);
     }).then([] {
       logger.info("test_accept() ok\n");
-    }).finally([pss] {
+    }).then([pss] {
       return pss->destroy();
     }).handle_exception([] (auto eptr) {
       logger.error("test_accept() got unexpeted exception {}", eptr);
@@ -179,7 +179,7 @@ class SocketFactory {
       return seastar::now();
     }).then([psf] {
       return psf->server_connected.get_future();
-    }).finally([psf] {
+    }).then([psf] {
       if (psf->pss) {
         return seastar::smp::submit_to(1u, [psf] {
           return psf->pss->destroy();
@@ -193,7 +193,7 @@ class SocketFactory {
       return seastar::when_all_succeed(
         seastar::smp::submit_to(0u, [socket = psf->client_socket.get(),
                                      cb_client = std::move(cb_client)] {
-          return cb_client(socket).finally([socket] {
+          return cb_client(socket).then([socket] {
             logger.debug("closing client socket...");
             return socket->close();
           }).handle_exception([] (auto eptr) {
@@ -204,7 +204,7 @@ class SocketFactory {
         }),
         seastar::smp::submit_to(1u, [socket = psf->server_socket.get(),
                                      cb_server = std::move(cb_server)] {
-          return cb_server(socket).finally([socket] {
+          return cb_server(socket).then([socket] {
             logger.debug("closing server socket...");
             return socket->close();
           }).handle_exception([] (auto eptr) {
