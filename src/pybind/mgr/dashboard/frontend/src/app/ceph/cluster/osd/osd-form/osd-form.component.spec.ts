@@ -49,7 +49,7 @@ describe('OsdFormComponent', () => {
   ];
 
   const expectPreviewButton = (enabled: boolean) => {
-    const debugElement = fixtureHelper.getElementByCss('.card-footer button');
+    const debugElement = fixtureHelper.getElementByCss('.tc_submitButton');
     expect(debugElement.nativeElement.disabled).toBe(!enabled);
   };
 

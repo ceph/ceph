@@ -60,11 +60,9 @@
         </ng-container>
       </div>
       <div class="modal-footer">
-        <cd-submit-button [form]="formGroup"
-                          (submitAction)="onSubmitForm(formGroup.value)">
-          {{ submitButtonText }}
-        </cd-submit-button>
-        <cd-back-button [back]="activeModal.close"></cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="onSubmitForm(formGroup.value)"
+                              [form]="formGroup"
+                              [submitText]="submitButtonText"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

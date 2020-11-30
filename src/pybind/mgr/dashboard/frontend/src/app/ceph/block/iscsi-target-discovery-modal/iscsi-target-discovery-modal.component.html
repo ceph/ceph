@@ -126,14 +126,10 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button (submitAction)="submitAction()"
-                          [form]="discoveryForm"
-                          *ngIf="hasPermission"
-                          i18n>Submit</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="submitAction()"
+                              [form]="discoveryForm"
+                              [showSubmit]="hasPermission"
+                              [submitText]="actionLabels.SUBMIT"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>
