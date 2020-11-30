@@ -601,6 +601,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
 
+            remove_column = 'CONTAINER ID'
+            if table.get_string(fields=[remove_column], border=False,
+                    header=False).count('<unknown>') == len(daemons):
+                try:
+                    table.del_column(remove_column)
+                except AttributeError as e:
+                    # del_column method was introduced in prettytable 2.0
+                    if str(e) != "del_column":
+                        raise
+                    table.field_names.remove(remove_column)
+                    table._rows = [row[:-1] for row in table._rows]
+
             return HandleCommandResult(stdout=table.get_string())
 
     @_cli_write_command(
