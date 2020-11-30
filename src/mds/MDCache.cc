@@ -4042,6 +4042,13 @@ void MDCache::rejoin_send_rejoins()
     return;
   }
   rejoin_gather = recovery_set;
+  for (set<mds_rank_t>::iterator p = rejoin_sent.begin();
+       p != rejoin_sent.end();
+       ++p) {
+    if (rejoin_gather.count(*p)) {
+      rejoin_gather.erase(*p);
+    }
+  }
 
   if (!resolve_gather.empty()) {
     dout(7) << "rejoin_send_rejoins still waiting for resolves ("
