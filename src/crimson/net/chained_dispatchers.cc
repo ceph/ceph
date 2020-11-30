@@ -13,7 +13,7 @@ namespace {
 namespace crimson::net {
 
 seastar::future<>
-ChainedDispatchers::ms_dispatch(crimson::net::Connection* conn,
+ChainedDispatchers::ms_dispatch(crimson::net::ConnectionRef conn,
                                 MessageRef m) {
   try {
     for (auto& dispatcher : dispatchers) {

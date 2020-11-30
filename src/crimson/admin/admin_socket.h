@@ -126,7 +126,7 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    * \param conn connection over which the incoming command message is received
    * \param m message carrying the command vector and optional input buffer
    */
-  seastar::future<> handle_command(crimson::net::Connection* conn,
+  seastar::future<> handle_command(crimson::net::ConnectionRef conn,
 				   boost::intrusive_ptr<MCommand> m);
 
 private:

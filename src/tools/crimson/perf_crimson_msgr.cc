@@ -153,7 +153,7 @@ static seastar::future<> run(
       }
 
       std::tuple<bool, seastar::future<>> ms_dispatch(
-          crimson::net::Connection* c, MessageRef m) override {
+          crimson::net::ConnectionRef c, MessageRef m) override {
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
         // server replies with MOSDOp to generate server-side write workload
@@ -308,7 +308,7 @@ static seastar::future<> run(
         conn_stats.connected_time = mono_clock::now();
       }
       std::tuple<bool, seastar::future<>> ms_dispatch(
-          crimson::net::Connection* c, MessageRef m) override {
+          crimson::net::ConnectionRef, MessageRef m) override {
         // server replies with MOSDOp to generate server-side write workload
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
