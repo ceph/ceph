@@ -3,10 +3,9 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
-#include "test/librbd/mock/migration/MockStreamInterface.h"
+#include "test/librbd/mock/migration/MockSnapshotInterface.h"
 #include "include/rbd_types.h"
 #include "common/ceph_mutex.h"
-#include "librbd/migration/FileStream.h"
 #include "librbd/migration/RawFormat.h"
 #include "librbd/migration/SourceSpecBuilder.h"
 #include "gtest/gtest.h"
@@ -28,8 +27,8 @@ namespace migration {
 template<>
 struct SourceSpecBuilder<librbd::MockTestImageCtx> {
 
-  MOCK_CONST_METHOD2(build_stream, int(const json_spirit::mObject&,
-                                       std::shared_ptr<StreamInterface>*));
+  MOCK_CONST_METHOD3(build_snapshot, int(const json_spirit::mObject&, uint64_t,
+                                         std::shared_ptr<SnapshotInterface>*));
 
 };
 
@@ -41,6 +40,8 @@ struct SourceSpecBuilder<librbd::MockTestImageCtx> {
 using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Invoke;
+using ::testing::ReturnRef;
+using ::testing::WithArg;
 using ::testing::WithArgs;
 
 namespace librbd {
@@ -65,42 +66,48 @@ public:
     json_object["stream"] = stream_obj;
   }
 
-  void expect_build_stream(MockSourceSpecBuilder& mock_source_spec_builder,
-                           MockStreamInterface* mock_stream_interface, int r) {
-    EXPECT_CALL(mock_source_spec_builder, build_stream(_, _))
-      .WillOnce(WithArgs<1>(Invoke([mock_stream_interface, r]
-        (std::shared_ptr<StreamInterface>* ptr) {
-          ptr->reset(mock_stream_interface);
+  void expect_build_snapshot(MockSourceSpecBuilder& mock_source_spec_builder,
+                             uint64_t index,
+                             MockSnapshotInterface* mock_snapshot_interface,
+                             int r) {
+    EXPECT_CALL(mock_source_spec_builder, build_snapshot(_, index, _))
+      .WillOnce(WithArgs<2>(Invoke([mock_snapshot_interface, r]
+        (std::shared_ptr<SnapshotInterface>* ptr) {
+          ptr->reset(mock_snapshot_interface);
           return r;
         })));
   }
 
-  void expect_stream_open(MockStreamInterface& mock_stream_interface, int r) {
-    EXPECT_CALL(mock_stream_interface, open(_))
+  void expect_snapshot_open(MockSnapshotInterface& mock_snapshot_interface,
+                            int r) {
+    EXPECT_CALL(mock_snapshot_interface, open(_, _))
+      .WillOnce(WithArg<1>(Invoke([r](Context* ctx) { ctx->complete(r); })));
+  }
+
+  void expect_snapshot_close(MockSnapshotInterface& mock_snapshot_interface,
+                             int r) {
+    EXPECT_CALL(mock_snapshot_interface, close(_))
       .WillOnce(Invoke([r](Context* ctx) { ctx->complete(r); }));
   }
 
-  void expect_stream_close(MockStreamInterface& mock_stream_interface, int r) {
-    EXPECT_CALL(mock_stream_interface, close(_))
-      .WillOnce(Invoke([r](Context* ctx) { ctx->complete(r); }));
+  void expect_snapshot_get_info(MockSnapshotInterface& mock_snapshot_interface,
+                                const SnapInfo& snap_info) {
+    EXPECT_CALL(mock_snapshot_interface, get_snap_info())
+      .WillOnce(ReturnRef(snap_info));
   }
 
-  void expect_stream_get_size(MockStreamInterface& mock_stream_interface,
-                              uint64_t size, int r) {
-    EXPECT_CALL(mock_stream_interface, get_size(_, _))
-      .WillOnce(Invoke([size, r](uint64_t* out_size, Context* ctx) {
-          *out_size = size;
-          ctx->complete(r);
-        }));
-  }
-
-  void expect_stream_read(MockStreamInterface& mock_stream_interface,
-                          const io::Extents& byte_extents,
-                          const bufferlist& bl, int r) {
-    EXPECT_CALL(mock_stream_interface, read(byte_extents, _, _))
-      .WillOnce(WithArgs<1, 2>(Invoke([bl, r]
-        (bufferlist* out_bl, Context* ctx) {
-          *out_bl = bl;
+  void expect_snapshot_read(MockSnapshotInterface& mock_snapshot_interface,
+                            const io::Extents& image_extents,
+                            const bufferlist& bl, int r) {
+    EXPECT_CALL(mock_snapshot_interface, read(_, image_extents, _))
+      .WillOnce(WithArgs<0, 2>(Invoke([bl, image_extents, r]
+        (io::AioCompletion* aio_comp, io::ReadResult& read_result) {
+          aio_comp->read_result = std::move(read_result);
+          aio_comp->read_result.set_image_extents(image_extents);
+          aio_comp->set_request_count(1);
+          auto ctx = new io::ReadResult::C_ImageReadRequest(aio_comp, 0,
+                                                            image_extents);
+          ctx->bl = std::move(bl);
           ctx->complete(r);
         })));
   }
@@ -121,13 +128,15 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
 
-  auto mock_stream_interface = new MockStreamInterface();
-  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
 
-  expect_stream_open(*mock_stream_interface, 0);
-  expect_stream_get_size(*mock_stream_interface, 0, 0);
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
-  expect_stream_close(*mock_stream_interface, 0);
+  expect_snapshot_close(*mock_snapshot_interface, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
@@ -147,10 +156,11 @@ TEST_F(TestMockMigrationRawFormat, OpenError) {
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
 
-  auto mock_stream_interface = new MockStreamInterface();
-  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
 
-  expect_stream_open(*mock_stream_interface, -ENOENT);
+  expect_snapshot_open(*mock_snapshot_interface, -ENOENT);
 
   expect_close(mock_image_ctx, 0);
 
@@ -168,13 +178,15 @@ TEST_F(TestMockMigrationRawFormat, GetSnapshots) {
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
 
-  auto mock_stream_interface = new MockStreamInterface();
-  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
 
-  expect_stream_open(*mock_stream_interface, 0);
-  expect_stream_get_size(*mock_stream_interface, 0, 0);
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
-  expect_stream_close(*mock_stream_interface, 0);
+  expect_snapshot_close(*mock_snapshot_interface, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
@@ -200,15 +212,17 @@ TEST_F(TestMockMigrationRawFormat, GetImageSize) {
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
 
-  auto mock_stream_interface = new MockStreamInterface();
-  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
 
-  expect_stream_open(*mock_stream_interface, 0);
-  expect_stream_get_size(*mock_stream_interface, 0, 0);
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
-  expect_stream_get_size(*mock_stream_interface, 123, 0);
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
-  expect_stream_close(*mock_stream_interface, 0);
+  expect_snapshot_close(*mock_snapshot_interface, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
@@ -228,19 +242,21 @@ TEST_F(TestMockMigrationRawFormat, GetImageSize) {
   ASSERT_EQ(0, ctx3.wait());
 }
 
-TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshot) {
+TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshotDNE) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
 
-  auto mock_stream_interface = new MockStreamInterface();
-  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
 
-  expect_stream_open(*mock_stream_interface, 0);
-  expect_stream_get_size(*mock_stream_interface, 0, 0);
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
-  expect_stream_close(*mock_stream_interface, 0);
+  expect_snapshot_close(*mock_snapshot_interface, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
@@ -252,7 +268,7 @@ TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshot) {
   C_SaferCond ctx2;
   uint64_t size;
   mock_raw_format.get_image_size(0, &size, &ctx2);
-  ASSERT_EQ(-EINVAL, ctx2.wait());
+  ASSERT_EQ(-ENOENT, ctx2.wait());
 
   C_SaferCond ctx3;
   mock_raw_format.close(&ctx3);
@@ -265,17 +281,19 @@ TEST_F(TestMockMigrationRawFormat, Read) {
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
 
-  auto mock_stream_interface = new MockStreamInterface();
-  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
 
-  expect_stream_open(*mock_stream_interface, 0);
-  expect_stream_get_size(*mock_stream_interface, 0, 0);
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
   bufferlist expect_bl;
   expect_bl.append(std::string(123, '1'));
-  expect_stream_read(*mock_stream_interface, {{123, 123}}, expect_bl, 0);
+  expect_snapshot_read(*mock_snapshot_interface, {{123, 123}}, expect_bl, 0);
 
-  expect_stream_close(*mock_stream_interface, 0);
+  expect_snapshot_close(*mock_snapshot_interface, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
@@ -305,13 +323,15 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
 
-  auto mock_stream_interface = new MockStreamInterface();
-  expect_build_stream(mock_source_spec_builder, mock_stream_interface, 0);
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
 
-  expect_stream_open(*mock_stream_interface, 0);
-  expect_stream_get_size(*mock_stream_interface, 0, 0);
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
-  expect_stream_close(*mock_stream_interface, 0);
+  expect_snapshot_close(*mock_snapshot_interface, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
