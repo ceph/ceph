@@ -79,7 +79,6 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx_substitution_extensions',
     'breathe',
-    'edit_on_github',
     'ceph_releases',
     'sphinxcontrib.openapi'
     ]
