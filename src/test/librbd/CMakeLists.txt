@@ -93,6 +93,7 @@ set(unittest_librbd_srcs
   migration/test_mock_HttpClient.cc
   migration/test_mock_HttpStream.cc
   migration/test_mock_RawFormat.cc
+  migration/test_mock_RawSnapshot.cc
   migration/test_mock_S3Stream.cc
   migration/test_mock_Utils.cc
   mirror/snapshot/test_mock_CreateNonPrimaryRequest.cc
