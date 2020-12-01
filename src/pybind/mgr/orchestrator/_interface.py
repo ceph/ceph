@@ -932,7 +932,7 @@ class Orchestrator(object):
         # assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def daemon_action(self, action: str, daemon_name: str, image: Optional[str]=None) -> Completion[str]:
+    def daemon_action(self, action: str, daemon_name: str, image: Optional[str] = None) -> Completion[str]:
         """
         Perform an action (start/stop/reload) on a daemon.
 
@@ -1201,7 +1201,7 @@ class DaemonDescription(object):
                  osdspec_affinity=None,
                  last_deployed=None,
                  events: Optional[List['OrchestratorEvent']] = None,
-                 is_active: bool=False):
+                 is_active: bool = False):
 
         # Host is at the same granularity as InventoryHost
         self.hostname: str = hostname
@@ -1243,7 +1243,7 @@ class DaemonDescription(object):
         self.osdspec_affinity: Optional[str] = osdspec_affinity
 
         self.events: List[OrchestratorEvent] = events or []
-        
+
         self.is_active = is_active
 
     def name(self):
@@ -1290,6 +1290,10 @@ class DaemonDescription(object):
                 v = self.daemon_id.split('.')
                 if len(v) in [3, 4]:
                     return '.'.join(v[0:2])
+
+            if self.daemon_type == 'iscsi':
+                v = self.daemon_id.split('.')
+                return '.'.join(v[0:-1])
 
             # daemon_id == "service_id"
             return self.daemon_id

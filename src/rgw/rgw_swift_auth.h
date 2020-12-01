@@ -152,7 +152,7 @@ class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
       : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none) {
       };
     bool is_admin_of(const rgw_user& uid) const {return false;}
-    bool is_owner_of(const rgw_user& uid) const {return false;}
+    bool is_owner_of(const rgw_user& uid) const {return uid.id.compare(RGW_USER_ANON_ID) == 0;}
 };
 
 class SwiftAnonymousEngine : public rgw::auth::AnonymousEngine {
@@ -207,11 +207,8 @@ class DefaultStrategy : public rgw::auth::Strategy,
                              const req_state* const s,
                              acl_strategy_t&& extra_acl_strategy,
                              const rgw::auth::RemoteApplier::AuthInfo &info) const override {
-    rgw_user user(s->account_name);
-    if (info.is_anon())
-      user = rgw_user(RGW_USER_ANON_ID);
     auto apl = \
-      rgw::auth::add_3rdparty(ctl, user,
+      rgw::auth::add_3rdparty(ctl, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, ctl, s,
           rgw::auth::RemoteApplier(cct, ctl, std::move(extra_acl_strategy), info,
                                    implicit_tenant_context,
@@ -225,11 +222,8 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
-    rgw_user user(s->account_name);
-    if (user_info.user_id.compare(RGW_USER_ANON_ID) == 0)
-      user = rgw_user(user_info.user_id);
     auto apl = \
-      rgw::auth::add_3rdparty(ctl, user,
+      rgw::auth::add_3rdparty(ctl, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, ctl, s,
           rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask)));
     /* TODO(rzarzynski): replace with static_ptr. */
@@ -263,7 +257,7 @@ public:
                       static_cast<rgw::auth::TokenExtractor*>(this),
                       static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       anon_engine(cct,
-                  static_cast<rgw::auth::LocalApplier::Factory*>(this),
+                  static_cast<SwiftAnonymousApplier::Factory*>(this),
                   static_cast<rgw::auth::TokenExtractor*>(this)) {
     /* When the constructor's body is being executed, all member engines
      * should be initialized. Thus, we can safely add them. */

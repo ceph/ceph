@@ -3,6 +3,7 @@
 
 #include "CacheClient.h"
 #include "common/Cond.h"
+#include "common/version.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
@@ -376,7 +377,8 @@ namespace immutable_obj_cache {
   // TODO : re-implement this method
   int CacheClient::register_client(Context* on_finish) {
     ObjectCacheRequest* reg_req = new ObjectCacheRegData(RBDSC_REGISTER,
-                                                         m_sequence_id++);
+                                                         m_sequence_id++,
+                                                         ceph_version_to_str());
     reg_req->encode();
 
     bufferlist bl;

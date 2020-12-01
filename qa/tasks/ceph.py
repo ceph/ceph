@@ -4,6 +4,7 @@ Ceph cluster task.
 Handle the setup, starting, and clean-up of a Ceph cluster.
 """
 from io import BytesIO
+from io import StringIO
 
 import argparse
 import configobj
@@ -15,7 +16,6 @@ import json
 import time
 import gevent
 import re
-import six
 import socket
 
 from paramiko import SSHException
@@ -192,12 +192,12 @@ def ceph_log(ctx, config):
         testdir = teuthology.get_testdir(ctx)
         remote_logrotate_conf = '%s/logrotate.ceph-test.conf' % testdir
         rotate_conf_path = os.path.join(os.path.dirname(__file__), 'logrotate.conf')
-        with open(rotate_conf_path, 'rb') as f:
+        with open(rotate_conf_path) as f:
             conf = ""
             for daemon, size in daemons.items():
                 log.info('writing logrotate stanza for {}'.format(daemon))
-                conf += six.ensure_str(f.read()).format(daemon_type=daemon,
-                                                   max_size=size)
+                conf += f.read().format(daemon_type=daemon,
+                                        max_size=size)
                 f.seek(0, 0)
 
             for remote in ctx.cluster.remotes.keys():
@@ -320,14 +320,14 @@ def valgrind_post(ctx, config):
                      "/dev/null | sort | uniq",
                 wait=False,
                 check_status=False,
-                stdout=BytesIO(),
+                stdout=StringIO(),
             )
             lookup_procs.append((proc, remote))
 
         valgrind_exception = None
         for (proc, remote) in lookup_procs:
             proc.wait()
-            out = six.ensure_str(proc.stdout.getvalue())
+            out = proc.stdout.getvalue()
             for line in out.split('\n'):
                 if line == '':
                     continue
@@ -402,12 +402,8 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        fs = Filesystem(ctx, name='cephfs', create=True,
-                        ec_profile=config.get('cephfs_ec_profile', None))
-
-        max_mds = config.get('max_mds', 1)
-        if max_mds > 1:
-            fs.set_max_mds(max_mds)
+        Filesystem(ctx, fs_config=config.get('cephfs', None), name='cephfs',
+                   create=True, ec_profile=config.get('cephfs_ec_profile', None))
 
     yield
 
@@ -1298,11 +1294,11 @@ def run_daemon(ctx, config, type_):
             if type_ == 'osd':
                 datadir='/var/lib/ceph/osd/{cluster}-{id}'.format(
                     cluster=cluster_name, id=id_)
-                osd_uuid = six.ensure_str(teuthology.get_file(
+                osd_uuid = teuthology.get_file(
                     remote=remote,
                     path=datadir + '/fsid',
                     sudo=True,
-                )).strip()
+                ).decode().strip()
                 osd_uuids[id_] = osd_uuid
     for osd_id in range(len(osd_uuids)):
         id_ = str(osd_id)
@@ -1684,6 +1680,20 @@ def task(ctx, config):
             mkfs_options: [-b,size=65536,-l,logdev=/dev/sdc1]
             mount_options: [nobarrier, inode64]
 
+    To change the cephfs's default max_mds (1), use::
+
+        tasks:
+        - ceph:
+            cephfs:
+              max_mds: 2
+
+    To change the mdsmap's default session_timeout (60 seconds), use::
+
+        tasks:
+        - ceph:
+            cephfs:
+              session_timeout: 300
+
     Note, this will cause the task to check the /scratch_devs file on each node
     for available devices.  If no such file is found, /dev/sdb will be used.
 
@@ -1808,8 +1818,8 @@ def task(ctx, config):
         lambda: crush_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
         lambda: create_rbd_pool(ctx=ctx, config=config),
-        lambda: cephfs_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
+        lambda: cephfs_setup(ctx=ctx, config=config),
         lambda: watchdog_setup(ctx=ctx, config=config),
     ]
 

@@ -10,7 +10,7 @@ describe('Manager modules page', () => {
 
   describe('breadcrumb test', () => {
     it('should open and show breadcrumb', () => {
-      mgrmodules.expectBreadcrumbText('Manager modules');
+      mgrmodules.expectBreadcrumbText('Manager Modules');
     });
   });
 

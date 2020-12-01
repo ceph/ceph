@@ -19,6 +19,7 @@
 #include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "common/config_obs.h"
 #include "include/common_fwd.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -36,14 +37,14 @@ class MLog;
 class Messenger;
 class AioCompletionImpl;
 
-class librados::RadosClient : public Dispatcher
+class librados::RadosClient : public Dispatcher, public md_config_obs_t
 {
   std::unique_ptr<CephContext,
 		  std::function<void(CephContext*)> > cct_deleter;
 
 public:
   using Dispatcher::cct;
-  const ConfigProxy& conf;
+  ConfigProxy& conf{cct->_conf};
 private:
   enum {
     DISCONNECTED,
@@ -81,6 +82,7 @@ private:
   bool service_daemon = false;
   string daemon_name, service_name;
   map<string,string> daemon_metadata;
+  ceph::timespan rados_mon_op_timeout{};
 
   int wait_for_osdmap();
 
@@ -179,6 +181,9 @@ public:
   mon_feature_t get_required_monitor_features() const;
 
   int get_inconsistent_pgs(int64_t pool_id, std::vector<std::string>* pgs);
+
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy&, const std::set<std::string>&) override;
 };
 
 #endif

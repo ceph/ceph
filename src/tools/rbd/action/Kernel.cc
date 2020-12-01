@@ -188,6 +188,8 @@ static int parse_map_options(const std::string &options_string)
       if (put_map_option_value("compression_hint", value_char,
                                map_option_compression_hint_cb))
         return -EINVAL;
+    } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
+      put_map_option("udev", this_char);
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return -EINVAL;
@@ -214,6 +216,8 @@ static int parse_unmap_options(const std::string &options_string)
 
     if (!strcmp(this_char, "force")) {
       put_map_option("force", this_char);
+    } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
+      put_map_option("udev", this_char);
     } else {
       std::cerr << "rbd: unknown unmap option '" << this_char << "'" << std::endl;
       return -EINVAL;
@@ -228,7 +232,7 @@ static int do_kernel_list(Formatter *f) {
   struct krbd_ctx *krbd;
   int r;
 
-  r = krbd_create_from_context(g_ceph_context, &krbd);
+  r = krbd_create_from_context(g_ceph_context, 0, &krbd);
   if (r < 0)
     return r;
 
@@ -352,19 +356,20 @@ static int do_kernel_map(const char *poolname, const char *nspace_name,
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   std::ostringstream oss;
+  uint32_t flags = 0;
   char *devnode;
   int r;
 
-  r = krbd_create_from_context(g_ceph_context, &krbd);
-  if (r < 0)
-    return r;
-
-  for (std::map<std::string, std::string>::iterator it = map_options.begin();
-       it != map_options.end(); ) {
+  for (auto it = map_options.begin(); it != map_options.end(); ) {
     // for compatibility with < 3.7 kernels, assume that rw is on by
     // default and omit it even if it was specified by the user
     // (see ceph.git commit fb0f1986449b)
     if (it->first == "rw" && it->second == "rw") {
+      it = map_options.erase(it);
+    } else if (it->first == "udev") {
+      if (it->second == "noudev") {
+        flags |= KRBD_CTX_F_NOUDEV;
+      }
       it = map_options.erase(it);
     } else {
       if (it != map_options.begin())
@@ -373,6 +378,10 @@ static int do_kernel_map(const char *poolname, const char *nspace_name,
       ++it;
     }
   }
+
+  r = krbd_create_from_context(g_ceph_context, flags, &krbd);
+  if (r < 0)
+    return r;
 
   r = krbd_is_mapped(krbd, poolname, nspace_name, imgname, snapname, &devnode);
   if (r < 0) {
@@ -410,17 +419,26 @@ static int do_kernel_unmap(const char *dev, const char *poolname,
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   std::ostringstream oss;
+  uint32_t flags = 0;
   int r;
 
-  r = krbd_create_from_context(g_ceph_context, &krbd);
+  for (auto it = map_options.begin(); it != map_options.end(); ) {
+    if (it->first == "udev") {
+      if (it->second == "noudev") {
+        flags |= KRBD_CTX_F_NOUDEV;
+      }
+      it = map_options.erase(it);
+    } else {
+      if (it != map_options.begin())
+        oss << ",";
+      oss << it->second;
+      ++it;
+    }
+  }
+
+  r = krbd_create_from_context(g_ceph_context, flags, &krbd);
   if (r < 0)
     return r;
-
-  for (auto it = map_options.cbegin(); it != map_options.cend(); ++it) {
-    if (it != map_options.cbegin())
-      oss << ",";
-    oss << it->second;
-  }
 
   if (dev)
     r = krbd_unmap(krbd, dev, oss.str().c_str());
@@ -469,13 +487,6 @@ int execute_map(const po::variables_map &vm,
     return r;
   }
 
-  if (vm["read-only"].as<bool>()) {
-    put_map_option("rw", "ro");
-  }
-  if (vm["exclusive"].as<bool>()) {
-    put_map_option("exclusive", "exclusive");
-  }
-
   // parse default options first so they can be overwritten by cli options
   r = parse_map_options(
       g_conf().get_val<std::string>("rbd_default_map_options"));
@@ -492,6 +503,16 @@ int execute_map(const po::variables_map &vm,
         return r;
       }
     }
+  }
+
+  // parse options common to all device types after parsing krbd-specific
+  // options so that common options win (in particular "-o rw --read-only"
+  // should result in read-only mapping)
+  if (vm["read-only"].as<bool>()) {
+    put_map_option("rw", "ro");
+  }
+  if (vm["exclusive"].as<bool>()) {
+    put_map_option("exclusive", "exclusive");
   }
 
   utils::init_context();

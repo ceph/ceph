@@ -5,7 +5,6 @@ import sys
 import inspect
 import json
 import functools
-import ipaddress
 import logging
 
 import collections
@@ -14,7 +13,6 @@ from distutils.util import strtobool
 import fnmatch
 import time
 import threading
-import six
 from six.moves import urllib
 import cherrypy
 
@@ -22,6 +20,8 @@ try:
     from urlparse import urljoin
 except ImportError:
     from urllib.parse import urljoin
+
+from ceph.deployment.utils import wrap_ipv6
 
 from . import mgr
 from .exceptions import ViewCacheNoDataException
@@ -693,16 +693,7 @@ def build_url(host, scheme=None, port=None):
     :type port: int
     :rtype: str
     """
-    try:
-        try:
-            u_host = six.u(host)
-        except TypeError:
-            u_host = host
-
-        ipaddress.IPv6Address(u_host)
-        netloc = '[{}]'.format(host)
-    except ValueError:
-        netloc = host
+    netloc = wrap_ipv6(host)
     if port:
         netloc += ':{}'.format(port)
     pr = urllib.parse.ParseResult(

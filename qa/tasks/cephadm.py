@@ -10,6 +10,7 @@ import os
 import json
 import re
 import uuid
+import yaml
 
 import six
 import toml
@@ -160,6 +161,16 @@ def ceph_log(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
+    # Add logs directory to job's info log file
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {'log': '/var/log/ceph'}
+        else:
+            info_yaml['archive']['log'] = '/var/log/ceph'
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
     try:
         yield
 
@@ -225,6 +236,7 @@ def ceph_log(ctx, config):
                         'sudo',
                         'find',
                         '/var/log/ceph',   # all logs, not just for the cluster
+                        '/var/log/rbd-target-api', # ceph-iscsi
                         '-name',
                         '*.log',
                         '-print0',
@@ -266,6 +278,16 @@ def ceph_crash(ctx, config):
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
+
+    # Add logs directory to job's info log file
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {'crash': '/var/lib/ceph/%s/crash' % fsid}
+        else:
+            info_yaml['archive']['crash'] = '/var/lib/ceph/%s/crash' % fsid
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
 
     try:
         yield
@@ -309,7 +331,7 @@ def ceph_bootstrap(ctx, config, registry):
     first_mon = ctx.ceph[cluster_name].first_mon
     first_mon_role = ctx.ceph[cluster_name].first_mon_role
     mons = ctx.ceph[cluster_name].mons
-    
+
     ctx.cluster.run(args=[
         'sudo', 'mkdir', '-p', '/etc/ceph',
         ]);
@@ -471,7 +493,7 @@ def ceph_bootstrap(ctx, config, registry):
                 ctx.daemons.get_daemon(type_, id_, cluster).stop()
             except Exception:
                 log.exception('Failed to stop "{role}"'.format(role=role))
-                raise 
+                raise
 
         # clean up /etc/ceph
         ctx.cluster.run(args=[
@@ -758,6 +780,56 @@ def ceph_rgw(ctx, config):
         remote, id_ = i
         ctx.daemons.register_daemon(
             remote, 'rgw', id_,
+            cluster=cluster_name,
+            fsid=fsid,
+            logger=log.getChild(role),
+            wait=False,
+            started=True,
+        )
+
+    yield
+
+
+@contextlib.contextmanager
+def ceph_iscsi(ctx, config):
+    """
+    Deploy iSCSIs
+    """
+    cluster_name = config['cluster']
+    fsid = ctx.ceph[cluster_name].fsid
+
+    nodes = []
+    daemons = {}
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('iscsi', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            nodes.append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    if nodes:
+        poolname = 'iscsi'
+        # ceph osd pool create iscsi 3 3 replicated
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'pool', 'create',
+            poolname, '3', '3', 'replicated']
+        )
+
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'pool', 'application', 'enable',
+            poolname, 'rbd']
+        )
+
+        # ceph orch apply iscsi iscsi user password
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'apply', 'iscsi',
+            poolname, 'user', 'password',
+            '--placement', str(len(nodes)) + ';' + ';'.join(nodes)]
+        )
+    for role, i in daemons.items():
+        remote, id_ = i
+        ctx.daemons.register_daemon(
+            remote, 'iscsi', id_,
             cluster=cluster_name,
             fsid=fsid,
             logger=log.getChild(role),
@@ -1135,7 +1207,7 @@ def task(ctx, config):
     if cluster_name not in ctx.ceph:
         ctx.ceph[cluster_name] = argparse.Namespace()
         ctx.ceph[cluster_name].bootstrapped = False
- 
+
     # image
     teuth_defaults = teuth_config.get('defaults', {})
     cephadm_defaults = teuth_defaults.get('cephadm', {})
@@ -1198,6 +1270,7 @@ def task(ctx, config):
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: ceph_rgw(ctx=ctx, config=config),
+            lambda: ceph_iscsi(ctx=ctx, config=config),
             lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),
             lambda: ceph_monitoring('node-exporter', ctx=ctx, config=config),
             lambda: ceph_monitoring('alertmanager', ctx=ctx, config=config),
@@ -1255,9 +1328,9 @@ def registries_add_mirror_to_docker_io(conf, mirror):
 
 def add_mirror_to_cluster(ctx, mirror):
     log.info('Adding local image mirror %s' % mirror)
-    
+
     registries_conf = '/etc/containers/registries.conf'
-    
+
     for remote in ctx.cluster.remotes.keys():
         try:
             config = teuthology.get_file(

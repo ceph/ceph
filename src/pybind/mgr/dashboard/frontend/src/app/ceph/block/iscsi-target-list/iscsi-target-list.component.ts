@@ -18,6 +18,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { Task } from '../../../shared/models/task';
+import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { NotAvailablePipe } from '../../../shared/pipes/not-available.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
@@ -59,6 +60,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     private authStorageService: AuthStorageService,
     private i18n: I18n,
     private iscsiService: IscsiService,
+    private joinPipe: JoinPipe,
     private taskListService: TaskListService,
     private notAvailablePipe: NotAvailablePipe,
     private modalService: BsModalService,
@@ -80,16 +82,14 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
         icon: Icons.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
         name: this.actionLabels.EDIT,
-        disable: () => !this.selection.first() || !_.isUndefined(this.getEditDisableDesc()),
-        disableDesc: () => this.getEditDisableDesc()
+        disable: () => this.getEditDisableDesc()
       },
       {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
         name: this.actionLabels.DELETE,
-        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
-        disableDesc: () => this.getDeleteDisableDesc()
+        disable: () => this.getDeleteDisableDesc()
       }
     ];
   }
@@ -105,11 +105,13 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
       {
         name: this.i18n('Portals'),
         prop: 'cdPortals',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
         name: this.i18n('Images'),
         prop: 'cdImages',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
@@ -152,8 +154,9 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     }
   }
 
-  getEditDisableDesc(): string | undefined {
+  getEditDisableDesc(): string | boolean {
     const first = this.selection.first();
+
     if (first && first.cdExecuting) {
       return first.cdExecuting;
     }
@@ -161,11 +164,12 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
       return this.i18n('Unavailable gateway(s)');
     }
 
-    return undefined;
+    return !first;
   }
 
-  getDeleteDisableDesc(): string | undefined {
+  getDeleteDisableDesc(): string | boolean {
     const first = this.selection.first();
+
     if (first && first.cdExecuting) {
       return first.cdExecuting;
     }
@@ -176,7 +180,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
       return this.i18n('Target has active sessions');
     }
 
-    return undefined;
+    return !first;
   }
 
   prepareResponse(resp: any): any[] {

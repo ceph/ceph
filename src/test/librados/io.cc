@@ -46,7 +46,8 @@ TEST_F(LibRadosIo, ReadTimeout) {
     ASSERT_EQ(0, rados_create(&cluster, "admin"));
     ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
     ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
-    ASSERT_EQ(0, rados_conf_set(cluster, "rados_osd_op_timeout", "0.00001")); // use any small value that will result in a timeout
+    ASSERT_EQ(0, rados_conf_set(cluster, "rados_osd_op_timeout", "1")); // use any small value that will result in a timeout
+    ASSERT_EQ(0, rados_conf_set(cluster, "ms_inject_internal_delays", "2")); // create a 2 second delay
     ASSERT_EQ(0, rados_connect(cluster));
     ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
     rados_ioctx_set_namespace(ioctx, nspace.c_str());
@@ -111,8 +112,8 @@ TEST_F(LibRadosIo, Checksum) {
 
   uint32_t expected_crc = ceph_crc32c(-1, reinterpret_cast<const uint8_t*>(buf),
                                       sizeof(buf));
-  uint32_t init_value = -1;
-  uint32_t crc[2];
+  ceph_le32 init_value = init_le32(-1);
+  ceph_le32 crc[2];
   ASSERT_EQ(0, rados_checksum(ioctx, "foo", LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			      reinterpret_cast<char*>(&init_value),
 			      sizeof(init_value), sizeof(buf), 0, 0,

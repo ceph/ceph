@@ -9,6 +9,7 @@ if(${WITH_CEPHFS})
     acl.cc
     main.cc
     deleg.cc
+    monconfig.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common

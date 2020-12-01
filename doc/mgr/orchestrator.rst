@@ -39,15 +39,14 @@ for the orchestrator module is needed.
 
 The relation between the names is the following:
 
-* A *service* has a specfic *service type*
+* A *service* has a specific *service type*
 * A *daemon* is a physical instance of a *service type*
 
 
 .. note::
 
     Orchestrator modules may only implement a subset of the commands listed below.
-    Also, the implementation of the commands are orchestrator module dependent and will
-    differ between implementations.
+    Also, the implementation of the commands may differ between modules.
 
 Status
 ======
@@ -56,8 +55,8 @@ Status
 
     ceph orch status
 
-Show current orchestrator mode and high-level status (whether the module able
-to talk to it)
+Show current orchestrator mode and high-level status (whether the orchestrator
+plugin is available and operational)
 
 Host Management
 ===============
@@ -97,7 +96,7 @@ Many hosts can be added at once using
     addr: node-02
     hostname: node-02
 
-This can be combined with service specifications (below) to create a cluster spec file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior.
+This can be combined with service specifications (below) to create a cluster spec file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
 
 OSD Management
 ==============
@@ -132,7 +131,7 @@ Example::
 Erase Devices (Zap Devices)
 ---------------------------
 
-Erase (zap) a device so that it can be resued. ``zap`` calls ``ceph-volume zap`` on the remote host.
+Erase (zap) a device so that it can be reused. ``zap`` calls ``ceph-volume zap`` on the remote host.
 
 ::
 
@@ -144,7 +143,7 @@ Example command::
 
 .. note::
     Cephadm orchestrator will automatically deploy drives that match the DriveGroup in your OSDSpec if the unmanaged flag is unset.
-    For example, if you use the ``all-available-devices`` option when creating OSD's, when you ``zap`` a device the cephadm orchestrator will automatically create a new OSD in the device .
+    For example, if you use the ``all-available-devices`` option when creating OSDs, when you ``zap`` a device the cephadm orchestrator will automatically create a new OSD in the device .
     To disable this behavior, see :ref:`orchestrator-cli-create-osds`.
 
 .. _orchestrator-cli-create-osds:
@@ -160,11 +159,11 @@ Another way of doing it is using ``apply`` interface::
 
     ceph orch apply osd -i <json_file/yaml_file> [--dry-run]
 
-Where the ``json_file/yaml_file`` is a DriveGroup specification.
+where the ``json_file/yaml_file`` is a DriveGroup specification.
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
 
-Along with ``apply`` interface if ``dry-run`` option is used, it will present a
-preview of what will happen.
+``dry-run`` will cause the orchestrator to present a preview of what will happen
+without actually creating the OSDs.
 
 Example::
 
@@ -174,31 +173,31 @@ Example::
     all-available-devices node2 /dev/vdc -  -
     all-available-devices node3 /dev/vdd -  -
 
-.. note::
-    Example output from cephadm orchestrator
-
 When the parameter ``all-available-devices`` or a DriveGroup specification is used, a cephadm service is created.
-This service guarantees that all available devices or devices included in the DriveGroup will be used for OSD's.
-Take into account the implications of this behavior, which is automatic and enabled by default.
+This service guarantees that all available devices or devices included in the DriveGroup will be used for OSDs.
+Note that the effect of ``--all-available-devices`` is persistent; that is, drives which are added to the system 
+or become available (say, by zapping) after the command is complete will be automatically found and added to the cluster.
 
-For example:
-
-After using::
+That is, after using::
 
     ceph orch apply osd --all-available-devices
 
-* If you add new disks to the cluster they will automatically be used to create new OSD's.
+* If you add new disks to the cluster they will automatically be used to create new OSDs.
 * A new OSD will be created automatically if you remove an OSD and clean the LVM physical volume.
 
-If you want to avoid this behavior (disable automatic creation of OSD in available devices), use the ``unmanaged`` parameter::
+If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter::
 
     ceph orch apply osd --all-available-devices --unmanaged=true
+
+If you have already created the OSDs using the ``all-available-devices`` service, you can change the automatic OSD creation using the following command::
+
+    ceph orch osd spec --service-name osd.all-available-devices --unmanaged
 
 Remove an OSD
 -------------
 ::
 
-    ceph orch osd rm <svc_id(s)> [--replace] [--force]
+    ceph orch osd rm <osd_id(s)> [--replace] [--force]
 
 Evacuates PGs from an OSD and removes it from the cluster.
 
@@ -219,7 +218,7 @@ You can query the state of the operation with::
     4       cephadm-dev  started                  42        False    True   2020-07-17 13:01:45.162158
 
 
-When no PGs are left on the osd, it will be decommissioned and removed from the cluster.
+When no PGs are left on the OSD, it will be decommissioned and removed from the cluster.
 
 .. note::
     After removing an OSD, if you wipe the LVM physical volume in the device used by the removed OSD, a new OSD will be created.
@@ -228,7 +227,7 @@ When no PGs are left on the osd, it will be decommissioned and removed from the 
 Stopping OSD Removal
 --------------------
 
-You can stop the operation with
+You can stop the queued OSD removal operation with
 
 ::
 
@@ -239,7 +238,7 @@ Example::
     # ceph orch osd rm stop 4
     Stopped OSD(s) removal
 
-This will reset the initial state of the OSD and remove it from the queue.
+This will reset the initial state of the OSD and take it off the removal queue.
 
 
 Replace an OSD
@@ -255,16 +254,16 @@ Example::
 
 
 This follows the same procedure as the "Remove OSD" part with the exception that the OSD is not permanently removed
-from the crush hierarchy, but is assigned a 'destroyed' flag.
+from the CRUSH hierarchy, but is assigned a 'destroyed' flag.
 
 **Preserving the OSD ID**
 
-The previously set the 'destroyed' flag is used to determined osd ids that will be reused in the next osd deployment.
+The previously-set 'destroyed' flag is used to determine OSD ids that will be reused in the next OSD deployment.
 
-If you use OSDSpecs for osd deployment, your newly added disks will be assigned with the osd ids of their replaced
-counterpart, granted the new disk still match the OSDSpecs.
+If you use OSDSpecs for OSD deployment, your newly added disks will be assigned the OSD ids of their replaced
+counterparts, assuming the new disks still match the OSDSpecs.
 
-For assistance in this process you can use the '--dry-run' feature:
+For assistance in this process you can use the '--dry-run' feature.
 
 Tip: The name of your OSDSpec can be retrieved from **ceph orch ls**
 
@@ -279,8 +278,8 @@ If this matches your anticipated behavior, just omit the --dry-run flag to execu
 
 
 ..
-    Blink Device Lights
-    ^^^^^^^^^^^^^^^^^^^
+    Turn On Device Lights
+    ^^^^^^^^^^^^^^^^^^^^^
     ::
 
         ceph orch device ident-on <dev_id>
@@ -302,8 +301,8 @@ If this matches your anticipated behavior, just omit the --dry-run flag to execu
         ceph orch osd fault-on {primary,journal,db,wal,all} <osd-id>
         ceph orch osd fault-off {primary,journal,db,wal,all} <osd-id>
 
-    Where ``journal`` is the filestore journal, ``wal`` is the write ahead log of
-    bluestore and ``all`` stands for all devices associated with the osd
+    where ``journal`` is the filestore journal device, ``wal`` is the bluestore
+    write ahead log device, and ``all`` stands for all devices associated with the OSD
 
 
 Monitor and manager management
@@ -314,13 +313,17 @@ error if it doesn't know how to do this transition.
 
 Update the number of monitor hosts::
 
-    ceph orch apply mon <num> [host, host:network...] [--dry-run]
+    ceph orch apply mon --placement=<placement> [--dry-run]
+    
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 Each host can optionally specify a network for the monitor to listen on.
 
 Update the number of manager hosts::
 
-    ceph orch apply mgr <num> [host...] [--dry-run]
+    ceph orch apply mgr --placement=<placement> [--dry-run]
+    
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 ..
     .. note::
@@ -370,24 +373,27 @@ the id is the numeric OSD ID, for MDS services it is the file system name::
 
 .. _orchestrator-cli-cephfs:
 
-Depoying CephFS
-===============
+Deploying CephFS
+================
 
 In order to set up a :term:`CephFS`, execute::
 
     ceph fs volume create <fs_name> <placement spec>
 
-Where ``name`` is the name of the CephFS, ``placement`` is a
+where ``name`` is the name of the CephFS and ``placement`` is a
 :ref:`orchestrator-cli-placement-spec`.
 
 This command will create the required Ceph pools, create the new
 CephFS, and deploy mds servers.
 
+
+.. _orchestrator-cli-stateless-services:
+
 Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
 =================================================
 
-The orchestrator is not responsible for configuring the services. Please look into the corresponding
-documentation for details.
+(Please note: The orchestrator will not configure the services. Please look into the corresponding
+documentation for service configuration details.)
 
 The ``name`` parameter is an identifier of the group of instances:
 
@@ -401,7 +407,7 @@ Creating/growing/shrinking/removing services::
     ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>] [--dry-run]
     ceph orch rm <service_name> [--force]
 
-Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
+where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 e.g., ``ceph orch apply mds myfs --placement="3 host1 host2 host3"``
 
@@ -409,13 +415,91 @@ Service Commands::
 
     ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
 
+Deploying custom containers
+===========================
+
+The orchestrator enables custom containers to be deployed using a YAML file.
+A corresponding :ref:`orchestrator-cli-service-spec` must look like:
+
+.. code-block:: yaml
+
+    service_type: container
+    service_id: foo
+    placement:
+        ...
+    image: docker.io/library/foo:latest
+    entrypoint: /usr/bin/foo
+    uid: 1000
+    gid: 1000
+    args:
+        - "--net=host"
+        - "--cpus=2"
+    ports:
+        - 8080
+        - 8443
+    envs:
+        - SECRET=mypassword
+        - PORT=8080
+        - PUID=1000
+        - PGID=1000
+    volume_mounts:
+        CONFIG_DIR: /etc/foo
+    bind_mounts:
+      - ['type=bind', 'source=lib/modules', 'destination=/lib/modules', 'ro=true']
+    dirs:
+      - CONFIG_DIR
+    files:
+      CONFIG_DIR/foo.conf:
+        - refresh=true
+        - username=xyz
+        - "port: 1234"
+
+where the properties of a service specification are:
+
+* ``service_id``
+    A unique name of the service.
+* ``image``
+    The name of the Docker image.
+* ``uid``
+    The UID to use when creating directories and files in the host system.
+* ``gid``
+    The GID to use when creating directories and files in the host system.
+* ``entrypoint``
+    Overwrite the default ENTRYPOINT of the image.
+* ``args``
+    A list of additional Podman/Docker command line arguments.
+* ``ports``
+    A list of TCP ports to open in the host firewall.
+* ``envs``
+    A list of environment variables.
+* ``bind_mounts``
+    When you use a bind mount, a file or directory on the host machine
+    is mounted into the container. Relative `source=...` paths will be
+    located below `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+* ``volume_mounts``
+    When you use a volume mount, a new directory is created within
+    Docker’s storage directory on the host machine, and Docker manages
+    that directory’s contents. Relative source paths will be located below
+    `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+* ``dirs``
+    A list of directories that are created below
+    `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+* ``files``
+    A dictionary, where the key is the relative path of the file and the
+    value the file content. The content must be double quoted when using
+    a string. Use '\\n' for line breaks in that case. Otherwise define
+    multi-line content as list of strings. The given files will be created
+    below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+    The absolute path of the directory where the file will be created must
+    exist. Use the `dirs` property to create them if necessary.
+
 .. _orchestrator-cli-service-spec:
 
 Service Specification
 =====================
 
-As *Service Specification* is a data structure often represented as YAML
-to specify the deployment of services. For example:
+A *Service Specification* is a data structure represented as YAML
+to specify the deployment of services.  For example:
 
 .. code-block:: yaml
 
@@ -426,30 +510,33 @@ to specify the deployment of services. For example:
         - host1
         - host2
         - host3
-    spec: ...
     unmanaged: false
+    ...
 
-Where the properties of a service specification are the following:
+where the properties of a service specification are:
 
-* ``service_type`` is the type of the service. Needs to be either a Ceph
-   service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
-   ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), or part of the
-   monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
-   ``prometheus``).
-* ``service_id`` is the name of the service. Omit the service time
-* ``placement`` is a :ref:`orchestrator-cli-placement-spec`
-* ``spec``: additional specifications for a specific service.
-* ``unmanaged``: If set to ``true``, the orchestrator will not deploy nor
-   remove any daemon associated with this service. Placement and all other
-   properties will be ignored. This is useful, if this service should not
-   be managed temporarily.
+* ``service_type``
+    The type of the service. Needs to be either a Ceph
+    service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
+    ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), part of the
+    monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
+    ``prometheus``) or (``container``) for custom containers.
+* ``service_id``
+    The name of the service.
+* ``placement``
+    See :ref:`orchestrator-cli-placement-spec`.
+* ``unmanaged``
+    If set to ``true``, the orchestrator will not deploy nor
+    remove any daemon associated with this service. Placement and all other
+    properties will be ignored. This is useful, if this service should not
+    be managed temporarily.
 
-Each service type can have different requirements for the spec.
+Each service type can have additional service specific properties.
 
 Service specifications of type ``mon``, ``mgr``, and the monitoring
-types do not require a ``service_id``
+types do not require a ``service_id``.
 
-A service of type ``nfs`` requires a pool name and contain
+A service of type ``nfs`` requires a pool name and may contain
 an optional namespace:
 
 .. code-block:: yaml
@@ -464,13 +551,13 @@ an optional namespace:
       pool: mypool
       namespace: mynamespace
 
-Where ``pool`` is a RADOS pool where NFS client recovery data is stored
+where ``pool`` is a RADOS pool where NFS client recovery data is stored
 and ``namespace`` is a RADOS namespace where NFS client recovery
 data is stored in the pool.
 
-A service of type ``osd`` is in detail described in :ref:`drivegroups`
+A service of type ``osd`` is described in :ref:`drivegroups`
 
-Many service specifications can then be applied at once using
+Many service specifications can be applied at once using
 ``ceph orch apply -i`` by submitting a multi-document YAML file::
 
     cat <<EOF | ceph orch apply -i -
@@ -495,18 +582,19 @@ Many service specifications can then be applied at once using
 Placement Specification
 =======================
 
-In order to allow the orchestrator to deploy a *service*, it needs to
-know how many and where it should deploy *daemons*. The orchestrator
-defines a placement specification that can either be passed as a command line argument.
+For the orchestrator to deploy a *service*, it needs to know where to deploy
+*daemons*, and how many to deploy.  This is the role of a placement
+specification.  Placement specifications can either be passed as command line arguments
+or in a YAML files.
 
 Explicit placements
 -------------------
 
-Daemons can be explictly placed on hosts by simply specifying them::
+Daemons can be explicitly placed on hosts by simply specifying them::
 
-    orch apply prometheus "host1 host2 host3"
+    orch apply prometheus --placement="host1 host2 host3"
 
-Or in yaml:
+Or in YAML:
 
 .. code-block:: yaml
 
@@ -519,19 +607,19 @@ Or in yaml:
 
 MONs and other services may require some enhanced network specifications::
 
-  orch daemon add mon myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name
+  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
 
-Where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
+where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
 
 Placement by labels
 -------------------
 
-Daemons can be explictly placed on hosts that match a specifc label::
+Daemons can be explictly placed on hosts that match a specific label::
 
-    orch apply prometheus label:mylabel
+    orch apply prometheus --placement="label:mylabel"
 
-Or in yaml:
+Or in YAML:
 
 .. code-block:: yaml
 
@@ -545,9 +633,9 @@ Placement by pattern matching
 
 Daemons can be placed on hosts as well::
 
-    orch apply prometheus 'myhost[1-3]'
+    orch apply prometheus --placement='myhost[1-3]'
 
-Or in yaml:
+Or in YAML:
 
 .. code-block:: yaml
 
@@ -557,9 +645,9 @@ Or in yaml:
 
 To place a service on *all* hosts, use ``"*"``::
 
-    orch apply crash '*'
+    orch apply crash --placement='*'
 
-Or in yaml:
+Or in YAML:
 
 .. code-block:: yaml
 
@@ -573,17 +661,19 @@ Setting a limit
 
 By specifying ``count``, only that number of daemons will be created::
 
-    orch apply prometheus 3
+    orch apply prometheus --placement=3
 
 To deploy *daemons* on a subset of hosts, also specify the count::
 
-    orch apply prometheus "2 host1 host2 host3"
+    orch apply prometheus --placement="2 host1 host2 host3"
 
-If the count is bigger than the amount of hosts, cephadm still deploys two daemons::
+If the count is bigger than the amount of hosts, cephadm deploys one per host::
 
-    orch apply prometheus "3 host1 host2"
+    orch apply prometheus --placement="3 host1 host2"
 
-Or in yaml:
+results in two Prometheus daemons.
+
+Or in YAML:
 
 .. code-block:: yaml
 
@@ -664,6 +754,7 @@ This is an overview of the current implementation status of the orchestrators.
  apply osd                           ✔      ✔
  apply rbd-mirror                    ✔      ✔
  apply rgw                           ⚪      ✔
+ apply container                     ⚪      ✔
  host add                            ⚪      ✔
  host ls                             ✔      ✔
  host rm                             ⚪      ✔

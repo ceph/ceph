@@ -563,7 +563,9 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   decode(name, bl);
   decode(rank, bl);
   decode(inc, bl);
-  decode((int32_t&)(state), bl);
+  int32_t raw_state;
+  decode(raw_state, bl);
+  state = (MDSMap::DaemonState)raw_state;
   decode(state_seq, bl);
   decode(addrs, bl);
   decode(laggy_since, bl);

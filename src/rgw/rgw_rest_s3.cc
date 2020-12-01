@@ -1855,7 +1855,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextContinuationToken", next_marker.name);
   }
-  s->formatter->dump_int("KeyCount",objs.size());
+  s->formatter->dump_int("KeyCount", objs.size() + common_prefixes.size());
   if (start_after_exist) {
     s->formatter->dump_string("StartAfter", startAfter);
   }
@@ -4375,6 +4375,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data) const
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
+  if (s->info.args.sub_resource_exists("encryption"))
+    return nullptr;
+
   if (s->info.args.sub_resource_exists("logging"))
     return new RGWGetBucketLogging_ObjStore_S3;
 
@@ -4435,8 +4438,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
-  if (s->info.args.sub_resource_exists("logging"))
-    return NULL;
+  if (s->info.args.sub_resource_exists("logging") ||
+      s->info.args.sub_resource_exists("encryption"))
+    return nullptr;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {
@@ -4477,6 +4481,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
+  if (s->info.args.sub_resource_exists("logging") ||
+      s->info.args.sub_resource_exists("encryption"))
+    return nullptr;
+
   if (is_tagging_op()) {
     return new RGWDeleteBucketTags_ObjStore_S3;
   } else if (is_cors_op()) {
@@ -5260,7 +5268,11 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       s->op_type == RGW_OP_PUT_USER_POLICY ||
       s->op_type == RGW_OP_GET_USER_POLICY ||
       s->op_type == RGW_OP_LIST_USER_POLICIES ||
-      s->op_type == RGW_OP_DELETE_USER_POLICY) {
+      s->op_type == RGW_OP_DELETE_USER_POLICY ||
+      s->op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
+      s->op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
+      s->op_type == RGW_OP_GET_OIDC_PROVIDER ||
+      s->op_type == RGW_OP_LIST_OIDC_PROVIDERS) {
     is_non_s3_op = true;
   }
 
@@ -5894,26 +5906,26 @@ rgw::auth::s3::STSEngine::authenticate(
   // Get all the authorization info
   RGWUserInfo user_info;
   rgw_user user_id;
-  vector<string> role_policies;
-  string role_name;
+  string role_id;
+  rgw::auth::RoleApplier::Role r;
   if (! token.roleId.empty()) {
     RGWRole role(s->cct, ctl, token.roleId);
     if (role.get_by_id() < 0) {
       return result_t::deny(-EPERM);
     }
+    r.id = token.roleId;
+    r.name = role.get_name();
+    r.tenant = role.get_tenant();
+
     vector<string> role_policy_names = role.get_role_policy_names();
     for (auto& policy_name : role_policy_names) {
       string perm_policy;
       if (int ret = role.get_role_policy(policy_name, perm_policy); ret == 0) {
-        role_policies.push_back(std::move(perm_policy));
+        r.role_policies.push_back(std::move(perm_policy));
       }
-    }
-    if (! token.policy.empty()) {
-      role_policies.push_back(std::move(token.policy));
     }
     // This is mostly needed to assign the owner of a bucket during its creation
     user_id = token.user;
-    role_name = role.get_name();
   }
 
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
@@ -5930,7 +5942,7 @@ rgw::auth::s3::STSEngine::authenticate(
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   } else if (token.acct_type == TYPE_ROLE) {
-    auto apl = role_apl_factory->create_apl_role(cct, s, role_name, user_id, role_policies);
+    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;

@@ -244,7 +244,6 @@ OSDs. For instance, in a replicated pool of size two, each placement
 group will store objects on two OSDs, as shown below.
 
 .. ditaa::
-
    +-----------------------+      +-----------------------+
    |  Placement Group #1   |      |  Placement Group #2   |
    |                       |      |                       |

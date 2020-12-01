@@ -2201,21 +2201,19 @@ std::string s3_expiration_header(
       const RGWObjTags& rule_tagset = filter.get_tags();
       for (auto& tag : rule_tagset.get_tags()) {
 	/* remember, S3 tags are {key,value} tuples */
-	auto ma1 = obj_tag_map.find(tag.first);
-	if ( ma1 != obj_tag_map.end()) {
-	  if (tag.second == ma1->second) {
-	    ldpp_dout(dpp, 10) << "tag match obj_key=" << obj_key
-			       << " rule_id=" << id
-			       << " tag=" << tag
-			       << " (ma=" << *ma1 << ")"
-			       << dendl;
-	    tag_match = true;
-	    break;
-	  }
-	}
+        tag_match = true;
+        auto obj_tag = obj_tag_map.find(tag.first);
+        if (obj_tag == obj_tag_map.end() || obj_tag->second != tag.second) {
+	        ldpp_dout(dpp, 10) << "tag does not match obj_key=" << obj_key
+			         << " rule_id=" << id
+			         << " tag=" << tag
+			         << dendl;
+	        tag_match = false;
+	        break;
+	      }
       }
       if (! tag_match)
-	continue;
+	      continue;
     }
 
     // compute a uniform expiration date

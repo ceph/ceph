@@ -2,5 +2,6 @@
 Description=ceph target allowing to start/stop all ceph-fuse@.service instances at once
 PartOf=ceph.target
 Before=ceph.target
+
 [Install]
 WantedBy=remote-fs.target ceph.target

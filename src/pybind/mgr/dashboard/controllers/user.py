@@ -7,7 +7,7 @@ import time
 
 import cherrypy
 
-from . import BaseController, ApiController, RESTController, Endpoint
+from . import BaseController, ApiController, RESTController, Endpoint, allow_empty_body
 from .. import mgr
 from ..exceptions import DashboardException, UserAlreadyExists, \
     UserDoesNotExist, PasswordPolicyException, PwdExpirationDateNotValid
@@ -146,6 +146,7 @@ class User(RESTController):
 class UserPasswordPolicy(RESTController):
 
     @Endpoint('POST')
+    @allow_empty_body
     def validate_password(self, password, username=None, old_password=None):
         """
         Check if the password meets the password policy.

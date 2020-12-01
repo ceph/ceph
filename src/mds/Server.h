@@ -164,7 +164,6 @@ public:
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      MDRequestRef& mdr);
 
-
   void handle_slave_request(const cref_t<MMDSSlaveRequest> &m);
   void handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m);
   void dispatch_slave_request(MDRequestRef& mdr);
@@ -319,8 +318,7 @@ private:
   friend class Batch_Getattr_Lookup;
 
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
-  void flush_session(Session *session, MDSGatherBuilder *gather);
-  void clear_batch_ops(const MDRequestRef& mdr);
+  void flush_session(Session *session, MDSGatherBuilder& gather);
 
   MDSRank *mds;
   MDCache *mdcache;
@@ -342,6 +340,7 @@ private:
   feature_bitset_t supported_features;
   feature_bitset_t required_client_features;
 
+  bool forward_all_requests_to_auth = false;
   bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;

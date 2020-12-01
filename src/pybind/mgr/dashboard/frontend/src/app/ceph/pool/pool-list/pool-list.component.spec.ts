@@ -479,6 +479,10 @@ describe('PoolListComponent', () => {
   });
 
   describe('getDisableDesc', () => {
+    beforeEach(() => {
+      component.selection.selected = [{ pool_name: 'foo' }];
+    });
+
     it('should return message if mon_allow_pool_delete flag is set to false', () => {
       component.monAllowPoolDelete = false;
       expect(component.getDisableDesc()).toBe(
@@ -486,9 +490,9 @@ describe('PoolListComponent', () => {
       );
     });
 
-    it('should return undefined if mon_allow_pool_delete flag is set to true', () => {
+    it('should return false if mon_allow_pool_delete flag is set to true', () => {
       component.monAllowPoolDelete = true;
-      expect(component.getDisableDesc()).toBeUndefined();
+      expect(component.getDisableDesc()).toBeFalsy();
     });
   });
 });

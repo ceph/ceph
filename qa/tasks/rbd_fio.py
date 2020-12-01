@@ -157,6 +157,8 @@ def run_fio(remote, config, rbd_test_dir):
                         '--image', rbd_name,
                         '--image-format', '{f}'.format(f=frmt)]
            map(lambda x: create_args.extend(['--image-feature', x]), feature)
+           if config.get('thick-provision'):
+               create_args.append('--thick-provision')
            remote.run(args=create_args)
            remote.run(args=['rbd', 'info', rbd_name])
            if ioengine != 'rbd':

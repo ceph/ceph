@@ -58,7 +58,6 @@ export class MgrModuleListComponent extends ListWithDetails {
       {
         name: this.i18n('Always-On'),
         prop: 'always_on',
-        isHidden: true,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
@@ -91,8 +90,7 @@ export class MgrModuleListComponent extends ListWithDetails {
         name: this.i18n('Disable'),
         permission: 'update',
         click: () => this.updateModuleState(),
-        disable: () => this.isTableActionDisabled('disabled'),
-        disableDesc: () => this.getTableActionDisabledDesc(),
+        disable: () => this.getTableActionDisabledDesc(),
         icon: Icons.stop
       }
     ];
@@ -142,15 +140,12 @@ export class MgrModuleListComponent extends ListWithDetails {
     }
   }
 
-  getTableActionDisabledDesc(): string | undefined {
-    if (this.selection.hasSelection) {
-      const selected = this.selection.first();
-      if (selected.always_on) {
-        return this.i18n('This Manager module is always on.');
-      }
+  getTableActionDisabledDesc(): string | boolean {
+    if (this.selection && this.selection.first().always_on) {
+      return this.i18n('This Manager module is always on.');
     }
 
-    return undefined;
+    return this.isTableActionDisabled('disabled');
   }
 
   /**

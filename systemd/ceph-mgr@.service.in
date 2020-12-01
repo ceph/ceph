@@ -1,8 +1,9 @@
 [Unit]
 Description=Ceph cluster manager daemon
-After=network-online.target local-fs.target time-sync.target
-Wants=network-online.target local-fs.target time-sync.target
 PartOf=ceph-mgr.target
+After=network-online.target local-fs.target time-sync.target
+Before=remote-fs-pre.target ceph-mgr.target
+Wants=network-online.target local-fs.target time-sync.target remote-fs-pre.target ceph-mgr.target
 
 [Service]
 LimitNOFILE=1048576
@@ -12,11 +13,9 @@ Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
 LockPersonality=true
-
 # We need to disable this protection as some python libraries generate
 # dynamic code, like python-cffi, and require mmap calls to succeed
 MemoryDenyWriteExecute=false
-
 NoNewPrivileges=true
 PrivateDevices=yes
 ProtectControlGroups=true

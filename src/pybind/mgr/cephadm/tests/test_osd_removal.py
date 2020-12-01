@@ -1,6 +1,8 @@
+import json
+
 from cephadm.services.osd import RemoveUtil, OSDQueue, OSD
 import pytest
-from .fixtures import rm_util, osd_obj
+from .fixtures import rm_util, osd_obj, cephadm_module
 from tests import mock
 from datetime import datetime
 
@@ -9,6 +11,7 @@ class MockOSD:
 
     def __init__(self, osd_id):
         self.osd_id = osd_id
+
 
 class TestOSDRemoval:
 
@@ -62,11 +65,34 @@ class TestOSDRemoval:
 
     def test_destroy_osd(self, rm_util):
         rm_util.destroy_osd(1)
-        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd destroy-actual', 'id': 1, 'yes_i_really_mean_it': True})
+        rm_util._run_mon_cmd.assert_called_with(
+            {'prefix': 'osd destroy-actual', 'id': 1, 'yes_i_really_mean_it': True})
 
     def test_purge_osd(self, rm_util):
         rm_util.purge_osd(1)
-        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd purge-actual', 'id': 1, 'yes_i_really_mean_it': True})
+        rm_util._run_mon_cmd.assert_called_with(
+            {'prefix': 'osd purge-actual', 'id': 1, 'yes_i_really_mean_it': True})
+
+    def test_load(self, cephadm_module):
+        data = json.dumps([
+            {
+                "osd_id": 35,
+                "started": True,
+                "draining": True,
+                "stopped": False,
+                "replace": False,
+                "force": False,
+                "nodename": "node2",
+                "drain_started_at": "2020-09-14T11:41:53.960463",
+                "drain_stopped_at": None,
+                "drain_done_at": None,
+                "process_started_at": "2020-09-14T11:41:52.245832"
+            }
+        ])
+        cephadm_module.set_store('osd_remove_queue', data)
+        cephadm_module.rm_util.load_from_store()
+
+        assert repr(cephadm_module.to_remove_osds) == 'OSDQueue({<OSD>(osd_id=35, draining=True)})'
 
 
 class TestOSD:

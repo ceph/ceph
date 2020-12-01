@@ -4,7 +4,8 @@ from __future__ import absolute_import
 import logging
 import cherrypy
 
-from . import ApiController, RESTController
+from . import ApiController, RESTController, \
+    allow_empty_body
 from .. import mgr
 from ..exceptions import DashboardException
 from ..services.auth import AuthManager, JwtManager
@@ -47,6 +48,7 @@ class Auth(RESTController):
                                  component='auth')
 
     @RESTController.Collection('POST')
+    @allow_empty_body
     def logout(self):
         logger.debug('Logout successful')
         token = JwtManager.get_token_from_header()

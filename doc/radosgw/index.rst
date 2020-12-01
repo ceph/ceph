@@ -22,7 +22,9 @@ in the same Ceph Storage Cluster used to store data from Ceph File System client
 or Ceph Block Device clients. The S3 and Swift APIs share a common namespace, so
 you may write data with one API and retrieve it with the other.
 
-.. ditaa::  +------------------------+ +------------------------+
+.. ditaa::
+
+            +------------------------+ +------------------------+
             |   S3 compatible API    | |  Swift compatible API  |
             +------------------------+-+------------------------+
             |                      radosgw                      |
@@ -71,6 +73,7 @@ you may write data with one API and retrieve it with the other.
    Keycloak <keycloak>
    Role <role>
    Orphan List and Associated Tooliing <orphans>
+   OpenID Connect Provider <oidc>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>

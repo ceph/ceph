@@ -1,3 +1,4 @@
+import shutil
 import sys
 import os
 
@@ -53,13 +54,34 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx.ext.graphviz',
     'sphinx.ext.todo',
-    'sphinxcontrib.ditaa',
+    'sphinx-prompt',
+    'sphinx_substitution_extensions',
     'breathe',
     'edit_on_github',
     'ceph_releases',
     ]
-ditaa = 'ditaa'
+
+ditaa = shutil.which("ditaa")
+if ditaa is not None:
+    extensions += ['sphinxcontrib.ditaa']
+else:
+    extensions += ['plantweb.directive']
+    plantweb_defaults = {
+        'engine': 'ditaa'
+    }
+
+build_with_rtd = os.environ.get('READTHEDOCS') == 'True'
+if build_with_rtd:
+    extensions += ['sphinx_search.extension']
+
+# sphinx.ext.todo
 todo_include_todos = True
+
+# sphinx_substitution_extensions
+# TODO: read from doc/releases/releases.yml
+rst_prolog = """
+.. |stable-release| replace:: octopus
+"""
 
 top_level = os.path.dirname(
     os.path.dirname(
@@ -87,6 +109,10 @@ edit_on_github_branch = 'master'
 # handles edit-on-github and old version warning display
 def setup(app):
     app.add_javascript('js/ceph.js')
+    if ditaa is None:
+        # add "ditaa" as an alias of "diagram"
+        from plantweb.directive import DiagramDirective
+        app.add_directive('ditaa', DiagramDirective)
 
 # mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
 # mgr.mgr_module
@@ -110,8 +136,21 @@ class Mock(object):
 
 sys.modules['ceph_module'] = Mock()
 
-for pybind in [os.path.join(top_level, 'src/pybind'),
-               os.path.join(top_level, 'src/pybind/mgr'),
-               os.path.join(top_level, 'src/python-common')]:
+if build_with_rtd:
+    exclude_patterns += ['**/api/*',
+                         '**/api.rst']
+    autodoc_mock_imports = ['cephfs',
+                            'rados',
+                            'rbd',
+                            'ceph']
+    pybinds = ['pybind/mgr',
+               'python-common']
+else:
+    pybinds = ['pybind',
+               'pybind/mgr',
+               'python-common']
+
+for c in pybinds:
+    pybind = os.path.join(top_level, 'src', c)
     if pybind not in sys.path:
         sys.path.insert(0, pybind)

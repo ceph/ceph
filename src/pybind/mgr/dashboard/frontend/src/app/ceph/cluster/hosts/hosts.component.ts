@@ -92,9 +92,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
             () => this.editAction()
           );
         },
-        disable: (selection: CdTableSelection) =>
-          !selection.hasSingleSelection || !selection.first().sources.orchestrator,
-        disableDesc: this.getEditDisableDesc.bind(this)
+        disable: this.getEditDisableDesc.bind(this)
       },
       {
         name: this.actionLabels.DELETE,
@@ -107,7 +105,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
             () => this.deleteAction()
           );
         },
-        disable: () => !this.selection.hasSelection
+        disable: this.getDeleteDisableDesc.bind(this)
       }
     ];
   }
@@ -189,11 +187,18 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     });
   }
 
-  getEditDisableDesc(selection: CdTableSelection): string | undefined {
-    if (selection && selection.hasSingleSelection && !selection.first().sources.orchestrator) {
-      return this.i18n('Host editing is disabled because the host is not managed by Orchestrator.');
+  getEditDisableDesc(selection: CdTableSelection): boolean | string {
+    if (selection && selection.hasSingleSelection) {
+      if (!selection.first().sources.orchestrator) {
+        return this.i18n(
+          'Host editing is disabled because the selected host is not managed by Orchestrator.'
+        );
+      }
+
+      return false;
     }
-    return undefined;
+
+    return true;
   }
 
   deleteAction() {
@@ -210,6 +215,20 @@ export class HostsComponent extends ListWithDetails implements OnInit {
           })
       }
     });
+  }
+
+  getDeleteDisableDesc(selection: CdTableSelection): boolean | string {
+    if (selection && selection.hasSelection) {
+      if (!selection.selected.every((selected) => selected.sources.orchestrator)) {
+        return this.i18n(
+          'Host deletion is disabled because a selected host is not managed by Orchestrator.'
+        );
+      }
+
+      return false;
+    }
+
+    return true;
   }
 
   getHosts(context: CdTableFetchDataContext) {

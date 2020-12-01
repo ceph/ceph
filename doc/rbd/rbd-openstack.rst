@@ -16,7 +16,9 @@ quad-core processor. The following diagram depicts the OpenStack/Ceph
 technology stack.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                    OpenStack                      |
             +---------------------------------------------------+
             |                     libvirt                       |

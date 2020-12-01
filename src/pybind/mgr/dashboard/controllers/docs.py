@@ -5,7 +5,8 @@ from typing import Any, Dict, Union
 import logging
 import cherrypy
 
-from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
+from . import Controller, BaseController, Endpoint, ENDPOINT_MAP, \
+    allow_empty_body
 from .. import mgr
 
 from ..tools import str_to_bool
@@ -449,5 +450,6 @@ class Docs(BaseController):
 
     @Endpoint('POST', path="/", json_response=False,
               query_params="{all_endpoints}")
+    @allow_empty_body
     def _with_token(self, token, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints, token)

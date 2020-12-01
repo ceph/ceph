@@ -26,6 +26,21 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
     assert ret == expected
     assert str(ret) == test_input
 
+    ps = PlacementSpec.from_string(test_input)
+    assert ps.pretty_str() == test_input
+    assert ps == PlacementSpec.from_string(ps.pretty_str())
+
+    # Testing the old verbose way of generating json. Don't remove:
+    assert ret == HostPlacementSpec.from_json({
+            'hostname': ret.hostname,
+            'network': ret.network,
+            'name': ret.name
+        })
+
+    assert ret == HostPlacementSpec.from_json(ret.to_json())
+
+
+
 
 @pytest.mark.parametrize(
     "test_input,expected",
@@ -51,6 +66,7 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
 def test_parse_placement_specs(test_input, expected):
     ret = PlacementSpec.from_string(test_input)
     assert str(ret) == expected
+    assert PlacementSpec.from_string(ret.pretty_str()) == ret, f'"{ret.pretty_str()}" != "{test_input}"'
 
 @pytest.mark.parametrize(
     "test_input",
@@ -141,9 +157,7 @@ service_id: default-rgw-realm.eu-central-1.1
 service_name: rgw.default-rgw-realm.eu-central-1.1
 placement:
   hosts:
-  - hostname: ceph-001
-    name: ''
-    network: ''
+  - ceph-001
 spec:
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1

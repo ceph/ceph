@@ -15,7 +15,7 @@ from tests import mock
 from orchestrator import raise_if_exception, Completion, ProgressReference
 from orchestrator import InventoryHost, DaemonDescription, ServiceDescription
 from orchestrator import OrchestratorValidationError
-from orchestrator.module import to_format
+from orchestrator.module import to_format, preview_table_osd
 
 
 def _test_resource(data, resource_class, extra=None):
@@ -98,6 +98,7 @@ def some_complex_completion():
             lambda four: four + 1))
     return c
 
+
 def test_promise_mondatic_then_combined():
     p = some_complex_completion()
     p.finalize()
@@ -135,13 +136,15 @@ def test_progress():
                                       completion=lambda: Completion(
                                           on_complete=lambda _: progress_val))
     )
-    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', 0.0, [('origin', 'orchestrator')])
+    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', 0.0, [
+                                  ('origin', 'orchestrator')])
 
     c.finalize()
     mgr.remote.assert_called_with('progress', 'complete', c.progress_reference.progress_id)
 
     c.progress_reference.update()
-    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', progress_val, [('origin', 'orchestrator')])
+    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id,
+                                  'hello world', progress_val, [('origin', 'orchestrator')])
     assert not c.progress_reference.effective
 
     progress_val = 1
@@ -191,8 +194,8 @@ def test_fail():
     assert isinstance(c.exception, KeyError)
 
     with pytest.raises(ValueError,
-                  match='Invalid State: called fail, but Completion is already finished: {}'.format(
-                      str(ZeroDivisionError()))):
+                       match='Invalid State: called fail, but Completion is already finished: {}'.format(
+                           str(ZeroDivisionError()))):
         c._first_promise.fail(ZeroDivisionError())
 
 
@@ -234,6 +237,7 @@ def test_pretty_print():
 
     assert p.result == 5
 
+
 def test_apply():
     to = _TestOrchestrator('', 0, 0)
     completion = to.apply([
@@ -242,7 +246,7 @@ def test_apply():
         ServiceSpec(service_type='nfs'),
     ])
     completion.finalize(42)
-    assert  completion.result == [None, None, None]
+    assert completion.result == [None, None, None]
 
 
 def test_yaml():
@@ -288,5 +292,49 @@ def test_event_multiline():
     e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', 'subject', 'ERROR', 'message')
     assert OrchestratorEvent.from_json(e.to_json()) == e
 
-    e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', 'subject', 'ERROR', 'multiline\nmessage')
+    e = OrchestratorEvent(datetime.datetime.utcnow(), 'service',
+                          'subject', 'ERROR', 'multiline\nmessage')
     assert OrchestratorEvent.from_json(e.to_json()) == e
+
+
+def test_preview_table_osd_smoke():
+    data = [
+        {
+            'service_type': 'osd',
+            'data':
+            {
+                'foo host':
+                [
+                    {
+                        'osdspec': 'foo',
+                        'error': '',
+                        'data':
+                        [
+                            {
+                                "block_db": "/dev/nvme0n1",
+                                "block_db_size": "66.67 GB",
+                                "data": "/dev/sdb",
+                                "data_size": "300.00 GB",
+                                "encryption": "None"
+                            },
+                            {
+                                "block_db": "/dev/nvme0n1",
+                                "block_db_size": "66.67 GB",
+                                "data": "/dev/sdc",
+                                "data_size": "300.00 GB",
+                                "encryption": "None"
+                            },
+                            {
+                                "block_db": "/dev/nvme0n1",
+                                "block_db_size": "66.67 GB",
+                                "data": "/dev/sdd",
+                                "data_size": "300.00 GB",
+                                "encryption": "None"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+    preview_table_osd(data)

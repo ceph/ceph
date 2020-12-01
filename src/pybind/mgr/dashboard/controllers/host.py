@@ -10,7 +10,7 @@ import cherrypy
 from mgr_util import merge_dicts
 from orchestrator import HostSpec
 from . import ApiController, RESTController, Task, Endpoint, ReadPermission, \
-    UiApiController, BaseController
+    UiApiController, BaseController, allow_empty_body
 from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
 from ..exceptions import DashboardException
@@ -121,10 +121,12 @@ class Host(RESTController):
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, True)
         orch_client.hosts.add(hostname)
+    create._cp_config = {'tools.json_in.force': False}  # pylint: disable=W0212
 
     @raise_if_no_orchestrator
     @handle_orchestrator_error('host')
     @host_task('delete', {'hostname': '{hostname}'})
+    @allow_empty_body
     def delete(self, hostname):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, False)
@@ -164,7 +166,7 @@ class Host(RESTController):
     @raise_if_no_orchestrator
     def daemons(self, hostname: str) -> List[dict]:
         orch = OrchClient.instance()
-        daemons = orch.services.list_daemons(None, hostname)
+        daemons = orch.services.list_daemons(hostname=hostname)
         return [d.to_json() for d in daemons]
 
     @handle_orchestrator_error('host')

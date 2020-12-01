@@ -226,7 +226,7 @@ function TEST_mon_last_clean_epoch() {
   # - all pools have floor equal to lec
 
   while kill $osd_pid ; do sleep 1 ; done
-  ceph osd down 2
+  ceph osd out 2
   sleep 5 # seriously, just to make sure things settle; we may not need this.
 
   # generate some maps
