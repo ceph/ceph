@@ -253,11 +253,8 @@ void BackfillFixture::request_replica_scan(
   const hobject_t& begin,
   const hobject_t& end)
 {
-  std::cout << __func__ << std::endl;
-
   BackfillInterval bi;
   bi.end = backfill_targets.at(target).store.list(begin, [&bi](auto kv) {
-    std::cout << kv << std::endl;
     bi.objects.insert(std::move(kv));
   });
   bi.begin = begin;
@@ -269,11 +266,8 @@ void BackfillFixture::request_replica_scan(
 void BackfillFixture::request_primary_scan(
   const hobject_t& begin)
 {
-  std::cout << __func__ << std::endl;
-
   BackfillInterval bi;
   bi.end = backfill_source.store.list(begin, [&bi](auto kv) {
-    std::cout << kv << std::endl;
     bi.objects.insert(std::move(kv));
   });
   bi.begin = begin;
@@ -313,12 +307,10 @@ void BackfillFixture::maybe_flush()
 void BackfillFixture::update_peers_last_backfill(
   const hobject_t& new_last_backfill)
 {
-  std::cout << __func__ << std::endl;
 }
 
 bool BackfillFixture::budget_available() const
 {
-  std::cout << __func__ << std::endl;
   return true;
 }
 
