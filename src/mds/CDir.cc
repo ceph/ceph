@@ -2159,37 +2159,41 @@ public:
 
 class C_IO_Dir_Commit_Ops : public Context {
 public:
-  C_IO_Dir_Commit_Ops(CDir *d, int pr, bufferlist &&bl,
-		      vector<dentry_key_t> &&r, vector<CDir::dentry_commit_item> &&s,
+  C_IO_Dir_Commit_Ops(CDir *d, int pr,
+		      vector<CDir::dentry_commit_item> &&s, bufferlist &&bl,
+		      vector<dentry_key_t> &&r,
 		      mempool::mds_co::compact_set<mempool::mds_co::string> &&stale) :
     dir(d), op_prio(pr) {
+    metapool = dir->mdcache->mds->mdsmap->get_metadata_pool();
     version = dir->get_version();
     is_new = dir->is_new();
+    to_set.swap(s);
     dfts.swap(bl);
     to_remove.swap(r);
-    to_set.swap(s);
     stale_items.swap(stale);
   }
 
   void finish(int r) override {
-    dir->_omap_commit_ops(r, op_prio, version, is_new, dfts, to_remove, to_set,
-                          stale_items);
+    dir->_omap_commit_ops(r, op_prio, metapool, version, is_new, to_set, dfts,
+			  to_remove, stale_items);
   }
 
 private:
   CDir *dir;
-  version_t version;
   int op_prio;
+  int64_t metapool;
+  version_t version;
   bool is_new;
+  vector<CDir::dentry_commit_item> to_set;
   bufferlist dfts;
   vector<dentry_key_t> to_remove;
-  vector<CDir::dentry_commit_item> to_set;
   mempool::mds_co::compact_set<mempool::mds_co::string> stale_items;
 };
 
 // This is not locked by mds_lock
-void CDir::_omap_commit_ops(int r, int op_prio, version_t version, bool _new, bufferlist &dfts,
-                            vector<dentry_key_t>& to_remove, vector<dentry_commit_item> &to_set,
+void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t version, bool _new,
+			    vector<dentry_commit_item> &to_set, bufferlist &dfts,
+                            vector<dentry_key_t>& to_remove,
 			    mempool::mds_co::compact_set<mempool::mds_co::string> &stales)
 {
   dout(10) << __func__ << dendl;
@@ -2205,7 +2209,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, version_t version, bool _new, bu
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(metapool);
 
   map<string, bufferlist> _set;
   set<string> _rm;
@@ -2409,9 +2413,8 @@ void CDir::_omap_commit(int op_prio)
     }
   }
 
-  auto c = new C_IO_Dir_Commit_Ops(this, op_prio, std::move(dfts),
-                                   std::move(to_remove), std::move(to_set),
-                                   std::move(stale_items));
+  auto c = new C_IO_Dir_Commit_Ops(this, op_prio, std::move(to_set), std::move(dfts),
+                                   std::move(to_remove), std::move(stale_items));
   stale_items.clear();
   mdcache->mds->finisher->queue(c);
 }
