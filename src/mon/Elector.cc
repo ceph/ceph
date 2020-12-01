@@ -58,16 +58,17 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 		<< ").elector(" << epoch << ") ";
 }
 
-Elector::Elector(Monitor *m, int strategy) : logic(this, static_cast<ElectionLogic::election_strategy>(strategy),
-						   &peer_tracker,
-						   m->cct->_conf.get_val<double>("mon_elector_ignore_propose_margin"),
-						   m->cct),
-					     peer_tracker(this, m->rank,
-					    m->cct->_conf.get_val<uint64_t>("mon_con_tracker_score_halflife"),
-					    m->cct->_conf.get_val<uint64_t>("mon_con_tracker_persist_interval")),
-			       ping_timeout(m->cct->_conf.get_val<double>("mon_elector_ping_timeout")),
-			       PING_DIVISOR(m->cct->_conf.get_val<uint64_t>("mon_elector_ping_divisor")),
-			       mon(m), elector(this) {
+Elector::Elector(Monitor *m, int strategy) :
+  logic(this, static_cast<ElectionLogic::election_strategy>(strategy),
+        &peer_tracker,
+        m->cct->_conf.get_val<double>("mon_elector_ignore_propose_margin"),
+        m->cct),
+  peer_tracker(this, m->rank,
+               m->cct->_conf.get_val<uint64_t>("mon_con_tracker_score_halflife"),
+               m->cct->_conf.get_val<uint64_t>("mon_con_tracker_persist_interval")),
+  ping_timeout(m->cct->_conf.get_val<double>("mon_elector_ping_timeout")),
+  PING_DIVISOR(m->cct->_conf.get_val<uint64_t>("mon_elector_ping_divisor")),
+  mon(m), elector(this) {
   bufferlist bl;
   mon->store->get(Monitor::MONITOR_NAME, "connectivity_scores", bl);
   if (bl.length()) {
