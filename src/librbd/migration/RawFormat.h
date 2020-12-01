@@ -65,6 +65,9 @@ private:
   Snapshots m_snapshots;
 
   void handle_open(int r, Context* on_finish);
+
+  void handle_list_snaps(int r, io::SnapIds&& snap_ids,
+                         io::SnapshotDelta* snapshot_delta, Context* on_finish);
 };
 
 } // namespace migration

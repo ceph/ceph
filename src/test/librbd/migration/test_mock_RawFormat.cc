@@ -112,6 +112,19 @@ public:
         })));
   }
 
+  void expect_snapshot_list_snap(MockSnapshotInterface& mock_snapshot_interface,
+                                 const io::Extents& image_extents,
+                                 const io::SparseExtents& sparse_extents,
+                                 int r) {
+    EXPECT_CALL(mock_snapshot_interface, list_snap(image_extents, _, _))
+      .WillOnce(WithArgs<1, 2>(Invoke(
+        [sparse_extents, r](io::SparseExtents* out_sparse_extents,
+                            Context* ctx) {
+          out_sparse_extents->insert(sparse_extents);
+          ctx->complete(r);
+        })));
+  }
+
   void expect_close(MockTestImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(*mock_image_ctx.state, close(_))
       .WillOnce(Invoke([this, r](Context* ctx) {
@@ -162,7 +175,41 @@ TEST_F(TestMockMigrationRawFormat, OpenError) {
 
   expect_snapshot_open(*mock_snapshot_interface, -ENOENT);
 
+  expect_snapshot_close(*mock_snapshot_interface, 0);
   expect_close(mock_image_ctx, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
+
+  C_SaferCond ctx;
+  mock_raw_format.open(&ctx);
+  ASSERT_EQ(-ENOENT, ctx.wait());
+}
+
+TEST_F(TestMockMigrationRawFormat, OpenSnapshotError) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
+  InSequence seq;
+  MockSourceSpecBuilder mock_source_spec_builder;
+
+  auto mock_snapshot_interface_head = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface_head, 0);
+
+  auto mock_snapshot_interface_1 = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, 1,
+                        mock_snapshot_interface_1, 0);
+
+  expect_snapshot_open(*mock_snapshot_interface_1, -ENOENT);
+  expect_snapshot_open(*mock_snapshot_interface_head, 0);
+
+  expect_snapshot_close(*mock_snapshot_interface_1, 0);
+  expect_snapshot_close(*mock_snapshot_interface_head, 0);
+  expect_close(mock_image_ctx, 0);
+
+  json_spirit::mArray snapshots;
+  snapshots.push_back(json_spirit::mObject{});
+  json_object["snapshots"] = snapshots;
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
                                 &mock_source_spec_builder);
@@ -331,6 +378,12 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
   SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
   expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
+  io::SparseExtents sparse_extents;
+  sparse_extents.insert(0, 123, {io::SPARSE_EXTENT_STATE_DATA, 123});
+  expect_snapshot_list_snap(*mock_snapshot_interface, {{0, 123}},
+                            sparse_extents, 0);
+
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
   MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
@@ -342,8 +395,137 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
 
   C_SaferCond ctx2;
   io::SnapshotDelta snapshot_delta;
-  mock_raw_format.list_snaps({{0, 123}}, {}, 0, &snapshot_delta, {}, &ctx2);
+  mock_raw_format.list_snaps({{0, 123}}, {CEPH_NOSNAP}, 0, &snapshot_delta, {},
+                             &ctx2);
   ASSERT_EQ(0, ctx2.wait());
+
+  io::SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{CEPH_NOSNAP, CEPH_NOSNAP}] = sparse_extents;
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+
+  C_SaferCond ctx3;
+  mock_raw_format.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationRawFormat, ListSnapsError) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
+  InSequence seq;
+  MockSourceSpecBuilder mock_source_spec_builder;
+
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface, 0);
+
+
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
+
+  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
+  io::SparseExtents sparse_extents;
+  sparse_extents.insert(0, 123, {io::SPARSE_EXTENT_STATE_DATA, 123});
+  expect_snapshot_list_snap(*mock_snapshot_interface, {{0, 123}},
+                            sparse_extents, -EINVAL);
+
+  expect_snapshot_close(*mock_snapshot_interface, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
+
+  C_SaferCond ctx1;
+  mock_raw_format.open(&ctx1);
+  ASSERT_EQ(0, ctx1.wait());
+
+  C_SaferCond ctx2;
+  io::SnapshotDelta snapshot_delta;
+  mock_raw_format.list_snaps({{0, 123}}, {CEPH_NOSNAP}, 0, &snapshot_delta, {},
+                             &ctx2);
+  ASSERT_EQ(-EINVAL, ctx2.wait());
+
+  C_SaferCond ctx3;
+  mock_raw_format.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationRawFormat, ListSnapsMerge) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
+  InSequence seq;
+  MockSourceSpecBuilder mock_source_spec_builder;
+
+  auto mock_snapshot_interface_head = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+                        mock_snapshot_interface_head, 0);
+
+  auto mock_snapshot_interface_1 = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, 1,
+                        mock_snapshot_interface_1, 0);
+
+  auto mock_snapshot_interface_2 = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, 2,
+                        mock_snapshot_interface_2, 0);
+
+
+  expect_snapshot_open(*mock_snapshot_interface_1, 0);
+  expect_snapshot_open(*mock_snapshot_interface_2, 0);
+  expect_snapshot_open(*mock_snapshot_interface_head, 0);
+
+  SnapInfo snap_info_head{{}, {}, 256, {}, 0, 0, {}};
+  expect_snapshot_get_info(*mock_snapshot_interface_head, snap_info_head);
+
+  SnapInfo snap_info_1{snap_info_head};
+  snap_info_1.size = 123;
+  expect_snapshot_get_info(*mock_snapshot_interface_1, snap_info_1);
+  io::SparseExtents sparse_extents_1;
+  sparse_extents_1.insert(0, 123, {io::SPARSE_EXTENT_STATE_DATA, 123});
+  expect_snapshot_list_snap(*mock_snapshot_interface_1, {{0, 123}},
+                            sparse_extents_1, 0);
+
+  SnapInfo snap_info_2{snap_info_head};
+  snap_info_2.size = 64;
+  expect_snapshot_get_info(*mock_snapshot_interface_2, snap_info_2);
+  io::SparseExtents sparse_extents_2;
+  sparse_extents_2.insert(0, 32, {io::SPARSE_EXTENT_STATE_DATA, 32});
+  expect_snapshot_list_snap(*mock_snapshot_interface_2, {{0, 123}},
+                            sparse_extents_2, 0);
+
+  expect_snapshot_get_info(*mock_snapshot_interface_head, snap_info_head);
+  io::SparseExtents sparse_extents_head;
+  sparse_extents_head.insert(0, 16, {io::SPARSE_EXTENT_STATE_DATA, 16});
+  expect_snapshot_list_snap(*mock_snapshot_interface_head, {{0, 123}},
+                            sparse_extents_head, 0);
+
+  expect_snapshot_close(*mock_snapshot_interface_1, 0);
+  expect_snapshot_close(*mock_snapshot_interface_2, 0);
+  expect_snapshot_close(*mock_snapshot_interface_head, 0);
+
+  json_spirit::mArray snapshots;
+  snapshots.push_back(json_spirit::mObject{});
+  snapshots.push_back(json_spirit::mObject{});
+  json_object["snapshots"] = snapshots;
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
+
+  C_SaferCond ctx1;
+  mock_raw_format.open(&ctx1);
+  ASSERT_EQ(0, ctx1.wait());
+
+  C_SaferCond ctx2;
+  io::SnapshotDelta snapshot_delta;
+  mock_raw_format.list_snaps({{0, 123}}, {1, CEPH_NOSNAP}, 0, &snapshot_delta,
+                             {}, &ctx2);
+  ASSERT_EQ(0, ctx2.wait());
+
+  io::SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{1, 1}] = sparse_extents_1;
+  sparse_extents_2.erase(0, 16);
+  sparse_extents_2.insert(64, 59, {io::SPARSE_EXTENT_STATE_ZEROED, 59});
+  expected_snapshot_delta[{CEPH_NOSNAP, 2}] = sparse_extents_2;
+  expected_snapshot_delta[{CEPH_NOSNAP, CEPH_NOSNAP}] = sparse_extents_head;
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 
   C_SaferCond ctx3;
   mock_raw_format.close(&ctx3);
