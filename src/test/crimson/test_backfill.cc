@@ -132,6 +132,8 @@ class BackfillFixture : public crimson::osd::BackfillState::BackfillListener {
     const hobject_t& obj,
     const eversion_t& v) override;
 
+  void maybe_flush() override;
+
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) override;
 
@@ -295,6 +297,10 @@ void BackfillFixture::enqueue_drop(
   const eversion_t& v)
 {
   backfill_targets.at(target).store.drop(obj, v);
+}
+
+void BackfillFixture::maybe_flush()
+{
 }
 
 void BackfillFixture::update_peers_last_backfill(

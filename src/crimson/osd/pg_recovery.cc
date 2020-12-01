@@ -452,7 +452,24 @@ void PGRecovery::enqueue_drop(
   const hobject_t& obj,
   const eversion_t& v)
 {
-  ceph_abort_msg("Not implemented");
+  // allocate a pair if target is seen for the first time
+  auto& req = backfill_drop_requests[target];
+  if (!req) {
+    req = ceph::make_message<MOSDPGBackfillRemove>(
+      spg_t(pg->get_pgid().pgid, target.shard), pg->get_osdmap_epoch());
+  }
+  req->ls.emplace_back(obj, v);
+}
+
+void PGRecovery::maybe_flush()
+{
+  for (auto& [target, req] : backfill_drop_requests) {
+    std::ignore = pg->get_shard_services().send_to_osd(
+      target.osd,
+      std::move(req),
+      pg->get_osdmap_epoch());
+  }
+  backfill_drop_requests.clear();
 }
 
 void PGRecovery::update_peers_last_backfill(
