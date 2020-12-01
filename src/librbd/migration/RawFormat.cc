@@ -9,101 +9,13 @@
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
-#include "librbd/migration/FileStream.h"
+#include "librbd/migration/SnapshotInterface.h"
 #include "librbd/migration/SourceSpecBuilder.h"
-#include "librbd/migration/StreamInterface.h"
-
-#define dout_subsys ceph_subsys_rbd
-#undef dout_prefix
-#define dout_prefix *_dout << "librbd::migration::RawFormat: " << this \
-                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace migration {
 
 #define dout_subsys ceph_subsys_rbd
-#undef dout_prefix
-#define dout_prefix *_dout << "librbd::migration::RawFormat::OpenRequest " \
-                           << this << " " << __func__ << ": "
-
-template <typename I>
-struct RawFormat<I>::OpenRequest {
-  RawFormat* raw_format;
-  Context* on_finish;
-
-  uint64_t image_size = 0;
-
-  OpenRequest(RawFormat* raw_format, Context* on_finish)
-    : raw_format(raw_format), on_finish(on_finish) {
-  }
-
-  void send() {
-    open_stream();
-  }
-
-  void open_stream() {
-    auto cct = raw_format->m_image_ctx->cct;
-    ldout(cct, 10) << dendl;
-
-    auto ctx = util::create_context_callback<
-      OpenRequest, &OpenRequest::handle_open_stream>(this);
-    raw_format->m_stream->open(ctx);
-  }
-
-  void handle_open_stream(int r) {
-    auto cct = raw_format->m_image_ctx->cct;
-    ldout(cct, 10) << "r=" << r << dendl;
-
-    if (r < 0) {
-      lderr(cct) << "failed to open stream: " << cpp_strerror(r) << dendl;
-      finish(r);
-      return;
-    }
-
-    get_image_size();
-  }
-
-  void get_image_size() {
-    auto cct = raw_format->m_image_ctx->cct;
-    ldout(cct, 10) << dendl;
-
-    auto ctx = util::create_context_callback<
-      OpenRequest, &OpenRequest::handle_get_image_size>(this);
-    raw_format->get_image_size(CEPH_NOSNAP, &image_size, ctx);
-  }
-
-  void handle_get_image_size(int r) {
-    auto cct = raw_format->m_image_ctx->cct;
-    ldout(cct, 10) << "r=" << r << dendl;
-
-    if (r < 0) {
-      lderr(cct) << "failed to open stream: " << cpp_strerror(r) << dendl;
-      finish(r);
-      return;
-    }
-
-    raw_format->m_image_ctx->image_lock.lock();
-    raw_format->m_image_ctx->size = image_size;
-    raw_format->m_image_ctx->image_lock.unlock();
-
-    finish(0);
-  }
-
-  void finish(int r) {
-    auto cct = raw_format->m_image_ctx->cct;
-    ldout(cct, 10) << "r=" << r << dendl;
-
-    if (r < 0) {
-      raw_format->m_image_ctx->state->close(new LambdaContext(
-        [r, on_finish=on_finish](int _) { on_finish->complete(r); }));
-    } else {
-      on_finish->complete(0);
-    }
-
-    delete this;
-  }
-};
-
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::migration::RawFormat: " << this \
                            << " " << __func__ << ": "
@@ -121,17 +33,48 @@ void RawFormat<I>::open(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
-  int r = m_source_spec_builder->build_stream(m_json_object, &m_stream);
+  on_finish = new LambdaContext([this, on_finish](int r) {
+    handle_open(r, on_finish); });
+
+  // treat the base image as a HEAD-revision snapshot
+  int r = m_source_spec_builder->build_snapshot(m_json_object, CEPH_NOSNAP,
+                                                &m_snapshots[CEPH_NOSNAP]);
   if (r < 0) {
-    lderr(cct) << "failed to build migration stream handler" << cpp_strerror(r)
+    lderr(cct) << "failed to build HEAD revision handler: " << cpp_strerror(r)
                << dendl;
-    m_image_ctx->state->close(
-      new LambdaContext([r, on_finish](int _) { on_finish->complete(r); }));
+    on_finish->complete(r);
     return;
   }
 
-  auto req = new OpenRequest(this, on_finish);
-  req->send();
+  auto gather_ctx = new C_Gather(cct, on_finish);
+  SnapshotInterface* previous_snapshot = nullptr;
+  for (auto& [_, snapshot] : m_snapshots) {
+    snapshot->open(previous_snapshot, gather_ctx->new_sub());
+    previous_snapshot = snapshot.get();
+  }
+  gather_ctx->activate();
+}
+
+template <typename I>
+void RawFormat<I>::handle_open(int r, Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to open raw image: " << cpp_strerror(r)
+               << dendl;
+    m_image_ctx->state->close(new LambdaContext(
+      [r, on_finish=on_finish](int _) { on_finish->complete(r); }));
+    return;
+  }
+
+  auto head_snapshot = m_snapshots[CEPH_NOSNAP];
+  ceph_assert(head_snapshot);
+
+  m_image_ctx->image_lock.lock();
+  m_image_ctx->size = head_snapshot->get_snap_info().size;
+  m_image_ctx->image_lock.unlock();
+  on_finish->complete(0);
 }
 
 template <typename I>
@@ -139,12 +82,12 @@ void RawFormat<I>::close(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
-  if (!m_stream) {
-    on_finish->complete(0);
-    return;
+  auto gather_ctx = new C_Gather(cct, on_finish);
+  for (auto& [snap_id, snapshot] : m_snapshots) {
+    snapshot->close(gather_ctx->new_sub());
   }
 
-  m_stream->close(on_finish);
+  gather_ctx->activate();
 }
 
 template <typename I>
@@ -153,6 +96,12 @@ void RawFormat<I>::get_snapshots(SnapInfos* snap_infos, Context* on_finish) {
   ldout(cct, 10) << dendl;
 
   snap_infos->clear();
+  for (auto& [snap_id, snapshot] : m_snapshots) {
+    if (snap_id == CEPH_NOSNAP) {
+      continue;
+    }
+    snap_infos->emplace(snap_id, snapshot->get_snap_info());
+  }
   on_finish->complete(0);
 }
 
@@ -162,12 +111,14 @@ void RawFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
-  if (snap_id != CEPH_NOSNAP) {
-    on_finish->complete(-EINVAL);
+  auto snapshot_it = m_snapshots.find(snap_id);
+  if (snapshot_it == m_snapshots.end()) {
+    on_finish->complete(-ENOENT);
     return;
   }
 
-  m_stream->get_size(size, on_finish);
+  *size = snapshot_it->second->get_snap_info().size;
+  on_finish->complete(0);
 }
 
 template <typename I>
@@ -178,20 +129,15 @@ bool RawFormat<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
-  if (snap_id != CEPH_NOSNAP) {
-    aio_comp->fail(-EINVAL);
+  auto snapshot_it = m_snapshots.find(snap_id);
+  if (snapshot_it == m_snapshots.end()) {
+    aio_comp->fail(-ENOENT);
     return true;
   }
 
-  aio_comp->read_result = std::move(read_result);
-  aio_comp->read_result.set_image_extents(image_extents);
-
-  aio_comp->set_request_count(1);
-  auto ctx = new io::ReadResult::C_ImageReadRequest(aio_comp,
-                                                    0, image_extents);
-
-  // raw directly maps the image-extent IO down to a byte IO extent
-  m_stream->read(std::move(image_extents), &ctx->bl, ctx);
+  snapshot_it->second->read(aio_comp, std::move(image_extents),
+                            std::move(read_result), op_flags, read_flags,
+                            parent_trace);
   return true;
 }
 
