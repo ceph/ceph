@@ -15,10 +15,7 @@ $(function() {
     if (branch === "master") {
       $("#dev-warning").show();
     } else if (data && data.releases && branch in data.releases) {
-      var eol = ("actual_eol" in data.releases[branch]);
-      if (eol) {
-        $("#eol-warning").show();
-      }
+      return;
     } else {
       $("#dev-warning").show();
     }
