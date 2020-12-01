@@ -1,10 +1,12 @@
 {% extends "!page.html" %}
 {% block body %}
 
-<div id="dev-warning" class="admonition note" style="display:none;">
+{%- if release == 'dev' %}
+<div id="dev-warning" class="admonition note">
   <p class="first admonition-title">Notice</p>
   <p class="last">This document is for a development version of Ceph.</p>
 </div>
+{%- endif %}
 
 {%- if is_release_eol %}
 <div id="eol-warning" class="admonition warning">

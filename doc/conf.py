@@ -1,6 +1,4 @@
-import datetime
 import fileinput
-import json
 import os
 import shutil
 import sys
@@ -222,27 +220,6 @@ for c in pybinds:
         sys.path.insert(0, pybind)
 
 
-# build the releases.json. this reads in the yaml version and dumps
-# out the json representation of the same file. the resulting releases.json
-# should be served from '/_static/releases.json' of hosted site.
-def yaml_to_json(input_path, output_path):
-    def json_serialize(obj):
-        if isinstance(obj, datetime.date):
-            return obj.isoformat()
-
-    yaml_fn = os.path.join(top_level, input_path)
-    json_fn = os.path.join(top_level, output_path)
-
-    def process(app):
-        with open(yaml_fn) as input:
-            with open(json_fn, 'w') as output:
-                releases = yaml.safe_load(input)
-                s = json.dumps(releases, indent=2, default=json_serialize)
-                output.write(s)
-
-    return process
-
-
 # handles edit-on-github and old version warning display
 def setup(app):
     app.add_js_file('js/ceph.js')
@@ -254,6 +231,3 @@ def setup(app):
                 generate_state_diagram(['src/osd/PeeringState.h',
                                         'src/osd/PeeringState.cc'],
                                        'doc/dev/peering_graph.generated.dot'))
-    app.connect('builder-inited',
-                yaml_to_json('doc/releases/releases.yml',
-                             'doc/_static/releases.json'))
