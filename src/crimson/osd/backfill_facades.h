@@ -23,17 +23,24 @@ struct BackfillState::PeeringFacade {
     return peering_state.get_backfill_targets();
   }
 
-  decltype(auto) get_peer_info(pg_shard_t peer) const {
-    return peering_state.get_peer_info(peer);
+  decltype(auto) get_peer_last_backfill(pg_shard_t peer) const {
+    return peering_state.get_peer_info(peer).last_backfill;
   }
 
-  decltype(auto) get_info() const {
-    return peering_state.get_info();
+  decltype(auto) get_last_update() const {
+    return peering_state.get_info().last_update;
   }
 
-  decltype(auto) get_pg_log() const {
-    return peering_state.get_pg_log();
+  decltype(auto) get_log_tail() const {
+    return peering_state.get_info().log_tail;
   }
+
+  template <class... Args>
+  void scan_log_after(Args&&... args) const {
+    peering_state.get_pg_log().get_log().scan_log_after(
+      std::forward<Args>(args)...);
+  }
+
   bool is_backfill_target(pg_shard_t peer) const {
     return peering_state.is_backfill_target(peer);
   }
