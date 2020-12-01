@@ -39,10 +39,10 @@
 ``mds dir max commit size``
 
 :Description: The maximum size of a directory update before Ceph breaks it into 
-              smaller transactions) (MB).
+              smaller transactions (MB).
               
 :Type:  32-bit Integer
-:Default: ``90``
+:Default: ``10``
 
 
 ``mds decay halflife``
