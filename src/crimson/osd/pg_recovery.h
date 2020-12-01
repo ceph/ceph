@@ -13,6 +13,7 @@
 
 #include "osd/object_state.h"
 
+class MOSDPGBackfillRemove;
 class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
@@ -82,6 +83,8 @@ private:
 
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
+  std::map<pg_shard_t,
+           ceph::ref_t<MOSDPGBackfillRemove>> backfill_drop_requests;
 
   template <class EventT>
   void start_backfill_recovery(
@@ -99,6 +102,7 @@ private:
     const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) final;
+  void maybe_flush() final;
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
