@@ -7,13 +7,28 @@ import sys
 
 import yaml
 
+
+top_level = \
+    os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(__file__)))
+
+
+def parse_ceph_release():
+    with open(os.path.join(top_level, 'src/ceph_release')) as f:
+        lines = f.readlines()
+        assert(len(lines) == 3)
+        # 16, pacific, dev
+        version, codename, status = [line.strip() for line in lines]
+        return version, codename, status
+
+
 # project information
 project = 'Ceph'
 copyright = ('2016, Ceph authors and contributors. '
              'Licensed under Creative Commons Attribution Share Alike 3.0 '
              '(CC-BY-SA-3.0)')
-version = 'dev'
-release = 'dev'
+version, codename, release = parse_ceph_release()
 pygments_style = 'sphinx'
 
 # HTML output options
@@ -103,12 +118,6 @@ todo_include_todos = True
 rst_prolog = """
 .. |stable-release| replace:: octopus
 """
-
-top_level = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
-)
 
 # breath options
 breathe_default_project = "Ceph"
