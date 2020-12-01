@@ -6154,11 +6154,20 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
           ldpp_dout(dpp, 20) << "Got sync hint for bucket=" << *source_bucket << ": " << hiter->get_key() << dendl;
 
           target_policy = make_shared<rgw_bucket_get_sync_policy_result>();
-          yield call(new RGWSyncGetBucketSyncPolicyHandlerCR(sync_env,
-                                                             nullopt,
-                                                             *hiter,
-                                                             target_policy,
-                                                             tn));
+          yield {
+            rgw_bucket hiter_bucket;
+            int r = rgw_bucket_parse_bucket_key(cct, hiter->get_key(),
+                                                &hiter_bucket, nullptr);
+            if (r < 0) {
+              ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to parse bucket key: " << hiter->get_key() << ": r=" << r << dendl;
+              return set_cr_error(r);
+            }
+            call(new RGWSyncGetBucketSyncPolicyHandlerCR(sync_env,
+                                                         nullopt,
+                                                         hiter_bucket,
+                                                         target_policy,
+                                                         tn));
+          }
           if (retcode < 0 &&
               retcode != -ENOENT) {
             return set_cr_error(retcode);
