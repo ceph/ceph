@@ -30,6 +30,12 @@ def latest_stable_release():
         return next(iter(releases.keys()))
 
 
+def is_release_eol(codename):
+    with open(os.path.join(top_level, 'doc/releases/releases.yml')) as input:
+        releases = yaml.safe_load(input)['releases']
+        return 'actual_eol' in releases.get(codename, {})
+
+
 # project information
 project = 'Ceph'
 copyright = ('2016, Ceph authors and contributors. '
@@ -43,6 +49,7 @@ html_theme = 'ceph'
 html_theme_path = ['_themes']
 html_title = "Ceph Documentation"
 html_logo = 'logo.png'
+html_context = {'is_release_eol': is_release_eol(codename)}
 html_favicon = 'favicon.ico'
 html_show_sphinx = False
 html_static_path = ["_static"]
