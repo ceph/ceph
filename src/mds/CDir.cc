@@ -2253,7 +2253,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   };
 
   for (auto &key : stales) {
-    write_size += key.length();
+    write_size += key.length() + sizeof(__u32);
     _rm.emplace(key);
 
     if (write_size >= max_write_size)
@@ -2263,7 +2263,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   for (auto &k : to_remove) {
     string key;
     k.encode(key);
-    write_size += key.length();
+    write_size += key.length() + sizeof(__u32);
     _rm.emplace(std::move(key));
 
     if (write_size >= max_write_size)
@@ -2316,7 +2316,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     }
     off += item.dft_len;
 
-    write_size += key.length() + bl.length();
+    write_size += key.length() + bl.length() + 2 * sizeof(__u32);
     _set[std::move(key)].swap(bl);
     if (write_size >= max_write_size)
       commit_one();
