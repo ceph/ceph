@@ -349,16 +349,16 @@ void Elector::handle_ack(MonOpRequestRef op)
     peer_info[from].mon_release = m->mon_release;
     peer_info[from].metadata = m->metadata;
     dout(5) << " so far i have {";
-    for (auto q = logic.acked_me.begin();
-         q != logic.acked_me.end();
-         ++q) {
-      auto p = peer_info.find(*q);
-      ceph_assert(p != peer_info.end());
-      if (q != logic.acked_me.begin())
+    for (const auto& acked_me_rank : logic.acked_me) {
+      auto acked_me_peer = peer_info.find(acked_me_rank);
+      ceph_assert(acked_me_peer != peer_info.end());
+      const auto& acked_me_elector_info = acked_me_peer->second;
+      if (acked_me_rank != *(logic.acked_me.begin())) {
         *_dout << ",";
-      *_dout << " mon." << p->first << ":"
-             << " features " << p->second.cluster_features
-             << " " << p->second.mon_features;
+      }
+      *_dout << " mon." << acked_me_rank << ":"
+             << " features " << acked_me_elector_info.cluster_features
+             << " " << acked_me_elector_info.mon_features;
     }
     *_dout << " }" << dendl;
   }

@@ -194,17 +194,15 @@ void Paxos::collect(version_t oldpn)
   dout(10) << "collect with pn " << accepted_pn << dendl;
 
   // send collect
-  for (auto p = mon.get_quorum().begin();
-       p != mon.get_quorum().end();
-       ++p) {
-    if (*p == mon.rank) continue;
+  for (const auto& quorum_mem_rank : mon.get_quorum()) {
+    if (quorum_mem_rank == mon.rank) continue;
 
     MMonPaxos *collect = new MMonPaxos(mon.get_epoch(), MMonPaxos::OP_COLLECT,
 				       ceph_clock_now());
     collect->last_committed = last_committed;
     collect->first_committed = first_committed;
     collect->pn = accepted_pn;
-    mon.send_mon_message(collect, *p);
+    mon.send_mon_message(collect, quorum_mem_rank);
   }
 
   // set timeout event
@@ -503,27 +501,25 @@ void Paxos::handle_last(MonOpRequestRef op)
   ceph_assert(g_conf()->paxos_kill_at != 2);
 
   // is everyone contiguous and up to date?
-  for (auto p = peer_last_committed.begin();
-       p != peer_last_committed.end();
-       ++p) {
-    if (p->second + 1 < first_committed && first_committed > 1) {
+  for (const auto& [peon_rank, peon_last_committed] : peer_last_committed) {
+    if (peon_last_committed + 1 < first_committed && first_committed > 1) {
       dout(5) << __func__
-	      << " peon " << p->first
-	      << " last_committed (" << p->second
+	      << " peon " << peon_rank
+	      << " last_committed (" << peon_last_committed
 	      << ") is too low for our first_committed (" << first_committed
 	      << ") -- bootstrap!" << dendl;
       op->mark_paxos_event("need to bootstrap");
       mon.bootstrap();
       return;
     }
-    if (p->second < last_committed) {
+    if (peon_last_committed < last_committed) {
       // share committed values
-      dout(10) << " sending commit to mon." << p->first << dendl;
+      dout(10) << " sending commit to mon." << peon_rank << dendl;
       MMonPaxos *commit = new MMonPaxos(mon.get_epoch(),
 					MMonPaxos::OP_COMMIT,
 					ceph_clock_now());
-      share_state(commit, peer_first_committed[p->first], p->second);
-      mon.send_mon_message(commit, p->first);
+      share_state(commit, peer_first_committed[peon_rank], peon_last_committed);
+      mon.send_mon_message(commit, peon_rank);
     }
   }
 
@@ -683,19 +679,17 @@ void Paxos::begin(bufferlist& v)
   }
 
   // ask others to accept it too!
-  for (auto p = mon.get_quorum().begin();
-       p != mon.get_quorum().end();
-       ++p) {
-    if (*p == mon.rank) continue;
+  for (const auto& quorum_mem_rank : mon.get_quorum()) {
+    if (quorum_mem_rank == mon.rank) continue;
     
-    dout(10) << " sending begin to mon." << *p << dendl;
+    dout(10) << " sending begin to mon." << quorum_mem_rank << dendl;
     MMonPaxos *begin = new MMonPaxos(mon.get_epoch(), MMonPaxos::OP_BEGIN,
 				     ceph_clock_now());
     begin->values[last_committed+1] = new_value;
     begin->last_committed = last_committed;
     begin->pn = accepted_pn;
     
-    mon.send_mon_message(begin, *p);
+    mon.send_mon_message(begin, quorum_mem_rank);
   }
 
   // set timeout event
@@ -909,19 +903,17 @@ void Paxos::commit_finish()
   _sanity_check_store();
 
   // tell everyone
-  for (auto p = mon.get_quorum().begin();
-       p != mon.get_quorum().end();
-       ++p) {
-    if (*p == mon.rank) continue;
+  for (const auto& quorum_mem_rank : mon.get_quorum()) {
+    if (quorum_mem_rank == mon.rank) continue;
 
-    dout(10) << " sending commit to mon." << *p << dendl;
+    dout(10) << " sending commit to mon." << quorum_mem_rank << dendl;
     MMonPaxos *commit = new MMonPaxos(mon.get_epoch(), MMonPaxos::OP_COMMIT,
 				      ceph_clock_now());
     commit->values[last_committed] = new_value;
     commit->pn = accepted_pn;
     commit->last_committed = last_committed;
 
-    mon.send_mon_message(commit, *p);
+    mon.send_mon_message(commit, quorum_mem_rank);
   }
 
   ceph_assert(g_conf()->paxos_kill_at != 9);
@@ -985,16 +977,16 @@ void Paxos::extend_lease()
 	  << " (" << lease_expire << ")" << dendl;
 
   // bcast
-  for (auto p = mon.get_quorum().begin();
-      p != mon.get_quorum().end(); ++p) {
+  for (const auto& quorum_mem_rank : mon.get_quorum()) {
+    if (quorum_mem_rank == mon.rank) continue;
 
-    if (*p == mon.rank) continue;
+    dout(10) << " sending begin to mon." << quorum_mem_rank << dendl;
     MMonPaxos *lease = new MMonPaxos(mon.get_epoch(), MMonPaxos::OP_LEASE,
 				     ceph_clock_now());
     lease->last_committed = last_committed;
     lease->lease_timestamp = utime_t{lease_expire};
     lease->first_committed = first_committed;
-    mon.send_mon_message(lease, *p);
+    mon.send_mon_message(lease, quorum_mem_rank);
   }
 
   // set timeout event.
