@@ -137,6 +137,7 @@ set(librbd_internal_srcs
   migration/NativeFormat.cc
   migration/OpenSourceImageRequest.cc
   migration/RawFormat.cc
+  migration/RawSnapshot.cc
   migration/S3Stream.cc
   migration/SourceSpecBuilder.cc
   migration/Utils.cc
