@@ -125,9 +125,6 @@ For example ::
 Will return all the indexed keys that user has read permission to, and
 are named 'foo'.
 
-Will return all the indexed keys that user has read permission to, and
-are named 'foo'.
-
 The output will be a list of keys in XML that is similar to the S3
 list buckets response.
 
