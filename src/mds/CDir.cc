@@ -2249,21 +2249,23 @@ void CDir::_omap_commit_ops(int r, int op_prio, version_t version, bool _new, bu
   };
 
   for (auto &key : stales) {
-    write_size += key.length() + sizeof(__u32);
-    _rm.emplace(key);
-
-    if (write_size >= max_write_size)
+    unsigned size = key.length() + sizeof(__u32);
+    if (write_size + size > max_write_size)
       commit_one();
+
+    write_size += size;
+    _rm.emplace(key);
   }
 
   for (auto &k : to_remove) {
     string key;
     k.encode(key);
-    write_size += key.length() + sizeof(__u32);
-    _rm.emplace(std::move(key));
-
-    if (write_size >= max_write_size)
+    unsigned size = key.length() + sizeof(__u32);
+    if (write_size + size > max_write_size)
       commit_one();
+
+    write_size += size;
+    _rm.emplace(std::move(key));
   }
 
   uint64_t off = 0;
@@ -2312,10 +2314,12 @@ void CDir::_omap_commit_ops(int r, int op_prio, version_t version, bool _new, bu
     }
     off += item.dft_len;
 
-    write_size += key.length() + bl.length() + 2 * sizeof(__u32);
-    _set[std::move(key)].swap(bl);
-    if (write_size >= max_write_size)
+    unsigned size = key.length() + bl.length() + 2 * sizeof(__u32);
+    if (write_size + size > max_write_size)
       commit_one();
+
+    write_size += size;
+    _set[std::move(key)].swap(bl);
   }
 
   commit_one(true);
