@@ -226,7 +226,7 @@ struct ResizePayload : public AsyncRequestPayloadBase {
   bool allow_shrink = true;
 
   ResizePayload() {}
-  ResizePayload(uint64_t size, bool allow_shrink, const AsyncRequestId &id)
+  ResizePayload(const AsyncRequestId &id, uint64_t size, bool allow_shrink)
     : AsyncRequestPayloadBase(id), size(size), allow_shrink(allow_shrink) {}
 
   NotifyOp get_notify_op() const override {
@@ -241,7 +241,7 @@ struct ResizePayload : public AsyncRequestPayloadBase {
   void dump(Formatter *f) const override;
 };
 
-struct SnapPayloadBase : public Payload {
+struct SnapPayloadBase : public AsyncRequestPayloadBase {
 public:
   cls::rbd::SnapshotNamespace snap_namespace;
   std::string snap_name;
@@ -256,21 +256,22 @@ public:
 
 protected:
   SnapPayloadBase() {}
-  SnapPayloadBase(const cls::rbd::SnapshotNamespace& snap_namespace,
+  SnapPayloadBase(const AsyncRequestId &id,
+                  const cls::rbd::SnapshotNamespace& snap_namespace,
 		  const std::string &name)
-    : snap_namespace(snap_namespace), snap_name(name) {}
+    : AsyncRequestPayloadBase(id), snap_namespace(snap_namespace),
+      snap_name(name) {
+  }
 };
 
 struct SnapCreatePayload : public SnapPayloadBase {
-  AsyncRequestId async_request_id;
   uint64_t flags = 0;
 
   SnapCreatePayload() {}
   SnapCreatePayload(const AsyncRequestId &id,
                     const cls::rbd::SnapshotNamespace &snap_namespace,
 		    const std::string &name, uint64_t flags)
-    : SnapPayloadBase(snap_namespace, name), async_request_id(id),
-      flags(flags) {
+    : SnapPayloadBase(id, snap_namespace, name), flags(flags) {
   }
 
   NotifyOp get_notify_op() const override {
@@ -286,9 +287,12 @@ struct SnapRenamePayload : public SnapPayloadBase {
   uint64_t snap_id = 0;
 
   SnapRenamePayload() {}
-  SnapRenamePayload(const uint64_t &src_snap_id,
+  SnapRenamePayload(const AsyncRequestId &id,
+                    const uint64_t &src_snap_id,
 		    const std::string &dst_name)
-    : SnapPayloadBase(cls::rbd::UserSnapshotNamespace(), dst_name), snap_id(src_snap_id) {}
+    : SnapPayloadBase(id, cls::rbd::UserSnapshotNamespace(), dst_name),
+      snap_id(src_snap_id) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_SNAP_RENAME;
@@ -301,9 +305,11 @@ struct SnapRenamePayload : public SnapPayloadBase {
 
 struct SnapRemovePayload : public SnapPayloadBase {
   SnapRemovePayload() {}
-  SnapRemovePayload(const cls::rbd::SnapshotNamespace& snap_namespace,
+  SnapRemovePayload(const AsyncRequestId &id,
+                    const cls::rbd::SnapshotNamespace& snap_namespace,
 		    const std::string &name)
-    : SnapPayloadBase(snap_namespace, name) {}
+    : SnapPayloadBase(id, snap_namespace, name) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_SNAP_REMOVE;
@@ -312,9 +318,11 @@ struct SnapRemovePayload : public SnapPayloadBase {
 
 struct SnapProtectPayload : public SnapPayloadBase {
   SnapProtectPayload() {}
-  SnapProtectPayload(const cls::rbd::SnapshotNamespace& snap_namespace,
+  SnapProtectPayload(const AsyncRequestId &id,
+                     const cls::rbd::SnapshotNamespace& snap_namespace,
 		     const std::string &name)
-    : SnapPayloadBase(snap_namespace, name) {}
+    : SnapPayloadBase(id, snap_namespace, name) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_SNAP_PROTECT;
@@ -323,9 +331,11 @@ struct SnapProtectPayload : public SnapPayloadBase {
 
 struct SnapUnprotectPayload : public SnapPayloadBase {
   SnapUnprotectPayload() {}
-  SnapUnprotectPayload(const cls::rbd::SnapshotNamespace& snap_namespace,
+  SnapUnprotectPayload(const AsyncRequestId &id,
+                       const cls::rbd::SnapshotNamespace& snap_namespace,
 		       const std::string &name)
-    : SnapPayloadBase(snap_namespace, name) {}
+    : SnapPayloadBase(id, snap_namespace, name) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_SNAP_UNPROTECT;
@@ -345,11 +355,13 @@ struct RebuildObjectMapPayload : public AsyncRequestPayloadBase {
   }
 };
 
-struct RenamePayload : public Payload {
+struct RenamePayload : public AsyncRequestPayloadBase {
   std::string image_name;
 
   RenamePayload() {}
-  RenamePayload(const std::string _image_name) : image_name(_image_name) {}
+  RenamePayload(const AsyncRequestId &id, const std::string _image_name)
+    : AsyncRequestPayloadBase(id), image_name(_image_name) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_RENAME;
@@ -363,13 +375,15 @@ struct RenamePayload : public Payload {
   void dump(Formatter *f) const;
 };
 
-struct UpdateFeaturesPayload : public Payload {
+struct UpdateFeaturesPayload : public AsyncRequestPayloadBase {
   uint64_t features = 0;
   bool enabled = false;
 
   UpdateFeaturesPayload() {}
-  UpdateFeaturesPayload(uint64_t features, bool enabled)
-    : features(features), enabled(enabled) {}
+  UpdateFeaturesPayload(const AsyncRequestId &id, uint64_t features,
+                        bool enabled)
+    : AsyncRequestPayloadBase(id), features(features), enabled(enabled) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_UPDATE_FEATURES;
@@ -439,12 +453,14 @@ struct UnquiescePayload : public AsyncRequestPayloadBase {
   }
 };
 
-struct MetadataUpdatePayload : public Payload {
+struct MetadataUpdatePayload : public AsyncRequestPayloadBase {
   std::string key;
   std::optional<std::string> value;
   MetadataUpdatePayload() {}
-  MetadataUpdatePayload(std::string key, std::optional<std::string> value)
-    : key(key), value(value) {}
+  MetadataUpdatePayload(const AsyncRequestId &id, std::string key,
+                        std::optional<std::string> value)
+    : AsyncRequestPayloadBase(id), key(key), value(value) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_METADATA_UPDATE;
