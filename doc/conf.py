@@ -1,19 +1,45 @@
-import datetime
 import fileinput
-import json
 import os
 import shutil
 import sys
 
 import yaml
 
+
+top_level = \
+    os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(__file__)))
+
+
+def parse_ceph_release():
+    with open(os.path.join(top_level, 'src/ceph_release')) as f:
+        lines = f.readlines()
+        assert(len(lines) == 3)
+        # 16, pacific, dev
+        version, codename, status = [line.strip() for line in lines]
+        return version, codename, status
+
+
+def latest_stable_release():
+    with open(os.path.join(top_level, 'doc/releases/releases.yml')) as input:
+        releases = yaml.safe_load(input)['releases']
+        # get the first release
+        return next(iter(releases.keys()))
+
+
+def is_release_eol(codename):
+    with open(os.path.join(top_level, 'doc/releases/releases.yml')) as input:
+        releases = yaml.safe_load(input)['releases']
+        return 'actual_eol' in releases.get(codename, {})
+
+
 # project information
 project = 'Ceph'
 copyright = ('2016, Ceph authors and contributors. '
              'Licensed under Creative Commons Attribution Share Alike 3.0 '
              '(CC-BY-SA-3.0)')
-version = 'dev'
-release = 'dev'
+version, codename, release = parse_ceph_release()
 pygments_style = 'sphinx'
 
 # HTML output options
@@ -21,6 +47,7 @@ html_theme = 'ceph'
 html_theme_path = ['_themes']
 html_title = "Ceph Documentation"
 html_logo = 'logo.png'
+html_context = {'is_release_eol': is_release_eol(codename)}
 html_favicon = 'favicon.ico'
 html_show_sphinx = False
 html_static_path = ["_static"]
@@ -79,7 +106,6 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx_substitution_extensions',
     'breathe',
-    'edit_on_github',
     'ceph_releases',
     'sphinxcontrib.openapi'
     ]
@@ -100,16 +126,9 @@ if build_with_rtd:
 todo_include_todos = True
 
 # sphinx_substitution_extensions options
-# TODO: read from doc/releases/releases.yml
-rst_prolog = """
-.. |stable-release| replace:: octopus
+rst_prolog = f"""
+.. |stable-release| replace:: {latest_stable_release()}
 """
-
-top_level = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
-)
 
 # breath options
 breathe_default_project = "Ceph"
@@ -201,27 +220,6 @@ for c in pybinds:
         sys.path.insert(0, pybind)
 
 
-# build the releases.json. this reads in the yaml version and dumps
-# out the json representation of the same file. the resulting releases.json
-# should be served from '/_static/releases.json' of hosted site.
-def yaml_to_json(input_path, output_path):
-    def json_serialize(obj):
-        if isinstance(obj, datetime.date):
-            return obj.isoformat()
-
-    yaml_fn = os.path.join(top_level, input_path)
-    json_fn = os.path.join(top_level, output_path)
-
-    def process(app):
-        with open(yaml_fn) as input:
-            with open(json_fn, 'w') as output:
-                releases = yaml.safe_load(input)
-                s = json.dumps(releases, indent=2, default=json_serialize)
-                output.write(s)
-
-    return process
-
-
 # handles edit-on-github and old version warning display
 def setup(app):
     app.add_js_file('js/ceph.js')
@@ -233,6 +231,3 @@ def setup(app):
                 generate_state_diagram(['src/osd/PeeringState.h',
                                         'src/osd/PeeringState.cc'],
                                        'doc/dev/peering_graph.generated.dot'))
-    app.connect('builder-inited',
-                yaml_to_json('doc/releases/releases.yml',
-                             'doc/_static/releases.json'))
