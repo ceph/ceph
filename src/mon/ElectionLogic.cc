@@ -132,7 +132,6 @@ void ElectionLogic::start()
   }
   acked_me.insert(elector->get_my_rank());
   clear_live_election_state();
-  reset_stable_tracker();
   electing_me = true;
 
   bufferlist bl;
