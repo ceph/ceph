@@ -100,7 +100,8 @@ class BackfillFixture : public crimson::osd::BackfillState::BackfillListener {
 
   FakePrimary backfill_source;
   std::map<pg_shard_t, FakeReplica> backfill_targets;
-
+  std::map<pg_shard_t,
+           std::vector<std::pair<hobject_t, eversion_t>>> enqueued_drops;
   std::deque<
     boost::intrusive_ptr<
       const boost::statechart::event_base>> events_to_dispatch;
@@ -296,11 +297,17 @@ void BackfillFixture::enqueue_drop(
   const hobject_t& obj,
   const eversion_t& v)
 {
-  backfill_targets.at(target).store.drop(obj, v);
+  enqueued_drops[target].emplace_back(obj, v);
 }
 
 void BackfillFixture::maybe_flush()
 {
+  for (const auto& [target, versioned_objs] : enqueued_drops) {
+    for (const auto& [obj, v] : versioned_objs) {
+      backfill_targets.at(target).store.drop(obj, v);
+    }
+  }
+  enqueued_drops.clear();
 }
 
 void BackfillFixture::update_peers_last_backfill(
