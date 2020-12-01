@@ -23,6 +23,13 @@ def parse_ceph_release():
         return version, codename, status
 
 
+def latest_stable_release():
+    with open(os.path.join(top_level, 'doc/releases/releases.yml')) as input:
+        releases = yaml.safe_load(input)['releases']
+        # get the first release
+        return next(iter(releases.keys()))
+
+
 # project information
 project = 'Ceph'
 copyright = ('2016, Ceph authors and contributors. '
@@ -114,9 +121,8 @@ if build_with_rtd:
 todo_include_todos = True
 
 # sphinx_substitution_extensions options
-# TODO: read from doc/releases/releases.yml
-rst_prolog = """
-.. |stable-release| replace:: octopus
+rst_prolog = f"""
+.. |stable-release| replace:: {latest_stable_release()}
 """
 
 # breath options
