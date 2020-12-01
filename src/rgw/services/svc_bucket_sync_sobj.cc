@@ -272,13 +272,13 @@ static bool diff_sets(std::set<rgw_bucket>& orig_set,
       ++niter;
       continue;
     }
-    while (*oiter < *niter &&
-	   oiter != orig_set.end()) {
+    while (oiter != orig_set.end() &&
+           *oiter < *niter) {
       removed->push_back(*oiter);
       ++oiter;
     }
-    while (*niter < *oiter
-	   && niter != new_set.end()) {
+    while (niter != new_set.end() &&
+           *niter < *oiter) {
       added->push_back(*niter);
       ++niter;
     }
