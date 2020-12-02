@@ -6495,6 +6495,14 @@ std::vector<Option> get_rgw_options() {
         "the metadata sync parallelism as a shard can only be processed by a single "
         "RGW at a time"),
 
+    Option("rgw_curl_buffersize", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(512_K)
+    .set_min_max(1_K, 512_K)
+    .set_long_description(
+        "Pass a long specifying your preferred size (in bytes) for the receive"
+        "buffer in libcurl. "
+        "See: https://curl.se/libcurl/c/CURLOPT_BUFFERSIZE.html"),
+
     Option("rgw_curl_wait_timeout_ms", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1000)
     .set_description(""),
