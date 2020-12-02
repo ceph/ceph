@@ -873,6 +873,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   const mempool::mds_co::compact_map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
   void set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m);
   void set_mds_caps_wanted(mds_rank_t mds, int32_t wanted);
+  void clear_mds_caps_wanted();
 
   const mempool_cap_map& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {

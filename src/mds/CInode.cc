@@ -3365,6 +3365,14 @@ void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
   }
 }
 
+void CInode::clear_mds_caps_wanted()
+{
+  if (mds_caps_wanted.empty())
+    return;
+  mds_caps_wanted.clear();
+  adjust_num_caps_notable(-1);
+}
+
 Capability *CInode::add_client_cap(client_t client, Session *session,
 				   SnapRealm *conrealm, bool new_inode)
 {
@@ -3469,10 +3477,7 @@ void CInode::clear_client_caps_after_export()
     remove_client_cap(client_caps.begin()->first);
   loner_cap = -1;
   want_loner_cap = -1;
-  if (!get_mds_caps_wanted().empty()) {
-    mempool::mds_co::compact_map<int32_t,int32_t> empty;
-    set_mds_caps_wanted(empty);
-  }
+  clear_mds_caps_wanted();
 }
 
 void CInode::export_client_caps(map<client_t,Capability::Export>& cl)

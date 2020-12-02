@@ -3011,6 +3011,7 @@ void Migrator::import_reverse(CDir *dir, import_state_iterator it, bool notify)
 
 	in->clear_dirty_parent();
 
+	in->clear_mds_caps_wanted();
 	in->clear_clientwriteable();
 	in->state_clear(CInode::STATE_NEEDSRECOVER);
 
