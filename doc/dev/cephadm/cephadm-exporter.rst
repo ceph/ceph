@@ -75,6 +75,8 @@ that the ssh access uses the same public key and port for each host connection.
 .. note:: Since the same SSL configuration is used on every exporter, when you supply your own settings you must
   ensure that the CN or SAN components of the distinguished name are either **not** used or created using wildcard naming.
 
+The crt, key and token files are all defined with restrictive permissions (600), to help mitigate against the risk of exposure
+to any other user on the Ceph cluster node(s).
 
 Administrator Interaction
 =========================
@@ -133,7 +135,7 @@ Show the current exporter configuration, in JSON format
 
 New Ceph Configuration Keys
 ===========================
-The exporter configuration is persisted to the monitor's KV store, as the following settings;
+The exporter configuration is persisted to the monitor's KV store, with the following keys:
 
 | mgr/cephadm/exporter_config
 | mgr/cephadm/exporter_enabled
@@ -241,15 +243,15 @@ Once the exporter is deployed, you can use the following snippet to extract the 
         print(f"Elapsed secs : {elapsed}")
 
 
-.. note:: the above example is using python3, and assumes that you've extracted the config using the get-exporter-config command.
+.. note:: the above example uses python3, and assumes that you've extracted the config using the ``get-exporter-config`` command.
 
 
 Implementation Specific Details
 ===============================
 
-Like a typical container based deployment, the exporter is deployed to a directory under ``/var/lib/ceph/<fsid>``. The 
+In the same way as a typical container based deployment, the exporter is deployed to a directory under ``/var/lib/ceph/<fsid>``. The 
 cephadm binary is stored in this cluster folder, and the daemon's configuration and systemd settings are stored
-under ``/var/lib/ceph/<fsid>/cephadm-exporter.<id>``.
+under ``/var/lib/ceph/<fsid>/cephadm-exporter.<id>/``.
 
 .. code::
 
@@ -259,9 +261,9 @@ under ``/var/lib/ceph/<fsid>/cephadm-exporter.<id>``.
     total 24
     drwx------. 2 root root  100 Nov 25 18:10 .
     drwx------. 8 root root  160 Nov 25 23:19 ..
-    -rw-r-----. 1 root root 1046 Nov 25 18:10 crt
-    -rw-r-----. 1 root root 1704 Nov 25 18:10 key
-    -rw-r-----. 1 root root   64 Nov 25 18:10 token
+    -rw-------. 1 root root 1046 Nov 25 18:10 crt
+    -rw-------. 1 root root 1704 Nov 25 18:10 key
+    -rw-------. 1 root root   64 Nov 25 18:10 token
     -rw-------. 1 root root   38 Nov 25 18:10 unit.configured
     -rw-------. 1 root root   48 Nov 25 18:10 unit.created
     -rw-r--r--. 1 root root  157 Nov 25 18:10 unit.run
@@ -285,20 +287,20 @@ very easily determine the age of the data it's received.
 
 If the underlying cephadm command execution hits an exception, the thread passes control to a _handle_thread_exception method.
 Here the exception is logged to the daemon's log file and the exception details are added to the cache, providing visibility
-of the issue to the caller.
+of the problem to the caller.
 
 Although each thread is effectively given it's own URL endpoint (host, disks, daemons), the recommended way to gather data from
 the host is to simply use the ``/v1/metadata`` endpoint. This will provide all of the data, and indicate whether any of the
 threads have failed.
 
-The run method uses "signal" to establish a reload hook, but in the initial implementation this doesn;t take any actio and simply
+The run method uses "signal" to establish a reload hook, but in the initial implementation this doesn't take any action and simply
 logs that a reload was received.
 
 
 Future Work
 ===========
 
-#. Consider a restart policy for failed threads
+#. Consider the potential of adding a restart policy for threads
 #. Once the exporter is fully integrated into mgr/cephadm, the goal would be to make the exporter the 
    default means of data gathering. However, until then the exporter will remain as an opt-in 'feature
    preview'.
