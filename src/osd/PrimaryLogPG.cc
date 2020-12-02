@@ -10124,9 +10124,10 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi,
             << " len: " << oi.size << " r: " << r << dendl;
     return r;
   }
-  if (bl.length() == 0) {
-    dout(0) << __func__ << " got 0 byte during chunking " << dendl;
-    return r;
+  if (bl.length() != oi.size) {
+    dout(0) << __func__ << " bl.length: " << bl.length() << " != oi.size: "
+	    << oi.size << " during chunking " << dendl;
+    return -ENODATA;
   }
 
   dout(10) << __func__ << " oid: " << oi.soid << " len: " << bl.length() 
