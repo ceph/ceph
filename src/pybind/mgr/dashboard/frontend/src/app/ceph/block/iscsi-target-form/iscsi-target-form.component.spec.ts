@@ -4,6 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { SelectOption } from 'app/shared/components/select/select-option.model';
 import { ToastrModule } from 'ngx-toastr';
 
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
@@ -329,6 +330,14 @@ describe('IscsiTargetFormComponent', () => {
       component.initiators.controls[0].patchValue({
         luns: ['rbd/disk_2']
       });
+      component.imagesInitiatorSelections[0] = [
+        {
+          description: '',
+          enabled: true,
+          name: 'rbd/disk_2',
+          selected: true
+        }
+      ];
       expect(component.initiators.controls[0].value).toEqual({
         auth: { mutual_password: '', mutual_user: '', password: '', user: '' },
         cdIsInGroup: false,
@@ -336,17 +345,19 @@ describe('IscsiTargetFormComponent', () => {
         luns: ['rbd/disk_2']
       });
 
-      component.addGroup();
       component.groups.controls[0].patchValue({
         group_id: 'foo',
         members: ['iqn.initiator']
       });
-      component.onGroupMemberSelection({
-        option: {
-          name: 'iqn.initiator',
-          selected: true
-        }
-      });
+      component.onGroupMemberSelection(
+        {
+          option: {
+            name: 'iqn.initiator',
+            selected: true
+          }
+        },
+        0
+      );
 
       expect(component.initiators.controls[0].value).toEqual({
         auth: { mutual_password: '', mutual_user: '', password: '', user: '' },
@@ -354,6 +365,14 @@ describe('IscsiTargetFormComponent', () => {
         client_iqn: 'iqn.initiator',
         luns: []
       });
+      expect(component.imagesInitiatorSelections[0]).toEqual([
+        {
+          description: '',
+          enabled: true,
+          name: 'rbd/disk_2',
+          selected: false
+        }
+      ]);
     });
 
     it('should disabled the initiator when selected', () => {
@@ -363,12 +382,55 @@ describe('IscsiTargetFormComponent', () => {
       ]);
 
       component.groupMembersSelections[0][0].selected = true;
-      component.onGroupMemberSelection({ option: { name: 'iqn.initiator', selected: true } });
+      component.onGroupMemberSelection({ option: { name: 'iqn.initiator', selected: true } }, 0);
 
       expect(component.groupMembersSelections).toEqual([
         [{ description: '', enabled: false, name: 'iqn.initiator', selected: true }],
         [{ description: '', enabled: false, name: 'iqn.initiator', selected: false }]
       ]);
+    });
+
+    describe('should remove from group', () => {
+      beforeEach(() => {
+        component.onGroupMemberSelection(
+          { option: new SelectOption(true, 'iqn.initiator', '') },
+          0
+        );
+        component.groupDiskSelections[0][0].selected = true;
+        component.groups.controls[0].patchValue({
+          disks: ['rbd/disk_2'],
+          members: ['iqn.initiator']
+        });
+
+        expect(component.initiators.value[0].luns).toEqual([]);
+        expect(component.imagesInitiatorSelections[0]).toEqual([
+          { description: '', enabled: true, name: 'rbd/disk_2', selected: false }
+        ]);
+        expect(component.initiators.value[0].cdIsInGroup).toBe(true);
+      });
+
+      it('should update initiator images when deselecting', () => {
+        component.onGroupMemberSelection(
+          { option: new SelectOption(false, 'iqn.initiator', '') },
+          0
+        );
+
+        expect(component.initiators.value[0].luns).toEqual(['rbd/disk_2']);
+        expect(component.imagesInitiatorSelections[0]).toEqual([
+          { description: '', enabled: true, name: 'rbd/disk_2', selected: true }
+        ]);
+        expect(component.initiators.value[0].cdIsInGroup).toBe(false);
+      });
+
+      it('should update initiator when removing', () => {
+        component.removeGroupInitiator(component.groups.controls[0] as CdFormGroup, 0, 0);
+
+        expect(component.initiators.value[0].luns).toEqual(['rbd/disk_2']);
+        expect(component.imagesInitiatorSelections[0]).toEqual([
+          { description: '', enabled: true, name: 'rbd/disk_2', selected: true }
+        ]);
+        expect(component.initiators.value[0].cdIsInGroup).toBe(false);
+      });
     });
 
     it('should validate authentication', () => {
