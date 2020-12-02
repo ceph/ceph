@@ -144,26 +144,6 @@ struct _node_fields_013_t {
     return range.end - range.start;
   }
 
-#if 0
-  template <node_type_t NODE_TYPE>
-  void fill_unused(NodeExtentMutable& mut) const {
-    auto range = fields_free_range_before<NODE_TYPE>(*this, num_keys);
-    for (auto i = range.start; i < range.end; ++i) {
-      mut.copy_in_relative(i, uint8_t(0xc5));
-    }
-  }
-
-  template <node_type_t NODE_TYPE>
-  void validate_unused() const {
-    auto range = fields_free_range_before<NODE_TYPE>(*this, num_keys);
-    for (auto i = fields_start(*this) + range.start;
-         i < fields_start(*this) + range.end;
-         ++i) {
-      assert(*i == char(0xc5));
-    }
-  }
-#endif
-
   static node_offset_t estimate_insert_one() { return sizeof(SlotType); }
   template <KeyT KT>
   static void insert_at(
@@ -236,26 +216,6 @@ struct node_fields_2_t {
     return range.end - range.start;
   }
 
-#if 0
-  template <node_type_t NODE_TYPE>
-  void fill_unused(NodeExtentMutable& mut) const {
-    auto range = fields_free_range_before<NODE_TYPE>(*this, num_keys);
-    for (auto i = range.start; i < range.end; ++i) {
-      mut.copy_in_relative(i, uint8_t(0xc5));
-    }
-  }
-
-  template <node_type_t NODE_TYPE>
-  void validate_unused() const {
-    auto range = fields_free_range_before<NODE_TYPE>(*this, num_keys);
-    for (auto i = fields_start(*this) + range.start;
-         i < fields_start(*this) + range.end;
-         ++i) {
-      assert(*i == char(0xc5));
-    }
-  }
-#endif
-
   static node_offset_t estimate_insert_one() { return sizeof(node_offset_t); }
   template <KeyT KT>
   static void insert_at(
@@ -322,42 +282,6 @@ struct _internal_fields_3_t {
     assert(free < SIZE);
     return free;
   }
-
-#if 0
-  template <node_type_t NODE_TYPE>
-  void fill_unused(NodeExtentMutable& mut) const {
-    node_offset_t begin = (const char*)&keys[num_keys] - fields_start(*this);
-    node_offset_t end = (const char*)&child_addrs[0] - fields_start(*this);
-    for (auto i = begin; i < end; ++i) {
-      mut.copy_in_relative(i, uint8_t(0xc5));
-    }
-    begin = (const char*)&child_addrs[num_keys] - fields_start(*this);
-    end = NODE_BLOCK_SIZE;
-    if (is_level_tail()) {
-      begin += sizeof(laddr_t);
-    }
-    for (auto i = begin; i < end; ++i) {
-      mut.copy_in_relative(i, uint8_t(0xc5));
-    }
-  }
-
-  template <node_type_t NODE_TYPE>
-  void validate_unused() const {
-    auto begin = (const char*)&keys[num_keys];
-    auto end = (const char*)&child_addrs[0];
-    for (auto i = begin; i < end; ++i) {
-      assert(*i == uint8_t(0xc5));
-    }
-    begin = (const char*)&child_addrs[num_keys];
-    end = fields_start(*this) + NODE_BLOCK_SIZE;
-    if (is_level_tail()) {
-      begin += sizeof(laddr_t);
-    }
-    for (auto i = begin; i < end; ++i) {
-      assert(*i == char(0xc5));
-    }
-  }
-#endif
 
   static node_offset_t estimate_insert_one() {
     return sizeof(snap_gen_t) + sizeof(laddr_t);
