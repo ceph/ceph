@@ -5,11 +5,6 @@
 #include <boost/type_index.hpp>
 
 #include "crimson/osd/backfill_state.h"
-#ifndef BACKFILL_UNITTEST
-#include "crimson/osd/backfill_facades.h"
-#else
-#include "test/crimson/test_backfill_facades.h"
-#endif
 
 namespace {
   seastar::logger& logger() {
