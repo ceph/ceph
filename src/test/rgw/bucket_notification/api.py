@@ -8,55 +8,20 @@ import xmltodict
 from http import client as http_client
 from urllib import parse as urlparse
 from time import gmtime, strftime
-from .multisite import Zone
 import boto3
 from botocore.client import Config
 
-log = logging.getLogger('rgw_multi.tests')
+log = logging.getLogger('bucket_notification.tests')
 
+NO_HTTP_BODY = ''
 
-def get_object_tagging(conn, bucket, object_key):
+def put_object_tagging(conn, bucket_name, key, tags):
     client = boto3.client('s3',
             endpoint_url='http://'+conn.host+':'+str(conn.port),
             aws_access_key_id=conn.aws_access_key_id,
             aws_secret_access_key=conn.aws_secret_access_key,
             config=Config(signature_version='s3'))
-    return client.get_object_tagging(
-                Bucket=bucket, 
-                Key=object_key
-            )
-
-
-class PSZone(Zone):  # pylint: disable=too-many-ancestors
-    """ PubSub zone class """
-    def __init__(self, name, zonegroup=None, cluster=None, data=None, zone_id=None, gateways=None, full_sync='false', retention_days ='7'):
-        self.full_sync = full_sync
-        self.retention_days = retention_days
-        self.master_zone = zonegroup.master_zone
-        super(PSZone, self).__init__(name, zonegroup, cluster, data, zone_id, gateways)
-
-    def is_read_only(self):
-        return True
-
-    def tier_type(self):
-        return "pubsub"
-
-    def syncs_from(self, zone_name):
-        return zone_name == self.master_zone.name
-
-    def create(self, cluster, args=None, **kwargs):
-        if args is None:
-            args = ''
-        tier_config = ','.join(['start_with_full_sync=' + self.full_sync, 'event_retention_days=' + self.retention_days])
-        args += ['--tier-type', self.tier_type(), '--sync-from-all=0', '--sync-from', self.master_zone.name, '--tier-config', tier_config] 
-        return self.json_command(cluster, 'create', args)
-
-    def has_buckets(self):
-        return False
-
-
-NO_HTTP_BODY = ''
-
+    return client.put_object(Body='aaaaaaaaaaa', Bucket=bucket_name, Key=key, Tagging=tags)
 
 def make_request(conn, method, resource, parameters=None, sign_parameters=False, extra_parameters=None):
     """generic request sending to pubsub radogw
@@ -90,53 +55,37 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     http_conn.close()
     return data.decode('utf-8'), status
 
+def delete_all_s3_topics(zone, region):
+    try:
+        conn = zone.secure_conn if zone.secure_conn is not None else zone.conn
+        protocol = 'https' if conn.is_secure else 'http'
+        client = boto3.client('sns',
+                endpoint_url=protocol+'://'+conn.host+':'+str(conn.port),
+                aws_access_key_id=conn.aws_access_key_id,
+                aws_secret_access_key=conn.aws_secret_access_key,
+                region_name=region,
+                verify='./cert.pem',
+                config=Config(signature_version='s3'))
 
-def print_connection_info(conn):
-    """print info of connection"""
-    print("Host: " + conn.host+':'+str(conn.port))
-    print("AWS Secret Key: " + conn.aws_secret_access_key)
-    print("AWS Access Key: " + conn.aws_access_key_id)
+        topics = client.list_topics()['Topics']
+        for topic in topics:
+            print('topic cleanup, deleting: ' + topic['TopicArn'])
+            assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
+    except Exception as err:
+        print('failed to do topic cleanup: ' + str(err))
 
+def delete_all_objects(conn, bucket_name):
+    client = boto3.client('s3',
+                      endpoint_url='http://'+conn.host+':'+str(conn.port),
+                      aws_access_key_id=conn.aws_access_key_id,
+                      aws_secret_access_key=conn.aws_secret_access_key)
 
-class PSTopic:
-    """class to set/get/delete a topic
-    PUT /topics/<topic name>[?push-endpoint=<endpoint>&[<arg1>=<value1>...]]
-    GET /topics/<topic name>
-    DELETE /topics/<topic name>
-    """
-    def __init__(self, conn, topic_name, endpoint=None, endpoint_args=None):
-        self.conn = conn
-        assert topic_name.strip()
-        self.resource = '/topics/'+topic_name
-        if endpoint is not None:
-            self.parameters = {'push-endpoint': endpoint}
-            self.extra_parameters = endpoint_args
-        else:
-            self.parameters = None
-            self.extra_parameters = None
-
-    def send_request(self, method, get_list=False, parameters=None, extra_parameters=None):
-        """send request to radosgw"""
-        if get_list:
-            return make_request(self.conn, method, '/topics')
-        return make_request(self.conn, method, self.resource, 
-                            parameters=parameters, extra_parameters=extra_parameters)
-
-    def get_config(self):
-        """get topic info"""
-        return self.send_request('GET')
-
-    def set_config(self):
-        """set topic"""
-        return self.send_request('PUT', parameters=self.parameters, extra_parameters=self.extra_parameters)
-
-    def del_config(self):
-        """delete topic"""
-        return self.send_request('DELETE')
-    
-    def get_list(self):
-        """list all topics"""
-        return self.send_request('GET', get_list=True)
+    objects = []
+    for key in client.list_objects(Bucket=bucket_name)['Contents']:
+        objects.append({'Key': key['Key']})
+    # delete objects from the bucket
+    response = client.delete_objects(Bucket=bucket_name,
+            Delete={'Objects': objects})
 
 
 class PSTopicS3:
@@ -144,7 +93,6 @@ class PSTopicS3:
     POST ?Action=CreateTopic&Name=<topic name>[&OpaqueData=<data>[&push-endpoint=<endpoint>&[<arg1>=<value1>...]]]
     POST ?Action=ListTopics
     POST ?Action=GetTopic&TopicArn=<topic-arn>
-    POST ?Action=GetTopicAttributes&TopicArn=<topic-arn>
     POST ?Action=DeleteTopic&TopicArn=<topic-arn>
     """
     def __init__(self, conn, topic_name, region, endpoint_args=None, opaque_data=None):
@@ -166,7 +114,6 @@ class PSTopicS3:
                            verify='./cert.pem',
                            config=Config(signature_version='s3'))
 
-
     def get_config(self):
         """get topic info"""
         parameters = {'Action': 'GetTopic', 'TopicArn': self.topic_arn}
@@ -176,7 +123,7 @@ class PSTopicS3:
         resource = '/'
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
-        log.debug('StringTosign: %s', string_to_sign) 
+        log.debug('StringTosign: %s', string_to_sign)
         signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
                                      hashlib.sha1).digest()).decode('ascii')
@@ -196,10 +143,6 @@ class PSTopicS3:
         http_conn.close()
         dict_response = xmltodict.parse(data)
         return dict_response, status
-
-    def get_attributes(self):
-        """get topic attributes"""
-        return self.client.get_topic_attributes(TopicArn=self.topic_arn)
 
     def set_config(self):
         """set topic"""
@@ -211,7 +154,7 @@ class PSTopicS3:
         """delete topic"""
         result = self.client.delete_topic(TopicArn=self.topic_arn)
         return result['ResponseMetadata']['HTTPStatusCode']
-    
+
     def get_list(self):
         """list all topics"""
         # note that boto3 supports list_topics(), however, the result only show ARNs
@@ -222,7 +165,7 @@ class PSTopicS3:
         resource = '/'
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
-        log.debug('StringTosign: %s', string_to_sign) 
+        log.debug('StringTosign: %s', string_to_sign)
         signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
                                      hashlib.sha1).digest()).decode('ascii')
@@ -242,40 +185,6 @@ class PSTopicS3:
         http_conn.close()
         dict_response = xmltodict.parse(data)
         return dict_response, status
-
-
-class PSNotification:
-    """class to set/get/delete a notification
-    PUT /notifications/bucket/<bucket>?topic=<topic-name>[&events=<event>[,<event>]]
-    GET /notifications/bucket/<bucket>
-    DELETE /notifications/bucket/<bucket>?topic=<topic-name>
-    """
-    def __init__(self, conn, bucket_name, topic_name, events=''):
-        self.conn = conn
-        assert bucket_name.strip()
-        assert topic_name.strip()
-        self.resource = '/notifications/bucket/'+bucket_name
-        if events.strip():
-            self.parameters = {'topic': topic_name, 'events': events}
-        else:
-            self.parameters = {'topic': topic_name}
-
-    def send_request(self, method, parameters=None):
-        """send request to radosgw"""
-        return make_request(self.conn, method, self.resource, parameters)
-
-    def get_config(self):
-        """get notification info"""
-        return self.send_request('GET')
-
-    def set_config(self):
-        """set notification"""
-        return self.send_request('PUT', self.parameters)
-
-    def del_config(self):
-        """delete notification"""
-        return self.send_request('DELETE', self.parameters)
-
 
 class PSNotificationS3:
     """class to set/get/delete an S3 notification
@@ -326,65 +235,3 @@ class PSNotificationS3:
         parameters = {'notification': notification}
 
         return self.send_request('DELETE', parameters)
-
-
-class PSSubscription:
-    """class to set/get/delete a subscription:
-    PUT /subscriptions/<sub-name>?topic=<topic-name>[&push-endpoint=<endpoint>&[<arg1>=<value1>...]]
-    GET /subscriptions/<sub-name>
-    DELETE /subscriptions/<sub-name>
-    also to get list of events, and ack them:
-    GET /subscriptions/<sub-name>?events[&max-entries=<max-entries>][&marker=<marker>]
-    POST /subscriptions/<sub-name>?ack&event-id=<event-id>
-    """
-    def __init__(self, conn, sub_name, topic_name, endpoint=None, endpoint_args=None):
-        self.conn = conn
-        assert topic_name.strip()
-        self.resource = '/subscriptions/'+sub_name
-        if endpoint is not None:
-            self.parameters = {'topic': topic_name, 'push-endpoint': endpoint}
-            self.extra_parameters = endpoint_args
-        else:
-            self.parameters = {'topic': topic_name}
-            self.extra_parameters = None
-
-    def send_request(self, method, parameters=None, extra_parameters=None):
-        """send request to radosgw"""
-        return make_request(self.conn, method, self.resource, 
-                            parameters=parameters,
-                            extra_parameters=extra_parameters)
-
-    def get_config(self):
-        """get subscription info"""
-        return self.send_request('GET')
-
-    def set_config(self):
-        """set subscription"""
-        return self.send_request('PUT', parameters=self.parameters, extra_parameters=self.extra_parameters)
-
-    def del_config(self, topic=False):
-        """delete subscription"""
-        if topic:
-            return self.send_request('DELETE', self.parameters)
-        return self.send_request('DELETE')
-
-    def get_events(self, max_entries=None, marker=None):
-        """ get events from subscription """
-        parameters = {'events': None}
-        if max_entries is not None:
-            parameters['max-entries'] = max_entries
-        if marker is not None:
-            parameters['marker'] = marker
-        return self.send_request('GET', parameters)
-
-    def ack_events(self, event_id):
-        """ ack events in a subscription """
-        parameters = {'ack': None, 'event-id': event_id}
-        return self.send_request('POST', parameters)
-
-
-class PSZoneConfig:
-    """ pubsub zone configuration """
-    def __init__(self, cfg, section):
-        self.full_sync = cfg.get(section, 'start_with_full_sync')
-        self.retention_days = cfg.get(section, 'retention_days')
