@@ -1,7 +1,5 @@
 #!/bin/sh -x
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
-
 mkdir .snap/foo
 
 echo "We want ENOENT, not ESTALE, here."
