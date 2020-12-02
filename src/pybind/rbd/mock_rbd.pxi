@@ -824,8 +824,8 @@ cdef nogil:
     void rbd_group_image_list_cleanup(rbd_group_image_info_t *images,
                                       size_t group_image_info_size, size_t len):
         pass
-    int rbd_group_snap_create(rados_ioctx_t group_p, const char *group_name,
-                              const char *snap_name):
+    int rbd_group_snap_create2(rados_ioctx_t group_p, const char *group_name,
+                               const char *snap_name, uint32_t flags):
         pass
     int rbd_group_snap_remove(rados_ioctx_t group_p, const char *group_name,
                               const char *snap_name):
