@@ -6131,7 +6131,7 @@ WantedBy=ceph-{fsid}.target
 
         # Create the required config files in the daemons dir, with restricted permissions
         for filename in config:
-            with open(os.open(os.path.join(self.daemon_path, filename), os.O_CREAT | os.O_WRONLY, mode=0o640), "w") as f:
+            with open(os.open(os.path.join(self.daemon_path, filename), os.O_CREAT | os.O_WRONLY, mode=0o600), "w") as f:
                 f.write(config[filename])
 
         # When __file__ is <stdin> we're being invoked over remoto via the orchestrator, so
