@@ -265,10 +265,7 @@ seastar::future<> OSD::start()
     cluster_msgr->set_policy(entity_name_t::TYPE_CLIENT,
                              SocketPolicy::stateless_server(0));
 
-    std::list<Dispatcher*> dispatchers;
-    dispatchers.push_front(mgrc.get());
-    dispatchers.push_front(monc.get());
-    dispatchers.push_front(this);
+    crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
     return seastar::when_all_succeed(
       cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
                              local_conf()->ms_bind_port_min,

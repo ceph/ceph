@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <list>
-
 #include "Fwd.h"
 #include "crimson/common/throttle.h"
 #include "msg/Message.h"
@@ -33,8 +31,6 @@ namespace crimson::net {
 #ifdef UNIT_TESTS_BUILT
 class Interceptor;
 #endif
-
-class Dispatcher;
 
 using Throttle = crimson::common::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
@@ -77,13 +73,7 @@ public:
                                        uint32_t min_port, uint32_t max_port) = 0;
 
   /// start the messenger
-  virtual seastar::future<> start(const std::list<Dispatcher*>&) = 0;
-
-  seastar::future<> start(Dispatcher& dispatcher) {
-    std::list<Dispatcher*> dispatchers;
-    dispatchers.push_back(&dispatcher);
-    return start(dispatchers);
-  }
+  virtual seastar::future<> start(const dispatchers_t&) = 0;
 
   /// either return an existing connection to the peer,
   /// or a new pending connection
