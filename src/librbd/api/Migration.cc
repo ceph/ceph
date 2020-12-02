@@ -35,8 +35,8 @@
 #include "librbd/image/Types.h"
 #include "librbd/internal.h"
 #include "librbd/migration/FormatInterface.h"
+#include "librbd/migration/OpenSourceImageRequest.h"
 #include "librbd/migration/NativeFormat.h"
-#include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 
@@ -532,38 +532,20 @@ int Migration<I>::prepare_import(
                  << dest_io_ctx.get_pool_name() << "/"
                  << dest_image_name << ", opts=" << opts << dendl;
 
-  auto src_image_ctx = I::create("", "", nullptr, dest_io_ctx, true);
-  auto asio_engine = src_image_ctx->asio_engine;
-
-  migration::SourceSpecBuilder<I> source_spec_builder(src_image_ctx);
-  json_spirit::mObject source_spec_object;
-  int r = source_spec_builder.parse_source_spec(source_spec,
-                                                &source_spec_object);
-  if (r < 0) {
-    lderr(cct) << "failed to parse source spec: " << cpp_strerror(r)
-               << dendl;
-    src_image_ctx->state->close();
-    return r;
-  }
-
-  std::unique_ptr<migration::FormatInterface> format;
-  r = source_spec_builder.build_format(source_spec_object, true, &format);
-  if (r < 0) {
-    lderr(cct) << "failed to build migration format handler: "
-               << cpp_strerror(r) << dendl;
-    src_image_ctx->state->close();
-    return r;
-  }
-
+  I* src_image_ctx = nullptr;
   C_SaferCond open_ctx;
-  format->open(&open_ctx);
-  r = open_ctx.wait();
+  auto req = migration::OpenSourceImageRequest<I>::create(
+    dest_io_ctx, nullptr, CEPH_NOSNAP,
+    {-1, "", "", "", source_spec, {}, 0, false}, &src_image_ctx, &open_ctx);
+  req->send();
+
+  int r = open_ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to open migration source: " << cpp_strerror(r)
-               << dendl;
+    lderr(cct) << "failed to open source image: " << cpp_strerror(r) << dendl;
     return r;
   }
 
+  auto asio_engine = src_image_ctx->asio_engine;
   BOOST_SCOPE_EXIT_TPL(src_image_ctx) {
     src_image_ctx->state->close();
   } BOOST_SCOPE_EXIT_END;
@@ -583,6 +565,18 @@ int Migration<I>::prepare_import(
   opts.set(RBD_IMAGE_OPTION_FEATURES_SET, features_set | RBD_FEATURE_MIGRATING);
 
   ldout(cct, 20) << "updated opts=" << opts << dendl;
+
+  // use json-spirit to clean-up json formatting
+  json_spirit::mObject source_spec_object;
+  json_spirit::mValue json_root;
+  if(json_spirit::read(source_spec, json_root)) {
+    try {
+      source_spec_object = json_root.get_obj();
+    } catch (std::runtime_error&) {
+      lderr(cct) << "failed to clean source spec" << dendl;
+      return -EINVAL;
+    }
+  }
 
   auto dst_image_ctx = I::create(
     dest_image_name, util::generate_image_id(dest_io_ctx), nullptr,
