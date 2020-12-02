@@ -34,3 +34,6 @@ endif()
 add_library(mon STATIC
   ${lib_mon_srcs})
 target_link_libraries(mon kv heap_profiler)
+if(WITH_JAEGER)
+  target_link_libraries(mon jaeger-base)
+endif()

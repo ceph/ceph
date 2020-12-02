@@ -22,7 +22,7 @@ public:
 
 class TestRGWUser : public sal::RGWUser {
 public:
-  virtual int list_buckets(const string&, const string&, uint64_t, bool, sal::RGWBucketList&, optional_yield y) override {
+  virtual int list_buckets(const string&, const string&, uint64_t, bool, sal::RGWBucketList&, optional_yield y, const jspan* const parent_span = nullptr) override {
     return 0;
   }
 

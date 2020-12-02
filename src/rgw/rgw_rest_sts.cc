@@ -357,7 +357,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
 
 } // namespace rgw::auth::sts
 
-int RGWREST_STS::verify_permission(optional_yield y)
+int RGWREST_STS::verify_permission(optional_yield y, const jspan* const parent_span)
 {
   STS::STSService _sts(s->cct, store, s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
@@ -404,7 +404,7 @@ void RGWREST_STS::send_response()
   end_header(s);
 }
 
-int RGWSTSGetSessionToken::verify_permission(optional_yield y)
+int RGWSTSGetSessionToken::verify_permission(optional_yield y, const jspan* const parent_span)
 {
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
@@ -442,7 +442,7 @@ int RGWSTSGetSessionToken::get_params()
   return 0;
 }
 
-void RGWSTSGetSessionToken::execute(optional_yield y)
+void RGWSTSGetSessionToken::execute(optional_yield y, const jspan* const parent_span)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
@@ -495,7 +495,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   return 0;
 }
 
-void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y)
+void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y, const jspan* const parent_span)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
@@ -554,7 +554,7 @@ int RGWSTSAssumeRole::get_params()
   return 0;
 }
 
-void RGWSTSAssumeRole::execute(optional_yield y)
+void RGWSTSAssumeRole::execute(optional_yield y, const jspan* const parent_span)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;

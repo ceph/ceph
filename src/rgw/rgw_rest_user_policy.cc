@@ -38,7 +38,7 @@ void RGWRestUserPolicy::send_response()
   end_header(s);
 }
 
-int RGWRestUserPolicy::verify_permission(optional_yield y)
+int RGWRestUserPolicy::verify_permission(optional_yield y, const jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -109,7 +109,7 @@ int RGWPutUserPolicy::get_params()
   return 0;
 }
 
-void RGWPutUserPolicy::execute(optional_yield y)
+void RGWPutUserPolicy::execute(optional_yield y, const jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -193,7 +193,7 @@ int RGWGetUserPolicy::get_params()
   return 0;
 }
 
-void RGWGetUserPolicy::execute(optional_yield y)
+void RGWGetUserPolicy::execute(optional_yield y, const jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -257,7 +257,7 @@ int RGWListUserPolicies::get_params()
   return 0;
 }
 
-void RGWListUserPolicies::execute(optional_yield y)
+void RGWListUserPolicies::execute(optional_yield y, const jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -319,7 +319,7 @@ int RGWDeleteUserPolicy::get_params()
   return 0;
 }
 
-void RGWDeleteUserPolicy::execute(optional_yield y)
+void RGWDeleteUserPolicy::execute(optional_yield y, const jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {

@@ -7,7 +7,7 @@
 // s3 compliant notification handler factory
 class RGWHandler_REST_PSNotifs_S3 : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op, optional_yield y) override {return 0;}
+  int init_permissions(RGWOp* op, optional_yield y, const jspan* const parent_span = nullptr) override {return 0;}
   int read_permissions(RGWOp* op, optional_yield y) override {return 0;}
   bool supports_quota() override {return false;}
   RGWOp* op_get() override;

@@ -303,8 +303,8 @@ public:
   RGW_SWIFT_Auth_Get() {}
   ~RGW_SWIFT_Auth_Get() override {}
 
-  int verify_permission(optional_yield) override { return 0; }
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield, const jspan* const parent_span = nullptr) override { return 0; }
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "swift_auth_get"; }
   dmc::client_id dmclock_client() override { return dmc::client_id::auth; }
 };

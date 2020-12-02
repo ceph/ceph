@@ -33,7 +33,7 @@ public:
   ut_get_sink() {}
   virtual ~ut_get_sink() {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jspan* const parent_span = nullptr) override
   {
     sink << std::string_view(bl.c_str()+bl_ofs, bl_len);
     return 0;

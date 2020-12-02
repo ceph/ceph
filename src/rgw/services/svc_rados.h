@@ -52,7 +52,7 @@ public:
 
 private:
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
-                    const OpenParams& params = {});
+                    const OpenParams& params = {}, const jspan* const parent_span = nullptr);
   int pool_iterate(librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
                    uint32_t num, vector<rgw_bucket_dir_entry>& objs,
@@ -101,7 +101,7 @@ public:
     int create();
     int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
-    int open(const OpenParams& params = {});
+    int open(const OpenParams& params = {}, const jspan* const parent_span = nullptr);
 
     const rgw_pool& get_pool() {
       return pool;

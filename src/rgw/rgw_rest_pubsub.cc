@@ -443,10 +443,10 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
 
 public:
   const char* name() const override { return "pubsub_notification_create_s3"; }
-  void execute(optional_yield) override;
+  void execute(optional_yield, const jspan* const parent_span = nullptr) override;
 };
 
-void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
+void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params_from_body();
   if (op_ret < 0) {
     return;
@@ -585,11 +585,11 @@ private:
   }
 
 public:
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "pubsub_notification_delete_s3"; }
 };
 
-void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
+void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -676,7 +676,7 @@ private:
   }
 
 public:
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
@@ -693,7 +693,7 @@ public:
   const char* name() const override { return "pubsub_notifications_get_s3"; }
 };
 
-void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
+void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y, const jspan* const parent_span) {
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);

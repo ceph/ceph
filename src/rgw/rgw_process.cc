@@ -94,8 +94,15 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
 			      optional_yield y,
                               const bool skip_retarget)
 {
+  RGWOpType type = op->get_type();
+  auto span = jaeger_tracing::new_span(op->name());
+  if(type>0){
+    jaeger_tracing::set_span_tag(span.get(), "operation_type", op->name());
+    s->root_span = std::move(span);
+  }
+
   ldpp_dout(op, 2) << "init permissions" << dendl;
-  int ret = handler->init_permissions(op, y);
+  int ret = handler->init_permissions(op, y, s->root_span.get());
   if (ret < 0) {
     return ret;
   }
@@ -143,7 +150,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
-  ret = op->verify_permission(y);
+  ret = op->verify_permission(y, s->root_span.get());
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
@@ -164,7 +171,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   op->pre_exec();
 
   ldpp_dout(op, 2) << "executing" << dendl;
-  op->execute(y);
+  op->execute(y, s->root_span.get());
 
   ldpp_dout(op, 2) << "completing" << dendl;
   op->complete();

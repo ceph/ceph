@@ -240,14 +240,17 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                     real_time mtime,
                                                     map<string, bufferlist> *pattrs,
                                                     RGWObjVersionTracker *objv_tracker,
-                                                    optional_yield y)
+                                                    optional_yield y, const jspan* parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bufferlist bl;
   encode(info, bl);
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("RGWSI_MetaBackend::put()", span_1.get());
   int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker, y);
+  jaeger_tracing::finish_span(span_2.get());
   if (ret < 0) {
     return ret;
   }
@@ -482,8 +485,10 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                   bool exclusive,
                                                   real_time mtime,
                                                   map<string, bufferlist> *pattrs,
-                                                  optional_yield y)
+                                                  optional_yield y, const jspan* parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   bufferlist bl;
   encode(info, bl);
 
@@ -497,12 +502,14 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
      * we're here because orig_info wasn't passed in
      * we don't have info about what was there before, so need to fetch first
      */
+    [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("RGWSI_Bucket_SObj::read_bucket_instance_info", span_1.get());
     int r  = read_bucket_instance_info(ctx,
                                        key,
                                        &shared_bucket_info,
                                        nullptr, nullptr,
                                        y,
                                        nullptr, boost::none);
+    jaeger_tracing::finish_span(span_2.get());
     if (r < 0) {
       if (r != -ENOENT) {
         ldout(cct, 0) << "ERROR: " << __func__ << "(): read_bucket_instance_info() of key=" << key << " returned r=" << r << dendl;
@@ -514,7 +521,9 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   if (orig_info && *orig_info && !exclusive) {
+    [[maybe_unused]] const auto span_3 = jaeger_tracing::child_span("RGWSI_BucketIndex::handle_overwrite", span_1.get());
     int r = svc.bi->handle_overwrite(info, *(orig_info.value()));
+    jaeger_tracing::finish_span(span_3.get());
     if (r < 0) {
       ldout(cct, 0) << "ERROR: " << __func__ << "(): svc.bi->handle_overwrite() of key=" << key << " returned r=" << r << dendl;
       return r;

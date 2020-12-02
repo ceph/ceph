@@ -85,7 +85,7 @@ public:
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   // We override RGWGetObj_ObjStore::get_params here, to allow ignoring all
   // conditional params for error pages.
-  int get_params(optional_yield y) override {
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override {
       if (is_errordoc_request) {
         range_str = NULL;
         if_mod = NULL;

@@ -375,6 +375,17 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+option(WITH_JAEGER "Use jaeger to create tracepoints and display it on Jaeger
+UI" ON)
+if(WITH_JAEGER)
+  set(HAVE_JAEGER TRUE)
+endif()
+
+option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
+if(WITH_BOOST_CONTEXT)
+  set(HAVE_BOOST_CONTEXT ON)
+endif()
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF)

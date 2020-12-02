@@ -1370,7 +1370,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     limit = -1; /* no limit */
     return 0;
   }
@@ -1546,7 +1546,7 @@ public:
 	       RGW_LOOKUP_FLAG_FILE);
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     max = default_max;
     return 0;
   }
@@ -1716,7 +1716,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     max = default_max;
     return 0;
   }
@@ -1795,7 +1795,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     struct req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -1911,13 +1911,13 @@ public:
     state->info.request_params = "";
     state->info.domain = ""; /* XXX ? */
 
-    /* XXX required in RGWOp::execute() */
+    /* XXX required in RGWOp::execute(const jspan* const parent_span) */
     state->content_length = bl.length();
 
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     struct req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -1926,7 +1926,7 @@ public:
     return ret;
   }
 
-  int get_data(buffer::list& _bl) override {
+  int get_data(buffer::list& _bl, const jspan* const parent_span = nullptr) override {
     /* XXX for now, use sharing semantics */
     _bl = std::move(bl);
     uint32_t len = _bl.length();
@@ -2008,7 +2008,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     return 0;
   }
 
@@ -2167,7 +2167,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     return 0;
   }
 
@@ -2183,7 +2183,7 @@ public:
     return 0;
   }
 
-  void execute(optional_yield y) override {
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override {
     RGWGetObj::execute(y);
     _size = get_state()->obj_size;
   }
@@ -2244,7 +2244,7 @@ public:
     return 0;
   }
 
-  virtual int get_params() {
+  virtual int get_params(const jspan* const parent_span = nullptr) {
     return 0;
   }
 
@@ -2317,7 +2317,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     max = default_max;
     return 0;
   }
@@ -2437,7 +2437,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     struct req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -2446,7 +2446,7 @@ public:
     return ret;
   }
 
-  int get_data(buffer::list& _bl) override {
+  int get_data(buffer::list& _bl, const jspan* const parent_span = nullptr) override {
     /* XXX for now, use sharing semantics */
     uint32_t len = data.length();
     _bl = std::move(data);
@@ -2550,7 +2550,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     struct req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -2560,7 +2560,7 @@ public:
   }
 
   void send_response() override {}
-  void send_partial_response(off_t ofs) override {}
+  void send_partial_response(off_t ofs, const jspan* const parent_span = nullptr) override {}
 
 }; /* RGWCopyObjRequest */
 
@@ -2607,7 +2607,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override {
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override {
     return 0;
   }
 
@@ -2646,7 +2646,7 @@ public:
     return 0;
   }
 
-  int get_params(optional_yield) override { return 0; }
+  int get_params(optional_yield, const jspan* const parent_span = nullptr) override { return 0; }
   bool only_bucket() override { return false; }
   void send_response() override {
     stats_req.kb = stats_op.kb;

@@ -203,24 +203,29 @@ int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
   return 0;
 }
 
-int AtomicObjectProcessor::prepare(optional_yield y)
+int AtomicObjectProcessor::prepare(optional_yield y, const jspan* parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   uint64_t max_head_chunk_size;
   uint64_t head_max_size;
   uint64_t chunk_size = 0;
   uint64_t alignment;
-
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::get_max_chunk_size", span_1.get());
   int r = head_obj->get_max_chunk_size(bucket->get_placement_rule(),
 				       &max_head_chunk_size, &alignment);
+  jaeger_tracing::finish_span(span_2.get());
   if (r < 0) {
     return r;
   }
 
   bool same_pool = true;
   if (bucket->get_placement_rule() != tail_placement_rule) {
+    [[maybe_unused]] const auto span_3 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::get_max_chunk_size", span_1.get());
     if (!head_obj->placement_rules_match(bucket->get_placement_rule(), tail_placement_rule)) {
       same_pool = false;
       r = head_obj->get_max_chunk_size(tail_placement_rule, &chunk_size);
+    jaeger_tracing::finish_span(span_3.get());
       if (r < 0) {
         return r;
       }
@@ -274,8 +279,10 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const char *if_nomatch,
                                     const std::string *user_data,
                                     rgw_zone_set *zones_trace,
-                                    bool *pcanceled, optional_yield y)
+                                    bool *pcanceled, optional_yield y, const jspan* parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   int r = writer.drain();
   if (r < 0) {
     return r;
@@ -313,7 +320,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  r = obj_op->write_meta(actual_size, accounted_size, y);
+  r = obj_op->write_meta(actual_size, accounted_size, y, span_1.get());
   if (r < 0) {
     return r;
   }
@@ -356,27 +363,35 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
   return 0;
 }
 
-int MultipartObjectProcessor::prepare_head()
+int MultipartObjectProcessor::prepare_head(const jspan* parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
   uint64_t chunk_size;
   uint64_t stripe_size;
   uint64_t alignment;
 
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("RGWRados::get_max_chunk_size", parent_span);
   int r = target_obj->get_max_chunk_size(tail_placement_rule, &chunk_size, &alignment);
+  jaeger_tracing::finish_span(span_2.get());
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
     return r;
   }
+  [[maybe_unused]] const auto span_3 = jaeger_tracing::child_span("RGWRados::get_max_aligned_size", span_1.get());
   target_obj->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+  jaeger_tracing::finish_span(span_3.get());
 
   manifest.set_multipart_part_rule(stripe_size, part_num);
 
+  [[maybe_unused]] const auto span_4 = jaeger_tracing::child_span("RGWObjManifest::generator::create_begin", span_1.get());
   r = manifest_gen.create_begin(store->ctx(), &manifest,
 				bucket->get_placement_rule(),
 				&tail_placement_rule,
 				target_obj->get_bucket()->get_key(),
 				target_obj->get_obj());
+  jaeger_tracing::finish_span(span_4.get());
   if (r < 0) {
     return r;
   }
@@ -397,11 +412,11 @@ int MultipartObjectProcessor::prepare_head()
   return 0;
 }
 
-int MultipartObjectProcessor::prepare(optional_yield y)
+int MultipartObjectProcessor::prepare(optional_yield y, const jspan* parent_span)
 {
   manifest.set_prefix(target_obj->get_name() + "." + upload_id);
 
-  return prepare_head();
+  return prepare_head(parent_span);
 }
 
 int MultipartObjectProcessor::complete(size_t accounted_size,
@@ -414,8 +429,9 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        const char *if_nomatch,
                                        const std::string *user_data,
                                        rgw_zone_set *zones_trace,
-                                       bool *pcanceled, optional_yield y)
+                                       bool *pcanceled, optional_yield y, const jspan* parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   int r = writer.drain();
   if (r < 0) {
     return r;
@@ -441,7 +457,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  r = obj_op->write_meta(actual_size, accounted_size, y);
+  r = obj_op->write_meta(actual_size, accounted_size, y, span_1.get());
   if (r < 0)
     return r;
 
@@ -502,7 +518,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::D
   return 0;
 }
 
-int AppendObjectProcessor::prepare(optional_yield y)
+int AppendObjectProcessor::prepare(optional_yield y, const jspan* parent_span)
 {
   RGWObjState *astate;
   int r = head_obj->get_obj_state(&obj_ctx, *bucket, &astate, y);
@@ -597,8 +613,10 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
                                     ceph::real_time set_mtime, rgw::sal::RGWAttrs& attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
-                                    optional_yield y)
+                                    optional_yield y, const jspan* parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   int r = writer.drain();
   if (r < 0)
     return r;
@@ -655,7 +673,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   if (r < 0) {
     return r;
   }
-  r = obj_op->write_meta(actual_size + cur_size, accounted_size + *cur_accounted_size, y);
+  r = obj_op->write_meta(actual_size + cur_size, accounted_size + *cur_accounted_size, y, span_1.get());
   if (r < 0) {
     return r;
   }
