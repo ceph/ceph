@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_MIGRATION_OPEN_SOURCE_IMAGE_REQUEST_H
 #define CEPH_LIBRBD_MIGRATION_OPEN_SOURCE_IMAGE_REQUEST_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "librbd/Types.h"
 #include <memory>
 
@@ -20,17 +21,19 @@ struct FormatInterface;
 template <typename ImageCtxT>
 class OpenSourceImageRequest {
 public:
-  static OpenSourceImageRequest* create(ImageCtxT* destination_image_ctx,
+  static OpenSourceImageRequest* create(librados::IoCtx& io_ctx,
+                                        ImageCtxT* destination_image_ctx,
                                         uint64_t src_snap_id,
                                         const MigrationInfo &migration_info,
                                         ImageCtxT** source_image_ctx,
                                         Context* on_finish) {
-    return new OpenSourceImageRequest(destination_image_ctx, src_snap_id,
-                                      migration_info, source_image_ctx,
-                                      on_finish);
+    return new OpenSourceImageRequest(io_ctx, destination_image_ctx,
+                                      src_snap_id, migration_info,
+                                      source_image_ctx, on_finish);
   }
 
-  OpenSourceImageRequest(ImageCtxT* destination_image_ctx,
+  OpenSourceImageRequest(librados::IoCtx& io_ctx,
+                         ImageCtxT* destination_image_ctx,
                          uint64_t src_snap_id,
                          const MigrationInfo &migration_info,
                          ImageCtxT** source_image_ctx,
@@ -53,6 +56,8 @@ private:
    * @endverbatim
    */
 
+  CephContext* m_cct;
+  librados::IoCtx& m_io_ctx;
   ImageCtxT* m_dst_image_ctx;
   uint64_t m_src_snap_id;
   MigrationInfo m_migration_info;

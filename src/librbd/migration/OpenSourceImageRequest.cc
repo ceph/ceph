@@ -22,13 +22,13 @@ namespace migration {
 
 template <typename I>
 OpenSourceImageRequest<I>::OpenSourceImageRequest(
-    I* dst_image_ctx, uint64_t src_snap_id,
+    librados::IoCtx& io_ctx, I* dst_image_ctx, uint64_t src_snap_id,
     const MigrationInfo &migration_info, I** src_image_ctx, Context* on_finish)
-  : m_dst_image_ctx(dst_image_ctx), m_src_snap_id(src_snap_id),
+  : m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())), m_io_ctx(io_ctx),
+    m_dst_image_ctx(dst_image_ctx), m_src_snap_id(src_snap_id),
     m_migration_info(migration_info), m_src_image_ctx(src_image_ctx),
     m_on_finish(on_finish) {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 }
 
 template <typename I>
@@ -38,12 +38,10 @@ void OpenSourceImageRequest<I>::send() {
 
 template <typename I>
 void OpenSourceImageRequest<I>::open_source() {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", m_src_snap_id, m_dst_image_ctx->md_ctx,
-                               true);
+  *m_src_image_ctx = I::create("", "", m_src_snap_id, m_io_ctx, true);
   auto src_image_ctx = *m_src_image_ctx;
   src_image_ctx->child = m_dst_image_ctx;
 
@@ -70,8 +68,8 @@ void OpenSourceImageRequest<I>::open_source() {
   int r = source_spec_builder.parse_source_spec(source_spec,
                                                 &source_spec_object);
   if (r < 0) {
-    lderr(cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
-               << dendl;
+    lderr(m_cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
+                 << dendl;
     (*m_src_image_ctx)->state->close();
     finish(r);
     return;
@@ -80,8 +78,8 @@ void OpenSourceImageRequest<I>::open_source() {
   r = source_spec_builder.build_format(source_spec_object, import_only,
                                        &m_format);
   if (r < 0) {
-    lderr(cct) << "failed to build migration format handler: "
-               << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to build migration format handler: "
+                 << cpp_strerror(r) << dendl;
     (*m_src_image_ctx)->state->close();
     finish(r);
     return;
@@ -95,12 +93,11 @@ void OpenSourceImageRequest<I>::open_source() {
 
 template <typename I>
 void OpenSourceImageRequest<I>::handle_open_source(int r) {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to open migration source: " << cpp_strerror(r)
-               << dendl;
+    lderr(m_cct) << "failed to open migration source: " << cpp_strerror(r)
+                 << dendl;
     finish(r);
     return;
   }
@@ -115,8 +112,7 @@ void OpenSourceImageRequest<I>::handle_open_source(int r) {
 
 template <typename I>
 void OpenSourceImageRequest<I>::finish(int r) {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
     *m_src_image_ctx = nullptr;
