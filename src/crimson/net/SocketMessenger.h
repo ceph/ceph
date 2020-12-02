@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <list>
 #include <map>
 #include <set>
 #include <vector>
@@ -66,7 +65,7 @@ class SocketMessenger final : public Messenger {
   bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
                                uint32_t min_port, uint32_t max_port) override;
 
-  seastar::future<> start(const std::list<Dispatcher*>& dispatchers) override;
+  seastar::future<> start(const dispatchers_t& dispatchers) override;
 
   ConnectionRef connect(const entity_addr_t& peer_addr,
                         const entity_name_t& peer_name) override;

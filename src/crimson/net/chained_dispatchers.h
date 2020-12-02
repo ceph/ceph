@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <list>
-
 #include "Fwd.h"
 #include "crimson/common/log.h"
 
@@ -14,7 +12,7 @@ class Dispatcher;
 
 class ChainedDispatchers {
 public:
-  void assign(const std::list<Dispatcher*> _dispatchers) {
+  void assign(const dispatchers_t& _dispatchers) {
     assert(empty());
     assert(!_dispatchers.empty());
     dispatchers = _dispatchers;
@@ -32,7 +30,7 @@ public:
   void ms_handle_remote_reset(crimson::net::ConnectionRef conn);
 
  private:
-  std::list<Dispatcher*> dispatchers;
+  dispatchers_t dispatchers;
 };
 
 }

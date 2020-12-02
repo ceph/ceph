@@ -182,7 +182,7 @@ static seastar::future<> run(
             msgr->set_crc_data();
           }
           return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
-            return msgr->start(*this);
+            return msgr->start({this});
           }, crimson::net::Messenger::bind_ertr::all_same_way(
               [addr] (const std::error_code& e) {
             logger().error("Server: "
@@ -348,7 +348,7 @@ static seastar::future<> run(
               client.msgr->set_crc_header();
               client.msgr->set_crc_data();
             }
-            return client.msgr->start(client);
+            return client.msgr->start({&client});
           }
           return seastar::now();
         });
