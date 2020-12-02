@@ -119,8 +119,8 @@ void RefreshParentRequest<I>::send_open_parent() {
         RefreshParentRequest<I>,
         &RefreshParentRequest<I>::handle_open_parent, false>(this));
     auto req = migration::OpenSourceImageRequest<I>::create(
-      &m_child_image_ctx, m_parent_md.spec.snap_id, m_migration_info,
-      &m_parent_image_ctx, ctx);
+      m_child_image_ctx.md_ctx, &m_child_image_ctx, m_parent_md.spec.snap_id,
+      m_migration_info, &m_parent_image_ctx, ctx);
     req->send();
     return;
   }
