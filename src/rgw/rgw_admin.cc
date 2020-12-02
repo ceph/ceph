@@ -3090,12 +3090,30 @@ static void show_result(T& obj,
   formatter->flush(cout);
 }
 
-void init_optional_bucket(std::optional<rgw_bucket>& opt_bucket,
+void init_optional_bucket(CephContext *cct,
+                          std::optional<rgw_bucket>& opt_bucket,
                           std::optional<string>& opt_tenant,
                           std::optional<string>& opt_bucket_name,
                           std::optional<string>& opt_bucket_id)
 {
   if (opt_tenant || opt_bucket_name || opt_bucket_id) {
+    if (opt_bucket_name && (!opt_tenant || !opt_bucket_id)) {
+      rgw_bucket b;
+
+      int r = rgw_bucket_parse_bucket_key(cct, *opt_bucket_name,
+                                          &b, nullptr);
+      if (r >= 0) {
+        opt_bucket_name = b.name;
+
+        if (!opt_tenant && !b.tenant.empty()) {
+          opt_tenant = b.tenant;
+        }
+        if (!opt_bucket_id && !b.bucket_id.empty()) {
+          opt_bucket_id = b.bucket_id;
+        }
+      }
+    }
+
     opt_bucket.emplace();
     if (opt_tenant) {
       opt_bucket->tenant = *opt_tenant;
@@ -4513,11 +4531,11 @@ int main(int argc, const char **argv)
     /* Needs to be after the store is initialized.  Note, user could be empty here. */
     user = store->get_user(user_id_arg);
 
-    init_optional_bucket(opt_bucket, opt_tenant,
+    init_optional_bucket(cct.get(), opt_bucket, opt_tenant,
                          opt_bucket_name, opt_bucket_id);
-    init_optional_bucket(opt_source_bucket, opt_source_tenant,
+    init_optional_bucket(cct.get(), opt_source_bucket, opt_source_tenant,
                          opt_source_bucket_name, opt_source_bucket_id);
-    init_optional_bucket(opt_dest_bucket, opt_dest_tenant,
+    init_optional_bucket(cct.get(), opt_dest_bucket, opt_dest_tenant,
                          opt_dest_bucket_name, opt_dest_bucket_id);
     init_optional_object_key(opt_object, opt_object_name, opt_object_version);
     init_optional_object_key(opt_source_object, opt_source_object_name, opt_source_object_version);
