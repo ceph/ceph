@@ -408,7 +408,7 @@ class RGWRados
   int append_atomic_test(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, rgw::sal::Object* obj,
                          librados::ObjectOperation& op, RGWObjState **state,
 			 RGWObjManifest** pmanifest, optional_yield y);
-  
+
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, std::map<std::string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 

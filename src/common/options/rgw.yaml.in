@@ -3451,6 +3451,19 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d3n_l1_local_datacache_backend
+  type: str
+  level: advanced
+  desc: implementation of D3N local datacache
+  long_desc: The configuration of d3n is in D3N l1 local datacache.
+    The configuration of ioc_cache is in immutable_object_cache
+  default: d3n
+  services:
+  - rgw
+  enum_values:
+  - d3n
+  - ioc
+  with_legacy: true
 - name: rgw_d3n_l1_datacache_persistent_path
   type: str
   level: advanced

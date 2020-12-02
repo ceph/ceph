@@ -171,6 +171,7 @@ set(librgw_common_srcs
   rgw_lua_utils.cc
   rgw_lua.cc
   rgw_lua_data_filter.cc
+  rgw_ioc_dispatch.cc
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc)
@@ -219,6 +220,7 @@ endif()
 target_link_libraries(rgw_common
   PRIVATE
     global
+    ceph_immutable_object_cache_lib
     cls_2pc_queue_client
     cls_cmpomap_client
     cls_lock_client

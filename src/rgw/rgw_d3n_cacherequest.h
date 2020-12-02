@@ -132,7 +132,7 @@ struct D3nL1CacheRequest {
   };
 
   void file_aio_read_abstract(const DoutPrefixProvider *dpp, boost::asio::io_context& context, yield_context yield,
-                              std::string& file_path, off_t read_ofs, off_t read_len,
+                              const std::string& file_path, off_t read_ofs, off_t read_len,
                               rgw::Aio* aio, rgw::AioResult& r) {
     using namespace boost::asio;
     async_completion<yield_context, void()> init(yield);
@@ -140,7 +140,7 @@ struct D3nL1CacheRequest {
 
     auto& ref = r.obj.get_ref();
     ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): oid=" << ref.obj.oid << dendl;
-    async_read(dpp, context, file_path+"/"+ref.obj.oid, read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
+    async_read(dpp, context, file_path, read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
   }
 
 };

@@ -19,6 +19,7 @@
 
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
+#include "rgw_ioc_dispatch.h"
 
 namespace rgw {
 
@@ -102,7 +103,7 @@ Aio::OpFunc d3n_cache_aio_abstract(const DoutPrefixProvider *dpp, optional_yield
     auto& ref = r.obj.get_ref();
     auto c = std::make_unique<D3nL1CacheRequest>();
     lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: d3n_cache_aio_abstract(): libaio Read From Cache, oid=" << ref.obj.oid << dendl;
-    c->file_aio_read_abstract(dpp, y.get_io_context(), y.get_yield_context(), location, read_ofs, read_len, aio, r);
+    c->file_aio_read_abstract(dpp, y.get_io_context(), y.get_yield_context(), location+"/"+ref.obj.oid, read_ofs, read_len, aio, r);
   };
 }
 
@@ -115,6 +116,31 @@ Aio::OpFunc aio_abstract(Op&& op, optional_yield y) {
   if (y) {
     return aio_abstract(std::forward<Op>(op), y.get_io_context(),
                         y.get_yield_context());
+  }
+  return aio_abstract(std::forward<Op>(op));
+}
+
+template <typename Op>
+Aio::OpFunc ioc_cache_aio_abstract(const DoutPrefixProvider *dpp, Op&& op, optional_yield y,
+                               off_t read_ofs, off_t read_len, IOChook* ioc_hook) {
+  return [op = std::move(op), dpp, y, read_ofs, read_len, ioc_hook] (Aio* aio, AioResult& r) mutable {
+    auto& ref = r.obj.get_ref();
+    ioc_hook->read(dpp, ref.obj.oid, ref.pool.ioctx().get_namespace(), ref.pool.ioctx().get_id(),
+                  read_ofs, read_len, y, aio_abstract(std::move(op), y), aio, r);
+  };
+}
+
+template <typename Op>
+Aio::OpFunc ioc_cache_aio_abstract(const DoutPrefixProvider *dpp, Op&& op, optional_yield y,
+                               off_t read_ofs, off_t read_len, void* arg) {
+  static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
+  static_assert(!std::is_lvalue_reference_v<Op>);
+  static_assert(!std::is_const_v<Op>);
+
+  auto ioc_hook = (static_cast<IOChook*>(arg));
+
+  if (y) {
+    return ioc_cache_aio_abstract(dpp, std::forward<Op>(op), y, read_ofs, read_len, ioc_hook);
   }
   return aio_abstract(std::forward<Op>(op));
 }
@@ -133,6 +159,11 @@ Aio::OpFunc Aio::librados_op(librados::ObjectWriteOperation&& op,
 Aio::OpFunc Aio::d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
                               off_t read_ofs, off_t read_len, std::string& location) {
   return d3n_cache_aio_abstract(dpp, y, read_ofs, read_len, location);
+}
+
+Aio::OpFunc Aio::ioc_cache_op(const DoutPrefixProvider *dpp, librados::ObjectReadOperation&& op, optional_yield y,
+                         off_t read_ofs, off_t read_len, void* arg) {
+  return ioc_cache_aio_abstract(dpp, std::move(op), y, read_ofs, read_len, arg);
 }
 
 } // namespace rgw

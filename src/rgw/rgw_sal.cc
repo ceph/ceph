@@ -26,6 +26,7 @@
 #include "store/rados/config/store.h"
 #include "store/json_config/store.h"
 #include "rgw_d3n_datacache.h"
+#include "rgw_ioc_dispatch.h"
 
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
@@ -129,6 +130,35 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       delete store;
       return nullptr;
     }
+  }
+  else if (cfg.store_name.compare("ioc") == 0) {
+    store = new rgw::sal::RadosStore();
+    RGWRados *rados = new IOCRGWDataCache<RGWRados>;
+    dynamic_cast<rgw::sal::RadosStore*>(store)->setRados(rados);
+    rados->set_store(static_cast<rgw::sal::RadosStore* >(store));
+
+    if ((*rados).set_use_cache(use_cache)
+                .set_use_datacache(true)
+                .set_run_gc_thread(use_gc_thread)
+                .set_run_lc_thread(use_lc_thread)
+                .set_run_quota_threads(quota_threads)
+                .set_run_sync_thread(run_sync_thread)
+                .set_run_reshard_thread(run_reshard_thread)
+                .init_begin(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+    if (rados->init_complete(dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+
+    lsubdout(cct, rgw, 1) << "rgw_ioc: rgw_d3n_l1_local_datacache_enabled=" <<
+      cct->_conf->rgw_d3n_l1_local_datacache_enabled << dendl;
   }
   else if (cfg.store_name.compare("d3n") == 0) {
     store = new rgw::sal::RadosStore();
@@ -347,7 +377,8 @@ StoreManager::Config StoreManager::get_config(bool admin, CephContext* cct)
       } else if (!g_conf().get_val<bool>("rgw_beast_enable_async")) {
 	lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield context - rgw_beast_enable_async=true)" << dendl;
       } else {
-	cfg.store_name = "d3n";
+        const auto& d3n_backend = g_conf().get_val<std::string>("rgw_d3n_l1_local_datacache_backend");
+        cfg.store_name = d3n_backend;
       }
     }
   }

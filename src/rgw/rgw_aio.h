@@ -99,6 +99,8 @@ class Aio {
                             optional_yield y);
   static OpFunc d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
                              off_t read_ofs, off_t read_len, std::string& location);
+  static OpFunc ioc_cache_op(const DoutPrefixProvider *dpp, librados::ObjectReadOperation&& op, optional_yield y,
+                             off_t read_ofs, off_t read_len, void* arg);
 };
 
 } // namespace rgw
