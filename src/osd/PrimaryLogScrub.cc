@@ -554,6 +554,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
     }
     m_pl_pg->finish_ctx(ctx.get(), pg_log_entry_t::MODIFY);
 
+    ++num_digest_updates_pending;
     ctx->register_on_success([this]() {
       dout(20) << "updating scrub digest " << num_digest_updates_pending << dendl;
       if (--num_digest_updates_pending <= 0) {
@@ -561,20 +562,17 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       }
     });
 
-    ++num_digest_updates_pending;
     m_pl_pg->simple_opc_submit(std::move(ctx));
   }
 
   dout(10) << __func__ << " (" << mode << ") finish" << dendl;
 }
 
-PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg)
-    : PgScrubber{pg}, m_pl_pg{pg}
-{}
+PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg) : PgScrubber{pg}, m_pl_pg{pg} {}
 
 void PrimaryLogScrub::_scrub_clear_state()
 {
-  dout(7) << __func__ << " - pg(" << m_pl_pg->pg_id << dendl;
+  dout(15) << __func__ << dendl;
   m_scrub_cstat = object_stat_collection_t();
 }
 

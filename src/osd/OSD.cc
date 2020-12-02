@@ -1806,6 +1806,7 @@ void OSDService::queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priorit
 
 void OSDService::queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority)
 {
+  // Resulting scrub event: 'InternalSchedScrub'
   queue_scrub_event_msg<PGScrubResched>(pg, with_priority);
 }
 
@@ -7431,28 +7432,6 @@ bool OSDService::ScrubJob::ScrubJob::operator<(const OSDService::ScrubJob& rhs) 
   if (sched_time > rhs.sched_time)
     return false;
   return pgid < rhs.pgid;
-}
-
-// this one is only moved here (from the header) temporarily, for debugging:
-void OSDService::unreg_pg_scrub(spg_t pgid, utime_t t)
-{
-  std::lock_guard l{OSDService::sched_scrub_lock};
-  size_t removed = sched_scrub_pg.erase(ScrubJob{cct, pgid, t});
-  ceph_assert(removed);
-  dout(10) << __func__ << " scrub-set removed: " << pgid << " T(" << t << ")" << dendl;
-}
-
-// this one is only moved here (from the header) temporarily, for debugging:
-utime_t OSDService::reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
-                     double pool_scrub_max_interval, bool must)
-{
-  ScrubJob scrub_job(cct, pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
-                     must);
-  std::lock_guard l(OSDService::sched_scrub_lock);
-  auto [x, inserted] = sched_scrub_pg.insert(scrub_job);
-  dout(10) << __func__ << " scrub-set inserted: " << pgid << " T(" << t << ")" << " must: " << must << " inserted "
-    << inserted << dendl;
-  return scrub_job.sched_time;
 }
 
 void OSDService::dumps_scrub(ceph::Formatter *f)

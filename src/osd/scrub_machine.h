@@ -53,7 +53,9 @@ void on_event_discard(std::string_view nm);
 
 MEV(RemotesReserved)	 ///< all replicas have granted our reserve request
 MEV(ReservationFailure)	 ///< a reservation request has failed
-MEV(EpochChanged)	 ///< ... from what it was when this chunk started
+
+MEV(IntervalChanged)  ///< ... from what it was when this chunk started
+
 MEV(StartScrub)	 ///< initiate a new scrubbing session (relevant if we are a Primary)
 MEV(AfterRepairScrub)  ///< initiate a new scrubbing session. Only triggered at Recovery
 		       ///< completion.
@@ -78,8 +80,10 @@ MEV(DigestUpdate)  ///< external. called upon success of a MODIFY op. See
 		   ///< scrub_snapshot_metadata()
 MEV(AllChunksDone)
 
-MEV(StartReplica)  ///< initiating replica scrub. replica_scrub_op() -> OSD Q ->
-		   ///< replica_scrub()
+MEV(StartReplica)	 ///< initiating replica scrub. replica_scrub_op() -> OSD Q ->
+			 ///< replica_scrub()
+MEV(StartReplicaNoWait)	 ///< 'start replica' when there are no pending updates
+
 MEV(SchedReplica)
 MEV(ReplicaPushesUpd)  ///< Update to active_pushes. 'active_pushes' represents recovery
 		       ///< that is in-flight to the local ObjectStore
@@ -105,17 +109,10 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
 
   PG* m_pg;  // only used for dout messages
   spg_t m_pg_id;
-
   ScrubMachineListener* m_scrbr;
 
-  void down_on_epoch_change(const EpochChanged&);
-
-  void on_epoch_changed(const EpochChanged&);
-
   void my_states() const;
-
   void assert_not_active() const;
-
   [[nodiscard]] bool is_reserving() const;
 };
 
@@ -127,37 +124,34 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
  *    queued "PGScrub" op.
  *  - a special end-of-recovery Primary scrub event ('AfterRepairScrub') that is
  *    not required to reserve resources.
- *  - (for a replica) 'StartReplica', triggered by an incoming MOSDRepScrub msg.
+ *  - (for a replica) 'StartReplica' or 'StartReplicaNoWait', triggered by an incoming
+ *    MOSDRepScrub message.
  */
 struct NotActive : sc::state<NotActive, ScrubMachine> {
   explicit NotActive(my_context ctx);
 
-  using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
+  using reactions = mpl::list<sc::custom_reaction<IntervalChanged>,
 			      sc::transition<StartScrub, ReservingReplicas>,
 			      // a scrubbing that was initiated at recovery completion,
 			      // and requires no resource reservations:
 			      sc::transition<AfterRepairScrub, ActiveScrubbing>,
 			      sc::transition<StartReplica, ReplicaWaitUpdates>,
-			      sc::custom_reaction<sc::event_base>>;
+			      sc::transition<StartReplicaNoWait, ActiveReplica>>;
 
-  sc::result react(const EpochChanged&);
-  sc::result react(const sc::event_base&)  // in the future: assert here
-  {
-    return discard_event();
-  }
+  sc::result react(const IntervalChanged&);
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {
 
   explicit ReservingReplicas(my_context ctx);
-  using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
+  using reactions = mpl::list<sc::custom_reaction<FullReset>,
 			      // all replicas granted our resources request
 			      sc::transition<RemotesReserved, ActiveScrubbing>,
-			      sc::custom_reaction<FullReset>,
 			      sc::custom_reaction<ReservationFailure>>;
 
-  sc::result react(const EpochChanged&);
   sc::result react(const FullReset&);
+
+  /// at least one replica denied us the scrub resources we've requested
   sc::result react(const ReservationFailure&);
 };
 
@@ -184,14 +178,12 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer> 
     // done scrubbing
     sc::transition<AllChunksDone, NotActive>,
 
-    sc::transition<EpochChanged,
-		   NotActive,
-		   ScrubMachine,
-		   &ScrubMachine::down_on_epoch_change>,
+    sc::custom_reaction<InternalError>,
     sc::custom_reaction<FullReset>>;
 
   sc::result react(const AllChunksDone&);
   sc::result react(const FullReset&);
+  sc::result react(const InternalError&);
 };
 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing> {
@@ -250,13 +242,19 @@ struct WaitLastUpdate : sc::state<WaitLastUpdate, ActiveScrubbing> {
 struct BuildMap : sc::state<BuildMap, ActiveScrubbing> {
   explicit BuildMap(my_context ctx);
 
+  // possible error scenarios:
+  // - an error reported by the backend will trigger an 'InternalError' event,
+  //   handled by our parent state;
+  // - if preempted, we switch to DrainReplMaps, where we will wait for all
+  //   replicas to send their maps before acknowledging the preemption;
+  // - an interval change will be handled by the relevant 'send-event' functions,
+  //   and will translated into a 'FullReset' event.
   using reactions =
     mpl::list<sc::transition<IntBmPreempted, DrainReplMaps>,
 	      sc::transition<InternalSchedScrub, BuildMap>,  // looping, waiting
 							     // for the backend to
 							     // finish
-	      sc::custom_reaction<IntLocalMapDone>,
-	      sc::transition<InternalError, NotActive>>;  // to discuss RRR
+	      sc::custom_reaction<IntLocalMapDone>>;
 
   sc::result react(const IntLocalMapDone&);
 };
@@ -301,27 +299,25 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
  */
 struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine> {
   explicit ReplicaWaitUpdates(my_context ctx);
-  using reactions =
-    mpl::list<sc::custom_reaction<ReplicaPushesUpd>, sc::custom_reaction<EpochChanged>>;
+  using reactions = mpl::list<sc::custom_reaction<ReplicaPushesUpd>,
+			      sc::custom_reaction<FullReset>,
+			      sc::custom_reaction<IntervalChanged>>;
 
   sc::result react(const ReplicaPushesUpd&);
-  sc::result react(const EpochChanged&);
+  sc::result react(const IntervalChanged&);
+  sc::result react(const FullReset&);
 };
 
 
 struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine> {
   explicit ActiveReplica(my_context ctx);
-  using reactions = mpl::list<sc::custom_reaction<EpochChanged>,
+  using reactions = mpl::list<sc::custom_reaction<IntervalChanged>,
 			      sc::custom_reaction<SchedReplica>,
-			      sc::custom_reaction<IntLocalMapDone>,
-			      sc::custom_reaction<FullReset>,
-			      sc::custom_reaction<InternalError>>;
+			      sc::custom_reaction<FullReset>>;
 
   sc::result react(const SchedReplica&);
-  sc::result react(const EpochChanged&);
-  sc::result react(const IntLocalMapDone&);
+  sc::result react(const IntervalChanged&);
   sc::result react(const FullReset&);
-  sc::result react(const InternalError&);
 };
 
 }  // namespace Scrub

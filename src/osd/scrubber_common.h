@@ -116,25 +116,27 @@ struct ScrubPgIF {
 
   // --------------- triggering state-machine events:
 
-  virtual void send_start_scrub() = 0;
+  virtual void send_start_scrub(epoch_t epoch_queued) = 0;
 
-  virtual void send_start_after_repair() = 0;
+  virtual void send_start_after_repair(epoch_t epoch_queued) = 0;
 
-  virtual void send_scrub_resched() = 0;
+  virtual void send_scrub_resched(epoch_t epoch_queued) = 0;
 
-  virtual void replica_scrub_resched(epoch_t epoch_queued) = 0;
-
-  virtual void active_pushes_notification() = 0;
+  virtual void active_pushes_notification(epoch_t epoch_queued) = 0;
 
   virtual void update_applied_notification(epoch_t epoch_queued) = 0;
 
-  virtual void digest_update_notification() = 0;
+  virtual void digest_update_notification(epoch_t epoch_queued) = 0;
 
-  virtual void send_scrub_unblock() = 0;
+  virtual void send_scrub_unblock(epoch_t epoch_queued) = 0;
 
-  virtual void send_replica_maps_ready() = 0;
+  virtual void send_replica_maps_ready(epoch_t epoch_queued) = 0;
 
-  virtual void send_replica_pushes_upd() = 0;
+  virtual void send_replica_pushes_upd(epoch_t epoch_queued) = 0;
+
+  virtual void send_start_replica(epoch_t epoch_queued) = 0;
+
+  virtual void send_sched_replica(epoch_t epoch_queued) = 0;
 
   // --------------------------------------------------
 
@@ -158,24 +160,25 @@ struct ScrubPgIF {
 
   virtual void replica_scrub_op(OpRequestRef op) = 0;
 
-  virtual void replica_scrub(epoch_t epoch_queued) = 0;
-
   virtual void set_op_parameters(requested_scrub_t&) = 0;
 
-  virtual void scrub_clear_state(bool keep_repair_state = false) = 0;
+  virtual void scrub_clear_state() = 0;
 
   virtual void handle_query_state(ceph::Formatter* f) = 0;
 
   virtual void dump(ceph::Formatter* f) const = 0;
 
   /**
-   * we allow some number of preemptions of the scrub, which mean we do
-   *  not block.  Then we start to block.  Once we start blocking, we do
-   *  not stop until the scrub range is completed.
+   * Return true if soid is currently being scrubbed and pending IOs should block.
+   * May have a side effect of preempting an in-progress scrub -- will return false
+   * in that case.
+   *
+   * @param soid object to check for ongoing scrub
+   * @return boolean whether a request on soid should block until scrub completion
    */
   virtual bool write_blocked_by_scrub(const hobject_t& soid) = 0;
 
-  /// true if the given range intersects the scrub interval in any way
+  /// Returns whether any objects in the range [begin, end] are being scrubbed
   virtual bool range_intersects_scrub(const hobject_t& start, const hobject_t& end) = 0;
 
   /// the op priority, taken from the primary's request message
@@ -201,19 +204,19 @@ struct ScrubPgIF {
    * the version of 'scrub_clear_state()' that does not try to invoke FSM services
    * (thus can be called from FSM reactions)
    */
-  virtual void clear_pgscrub_state(bool keep_repair_state) = 0;
+  virtual void clear_pgscrub_state() = 0;
 
   /**
    *  triggers the 'RemotesReserved' (all replicas granted scrub resources)
    *  state-machine event
    */
-  virtual void send_remotes_reserved() = 0;
+  virtual void send_remotes_reserved(epoch_t epoch_queued) = 0;
 
   /**
    * triggers the 'ReservationFailure' (at least one replica denied us the requested
    * resources) state-machine event
    */
-  virtual void send_reservation_failure() = 0;
+  virtual void send_reservation_failure(epoch_t epoch_queued) = 0;
 
   virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
 

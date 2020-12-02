@@ -53,9 +53,15 @@ class ReplicaReservations {
   /// notify the scrubber that we have failed to reserve replicas' resources
   void send_reject();
 
-  void release_all();
-
  public:
+  /**
+   *  quietly discard all knowledge about existing reservations. No messages
+   *  are sent to peers.
+   *  To be used upon interval change, as we know the the running scrub is no longer
+   *  relevant, and that the replicas had reset the reservations on their side.
+   */
+  void discard_all();
+
   ReplicaReservations(PG* pg, pg_shard_t whoami);
 
   ~ReplicaReservations();
@@ -77,7 +83,6 @@ class LocalReservation {
   LocalReservation(PG* pg, OSDService* osds);
   ~LocalReservation();
   bool is_reserved() const { return m_holding_local_reservation; }
-  void early_release();
 };
 
 /**
@@ -87,12 +92,15 @@ class ReservedByRemotePrimary {
   PG* m_pg;
   OSDService* m_osds;
   bool m_reserved_by_remote_primary{false};
+  const epoch_t m_reserved_at;
 
  public:
-  ReservedByRemotePrimary(PG* pg, OSDService* osds);
+  ReservedByRemotePrimary(PG* pg, OSDService* osds, epoch_t epoch);
   ~ReservedByRemotePrimary();
   [[nodiscard]] bool is_reserved() const { return m_reserved_by_remote_primary; }
-  void early_release();
+
+  /// compare the remembered reserved-at epoch to the current interval
+  [[nodiscard]] bool is_stale() const;
 };
 
 /**
@@ -183,23 +191,27 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   /// are we waiting for resource reservation grants form our replicas?
   [[nodiscard]] bool is_reserving() const final;
 
-  void send_start_scrub() final;
+  void send_start_scrub(epoch_t epoch_queued) final;
 
-  void send_start_after_repair() final;
+  void send_start_after_repair(epoch_t epoch_queued) final;
 
-  void send_scrub_resched() final;
+  void send_scrub_resched(epoch_t epoch_queued) final;
 
-  void active_pushes_notification() final;
+  void active_pushes_notification(epoch_t epoch_queued) final;
 
   void update_applied_notification(epoch_t epoch_queued) final;
 
-  void send_scrub_unblock() final;
+  void send_scrub_unblock(epoch_t epoch_queued) final;
 
-  void digest_update_notification() final;
+  void digest_update_notification(epoch_t epoch_queued) final;
 
-  void send_replica_maps_ready() final;
+  void send_replica_maps_ready(epoch_t epoch_queued) final;
 
-  void send_replica_pushes_upd() final;
+  void send_start_replica(epoch_t epoch_queued) final;
+
+  void send_sched_replica(epoch_t epoch_queued) final;
+
+  void send_replica_pushes_upd(epoch_t epoch_queued) final;
 
   void reset_epoch(epoch_t epoch_queued) final;
 
@@ -213,7 +225,12 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   /// true if the given range intersects the scrub interval in any way
   bool range_intersects_scrub(const hobject_t& start, const hobject_t& end) final;
 
+  /**
+   *  we are a replica being asked by the Primary to reserve OSD resources for
+   *  scrubbing
+   */
   void handle_scrub_reserve_request(OpRequestRef op) final;
+
   void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from) final;
   void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from) final;
   void handle_scrub_reserve_release(OpRequestRef op) final;
@@ -245,8 +262,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   // used if we are a replica
 
   void replica_scrub_op(OpRequestRef op) final;
-  void replica_scrub(epoch_t epoch_queued) final;
-  void replica_scrub_resched(epoch_t epoch_queued) final;
 
   /// the op priority, taken from the primary's request message
   Scrub::scrub_prio_t replica_op_priority() const final
@@ -279,7 +294,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
     return false;
   }
 
-  void scrub_clear_state(bool keep_repair_state = false) final;
+  void scrub_clear_state() final;
 
   /**
    *  add to scrub statistics, but only if the soid is below the scrub start
@@ -319,8 +334,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
     return m_pg->recovery_state.get_last_update_applied();
   }
 
-  void requeue_waiting() const final { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
-
   int pending_active_pushes() const final { return m_pg->active_pushes; }
 
   void scrub_compare_maps() final;
@@ -331,7 +344,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
   /// (thus can be called from FSM reactions)
-  void clear_pgscrub_state(bool keep_repair_state) final;
+  void clear_pgscrub_state() final;
 
   void add_delayed_scheduling() final;
 
@@ -344,10 +357,10 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   Scrub::FsmNext on_digest_updates() final;
 
-  void send_replica_map(bool was_preempted) final;
+  void send_replica_map(Scrub::PreemptionNoted was_preempted) final;
 
-  void send_remotes_reserved() final;
-  void send_reservation_failure() final;
+  void send_remotes_reserved(epoch_t epoch_queued) final;
+  void send_reservation_failure(epoch_t epoch_queued) final;
 
   /**
    *  does the PG have newer updates than what we (the scrubber) know?
@@ -356,11 +369,9 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void set_subset_last_update(eversion_t e) final;
 
-  void replica_update_start_epoch() final;
-
   void maps_compare_n_cleanup() final;
 
-  Scrub::preemption_t* get_preemptor() final;
+  Scrub::preemption_t& get_preemptor() final;
 
   int build_primary_map_chunk() final;
 
@@ -400,32 +411,61 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   virtual ~PgScrubber();  // must be defined separately, in the .cc file
 
-  [[nodiscard]] bool is_scrub_active() const final;
+  [[nodiscard]] bool is_scrub_active() const final { return m_active; }
 
  private:
   void reset_internal_state();
 
-  void _scan_snaps(ScrubMap& smap);  // note that the (non-standard for a
-				     // non-virtual) name of the function is searched
-				     // for by the QA standalone tests. Do not modify.
+  void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
 
-  void clean_meta_map(ScrubMap& for_meta_scrub);
+  void _scan_snaps(ScrubMap& smap);
+
+  ScrubMap clean_meta_map();
 
   void run_callbacks();
 
+  void send_interval_changed();
+
+  // -----     methods used to verify the relevance of incoming events:
+
   /**
-   * are we still a clean & healthy scrubbing primary?
+   *  is the incoming event still relevant, and should be processed?
    *
-   * relevant only after the initial sched_scrub
+   *  It isn't if:
+   *  - (1) we are no longer 'actively scrubbing'; or
+   *  - (2) the message is from an epoch prior to when we started the current scrub
+   * session; or
+   *  - (3) the message epoch is from a previous interval; or
+   *  - (4) the 'abort' configuration flags were set.
+   *
+   *  For (1) & (2) - teh incoming message is discarded, w/o further action.
+   *
+   *  For (3): (see check_interval() for a full description) if we have not reacted yet
+   *  to this specific new interval, we do now:
+   *  - replica reservations are silently discarded (we count on the replicas to notice
+   *        the interval change and un-reserve themselves);
+   *  - the scrubbing is halted.
+   *
+   *  For (4): the message will be discarded, but also:
+   *    if this is the first time we've noticed the 'abort' request, we perform the abort.
+   *
+   *  \returns should the incoming event be processed?
    */
-  [[nodiscard]] bool is_event_relevant(epoch_t queued) const;
+  bool is_message_relevant(epoch_t epoch_to_verify);
 
   /**
    * check the 'no scrub' configuration options.
    */
-  [[nodiscard]] bool should_abort_scrub(epoch_t queued) const;
+  [[nodiscard]] bool should_abort() const;
+  [[nodiscard]] bool verify_against_abort(epoch_t epoch_to_verify);
 
-  void send_epoch_changed();
+  bool check_interval(epoch_t epoch_to_verify);
+  bool check_interval_replica(epoch_t epoch_to_verify);
+
+  epoch_t m_last_dead_interval{};
+  epoch_t m_last_aborted{};  // last time we've noticed a request to abort
+
+
 
   /**
    * return true if any inconsistency/missing is repaired, false otherwise
@@ -434,6 +474,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   bool m_needs_sleep{true};  ///< should we sleep before being rescheduled? always
 			     ///< 'true', unless we just got out of a sleep period
+
+  utime_t m_sleep_started_at;
 
 
   // 'optional', as 'ReplicaReservations' & 'LocalReservation' are 'RAII-designed'
@@ -449,8 +491,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   /// the part that actually finalizes a scrub
   void scrub_finish();
-
-  utime_t m_sleep_started_at;
 
  protected:
   PG* const m_pg;
@@ -478,13 +518,18 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   OSDService* const m_osds;
   const pg_shard_t m_pg_whoami;	 ///< a local copy of m_pg->pg_whoami;
 
-  epoch_t m_epoch_start;  ///< epoch when scrubbing was first scheduled
-  epoch_t m_epoch_queued;
+  epoch_t m_interval_start;  ///< interval's 'from' of when scrubbing was first scheduled
+  /*
+   * the exact epoch when the scrubbing actually started (started here - cleared checks
+   *  for no-scrub conf). Incoming events are verified against this, with stale events
+   *  discarded.
+   */
+  epoch_t m_epoch_start{0};  ///< the actual epoch when scrubbing started
   scrub_flags_t m_flags;
 
   bool m_active{false};
 
-  eversion_t m_subset_last_update;
+  eversion_t m_subset_last_update{};
 
   std::unique_ptr<Scrub::Store> m_store;
 
@@ -498,10 +543,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   epoch_t get_osdmap_epoch() const { return get_osdmap()->get_epoch(); }
 
   CephContext* get_pg_cct() const { return m_pg->cct; }
-
-  void send_start_replica();
-
-  void send_sched_replica();
 
   // collected statistics
   int m_shallow_errors{0};
@@ -521,8 +562,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
    * building the scrub maps.
    */
   bool m_is_deep{false};
-
-  inline static int fake_count{2};  // unit-tests. To be removed
 
   /**
    * initiate a deep-scrub after the current scrub ended with errors.
@@ -568,11 +607,10 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   // ------------ members used if we are a replica
 
-  epoch_t m_replica_epoch_start;
   epoch_t m_replica_min_epoch;	///< the min epoch needed to handle this message
 
-  ScrubMapBuilder replica_scrubmap_pos;	 /// \todo document
-  ScrubMap replica_scrubmap;		 /// \todo document
+  ScrubMapBuilder replica_scrubmap_pos;
+  ScrubMap replica_scrubmap;
   /**
    * we mark the request priority as it arrived. It influences the queuing priority
    * when we wait for local updates
