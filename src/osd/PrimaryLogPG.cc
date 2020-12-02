@@ -3351,9 +3351,13 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
        * the reference the targe object has prior to update object_manifest in object_info_t.
        * So, call directly refcount_manifest.
        */
-      RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
-      refcount_manifest(ctx->obs->oi.soid, p->first,
-	  refcount_t::INCREMENT_REF, fin, std::nullopt);
+      C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(
+			  new RefCountCallback(ctx, osd_op), 
+			  ctx->obs->oi.soid);
+      ceph_tid_t tid = refcount_manifest(ctx->obs->oi.soid, p->first,
+			refcount_t::INCREMENT_REF, fin, std::nullopt);
+      manifest_ops[ctx->obs->oi.soid] = std::make_shared<ManifestOp>(fin->cb, tid);
+      ctx->obc->start_block();
       return true;
     } else if (inc_ref_count < 0) {
       hobject_t src = ctx->obs->oi.soid;
@@ -3462,15 +3466,9 @@ ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soi
     ceph_assert(0 == "unrecognized type");
   }
 
-  Context *c = nullptr, *fin = nullptr;
+  Context *c = nullptr;
   if (cb) {
-    if (type == refcount_t::INCREMENT_REF ||
-        type == refcount_t::DECREMENT_REF) {
-      fin = new C_SetManifestRefCountDone(static_cast<RefCountCallback*>(cb), src_soid);
-    } else if (type == refcount_t::CREATE_OR_GET_REF) {
-      fin = cb;
-    }
-    c = new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard()));
+    c = new C_OnFinisher(cb, osd->get_objecter_finisher(get_pg_shard()));
   }
 
   object_locator_t oloc(tgt_soid);
@@ -3480,13 +3478,6 @@ ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soi
     tgt_soid.oid, oloc, obj_op, SnapContext(),
     ceph::real_clock::from_ceph_timespec(src_obc->obs.oi.mtime),
     flags, c);
-  if (cb) {
-    if (type == refcount_t::INCREMENT_REF ||
-        type == refcount_t::DECREMENT_REF) {
-      manifest_ops[src_soid] = std::make_shared<ManifestOp>(static_cast<RefCountCallback*>(cb), tid);
-      src_obc->start_block();
-    }
-  }
   return tid;
 }
 
@@ -6827,9 +6818,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // start
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
-	  RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
-	  refcount_manifest(ctx->obc->obs.oi.soid, target, 
+	  C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(
+			      new RefCountCallback(ctx, osd_op), 
+			      soid);
+	  ceph_tid_t tid = refcount_manifest(soid, target, 
 			    refcount_t::INCREMENT_REF, fin, std::nullopt);
+	  manifest_ops[soid] = std::make_shared<ManifestOp>(fin->cb, tid);
+	  ctx->obc->start_block();
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
