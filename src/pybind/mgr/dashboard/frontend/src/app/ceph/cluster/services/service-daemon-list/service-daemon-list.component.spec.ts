@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import _ from 'lodash';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
@@ -77,7 +78,7 @@ describe('ServiceDaemonListComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, CephModule, CoreModule, SharedModule]
+    imports: [HttpClientTestingModule, CephModule, CoreModule, NgxPipeFunctionModule, SharedModule]
   });
 
   beforeEach(() => {

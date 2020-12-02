@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SummaryService } from '~/app/shared/services/summary.service';
@@ -16,7 +17,13 @@ describe('ServiceDetailsComponent', () => {
   let fixture: ComponentFixture<ServiceDetailsComponent>;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, NgbNavModule],
+    imports: [
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      NgbNavModule,
+      NgxPipeFunctionModule
+    ],
     declarations: [ServiceDetailsComponent, ServiceDaemonListComponent],
     providers: [{ provide: SummaryService, useValue: { subscribeOnce: jest.fn() } }]
   });

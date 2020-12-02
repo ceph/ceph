@@ -414,10 +414,10 @@
                 <div class="col-12">
                   <button type="button"
                           class="btn btn-light float-right tc_addCapButton"
-                          [disabled]="hasAllCapabilities()"
+                          [disabled]="capabilities | pipeFunction:hasAllCapabilities"
                           i18n-ngbTooltip
                           ngbTooltip="All capabilities are already added."
-                          [disableTooltip]="!hasAllCapabilities()"
+                          [disableTooltip]="!(capabilities | pipeFunction:hasAllCapabilities)"
                           triggers="pointerenter:pointerleave"
                           (click)="showCapabilityModal()">
                     <i [ngClass]="[icons.add]"></i>

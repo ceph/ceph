@@ -269,7 +269,7 @@
 
 <ng-template #classAddingTpl
              let-value="value">
-  <span class="{{useCustomClass(value)}}">{{ value }}</span>
+  <span class="{{ value | pipeFunction:useCustomClass:this }}">{{ value }}</span>
 </ng-template>
 
 <ng-template #badgeTpl

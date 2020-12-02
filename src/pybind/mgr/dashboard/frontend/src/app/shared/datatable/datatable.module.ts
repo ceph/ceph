@@ -5,6 +5,7 @@ import { RouterModule } from '@angular/router';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ComponentsModule } from '../components/components.module';
 import { PipesModule } from '../pipes/pipes.module';
@@ -16,6 +17,7 @@ import { TableComponent } from './table/table.component';
   imports: [
     CommonModule,
     NgxDatatableModule,
+    NgxPipeFunctionModule,
     FormsModule,
     NgbDropdownModule,
     NgbTooltipModule,
