@@ -468,7 +468,7 @@ void Paxos::handle_last(MonOpRequestRef op)
   op->mark_paxos_event("handle_last");
   auto last = op->get_req<MMonPaxos>();
   bool need_refresh = false;
-  int from = last->get_source().num();
+  int peer_rank = last->get_source().num();
 
   dout(10) << "handle_last " << *last << dendl;
 
@@ -479,12 +479,12 @@ void Paxos::handle_last(MonOpRequestRef op)
 
   // note peer's first_ and last_committed, in case we learn a new
   // commit and need to push it to them.
-  peer_first_committed[from] = last->first_committed;
-  peer_last_committed[from] = last->last_committed;
+  peer_first_committed[peer_rank] = last->first_committed;
+  peer_last_committed[peer_rank] = last->last_committed;
 
   if (last->first_committed > last_committed + 1) {
     dout(5) << __func__
-            << " mon." << from
+            << " mon." << peer_rank
 	    << " lowest version is too high for our last committed"
             << " (theirs: " << last->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
@@ -1145,17 +1145,17 @@ void Paxos::handle_lease_ack(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_lease_ack");
   auto ack = op->get_req<MMonPaxos>();
-  int from = ack->get_source().num();
+  int peer_rank = ack->get_source().num();
 
   if (!lease_ack_timeout_event) {
     dout(10) << "handle_lease_ack from " << ack->get_source()
 	     << " -- stray (probably since revoked)" << dendl;
 
-  } else if (acked_lease.count(from) == 0) {
-    acked_lease.insert(from);
+  } else if (acked_lease.count(peer_rank) == 0) {
+    acked_lease.insert(peer_rank);
     if (ack->feature_map.length()) {
       auto p = ack->feature_map.cbegin();
-      FeatureMap& t = mon.quorum_feature_map[from];
+      FeatureMap& t = mon.quorum_feature_map[peer_rank];
       decode(t, p);
     }
     if (acked_lease == mon.get_quorum()) {

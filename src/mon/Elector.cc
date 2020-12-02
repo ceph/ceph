@@ -277,7 +277,7 @@ void Elector::handle_propose(MonOpRequestRef op)
   op->mark_event("elector:handle_propose");
   auto m = op->get_req<MMonElection>();
   dout(5) << "handle_propose from " << m->get_source() << dendl;
-  int from = m->get_source().num();
+  int peer_rank = m->get_source().num();
 
   ceph_assert(m->epoch % 2 == 1); // election
   uint64_t required_features = mon->get_required_features();
@@ -291,12 +291,12 @@ void Elector::handle_propose(MonOpRequestRef op)
 
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
-    dout(5) << " ignoring propose from mon" << from
+    dout(5) << " ignoring propose from mon" << peer_rank
 	    << " without required features" << dendl;
     nak_old_peer(op);
     return;
   } else if (mon->monmap->min_mon_release > m->mon_release) {
-    dout(5) << " ignoring propose from mon" << from
+    dout(5) << " ignoring propose from mon" << peer_rank
 	    << " release " << (int)m->mon_release
 	    << " < min_mon_release " << (int)mon->monmap->min_mon_release
 	    << dendl;
@@ -305,7 +305,7 @@ void Elector::handle_propose(MonOpRequestRef op)
   } else if (!m->mon_features.contains_all(required_mon_features)) {
     // all the features in 'required_mon_features' not in 'm->mon_features'
     mon_feature_t missing = required_mon_features.diff(m->mon_features);
-    dout(5) << " ignoring propose from mon." << from
+    dout(5) << " ignoring propose from mon." << peer_rank
             << " without required mon_features " << missing
             << dendl;
     nak_old_peer(op);
@@ -314,7 +314,7 @@ void Elector::handle_propose(MonOpRequestRef op)
   if (m->sharing_bl.length()) {
     oct = new ConnectionTracker(m->sharing_bl);
   }
-  logic.receive_propose(from, m->epoch, oct);
+  logic.receive_propose(peer_rank, m->epoch, oct);
   delete oct;
 }
 
@@ -323,13 +323,13 @@ void Elector::handle_ack(MonOpRequestRef op)
   op->mark_event("elector:handle_ack");
   auto m = op->get_req<MMonElection>();
   dout(5) << "handle_ack from " << m->get_source() << dendl;
-  int from = m->get_source().num();
+  int peer_rank = m->get_source().num();
 
   ceph_assert(m->epoch == get_epoch());
   uint64_t required_features = mon->get_required_features();
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
-    dout(5) << " ignoring ack from mon" << from
+    dout(5) << " ignoring ack from mon" << peer_rank
 	    << " without required features" << dendl;
     return;
   }
@@ -337,7 +337,7 @@ void Elector::handle_ack(MonOpRequestRef op)
   mon_feature_t required_mon_features = mon->get_required_mon_features();
   if (!m->mon_features.contains_all(required_mon_features)) {
     mon_feature_t missing = required_mon_features.diff(m->mon_features);
-    dout(5) << " ignoring ack from mon." << from
+    dout(5) << " ignoring ack from mon." << peer_rank
             << " without required mon_features " << missing
             << dendl;
     return;
@@ -345,10 +345,10 @@ void Elector::handle_ack(MonOpRequestRef op)
 
   if (logic.electing_me) {
     // thanks
-    peer_info[from].cluster_features = m->get_connection()->get_features();
-    peer_info[from].mon_features = m->mon_features;
-    peer_info[from].mon_release = m->mon_release;
-    peer_info[from].metadata = m->metadata;
+    peer_info[peer_rank].cluster_features = m->get_connection()->get_features();
+    peer_info[peer_rank].mon_features = m->mon_features;
+    peer_info[peer_rank].mon_release = m->mon_release;
+    peer_info[peer_rank].metadata = m->metadata;
     dout(5) << " so far i have {";
     for (const auto& acked_me_rank : logic.acked_me) {
       auto acked_me_peer = peer_info.find(acked_me_rank);
@@ -364,7 +364,7 @@ void Elector::handle_ack(MonOpRequestRef op)
     *_dout << " }" << dendl;
   }
 
-  logic.receive_ack(from, m->epoch);
+  logic.receive_ack(peer_rank, m->epoch);
 }
 
 void Elector::handle_victory(MonOpRequestRef op)
