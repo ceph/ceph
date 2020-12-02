@@ -140,11 +140,8 @@ struct TestMigration : public TestFixture {
         std::cout << description
                   << ", block " << offset << "~" << read_size << " differs"
                   << std::endl;
-        char *c = getenv("TEST_RBD_MIGRATION_VERBOSE");
-        if (c != NULL && *c != '\0') {
-          std::cout << "src block: " << src_ictx->id << ": " << std::endl; src_bl.hexdump(std::cout);
-          std::cout << "dst block: " << dst_ictx->id << ": " << std::endl; dst_bl.hexdump(std::cout);
-        }
+        std::cout << "src block: " << src_ictx->id << ": " << std::endl; src_bl.hexdump(std::cout);
+        std::cout << "dst block: " << dst_ictx->id << ": " << std::endl; dst_bl.hexdump(std::cout);
       }
       EXPECT_TRUE(src_bl.contents_equal(dst_bl));
       offset += read_size;
