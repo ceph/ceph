@@ -62,7 +62,7 @@ void DiffRequest<I>::load_object_map(
     }
   }
 
-  if ((m_image_ctx->features & RBD_FEATURE_FAST_DIFF) != 0) {
+  if ((m_image_ctx->features & RBD_FEATURE_FAST_DIFF) == 0) {
     image_locker->unlock();
 
     ldout(cct, 10) << "fast-diff feature not enabled" << dendl;
