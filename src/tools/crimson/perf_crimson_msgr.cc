@@ -152,7 +152,7 @@ static seastar::future<> run(
         msg_data.append_zero(msg_len);
       }
 
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef c, MessageRef m) override {
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
@@ -167,7 +167,7 @@ static seastar::future<> run(
         rep->write(0, msg_len, data);
         rep->set_tid(m->get_tid());
         std::ignore = c->send(std::move(rep));
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
       seastar::future<> init(bool v1_crc_enabled, const entity_addr_t& addr) {
@@ -307,7 +307,7 @@ static seastar::future<> run(
       void ms_handle_connect(crimson::net::ConnectionRef conn) override {
         conn_stats.connected_time = mono_clock::now();
       }
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef, MessageRef m) override {
         // server replies with MOSDOp to generate server-side write workload
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
@@ -327,7 +327,7 @@ static seastar::future<> run(
         ++(conn_stats.received_count);
         depth.signal(1);
 
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
       // should start messenger at this shard?

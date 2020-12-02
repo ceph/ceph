@@ -203,7 +203,7 @@ void Heartbeat::remove_peer(osd_id_t peer)
   peers.erase(peer);
 }
 
-std::tuple<bool, seastar::future<>>
+std::optional<seastar::future<>>
 Heartbeat::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
   bool dispatched = true;
@@ -216,7 +216,7 @@ Heartbeat::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
       return seastar::now();
     }
   });
-  return {dispatched, seastar::now()};
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
 void Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
