@@ -3221,6 +3221,12 @@ struct C_SetManifestRefCountDone : public Context {
     }
     pg->manifest_ops.erase(it);
     cb->complete(r);
+    cb = nullptr;
+  }
+  ~C_SetManifestRefCountDone() {
+    if (cb) {
+      delete cb;
+    }
   }
 };
 
