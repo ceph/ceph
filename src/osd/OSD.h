@@ -291,10 +291,25 @@ public:
   };
   std::set<ScrubJob> sched_scrub_pg;
 
-  /// @returns the scrub_reg_stamp used for unregister'ing the scrub job
-  utime_t reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
-		       double pool_scrub_max_interval, bool must);
-  void unreg_pg_scrub(spg_t pgid, utime_t t);
+  /// @returns the scrub_reg_stamp used for unregistering the scrub job
+  utime_t reg_pg_scrub(spg_t pgid,
+		       utime_t t,
+		       double pool_scrub_min_interval,
+		       double pool_scrub_max_interval,
+		       bool must) {
+    ScrubJob scrub_job(cct, pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
+		       must);
+    std::lock_guard l(OSDService::sched_scrub_lock);
+    sched_scrub_pg.insert(scrub_job);
+    return scrub_job.sched_time;
+  }
+
+  void unreg_pg_scrub(spg_t pgid, utime_t t) {
+    std::lock_guard l(sched_scrub_lock);
+    size_t removed = sched_scrub_pg.erase(ScrubJob(cct, pgid, t));
+    ceph_assert(removed);
+  }
+
   bool first_scrub_stamp(ScrubJob *out) {
     std::lock_guard l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
