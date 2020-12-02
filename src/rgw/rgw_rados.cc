@@ -6333,6 +6333,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
   return bl.length();
 }
 
+/* temporary copy-paste from src/rgw/rgw_rados.h for sake of PR review.
 struct get_obj_data {
   RGWRados* store;
   RGWGetDataCB* client_cb;
@@ -6386,6 +6387,7 @@ struct get_obj_data {
     return flush(std::move(c));
   }
 };
+*/
 
 static int _get_obj_iterate_cb(const DoutPrefixProvider *dpp, 
                                const rgw_raw_obj& read_obj, off_t obj_ofs,
