@@ -1516,7 +1516,7 @@ protected:
 	     std::map<uint64_t, bufferlist>& chunks);
   int start_dedup(OpRequestRef op, ObjectContextRef obc);
   hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
-  void finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
+  int finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
