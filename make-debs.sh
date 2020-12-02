@@ -72,7 +72,7 @@ fi
 if test $NPROC -gt 1 ; then
     j=-j${NPROC}
 fi
-PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
+PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us --build-profiles=nocheck
 cd ../..
 mkdir -p $codename/conf
 cat > $codename/conf/distributions <<EOF

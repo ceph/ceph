@@ -75,7 +75,7 @@ To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the
 
 Once you have installed debhelper, you can build the packages::
 
-	sudo dpkg-buildpackage
+	sudo dpkg-buildpackage --build-profiles=nocheck
 
 For multi-processor CPUs use the ``-j`` option to accelerate the build.
 
