@@ -10178,14 +10178,14 @@ hobject_t PrimaryLogPG::get_fpoid_from_chunk(const hobject_t soid, bufferlist& c
   return target;
 }
 
-void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset)
+int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
   map<hobject_t,ManifestOpRef>::iterator p = manifest_ops.find(oid);
   if (p == manifest_ops.end()) {
     dout(10) << __func__ << " no manifest_op found" << dendl;
-    return;
+    return -EINVAL;
   }
   ManifestOpRef mop = p->second;
   mop->results[offset] = r;
@@ -10195,13 +10195,13 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
   }
   if (mop->num_chunks != mop->results.size()) {
     // there are on-going works
-    return;
+    return -EINPROGRESS;
   }
   ObjectContextRef obc = get_object_context(oid, false);
   if (!obc) {
     if (mop->op)
       osd->reply_op_error(mop->op, -EINVAL);
-    return;
+    return -EINVAL;
   }
   ceph_assert(obc->is_blocked());
   obc->stop_block();
@@ -10211,7 +10211,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     ceph_assert(mop->num_chunks == mop->results.size());
     manifest_ops.erase(oid);
     osd->reply_op_error(mop->op, mop->results[0]);
-    return;
+    return -EIO;
   }
 
   if (mop->chunks.size()) {
@@ -10226,8 +10226,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     } else if (mop->op) {
       dout(10) << __func__ << " waiting on write lock " << mop->op << dendl;
       close_op_ctx(ctx.release());
-      osd->reply_op_error(mop->op, -EAGAIN);
-      return;    
+      return -EAGAIN;    
     }
 
     ctx->at_version = get_next_version();
@@ -10281,6 +10280,7 @@ void PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64
     osd->reply_op_error(mop->op, r);
 
   manifest_ops.erase(oid);
+  return 0;
 }
 
 int PrimaryLogPG::start_flush(
