@@ -50,8 +50,6 @@ function munge_ceph_spec_in {
 function munge_debian_control {
     local version=$1
     shift
-    local with_seastar=$1
-    shift
     local control=$1
     case "$version" in
         *squeeze*|*wheezy*)
@@ -59,9 +57,6 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
-    if $with_seastar; then
-	sed -i -e 's/^# Crimson[[:space:]]//g' $control
-    fi
     if $with_jaeger; then
 	sed -i -e 's/^# Jaeger[[:space:]]//g' $control
 	sed -i -e 's/^# Crimson      libyaml-cpp-dev,/d' $control
@@ -339,7 +334,7 @@ else
         touch $DIR/status
 
 	backports=""
-	control=$(munge_debian_control "$VERSION" "$with_seastar" "debian/control")
+	control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
@@ -352,6 +347,9 @@ else
 	build_profiles=""
 	if $for_make_check; then
 	    build_profiles+=",pkg.ceph.check"
+	fi
+	if $with_seastar; then
+	    build_profiles+=",pkg.ceph.crimson"
 	fi
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
 	      --build-profiles "${build_profiles#,}" \
