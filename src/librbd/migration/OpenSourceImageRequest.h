@@ -6,6 +6,7 @@
 
 #include "include/rados/librados_fwd.hpp"
 #include "librbd/Types.h"
+#include <map>
 #include <memory>
 
 struct Context;
@@ -51,10 +52,18 @@ private:
    * OPEN_SOURCE
    *    |
    *    v
-   * <finish>
+   * GET_IMAGE_SIZE  * * * * * * *
+   *    |                        *
+   *    v                        v
+   * GET_SNAPSHOTS * * * * > CLOSE_IMAGE
+   *    |                        |
+   *    v                        |
+   * <finish> <------------------/
    *
    * @endverbatim
    */
+
+  typedef std::map<uint64_t, SnapInfo> SnapInfos;
 
   CephContext* m_cct;
   librados::IoCtx& m_io_ctx;
@@ -66,8 +75,21 @@ private:
 
   std::unique_ptr<FormatInterface> m_format;
 
+  uint64_t m_image_size = 0;
+  SnapInfos m_snap_infos;
+
   void open_source();
   void handle_open_source(int r);
+
+  void get_image_size();
+  void handle_get_image_size(int r);
+
+  void get_snapshots();
+  void handle_get_snapshots(int r);
+
+  void close_image(int r);
+
+  void register_image_dispatch();
 
   void finish(int r);
 
