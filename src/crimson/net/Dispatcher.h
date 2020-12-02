@@ -14,26 +14,22 @@
 
 #pragma once
 
-#include <seastar/core/future.hh>
-#include <seastar/core/sharded.hh>
-#include <boost/intrusive/slist.hpp>
-
-#include "crimson/common/gated.h"
 #include "Fwd.h"
 
 class AuthAuthorizer;
 
 namespace crimson::net {
 
-class Dispatcher : public boost::intrusive::slist_base_hook<
-			    boost::intrusive::link_mode<
-			      boost::intrusive::safe_link>> {
+class Dispatcher {
  public:
   virtual ~Dispatcher() {}
 
-  virtual seastar::future<> ms_dispatch(Connection* conn, MessageRef m) {
-    return seastar::make_ready_future<>();
-  }
+  // Dispatchers are put into a chain as described by chain-of-responsibility
+  // pattern. If any of the dispatchers claims this message, it returns a valid
+  // future to prevent other dispatchers from processing it, and this is also
+  // used to throttle the connection if it's too busy.
+  virtual std::optional<seastar::future<>> ms_dispatch(ConnectionRef, MessageRef) = 0;
+
   virtual void ms_handle_accept(ConnectionRef conn) {}
 
   virtual void ms_handle_connect(ConnectionRef conn) {}

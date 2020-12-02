@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 #include <seastar/net/api.hh>
 #include <seastar/net/inet_address.hh>
+#include <seastar/core/future-util.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/thread.hh>
@@ -122,7 +123,7 @@ seastar::future<> AdminSocket::finalize_response(
 }
 
 
-seastar::future<> AdminSocket::handle_command(crimson::net::Connection* conn,
+seastar::future<> AdminSocket::handle_command(crimson::net::ConnectionRef conn,
 					      boost::intrusive_ptr<MCommand> m)
 {
   return execute_command(m->cmd, std::move(m->get_data())).then(

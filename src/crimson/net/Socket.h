@@ -9,10 +9,10 @@
 #include <seastar/net/packet.hh>
 
 #include "include/buffer.h"
-#include "msg/msg_types.h"
 
 #include "crimson/common/log.h"
 #include "Errors.h"
+#include "Fwd.h"
 
 #ifdef UNIT_TESTS_BUILT
 #include "Interceptor.h"
@@ -197,7 +197,10 @@ public:
   FixedCPUServerSocket(const FixedCPUServerSocket&) = delete;
   FixedCPUServerSocket& operator=(const FixedCPUServerSocket&) = delete;
 
-  seastar::future<> listen(entity_addr_t addr);
+  using listen_ertr = crimson::errorator<
+    crimson::ct_error::address_in_use // The address is already bound
+    >;
+  listen_ertr::future<> listen(entity_addr_t addr);
 
   // fn_accept should be a nothrow function of type
   // seastar::future<>(SocketRef, entity_addr_t)

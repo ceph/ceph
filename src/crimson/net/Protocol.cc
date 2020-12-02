@@ -7,7 +7,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"
-#include "crimson/net/Dispatcher.h"
+#include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/Socket.h"
 #include "crimson/net/SocketConnection.h"
 #include "msg/Message.h"
@@ -21,10 +21,10 @@ namespace {
 namespace crimson::net {
 
 Protocol::Protocol(proto_t type,
-                   ChainedDispatchersRef& dispatcher,
+                   ChainedDispatchers& dispatchers,
                    SocketConnection& conn)
   : proto_type(type),
-    dispatcher(dispatcher),
+    dispatchers(dispatchers),
     conn(conn),
     auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()}
 {}
@@ -73,19 +73,14 @@ void Protocol::close(bool dispatch_reset,
   auto gate_closed = gate.close();
 
   if (dispatch_reset) {
-    try {
-        dispatcher->ms_handle_reset(
-            seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
-            is_replace);
-    } catch (...) {
-      logger().error("{} got unexpected exception in ms_handle_reset() {}",
-                     conn, std::current_exception());
-    }
+    dispatchers.ms_handle_reset(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
+        is_replace);
   }
 
   // asynchronous operations
   assert(!close_ready.valid());
-  close_ready = std::move(gate_closed).finally([this] {
+  close_ready = std::move(gate_closed).then([this] {
     if (socket) {
       return socket->close();
     } else {

@@ -14,12 +14,17 @@
 
 #pragma once
 
+#include <boost/container/small_vector.hpp>
+#include <seastar/core/future.hh>
+#include <seastar/core/future-util.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sharded.hh>
 
 #include "msg/Connection.h"
 #include "msg/MessageRef.h"
 #include "msg/msg_types.h"
+
+#include "crimson/common/errorator.h"
 
 using auth_proto_t = int;
 
@@ -35,6 +40,9 @@ class Connection;
 using ConnectionRef = seastar::shared_ptr<Connection>;
 
 class Dispatcher;
+class ChainedDispatchers;
+constexpr std::size_t NUM_DISPATCHERS = 4u;
+using dispatchers_t = boost::container::small_vector<Dispatcher*, NUM_DISPATCHERS>;
 
 class Messenger;
 using MessengerRef = seastar::shared_ptr<Messenger>;

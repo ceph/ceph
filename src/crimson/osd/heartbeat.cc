@@ -57,14 +57,10 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
                          SocketPolicy::lossy_client(0));
   back_msgr->set_policy(entity_name_t::TYPE_OSD,
                         SocketPolicy::lossy_client(0));
-  auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
-  chained_dispatchers->push_back(*this);
   return seastar::when_all_succeed(start_messenger(*front_msgr,
-						   front_addrs,
-						   chained_dispatchers),
+						   front_addrs),
                                    start_messenger(*back_msgr,
-						   back_addrs,
-						   chained_dispatchers))
+						   back_addrs))
     .then_unpack([this] {
       timer.arm_periodic(
         std::chrono::seconds(local_conf()->osd_heartbeat_interval));
@@ -73,25 +69,26 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
 
 seastar::future<>
 Heartbeat::start_messenger(crimson::net::Messenger& msgr,
-                           const entity_addrvec_t& addrs,
-			   ChainedDispatchersRef chained_dispatchers)
+                           const entity_addrvec_t& addrs)
 {
   return msgr.try_bind(addrs,
                        local_conf()->ms_bind_port_min,
                        local_conf()->ms_bind_port_max)
-  .then([&msgr, chained_dispatchers]() mutable {
-    return msgr.start(chained_dispatchers);
-  });
+  .safe_then([this, &msgr]() mutable {
+    return msgr.start({this});
+  }, crimson::net::Messenger::bind_ertr::all_same_way(
+      [] (const std::error_code& e) {
+    logger().error("heartbeat messenger try_bind(): address range is unavailable.");
+    ceph_abort();
+  }));
 }
 
 seastar::future<> Heartbeat::stop()
 {
   logger().info("{}", __func__);
   timer.cancel();
-  if (!front_msgr->dispatcher_chain_empty())
-    front_msgr->remove_dispatcher(*this);
-  if (!back_msgr->dispatcher_chain_empty())
-    back_msgr->remove_dispatcher(*this);
+  front_msgr->stop();
+  back_msgr->stop();
   return gate.close().then([this] {
     return seastar::when_all_succeed(front_msgr->shutdown(),
 				     back_msgr->shutdown());
@@ -206,17 +203,20 @@ void Heartbeat::remove_peer(osd_id_t peer)
   peers.erase(peer);
 }
 
-seastar::future<> Heartbeat::ms_dispatch(crimson::net::Connection* conn,
-                                         MessageRef m)
+std::optional<seastar::future<>>
+Heartbeat::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
-  return gate.dispatch(__func__, *this, [this, conn, &m] {
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
     switch (m->get_type()) {
     case MSG_OSD_PING:
       return handle_osd_ping(conn, boost::static_pointer_cast<MOSDPing>(m));
     default:
+      dispatched = false;
       return seastar::now();
     }
   });
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
 void Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
@@ -258,7 +258,7 @@ void Heartbeat::ms_handle_accept(crimson::net::ConnectionRef conn)
   }
 }
 
-seastar::future<> Heartbeat::handle_osd_ping(crimson::net::Connection* conn,
+seastar::future<> Heartbeat::handle_osd_ping(crimson::net::ConnectionRef conn,
                                              Ref<MOSDPing> m)
 {
   switch (m->op) {
@@ -273,7 +273,7 @@ seastar::future<> Heartbeat::handle_osd_ping(crimson::net::Connection* conn,
   }
 }
 
-seastar::future<> Heartbeat::handle_ping(crimson::net::Connection* conn,
+seastar::future<> Heartbeat::handle_ping(crimson::net::ConnectionRef conn,
                                          Ref<MOSDPing> m)
 {
   auto min_message = static_cast<uint32_t>(
@@ -291,7 +291,7 @@ seastar::future<> Heartbeat::handle_ping(crimson::net::Connection* conn,
   return conn->send(reply);
 }
 
-seastar::future<> Heartbeat::handle_reply(crimson::net::Connection* conn,
+seastar::future<> Heartbeat::handle_reply(crimson::net::ConnectionRef conn,
                                           Ref<MOSDPing> m)
 {
   const osd_id_t from = m->get_source().num();
@@ -373,9 +373,9 @@ Heartbeat::Connection::~Connection()
   }
 }
 
-bool Heartbeat::Connection::matches(crimson::net::Connection* _conn) const
+bool Heartbeat::Connection::matches(crimson::net::ConnectionRef _conn) const
 {
-  return (conn && conn.get() == _conn);
+  return (conn && conn == _conn);
 }
 
 void Heartbeat::Connection::accepted(crimson::net::ConnectionRef accepted_conn)
@@ -551,7 +551,7 @@ void Heartbeat::Peer::send_heartbeat(
 }
 
 seastar::future<> Heartbeat::Peer::handle_reply(
-    crimson::net::Connection* conn, Ref<MOSDPing> m)
+    crimson::net::ConnectionRef conn, Ref<MOSDPing> m)
 {
   if (!session.is_started()) {
     // we haven't sent any ping yet

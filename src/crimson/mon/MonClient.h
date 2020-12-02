@@ -140,13 +140,13 @@ private:
 private:
   void tick();
 
-  seastar::future<> ms_dispatch(crimson::net::Connection* conn,
-				MessageRef m) override;
+  std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef conn,
+                                               MessageRef m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
-  seastar::future<> handle_monmap(crimson::net::Connection* conn,
+  seastar::future<> handle_monmap(crimson::net::ConnectionRef conn,
 				  Ref<MMonMap> m);
-  seastar::future<> handle_auth_reply(crimson::net::Connection* conn,
+  seastar::future<> handle_auth_reply(crimson::net::ConnectionRef conn,
 				      Ref<MAuthReply> m);
   seastar::future<> handle_subscribe_ack(Ref<MMonSubscribeAck> m);
   seastar::future<> handle_get_version_reply(Ref<MMonGetVersionReply> m);

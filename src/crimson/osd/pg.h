@@ -518,7 +518,7 @@ public:
     with_obc_func_t&& f);
 
   seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
-  void handle_rep_op_reply(crimson::net::Connection* conn,
+  void handle_rep_op_reply(crimson::net::ConnectionRef conn,
 			   const MOSDRepOpReply& m);
 
   void print(std::ostream& os) const;
