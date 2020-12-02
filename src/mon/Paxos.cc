@@ -768,7 +768,7 @@ void Paxos::handle_accept(MonOpRequestRef op)
   op->mark_paxos_event("handle_accept");
   auto accept = op->get_req<MMonPaxos>();
   dout(10) << "handle_accept " << *accept << dendl;
-  int from = accept->get_source().num();
+  int acceptor_rank = accept->get_source().num();
 
   if (accept->pn != accepted_pn) {
     // we accepted a higher pn, from some other leader
@@ -786,8 +786,8 @@ void Paxos::handle_accept(MonOpRequestRef op)
 	 accept->last_committed == last_committed-1);  // committed
 
   ceph_assert(is_updating() || is_updating_previous());
-  ceph_assert(accepted.count(from) == 0);
-  accepted.insert(from);
+  ceph_assert(accepted.count(acceptor_rank) == 0);
+  accepted.insert(acceptor_rank);
   dout(10) << " now " << accepted << " have accepted" << dendl;
 
   ceph_assert(g_conf()->paxos_kill_at != 6);

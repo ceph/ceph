@@ -453,18 +453,18 @@ void ElectionLogic::propose_connectivity_handler(int proposer_rank, epoch_t prop
   }
 }
 
-void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
+void ElectionLogic::receive_ack(int acceptor_rank, epoch_t acceptor_epoch)
 {
-  ceph_assert(from_epoch % 2 == 1); // sender in an election epoch
-  if (from_epoch > epoch) {
+  ceph_assert(acceptor_epoch % 2 == 1); // sender in an election epoch
+  if (acceptor_epoch > epoch) {
     ldout(cct, 5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
-    bump_epoch(from_epoch);
+    bump_epoch(acceptor_epoch);
     start();
     return;
   }
   // is that _everyone_?
   if (electing_me) {
-    acked_me.insert(from);
+    acked_me.insert(acceptor_rank);
     if (acked_me.size() == elector->paxos_size()) {
       // if yes, shortcut to election finish
       declare_victory();

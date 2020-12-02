@@ -306,10 +306,10 @@ public:
    * @post  Election is not on-going if we are victorious
    * @post  Election is not on-going if we must start a new one
    *
-   * @param from The rank which acked us
-   * @param from_epoch The election epoch the ack belongs to
+   * @param acceptor_rank The rank which acked us
+   * @param acceptor_epoch The election epoch the ack belongs to
    */
-  void receive_ack(int from, epoch_t from_epoch);
+  void receive_ack(int acceptor_rank, epoch_t acceptor_epoch);
   /**
    * Handle a message from some other participant declaring Victory.
    *
