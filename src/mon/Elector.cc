@@ -172,7 +172,7 @@ void Elector::_start()
   reset_timer();
 }
 
-void Elector::_defer_to(int who)
+void Elector::_defer_to(int high_priority_rank)
 {
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, get_epoch(),
 				     peer_tracker.get_encoded_bl(),
@@ -181,7 +181,7 @@ void Elector::_defer_to(int who)
   m->mon_release = ceph_release();
   mon->collect_metadata(&m->metadata);
 
-  mon->send_mon_message(m, who);
+  mon->send_mon_message(m, high_priority_rank);
   
   // set a timer
   reset_timer(1.0);  // give the leader some extra time to declare victory

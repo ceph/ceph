@@ -142,14 +142,14 @@ void ElectionLogic::start()
   elector->_start();
 }
 
-void ElectionLogic::defer(int who)
+void ElectionLogic::defer(int high_priority_rank)
 {
   if (strategy == CLASSIC) {
-      ldout(cct, 5) << "defer to " << who << dendl;
-      ceph_assert(who < elector->get_my_rank());
+      ldout(cct, 5) << "defer to " << high_priority_rank << dendl;
+      ceph_assert(high_priority_rank < elector->get_my_rank());
   } else {
-    ldout(cct, 5) << "defer to " << who << ", disallowed_leaders=" << elector->get_disallowed_leaders() << dendl;
-    ceph_assert(!elector->get_disallowed_leaders().count(who));
+    ldout(cct, 5) << "defer to " << high_priority_rank << ", disallowed_leaders=" << elector->get_disallowed_leaders() << dendl;
+    ceph_assert(!elector->get_disallowed_leaders().count(high_priority_rank));
   }
 
   if (electing_me) {
@@ -159,8 +159,8 @@ void ElectionLogic::defer(int who)
   }
 
   // ack them
-  leader_acked = who;
-  elector->_defer_to(who);
+  leader_acked = high_priority_rank;
+  elector->_defer_to(high_priority_rank);
 }
 
 void ElectionLogic::end_election_period()

@@ -109,9 +109,9 @@ public:
    * Tell the ElectionOwner to defer to the identified peer. Tell that peer
    * we have deferred to it.
    *
-   * @post  we sent an ack message to @p who
+   * @post  we sent an ack message to @p high_priority_rank
    */
-  virtual void _defer_to(int who) = 0;
+  virtual void _defer_to(int high_priority_rank) = 0;
   /**
    * We have won an election, so have the ElectionOwner message that to
    * our new quorum!
@@ -405,15 +405,15 @@ private:
    * to become the Leader. We will only defer an election if the monitor we
    * are deferring to outranks us.
    *
-   * @pre   @p who outranks us (i.e., who < our rank)
-   * @pre   @p who outranks any other monitor we have deferred to in the past
+   * @pre   @p high_priority_rank outranks us (i.e., high_priority_rank < our rank)
+   * @pre   @p high_priority_rank outranks any other monitor we have deferred to in the past
    * @post  electing_me is false
-   * @post  leader_acked equals @p who
-   * @post  we triggered ElectionOwner's _defer_to() on @p who
+   * @post  leader_acked equals @p high_priority_rank
+   * @post  we triggered ElectionOwner's _defer_to() on @p high_priority_rank
    *
-   * @param who Some other monitor's numeric identifier. 
+   * @param high_priority_rank Some other monitor's numeric identifier.
    */
-  void defer(int who);
+  void defer(int high_priority_rank);
   /**
    * Declare Victory.
    * 
