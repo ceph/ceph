@@ -1426,6 +1426,7 @@ OPTION(rgw_relaxed_s3_bucket_names, OPT_BOOL) // enable relaxed bucket name rule
 OPTION(rgw_defer_to_bucket_acls, OPT_STR) // if the user has bucket perms)
 OPTION(rgw_list_buckets_max_chunk, OPT_INT) // max buckets to retrieve in a single op when listing user buckets
 OPTION(rgw_md_log_max_shards, OPT_INT) // max shards for metadata log
+OPTION(rgw_curl_buffersize, OPT_INT) // set preferred receive buffer size for curl calls
 OPTION(rgw_curl_wait_timeout_ms, OPT_INT) // timeout for certain curl calls
 OPTION(rgw_curl_low_speed_limit, OPT_INT) // low speed limit for certain curl calls
 OPTION(rgw_curl_low_speed_time, OPT_INT) // low speed time for certain curl calls
