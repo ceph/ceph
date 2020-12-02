@@ -81,30 +81,22 @@ class NodeExtentT {
   using StagedIterator = typename layout_t::StagedIterator;
   using value_t = typename layout_t::value_t;
   static constexpr auto FIELD_TYPE = layout_t::FIELD_TYPE;
-  enum class state_t {
-    NO_RECORDING,  // extent_state_t::INITIAL_WRITE_PENDING
-                   //   can mutate, no recording
-    RECORDING,     // extent_state_t::MUTATION_PENDING
-                   //   can mutate, recording
-    PENDING_MUTATE // extent_state_t::CLEAN/DIRTY
-                   //   cannot mutate
-  };
 
-  NodeExtentT(state_t state, NodeExtentRef extent)
-      : state{state}, extent{extent},
+  NodeExtentT(NodeExtentRef extent)
+      : extent{extent},
         node_stage{reinterpret_cast<const FieldType*>(extent->get_read())} {
-    if (state == state_t::NO_RECORDING) {
+    if (no_recording()) {
       mut.emplace(extent->get_mutable());
       assert(extent->get_recorder() == nullptr);
       recorder = nullptr;
-    } else if (state == state_t::RECORDING) {
+    } else if (needs_recording()) {
       mut.emplace(extent->get_mutable());
       auto p_recorder = extent->get_recorder();
       assert(p_recorder != nullptr);
       assert(p_recorder->node_type() == NODE_TYPE);
       assert(p_recorder->field_type() == FIELD_TYPE);
       recorder = static_cast<recorder_t*>(p_recorder);
-    } else if (state == state_t::PENDING_MUTATE) {
+    } else if (needs_mutate()) {
       // mut is empty
       assert(extent->get_recorder() == nullptr ||
              extent->get_recorder()->is_empty());
@@ -125,14 +117,11 @@ class NodeExtentT {
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
-    if (state == state_t::PENDING_MUTATE) {
-      assert(!extent->is_pending());
+    if (needs_mutate()) {
       auto ref_recorder = recorder_t::create();
       recorder = static_cast<recorder_t*>(ref_recorder.get());
       extent = extent->mutate(c, std::move(ref_recorder));
-
-      state = state_t::RECORDING;
-      assert(extent->is_mutation_pending());
+      assert(needs_recording());
       node_stage = node_stage_t(
           reinterpret_cast<const FieldType*>(extent->get_read()));
       assert(recorder == static_cast<recorder_t*>(extent->get_recorder()));
@@ -147,8 +136,8 @@ class NodeExtentT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(state != state_t::PENDING_MUTATE);
-    if (state == state_t::RECORDING) {
+    assert(!needs_mutate());
+    if (needs_recording()) {
       recorder->template encode_insert<KT>(
           key, value, insert_pos, insert_stage, insert_size);
     }
@@ -158,8 +147,8 @@ class NodeExtentT {
   }
 
   void split_replayable(StagedIterator& split_at) {
-    assert(state != state_t::PENDING_MUTATE);
-    if (state == state_t::RECORDING) {
+    assert(!needs_mutate());
+    if (needs_recording()) {
       recorder->encode_split(split_at, read().p_start());
     }
     layout_t::split(*mut, read(), split_at);
@@ -173,8 +162,8 @@ class NodeExtentT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(state != state_t::PENDING_MUTATE);
-    if (state == state_t::RECORDING) {
+    assert(!needs_mutate());
+    if (needs_recording()) {
       recorder->template encode_split_insert<KT>(
           split_at, key, value, insert_pos, insert_stage, insert_size,
           read().p_start());
@@ -186,8 +175,8 @@ class NodeExtentT {
 
   void update_child_addr_replayable(
       const laddr_t new_addr, laddr_packed_t* p_addr) {
-    assert(state != state_t::PENDING_MUTATE);
-    if (state == state_t::RECORDING) {
+    assert(!needs_mutate());
+    if (needs_recording()) {
       recorder->encode_update_child_addr(new_addr, p_addr, read().p_start());
     }
     return layout_t::update_child_addr(*mut, new_addr, p_addr);
@@ -198,31 +187,25 @@ class NodeExtentT {
     std::memcpy(to.get_write(), extent->get_read(), extent->get_length());
   }
 
-  static state_t loaded(NodeExtentRef extent) {
-    state_t state;
-    if (extent->is_initial_pending()) {
-      state = state_t::NO_RECORDING;
-    } else if (extent->is_mutation_pending()) {
-      state = state_t::RECORDING;
-    } else if (extent->is_valid()) {
-      state = state_t::PENDING_MUTATE;
-    } else {
-      ceph_abort("invalid extent");
-    }
-    return state;
-  }
-
-  static std::tuple<state_t, NodeExtentMutable> allocated(
-      NodeExtentRef extent, bool is_level_tail, level_t level) {
-    assert(extent->is_initial_pending());
-    auto mut = extent->get_mutable();
-    node_stage_t::bootstrap_extent(
-        mut, FIELD_TYPE, NODE_TYPE, is_level_tail, level);
-    return {state_t::NO_RECORDING, mut};
-  }
-
  private:
-  state_t state;
+  /**
+   * Possible states with CachedExtent::extent_state_t:
+   *   INITIAL_WRITE_PENDING -- can mutate, no recording
+   *   MUTATION_PENDING      -- can mutate, needs recording
+   *   CLEAN/DIRTY           -- pending mutate
+   *   INVALID               -- impossible
+   */
+  bool no_recording() const {
+    return extent->is_initial_pending();
+  }
+  bool needs_recording() const {
+    return extent->is_mutation_pending();
+  }
+  bool needs_mutate() const {
+    assert(extent->is_valid());
+    return !extent->is_pending();
+  }
+
   NodeExtentRef extent;
   node_stage_t node_stage;
   std::optional<NodeExtentMutable> mut;

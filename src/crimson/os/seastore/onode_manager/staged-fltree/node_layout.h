@@ -53,8 +53,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   ~NodeLayoutT() override = default;
 
   static URef load(NodeExtentRef extent, bool expect_is_level_tail) {
-    std::unique_ptr<NodeLayoutT> ret(
-        new NodeLayoutT(extent_t::loaded(extent), extent));
+    std::unique_ptr<NodeLayoutT> ret(new NodeLayoutT(extent));
     assert(ret->is_level_tail() == expect_is_level_tail);
     return ret;
   }
@@ -68,9 +67,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     // option3: length is totally flexible;
     return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
     ).safe_then([is_level_tail, level](auto extent) {
-      auto [state, mut] = extent_t::allocated(extent, is_level_tail, level);
+      assert(extent->is_initial_pending());
+      auto mut = extent->get_mutable();
+      node_stage_t::bootstrap_extent(
+          mut, FIELD_TYPE, NODE_TYPE, is_level_tail, level);
       return typename parent_t::fresh_impl_t{
-        std::unique_ptr<parent_t>(new NodeLayoutT(state, extent)), mut};
+        std::unique_ptr<parent_t>(new NodeLayoutT(extent)), mut};
     });
   }
 
@@ -578,8 +580,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
  private:
-  NodeLayoutT(typename extent_t::state_t state, NodeExtentRef extent)
-    : extent{state, extent} {}
+  NodeLayoutT(NodeExtentRef extent) : extent{extent} {}
 
   node_offset_t filled_size() const {
     auto& node_stage = extent.read();
