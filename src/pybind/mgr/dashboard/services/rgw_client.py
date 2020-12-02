@@ -16,7 +16,7 @@ from ..tools import build_url, dict_contains_path, json_str_to_object,\
 from .. import mgr
 
 try:
-    from typing import Any, Dict, List, Optional  # pylint: disable=unused-import
+    from typing import Any, Dict, List, Optional, Tuple  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
@@ -89,19 +89,21 @@ def _get_daemon_info() -> Dict[str, Any]:
     return daemon
 
 
-def _determine_rgw_addr():
+def _determine_rgw_addr() -> Tuple[str, int, bool]:
     """
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = _get_daemon_info()
-
     addr = _parse_addr(daemon['addr'])
     port, ssl = _parse_frontend_config(daemon['metadata']['frontend_config#0'])
+
+    logger.info('Auto-detected RGW configuration: addr=%s, port=%d, ssl=%s',
+                addr, port, str(ssl))
 
     return addr, port, ssl
 
 
-def _parse_addr(value):
+def _parse_addr(value) -> str:
     """
     Get the IP address the RGW is running on.
 
@@ -155,7 +157,7 @@ def _parse_addr(value):
     raise LookupError('Failed to determine RGW address')
 
 
-def _parse_frontend_config(config):
+def _parse_frontend_config(config) -> Tuple[int, bool]:
     """
     Get the port the RGW is running on. Due the complexity of the
     syntax not all variations are supported.
@@ -271,7 +273,7 @@ class RgwClient(RestClient):
         # Discard all cached instances if any rgw setting has changed
         if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
             RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
-            RgwClient._user_instances.clear()
+            RgwClient.drop_instance()
 
         if not RgwClient._user_instances:
             RgwClient._load_settings()
@@ -297,6 +299,16 @@ class RgwClient(RestClient):
     @staticmethod
     def admin_instance():
         return RgwClient.instance(RgwClient._SYSTEM_USERID)
+
+    @staticmethod
+    def drop_instance(userid: Optional[str] = None):
+        """
+        Drop a cached instance by name or all.
+        """
+        if userid:
+            RgwClient._user_instances.pop(userid, None)
+        else:
+            RgwClient._user_instances.clear()
 
     def _reset_login(self):
         if self.userid != RgwClient._SYSTEM_USERID:
