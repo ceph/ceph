@@ -380,4 +380,16 @@ EOF
 $MINGW_DLLTOOL -d $winLibDir/mswsock.def \
                -l $winLibDir/libmswsock.a
 
+cd $depsSrcDir
+if [[ ! -d $wnbdSrcDir ]]; then
+    git clone $wnbdUrl
+    cd $wnbdSrcDir && git checkout $wnbdTag
+fi
+cd $wnbdSrcDir
+mkdir -p $wnbdLibDir
+$MINGW_DLLTOOL -d $wnbdSrcDir/libwnbd/libwnbd.def \
+               -D libwnbd.dll \
+               -l $wnbdLibDir/libwnbd.a
+
+
 touch $depsToolsetDir/completed
