@@ -71,8 +71,16 @@ class DeltaRecorderT final: public DeltaRecorder {
   }
 };
 
+/**
+ * NodeExtentAccessorT
+ *
+ * This component is responsible to mutate the underlying NodeExtent, record
+ * mutation parameters as delta and apply the recorded modifications to the
+ * NodeExtent. It contains static information about node and field type in
+ * order to call methods of NodeLayoutReplayable.
+ */
 template <typename FieldType, node_type_t NODE_TYPE>
-class NodeExtentT {
+class NodeExtentAccessorT {
  public:
   using layout_t = NodeLayoutReplayableT<FieldType, NODE_TYPE>;
   using node_stage_t = typename layout_t::node_stage_t;
@@ -82,7 +90,7 @@ class NodeExtentT {
   using value_t = typename layout_t::value_t;
   static constexpr auto FIELD_TYPE = layout_t::FIELD_TYPE;
 
-  NodeExtentT(NodeExtentRef extent)
+  NodeExtentAccessorT(NodeExtentRef extent)
       : extent{extent},
         node_stage{reinterpret_cast<const FieldType*>(extent->get_read())} {
     if (no_recording()) {
@@ -105,11 +113,11 @@ class NodeExtentT {
       ceph_abort("impossible path");
     }
   }
-  ~NodeExtentT() = default;
-  NodeExtentT(const NodeExtentT&) = delete;
-  NodeExtentT(NodeExtentT&&) = delete;
-  NodeExtentT& operator=(const NodeExtentT&) = delete;
-  NodeExtentT& operator=(NodeExtentT&&) = delete;
+  ~NodeExtentAccessorT() = default;
+  NodeExtentAccessorT(const NodeExtentAccessorT&) = delete;
+  NodeExtentAccessorT(NodeExtentAccessorT&&) = delete;
+  NodeExtentAccessorT& operator=(const NodeExtentAccessorT&) = delete;
+  NodeExtentAccessorT& operator=(NodeExtentAccessorT&&) = delete;
 
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }

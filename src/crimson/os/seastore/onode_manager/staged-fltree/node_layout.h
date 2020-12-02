@@ -8,7 +8,7 @@
 
 #include "common/likely.h"
 #include "crimson/common/log.h"
-#include "node_extent_visitor.h"
+#include "node_extent_accessor.h"
 #include "node_impl.h"
 #include "stages/node_stage_layout.h"
 
@@ -36,7 +36,7 @@ template <typename FieldType, node_type_t NODE_TYPE>
 class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
  public:
   using URef = std::unique_ptr<NodeLayoutT>;
-  using extent_t = NodeExtentT<FieldType, NODE_TYPE>;
+  using extent_t = NodeExtentAccessorT<FieldType, NODE_TYPE>;
   using parent_t = typename node_impl_type<NODE_TYPE>::type;
   using marker_t = typename node_marker_type<NODE_TYPE>::type;
   using node_stage_t = typename extent_t::node_stage_t;
