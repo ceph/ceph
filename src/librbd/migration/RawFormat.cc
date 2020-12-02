@@ -167,7 +167,8 @@ bool RawFormat<I>::read(
     io::ReadResult&& read_result, int op_flags, int read_flags,
     const ZTracer::Trace &parent_trace) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "image_extents=" << image_extents << dendl;
+  ldout(cct, 20) << "snap_id=" << snap_id << ", "
+                 << "image_extents=" << image_extents << dendl;
 
   auto snapshot_it = m_snapshots.find(snap_id);
   if (snapshot_it == m_snapshots.end()) {
