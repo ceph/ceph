@@ -6,6 +6,7 @@
 # LIBCRYPTSETUP_VERSION
 # LIBCRYPTSETUP_FOUND
 
+find_package(PkgConfig QUIET REQUIRED)
 pkg_search_module(PC_libcryptsetup libcryptsetup)
 
 find_path(LIBCRYPTSETUP_INCLUDE_DIR
