@@ -10268,9 +10268,6 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
         });
     }
 
-    // clear all regions
-    ctx->new_obs.oi.manifest.chunk_map.clear();
-
     // set new references
     ctx->new_obs.oi.manifest.chunk_map = mop->new_manifest.chunk_map;
 
