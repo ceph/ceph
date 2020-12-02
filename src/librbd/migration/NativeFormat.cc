@@ -153,8 +153,7 @@ void NativeFormat<I>::open(Context* on_finish) {
   }
 
   // open the source RBD image
-  auto ctx = util::create_async_context_callback(*m_image_ctx, on_finish);
-  m_image_ctx->state->open(flags, ctx);
+  m_image_ctx->state->open(flags, on_finish);
 }
 
 template <typename I>
