@@ -406,6 +406,8 @@ public:
 
   int group_snap_create(IoCtx& io_ctx, const char *group_name,
 			const char *snap_name);
+  int group_snap_create2(IoCtx& io_ctx, const char *group_name,
+                         const char *snap_name, uint32_t flags);
   int group_snap_remove(IoCtx& io_ctx, const char *group_name,
 			const char *snap_name);
   int group_snap_rename(IoCtx& group_ioctx, const char *group_name,

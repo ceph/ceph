@@ -2528,6 +2528,27 @@ class TestGroups(object):
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
 
+    def test_group_snap_flags(self):
+        global snap_name
+        eq([], list(self.group.list_snaps()))
+
+        self.group.create_snap(snap_name, 0)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.remove_snap(snap_name)
+
+        self.group.create_snap(snap_name, RBD_SNAP_CREATE_SKIP_QUIESCE)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.remove_snap(snap_name)
+
+        self.group.create_snap(snap_name, RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.remove_snap(snap_name)
+
+        assert_raises(InvalidArgument, self.group.create_snap, snap_name,
+                      RBD_SNAP_CREATE_SKIP_QUIESCE |
+                      RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
+        eq([], list(self.group.list_snaps()))
+
     def test_group_snap_list_many(self):
         global snap_name
         eq([], list(self.group.list_snaps()))

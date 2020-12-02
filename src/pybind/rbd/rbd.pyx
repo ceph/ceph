@@ -2668,11 +2668,12 @@ cdef class Group(object):
         """
         return GroupImageIterator(self)
 
-    def create_snap(self, snap_name):
+    def create_snap(self, snap_name, flags=0):
         """
         Create a snapshot for the group.
 
         :param snap_name: the name of the snapshot to create
+        :param flags: create snapshot flags
         :type name: str
 
         :raises: :class:`ObjectNotFound`
@@ -2683,8 +2684,10 @@ cdef class Group(object):
         snap_name = cstr(snap_name, 'snap_name')
         cdef:
             char *_snap_name = snap_name
+            uint32_t _flags = flags
         with nogil:
-            ret = rbd_group_snap_create(self._ioctx, self._name, _snap_name)
+            ret = rbd_group_snap_create2(self._ioctx, self._name, _snap_name,
+                                         _flags)
         if ret != 0:
             raise make_ex(ret, 'error creating group snapshot', group_errno_to_exception)
 
