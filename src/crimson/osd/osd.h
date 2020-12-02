@@ -96,7 +96,7 @@ class OSD final : public crimson::net::Dispatcher,
   OSDSuperblock superblock;
 
   // Dispatcher methods
-  std::tuple<bool, seastar::future<>> ms_dispatch(crimson::net::ConnectionRef, MessageRef) final;
+  std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef, MessageRef) final;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
   void ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
 

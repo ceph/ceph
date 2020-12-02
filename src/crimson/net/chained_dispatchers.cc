@@ -17,16 +17,15 @@ ChainedDispatchers::ms_dispatch(crimson::net::ConnectionRef conn,
                                 MessageRef m) {
   try {
     for (auto& dispatcher : dispatchers) {
-      auto [dispatched, throttle_future] = dispatcher->ms_dispatch(conn, m);
-      if (dispatched) {
-        return std::move(throttle_future
+      auto dispatched = dispatcher->ms_dispatch(conn, m);
+      if (dispatched.has_value()) {
+        return std::move(*dispatched
         ).handle_exception([conn] (std::exception_ptr eptr) {
           logger().error("{} got unexpected exception in ms_dispatch() throttling {}",
                          *conn, eptr);
           ceph_abort();
         });
       }
-      assert(throttle_future.available());
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_dispatch() {}",

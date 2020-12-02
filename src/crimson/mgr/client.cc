@@ -47,7 +47,7 @@ seastar::future<> Client::stop()
   return fut;
 }
 
-std::tuple<bool, seastar::future<>>
+std::optional<seastar::future<>>
 Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
   bool dispatched = true;
@@ -62,7 +62,7 @@ Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
       return seastar::now();
     }
   });
-  return {dispatched, seastar::now()};
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
 void Client::ms_handle_connect(crimson::net::ConnectionRef c)
