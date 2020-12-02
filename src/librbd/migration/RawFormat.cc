@@ -114,12 +114,6 @@ void RawFormat<I>::handle_open(int r, Context* on_finish) {
     return;
   }
 
-  auto head_snapshot = m_snapshots[CEPH_NOSNAP];
-  ceph_assert(head_snapshot);
-
-  m_image_ctx->image_lock.lock();
-  m_image_ctx->size = head_snapshot->get_snap_info().size;
-  m_image_ctx->image_lock.unlock();
   on_finish->complete(0);
 }
 
