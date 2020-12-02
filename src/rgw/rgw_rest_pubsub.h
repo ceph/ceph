@@ -27,7 +27,6 @@ class RGWHandler_REST_PSTopic_AWS : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
   const std::string& post_body;
   void rgw_topic_parse_input();
-  //static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 protected:
   RGWOp* op_post() override;
 public:
