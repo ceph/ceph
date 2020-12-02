@@ -146,8 +146,6 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
                         mock_snapshot_interface, 0);
 
   expect_snapshot_open(*mock_snapshot_interface, 0);
-  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
@@ -230,8 +228,6 @@ TEST_F(TestMockMigrationRawFormat, GetSnapshots) {
                         mock_snapshot_interface, 0);
 
   expect_snapshot_open(*mock_snapshot_interface, 0);
-  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
@@ -264,9 +260,8 @@ TEST_F(TestMockMigrationRawFormat, GetImageSize) {
                         mock_snapshot_interface, 0);
 
   expect_snapshot_open(*mock_snapshot_interface, 0);
-  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
   expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
@@ -300,8 +295,6 @@ TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshotDNE) {
                         mock_snapshot_interface, 0);
 
   expect_snapshot_open(*mock_snapshot_interface, 0);
-  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
@@ -333,8 +326,6 @@ TEST_F(TestMockMigrationRawFormat, Read) {
                         mock_snapshot_interface, 0);
 
   expect_snapshot_open(*mock_snapshot_interface, 0);
-  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
   bufferlist expect_bl;
   expect_bl.append(std::string(123, '1'));
@@ -375,9 +366,8 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
                         mock_snapshot_interface, 0);
 
   expect_snapshot_open(*mock_snapshot_interface, 0);
-  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
   expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
   io::SparseExtents sparse_extents;
   sparse_extents.insert(0, 123, {io::SPARSE_EXTENT_STATE_DATA, 123});
@@ -420,9 +410,8 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsError) {
 
 
   expect_snapshot_open(*mock_snapshot_interface, 0);
-  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
 
+  SnapInfo snap_info{{}, {}, 123, {}, 0, 0, {}};
   expect_snapshot_get_info(*mock_snapshot_interface, snap_info);
   io::SparseExtents sparse_extents;
   sparse_extents.insert(0, 123, {io::SPARSE_EXTENT_STATE_DATA, 123});
@@ -473,8 +462,6 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsMerge) {
   expect_snapshot_open(*mock_snapshot_interface_head, 0);
 
   SnapInfo snap_info_head{{}, {}, 256, {}, 0, 0, {}};
-  expect_snapshot_get_info(*mock_snapshot_interface_head, snap_info_head);
-
   SnapInfo snap_info_1{snap_info_head};
   snap_info_1.size = 123;
   expect_snapshot_get_info(*mock_snapshot_interface_1, snap_info_1);
