@@ -92,6 +92,11 @@ void ImageCopyRequest<I>::map_src_objects(uint64_t dst_object,
 
 template <typename I>
 void ImageCopyRequest<I>::compute_diff() {
+  if (m_flatten) {
+    send_object_copies();
+    return;
+  }
+
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<
