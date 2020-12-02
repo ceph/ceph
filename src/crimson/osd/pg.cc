@@ -808,7 +808,7 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
       logger().debug("with_head_obc: found {} in cache", oid);
     } else {
       logger().debug("with_head_obc: cache miss on {}", oid);
-      loaded = obc->with_promoted_lock<RWState::RWEXCL>([this, obc] {
+      loaded = obc->with_promoted_lock<State>([this, obc] {
         return load_head_obc(obc);
       });
     }
@@ -841,7 +841,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
         logger().debug("with_clone_obc: found {} in cache", coid);
       } else {
         logger().debug("with_clone_obc: cache miss on {}", coid);
-        loaded = clone->template with_promoted_lock<RWState::RWEXCL>(
+        loaded = clone->template with_promoted_lock<State>(
           [coid, clone, head, this] {
           return backend->load_metadata(coid).safe_then(
             [coid, clone=std::move(clone), head=std::move(head)](auto md) mutable {
