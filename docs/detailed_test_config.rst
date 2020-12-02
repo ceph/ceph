@@ -227,6 +227,30 @@ global option can be set to true to make the unlocking happen unconditionally.
 Troubleshooting
 ===============
 
+Postmortem Debugging
+--------------------
+
+After completion of a test, the ``archive`` subdirectory is archived under
+the corresponding ``remote`` subdirectory. We can disable this behavior
+using the top-level configuration, like::
+
+  archive-on-error: true
+
+If ``archive-on-error`` is ``true``, the ``archive`` subdirectory is
+archived only for failed tests.
+
+If the size of the archived file exceeds 128MB, the file will be compressed
+using GZip. This threshold can be configured using the top-level option
+named ``log-compress-min-size``, like::
+
+  log-compress-min-size: 256GB
+
+Other size unit postfixes are also supported,
+see `humanfriendly document <https://pypi.org/project/humanfriendly/#a-note-about-size-units>`__
+for more details.
+
+Situ Debugging
+--------------
 Sometimes when a bug triggers, instead of automatic cleanup, you want
 to explore the system as is. Adding a top-level::
 

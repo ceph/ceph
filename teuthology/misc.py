@@ -7,6 +7,7 @@ import os
 import logging
 import configobj
 import getpass
+import shutil
 import socket
 import subprocess
 import tarfile
@@ -714,9 +715,24 @@ def get_file(remote, path, sudo=False, dest_dir='/tmp'):
     return file_data
 
 
-def pull_directory(remote, remotedir, localdir):
+def copy_fileobj(src, tarinfo, local_path):
+    with open(local_path, 'wb') as dest:
+        shutil.copyfileobj(src, dest)
+
+
+def pull_directory(remote, remotedir, localdir, write_to=copy_fileobj):
     """
     Copy a remote directory to a local directory.
+
+    :param remote: the remote object representing the remote host from where
+                   the specified directory is pulled
+    :param remotedir: the source directory on remote host
+    :param localdir: the destination directory on localhost
+    :param write_to: optional function to write the file to localdir.
+                     its signature should be:
+                     func(src: fileobj,
+                          tarinfo: tarfile.TarInfo,
+                          local_path: str)
     """
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localdir)
@@ -736,7 +752,8 @@ def pull_directory(remote, remotedir, localdir):
         elif ti.isfile():
             sub = safepath.munge(ti.name)
             safepath.makedirs(root=localdir, path=os.path.dirname(sub))
-            tar.makefile(ti, targetpath=os.path.join(localdir, sub))
+            with tar.extractfile(ti) as src:
+                write_to(src, ti, os.path.join(localdir, sub))
         else:
             if ti.isdev():
                 type_ = 'device'
