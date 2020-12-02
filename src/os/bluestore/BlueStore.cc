@@ -1128,7 +1128,14 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     --num_pinned;
     dout(20) << __func__ << this << " " << " " << " " << o->oid << " unpinned" << dendl;
   }
-
+  void _unpin_and_rm(BlueStore::Onode* o) override
+  {
+    o->pop_cache();
+    ceph_assert(num_pinned);
+    --num_pinned;
+    ceph_assert(num);
+    --num;
+  }
   void _trim_to(uint64_t new_size) override
   {
     if (new_size >= lru.size()) {
@@ -3576,7 +3583,13 @@ void BlueStore::Onode::put() {
       n = --nref;
     }
     if (cached && r) {
-      ocs->_unpin(this);
+      if (exists) {
+        ocs->_unpin(this);
+      } else {
+        ocs->_unpin_and_rm(this);
+        // remove will also decrement nref and delete Onode
+        c->onode_map._remove(oid);
+      }
     }
   }
   if (n == 0) {
