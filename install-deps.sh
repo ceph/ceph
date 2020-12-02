@@ -47,8 +47,6 @@ function munge_ceph_spec_in {
 function munge_debian_control {
     local version=$1
     shift
-    local with_seastar=$1
-    shift
     local control=$1
     case "$version" in
         *squeeze*|*wheezy*)
@@ -56,9 +54,6 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
-    if $with_seastar; then
-	sed -i -e 's/^# Crimson[[:space:]]//g' $control
-    fi
     echo $control
 }
 
@@ -294,7 +289,7 @@ else
         touch $DIR/status
 
 	backports=""
-	control=$(munge_debian_control "$VERSION" "$with_seastar" "debian/control")
+	control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
@@ -304,6 +299,9 @@ else
 	# make a metapackage that expresses the build dependencies,
 	# install it, rm the .deb; then uninstall the package as its
 	# work is done
+	if $with_seastar; then
+	    build_profiles+="pkg.ceph.crimson"
+	fi
 	if ! $for_make_check; then
 	    build_profiles+="nocheck"
 	fi
