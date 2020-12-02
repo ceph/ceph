@@ -1421,7 +1421,6 @@ OPTION(rgw_obj_stripe_size, OPT_INT)
 OPTION(rgw_extended_http_attrs, OPT_STR) // list of extended attrs that can be set on objects (beyond the default)
 OPTION(rgw_exit_timeout_secs, OPT_INT) // how many seconds to wait for process to go down before exiting unconditionally
 OPTION(rgw_get_obj_window_size, OPT_INT) // window size in bytes for single get obj request
-OPTION(rgw_get_obj_max_req_size, OPT_INT) // max length of a single get obj rados op
 OPTION(rgw_relaxed_s3_bucket_names, OPT_BOOL) // enable relaxed bucket name rules for US region buckets
 OPTION(rgw_defer_to_bucket_acls, OPT_STR) // if the user has bucket perms)
 OPTION(rgw_list_buckets_max_chunk, OPT_INT) // max buckets to retrieve in a single op when listing user buckets

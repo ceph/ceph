@@ -9,12 +9,19 @@
 #include "common/Formatter.h"
 
 #include "rgw/rgw_basic_types.h"
+#include "rgw/rgw_compression_types.h"
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
 #define CEPH_RGW_TAG_TIMEOUT 120
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
+
+#define RGW_ATTR_PREFIX  "user.rgw."
+#define RGW_CRYPT_BLOCK_SIZE 4096
+#define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
+#define RGW_ATTR_CRYPT_PREFIX   RGW_ATTR_PREFIX "crypt."
+#define RGW_ATTR_CRYPT_MODE     RGW_ATTR_CRYPT_PREFIX "mode"
 
 class JSONObj;
 

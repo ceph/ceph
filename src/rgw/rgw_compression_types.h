@@ -15,7 +15,10 @@
 
 #pragma once
 
-#include "rgw_common.h"
+#include <string>
+#include <vector>
+#include <boost/optional.hpp>
+#include "include/buffer.h"
 
 struct compression_block {
   uint64_t old_ofs;
@@ -38,14 +41,15 @@ struct compression_block {
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<compression_block*>& o);
 };
 WRITE_CLASS_ENCODER(compression_block)
 
 struct RGWCompressionInfo {
-  string compression_type;
+  std::string compression_type;
   uint64_t orig_size;
   boost::optional<int32_t> compressor_message;
-  vector<compression_block> blocks;
+  std::vector<compression_block> blocks;
 
   RGWCompressionInfo() : compression_type("none"), orig_size(0) {}
   RGWCompressionInfo(const RGWCompressionInfo& cs_info) : compression_type(cs_info.compression_type),
@@ -73,6 +77,7 @@ struct RGWCompressionInfo {
      DECODE_FINISH(bl);
   } 
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWCompressionInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCompressionInfo)
 

@@ -500,12 +500,6 @@ void RGWRadosObject::set_atomic(RGWObjectCtx *rctx) const
   store->getRados()->set_atomic(rctx, obj);
 }
 
-void RGWRadosObject::set_prefetch_data(RGWObjectCtx *rctx)
-{
-  rgw_obj obj = get_obj();
-  store->getRados()->set_prefetch_data(rctx, obj);
-}
-
 bool RGWRadosObject::is_expired() {
   auto iter = attrs.find(RGW_ATTR_DELETE_AT);
   if (iter != attrs.end()) {

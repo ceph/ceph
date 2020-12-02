@@ -15,32 +15,41 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <optional>
 
 using namespace librados;
 
-// creates a temporary pool and initializes an IoCtx shared by all tests
-class cls_rgw : public ::testing::Test {
-  static librados::Rados rados;
-  static std::string pool_name;
- protected:
-  static librados::IoCtx ioctx;
+// create/destroy a pool that's shared by all tests in the process
+struct RadosEnv : public ::testing::Environment {
+  static std::optional<std::string> pool_name;
+ public:
+  static Rados rados;
+  static IoCtx ioctx;
 
-  static void SetUpTestCase() {
-    pool_name = get_temp_pool_name();
-    /* create pool */
-    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  void SetUp() override {
+    // create pool
+    std::string name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(name, rados));
+    pool_name = name;
+    ASSERT_EQ(rados.ioctx_create(name.c_str(), ioctx), 0);
   }
-  static void TearDownTestCase() {
-    /* remove pool */
+  void TearDown() override {
     ioctx.close();
-    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+    if (pool_name) {
+      ASSERT_EQ(destroy_one_pool_pp(*pool_name, rados), 0);
+    }
   }
 };
-librados::Rados cls_rgw::rados;
-std::string cls_rgw::pool_name;
-librados::IoCtx cls_rgw::ioctx;
+std::optional<std::string> RadosEnv::pool_name;
+Rados RadosEnv::rados;
+IoCtx RadosEnv::ioctx;
 
+auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
+
+class cls_rgw : public ::testing::Test {
+ protected:
+  IoCtx& ioctx = RadosEnv::ioctx;
+};
 
 string str_int(string s, int i)
 {
@@ -51,7 +60,8 @@ string str_int(string s, int i)
   return s;
 }
 
-void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, uint64_t num_entries, uint64_t total_size)
+void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory category,
+                uint64_t num_entries, uint64_t total_size)
 {
   map<int, struct rgw_cls_list_ret> results;
   map<int, string> oids;
@@ -69,7 +79,7 @@ void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, ui
   ASSERT_EQ(num_entries, entries);
 }
 
-void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
+void index_prepare(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
                    string& tag, const cls_rgw_obj_key& key, string& loc,
                    uint16_t bi_flags = 0, bool log_op = true)
 {
@@ -79,7 +89,7 @@ void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
-void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
+void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
                     string& tag, int epoch, const cls_rgw_obj_key& key,
                     rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0,
                     bool log_op = true)
@@ -103,7 +113,7 @@ void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
 
 TEST_F(cls_rgw, index_basic)
 {
-  string bucket_oid = str_int("bucket", 0);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -135,7 +145,7 @@ TEST_F(cls_rgw, index_basic)
 
 TEST_F(cls_rgw, index_multiple_obj_writers)
 {
-  string bucket_oid = str_int("bucket", 1);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -171,7 +181,7 @@ TEST_F(cls_rgw, index_multiple_obj_writers)
 
 TEST_F(cls_rgw, index_remove_object)
 {
-  string bucket_oid = str_int("bucket", 2);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -262,7 +272,7 @@ TEST_F(cls_rgw, index_remove_object)
 
 TEST_F(cls_rgw, index_suggest)
 {
-  string bucket_oid = str_int("bucket", 3);
+  const string bucket_oid = __PRETTY_FUNCTION__;
   {
     ObjectWriteOperation op;
     cls_rgw_bucket_init_index(op);
@@ -374,7 +384,7 @@ TEST_F(cls_rgw, index_suggest)
  */
 TEST_F(cls_rgw, index_list)
 {
-  string bucket_oid = str_int("bucket", 4);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -450,7 +460,7 @@ TEST_F(cls_rgw, index_list)
  */
 TEST_F(cls_rgw, index_list_delimited)
 {
-  string bucket_oid = str_int("bucket", 7);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -553,7 +563,7 @@ TEST_F(cls_rgw, index_list_delimited)
 
 TEST_F(cls_rgw, bi_list)
 {
-  string bucket_oid = str_int("bucket", 5);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
  CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
 
@@ -675,7 +685,7 @@ static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 TEST_F(cls_rgw, gc_set)
 {
   /* add chains */
-  string oid = "obj";
+  string oid = __PRETTY_FUNCTION__;
   for (int i = 0; i < 10; i++) {
     char buf[32];
     snprintf(buf, sizeof(buf), "chain-%d", i);
@@ -751,7 +761,7 @@ TEST_F(cls_rgw, gc_set)
 TEST_F(cls_rgw, gc_list)
 {
   /* add chains */
-  string oid = "obj";
+  string oid = __PRETTY_FUNCTION__;
   for (int i = 0; i < 10; i++) {
     char buf[32];
     snprintf(buf, sizeof(buf), "chain-%d", i);
@@ -828,15 +838,7 @@ TEST_F(cls_rgw, gc_list)
 
 TEST_F(cls_rgw, gc_defer)
 {
-  librados::IoCtx ioctx;
-  librados::Rados rados;
-
-  string gc_pool_name = get_temp_pool_name();
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(gc_pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(gc_pool_name.c_str(), ioctx));
-
-  string oid = "obj";
+  string oid = __PRETTY_FUNCTION__;
   string tag = "mychain";
 
   librados::ObjectWriteOperation op;
@@ -899,10 +901,6 @@ TEST_F(cls_rgw, gc_defer)
   ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
-
-  /* remove pool */
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(gc_pool_name, rados));
 }
 
 auto populate_usage_log_info(std::string user, std::string payer, int total_usage_entries)
@@ -930,7 +928,7 @@ auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_e
 
 TEST_F(cls_rgw, usage_basic)
 {
-  string oid="usage.1";
+  const string oid = __PRETTY_FUNCTION__;
   string user="user1";
   uint64_t start_epoch{0}, end_epoch{(uint64_t) -1};
   int total_usage_entries = 512;
@@ -1027,7 +1025,7 @@ TEST_F(cls_rgw, usage_clear)
   ASSERT_EQ(0u, usage.size());
 }
 
-static int bilog_list(librados::IoCtx& ioctx, const std::string& oid,
+static int bilog_list(IoCtx& ioctx, const std::string& oid,
                       cls_rgw_bi_log_list_ret *result)
 {
   int retcode = 0;
@@ -1040,7 +1038,7 @@ static int bilog_list(librados::IoCtx& ioctx, const std::string& oid,
   return retcode;
 }
 
-static int bilog_trim(librados::IoCtx& ioctx, const std::string& oid,
+static int bilog_trim(IoCtx& ioctx, const std::string& oid,
                       const std::string& start_marker,
                       const std::string& end_marker)
 {
@@ -1051,7 +1049,7 @@ static int bilog_trim(librados::IoCtx& ioctx, const std::string& oid,
 
 TEST_F(cls_rgw, bi_log_trim)
 {
-  string bucket_oid = str_int("bucket", 6);
+  const string bucket_oid = __PRETTY_FUNCTION__;
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -1139,5 +1137,287 @@ TEST_F(cls_rgw, bi_log_trim)
                                  &entries, &truncated));
     EXPECT_EQ(40u, entries.size());
     EXPECT_FALSE(truncated);
+  }
+}
+
+// cls_rgw_head_prefetch
+TEST_F(cls_rgw, head_prefetch_full)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 0xffffffffffffffff;
+  constexpr uint64_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    // initialize uncompressed head object
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_less_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 48;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(prefetch_length, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_more_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 96;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+// compress at 50% ratio with the given block size
+static bufferlist make_compression_attr(uint64_t orig_size, uint64_t block_size)
+{
+  std::vector<compression_block> blocks;
+  uint64_t logical_offset = 0;
+  uint64_t compressed_offset = 0;
+  uint64_t remaining = orig_size;
+  while (remaining) {
+    const uint64_t logical_length = std::min(block_size, remaining);
+    const uint64_t compressed_length = logical_length / 2;
+    blocks.push_back({logical_offset, compressed_offset, compressed_length});
+    logical_offset += logical_length;
+    compressed_offset += compressed_length;
+    remaining -= logical_length;
+  }
+
+  RGWCompressionInfo info;
+  info.compression_type = "test";
+  info.orig_size = orig_size;
+  info.blocks = std::move(blocks);
+
+  bufferlist bl;
+  encode(info, bl);
+  return bl;
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_full)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 0xffffffffffffffff;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    // initialize compressed head object
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_full_with_xattrs)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 0xffffffffffffffff;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    // initialize compressed head object
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    op.setxattr("user.rgw.getxattrs", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    std::map<std::string, bufferlist> xattrs;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, &xattrs);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+    EXPECT_EQ(2, xattrs.size());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_less_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 96; // compressed to 48
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(48, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_more_than_chunk)
+{
+  constexpr uint64_t prefetch_offset = 0;
+  constexpr uint64_t prefetch_length = 160; // compressed to 80
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(prefetch_offset, offset);
+    EXPECT_EQ(chunk_size, data.length());
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_offset_off_boundary)
+{
+  constexpr uint64_t prefetch_offset = 36;
+  constexpr uint64_t prefetch_length = 61; // just enough to span an extra block
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(16, offset); // block boundary before 36
+    EXPECT_EQ(48, data.length()); // round up to 3 compressed blocks
+  }
+}
+
+TEST_F(cls_rgw, head_prefetch_compressed_single_block_off_boundary)
+{
+  constexpr uint64_t prefetch_offset = 36;
+  constexpr uint64_t prefetch_length = 1;
+  constexpr size_t chunk_size = 64;
+
+  const string oid = __PRETTY_FUNCTION__;
+  {
+    bufferlist data;
+    data.append_zero(chunk_size);
+    ObjectWriteOperation op;
+    op.write(0, data);
+    op.setxattr("user.rgw.compression", make_compression_attr(1024, 32));
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+  {
+    ObjectReadOperation op;
+    int ret = 0;
+    uint64_t offset = 0;
+    bufferlist data;
+    cls_rgw_head_prefetch(op, prefetch_offset, prefetch_length,
+                          chunk_size, &ret, &offset, &data, nullptr);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, 0));
+    EXPECT_EQ(16, offset); // block boundary before 36
+    EXPECT_EQ(16, data.length()); // round up to 1 compressed block
   }
 }

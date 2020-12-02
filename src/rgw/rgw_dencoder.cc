@@ -616,3 +616,14 @@ void obj_version::generate_test_instances(list<obj_version*>& o)
   o.push_back(v);
   o.push_back(new obj_version);
 }
+
+void compression_block::generate_test_instances(list<compression_block*>& o)
+{
+    o.push_back(new compression_block);
+}
+
+void RGWCompressionInfo::generate_test_instances(list<RGWCompressionInfo*>& o)
+{
+    o.push_back(new RGWCompressionInfo);
+}
+

@@ -61,15 +61,10 @@ public:
 
 
 class BlockCryptNone: public BlockCrypt {
-  size_t block_size = 256;
 public:
   BlockCryptNone(){};
-  BlockCryptNone(size_t sz) : block_size(sz) {}
   virtual ~BlockCryptNone(){};
-  size_t get_block_size() override
-  {
-    return block_size;
-  }
+
   bool encrypt(bufferlist& input,
                        off_t in_ofs,
                        size_t size,
@@ -115,7 +110,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity)
     auto aes(AES_256_CBC_create(g_ceph_context, &key[0], 32));
     ASSERT_NE(aes.get(), nullptr);
 
-    size_t block_size = aes->get_block_size();
+    size_t block_size = RGW_CRYPT_BLOCK_SIZE;
     ASSERT_NE(block_size, 0u);
 
     for (size_t r = 97; r < 123 ; r++)
@@ -167,7 +162,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_2)
     auto aes(AES_256_CBC_create(g_ceph_context, &key[0], 32));
     ASSERT_NE(aes.get(), nullptr);
 
-    size_t block_size = aes->get_block_size();
+    size_t block_size = RGW_CRYPT_BLOCK_SIZE;
     ASSERT_NE(block_size, 0u);
 
     for (off_t end = 1; end < 6096 ; end+=3)
@@ -215,7 +210,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_3)
     auto aes(AES_256_CBC_create(g_ceph_context, &key[0], 32));
     ASSERT_NE(aes.get(), nullptr);
 
-    size_t block_size = aes->get_block_size();
+    size_t block_size = RGW_CRYPT_BLOCK_SIZE;
     ASSERT_NE(block_size, 0u);
     size_t rr = 111;
     for (size_t r = 97; r < 123 ; r++)
@@ -292,7 +287,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_size_0_15)
     auto aes(AES_256_CBC_create(g_ceph_context, &key[0], 32));
     ASSERT_NE(aes.get(), nullptr);
 
-    size_t block_size = aes->get_block_size();
+    size_t block_size = RGW_CRYPT_BLOCK_SIZE;
     ASSERT_NE(block_size, 0u);
     for (size_t r = 97; r < 123 ; r++)
     {
@@ -341,7 +336,7 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_last_block)
     auto aes(AES_256_CBC_create(g_ceph_context, &key[0], 32));
     ASSERT_NE(aes.get(), nullptr);
 
-    size_t block_size = aes->get_block_size();
+    size_t block_size = RGW_CRYPT_BLOCK_SIZE;
     ASSERT_NE(block_size, 0u);
     size_t rr = 111;
     for (size_t r = 97; r < 123 ; r++)
@@ -513,12 +508,13 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup)
   auto nonecrypt = std::unique_ptr<BlockCrypt>(new BlockCryptNone);
   RGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
                                  std::move(nonecrypt));
-  ASSERT_EQ(fixup_range(&decrypt,0,0),     range_t(0,255));
-  ASSERT_EQ(fixup_range(&decrypt,1,256),   range_t(0,511));
-  ASSERT_EQ(fixup_range(&decrypt,0,255),   range_t(0,255));
-  ASSERT_EQ(fixup_range(&decrypt,255,256), range_t(0,511));
-  ASSERT_EQ(fixup_range(&decrypt,511,1023), range_t(256,1023));
-  ASSERT_EQ(fixup_range(&decrypt,513,1024), range_t(512,1024+255));
+  auto block_size = RGW_CRYPT_BLOCK_SIZE;
+  ASSERT_EQ(fixup_range(&decrypt,0,0),     range_t(0,block_size-1));
+  ASSERT_EQ(fixup_range(&decrypt,1,block_size),   range_t(0,block_size*2-1));
+  ASSERT_EQ(fixup_range(&decrypt,0,block_size-1),   range_t(0,block_size-1));
+  ASSERT_EQ(fixup_range(&decrypt,block_size-1,block_size), range_t(0,block_size*2-1));
+  ASSERT_EQ(fixup_range(&decrypt,block_size*2-1,block_size*4-1), range_t(block_size,block_size*4-1));
+  ASSERT_EQ(fixup_range(&decrypt,block_size*2+1,block_size*4), range_t(block_size*2,block_size*5-1));
 }
 
 using parts_len_t = std::vector<size_t>;
@@ -551,7 +547,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_simple)
 {
 
   ut_get_sink get_sink;
-  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  auto nonecrypt = std::make_unique<BlockCryptNone>();
   TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
 				     std::move(nonecrypt));
   decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
@@ -581,7 +577,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_obj_size)
 {
 
   ut_get_sink get_sink;
-  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  auto nonecrypt = std::make_unique<BlockCryptNone>();
   TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
 				     std::move(nonecrypt));
   auto na_obj_size = obj_size + 1;
@@ -608,7 +604,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_part_size)
 {
 
   ut_get_sink get_sink;
-  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  auto nonecrypt = std::make_unique<BlockCryptNone>();
   TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
 				     std::move(nonecrypt));
   auto na_part_size = part_size + 1;
@@ -641,7 +637,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned)
 {
 
   ut_get_sink get_sink;
-  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  auto nonecrypt = std::make_unique<BlockCryptNone>();
   TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
 				     std::move(nonecrypt));
   auto na_part_size = part_size + 1;
@@ -670,7 +666,7 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_invalid_ranges)
 {
 
   ut_get_sink get_sink;
-  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  auto nonecrypt = std::make_unique<BlockCryptNone>();
   TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
 				     std::move(nonecrypt));
 
