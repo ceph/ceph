@@ -1,9 +1,10 @@
 import { Location } from '@angular/common';
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { FormGroup, NgForm } from '@angular/forms';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { ModalService } from '~/app/shared/services/modal.service';
+import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 
 @Component({
   selector: 'cd-form-button-panel',
@@ -11,6 +12,9 @@ import { ModalService } from '~/app/shared/services/modal.service';
   styleUrls: ['./form-button-panel.component.scss']
 })
 export class FormButtonPanelComponent {
+  @ViewChild(SubmitButtonComponent)
+  submitButton: SubmitButtonComponent;
+
   @Output()
   submitActionEvent = new EventEmitter();
   @Output()
