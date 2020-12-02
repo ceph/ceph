@@ -71,7 +71,8 @@ struct RawSnapshot<I>::OpenRequest {
 
   void handle_get_image_size(int r) {
     auto cct = raw_snapshot->m_image_ctx->cct;
-    ldout(cct, 10) << "r=" << r << dendl;
+    ldout(cct, 10) << "r=" << r << ", "
+                   << "image_size=" << raw_snapshot->m_snap_info.size << dendl;
 
     if (r < 0) {
       lderr(cct) << "failed to open stream: " << cpp_strerror(r) << dendl;
@@ -130,7 +131,6 @@ template <typename I>
 void RawSnapshot<I>::open(SnapshotInterface* previous_snapshot,
                           Context* on_finish) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
 
   // special-case for treating the HEAD revision as a snapshot
   if (m_index != CEPH_NOSNAP) {
@@ -148,6 +148,8 @@ void RawSnapshot<I>::open(SnapshotInterface* previous_snapshot,
       return;
     }
   }
+
+  ldout(cct, 10) << "name=" << m_snap_info.name << dendl;
 
   int r = m_source_spec_builder->build_stream(m_json_object, &m_stream);
   if (r < 0) {
