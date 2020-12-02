@@ -140,8 +140,8 @@ private:
 private:
   void tick();
 
-  std::tuple<bool, seastar::future<>> ms_dispatch(crimson::net::ConnectionRef conn,
-                                                  MessageRef m) override;
+  std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef conn,
+                                               MessageRef m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
   seastar::future<> handle_monmap(crimson::net::ConnectionRef conn,

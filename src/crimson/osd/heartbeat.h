@@ -48,7 +48,7 @@ public:
   void set_require_authorizer(bool);
 
   // Dispatcher methods
-  std::tuple<bool, seastar::future<>> ms_dispatch(
+  std::optional<seastar::future<>> ms_dispatch(
       crimson::net::ConnectionRef conn, MessageRef m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
   void ms_handle_connect(crimson::net::ConnectionRef conn) override;

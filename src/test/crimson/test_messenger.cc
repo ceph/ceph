@@ -57,14 +57,14 @@ static seastar::future<> test_echo(unsigned rounds,
       crimson::net::MessengerRef msgr;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef c, MessageRef m) override {
         if (verbose) {
           logger().info("server got {}", *m);
         }
         // reply with a pong
         std::ignore = c->send(make_message<MPing>());
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
       seastar::future<> init(const entity_name_t& name,
@@ -127,7 +127,7 @@ static seastar::future<> test_echo(unsigned rounds,
         ceph_assert(added);
         session->connected_time = mono_clock::now();
       }
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef c, MessageRef m) override {
         auto session = find_session(c);
         ++(session->count);
@@ -142,7 +142,7 @@ static seastar::future<> test_echo(unsigned rounds,
           ceph_assert(found != pending_conns.end());
           found->second.set_value();
         }
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
       seastar::future<> init(const entity_name_t& name,
@@ -277,7 +277,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
       seastar::promise<> on_done; // satisfied when first dispatch unblocks
       crimson::auth::DummyAuthClientServer dummy_auth;
 
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef, MessageRef m) override {
         switch (++count) {
         case 1:
@@ -290,7 +290,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
         default:
           throw std::runtime_error("unexpected count");
         }
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
       seastar::future<> wait() { return on_done.get_future(); }
@@ -319,9 +319,9 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
       crimson::net::MessengerRef msgr;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef, MessageRef m) override {
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
       seastar::future<> init(const entity_name_t& name,
@@ -378,10 +378,10 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       crimson::net::MessengerRef msgr;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef c, MessageRef m) override {
         std::ignore = c->send(make_message<MPing>());
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
      public:
@@ -419,9 +419,9 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       bool stop_send = false;
       seastar::promise<> stopped_send_promise;
 
-      std::tuple<bool, seastar::future<>> ms_dispatch(
+      std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef, MessageRef m) override {
-        return {true, seastar::now()};
+        return {seastar::now()};
       }
 
      public:
@@ -813,7 +813,7 @@ class FailoverSuite : public Dispatcher {
   unsigned pending_peer_receive = 0;
   unsigned pending_receive = 0;
 
-  std::tuple<bool, seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
+  std::optional<seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
     auto result = interceptor.find_result(c);
     if (result == nullptr) {
       logger().error("Untracked ms dispatched connection: {}", *c);
@@ -835,7 +835,7 @@ class FailoverSuite : public Dispatcher {
     }
     logger().info("[Test] got op, left {} ops -- [{}] {}",
                   pending_receive, result->index, *c);
-    return {true, seastar::now()};
+    return {seastar::now()};
   }
 
   void ms_handle_accept(ConnectionRef conn) override {
@@ -1209,7 +1209,7 @@ class FailoverTest : public Dispatcher {
 
   std::unique_ptr<FailoverSuite> test_suite;
 
-  std::tuple<bool, seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
+  std::optional<seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
     switch (m->get_type()) {
      case CEPH_MSG_PING:
       ceph_assert(recv_pong);
@@ -1232,7 +1232,7 @@ class FailoverTest : public Dispatcher {
       logger().error("{} got unexpected msg from cmd server: {}", *c, *m);
       ceph_abort();
     }
-    return {true, seastar::now()};
+    return {seastar::now()};
   }
 
  private:
@@ -1407,12 +1407,12 @@ class FailoverSuitePeer : public Dispatcher {
   ConnectionRef tracked_conn;
   unsigned pending_send = 0;
 
-  std::tuple<bool, seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
+  std::optional<seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
     logger().info("[TestPeer] got op from Test");
     ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
     ceph_assert(tracked_conn == c);
     std::ignore = op_callback();
-    return {true, seastar::now()};
+    return {seastar::now()};
   }
 
   void ms_handle_accept(ConnectionRef conn) override {
@@ -1537,7 +1537,7 @@ class FailoverTestPeer : public Dispatcher {
   const entity_addr_t test_peer_addr;
   std::unique_ptr<FailoverSuitePeer> test_suite;
 
-  std::tuple<bool, seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
+  std::optional<seastar::future<>> ms_dispatch(ConnectionRef c, MessageRef m) override {
     ceph_assert(cmd_conn == c);
     switch (m->get_type()) {
      case CEPH_MSG_PING:
@@ -1562,7 +1562,7 @@ class FailoverTestPeer : public Dispatcher {
       logger().error("{} got unexpected msg from cmd client: {}", *c, m);
       ceph_abort();
     }
-    return {true, seastar::now()};
+    return {seastar::now()};
   }
 
   void ms_handle_accept(ConnectionRef conn) override {

@@ -614,11 +614,11 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   });
 }
 
-std::tuple<bool, seastar::future<>>
+std::optional<seastar::future<>>
 OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
   if (state.is_stopping()) {
-    return {false, seastar::now()};
+    return {};
   }
   bool dispatched = true;
   gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
@@ -678,7 +678,7 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
       return seastar::now();
     }
   });
-  return {dispatched, seastar::now()};
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
 void OSD::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
