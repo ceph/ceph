@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <boost/container/small_vector.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -38,7 +39,10 @@ using stop_t = seastar::stop_iteration;
 class Connection;
 using ConnectionRef = seastar::shared_ptr<Connection>;
 
+class Dispatcher;
 class ChainedDispatchers;
+constexpr std::size_t NUM_DISPATCHERS = 4u;
+using dispatchers_t = boost::container::small_vector<Dispatcher*, NUM_DISPATCHERS>;
 
 class Messenger;
 using MessengerRef = seastar::shared_ptr<Messenger>;

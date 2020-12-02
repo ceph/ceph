@@ -77,7 +77,7 @@ static seastar::future<> test_echo(unsigned rounds,
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
         return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
-          return msgr->start(*this);
+          return msgr->start({this});
         }, crimson::net::Messenger::bind_ertr::all_same_way(
             [addr] (const std::error_code& e) {
           logger().error("test_echo(): "
@@ -152,7 +152,7 @@ static seastar::future<> test_echo(unsigned rounds,
         msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
-        return msgr->start(*this);
+        return msgr->start({this});
       }
 
       seastar::future<> shutdown() {
@@ -304,7 +304,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
         return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
-          return msgr->start(*this);
+          return msgr->start({this});
         }, crimson::net::Messenger::bind_ertr::all_same_way(
             [addr] (const std::error_code& e) {
           logger().error("test_concurrent_dispatch(): "
@@ -331,7 +331,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
         msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
-        return msgr->start(*this);
+        return msgr->start({this});
       }
     };
   };
@@ -394,7 +394,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
         return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
-          return msgr->start(*this);
+          return msgr->start({this});
         }, crimson::net::Messenger::bind_ertr::all_same_way(
             [addr] (const std::error_code& e) {
           logger().error("test_preemptive_shutdown(): "
@@ -432,7 +432,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
         msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
-        return msgr->start(*this);
+        return msgr->start({this});
       }
       void send_pings(const entity_addr_t& addr) {
         auto conn = msgr->connect(addr, entity_name_t::TYPE_OSD);
@@ -927,7 +927,7 @@ class FailoverSuite : public Dispatcher {
     test_msgr->set_auth_server(&dummy_auth);
     test_msgr->interceptor = &interceptor;
     return test_msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
-      return test_msgr->start(*this);
+      return test_msgr->start({this});
     }, Messenger::bind_ertr::all_same_way([addr] (const std::error_code& e) {
       logger().error("FailoverSuite: "
                      "there is another instance running at {}", addr);
@@ -1276,7 +1276,7 @@ class FailoverTest : public Dispatcher {
     cmd_msgr->set_default_policy(SocketPolicy::lossy_client(0));
     cmd_msgr->set_auth_client(&dummy_auth);
     cmd_msgr->set_auth_server(&dummy_auth);
-    return cmd_msgr->start(*this).then([this, cmd_peer_addr] {
+    return cmd_msgr->start({this}).then([this, cmd_peer_addr] {
       logger().info("CmdCli connect to CmdSrv({}) ...", cmd_peer_addr);
       cmd_conn = cmd_msgr->connect(cmd_peer_addr, entity_name_t::TYPE_OSD);
       return pingpong();
@@ -1436,7 +1436,7 @@ class FailoverSuitePeer : public Dispatcher {
     peer_msgr->set_auth_client(&dummy_auth);
     peer_msgr->set_auth_server(&dummy_auth);
     return peer_msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
-      return peer_msgr->start(*this);
+      return peer_msgr->start({this});
     }, Messenger::bind_ertr::all_same_way([addr] (const std::error_code& e) {
       logger().error("FailoverSuitePeer: "
                      "there is another instance running at {}", addr);
@@ -1620,7 +1620,7 @@ class FailoverTestPeer : public Dispatcher {
     cmd_msgr->set_auth_client(&dummy_auth);
     cmd_msgr->set_auth_server(&dummy_auth);
     return cmd_msgr->bind(entity_addrvec_t{cmd_peer_addr}).safe_then([this] {
-      return cmd_msgr->start(*this);
+      return cmd_msgr->start({this});
     }, Messenger::bind_ertr::all_same_way([cmd_peer_addr] (const std::error_code& e) {
       logger().error("FailoverTestPeer: "
                      "there is another instance running at {}", cmd_peer_addr);

@@ -122,7 +122,8 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
   });
 }
 
-seastar::future<> SocketMessenger::start(const std::list<Dispatcher*>& _dispatchers) {
+seastar::future<> SocketMessenger::start(
+    const dispatchers_t& _dispatchers) {
   assert(seastar::this_shard_id() == master_sid);
 
   dispatchers.assign(_dispatchers);
