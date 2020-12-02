@@ -9,7 +9,7 @@ For hardware recommendations, see :ref:`hardware-recommendations` .
 
 .. note::
     On iSCSI gateway nodes the memory footprint is a function of
-    of the RBD images mapped and can grow to be largee. Plan memory
+    of the RBD images mapped and can grow to be large. Plan memory
     requirements accordingly based on the number RBD images to be mapped.
 
 There are no specific iSCSI gateway options for the Ceph Monitors or
