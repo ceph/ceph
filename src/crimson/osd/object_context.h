@@ -173,10 +173,8 @@ public:
       return false;
     }
   }
-  seastar::future<> wait_recovery_read() {
-    return lock.lock_for_read().then([this] {
-      recovery_read_marker = true;
-    });
+  void wait_recovery_read() {
+    recovery_read_marker = true;
   }
   void drop_recovery_read() {
     assert(recovery_read_marker);
