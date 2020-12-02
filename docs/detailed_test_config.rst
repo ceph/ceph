@@ -239,6 +239,15 @@ using the top-level configuration, like::
 If ``archive-on-error`` is ``true``, the ``archive`` subdirectory is
 archived only for failed tests.
 
+If the size of the archived file exceeds 128MB, the file will be compressed
+using GZip. This threshold can be configured using the top-level option
+named ``log-compress-min-size``, like::
+
+  log-compress-min-size: 256GB
+
+Other size unit postfixes are also supported,
+see `humanfriendly document <https://pypi.org/project/humanfriendly/#a-note-about-size-units>`__
+for more details.
 
 Situ Debugging
 --------------
