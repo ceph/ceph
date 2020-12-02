@@ -126,7 +126,8 @@ auto ReplicatedRecoveryBackend::load_obc_for_recovery(
   return pg.with_head_obc<RWState::RWREAD>(soid, [&recovery_waiter](auto obc) {
     logger().debug("load_obc_for_recovery: loaded obc: {}", obc->obs.oi.soid);
     recovery_waiter.obc = obc;
-    return recovery_waiter.obc->wait_recovery_read();
+    recovery_waiter.obc->wait_recovery_read();
+    return seastar::now();
   });
 }
 
