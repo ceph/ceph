@@ -373,7 +373,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
    */
   getSelectedOsdIds(): number[] {
     const osdIds = this.osds.map((osd) => osd.id);
-    return this.selection.selected.map((row) => row.id).filter((id) => osdIds.includes(id));
+    return this.selection.selected
+      .map((row) => row.id)
+      .filter((id) => osdIds.includes(id))
+      .sort();
   }
 
   getSelectedOsds(): any[] {
@@ -483,12 +486,14 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
+    const osdIds = this.getSelectedOsdIds();
     this.bsModalRef = this.modalService.show(ConfirmationModalComponent, {
       titleText: $localize`Mark OSD ${markAction}`,
       buttonText: $localize`Mark ${markAction}`,
       bodyTpl: this.markOsdConfirmationTpl,
       bodyContext: {
-        markActionDescription: markAction
+        markActionDescription: markAction,
+        osdIds
       },
       onSubmit: () => {
         observableForkJoin(
