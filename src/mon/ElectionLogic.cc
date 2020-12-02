@@ -171,6 +171,8 @@ void ElectionLogic::end_election_period()
   if (electing_me &&
       acked_me.size() > (elector->paxos_size() / 2)) {
     // i win
+    // Note:
+    //   receive_ack may also declare_victory
     declare_victory();
   } else {
     // whoever i deferred to didn't declare victory quickly enough.
@@ -467,6 +469,9 @@ void ElectionLogic::receive_ack(int acceptor_rank, epoch_t acceptor_epoch)
     acked_me.insert(acceptor_rank);
     if (acked_me.size() == elector->paxos_size()) {
       // if yes, shortcut to election finish
+      // Note:
+      //    there's election timeout event expire_event which
+      //    could also declare_victory.
       declare_victory();
     }
   } else {

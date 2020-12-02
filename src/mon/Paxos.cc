@@ -795,6 +795,12 @@ void Paxos::handle_accept(MonOpRequestRef op)
   // only commit (and expose committed state) when we get *all* quorum
   // members to accept.  otherwise, they may still be sharing the now
   // stale state.
+  // Note:
+  //    For Ceph, leader needs all quorum's accept to propose which is
+  //    different from normal Paxos.
+  //    The timeout event is registered after sending MMonPaxos::OP_BEGIN
+  //    If we don't receive all the quorum's accept in limited time, the
+  //    timeout event will be triggered.
   // FIXME: we can improve this with an additional lease revocation message
   // that doesn't block for the persist.
   if (accepted == mon.get_quorum()) {
