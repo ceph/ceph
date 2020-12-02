@@ -3,7 +3,7 @@
 
 #include "seastore.h"
 
-#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_visitor.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_accessor.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/stages/node_stage_layout.h"
 
 namespace {
