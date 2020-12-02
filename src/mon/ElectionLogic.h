@@ -279,13 +279,13 @@ public:
    * of the underlying data and delete it as needed.
    *
    * @pre   Message epoch is from the current or a newer epoch
-   * @param mepoch The epoch of the proposal
-   * @param from The rank proposing itself as leader
+   * @param proposer_rank The rank proposing itself as leader
+   * @param proposer_epoch The epoch of the proposal
    * @param ct Any incoming ConnectionTracker data sent with the message.
    *  Callers are responsible for deleting this -- we will copy it if we want
    *  to keep the data.
    */
-  void receive_propose(int from, epoch_t mepoch, const ConnectionTracker *ct);
+  void receive_propose(int proposer_rank, epoch_t proposer_epoch, const ConnectionTracker *ct);
   /**
    * Handle a message from some other participant Acking us as the Leader.
    *
@@ -367,7 +367,7 @@ private:
    * it comes from an out-of-quorum peer, trigger a new eleciton.
    * @returns true if you should drop this proposal, false otherwise.
    */
-  bool propose_classic_prefix(int from, epoch_t mepoch);
+  bool propose_classic_prefix(int proposer_rank, epoch_t proposer_epoch);
   /**
    * Handle a proposal from another rank using the classic strategy.
    * We will take one of the following actions:
@@ -377,13 +377,13 @@ private:
    *  @li Defer to it because it outranks us and the node we previously
    *	  acked, if any
    */
-  void propose_classic_handler(int from, epoch_t mepoch);
+  void propose_classic_handler(int proposer_rank, epoch_t proposer_epoch);
   /**
    * Handle a proposal from another rank using our disallow strategy.
    * This is the same as the classic strategy except we also disallow
    * certain ranks from becoming the leader.
    */
-  void propose_disallow_handler(int from, epoch_t mepoch);
+  void propose_disallow_handler(int proposer_rank, epoch_t proposer_epoch);
   /**
    * Handle a proposal from another rank using the connectivity strategy.
    * We will choose to defer or not based on the ordered criteria:
@@ -392,7 +392,7 @@ private:
    * @li Whether the other monitor or ourself has the most connectivity to peers
    * @li Whether the other monitor or ourself has the lower rank
    */
-  void propose_connectivity_handler(int from, epoch_t mepoch, const ConnectionTracker *ct);
+  void propose_connectivity_handler(int proposer_rank, epoch_t proposer_epoch, const ConnectionTracker *ct);
   /**
    * Helper function for connectivity handler. Combines the disallowed list
    * with ConnectionTracker scores.

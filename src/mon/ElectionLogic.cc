@@ -198,17 +198,17 @@ void ElectionLogic::declare_victory()
   elector->message_victory(new_quorum);
 }
 
-bool ElectionLogic::propose_classic_prefix(int from, epoch_t mepoch)
+bool ElectionLogic::propose_classic_prefix(int proposer_rank, epoch_t proposer_epoch)
 {
-  if (mepoch > epoch) {
-    bump_epoch(mepoch);
-  } else if (mepoch < epoch) {
+  if (proposer_epoch > epoch) {
+    bump_epoch(proposer_epoch);
+  } else if (proposer_epoch < epoch) {
     // got an "old" propose,
     if (epoch % 2 == 0 &&    // in a non-election cycle
-	!elector->is_current_member(from)) {  // from someone outside the quorum
+	!elector->is_current_member(proposer_rank)) {  // from someone outside the quorum
       // a mon just started up, call a new election so they can rejoin!
       ldout(cct, 5) << " got propose from old epoch, "
-	      << from << " must have just started" << dendl;
+	      << proposer_rank << " must have just started" << dendl;
       // we may be active; make sure we reset things in the monitor appropriately.
       elector->trigger_new_election();
     } else {
@@ -219,48 +219,48 @@ bool ElectionLogic::propose_classic_prefix(int from, epoch_t mepoch)
   return false;
 }
 
-void ElectionLogic::receive_propose(int from, epoch_t mepoch,
+void ElectionLogic::receive_propose(int proposer_rank, epoch_t proposer_epoch,
 				    const ConnectionTracker *ct)
 {
-  if (from == elector->get_my_rank()) {
+  if (proposer_rank == elector->get_my_rank()) {
     lderr(cct) << "I got a propose from my own rank, hopefully this is startup weirdness,dropping" << dendl;
     return;
   }
   switch (strategy) {
   case CLASSIC:
-    propose_classic_handler(from, mepoch);
+    propose_classic_handler(proposer_rank, proposer_epoch);
     break;
   case DISALLOW:
-    propose_disallow_handler(from, mepoch);
+    propose_disallow_handler(proposer_rank, proposer_epoch);
     break;
   case CONNECTIVITY:
-    propose_connectivity_handler(from, mepoch, ct);
+    propose_connectivity_handler(proposer_rank, proposer_epoch, ct);
     break;
   default:
     ceph_assert(0 == "how did election strategy become an invalid value?");
   }
 }
 
-void ElectionLogic::propose_disallow_handler(int from, epoch_t mepoch)
+void ElectionLogic::propose_disallow_handler(int proposer_rank, epoch_t proposer_epoch)
 {
-  if (propose_classic_prefix(from, mepoch)) {
+  if (propose_classic_prefix(proposer_rank, proposer_epoch)) {
     return;
   }
   const set<int>& disallowed_leaders = elector->get_disallowed_leaders();
   int my_rank = elector->get_my_rank();
   bool me_disallowed = disallowed_leaders.count(my_rank);
-  bool from_disallowed = disallowed_leaders.count(from);
+  bool proposer_rank_disallowed = disallowed_leaders.count(proposer_rank);
   bool my_win = !me_disallowed && // we are allowed to lead
-    (my_rank < from || from_disallowed); // we are a better choice than them
-  bool their_win = !from_disallowed && // they are allowed to lead
-    (my_rank > from || me_disallowed) && // they are a better choice than us
-    (leader_acked < 0 || leader_acked >= from); // they are a better choice than our previously-acked choice
+    (my_rank < proposer_rank || proposer_rank_disallowed); // we are a better choice than them
+  bool their_win = !proposer_rank_disallowed && // they are allowed to lead
+    (my_rank > proposer_rank || me_disallowed) && // they are a better choice than us
+    (leader_acked < 0 || leader_acked >= proposer_rank); // they are a better choice than our previously-acked choice
     
   
   if (my_win) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
-      ceph_assert(leader_acked < from || from_disallowed);  // and they still win, of course
+      ceph_assert(leader_acked < proposer_rank || proposer_rank_disallowed);  // and they still win, of course
       ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
@@ -271,7 +271,7 @@ void ElectionLogic::propose_disallow_handler(int from, epoch_t mepoch)
   } else {
     // they would win over me
     if (their_win) {
-      defer(from);
+      defer(proposer_rank);
     } else {
       // ignore them!
       ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
@@ -279,15 +279,15 @@ void ElectionLogic::propose_disallow_handler(int from, epoch_t mepoch)
   }
 }
 
-void ElectionLogic::propose_classic_handler(int from, epoch_t mepoch)
+void ElectionLogic::propose_classic_handler(int proposer_rank, epoch_t proposer_epoch)
 {
-  if (propose_classic_prefix(from, mepoch)) {
+  if (propose_classic_prefix(proposer_rank, proposer_epoch)) {
     return;
   }
-  if (elector->get_my_rank() < from) {
+  if (elector->get_my_rank() < proposer_rank) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
-      ceph_assert(leader_acked < from);  // and they still win, of course
+      ceph_assert(leader_acked < proposer_rank);  // and they still win, of course
       ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
@@ -298,9 +298,9 @@ void ElectionLogic::propose_classic_handler(int from, epoch_t mepoch)
   } else {
     // they would win over me
     if (leader_acked < 0 || // haven't acked anyone yet, or
-	leader_acked > from ||   // they would win over who you did ack, or
-	leader_acked == from) {  // this is the guy we're already deferring to
-      defer(from);
+	leader_acked > proposer_rank ||   // they would win over who you did ack, or
+	leader_acked == proposer_rank) {  // this is the guy we're already deferring to
+      defer(proposer_rank);
     } else {
       // ignore them!
       ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
@@ -323,12 +323,12 @@ double ElectionLogic::connectivity_election_score(int rank)
   return score;
 }
 
-void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
+void ElectionLogic::propose_connectivity_handler(int proposer_rank, epoch_t proposer_epoch,
 						 const ConnectionTracker *ct)
 {
   if ((epoch % 2 == 0) &&
       last_election_winner != elector->get_my_rank() &&
-      !elector->is_current_member(from)) {
+      !elector->is_current_member(proposer_rank)) {
     // To prevent election flapping, peons ignore proposals from out-of-quorum
     // peers unless their vote would materially change from the last election
     int best_scorer = 0;
@@ -350,15 +350,15 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
       return;
     }
   }
-  if (mepoch > epoch) {
-    connectivity_bump_epoch_in_election(mepoch);
-  } else if (mepoch < epoch) {
+  if (proposer_epoch > epoch) {
+    connectivity_bump_epoch_in_election(proposer_epoch);
+  } else if (proposer_epoch < epoch) {
     // got an "old" propose,
     if (epoch % 2 == 0 &&    // in a non-election cycle
-	!elector->is_current_member(from)) {  // from someone outside the quorum
+	!elector->is_current_member(proposer_rank)) {  // from someone outside the quorum
       // a mon just started up, call a new election so they can rejoin!
       ldout(cct, 5) << " got propose from old epoch, "
-	      << from << " must have just started" << dendl;
+	      << proposer_rank << " must have just started" << dendl;
       // we may be active; make sure we reset things in the monitor appropriately.
       elector->trigger_new_election();
     } else {
@@ -369,28 +369,28 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
 
   int my_rank = elector->get_my_rank();
   double my_score = connectivity_election_score(my_rank);
-  double from_score = connectivity_election_score(from);
+  double from_score = connectivity_election_score(proposer_rank);
   double leader_score = -1;
   if (leader_acked >= 0) {
     leader_score = connectivity_election_score(leader_acked);
   }
 
-  ldout(cct, 30) << "propose from rank=" << from << ", tracker: "
+  ldout(cct, 30) << "propose from rank=" << proposer_rank << ", tracker: "
 		 << (stable_peer_tracker ? *stable_peer_tracker : *peer_tracker) << dendl;
 
-  ldout(cct, 10) << "propose from rank=" << from << ",score=" << from_score
+  ldout(cct, 10) << "propose from rank=" << proposer_rank << ",score=" << from_score
 		 << "; my score=" << my_score
 		 << "; currently acked " << leader_acked
 		 << ",score=" << leader_score << dendl;
 
   bool my_win = (my_score >= 0) && // My score is non-zero; I am allowed to lead
-    ((my_rank < from && my_score >= from_score) || // We have same scores and I have lower rank, or
+    ((my_rank < proposer_rank && my_score >= from_score) || // We have same scores and I have lower rank, or
      (my_score > from_score)); // my score is higher
   
   bool their_win = (from_score >= 0) && // Their score is non-zero; they're allowed to lead, AND
-    ((from < my_rank && from_score >= my_score) || // Either they have lower rank and same score, or
+    ((proposer_rank < my_rank && from_score >= my_score) || // Either they have lower rank and same score, or
      (from_score > my_score)) && // their score is higher, AND
-    ((from <= leader_acked && from_score >= leader_score) || // same conditions compared to leader, or IS leader
+    ((proposer_rank <= leader_acked && from_score >= leader_score) || // same conditions compared to leader, or IS leader
      (from_score > leader_score));
 
   if (my_win) {
@@ -406,44 +406,44 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
     }
   } else {
     // they would win over me
-    if (their_win || from == leader_acked) {
-      if (leader_acked >= 0 && from != leader_acked) {
+    if (their_win || proposer_rank == leader_acked) {
+      if (leader_acked >= 0 && proposer_rank != leader_acked) {
 	// we have to make sure our acked leader will ALSO defer to them, or else
 	// we can't, to maintain guarantees!
 	double leader_from_score;
 	int leader_from_liveness;
 	leader_peer_tracker->
-	  get_total_connection_score(from, &leader_from_score,
+	  get_total_connection_score(proposer_rank, &leader_from_score,
 				     &leader_from_liveness);
 	double leader_leader_score;
 	int leader_leader_liveness;
 	leader_peer_tracker->
 	  get_total_connection_score(leader_acked, &leader_leader_score,
 				     &leader_leader_liveness);
-	if ((from < leader_acked && leader_from_score >= leader_leader_score) ||
+	if ((proposer_rank < leader_acked && leader_from_score >= leader_leader_score) ||
 	    (leader_from_score > leader_leader_score)) {
-	  defer(from);
+	  defer(proposer_rank);
 	  leader_peer_tracker.reset(new ConnectionTracker(*ct));
 	} else { // we can't defer to them *this* round even though they should win...
 	  double cur_leader_score, cur_from_score;
 	  int cur_leader_live, cur_from_live;
 	  peer_tracker->get_total_connection_score(leader_acked, &cur_leader_score, &cur_leader_live);
-	  peer_tracker->get_total_connection_score(from, &cur_from_score, &cur_from_live);
-	  if ((from < leader_acked && cur_from_score >= cur_leader_score) ||
+	  peer_tracker->get_total_connection_score(proposer_rank, &cur_from_score, &cur_from_live);
+	  if ((proposer_rank < leader_acked && cur_from_score >= cur_leader_score) ||
 	      (cur_from_score > cur_leader_score)) {
 	    ldout(cct, 5) << "Bumping epoch and starting new election; acked "
-			  << leader_acked << " should defer to " << from
+			  << leader_acked << " should defer to " << proposer_rank
 			  << " but there is score disagreement!" << dendl;
 	    bump_epoch(epoch+1);
 	    start();
 	  } else {
 	    ldout(cct, 5) << "no, we already acked " << leader_acked
-			  << " and it won't defer to " << from
+			  << " and it won't defer to " << proposer_rank
 			  << " despite better round scores" << dendl;
 	  }
 	}
       } else {
-	defer(from);
+	defer(proposer_rank);
 	leader_peer_tracker.reset(new ConnectionTracker(*ct));
       }
     } else {
