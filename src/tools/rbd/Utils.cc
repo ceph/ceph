@@ -45,7 +45,7 @@ static std::string mgr_command_args_to_str(
 int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
   if (progress) {
     int pc = total ? (offset * 100ull / total) : 0;
-    if (pc != last_pc) {
+    if (pc > last_pc) {
       cerr << "\r" << operation << ": "
            << pc << "% complete...";
       cerr.flush();
