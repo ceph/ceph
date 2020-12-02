@@ -122,7 +122,8 @@
         </fieldset>
       </div>
       <div class="card-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
+        <cd-form-button-panel #previewButtonPanel
+                              (submitActionEvent)="submit()"
                               [form]="form"
                               [disabled]="dataDeviceSelectionGroups.devices.length === 0"
                               [submitText]="actionLabels.PREVIEW"
