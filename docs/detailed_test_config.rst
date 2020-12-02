@@ -227,6 +227,21 @@ global option can be set to true to make the unlocking happen unconditionally.
 Troubleshooting
 ===============
 
+Postmortem Debugging
+--------------------
+
+After completion of a test, the ``archive`` subdirectory is archived under
+the corresponding ``remote`` subdirectory. We can disable this behavior
+using the top-level configuration, like::
+
+  archive-on-error: true
+
+If ``archive-on-error`` is ``true``, the ``archive`` subdirectory is
+archived only for failed tests.
+
+
+Situ Debugging
+--------------
 Sometimes when a bug triggers, instead of automatic cleanup, you want
 to explore the system as is. Adding a top-level::
 
