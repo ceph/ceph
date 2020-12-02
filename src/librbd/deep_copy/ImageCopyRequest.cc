@@ -67,6 +67,30 @@ void ImageCopyRequest<I>::cancel() {
 }
 
 template <typename I>
+void ImageCopyRequest<I>::map_src_objects(uint64_t dst_object,
+                                          std::set<uint64_t> *src_objects) {
+  std::vector<std::pair<uint64_t, uint64_t>> image_extents;
+  Striper::extent_to_file(m_cct, &m_dst_image_ctx->layout, dst_object, 0,
+                          m_dst_image_ctx->layout.object_size, image_extents);
+
+  for (auto &e : image_extents) {
+    std::map<object_t, std::vector<ObjectExtent>> src_object_extents;
+    Striper::file_to_extents(m_cct, m_src_image_ctx->format_string,
+                             &m_src_image_ctx->layout, e.first, e.second, 0,
+                             src_object_extents);
+    for (auto &p : src_object_extents) {
+      for (auto &s : p.second) {
+        src_objects->insert(s.objectno);
+      }
+    }
+  }
+
+  ceph_assert(!src_objects->empty());
+
+  ldout(m_cct, 20) << dst_object << " -> " << *src_objects << dendl;
+}
+
+template <typename I>
 void ImageCopyRequest<I>::compute_diff() {
   ldout(m_cct, 10) << dendl;
 
@@ -149,10 +173,24 @@ int ImageCopyRequest<I>::send_next_object_copy() {
   }
 
   uint64_t ono = m_object_no++;
-  if (ono < m_object_diff_state.size() &&
-      m_object_diff_state[ono] == object_map::DIFF_STATE_NONE) {
-    ldout(m_cct, 20) << "skipping clean object " << ono << dendl;
-    return 1;
+
+  if (m_object_diff_state.size() > 0) {
+    std::set<uint64_t> src_objects;
+    map_src_objects(ono, &src_objects);
+
+    bool skip = true;
+    for (auto src_ono : src_objects) {
+      if (src_ono >= m_object_diff_state.size() ||
+          m_object_diff_state[src_ono] != object_map::DIFF_STATE_NONE) {
+        skip = false;
+        break;
+      }
+    }
+
+    if (skip) {
+      ldout(m_cct, 20) << "skipping clean object " << ono << dendl;
+      return 1;
+    }
   }
 
   ldout(m_cct, 20) << "object_num=" << ono << dendl;
