@@ -129,7 +129,8 @@ describe('PoolDetailsComponent', () => {
               pg_placement_num_target: 256,
               pool: 2,
               pool_name: 'somePool',
-              type: 'replicated'
+              type: 'replicated',
+              size: 3
             }
           },
           Mocks.getPool('somePool', 2)
