@@ -1654,8 +1654,8 @@ public:
       modified_objects.insert(o);
     }
     void note_removed_object(OnodeRef& o) {
-      onodes.erase(o);
       modified_objects.insert(o);
+      onodes.erase(o);
     }
 
     void zoned_note_new_object(OnodeRef &o) {
