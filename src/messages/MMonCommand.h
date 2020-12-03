@@ -15,6 +15,7 @@
 #ifndef CEPH_MMONCOMMAND_H
 #define CEPH_MMONCOMMAND_H
 
+#include "common/cmdparse.h"
 #include "messages/PaxosServiceMessage.h"
 
 #include <vector>
@@ -41,10 +42,26 @@ private:
 public:
   std::string_view get_type_name() const override { return "mon_command"; }
   void print(std::ostream& o) const override {
+    cmdmap_t cmdmap;
+    std::ostringstream ss;
+    string prefix;
+    ceph::common::cmdmap_from_json(cmd, &cmdmap, ss);
+    ceph::common::cmd_getval(cmdmap, "prefix", prefix);
+    // Some config values contain sensitive data, so don't log them
     o << "mon_command(";
-    for (unsigned i=0; i<cmd.size(); i++) {
-      if (i) o << ' ';
-      o << cmd[i];
+    if (prefix == "config set") {
+      string name;
+      ceph::common::cmd_getval(cmdmap, "name", name);
+      o << "[{prefix=" << prefix << ", name=" << name << "}]";
+    } else if (prefix == "config-key set") {
+      string key;
+      ceph::common::cmd_getval(cmdmap, "key", key);
+      o << "[{prefix=" << prefix << ", key=" << key << "}]";
+    } else {
+      for (unsigned i=0; i<cmd.size(); i++) {
+        if (i) o << ' ';
+        o << cmd[i];
+      }
     }
     o << " v " << version << ")";
   }
