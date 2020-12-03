@@ -1304,10 +1304,14 @@ public:
           complete = std::move(*state->obligation);
           *state->obligation = std::move(obligation);
           state->counter++;
-        } else {
+        } else if (state->obligation->timestamp > obligation.timestamp) {
           // cancel new obligation
           tn->log(10, SSTR("canceling new obligation " << obligation));
           complete = std::move(obligation);
+        } else {
+          // same obligation, maybe retrying error repo
+          tn->log(10, SSTR("same obligation"));
+          return set_cr_done();
         }
       } else {
         // start syncing a new obligation
