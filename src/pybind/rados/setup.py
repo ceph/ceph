@@ -132,7 +132,7 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
-if 'BUILD_DOC' in os.environ:
+if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
     ext_args = {}
     cython_constants = dict(BUILD_DOC=True)
 elif check_sanity():
