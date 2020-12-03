@@ -177,9 +177,9 @@ void Paxos::collect(version_t oldpn)
     }
     uncommitted_v = last_committed+1;
 
-    get_store()->get(get_name(), last_committed+1, uncommitted_value);
+    get_store()->get(get_name(), uncommitted_v, uncommitted_value);
     ceph_assert(uncommitted_value.length());
-    dout(10) << "learned uncommitted " << (last_committed+1)
+    dout(10) << "learned uncommitted " << uncommitted_v
 	     << " pn " << uncommitted_pn
 	     << " (" << uncommitted_value.length() << " bytes) from myself" 
 	     << dendl;
