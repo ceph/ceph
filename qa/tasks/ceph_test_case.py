@@ -1,6 +1,7 @@
 import unittest
 import time
 import logging
+import traceback
 
 from teuthology.orchestra.run import CommandFailedError
 
@@ -106,9 +107,11 @@ class CephTestCase(unittest.TestCase):
                 return found
 
             def __enter__(self):
+                log.info('=============running assert_cluster_log.ContextManager.___enter__')
                 self.watcher_process = ceph_manager.run_ceph_w(watch_channel)
 
             def __exit__(self, exc_type, exc_val, exc_tb):
+                log.info('=============running assert_cluster_log.ContextManager.__exit__()')
                 if not self.watcher_process.finished:
                     # Check if we got an early match, wait a bit if we didn't
                     if self.match():
@@ -119,15 +122,24 @@ class CephTestCase(unittest.TestCase):
                         # then some grace
                         time.sleep(5 + timeout)
 
-                self.watcher_process.stdin.close()
+                traceback.print_exc()
+                log.info('=============will close self.watcher_process.stdin')
+                rv = self.watcher_process.stdin.close()
+                log.info('=============self.watcher_process.stdin closed. rv = ' + str(rv))
                 try:
-                    self.watcher_process.wait()
-                except CommandFailedError:
+                    log.info('=============will wait for self.watcher_process.stdin to be closed')
+                    rv2 = self.watcher_process.wait()
+                    log.info('=============waiting complete for self.watcher_process.stdin. rv2 = ' + str(rv2))
+                except CommandFailedError as e:
+                    log.info('============got CommandFailedError while killing ' + str(self.watcher_process.args))
+                    log.info('===========e.args' + str(e.args))
                     pass
 
                 if not self.match():
                     log.error("Log output: \n{0}\n".format(self.watcher_process.stdout.getvalue()))
                     raise AssertionError("Expected log message not found: '{0}'".format(expected_pattern))
+
+                log.info('==============finished running assert_cluster_log.ContextManager.__exit__()')
 
         return ContextManager()
 

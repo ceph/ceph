@@ -180,60 +180,93 @@ class LocalRemoteProcess(object):
         self.exitstatus = self.returncode = None
 
     def wait(self):
+        log.info('===========running LocalRemoteProcess.wait(). self.args = ' + str(self.args))
         if self.finished:
+            log.info('self.finished is true')
             # Avoid calling communicate() on a dead process because it'll
             # give you stick about std* already being closed
             if self.check_status and self.exitstatus != 0:
+                log.info('self.finished is True')
+                log.info('self.args = ' + str(self.args))
+                log.info('self.exitstatus = ' + str(self.exitstatus))
+                log.info('raising CommandFailedError')
                 raise CommandFailedError(self.args, self.exitstatus)
             else:
+                log.info('finished running LocalRemoteProcess.wait(), returning None')
                 return
+        log.info('self.finished is False, running self.subproc.communicate '
+                 'next')
 
         out, err = self.subproc.communicate()
+        log.info('finished running self.subproc.communicate(), delete nonascii chars next')
         out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
+        log.info('finished deleting nonascii chars')
         if isinstance(self.stdout, StringIO):
+            log.info('writing out to self.stdout after decoding...')
             self.stdout.write(out.decode(errors='ignore'))
         elif self.stdout is None:
             pass
         else:
+            log.info('writing out to self.stdout without decoding...')
             self.stdout.write(out)
         if isinstance(self.stderr, StringIO):
+            log.info('writing err to self.stderr after decoding...')
             self.stderr.write(err.decode(errors='ignore'))
         elif self.stderr is None:
             pass
         else:
+            log.info('writing err to self.stderr without decoding...')
             self.stderr.write(err)
 
         self.exitstatus = self.returncode = self.subproc.returncode
+        log.info('self.existatus = ' + str(self.exitstatus))
 
         if self.exitstatus != 0:
             sys.stderr.write(out.decode())
             sys.stderr.write(err.decode())
 
         if self.check_status and self.exitstatus != 0:
+            log.info('self.args = ' + str(self.args))
+            log.info('raising CommandFailedErorr')
             raise CommandFailedError(self.args, self.exitstatus)
+        log.info('finished running LocalRemoteProcess.wait(), returning None')
 
     @property
     def finished(self):
+        log.info('==================running LocalRemoteProcess.finished()')
         if self.exitstatus is not None:
+            log.info('self.existatus is not None')
+            log.info('finished running LocalRemote.finsished(), returning True')
             return True
+        log.info('self.exitstatus is None, running self.subproc.poll() next')
 
         if self.subproc.poll() is not None:
+            log.info('finished running self.subproc.poll(), its not None')
+            log.info('running self.subproc.communicate()')
             out, err = self.subproc.communicate()
+            log.info('finshed running self.subproc.communicate()')
             if isinstance(self.stdout, StringIO):
+                log.info('writing out to self.stdout after decoding...')
                 self.stdout.write(out.decode(errors='ignore'))
             elif self.stdout is None:
                 pass
             else:
+                log.info('writing out to self.stdout without decoding...')
                 self.stdout.write(out)
             if isinstance(self.stderr, StringIO):
+                log.info('writing err to self.stderr after decoding...')
                 self.stderr.write(err.decode(errors='ignore'))
             elif self.stderr is None:
                 pass
             else:
+                log.info('writing err to self.stderr without decoding...')
                 self.stderr.write(err)
             self.exitstatus = self.returncode = self.subproc.returncode
+            log.info('finished running LocalRemote.finsished(), returning True')
             return True
         else:
+            log.info('self.subproc.poll is None')
+            log.info('finished running LocalRemote.finsished(), returning False')
             return False
 
     def kill(self):
@@ -532,12 +565,18 @@ class LocalDaemon(object):
             return None
 
     def wait(self, timeout):
+        log.info('Running vstart_runner.LocalDeamon.wait()')
         waited = 0
+        log.info('will loop now...')
         while self._get_pid() is not None:
+            log.info('looping...')
             if waited > timeout:
+                log.info('raising MaxWhileTies')
                 raise MaxWhileTries("Timed out waiting for daemon {0}.{1}".format(self.daemon_type, self.daemon_id))
             time.sleep(1)
             waited += 1
+        log.info('finished looping')
+        log.info('Finished running vstart_runner.LocalRemote.wait()')
 
     def stop(self, timeout=300):
         if not self.running():

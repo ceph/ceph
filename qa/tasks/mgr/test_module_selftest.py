@@ -236,9 +236,10 @@ class TestModuleSelftest(MgrTestCase):
             # 2018-09-24 09:37:10.977863 mgr.x [WRN] foo bar warning
             # 2018-09-24 09:37:10.977866 mgr.x [ERR] foo bar error
             with self.assert_cluster_log(log_message):
-                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                rv = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
                     "mgr", "self-test", "cluster-log", "cluster",
                     priority, message)
+                log.info('============rv = ' + str(rv))
             with self.assert_cluster_log(log_message, watch_channel="audit"):
                 self.mgr_cluster.mon_manager.raw_cluster_cmd(
                     "mgr", "self-test", "cluster-log", "audit",
