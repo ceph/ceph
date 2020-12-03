@@ -27,6 +27,12 @@ namespace {
     return crimson::get_logger(ceph_subsys_test);
   }
 
+  ghobject_t make_ghobj(
+      shard_t shard, pool_t pool, crush_hash_t crush,
+      std::string ns, std::string oid, snap_t snap, gen_t gen) {
+    return ghobject_t{shard_id_t{shard}, pool, crush, ns, oid, snap, gen};
+  }
+
   // return a key_view_t and its underlying memory buffer.
   // the buffer needs to be freed manually.
   std::pair<key_view_t, void*> build_key_view(const ghobject_t& hobj) {
