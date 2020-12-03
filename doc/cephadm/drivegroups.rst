@@ -319,7 +319,7 @@ This can be described with two layouts.
     db_devices:
       model: MC-55-44-XZ
       limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
-      
+    ---  
     service_type: osd
     service_id: osd_spec_ssd
     placement:
@@ -376,8 +376,7 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
       rotational: 1
     db_devices:
       rotational: 0
-      
-      
+    ---    
     service_type: osd
     service_id: osd_spec_six_to_ten
     placement:
