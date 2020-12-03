@@ -2437,7 +2437,6 @@ void OSDMonitor::_prune_update_trimmed(
   dout(10) << __func__
            << " first " << first
            << " last_pinned " << osdmap_manifest.get_last_pinned()
-           << " last_pinned " << osdmap_manifest.get_last_pinned()
            << dendl;
 
   osdmap_manifest_t manifest = osdmap_manifest;
