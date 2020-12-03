@@ -240,7 +240,15 @@ int AvlAllocator::_allocate(
       max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
     *cursor = 0;
-    start = _block_picker(range_size_tree, cursor, size, unit);
+    do {
+      start = _block_picker(range_size_tree, cursor, size, unit);
+      if (start != -1ULL || !force_range_size_alloc) {
+        break;
+      }
+      // try to collect smaller extents as we could fail to retrieve
+      // that large block due to misaligned extents
+      size = p2align(size >> 1, unit);
+    } while (size >= unit);
   } else {
     start = _block_picker(range_tree, cursor, size, unit);
   }
