@@ -133,9 +133,11 @@ def check_sanity():
 
 
 if 'BUILD_DOC' in os.environ:
-    pass
+    ext_args = {}
+    cython_constants = dict(BUILD_DOC=True)
 elif check_sanity():
-    pass
+    ext_args = get_python_flags(['rados'])
+    cython_constants = dict(BUILD_DOC=False)
 else:
     sys.exit(1)
 
@@ -185,12 +187,13 @@ setup(
             Extension(
                 "rados",
                 [source],
-                **get_python_flags(['rados'])
+                **ext_args
             )
         ],
         # use "3str" when Cython 3.0 is available
         compiler_directives={'language_level': sys.version_info.major},
-        build_dir=os.environ.get("CYTHON_BUILD_DIR", None)
+        compile_time_env=cython_constants,
+        build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
     ),
     classifiers=[
         'Intended Audience :: Developers',
