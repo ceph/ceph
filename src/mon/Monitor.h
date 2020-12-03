@@ -42,6 +42,7 @@
 #include "MonCommand.h"
 
 
+#include "common/cmdparse.h"
 #include "common/config_obs.h"
 #include "common/LogClient.h"
 #include "auth/AuthClient.h"
@@ -869,7 +870,13 @@ public:
             ss << "session dropped for command ";
           }
         }
-        ss << "cmd='" << m->cmd << "': finished";
+        cmdmap_t cmdmap;
+        std::ostringstream ds;
+        string prefix;
+        ceph::common::cmdmap_from_json(m->cmd, &cmdmap, ds);
+        ceph::common::cmd_getval(cmdmap, "prefix", prefix);
+        if (prefix != "config set" && prefix != "config-key set")
+          ss << "cmd='" << m->cmd << "': finished";
 
         mon.audit_clog->info() << ss.str();
         mon.reply_command(op, rc, rs, rdata, version);
