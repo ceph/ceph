@@ -84,37 +84,7 @@ $vdir/bin/python $TOPDIR/doc/scripts/gen_mon_command_api.py > $TOPDIR/doc/api/mo
 # --global-option=build_ext --global-option="--cython-include-dirs $TOPDIR/src/pybind/rados/"
 # but that doesn't work, so copying the file in the rbd module directly, that's ok for docs
 for bind in rados rbd cephfs rgw; do
-    if [ ${bind} != rados ]; then
-        cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/${bind}/
-    fi
-    ln -sf lib${bind}.so.1 $vdir/lib/lib${bind}.so
-    gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc /dev/null
-    ld_flags="-Wl,-rpath,$vdir/lib"
-    if [ $(uname) != Darwin ]; then
-        ld_flags="${ld_flags},--no-as-needed"
-    fi
-    BUILD_DOC=1 \
-        CFLAGS="-iquote$TOPDIR/src/include" \
-        CPPFLAGS="-iquote$TOPDIR/src/include" \
-        LDFLAGS="-L$vdir/lib ${ld_flags}" \
-        $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
-    # rgwfile_version(), librgw_create(), rgw_mount()
-    # since py3.5, distutils adds postfix in between ${bind} and so
-    lib_fn=$vdir/lib/python*/*-packages/${bind}.*.so
-    if [ ! -e $lib_fn ]; then
-       lib_fn=$vdir/lib/python*/*-packages/${bind}.so
-    fi
-    if [ ${bind} = "cephfs" ]; then
-        func_prefix="ceph"
-    else
-        func_prefix="(lib)?${bind}"
-    fi
-    nm $lib_fn | grep -E "U (_)?${func_prefix}" | \
-        awk '{ gsub(/^_/,"",$2); print "void "$2"(void) {}" }' | \
-        gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc -
-    if [ ${bind} != rados ]; then
-        rm -f $TOPDIR/src/pybind/${bind}/rados.pxd
-    fi
+    BUILD_DOC=1 $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
 done
 
 if [ -z "$@" ]; then
