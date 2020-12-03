@@ -16,6 +16,10 @@ public:
 	          const std::string& name) :
       AvlAllocator(cct, device_size, _block_size, max_mem, name) {
   }
+  const char* get_type() const override
+  {
+    return "hybrid";
+  }
   int64_t allocate(
     uint64_t want,
     uint64_t unit,
