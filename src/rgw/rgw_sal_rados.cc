@@ -467,7 +467,10 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   if (ret < 0)
     return ret;
 
-  ret = read_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  const auto& latest_log = info.layout.logs.back();
+  const auto& index = log_to_index_layout(latest_log);
+
+  ret = read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -618,17 +621,20 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bo
   return ret;
 }
 
-int RadosBucket::read_stats(const DoutPrefixProvider *dpp, int shard_id,
-				     std::string* bucket_ver, std::string* master_ver,
-				     std::map<RGWObjCategory, RGWStorageStats>& stats,
-				     std::string* max_marker, bool* syncstopped)
+int RadosBucket::read_stats(const DoutPrefixProvider *dpp,
+			    const bucket_index_layout_generation& idx_layout,
+			    int shard_id, std::string* bucket_ver, std::string* master_ver,
+			    std::map<RGWObjCategory, RGWStorageStats>& stats,
+			    std::string* max_marker, bool* syncstopped)
 {
-  return store->getRados()->get_bucket_stats(dpp, info, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(dpp, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
-int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx)
+int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
+				  const bucket_index_layout_generation& idx_layout,
+				  int shard_id, RGWGetBucketStats_CB* ctx)
 {
-  return store->getRados()->get_bucket_stats_async(dpp, get_info(), shard_id, ctx);
+  return store->getRados()->get_bucket_stats_async(dpp, get_info(), idx_layout, shard_id, ctx);
 }
 
 int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
