@@ -248,6 +248,11 @@ class DPDKWorker : public Worker {
 
 class DPDKStack : public NetworkStack {
   vector<std::function<void()> > funcs;
+
+  virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
+    return new DPDKWorker(c, worker_id);
+  }
+
  public:
   explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {
     funcs.resize(cct->_conf->ms_async_max_op_threads);
