@@ -45,6 +45,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
   permissions: Permissions;
   tableActions: CdTableAction[];
+  showDocPanel = false;
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
@@ -139,6 +140,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
     this.orchService.status().subscribe((status: OrchestratorStatus) => {
       this.orchStatus = status;
+      this.showDocPanel = !status.available;
     });
   }
 
