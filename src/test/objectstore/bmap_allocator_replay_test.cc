@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
- * Bitmap allocator replay tool.
+ * Allocator replay tool.
  * Author: Igor Fedotov, ifedotov@suse.com
  */
 #include <iostream>
@@ -9,12 +9,15 @@
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "common/Cycles.h"
+#include "common/errno.h"
+#include "common/ceph_json.h"
+#include "common/admin_socket.h"
 #include "global/global_init.h"
 #include "os/bluestore/Allocator.h"
 
 
 void usage(const string &name) {
-  cerr << "Usage: " << name << " <log_to_replay> "
+  cerr << "Usage: " << name << " <log_to_replay> <raw_duplicate|free_dump>"
        << std::endl;
 }
 
@@ -211,6 +214,100 @@ int replay_and_check_for_duplicate(char* fname)
   return 0;
 }
 
+/*
+* This replays allocator dump (in JSON) reported by 
+  "ceph daemon <osd> bluestore allocator dump <name>"
+  command and applies custom method to it
+*/
+int replay_free_dump_and_apply(char* fname,
+    std::function<int (Allocator*, const string& aname)> fn)
+{
+  string alloc_type;
+  string alloc_name;
+  uint64_t capacity = 0;
+  uint64_t alloc_unit = 0;
+
+  JSONParser p;
+  std::cout << "parsing..." << std::endl;
+  bool b = p.parse(fname);
+  if (!b) {
+    std::cerr << "Failed to parse json: " << fname << std::endl;
+    return -1;
+  }
+
+  JSONObj::data_val v;
+  ceph_assert(p.is_object());
+
+  auto *o = p.find_obj("allocator_type");
+  ceph_assert(o);
+  alloc_type = o->get_data_val().str;
+
+  o = p.find_obj("allocator_name");
+  ceph_assert(o);
+  alloc_name = o->get_data_val().str;
+
+  o = p.find_obj("capacity");
+  ceph_assert(o);
+  decode_json_obj(capacity, o);
+  o = p.find_obj("alloc_unit");
+  ceph_assert(o);
+  decode_json_obj(alloc_unit, o);
+
+  o = p.find_obj("extents");
+  ceph_assert(o);
+  ceph_assert(o->is_array());
+  std::cout << "parsing completed!" << std::endl;
+
+  unique_ptr<Allocator> alloc;
+  alloc.reset(Allocator::create(g_ceph_context, alloc_type,
+    capacity, alloc_unit, alloc_name));
+
+  auto it = o->find_first();
+  while (!it.end()) {
+    auto *item_obj = *it;
+    uint64_t offset = 0;
+    uint64_t length = 0;
+    string offset_str, length_str;
+
+    bool b = JSONDecoder::decode_json("offset", offset_str, item_obj);
+    ceph_assert(b);
+    b = JSONDecoder::decode_json("length", length_str, item_obj);
+    ceph_assert(b);
+
+    char* p;
+    offset = strtol(offset_str.c_str(), &p, 16);
+    length = strtol(length_str.c_str(), &p, 16);
+
+    alloc->init_add_free(offset, length);
+
+    ++it;
+  }
+
+  int r = fn(alloc.get(), alloc_name);
+
+  return r;
+}
+
+void dump_alloc(Allocator* alloc, const string& aname)
+{
+  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+  ceph_assert(admin_socket);
+
+  ceph::bufferlist in, out;
+  ostringstream err;
+
+  string cmd = "{\"prefix\": \"bluestore allocator dump " + aname + "\"}";
+  auto r = admin_socket->execute_command(
+    { cmd },
+    in, err, &out);
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  }
+  else {
+    std::cout << std::string(out.c_str(), out.length()) << std::endl;
+  }
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
@@ -220,10 +317,27 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf.apply_changes(nullptr);
 
-  if (argc < 2) {
+  if (argc < 3) {
     usage(argv[0]);
     return 1;
   }
-
-  return replay_and_check_for_duplicate(argv[1]);
+  if (strcmp(argv[2], "raw_duplicate") == 0) {
+    return replay_and_check_for_duplicate(argv[1]);
+  } else if (strcmp(argv[2], "free_dump") == 0) {
+    return replay_free_dump_and_apply(argv[1],
+      [&](Allocator* a, const string& aname) {
+        ceph_assert(a);
+        std::cout << "Fragmentation:" << a->get_fragmentation()
+                  << std::endl;
+        std::cout << "Fragmentation score:" << a->get_fragmentation_score()
+                  << std::endl;
+        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+                  << std::endl;
+        {
+        // stub to implement various testing stuff on properly initialized allocator
+        // e.g. one can dump allocator back via dump_alloc(a, aname);
+        }
+        return 0;
+      });
+  }
 }
