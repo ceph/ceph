@@ -378,7 +378,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       // Add
       // Create an observable to add the capability when the form is submitted.
       this.submitObservables.push(this.rgwUserService.addCapability(uid, cap.type, cap.perm));
-      this.capabilities.push(cap);
+      this.capabilities = [...this.capabilities, cap]; // Notify Angular CD
     }
     // Mark the form as dirty to be able to submit it.
     this.userForm.markAsDirty();
@@ -398,12 +398,13 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     );
     // Remove the capability to update the UI.
     this.capabilities.splice(index, 1);
+    this.capabilities = [...this.capabilities]; // Notify Angular CD
     // Mark the form as dirty to be able to submit it.
     this.userForm.markAsDirty();
   }
 
-  hasAllCapabilities() {
-    return !_.difference(RgwUserCapabilities.getAll(), _.map(this.capabilities, 'type')).length;
+  hasAllCapabilities(capabilities: RgwUserCapability[]) {
+    return !_.difference(RgwUserCapabilities.getAll(), _.map(capabilities, 'type')).length;
   }
 
   /**

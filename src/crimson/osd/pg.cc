@@ -612,6 +612,53 @@ osd_op_params_t&& PG::fill_op_params_bump_pg_version(
   return std::move(osd_op_p);
 }
 
+seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
+  const std::error_code& e,
+  ObjectContextRef obc,
+  const OpsExecuter& ox,
+  const MOSDOp& m) const
+{
+  // Oops, an operation had failed. do_osd_ops() altogether with
+  // OpsExecuter already dropped the ObjectStore::Transaction if
+  // there was any. However, this is not enough to completely
+  // rollback as we gave OpsExecuter the very single copy of `obc`
+  // we maintain and we did it for both reading and writing.
+  // Now all modifications must be reverted.
+  //
+  // Let's just reload from the store. Evicting from the shared
+  // LRU would be tricky as next MOSDOp (the one at `get_obc`
+  // phase) could actually already finished the lookup. Fortunately,
+  // this is supposed to live on cold  paths, so performance is not
+  // a concern -- simplicity wins.
+  //
+  // The conditional's purpose is to efficiently handle hot errors
+  // which may appear as a result of e.g. CEPH_OSD_OP_CMPXATTR or
+  // CEPH_OSD_OP_OMAP_CMP. These are read-like ops and clients
+  // typically append them before any write. If OpsExecuter hasn't
+  // seen any modifying operation, `obc` is supposed to be kept
+  // unchanged.
+  assert(e.value() > 0);
+  const bool need_reload_obc = ox.has_seen_write();
+  logger().debug(
+    "{}: {} - object {} got error code {}, {}; need_reload_obc {}",
+    __func__,
+    m,
+    obc->obs.oi.soid,
+    e.value(),
+    e.message(),
+    need_reload_obc);
+  return (need_reload_obc ? reload_obc(*obc)
+                          : load_obc_ertr::now()
+  ).safe_then([&e, &m, obc = std::move(obc), this] {
+    auto reply = make_message<MOSDOpReply>(
+      &m, -e.value(), get_osdmap_epoch(), 0, false);
+    reply->set_enoent_reply_versions(
+      peering_state.get_info().last_update,
+      peering_state.get_info().last_user_version);
+    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+  }, load_obc_ertr::assert_all{ "can't live with object state messed up" });
+}
+
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
@@ -669,7 +716,6 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   }).safe_then([this,
                 m,
                 obc,
-                ox_deleter = std::move(ox),
                 rvec = op_info.allows_returnvec()] {
     // TODO: should stop at the first op which returns a negative retval,
     //       cmpext uses it for returning the index of first unmatched byte
@@ -688,32 +734,18 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       *m,
       obc->obs.oi.soid);
     return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }, OpsExecuter::osd_op_errorator::all_same_way([=] (const std::error_code& e) {
-    assert(e.value() > 0);
-    logger().debug(
-      "do_osd_ops: {} - object {} got error code {}, {}",
-      *m,
-      obc->obs.oi.soid,
-      e.value(),
-      e.message());
-    auto reply = make_message<MOSDOpReply>(
-      m.get(), -e.value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-				     peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  })).handle_exception_type([=](const crimson::osd::error& e) {
+  }, osd_op_errorator::all_same_way([ox = ox.get(),
+                                     m,
+                                     obc,
+                                     this] (const std::error_code& e) {
+    return handle_failed_op(e, std::move(obc), *ox, *m);
+  })).handle_exception_type([ox_deleter = std::move(ox),
+                             m,
+                             obc,
+                             this] (const crimson::osd::error& e) {
     // we need this handler because throwing path which aren't errorated yet.
-    logger().debug(
-      "do_osd_ops: {} - object {} got unhandled exception {} ({})",
-      *m,
-      obc->obs.oi.soid,
-      e.code(),
-      e.what());
-    auto reply = make_message<MOSDOpReply>(
-      m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-				     peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    logger().debug("encountered the legacy error handling path!");
+    return handle_failed_op(e.code(), std::move(obc), *ox_deleter, *m);
   });
 }
 
@@ -795,7 +827,7 @@ std::optional<hobject_t> PG::resolve_oid(
 }
 
 template<RWState::State State>
-seastar::future<>
+PG::load_obc_ertr::future<>
 PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
 {
   assert(oid.is_head());
@@ -803,44 +835,45 @@ PG::with_head_obc(hobject_t oid, with_obc_func_t&& func)
   return obc->with_lock<State>(
     [oid=std::move(oid), existed=existed, obc=std::move(obc),
      func=std::move(func), this] {
-    auto loaded = seastar::make_ready_future<ObjectContextRef>(obc);
+    auto loaded = load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
     if (existed) {
       logger().debug("with_head_obc: found {} in cache", oid);
     } else {
       logger().debug("with_head_obc: cache miss on {}", oid);
-      loaded = obc->with_promoted_lock<RWState::RWEXCL>([this, obc] {
+      loaded = obc->with_promoted_lock<State>([this, obc] {
         return load_head_obc(obc);
       });
     }
-    return loaded.then([func = std::move(func)](auto obc) {
+    return loaded.safe_then([func=std::move(func)](auto obc) {
       return func(std::move(obc));
     });
   });
 }
 
 template<RWState::State State>
-seastar::future<>
+PG::load_obc_ertr::future<>
 PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
 {
   assert(!oid.is_head());
   return with_head_obc<RWState::RWREAD>(oid.get_head(),
-    [oid, func=std::move(func), this](auto head) {
+    [oid, func=std::move(func), this](auto head) -> load_obc_ertr::future<> {
     auto coid = resolve_oid(head->get_ro_ss(), oid);
     if (!coid) {
       // TODO: return crimson::ct_error::enoent::make();
       logger().error("with_clone_obc: {} clone not found", coid);
-      return seastar::make_ready_future<>();
+      return load_obc_ertr::make_ready_future<>();
     }
     auto [clone, existed] = shard_services.obc_registry.get_cached_obc(*coid);
     return clone->template with_lock<State>(
       [coid=*coid, existed=existed,
-      head=std::move(head), clone=std::move(clone), func=std::move(func), this] {
-      auto loaded = seastar::make_ready_future<ObjectContextRef>(clone);
+       head=std::move(head), clone=std::move(clone),
+       func=std::move(func), this]() -> load_obc_ertr::future<> {
+      auto loaded = load_obc_ertr::make_ready_future<ObjectContextRef>(clone);
       if (existed) {
         logger().debug("with_clone_obc: found {} in cache", coid);
       } else {
         logger().debug("with_clone_obc: cache miss on {}", coid);
-        loaded = clone->template with_promoted_lock<RWState::RWEXCL>(
+        loaded = clone->template with_promoted_lock<State>(
           [coid, clone, head, this] {
           return backend->load_metadata(coid).safe_then(
             [coid, clone=std::move(clone), head=std::move(head)](auto md) mutable {
@@ -849,7 +882,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
           });
         });
       }
-      return loaded.then([func = std::move(func)](auto clone) {
+      return loaded.safe_then([func=std::move(func)](auto clone) {
         return func(std::move(clone));
       });
     });
@@ -857,7 +890,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
 }
 
 // explicitly instantiate the used instantiations
-template seastar::future<>
+template PG::load_obc_ertr::future<>
 PG::with_head_obc<RWState::RWNONE>(hobject_t, with_obc_func_t&&);
 
 PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
@@ -880,6 +913,29 @@ PG::load_head_obc(ObjectContextRef obc)
       obc->obs.oi, obc->obs.oi.soid);
     return load_obc_ertr::make_ready_future<
       crimson::osd::ObjectContextRef>(obc);
+  });
+}
+
+PG::load_obc_ertr::future<>
+PG::reload_obc(crimson::osd::ObjectContext& obc) const
+{
+  assert(obc.is_head());
+  return backend->load_metadata(obc.get_oid()).safe_then([&obc](auto md)
+    -> load_obc_ertr::future<> {
+    logger().debug(
+      "{}: reloaded obs {} for {}",
+      __func__,
+      md->os.oi,
+      obc.get_oid());
+    if (!md->ss) {
+      logger().error(
+        "{}: oid {} missing snapset",
+        __func__,
+        obc.get_oid());
+      return crimson::ct_error::object_corrupted::make();
+    }
+    obc.set_head_state(std::move(md->os), std::move(*(md->ss)));
+    return load_obc_ertr::now();
   });
 }
 
@@ -946,7 +1002,7 @@ seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
     });
 }
 
-void PG::handle_rep_op_reply(crimson::net::Connection* conn,
+void PG::handle_rep_op_reply(crimson::net::ConnectionRef conn,
 			     const MOSDRepOpReply& m)
 {
   if (!can_discard_replica_op(m)) {

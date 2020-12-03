@@ -12,6 +12,7 @@
  */
 
 #include "DaemonServer.h"
+#include <boost/algorithm/string.hpp>
 #include "mgr/Mgr.h"
 
 #include "include/stringify.h"
@@ -863,7 +864,7 @@ void DaemonServer::log_access_denied(
                      << "entity='" << session->entity_name << "' "
                      << "cmd=" << cmdctx->cmd << ":  access denied";
   ss << "access denied: does your client key have mgr caps? "
-        "See http://docs.ceph.com/docs/master/mgr/administrator/"
+        "See http://docs.ceph.com/en/latest/mgr/administrator/"
         "#client-authentication";
 }
 
@@ -889,8 +890,6 @@ bool DaemonServer::_handle_command(
     session->inst.name = m->get_source();
   }
 
-  std::string format;
-  boost::scoped_ptr<Formatter> f;
   map<string,string> param_str_map;
   std::stringstream ss;
   int r = 0;
@@ -900,15 +899,20 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
-  {
-    cmd_getval(cmdctx->cmdmap, "format", format, string("plain"));
-    f.reset(Formatter::create(format));
-  }
-
   string prefix;
   cmd_getval(cmdctx->cmdmap, "prefix", prefix);
+  dout(10) << "decoded-size=" << cmdctx->cmdmap.size() << " prefix=" << prefix << dendl;
 
-  dout(10) << "decoded-size=" << cmdctx->cmdmap.size() << " prefix=" << prefix  << dendl;
+  boost::scoped_ptr<Formatter> f;
+  {
+    std::string format;
+    if (boost::algorithm::ends_with(prefix, "_json")) {
+      format = "json";
+    } else {
+      cmd_getval(cmdctx->cmdmap, "format", format, string("plain"));
+    }
+    f.reset(Formatter::create(format));
+  }
 
   // this is just for mgr commands - admin socket commands will fall
   // through and use the admin socket version of

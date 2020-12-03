@@ -380,6 +380,7 @@ class Option(dict):
             (k, v) for k, v in vars().items()
             if k != 'self' and v is not None)
 
+
 class Command(dict):
     """
     Helper class to declare options for COMMANDS list.
@@ -443,6 +444,7 @@ class CPlusPlusHandler(logging.Handler):
         if record.levelno >= self.level:
             self._module._ceph_log(self.format(record))
 
+
 class ClusterLogHandler(logging.Handler):
     def __init__(self, module_inst):
         super().__init__()
@@ -462,6 +464,7 @@ class ClusterLogHandler(logging.Handler):
             self._module.cluster_log(self._module.module_name,
                                      level,
                                      self.format(record))
+
 
 class FileHandler(logging.FileHandler):
     def __init__(self, module_inst):
@@ -500,7 +503,6 @@ class MgrModuleLoggingMixin(object):
 
         self._root_logger.setLevel(logging.NOTSET)
         self._set_log_level(mgr_level, module_level, cluster_level)
-
 
     def _unconfigure_logging(self):
         # remove existing handlers:
@@ -764,7 +766,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         # Keep a librados instance for those that need it.
         self._rados = None
-
 
     def __del__(self):
         self._unconfigure_logging()
@@ -1494,7 +1495,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def update_progress_event(self, evid, desc, progress, add_to_ceph_s):
         return self._ceph_update_progress_event(str(evid),
                                                 str(desc),
-                                                float(progress), 
+                                                float(progress),
                                                 bool(add_to_ceph_s))
 
     def complete_progress_event(self, evid):

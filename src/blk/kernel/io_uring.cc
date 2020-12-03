@@ -8,11 +8,6 @@
 #include "liburing.h"
 #include <sys/epoll.h>
 
-/* Options */
-
-static bool hipri = false;      /* use IO polling */
-static bool sq_thread = false;  /* use kernel submission/poller thread */
-
 struct ioring_data {
   struct io_uring io_uring;
   pthread_mutex_t cq_mutex;
@@ -108,9 +103,11 @@ static void build_fixed_fds_map(struct ioring_data *d,
   }
 }
 
-ioring_queue_t::ioring_queue_t(unsigned iodepth_) :
+ioring_queue_t::ioring_queue_t(unsigned iodepth_, bool hipri_, bool sq_thread_) :
   d(make_unique<ioring_data>()),
-  iodepth(iodepth_)
+  iodepth(iodepth_),
+  hipri(hipri_),
+  sq_thread(sq_thread_)
 {
 }
 
@@ -224,7 +221,7 @@ bool ioring_queue_t::supported()
 
 struct ioring_data {};
 
-ioring_queue_t::ioring_queue_t(unsigned iodepth_)
+ioring_queue_t::ioring_queue_t(unsigned iodepth_, bool hipri_, bool sq_thread_)
 {
   ceph_assert(0);
 }

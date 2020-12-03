@@ -1,3 +1,7 @@
+if(Boost_VERSION VERSION_GREATER_EQUAL 1.74)
+  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
+endif()
+
 set(librbd_types_srcs
   journal/Types.cc
   mirroring_watcher/Types.cc
@@ -133,6 +137,7 @@ set(librbd_internal_srcs
   migration/NativeFormat.cc
   migration/OpenSourceImageRequest.cc
   migration/RawFormat.cc
+  migration/S3Stream.cc
   migration/SourceSpecBuilder.cc
   migration/Utils.cc
   mirror/DemoteRequest.cc

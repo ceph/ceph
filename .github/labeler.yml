@@ -11,6 +11,24 @@ documentation:
   - man/**
   - "**/*.+(rst|md)"
 
+mon:
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/monmaptool.rst
+  - doc/mon/**
+  - qa/workunits/mon/**
+  - src/mon/**
+  - src/test/mon/**
+
+mgr:
+  - doc/mgr/**
+  - src/mgr/**
+  - src/pybind/mgr/ceph_module.pyi
+  - src/pybind/mgr/mgr_module.py
+  - src/pybind/mgr/mgr_util.py
+  - src/pybind/mgr/requirements.txt
+  - src/pybind/mgr/tox.ini
+  - src/test/mgr/**
+
 pybind:
   - src/pybind/cephfs/**
   - src/pybind/mgr/**
@@ -52,6 +70,9 @@ core:
   - qa/workunits/mon/**
   - qa/workunits/objectstore/**
   - qa/workunits/rados/**
+  - src/ceph.in
+  - src/ceph_osd.cc
+  - src/ceph_mon.cc
   - src/blk/**
   - src/crush/*
   - src/erasure-code/**
@@ -63,6 +84,7 @@ core:
   - src/os/**
   - src/osd/**
   - src/tools/rados/**
+  - src/test/osd/**
 
 crimson:
   - doc/dev/crimson/**
@@ -132,8 +154,28 @@ rbd:
   - src/test/librbd/**
   - src/test/rbd_mirror/**
   - src/tools/rbd/**
+  - src/tools/rbd_ggate/**
   - src/tools/rbd_mirror/**
   - src/tools/rbd_nbd/**
+  - src/tools/rbd_wnbd/**
+
+rgw:
+  - qa/suites/rgw/**
+  - qa/tasks/rgw*
+  - qa/tasks/s3*
+  - src/cls/cmpomap/**
+  - src/cls/fifo/**
+  - src/cls/otp/**
+  - src/cls/queue/**
+  - src/cls/rgw/**
+  - src/cls/rgw_gc/**
+  - src/cls/timeindex/**
+  - src/mrgw.sh
+  - src/rgw/**
+  - src/test/cls_rgw/**
+  - src/test/librgw_*
+  - src/test/rgw/**
+  - src/test/test_rgw*
 
 ceph-volume:
   - src/ceph-volume/**
@@ -142,3 +184,4 @@ ceph-volume:
 tests:
   - qa/tasks/**
   - qa/workunits/**
+  - src/test/**

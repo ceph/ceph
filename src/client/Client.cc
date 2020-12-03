@@ -482,6 +482,7 @@ void Client::dump_status(Formatter *f)
     f->dump_int("osd_epoch", osd_epoch);
     f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
     f->dump_bool("blocklisted", blocklisted);
+    f->dump_string("fs_name", mdsmap->get_fs_name());
   }
 }
 
@@ -2775,8 +2776,6 @@ void Client::cancel_commands(const MDSMap& newmap)
 
 void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 {
-  mds_gid_t old_inc, new_inc;
-
   std::unique_lock cl(client_lock);
   if (m->get_epoch() <= mdsmap->get_epoch()) {
     ldout(cct, 1) << __func__ << " epoch " << m->get_epoch()
@@ -2805,8 +2804,8 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
     if (!mdsmap->is_up(mds)) {
       session->con->mark_down();
     } else if (mdsmap->get_addrs(mds) != session->addrs) {
-      old_inc = _mdsmap->get_incarnation(mds);
-      new_inc = mdsmap->get_incarnation(mds);
+      auto old_inc = _mdsmap->get_incarnation(mds);
+      auto new_inc = mdsmap->get_incarnation(mds);
       if (old_inc != new_inc) {
         ldout(cct, 1) << "mds incarnation changed from "
 		      << old_inc << " to " << new_inc << dendl;
@@ -4329,7 +4328,7 @@ void Client::remove_session_caps(MetaSession *s, int err)
 
 int Client::_do_remount(bool retry_on_error)
 {
-  uint64_t max_retries = g_conf().get_val<uint64_t>("mds_max_retries_on_remount_failure");
+  uint64_t max_retries = cct->_conf.get_val<uint64_t>("mds_max_retries_on_remount_failure");
 
   errno = 0;
   int r = remount_cb(callback_handle);
@@ -6523,13 +6522,6 @@ void Client::start_tick_thread()
 
       auto t_interval = clock::duration(cct->_conf.get_val<sec>("client_tick_interval"));
       auto d_interval = clock::duration(cct->_conf.get_val<sec>("client_debug_inject_tick_delay"));
-
-      // Clear the debug inject tick delay
-      if (unlikely(d_interval.count() > 0)) {
-        ldout(cct, 20) << "clear debug inject tick delay: " << d_interval << dendl;
-        ceph_assert(0 == cct->_conf.set_val("client_debug_inject_tick_delay", "0"));
-        cct->_conf.apply_changes(nullptr);
-      }
 
       auto interval = std::max(t_interval, d_interval);
       if (likely(since >= interval)) {
@@ -10182,6 +10174,8 @@ int Client::ftruncate(int fd, loff_t length, const UserPerm& perms)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
+  if ((f->mode & CEPH_FILE_MODE_WR) == 0)
+    return -EBADF;
   struct stat attr;
   attr.st_size = length;
   return _setattr(f->inode, &attr, CEPH_SETATTR_SIZE, perms);
@@ -13184,6 +13178,15 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -EROFS;
   }
+  if (fromdir != todir) {
+    Inode *fromdir_root =
+      fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
+    Inode *todir_root =
+      todir->quota.is_enable() ? todir : get_quota_root(todir, perm);
+    if (fromdir_root != todir_root) {
+      return -EXDEV;
+    }
+  }
 
   InodeRef target;
   MetaRequest *req = new MetaRequest(op);
@@ -13216,32 +13219,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    Inode *fromdir_root = nullptr;
-    Inode *todir_root = nullptr;
-    int mask = 0;
-    bool quota_check = false;
-    if (fromdir != todir) {
-      fromdir_root =
-        fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
-      todir_root =
-        todir->quota.is_enable() ? todir : get_quota_root(todir, perm);
-
-      if (todir_root->quota.is_enable() && fromdir_root != todir_root) {
-        // use CEPH_STAT_RSTAT mask to force send getattr or lookup request 
-        // to auth MDS to get latest rstat for todir_root and source dir 
-        // even if their dentry caches and inode caps are satisfied.
-        res = _getattr(todir_root, CEPH_STAT_RSTAT, perm, true);
-        if (res < 0)
-          goto fail;
-
-        quota_check = true;
-        if (oldde->inode && oldde->inode->is_dir()) {
-          mask |= CEPH_STAT_RSTAT;
-        }
-      }
-    }
-
-    res = _lookup(fromdir, fromname, mask, &oldin, perm);
+    res = _lookup(fromdir, fromname, 0, &oldin, perm);
     if (res < 0)
       goto fail;
 
@@ -13249,39 +13227,6 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     oldinode->break_all_delegs();
     req->set_old_inode(oldinode);
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
-
-    if (quota_check) {
-      int64_t old_bytes, old_files;
-      if (oldinode->is_dir()) {
-        old_bytes = oldinode->rstat.rbytes;
-        old_files = oldinode->rstat.rsize();
-      } else {
-        old_bytes = oldinode->size;
-        old_files = 1;
-      }
-
-      bool quota_exceed = false;
-      if (todir_root && todir_root->quota.max_bytes &&
-          (old_bytes + todir_root->rstat.rbytes) >= todir_root->quota.max_bytes) {
-        ldout(cct, 10) << "_rename (" << oldinode->ino << " bytes="
-                       << old_bytes << ") to (" << todir->ino 
-		       << ") will exceed quota on " << *todir_root << dendl;
-        quota_exceed = true;
-      }
-
-      if (todir_root && todir_root->quota.max_files &&
-          (old_files + todir_root->rstat.rsize()) >= todir_root->quota.max_files) {
-        ldout(cct, 10) << "_rename (" << oldinode->ino << " files="
-                       << old_files << ") to (" << todir->ino 
-                       << ") will exceed quota on " << *todir_root << dendl;
-        quota_exceed = true;
-      }
-
-      if (quota_exceed) {
-        res = (oldinode->is_dir()) ? -EXDEV : -EDQUOT;
-        goto fail;
-      }
-    }
 
     res = _lookup(todir, toname, 0, &otherin, perm);
     switch (res) {
@@ -15153,7 +15098,7 @@ void intrusive_ptr_add_ref(Inode *in)
 {
   in->get();
 }
-		
+
 void intrusive_ptr_release(Inode *in)
 {
   in->client->put_inode(in);

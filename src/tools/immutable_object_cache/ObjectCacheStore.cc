@@ -3,7 +3,13 @@
 
 #include "ObjectCacheStore.h"
 #include "Utils.h"
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
 #include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
@@ -11,7 +17,6 @@
 #define dout_prefix *_dout << "ceph::cache::ObjectCacheStore: " << this << " " \
                            << __func__ << ": "
 
-namespace efs = std::experimental::filesystem;
 
 namespace ceph {
 namespace immutable_obj_cache {
@@ -61,15 +66,15 @@ int ObjectCacheStore::init(bool reset) {
   // TODO(dehao): fsck and reuse existing cache objects
   if (reset) {
     try {
-      if (efs::exists(m_cache_root_dir)) {
+      if (fs::exists(m_cache_root_dir)) {
         // remove all sub folders
-        for (auto& p : efs::directory_iterator(m_cache_root_dir)) {
-          efs::remove_all(p.path());
+        for (auto& p : fs::directory_iterator(m_cache_root_dir)) {
+          fs::remove_all(p.path());
         }
       } else {
-        efs::create_directories(m_cache_root_dir);
+        fs::create_directories(m_cache_root_dir);
       }
-    } catch (const efs::filesystem_error& e) {
+    } catch (const fs::filesystem_error& e) {
       lderr(m_cct) << "failed to initialize cache store directory: "
                    << e.what() << dendl;
       return -e.code().value();
@@ -287,12 +292,12 @@ std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name,
     ldout(m_cct, 20) << "creating cache dir: " << cache_file_dir <<dendl;
     std::error_code ec;
     std::string new_dir = m_cache_root_dir + cache_file_dir;
-    if (efs::exists(new_dir, ec)) {
+    if (fs::exists(new_dir, ec)) {
       ldout(m_cct, 20) << "cache dir exists: " << cache_file_dir <<dendl;
       return new_dir + cache_file_name;
     }
 
-    if (!efs::create_directories(new_dir, ec)) {
+    if (!fs::create_directories(new_dir, ec)) {
       ldout(m_cct, 5) << "fail to create cache dir: " << new_dir
                       << "error: " << ec.message() << dendl;
       return "";

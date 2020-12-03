@@ -518,10 +518,11 @@ bool Client::is_hunting() const {
   return !active_con;
 }
 
-seastar::future<>
-Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
+std::optional<seastar::future<>>
+Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
-  return gate.dispatch(__func__, *this, [this, conn, &m] {
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
     // we only care about these message types
     switch (m->get_type()) {
     case CEPH_MSG_MON_MAP:
@@ -545,9 +546,11 @@ Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
       return handle_config(
 	boost::static_pointer_cast<MConfig>(m));
     default:
+      dispatched = false;
       return seastar::now();
     }
   });
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
 void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replace */)
@@ -782,7 +785,7 @@ int Client::handle_auth_bad_method(crimson::net::ConnectionRef conn,
   }
 }
 
-seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
+seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
                                         Ref<MMonMap> m)
 {
   monmap.decode(m->monmapbl);
@@ -812,8 +815,8 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
   }
 }
 
-seastar::future<> Client::handle_auth_reply(crimson::net::Connection* conn,
-                                               Ref<MAuthReply> m)
+seastar::future<> Client::handle_auth_reply(crimson::net::ConnectionRef conn,
+                                            Ref<MAuthReply> m)
 {
   logger().info(
     "handle_auth_reply mon {} => {} returns {}: {}",

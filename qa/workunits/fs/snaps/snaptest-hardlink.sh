@@ -2,8 +2,6 @@
 
 set -e
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
-
 mkdir 1 2
 echo asdf >1/file1
 echo asdf >1/file2

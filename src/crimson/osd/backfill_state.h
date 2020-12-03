@@ -13,7 +13,6 @@
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 
-#include "osd/PeeringState.h"
 #include "osd/recovery_types.h"
 
 namespace crimson::osd {
@@ -170,6 +169,9 @@ public:
 
     // these methods take BackfillIntervals instead of extracting them from
     // the state to emphasize the relationships across the main loop.
+    bool all_emptied(
+      const BackfillInterval& local_backfill_info,
+      const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const;
     hobject_t earliest_peer_backfill(
       const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info) const;
     bool should_rescan_replicas(
@@ -288,7 +290,6 @@ struct BackfillState::BackfillListener {
     const hobject_t& begin) = 0;
 
   virtual void enqueue_push(
-    const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) = 0;
 
@@ -340,7 +341,7 @@ public:
 
   bool tracked_objects_completed() const;
 
-  void enqueue_push(const hobject_t&);
+  bool enqueue_push(const hobject_t&);
   void enqueue_drop(const hobject_t&);
   void complete_to(const hobject_t&, const pg_stat_t&);
 };

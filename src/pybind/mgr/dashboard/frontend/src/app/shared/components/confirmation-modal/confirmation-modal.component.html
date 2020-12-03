@@ -12,14 +12,10 @@
         </p>
       </div>
       <div class="modal-footer">
-        <cd-submit-button [form]="confirmationForm"
-                          (submitAction)="onSubmit(confirmationForm.value)">
-          {{ buttonText }}
-        </cd-submit-button>
-        <cd-back-button [back]="boundCancel"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="onSubmit(confirmationForm.value)"
+                              (backActionEvent)="boundCancel()"
+                              [form]="confirmationForm"
+                              [submitText]="buttonText"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

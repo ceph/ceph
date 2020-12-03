@@ -53,20 +53,19 @@ def task(ctx, config):
     :param config: Configuration
     """
     log.info('Mounting kernel clients...')
-    assert config is None or isinstance(config, list) or isinstance(config, dict), \
-        "task kclient got invalid config"
 
     if config is None:
-        config = ['client.{id}'.format(id=id_)
-                  for id_ in misc.all_roles_of_type(ctx.cluster, 'client')]
-
-    if isinstance(config, list):
+        ids = misc.all_roles_of_type(ctx.cluster, 'client')
+        client_roles = [f'client.{id_}' for id_ in ids]
+        config = dict([r, dict()] for r in client_roles)
+    elif isinstance(config, list):
         client_roles = config
         config = dict([r, dict()] for r in client_roles)
     elif isinstance(config, dict):
         client_roles = filter(lambda x: 'client.' in x, config.keys())
     else:
-        raise ValueError("Invalid config object: {0} ({1})".format(config, config.__class__))
+        raise ValueError(f"Invalid config object: {config} ({config.__class__})")
+    log.info(f"config is {config}")
 
     clients = list(misc.get_clients(ctx=ctx, roles=client_roles))
 
@@ -77,13 +76,22 @@ def task(ctx, config):
 
     mounts = {}
     overrides = ctx.config.get('overrides', {}).get('kclient', {})
+    top_overrides = dict(filter(lambda x: 'client.' not in x[0], overrides.items()))
     for id_, remote in clients:
-        client_config = config.get("client.%s" % id_)
+        entity = f"client.{id_}"
+        client_config = config.get(entity)
         if client_config is None:
             client_config = {}
+        # top level overrides
+        for k, v in top_overrides.items():
+            if v is not None:
+                client_config[k] = v
+        # mount specific overrides
+        client_config_overrides = overrides.get(entity)
+        deep_merge(client_config, client_config_overrides)
+        log.info(f"{entity} config is {client_config}")
 
-        deep_merge(client_config, overrides)
-
+        cephfs_name = client_config.get("cephfs_name")
         if config.get("disabled", False) or not client_config.get('mounted', True):
             continue
 
@@ -93,7 +101,8 @@ def task(ctx, config):
             client_id=id_,
             client_remote=remote,
             brxnet=ctx.teuthology_config.get('brxnet', None),
-            config=client_config)
+            config=client_config,
+            cephfs_name=cephfs_name)
 
         mounts[id_] = kernel_mount
 

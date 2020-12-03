@@ -15,9 +15,8 @@ A push notification mechanism exists too, currently supporting HTTP,
 AMQP0.9.1 and Kafka endpoints. In this case, the events are pushed to an endpoint on top of storing them in Ceph. If events should only be pushed to an endpoint
 and do not need to be stored in Ceph, the `Bucket Notification`_ mechanism should be used instead of pubsub sync module. 
 
-A user can create different topics. A topic entity is defined by its user and its name. A
-user can only manage its own topics, and can only subscribe to events published by buckets
-it owns.
+A user can create different topics. A topic entity is defined by its name and is per tenant. A
+user can only associate its topics (via notification configuration) with buckets it owns.
 
 In order to publish events for specific bucket a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
@@ -31,7 +30,7 @@ mechanisms. This API has two flavors, one is S3-compatible and one is not. The t
 together, although it is recommended to use the S3-compatible one. 
 The S3-compatible API is similar to the one used in the bucket notification mechanism.
 
-Events are stored as RGW objects in a special bucket, under a special user. Events cannot
+Events are stored as RGW objects in a special bucket, under a special user (pubsub control user). Events cannot
 be accessed directly, but need to be pulled and acked using the new REST API.
 
 .. toctree::
@@ -116,52 +115,52 @@ A configuration field can be removed by using ``--tier-config-rm={key}``.
 Topic and Subscription Management via CLI
 -----------------------------------------
 
-Configuration of all topics of a user could be fetched using the following command:
+Configuration of all topics, associated with a tenant, could be fetched using the following command:
    
 ::
    
-   # radosgw-admin topic list --uid={user-id}
+   # radosgw-admin topic list [--tenant={tenant}]
 
 
 Configuration of a specific topic could be fetched using:
 
 ::
    
-   # radosgw-admin topic get --uid={user-id} --topic={topic-name}
+   # radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
 And removed using:
 
 ::
    
-   # radosgw-admin topic rm --uid={user-id} --topic={topic-name}
+   # radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
 
 Configuration of a subscription could be fetched using:
 
 ::
    
-   # radosgw-admin subscription get --uid={user-id} --subscription={topic-name}
+   # radosgw-admin subscription get --subscription={topic-name} [--tenant={tenant}]
 
 And removed using:
 
 ::
    
-   # radosgw-admin subscription rm --uid={user-id} --subscription={topic-name}
+   # radosgw-admin subscription rm --subscription={topic-name} [--tenant={tenant}]
 
 
 To fetch all of the events stored in a subcription, use:
 
 ::
    
-   # radosgw-admin subscription pull --uid={user-id} --subscription={topic-name} [--marker={last-marker}]
+   # radosgw-admin subscription pull --subscription={topic-name} [--marker={last-marker}] [--tenant={tenant}]
 
 
 To ack (and remove) an event from a subscription, use:
 
 ::
    
-   # radosgw-admin subscription ack --uid={user-id} --subscription={topic-name} --event-id={event-id}
+   # radosgw-admin subscription ack --subscription={topic-name} --event-id={event-id} [--tenant={tenant}]
 
 
 PubSub Performance Stats
@@ -276,7 +275,9 @@ Response will have the following format (JSON):
                "oid_prefix":"",
                "push_endpoint":"",
                "push_endpoint_args":"",
-               "push_endpoint_topic":""
+               "push_endpoint_topic":"",
+               "stored_secret":"",
+               "persistent":""
            },
            "arn":""
            "opaqueData":""
@@ -307,7 +308,7 @@ Delete the specified topic.
 List Topics
 ```````````
 
-List all topics that user defined.
+List all topics associated with a tenant.
 
 ::
 
