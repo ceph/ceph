@@ -201,7 +201,7 @@ class MetricCollectionThread(threading.Thread):
 
                 try:
                     data = self.mod.collect()
-                except Exception as e:
+                except:
                     # Log any issues encountered during the data collection and continue
                     self.mod.log.exception("failed to collect metrics:")
                     self.event.wait(self.mod.scrape_interval)
