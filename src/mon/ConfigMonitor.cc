@@ -800,13 +800,6 @@ void ConfigMonitor::load_config()
     it->next();
   }
   dout(10) << __func__ << " got " << num << " keys" << dendl;
-  dout(20) << __func__ << " config map:\n";
-  JSONFormatter jf(true);
-  jf.open_object_section("config_map");
-  config_map.dump(&jf);
-  jf.close_section();
-  jf.flush(*_dout);
-  *_dout << dendl;
 
   // refresh our own config
   {
