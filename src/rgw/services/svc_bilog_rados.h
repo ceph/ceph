@@ -35,14 +35,16 @@ public:
 
   void init(RGWSI_BucketIndex_RADOS *bi_rados_svc);
 
-  int log_start(const RGWBucketInfo& bucket_info, int shard_id);
-  int log_stop(const RGWBucketInfo& bucket_info, int shard_id);
+  int log_start(const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id);
+  int log_stop(const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id);
 
   int log_trim(const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
                int shard_id,
                std::string& start_marker,
                std::string& end_marker);
   int log_list(const RGWBucketInfo& bucket_info,
+               const rgw::bucket_log_layout_generation& log_layout,
                int shard_id,
                std::string& marker,
                uint32_t max,
@@ -50,6 +52,7 @@ public:
                bool *truncated);
 
   int get_log_status(const RGWBucketInfo& bucket_info,
+                     const rgw::bucket_log_layout_generation& log_layout,
                      int shard_id,
                      map<int, string> *markers,
                      optional_yield y);

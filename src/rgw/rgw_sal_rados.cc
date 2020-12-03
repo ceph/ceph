@@ -211,12 +211,12 @@ int RGWRadosBucket::load_by_name(const DoutPrefixProvider *dpp, const std::strin
   return store->getRados()->get_bucket_instance_info(*rctx, info.bucket, info, NULL, &attrs, y, dpp);
 }
 
-int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
-				     std::string *bucket_ver, std::string *master_ver,
+int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, const bucket_index_layout_generation& idx_layout,
+                                     int shard_id, std::string *bucket_ver, std::string *master_ver,
 				     std::map<RGWObjCategory, RGWStorageStats>& stats,
 				     std::string *max_marker, bool *syncstopped)
 {
-  return store->getRados()->get_bucket_stats(bucket_info, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(bucket_info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RGWRadosBucket::read_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y)

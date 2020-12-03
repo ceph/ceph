@@ -225,7 +225,8 @@ class RGWBucket {
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) = 0;
     virtual int get_bucket_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-    virtual int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
+    virtual int get_bucket_stats(RGWBucketInfo& bucket_info,
+				 const bucket_index_layout_generation& idx_layout, int shard_id,
 				 std::string *bucket_ver, std::string *master_ver,
 				 std::map<RGWObjCategory, RGWStorageStats>& stats,
 				 std::string *max_marker = nullptr,

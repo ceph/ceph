@@ -23,6 +23,10 @@
 
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;
+  uint32_t format_ver{0};
+  bool truncated{false};
+  std::optional<rgw::bucket_log_layout_generation> next_log_layout;
+
 public:
   RGWOp_BILog_List() : sent_header(false) {}
   ~RGWOp_BILog_List() override {}
@@ -47,6 +51,9 @@ class RGWOp_BILog_Info : public RGWRESTOp {
   string master_ver;
   string max_marker;
   bool syncstopped;
+  uint64_t oldest_gen = 0;
+  uint64_t latest_gen = 0;
+
 public:
   RGWOp_BILog_Info() : bucket_ver(), master_ver(), syncstopped(false) {}
   ~RGWOp_BILog_Info() override {}

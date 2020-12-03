@@ -306,7 +306,10 @@ int BucketAsyncRefreshHandler::init_fetch()
 
   ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
-  r = store->getRados()->get_bucket_stats_async(bucket_info, RGW_NO_SHARD, this);
+  const auto& latest_log = bucket_info.layout.logs.back();
+  const auto& index = log_to_index_layout(latest_log);
+
+  r = store->getRados()->get_bucket_stats_async(bucket_info, index, RGW_NO_SHARD, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
@@ -378,8 +381,11 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
   string bucket_ver;
   string master_ver;
 
+  const auto& latest_log = bucket_info.layout.logs.back();
+  const auto& index = log_to_index_layout(latest_log);
+
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  r = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver,
+  r = store->getRados()->get_bucket_stats(bucket_info, index, RGW_NO_SHARD, &bucket_ver,
                                   &master_ver, bucket_stats, nullptr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket stats for bucket="
