@@ -5,7 +5,6 @@ This module is a thin wrapper around rgw_file.
 
 from cpython cimport PyObject, ref, exc, array
 from libc.stdint cimport *
-from libcpp cimport bool
 from libc.stdlib cimport malloc, realloc, free
 from cstat cimport stat
 
@@ -163,7 +162,7 @@ cdef make_ex(ret, msg):
         return Error(msg + (": error code %d" % ret))
 
 
-cdef bool readdir_cb(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) \
+cdef bint readdir_cb(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) \
 except? -9000 with gil:
     if exc.PyErr_Occurred():
         return False
@@ -371,7 +370,7 @@ cdef class LibRGWFS(object):
         cdef:
             rgw_file_handle *_dir_handler = <rgw_file_handle*>dir_handler.handler
             uint64_t _offset = offset
-            bool _eof
+            bint _eof
             uint32_t _flags = flags
         with nogil:
             ret = rgw_readdir(self.fs, _dir_handler, &_offset, &readdir_cb,
