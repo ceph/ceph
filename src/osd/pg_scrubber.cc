@@ -181,7 +181,7 @@ bool PgScrubber::verify_against_abort(epoch_t epoch_to_verify)
   }
 
   dout(15) << __func__ << " aborting. incoming epoch: " << epoch_to_verify
-	   << "vs last-aborted: " << m_last_aborted << dendl;
+	   << " vs last-aborted: " << m_last_aborted << dendl;
 
   // if we were not aware of the abort before - kill the scrub.
   if (epoch_to_verify > m_last_aborted) {
@@ -699,6 +699,9 @@ void PgScrubber::add_delayed_scheduling()
     m_needs_sleep = false;
     m_sleep_started_at = ceph_clock_now();
 
+    // the following log line is used by osd-scrub-test.sh
+    dout(20) << __func__ << " scrub state is PendingTimer, sleeping" << dendl;
+
     // the 'delayer' for crimson is different. Will be factored out.
 
     spg_t pgid = m_pg->get_pgid();
@@ -1047,17 +1050,17 @@ int PgScrubber::build_scrub_map_chunk(
     int r = m_pg->get_pgbackend()->be_scan_list(map, pos);
     dout(10) << __func__ << " be r " << r << dendl;
     if (r == -EINPROGRESS) {
-      dout(8 /*20*/) << __func__ << " in progress" << dendl;
+      dout(20) << __func__ << " in progress" << dendl;
       return r;
     }
   }
 
   // finish
-  dout(8 /*20*/) << __func__ << " finishing" << dendl;
+  dout(20) << __func__ << " finishing" << dendl;
   ceph_assert(pos.done());
   m_pg->_repair_oinfo_oid(map);
 
-  dout(8 /*20*/) << __func__ << " done, got " << map.objects.size() << " items" << dendl;
+  dout(20) << __func__ << " done, got " << map.objects.size() << " items" << dendl;
   return 0;
 }
 
@@ -1649,10 +1652,9 @@ void PgScrubber::scrub_finish()
 	  stats.stats.sum.num_large_omap_objects = m_omap_stats.large_omap_objects;
 	  stats.stats.sum.num_omap_bytes = m_omap_stats.omap_bytes;
 	  stats.stats.sum.num_omap_keys = m_omap_stats.omap_keys;
-	  dout(10 /*25*/) << "scrub_finish shard " << m_pg_whoami
-			  << " num_omap_bytes = " << stats.stats.sum.num_omap_bytes
-			  << " num_omap_keys = " << stats.stats.sum.num_omap_keys
-			  << dendl;
+	  dout(25) << "scrub_finish shard " << m_pg_whoami
+		   << " num_omap_bytes = " << stats.stats.sum.num_omap_bytes
+		   << " num_omap_keys = " << stats.stats.sum.num_omap_keys << dendl;
 	} else {
 	  stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
 	  // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
