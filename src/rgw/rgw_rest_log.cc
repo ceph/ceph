@@ -366,15 +366,35 @@ void RGWOp_BILog_List::execute(optional_yield y) {
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
          max_entries_str = s->info.args.get("max-entries"),
-         bucket_instance = s->info.args.get("bucket-instance");
+         bucket_instance = s->info.args.get("bucket-instance"),
+         gen_str = s->info.args.get("generation"),
+         format_version_str = s->info.args.get("format-ver");
   std::unique_ptr<rgw::sal::Bucket> bucket;
   rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
+
   unsigned max_entries;
 
   if (bucket_name.empty() && bucket_instance.empty()) {
     ldpp_dout(this, 5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
     op_ret = -EINVAL;
     return;
+  }
+
+  string err;
+  const uint64_t gen = strict_strtoll(gen_str.c_str(), 10, &err);
+  if (!err.empty()) {
+    ldpp_dout(s, 5) << "Error parsing generation param " << gen_str << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  if (!format_version_str.empty()) {
+    format_ver = strict_strtoll(format_version_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 5) << "Failed to parse format-ver param: " << format_ver << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
   }
 
   int shard_id;
@@ -394,9 +414,23 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     return;
   }
 
-  bool truncated;
+  const auto& logs = bucket->get_info().layout.logs;
+  auto log = std::prev(logs.end());
+  if (gen) {
+    log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
+    if (log == logs.end()) {
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
+      op_ret = -ENOENT;
+      return;
+    }
+  }
+  if (auto next = std::next(log); next != logs.end()) {
+    next_log_layout = *next;   // get the next log after the current latest
+  }
+  auto& log_layout = *log; // current log layout for log listing
+
   unsigned count = 0;
-  string err;
+
 
   max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
@@ -405,8 +439,8 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), shard_id,
-                                               marker, max_entries - count, 
+    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
+                                               marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {
       ldpp_dout(this, 5) << "ERROR: list_bi_log_entries()" << dendl;
@@ -434,6 +468,10 @@ void RGWOp_BILog_List::send_response() {
   if (op_ret < 0)
     return;
 
+  if (format_ver >= 2) {
+    s->formatter->open_object_section("result");
+  }
+
   s->formatter->open_array_section("entries");
 }
 
@@ -450,9 +488,23 @@ void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& ma
 
 void RGWOp_BILog_List::send_response_end() {
   s->formatter->close_section();
+
+  if (format_ver >= 2) {
+    encode_json("truncated", truncated, s->formatter);
+
+    if (next_log_layout) {
+      s->formatter->open_object_section("next_log");
+      encode_json("generation", next_log_layout->gen, s->formatter);
+      encode_json("num_shards", next_log_layout->layout.in_index.layout.num_shards, s->formatter);
+      s->formatter->close_section(); // next_log
+    }
+
+    s->formatter->close_section(); // result
+  }
+
   flusher.flush();
 }
-      
+
 void RGWOp_BILog_Info::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
@@ -484,11 +536,17 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   }
 
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  bucket->read_stats(s, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  const auto& latest_log = bucket->get_info().layout.logs.back();
+  const auto& index = log_to_index_layout(latest_log);
+
+  int ret =  bucket->read_stats(s, index, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;
   }
+
+  oldest_gen = bucket->get_info().layout.logs.front().gen;
+  latest_gen = latest_log.gen;
 }
 
 void RGWOp_BILog_Info::send_response() {
@@ -504,6 +562,8 @@ void RGWOp_BILog_Info::send_response() {
   encode_json("master_ver", master_ver, s->formatter);
   encode_json("max_marker", max_marker, s->formatter);
   encode_json("syncstopped", syncstopped, s->formatter);
+  encode_json("oldest_gen", oldest_gen, s->formatter);
+  encode_json("latest_gen", latest_gen, s->formatter);
   s->formatter->close_section();
 
   flusher.flush();
@@ -544,7 +604,20 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(s, bucket->get_info(), shard_id, start_marker, end_marker);
+  const auto& logs = bucket->get_info().layout.logs;
+  auto log_layout = std::reference_wrapper{logs.back()};
+  auto gen = logs.back().gen; // TODO: remove this once gen is passed here
+  if (gen) {
+    auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
+    if (i == logs.end()) {
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
+      op_ret = -ENOENT;
+      return;
+    }
+    log_layout = *i;
+  }
+
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(s, bucket->get_info(), log_layout, shard_id, start_marker, end_marker);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
@@ -1066,10 +1139,10 @@ RGWOp *RGWHandler_Log::op_post() {
     else if (s->info.args.exists("unlock"))
       return new RGWOp_MDLog_Unlock;
     else if (s->info.args.exists("notify"))
-      return new RGWOp_MDLog_Notify;	    
+      return new RGWOp_MDLog_Notify;
   } else if (type.compare("data") == 0) {
     if (s->info.args.exists("notify"))
-      return new RGWOp_DATALog_Notify;	    
+      return new RGWOp_DATALog_Notify;
   }
   return NULL;
 }

@@ -1349,9 +1349,9 @@ public:
     rctx->set_compressed(obj);
   }
   int decode_policy(const DoutPrefixProvider *dpp, bufferlist& bl, ACLOwner *owner);
-  int get_bucket_stats(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, int shard_id, std::string *bucket_ver, std::string *master_ver,
+  int get_bucket_stats(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
-  int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
+  int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *cb);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp);
   /* xxx dang obj_ctx -> svc */
@@ -1396,7 +1396,8 @@ public:
 
   int cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
                               RGWBucketInfo& bucket_info,
-			      const int shard_id,
+                              const rgw::bucket_index_layout_generation& idx_layout,
+                              const int shard_id,
 			      const rgw_obj_index_key& start_after,
 			      const std::string& prefix,
 			      const std::string& delimiter,
@@ -1411,7 +1412,8 @@ public:
 			      RGWBucketListNameFilter force_check_filter = {});
   int cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
                                 RGWBucketInfo& bucket_info,
-				int shard_id,
+                                const rgw::bucket_index_layout_generation& idx_layout,
+                                int shard_id,
 				const rgw_obj_index_key& start_after,
 				const std::string& prefix,
 				uint32_t num_entries,
@@ -1423,11 +1425,13 @@ public:
 				RGWBucketListNameFilter force_check_filter = {});
   int cls_bucket_head(const DoutPrefixProvider *dpp,
 		      const RGWBucketInfo& bucket_info,
-		      int shard_id,
-		      std::vector<rgw_bucket_dir_header>& headers,
+		      const rgw::bucket_index_layout_generation& idx_layout,
+		      int shard_id, std::vector<rgw_bucket_dir_header>& headers,
 		      std::map<int, std::string> *bucket_instance_ids = NULL);
-  int cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
-
+  int cls_bucket_head_async(const DoutPrefixProvider *dpp,
+			    const RGWBucketInfo& bucket_info,
+			    const rgw::bucket_index_layout_generation& idx_layout,
+			    int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
   int bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_dir_entry *dirent);
   int bi_get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_olh_entry *olh);
   int bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
