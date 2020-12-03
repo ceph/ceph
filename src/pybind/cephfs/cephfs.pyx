@@ -7,8 +7,15 @@ from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 
-from c_cephfs cimport *
-cimport rados
+from types cimport *
+IF BUILD_DOC:
+    include "mock_cephfs.pxi"
+    cdef class Rados:
+        cdef:
+            rados_t cluster
+ELSE:
+    from c_cephfs cimport *
+    from rados cimport Rados
 
 from collections import namedtuple
 from datetime import datetime
@@ -404,7 +411,7 @@ cdef class LibCephFS(object):
         else:
             self.create(conf, conffile, auth_id)
 
-    def create_with_rados(self, rados.Rados rados_inst):
+    def create_with_rados(self, Rados rados_inst):
         cdef int ret
         with nogil:
             ret = ceph_create_from_rados(&self.cluster, rados_inst.cluster)
