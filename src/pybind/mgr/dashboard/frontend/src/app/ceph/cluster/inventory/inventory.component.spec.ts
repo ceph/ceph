@@ -43,6 +43,10 @@ describe('InventoryComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should not display doc panel if orchestrator is available', () => {
+    expect(component.showDocPanel).toBeFalsy();
+  });
+
   describe('after ngOnInit', () => {
     it('should load devices', () => {
       fixture.detectChanges();

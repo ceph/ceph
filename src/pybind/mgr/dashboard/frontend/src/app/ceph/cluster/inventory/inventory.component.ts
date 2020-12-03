@@ -16,6 +16,7 @@ export class InventoryComponent implements OnChanges, OnInit {
   icons = Icons;
 
   hasOrchestrator = false;
+  showDocPanel = false;
 
   devices: Array<InventoryDevice> = [];
 
@@ -24,6 +25,7 @@ export class InventoryComponent implements OnChanges, OnInit {
   ngOnInit() {
     this.orchService.status().subscribe((status) => {
       this.hasOrchestrator = status.available;
+      this.showDocPanel = !status.available;
       if (status.available) {
         this.getInventory();
       }

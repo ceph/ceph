@@ -111,4 +111,8 @@ describe('ServiceDaemonListComponent', () => {
     component.getDaemons(new CdTableFetchDataContext(() => {}));
     expect(component.daemons.length).toBe(3);
   });
+
+  it('should not display doc panel if orchestrator is available', () => {
+    expect(component.showDocPanel).toBeFalsy();
+  });
 });

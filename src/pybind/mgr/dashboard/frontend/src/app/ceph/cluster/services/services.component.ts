@@ -28,6 +28,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   @Input() hiddenColumns: string[] = [];
 
   permissions: Permissions;
+  showDocPanel = false;
 
   checkingOrchestrator = true;
   hasOrchestrator = false;
@@ -93,6 +94,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
     this.orchService.status().subscribe((status) => {
       this.hasOrchestrator = status.available;
+      this.showDocPanel = !status.available;
     });
   }
 
