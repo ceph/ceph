@@ -24,6 +24,7 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
   icons = Icons;
 
   orchStatus: OrchestratorStatus;
+  showDocPanel = false;
 
   devices: Array<InventoryDevice> = [];
 
@@ -36,6 +37,7 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
   ngOnInit() {
     this.orchService.status().subscribe((status) => {
       this.orchStatus = status;
+      this.showDocPanel = !status.available;
       if (status.available) {
         // Create a timer to get cached inventory from the orchestrator.
         // Do not ask the orchestrator frequently to refresh its cache data because it's expensive.
