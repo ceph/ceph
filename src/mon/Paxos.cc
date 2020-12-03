@@ -625,7 +625,7 @@ void Paxos::begin(bufferlist& v)
   // accept it ourselves
   accepted.clear();
   accepted.insert(mon.rank);
-  new_value = v;
+  new_value = std::move(v);
 
   if (last_committed == 0) {
     auto t(std::make_shared<MonitorDBStore::Transaction>());
@@ -636,7 +636,7 @@ void Paxos::begin(bufferlist& v)
     bufferlist tx_bl;
     t->encode(tx_bl);
 
-    new_value = tx_bl;
+    new_value = std::move(tx_bl);
   }
 
   // store the proposed value in the store. IF it is accepted, we will then
