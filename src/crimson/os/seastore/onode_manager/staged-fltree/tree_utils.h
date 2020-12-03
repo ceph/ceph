@@ -15,27 +15,13 @@
 #include "stages/key_layout.h"
 #include "tree.h"
 
-namespace crimson::os::seastore::onode {
+/**
+ * tree_utils
+ *
+ * Contains shared logic for unit tests and perf tool.
+ */
 
-ghobject_t make_ghobj(
-    int shard, unsigned pool, unsigned crush,
-    std::string ns, std::string oid, unsigned snap, unsigned gen) {
-  assert(shard <= std::numeric_limits<shard_t>::max());
-  assert(shard >= std::numeric_limits<shard_t>::min());
-  assert(pool <= std::numeric_limits<pool_t>::max());
-  assert(crush <= std::numeric_limits<crush_hash_t>::max());
-  assert(snap <= std::numeric_limits<snap_t>::max());
-  assert(gen <= std::numeric_limits<gen_t>::max());
-  ghobject_t ghobj;
-  ghobj.shard_id.id = shard;
-  ghobj.hobj.pool = pool;
-  ghobj.hobj.set_hash(crush);
-  ghobj.hobj.nspace = ns;
-  ghobj.hobj.oid.name = oid;
-  ghobj.hobj.snap = snap;
-  ghobj.generation = gen;
-  return ghobj;
-}
+namespace crimson::os::seastore::onode {
 
 class Onodes {
  public:
@@ -130,7 +116,7 @@ class KVPool {
       assert(oid_size >= current_size);
       os_oid << std::string(oid_size - current_size, '_');
 
-      return make_ghobj(index2, index2, index2,
+      return ghobject_t(shard_id_t(index2), index2, index2,
                         os_ns.str(), os_oid.str(), index0, index0);
     }
   };
