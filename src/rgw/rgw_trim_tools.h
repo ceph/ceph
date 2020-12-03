@@ -9,6 +9,8 @@
 #include <vector>
 #include <set>
 
+#include "rgw_sync_info.h"
+
 class RGWCoroutine;
 class RGWRados;
 class RGWHTTPManager;
@@ -34,6 +36,7 @@ public:
 class RGWTrimTools {
 public:
   static RGWTrimSIPMgr *get_trim_sip_mgr(rgw::sal::RGWRadosStore *store,
-                                         const std::string& sip_name,
+                                         const string& sip_data_type,
+                                         SIProvider::StageType sip_stage_type,
                                          std::optional<std::string> sip_instance);
 };

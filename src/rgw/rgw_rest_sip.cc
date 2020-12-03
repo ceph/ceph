@@ -28,7 +28,13 @@
 void RGWOp_SIP_GetInfo::execute() {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
+  if (provider) {
+    sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(*provider, opt_instance);
+  } else {
+    sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(*data_type,
+                                                 SIProvider::stage_type_from_str(*stage_type),
+                                                 opt_instance);
+  }
   if (!sip) {
     ldout(s->cct, 20) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -403,12 +409,21 @@ void RGWOp_SIP_Trim::execute() {
 
 RGWOp *RGWHandler_SIP::op_get() {
   auto provider = s->info.args.get_std_optional("provider");
+  auto data_type = s->info.args.get_std_optional("data-type");
+  auto stage_type = s->info.args.get_std_optional("stage-type");
+
   if (!provider) {
-    return new RGWOp_SIP_List;
+    if (!data_type && !stage_type) {
+      return new RGWOp_SIP_List;
+    }
   }
 
   if (s->info.args.exists("info")) {
-    return new RGWOp_SIP_GetInfo(std::move(*provider));
+    return new RGWOp_SIP_GetInfo(provider, data_type, stage_type);
+  }
+
+  if (!provider) {
+    return nullptr;
   }
 
   if (s->info.args.exists("status")) {

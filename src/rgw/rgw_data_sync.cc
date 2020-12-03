@@ -520,8 +520,6 @@ public:
                                                   sync_env(_sc->env) {}
 
   virtual ~RGWDataSyncInfoCRHandler() {}
-
-  virtual int validate_sync_marker(rgw_data_sync_marker& marker) const = 0;
 };
 
 using RGWDataSyncInfoCRHandlerRef = std::shared_ptr<RGWDataSyncInfoCRHandler>;
@@ -958,11 +956,6 @@ public:
     path = "/admin/metadata/bucket.instance";
   }
 
-  int validate_sync_marker(rgw_data_sync_marker& marker) const override {
-    /* markers are not used during this stage anyway at the moment */
-    return 0;
-  }
-
   string get_sip_name() const override {
     return "legacy/data.full";
   }
@@ -1145,22 +1138,6 @@ public:
     return remote_datalog_info.num_shards;
   }
 
-  int validate_sync_marker(rgw_data_sync_marker& marker) const override {
-    if (marker.sip_name.empty() ||
-        marker.sip_name == "legacy/data.inc") {
-      return 0;
-    }
-
-    if (marker.sip_name == "data.inc") {
-      marker.sip_name =  get_sip_name();
-      return 0;
-    }
-
-    /* unsupported marker type */
-
-    return -ENOTSUP;
-  }
-
   RGWCoroutine *init_cr(RGWSyncTraceNodeRef& tn) override {
     return new InitCR(this, sc);
   }
@@ -1187,15 +1164,16 @@ protected:
   static constexpr int max_entries = 1000;
 
   CephContext *cct;
+  string data_type;
+  SIProvider::StageType stage_type;
 
   std::unique_ptr<SIProviderCRMgr_REST> sip;
+
   SIProvider::Info info;
   SIProvider::stage_id_t sid;
   SIProvider::StageInfo stage_info;
 
   SIProvider::TypeHandler *type_handler;
-
-  string sip_name;
 
   void copy_state(RGWSyncInfoCRHandler_SIP *dest) {
     dest->info = info;
@@ -1203,8 +1181,13 @@ protected:
     dest->stage_info = stage_info;
   }
 
+  string sip_id() const {
+    return data_type + ":" + SIProvider::stage_type_to_str(stage_type);
+  }
+
   class InitCR : public RGWCoroutine {
     RGWSyncInfoCRHandler_SIP *siph;
+    bool found_sid{false};
 
   public:
     InitCR(RGWSyncInfoCRHandler_SIP *_siph) : RGWCoroutine(_siph->ctx()),
@@ -1212,20 +1195,31 @@ protected:
 
     int operate() {
       reenter(this) {
-        yield call(siph->sip->get_info_cr(&siph->info));
+        yield call(siph->sip->init_cr());
         if (retcode < 0) {
-          ldout(cct, 0) << "ERROR: failed to fetch list of stages for sip (" << siph->sip_name << "): retcode=" << retcode << dendl;
+          ldout(cct, 0) << "ERROR: failed to initialize sip (" << siph->sip_id() << "): retcode=" << retcode << dendl;
           return set_cr_error(retcode);
         }
+        siph->info = siph->sip->get_info();
         if (siph->info.stages.empty()) {
-          ldout(cct, 0) << "ERROR: sip (" << siph->sip_name << ") has no stages, likely a bug!" << dendl;
+          ldout(cct, 0) << "ERROR: sip (" << siph->sip_id() << ") has no stages, likely a bug!" << dendl;
           return set_cr_error(-EIO);
         }
-
-        siph->sid = siph->info.stages.front().sid;
+        {
+          for (auto& stage : siph->info.stages) {
+            if (stage.type == siph->stage_type) {
+              siph->sid = stage.sid;
+              found_sid = true;
+            }
+          }
+        }
+        if (!found_sid) {
+          ldout(cct, 0) << "ERROR: sip (" << siph->sip_id() << ") failed to find an appropirate stage" << dendl;
+          return set_cr_error(-EIO);
+        }
         yield call(siph->sip->get_stage_info_cr(siph->sid, &siph->stage_info));
         if (retcode < 0) {
-          ldout(cct, 0) << "ERROR: sip (" << siph->sip_name << ") failed to fetch stage info for sid " << siph->sid << ", retcode=" << retcode << dendl;
+          ldout(cct, 0) << "ERROR: sip (" << siph->sip_id() << ") failed to fetch stage info for sid " << siph->sid << ", retcode=" << retcode << dendl;
           return set_cr_error(retcode);
         }
         return set_cr_done();
@@ -1299,8 +1293,10 @@ protected:
 
 public:
   RGWSyncInfoCRHandler_SIP(CephContext *_cct,
-                           const string& _sip_name) : cct(_cct),
-                                                      sip_name(_sip_name) {
+                           string _data_type,
+                           SIProvider::StageType _stage_type) : cct(_cct),
+                                                                data_type(_data_type),
+                                                                stage_type(_stage_type) {
   }
 
   CephContext *ctx() {
@@ -1308,7 +1304,7 @@ public:
   }
 
   string get_sip_name() const override {
-    return sip_name;
+    return info.name;
   }
 
   RGWCoroutine *init_cr(RGWSyncTraceNodeRef& tn) override {
@@ -1365,32 +1361,18 @@ protected:
 
 public:
   RGWDataSyncInfoCRHandler_SIP_Base(RGWDataSyncCtx *_sc,
-                                    const string& _sip_name) : RGWSyncInfoCRHandler_SIP(_sc->cct,
-                                                                                        _sip_name),
-                                                               RGWDataSyncInfoCRHandler(_sc) {
+                                    SIProvider::StageType _stage_type) : RGWSyncInfoCRHandler_SIP(_sc->cct,
+                                                                                                  "data",
+                                                                                                  _stage_type),
+                                                                         RGWDataSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
     sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
                                                     _sc->conns.sip,
                                                     _sc->env->http_manager,
-                                                    _sip_name,
+                                                    data_type,
+                                                    stage_type,
                                                     type_provider.get(),
                                                     nullopt));
-  }
-
-  int validate_sync_marker(rgw_data_sync_marker& marker) const override {
-    if (marker.sip_name == sip_name) {
-      return 0;
-    }
-
-    if (marker.sip_name.empty() ||
-        marker.sip_name == "legacy/data.inc") {
-      marker.sip_name =  sip_name;
-      return 0;
-    }
-
-    /* unsupported marker type */
-
-    return -ENOTSUP;
   }
 
   /* create a clone object with new data sync ctx,
@@ -1412,7 +1394,7 @@ protected:
   }
 
 public:
-  RGWDataFullSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, "data.full") {
+  RGWDataFullSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, SIProvider::StageType::FULL) {
   }
 
   RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos, bool *disabled) override {
@@ -1434,7 +1416,7 @@ protected:
   }
 
 public:
-  RGWDataIncSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, "data.inc") {
+  RGWDataIncSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, SIProvider::StageType::INC) {
   }
 
   RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos, bool *disabled) override {
@@ -2421,13 +2403,6 @@ public:
         }
         set_status("lease acquired");
         tn->log(10, "took lease");
-      }
-      retcode = sc->dsi.inc->validate_sync_marker(sync_marker);
-      if (retcode < 0) {
-        tn->log(0, SSTR("ERROR: failed to validate marker: ret=" << retcode));
-        lease_cr->go_down();
-        drain_all();
-        return set_cr_error(retcode);
       }
       marker_tracker.emplace(sc, status_oid, sync_marker, tn);
       do {
@@ -3694,14 +3669,16 @@ protected:
 public:
   RGWBucketSyncInfoCRHandler_SIP_Base(RGWDataSyncCtx *_sc,
                                       const rgw_bucket& source_bucket,
-                                      const string& _sip_name) : RGWSyncInfoCRHandler_SIP(_sc->cct,
-                                                                                          _sip_name),
-                                                               RGWBucketPipeSyncInfoCRHandler(_sc) {
+                                      SIProvider::StageType _stage_type) : RGWSyncInfoCRHandler_SIP(_sc->cct,
+                                                                                                    "bucket",
+                                                                                                    _stage_type),
+                                                                           RGWBucketPipeSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >();
     sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
                                                     _sc->conns.sip,
                                                     _sc->env->http_manager,
-                                                    _sip_name,
+                                                    data_type,
+                                                    stage_type,
                                                     type_provider.get(),
                                                     source_bucket.get_key()));
   }
@@ -3710,13 +3687,12 @@ public:
 class RGWBucketSyncInfoCRHandler_SIP : public RGWBucketSyncInfoCRHandler_SIP_Base {
 public:
   RGWBucketSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc,
-                                 const rgw_bucket& source_bucket,
-                                 const string& sip_name) : RGWBucketSyncInfoCRHandler_SIP_Base(_sc, source_bucket, sip_name) {
+                                 const rgw_bucket& _source_bucket,
+                                 SIProvider::StageType _stage_type) : RGWBucketSyncInfoCRHandler_SIP_Base(_sc, _source_bucket, _stage_type) {
   }
 
   RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *pos, bool *disabled) override {
-    auto& stage = info.stages.front();
-    return sip->get_cur_state_cr(stage.sid, shard_id, pos, disabled);
+    return sip->get_cur_state_cr(sid, shard_id, pos, disabled);
   }
 
   RGWCoroutine *update_marker_cr(int shard_id,
@@ -3794,16 +3770,22 @@ class RGWBucketShardSIPCRHandlersRepo {
   RGWDataSyncCtx *sc;
   rgw_bucket bucket;
 
-  map<string, std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> > handlers;
+  using SIPType = std::pair<SIProvider::StageType, bool>; /* stage type + legacy flag */
 
-  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> create_handler(const string& name) {
+  map<SIPType, std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> > handlers;
+
+  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> create_handler(SIProvider::StageType stage_type,
+                                                                 bool legacy) {
+
     std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> result;
-    if (name == "legacy/bucket.full") {
-      result.reset(new RGWBucketFullSyncInfoCRHandler_Legacy(sc, bucket));
-    } else if (name == "legacy/bucket.inc") {
-      result.reset(new RGWBucketIncSyncInfoCRHandler_Legacy(sc, bucket));
+    if (!legacy) {
+      result.reset(new RGWBucketSyncInfoCRHandler_SIP(sc, bucket, stage_type));
     } else {
-      result.reset(new RGWBucketSyncInfoCRHandler_SIP(sc, bucket, name));
+      if (stage_type == SIProvider::StageType::FULL) {
+        result.reset(new RGWBucketFullSyncInfoCRHandler_Legacy(sc, bucket));
+      } else { /* only incremental is left */
+        result.reset(new RGWBucketIncSyncInfoCRHandler_Legacy(sc, bucket));
+      }
     }
 
     return result;
@@ -3814,15 +3796,16 @@ public:
                                   const rgw_bucket& _bucket) : sc(_sc),
                                                                bucket(_bucket) {}
 
-  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> get(const string& name) {
-    auto iter = handlers.find(name);
+  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> get(SIProvider::StageType stage_type, bool legacy) {
+    auto sip_type = SIPType(stage_type, legacy);
+    auto iter = handlers.find(sip_type);
     if (iter != handlers.end()) {
       return iter->second;
     }
 
-    auto result = create_handler(name);
+    auto result = create_handler(stage_type, legacy);
 
-    handlers[name] = result;
+    handlers[sip_type] = result;
 
     return result;
   }
@@ -3947,12 +3930,15 @@ class RGWBucketShardSIPCRWrapperCore
 
   std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> handler;
 
-  std::map<string, RGWGroupCallCR::State> groups;
+  using SIPType = std::pair<SIProvider::StageType, bool>; /* stage type + legacy flag */
+
+  std::map<SIPType, RGWGroupCallCR::State> groups;
 
   class InitCR : public RGWCoroutine {
     RGWBucketShardSIPCRWrapperCore *caller;
-    string sip_name;
-    std::optional<string> fallback_sip;
+    SIProvider::StageType stage_type;
+    bool legacy_fallback;
+    bool legacy{false};
     RGWSyncTraceNodeRef tn;
 
     RGWGroupCallCR::State *group{nullptr};
@@ -3963,24 +3949,24 @@ class RGWBucketShardSIPCRWrapperCore
 
   public:
     InitCR(RGWBucketShardSIPCRWrapperCore *_caller,
-           const string& _sip_name,
-           std::optional<string> _fallback_sip,
+           SIProvider::StageType _stage_type,
+           bool _legacy_fallback,
            RGWSyncTraceNodeRef& _tn) : RGWCoroutine(_caller->sc->cct),
                                        caller(_caller),
-                                       sip_name(_sip_name),
-                                       fallback_sip(_fallback_sip),
+                                       stage_type(_stage_type),
+                                       legacy_fallback(_legacy_fallback),
                                        tn(_tn) {}
 
     int operate() {
       reenter(this) {
 
         for (i = 0; i < 2; ++i) {
-          caller->handler = caller->handlers_repo->get(sip_name);
+          caller->handler = caller->handlers_repo->get(stage_type, legacy);
           if (!caller->handler) {
             return set_cr_error(-ENOENT);
           }
 
-          group = &caller->groups[sip_name];
+          group = &caller->groups[SIPType(stage_type, legacy)];
 
           if (!group->is_complete(&retcode)) {
             group->maybe_init([&]{
@@ -3993,14 +3979,13 @@ class RGWBucketShardSIPCRWrapperCore
             return set_cr_done();
           }
 
-          if (retcode != -ENOTSUP || !fallback_sip) {
-            ldout(cct, 0) << "ERROR: failed to initialize sip (name=" << sip_name << "): ret=" << retcode << dendl;
+          if (retcode != -ENOTSUP || !legacy_fallback) {
+            ldout(cct, 0) << "ERROR: failed to initialize bucket sip (stage_type=" << SIProvider::stage_type_to_str(stage_type) << (legacy ? " [legacy]" : "") << " : ret=" << retcode << dendl;
             return set_cr_error(retcode);
           }
-          ldout(cct, 0) << "WARNING: failed to initialize sip (" << sip_name << "): ret=" << retcode << ", trying fallback sip (" << *fallback_sip << ")" << dendl;
+          ldout(cct, 0) << "WARNING: failed to initialize bucket sip (stage_type=" << SIProvider::stage_type_to_str(stage_type) << (legacy ? " [legacy]" : "") << " : ret=" << retcode << ", trying fallback to legacy sip" << dendl;
 
-          sip_name = *fallback_sip;
-          fallback_sip.reset();
+          legacy = true;
         }
 
         return set_cr_done();
@@ -4017,9 +4002,9 @@ public:
                                                                                                     source_bucket(_source_bucket),
                                                                                                     handlers_repo(_handlers_repo) {}
 
-  RGWCoroutine *init_cr(const string& sip_name, std::optional<string> fallback_sip,
+  RGWCoroutine *init_cr(SIProvider::StageType stage_type, bool legacy_fallback,
                         RGWSyncTraceNodeRef& tn) {
-    return new InitCR(this, sip_name, fallback_sip, tn);
+    return new InitCR(this, stage_type, legacy_fallback, tn);
   }
 
   int num_shards() const {
@@ -4176,13 +4161,13 @@ int RGWRemoteBucketManager::init(RGWCoroutinesManager *cr_mgr)
 
   auto tn = sync_env->sync_tracer->add_node(sync_env->sync_tracer->root_node, "bucket_manager.init", SSTR(source_bucket));
 
-  int ret = cr_mgr->run(wrapper_core_full->init_cr("bucket.full", "legacy/bucket.full", tn));
+  int ret = cr_mgr->run(wrapper_core_full->init_cr(SIProvider::StageType::FULL, true, tn));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize SIP core for full bucket sync: ret=" << ret << dendl;
     return ret;
   }
 
-  ret = cr_mgr->run(wrapper_core_inc->init_cr("bucket.inc", "legacy/bucket.inc", tn));
+  ret = cr_mgr->run(wrapper_core_inc->init_cr(SIProvider::StageType::INC, true, tn));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize SIP core for incremental bucket sync: ret=" << ret << dendl;
     return ret;
@@ -5862,14 +5847,14 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
         wrapper_core_full = std::make_shared<RGWBucketShardSIPCRWrapperCore>(sc, sync_pair.source_bs.bucket, handlers_repo);
         wrapper_core_inc = std::make_shared<RGWBucketShardSIPCRWrapperCore>(sc, sync_pair.source_bs.bucket, handlers_repo);
 
-        yield call(wrapper_core_full->init_cr("bucket.full", "legacy/bucket.full", tn));
+        yield call(wrapper_core_full->init_cr(SIProvider::StageType::FULL, true, tn));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to initialize sip for full bucket sync: " << retcode));
           drain_all();
           return set_cr_error(retcode);
         }
 
-        yield call(wrapper_core_inc->init_cr("bucket.inc", "legacy/bucket.inc", tn));
+        yield call(wrapper_core_inc->init_cr(SIProvider::StageType::INC, true, tn));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to initialize sip for incremental bucket sync: " << retcode));
           drain_all();
@@ -6651,7 +6636,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
 
   auto tn = env.sync_tracer->add_node(env.sync_tracer->root_node, "rgw_bucket_sync_status", SSTR(source_bucket));
 
-  ret = crs.run(dpp, wrapper_core_inc->init_cr("bucket.inc", "legacy/bucket.inc", tn));
+  ret = crs.run(dpp, wrapper_core_inc->init_cr(SIProvider::StageType::INC, true, tn));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize SIP core for incremental bucket sync: ret=" << ret << dendl;
     return ret;

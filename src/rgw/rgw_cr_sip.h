@@ -27,6 +27,9 @@ class SIProviderCRMgr
 
 protected:
   CephContext *cct;
+
+  SIProvider::Info info;
+
 public:
   SIProviderCRMgr(CephContext *_cct) : cct(_cct) {}
   virtual ~SIProviderCRMgr() {}
@@ -35,9 +38,13 @@ public:
     return cct;
   }
 
+  const SIProvider::Info& get_info() {
+    return info;
+  }
+
+  virtual RGWCoroutine *init_cr() = 0;
   virtual RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) = 0;
   virtual RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) = 0;
-  virtual RGWCoroutine *get_info_cr(SIProvider::Info *info) = 0;
   virtual RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
   virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
   virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) = 0;
@@ -65,9 +72,9 @@ public:
                         RGWAsyncRadosProcessor *_async_rados,
                         SIProviderRef& _provider);
 
+  RGWCoroutine *init_cr() override;
   RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
   RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
-  RGWCoroutine *get_info_cr(SIProvider::Info *info) override;
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;
@@ -98,7 +105,9 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
 
   string path_prefix = "/admin/sip";
 
-  string remote_provider_name;
+  std::optional<string> remote_provider_name;
+  std::optional<string> data_type;
+  std::optional<SIProvider::StageType> stage_type;
   std::optional<string> instance;
 
   SIProvider::TypeHandlerProvider *type_provider;
@@ -115,10 +124,23 @@ public:
                                                           remote_provider_name(_remote_provider_name),
                                                           instance(_instance.value_or(string())),
                                                           type_provider(_type_provider) {}
+  SIProviderCRMgr_REST(CephContext *_cct,
+                       RGWRESTConn *_conn,
+                       RGWHTTPManager *_http_manager,
+                       const string& _data_type,
+                       SIProvider::StageType _stage_type,
+                       SIProvider::TypeHandlerProvider *_type_provider,
+                       std::optional<string> _instance) : SIProviderCRMgr(_cct),
+                                                          conn(_conn),
+                                                          http_manager(_http_manager),
+                                                          data_type(_data_type),
+                                                          stage_type(_stage_type),
+                                                          instance(_instance.value_or(string())),
+                                                          type_provider(_type_provider) {}
 
+  RGWCoroutine *init_cr();
   RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
   RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
-  RGWCoroutine *get_info_cr(SIProvider::Info *info) override;
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;

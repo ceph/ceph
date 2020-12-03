@@ -19,8 +19,35 @@ SIProvider_REST::SIProvider_REST(CephContext *_cct,
                                                                     instance(_instance),
                                                                     proxy_type_provider(this) {
   sip_cr_mgr.reset(new SIProviderCRMgr_REST(cct, conn, http_manager,
-                                            remote_provider_name,
+                                            _remote_provider_name,
                                             &proxy_type_provider, instance));
+}
+
+SIProvider_REST::SIProvider_REST(CephContext *_cct,
+                                 RGWCoroutinesManager *_cr_mgr,
+                                 RGWRESTConn *_conn,
+                                 RGWHTTPManager *_http_manager,
+                                 const string& _data_type,
+                                 SIProvider::StageType _stage_type,
+                                 std::optional<string> _instance) : SIProviderCommon(_cct,
+                                                                                     string("rest:") + _data_type + "." + SIProvider::stage_type_to_str(_stage_type),
+                                                                                     _instance),
+                                                                    cr_mgr(_cr_mgr),
+                                                                    conn(_conn),
+                                                                    http_manager(_http_manager),
+                                                                    data_type(_data_type),
+                                                                    stage_type(_stage_type),
+                                                                    instance(_instance),
+                                                                    proxy_type_provider(this) {
+  sip_cr_mgr.reset(new SIProviderCRMgr_REST(cct, conn, http_manager,
+                                            _data_type,
+                                            _stage_type,
+                                            &proxy_type_provider, instance));
+}
+
+int SIProvider_REST::init()
+{
+  return cr_mgr->run(sip_cr_mgr->init_cr());
 }
 
 SIProvider_REST::~SIProvider_REST() {

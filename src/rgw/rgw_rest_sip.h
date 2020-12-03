@@ -19,10 +19,16 @@
 #include "rgw_sync_info.h"
 
 class RGWOp_SIP_GetInfo : public RGWRESTOp {
-  string provider;
+  std::optional<string> provider;
+  std::optional<string> data_type;
+  std::optional<string> stage_type;
   SIProviderRef sip;
 public:
-  RGWOp_SIP_GetInfo(string&& _provider) : provider(std::move(_provider)) {}
+  RGWOp_SIP_GetInfo(std::optional<std::string> _provider,
+                    std::optional<std::string> _data_type,
+                    std::optional<std::string> _stage_type) : provider(std::move(_provider)),
+                                                              data_type(_data_type),
+                                                              stage_type(_stage_type) {}
   ~RGWOp_SIP_GetInfo() override {}
 
   int check_caps(const RGWUserCaps& caps) override {

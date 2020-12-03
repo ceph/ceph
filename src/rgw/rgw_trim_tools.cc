@@ -19,7 +19,8 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
   friend class RGWTrimGetSIPTargetsInfo;
 
   rgw::sal::RGWRadosStore *store;
-  string sip_name;
+  string sip_data_type;
+  SIProvider::StageType sip_stage_type;
   std::optional<string> sip_instance;
 
   SIProviderRef sip;
@@ -39,7 +40,7 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
 
     int operate() override {
       reenter(this) {
-        mgr->sip = store->ctl()->si.mgr->find_sip(mgr->sip_name, mgr->sip_instance);
+        mgr->sip = store->ctl()->si.mgr->find_sip_by_type(mgr->sip_data_type, mgr->sip_stage_type, mgr->sip_instance);
         if (!mgr->sip) {
           return set_cr_error(-ENOENT);
         }
@@ -70,9 +71,11 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
 
 public:
   RGWTrimSIPMgrImpl(rgw::sal::RGWRadosStore *_store,
-                    const string& _sip_name,
+                    const string& _sip_data_type,
+                    SIProvider::StageType _sip_stage_type,
                     std::optional<string> _sip_instance) : store(_store),
-                                                           sip_name(_sip_name),
+                                                           sip_data_type(_sip_data_type),
+                                                           sip_stage_type(_sip_stage_type),
                                                            sip_instance(_sip_instance) {}
 
   CephContext *ctx() {
@@ -92,6 +95,9 @@ public:
     return sip_cr->set_min_source_pos_cr(sid, shard_id, pos);
   }
 
+  string sip_id() const {
+    return sip_data_type + "." + SIProvider::stage_type_to_str(sip_stage_type);
+  }
 };
 
 class RGWTrimGetSIPTargetsInfo : public RGWCoroutine
@@ -128,7 +134,8 @@ int RGWTrimGetSIPTargetsInfo::operate()
 {
   reenter(this) {
     if (!mgr->sip_cr) {
-      ldout(cct, 0) << "WARNING: could not find sip handler for " << mgr->sip_name << dendl;
+      ldout(cct, 0) << "WARNING: could not find sip handler for " << mgr->sip_data_type
+        << " (" << SIProvider::stage_type_to_str(mgr->sip_stage_type) << ")" << dendl;
 
       /* caller will do legacy handling anyway */
 
@@ -146,7 +153,7 @@ int RGWTrimGetSIPTargetsInfo::operate()
                          [&](uint64_t stack_id, int ret) {
                          if (ret < 0 &&
                              ret != -ENOENT) {
-                         ldout(cct, 0) << "failed to fetch markers info for sip " << mgr->sip_name << " sid=" << mgr->sid << ": ret=" << ret << dendl;
+                         ldout(cct, 0) << "failed to fetch markers info for sip " << mgr->sip_id() << " sid=" << mgr->sid << ": ret=" << ret << dendl;
                          return ret;
                          }
                          return 0;
@@ -156,7 +163,7 @@ int RGWTrimGetSIPTargetsInfo::operate()
     drain_all_cb([&](uint64_t stack_id, int ret) {
                  if (ret < 0 &&
                      ret != -ENOENT) {
-                 ldout(cct, 0) << "failed to fetch markers info for sip " << mgr->sip_name << " sid=" << mgr->sid << ": ret=" << ret << dendl;
+                 ldout(cct, 0) << "failed to fetch markers info for sip " << mgr->sip_id() << " sid=" << mgr->sid << ": ret=" << ret << dendl;
                  return ret;
                  }
                  return 0;
@@ -206,9 +213,10 @@ RGWCoroutine *RGWTrimSIPMgrImpl::get_targets_info_cr(std::vector<std::optional<s
 }
 
 RGWTrimSIPMgr *RGWTrimTools::get_trim_sip_mgr(rgw::sal::RGWRadosStore *store,
-                                              const std::string& sip_name,
+                                              const string& sip_data_type,
+                                              SIProvider::StageType sip_stage_type,
                                               std::optional<std::string> sip_instance)
 {
-  return new RGWTrimSIPMgrImpl(store, sip_name, sip_instance);
+  return new RGWTrimSIPMgrImpl(store, sip_data_type, sip_stage_type, sip_instance);
 }
 

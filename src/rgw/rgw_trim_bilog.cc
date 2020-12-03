@@ -507,7 +507,8 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
     }
 
     sip_mgr.reset(RGWTrimTools::get_trim_sip_mgr(store,
-                                                 "bucket.inc",
+                                                 "bucket",
+                                                 SIProvider::StageType::INC,
                                                  bucket_instance));
 
     yield call(sip_mgr->init_cr());

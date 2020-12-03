@@ -140,7 +140,8 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
     set_status("fetching sync status");
 
     sip_mgr.reset(RGWTrimTools::get_trim_sip_mgr(store,
-                                                 "data.inc",
+                                                 "data",
+                                                 SIProvider::StageType::INC,
                                                  nullopt));
 
     yield call(sip_mgr->init_cr());

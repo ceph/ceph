@@ -40,6 +40,9 @@ public:
     INC = 1,
   };
 
+  static std::string stage_type_to_str(SIProvider::StageType st);
+  static StageType stage_type_from_str(const string& s);
+
   using stage_id_t = RGWSI_SIP_Marker::stage_id_t;
 
   struct StageInfo {
@@ -115,6 +118,11 @@ public:
   virtual ~SIProvider() {}
 
   virtual Info get_info() = 0;
+
+
+  virtual int init() {
+    return 0;
+  }
 
   virtual stage_id_t get_first_stage() = 0;
   virtual stage_id_t get_last_stage() = 0;
@@ -450,11 +458,22 @@ class RGWSIPManager
 {
   std::map<std::string, RGWSIPGeneratorRef> sip_gens;
 
+  using TypeInfo = std::pair<string, SIProvider::StageType>;
+
+  std::map<TypeInfo, std::string> sip_type_index;
+
 public:
   RGWSIPManager() {}
 
-  void register_sip(const std::string& id, RGWSIPGeneratorRef gen) {
+  void register_sip(const std::string& id,
+                    const string& data_type,
+                    const std::vector<SIProvider::StageType>& stage_types,
+                    RGWSIPGeneratorRef gen) {
     sip_gens[id] = gen;
+
+    for (auto st : stage_types) {
+      sip_type_index[TypeInfo(data_type, st)] = id;
+    }
   }
 
   SIProviderRef find_sip(const std::string& id, std::optional<std::string> instance) {
@@ -463,6 +482,15 @@ public:
       return nullptr;
     }
     return iter->second->get(instance);
+  }
+
+  SIProviderRef find_sip_by_type(const std::string& data_type, SIProvider::StageType stage_type,
+                                 std::optional<std::string> instance) {
+    auto iter = sip_type_index.find(TypeInfo(data_type, stage_type));
+    if (iter == sip_type_index.end()) {
+      return nullptr;
+    }
+    return find_sip(iter->second, instance);
   }
 
   std::vector<std::string> list_sip() const {
