@@ -47,6 +47,7 @@ public:
                std::string& marker,
                uint32_t max,
                std::list<rgw_bi_log_entry>& result,
+               uint64_t& generation,
                bool *truncated);
 
   int get_log_status(const RGWBucketInfo& bucket_info,

@@ -7561,7 +7561,7 @@ int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string 
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = cls_bucket_head(bucket_info, shard_id, headers, &bucket_instance_ids);
+  int r = cls_bucket_head(bucket_info, shard_id, gen_id, headers, &bucket_instance_ids);
   if (r < 0) {
     return r;
   }
@@ -8941,12 +8941,12 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   return 0;
 }
 
-int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
+int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, uint64_t gen_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> oids;
   map<int, struct rgw_cls_list_ret> list_results;
-  int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id, &index_pool, &oids, bucket_instance_ids);
+  int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id, gen_id, &index_pool, &oids, bucket_instance_ids);
   if (r < 0) {
     ldout(cct, 20) << "cls_bucket_head: open_bucket_index() returned "
                    << r << dendl;

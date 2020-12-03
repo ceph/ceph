@@ -34,7 +34,7 @@ public:
     return check_caps(s->user->get_caps());
   }
   void send_response() override;
-  virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
+  virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker, uint64_t generation);
   virtual void send_response_end();
   void execute(optional_yield y) override;
   const char* name() const override {

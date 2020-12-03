@@ -376,7 +376,8 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
   int shard_id;
   string bn;
-  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
+  uint64_t gen_id;
+  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &gen_id, &shard_id);
   if (op_ret < 0) {
     return;
   }
@@ -397,6 +398,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   }
 
   bool truncated;
+  uint64_t generation;
   unsigned count = 0;
   string err;
 
@@ -408,8 +410,8 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   do {
     list<rgw_bi_log_entry> entries;
     int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id,
-                                               marker, max_entries - count, 
-                                               entries, &truncated);
+                                               marker, max_entries - count,
+                                               entries, generation, &truncated);
     if (ret < 0) {
       ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << dendl;
       return;
@@ -417,7 +419,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
     count += entries.size();
 
-    send_response(entries, marker);
+    send_response(entries, marker, generation);
   } while (truncated && count < max_entries);
 
   send_response_end();
@@ -439,11 +441,12 @@ void RGWOp_BILog_List::send_response() {
   s->formatter->open_array_section("entries");
 }
 
-void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& marker)
+void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& marker, uint64_t generation)
 {
   for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
     rgw_bi_log_entry& entry = *iter;
     encode_json("entry", entry, s->formatter);
+    encode_json("generation", generation, s->formatter);
 
     marker = entry.id;
     flusher.flush();
@@ -469,6 +472,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   int shard_id;
   string bn;
+  uint64_t gen_id;
   op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
   if (op_ret < 0) {
     return;
@@ -533,7 +537,8 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
 
   int shard_id;
   string bn;
-  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
+  uint64_t gen_id;
+  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &gen_id, &shard_id);
   if (op_ret < 0) {
     return;
   }

@@ -8137,13 +8137,15 @@ next:
     }
     formatter->open_array_section("entries");
     bool truncated;
+    uint64_t generation;
     int count = 0;
     if (max_entries < 0)
       max_entries = 1000;
 
     do {
       list<rgw_bi_log_entry> entries;
-      ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, marker, max_entries - count, entries, &truncated);
+      ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, marker, max_entries - count, entries,
+              generation, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;

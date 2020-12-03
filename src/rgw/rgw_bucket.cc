@@ -187,7 +187,7 @@ int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *buck
   *bucket_id = first.substr(pos + 1);
 
   string err;
-  *shard_id = strict_strtol(second.c_str(), 10, &err);
+  *shard_id = strict_strtol(second.substr(pos+1).c_str(), 10, &err);
   if (!err.empty()) {
     return -EINVAL;
   }
