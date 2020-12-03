@@ -19,7 +19,7 @@ void RGWSI_BILog_RADOS::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id, string& start_marker, string& end_marker)
+int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id, string& start_marker, string& end_marker)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -27,7 +27,8 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, const RGWBucketIn
   BucketIndexShardsManager start_marker_mgr;
   BucketIndexShardsManager end_marker_mgr;
 
-  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, &index_pool, &bucket_objs, nullptr);
+  const auto& current_index = rgw::log_to_index_layout(log_layout);
+  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &bucket_objs, nullptr);
   if (r < 0) {
     return r;
   }
@@ -46,22 +47,24 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp, const RGWBucketIn
 			      cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id)
+int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
-  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, &index_pool, &bucket_objs, nullptr);
+  const auto& current_index = rgw::log_to_index_layout(log_layout);
+  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &bucket_objs, nullptr);
   if (r < 0)
     return r;
 
   return CLSRGWIssueResyncBucketBILog(index_pool.ioctx(), bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id)
+int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
-  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, &index_pool, &bucket_objs, nullptr);
+  const auto& current_index = rgw::log_to_index_layout(log_layout);
+  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &bucket_objs, nullptr);
   if (r < 0)
     return r;
 
@@ -78,7 +81,10 @@ static void build_bucket_index_marker(const string& shard_id_str,
   }
 }
 
-int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id, string& marker, uint32_t max,
+int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
+				const RGWBucketInfo& bucket_info,
+				const rgw::bucket_log_layout_generation& log_layout,
+				int shard_id, string& marker, uint32_t max,
                                 std::list<rgw_bi_log_entry>& result, bool *truncated)
 {
   ldpp_dout(dpp, 20) << __func__ << ": " << bucket_info.bucket << " marker " << marker << " shard_id=" << shard_id << " max " << max << dendl;
@@ -87,7 +93,8 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, const RGWBucketIn
   RGWSI_RADOS::Pool index_pool;
   map<int, string> oids;
   map<int, cls_rgw_bi_log_list_ret> bi_log_lists;
-  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, &index_pool, &oids, nullptr);
+  const auto& current_index = rgw::log_to_index_layout(log_layout);
+  int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &oids, nullptr);
   if (r < 0)
     return r;
 
@@ -178,13 +185,15 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp, const RGWBucketIn
 
 int RGWSI_BILog_RADOS::get_log_status(const DoutPrefixProvider *dpp,
                                       const RGWBucketInfo& bucket_info,
+				      const rgw::bucket_log_layout_generation& log_layout, 
                                       int shard_id,
                                       map<int, string> *markers,
 				      optional_yield y)
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = svc.bi->cls_bucket_head(dpp, bucket_info, shard_id, &headers, &bucket_instance_ids, y);
+  const auto& current_index = rgw::log_to_index_layout(log_layout);
+  int r = svc.bi->cls_bucket_head(dpp, bucket_info, current_index, shard_id, &headers, &bucket_instance_ids, y);
   if (r < 0)
     return r;
 
