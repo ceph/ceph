@@ -8,7 +8,7 @@ function assert_dm() {
 
     local devno
     devno=$(sudo dmsetup info -c --noheadings -o Major,Minor $name)
-    grep -q $val /sys/dev/block/$devno/bdi/stable_pages_required
+    grep -q $val /sys/dev/block/$devno/queue/stable_writes
 }
 
 function dmsetup_reload() {
@@ -22,7 +22,7 @@ function dmsetup_reload() {
     sudo dmsetup resume $name
 }
 
-IMAGE_NAME="stable-pages-required-test"
+IMAGE_NAME="stable-writes-test"
 
 rbd create --size 1 $IMAGE_NAME
 DEV=$(sudo rbd map $IMAGE_NAME)
@@ -31,11 +31,11 @@ fallocate -l 1M loopfile
 LOOP_DEV=$(sudo losetup -f --show loopfile)
 
 [[ $(blockdev --getsize64 $DEV) -eq 1048576 ]]
-grep -q 1 /sys/block/${DEV#/dev/}/bdi/stable_pages_required
+grep -q 1 /sys/block/${DEV#/dev/}/queue/stable_writes
 
 rbd resize --size 2 $IMAGE_NAME
 [[ $(blockdev --getsize64 $DEV) -eq 2097152 ]]
-grep -q 1 /sys/block/${DEV#/dev/}/bdi/stable_pages_required
+grep -q 1 /sys/block/${DEV#/dev/}/queue/stable_writes
 
 cat <<EOF | sudo dmsetup create tbl
 0 1024 linear $LOOP_DEV 0
