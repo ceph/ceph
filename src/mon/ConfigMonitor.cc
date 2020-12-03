@@ -880,8 +880,9 @@ bool ConfigMonitor::refresh_config(MonSession *s)
     dout(20) << __func__ << " no change, " << out << dendl;
     return false;
   }
-
-  dout(20) << __func__ << " " << out << dendl;
+  // removing this to hide sensitive data going into logs
+  // leaving this for debugging purposes
+  // dout(20) << __func__ << " " << out << dendl;
   s->last_config = out;
   s->any_config = true;
   return true;
