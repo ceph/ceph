@@ -132,7 +132,7 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
-if 'BUILD_DOC' in os.environ.keys():
+if 'BUILD_DOC' in os.environ:
     pass
 elif check_sanity():
     pass
