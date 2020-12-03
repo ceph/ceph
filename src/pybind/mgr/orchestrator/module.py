@@ -679,9 +679,15 @@ Examples:
         if inbuf:
             if unmanaged is not None:
                 return HandleCommandResult(-errno.EINVAL, stderr=usage)
-            try:
-                drivegroups = yaml.safe_load_all(inbuf)
 
+            try:
+                drivegroups = [_dg for _dg in yaml.safe_load_all(inbuf)]
+            except yaml.scanner.ScannerError as e:
+                msg = f"Invalid YAML received : {str(e)}"
+                self.log.exception(e)
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
+            try:
                 dg_specs = []
                 for dg in drivegroups:
                     spec = DriveGroupSpec.from_json(dg)
