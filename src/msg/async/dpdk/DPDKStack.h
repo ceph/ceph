@@ -254,7 +254,7 @@ class DPDKStack : public NetworkStack {
   }
 
  public:
-  explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {
+  explicit DPDKStack(CephContext *cct): NetworkStack(cct) {
     funcs.resize(cct->_conf->ms_async_max_op_threads);
   }
   virtual bool support_local_listen_table() const override { return true; }
