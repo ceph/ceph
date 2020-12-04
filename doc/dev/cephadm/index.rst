@@ -10,3 +10,4 @@ CEPHADM Developer Documentation
 
    host-maintenance
    cephadm-exporter
+   compliance-check
