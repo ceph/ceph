@@ -1574,6 +1574,7 @@ echo ""
 {
     echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
+    echo "export PATH=$CEPH_DIR/bin:\$PATH"
 
     if [ "$CEPH_DIR" != "$PWD" ]; then
         echo "export CEPH_CONF=$conf_fn"
