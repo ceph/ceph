@@ -5397,7 +5397,8 @@ namespace {
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
-    PG_AUTOSCALE_BIAS };
+    PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
+    DEDUP_CDC_CHUNK_SIZE };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6132,6 +6133,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
+      {"dedup_tier", DEDUP_TIER},
+      {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
+      {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6348,6 +6352,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
+	  case DEDUP_TIER:
+	  case DEDUP_CHUNK_ALGORITHM:
+	  case DEDUP_CDC_CHUNK_SIZE:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
               if(*it == CSUM_TYPE) {
@@ -6505,6 +6512,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
+	  case DEDUP_TIER:
+	  case DEDUP_CHUNK_ALGORITHM:
+	  case DEDUP_CDC_CHUNK_SIZE:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -8671,6 +8681,41 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (f < 0.0 || f > 1000.0) {
 	ss << "pg_autoscale_bias must be between 0 and 1000";
 	return -EINVAL;
+      }
+    } else if (var == "dedup_tier") {
+      if (interr.empty()) {
+	ss << "expecting value 'pool name'";
+	return -EINVAL;
+      }
+      // Current base tier in dedup does not support ec pool 
+      if (p.is_erasure()) {
+	ss << "pool '" << poolstr
+	   << "' is an ec pool, which cannot be a base tier";
+	return -ENOTSUP;
+      }
+      int64_t lowtierpool_id = osdmap.lookup_pg_pool_name(val);
+      if (lowtierpool_id < 0) {
+	ss << "unrecognized pool '" << val << "'";
+	return -ENOENT;
+      }
+      const pg_pool_t *tp = osdmap.get_pg_pool(lowtierpool_id);
+      ceph_assert(tp);
+      n = lowtierpool_id;
+      // The original input is string (pool name), but we convert it to int64_t.
+      // So, clear interr
+      interr.clear();
+    } else if (var == "dedup_chunk_algorithm") {
+      if (!unset) {
+        auto alg = pg_pool_t::get_dedup_chunk_algorithm_from_str(val);
+        if (!alg) {
+          ss << "unrecognized fingerprint_algorithm '" << val << "'";
+	  return -EINVAL;
+        }
+      }
+    } else if (var == "dedup_cdc_chunk_size") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
       }
     }
 
@@ -13541,7 +13586,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "Triggering recovery stretch mode";
     err = 0;
     goto reply;
-} else {
+  } else {
     err = -EINVAL;
   }
 
