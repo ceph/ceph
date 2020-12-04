@@ -4409,6 +4409,7 @@ BlueStore::BlueStore(CephContext *cct,
     finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
+    zoned_cleaner_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
     mempool_thread(this)
@@ -5337,7 +5338,7 @@ int BlueStore::_init_alloc()
   ceph_assert(shared_alloc.a != NULL);
 
   if (bdev->is_smr()) {
-    shared_alloc.a->set_zone_states(fm->get_zone_states(db));
+    shared_alloc.a->zoned_set_zone_states(fm->get_zone_states(db));
   }
 
   uint64_t num = 0, bytes = 0;
@@ -6876,6 +6877,10 @@ int BlueStore::_mount()
 
   _kv_start();
 
+  if (bdev->is_smr()) {
+    _zoned_cleaner_start();
+  }
+
   r = _deferred_replay();
   if (r < 0)
     goto out_stop;
@@ -6905,6 +6910,9 @@ int BlueStore::_mount()
   return 0;
 
  out_stop:
+  if (bdev->is_smr()) {
+    _zoned_cleaner_stop();
+  }
   _kv_stop();
  out_coll:
   _shutdown_cache();
@@ -6923,6 +6931,10 @@ int BlueStore::umount()
   mounted = false;
   if (!_kv_only) {
     mempool_thread.shutdown();
+    if (bdev->is_smr()) {
+      dout(20) << __func__ << " stopping zone cleaner thread" << dendl;
+      _zoned_cleaner_stop();
+    }
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
     _shutdown_cache();
@@ -12001,6 +12013,63 @@ void BlueStore::_kv_finalize_thread()
   kv_finalize_started = false;
 }
 
+void BlueStore::_zoned_cleaner_start() {
+  dout(10) << __func__ << dendl;
+
+  zoned_cleaner_thread.create("bstore_zcleaner");
+}
+
+void BlueStore::_zoned_cleaner_stop() {
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock l{zoned_cleaner_lock};
+    while (!zoned_cleaner_started) {
+      zoned_cleaner_cond.wait(l);
+    }
+    zoned_cleaner_stop = true;
+    zoned_cleaner_cond.notify_all();
+  }
+  zoned_cleaner_thread.join();
+  {
+    std::lock_guard l{zoned_cleaner_lock};
+    zoned_cleaner_stop = false;
+  }
+  dout(10) << __func__ << " done" << dendl;
+}
+
+void BlueStore::_zoned_cleaner_thread() {
+  dout(10) << __func__ << " start" << dendl;
+  std::unique_lock l{zoned_cleaner_lock};
+  ceph_assert(!zoned_cleaner_started);
+  zoned_cleaner_started = true;
+  zoned_cleaner_cond.notify_all();
+  std::deque<uint64_t> zones_to_clean;
+  while (true) {
+    if (zoned_cleaner_queue.empty()) {
+      if (zoned_cleaner_stop) {
+	break;
+      }
+      dout(20) << __func__ << " sleep" << dendl;
+      zoned_cleaner_cond.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      zones_to_clean.swap(zoned_cleaner_queue);
+      l.unlock();
+      while (!zones_to_clean.empty()) {
+	_zoned_clean_zone(zones_to_clean.front());
+	zones_to_clean.pop_front();
+      }
+      l.lock();
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+  zoned_cleaner_started = false;
+}
+
+void BlueStore::_zoned_clean_zone(uint64_t zone_num) {
+  dout(10) << __func__ << " cleaning zone " << zone_num << dendl;
+}
+
 bluestore_deferred_op_t *BlueStore::_get_deferred_op(
   TransContext *txc)
 {
@@ -13658,6 +13727,15 @@ int BlueStore::_do_alloc_write(
     return -ENOSPC;
   }
   _collect_allocation_stats(need, min_alloc_size, prealloc.size());
+
+  if (bdev->is_smr()) {
+    std::deque<uint64_t> zones_to_clean;
+    if (shared_alloc.a->zoned_get_zones_to_clean(&zones_to_clean)) {
+      std::lock_guard l{zoned_cleaner_lock};
+      zoned_cleaner_queue.swap(zones_to_clean);
+      zoned_cleaner_cond.notify_one();
+    }
+  }
 
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
