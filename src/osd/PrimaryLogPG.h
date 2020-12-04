@@ -260,6 +260,13 @@ public:
   struct ManifestOp {
     RefCountCallback *cb;
     ceph_tid_t objecter_tid;
+    OpRequestRef op;
+    std::map<uint64_t, int> results;
+    std::map<uint64_t, ceph_tid_t> tids; 
+    std::map<hobject_t, pair<uint64_t, uint64_t>> chunks;
+    uint64_t num_chunks = 0;
+    object_manifest_t new_manifest;
+    
 
     ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
       : cb(cb), objecter_tid(tid) {}
@@ -1482,6 +1489,7 @@ protected:
   enum class refcount_t {
     INCREMENT_REF,
     DECREMENT_REF,
+    CREATE_OR_GET_REF,
   };
   void do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing_oid, 
 			   ObjectContextRef obc, bool write_ordered);
@@ -1494,21 +1502,27 @@ protected:
   void finish_promote_manifest(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_and_requeue_proxy_ops(hobject_t oid);
   void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
-  void refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
-			 RefCountCallback* cb);
+  ceph_tid_t refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
+			      Context *cb, std::optional<bufferlist> chunk);
   void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);
   void dec_refcount(const hobject_t& soid, const object_ref_delta_t& refs);
   void dec_refcount_by_dirty(OpContext* ctx);
   ObjectContextRef get_prev_clone_obc(ObjectContextRef obc);
-  void get_adjacent_clones(const object_info_t& oi, OpContext* ctx, 
+  void get_adjacent_clones(ObjectContextRef src_obc, 
 			   ObjectContextRef& _l, ObjectContextRef& _g);
   bool inc_refcount_by_set(OpContext* ctx, object_manifest_t& tgt,
 			   OSDOp& osd_op);
+  int do_cdc(const object_info_t& oi, std::map<uint64_t, chunk_info_t>& chunk_map,
+	     std::map<uint64_t, bufferlist>& chunks);
+  int start_dedup(OpRequestRef op, ObjectContextRef obc);
+  hobject_t get_fpoid_from_chunk(const hobject_t soid, bufferlist& chunk);
+  int finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend struct C_CopyChunk;
   friend struct RefCountCallback;
+  friend struct C_SetDedupChunks;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
