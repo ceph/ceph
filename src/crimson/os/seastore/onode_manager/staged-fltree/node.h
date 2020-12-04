@@ -16,28 +16,47 @@
 #include "super.h"
 #include "tree_types.h"
 
-namespace crimson::os::seastore::onode {
-
 /**
- * in-memory subtree management:
+ * Tree example (2 levels):
  *
- * resource management (bottom-up):
- * USER          --> Ref<tree_cursor_t>
- * tree_cursor_t --> Ref<LeafNode>
- * Node (child)  --> Ref<InternalNode> (see parent_info_t)
- * Node (root)   --> Super::URef
- * Super         --> Btree
+ * Root node keys:               [  3  7  ]
+ *           values:             [p1 p2 p3]
+ *                                /  |   \
+ *                         -------   |    -------
+ *                         |         |          |
+ *                         V         V          V
+ * Leaf node keys:   [ 1  2  3] [ 4  5  7] [ 9 11 12]
+ *           values: [v1 v2 v3] [v4 v5 v6] [v7 v8 v9]
  *
- * tracked lookup (top-down):
- * Btree         --> Super*
- * Super         --> Node* (root)
- * InternalNode  --> Node* (children)
- * LeafNode      --> tree_cursor_t*
+ * Tree structure properties:
+ * - As illustrated above, the parent key is strictly equal to its left child's
+ *   largest key;
+ * - If a tree is indexing multiple seastore transactions, each transaction
+ *   will be mapped to a Super which points to a distinct root node. So the
+ *   transactions are isolated at tree level. However, tree nodes from
+ *   different transactions can reference the same seastore CachedExtent before
+ *   modification;
+ * - The resources of the transactional tree are tracked by tree_cursor_ts held
+ *   by users. As long as any cursor is alive, the according tree hierarchy is
+ *   alive and keeps tracked. See the reversed resource management sections
+ *   below;
  */
+
+namespace crimson::os::seastore::onode {
 
 class LeafNode;
 class InternalNode;
 
+/**
+ * tree_cursor_t
+ *
+ * A cursor points to a position (LeafNode and search_position_t) of the tree
+ * where it can find the according key and value pair. The position is updated
+ * by LeafNode insert/split/delete/merge internally and is kept valid. It also
+ * caches the key-value information for a specific node layout version.
+ *
+ * Exposes public interfaces for Btree::Cursor.
+ */
 using layout_version_t = uint32_t;
 class tree_cursor_t final
   : public boost::intrusive_ref_counter<
@@ -50,8 +69,19 @@ class tree_cursor_t final
   tree_cursor_t& operator=(const tree_cursor_t&) = delete;
   tree_cursor_t& operator=(tree_cursor_t&&) = delete;
 
+  /**
+   * is_end
+   *
+   * Represents one-past-the-last of all the sorted key-value
+   * pairs in the tree. An end cursor won't contain valid key-value
+   * information.
+   */
   bool is_end() const { return position.is_end(); }
+
+  /// Returns the key view in tree if it is not an end cursor.
   const key_view_t& get_key_view() const;
+
+  /// Returns the value pointer in tree if it is not an end cursor.
   const onode_t* get_p_value() const;
 
  private:
@@ -68,8 +98,15 @@ class tree_cursor_t final
   void ensure_kv() const;
 
  private:
+  /**
+   * Reversed resource management (tree_cursor_t)
+   *
+   * tree_cursor_t holds a reference to the LeafNode, so the LeafNode will be
+   * alive as long as any of it's cursors is still referenced by user.
+   */
   Ref<LeafNode> leaf_node;
   search_position_t position;
+
   // cached information
   mutable std::optional<key_view_t> key_view;
   mutable const onode_t* p_value;
@@ -79,6 +116,13 @@ class tree_cursor_t final
   friend class Node; // get_position(), get_leaf_node()
 };
 
+/**
+ * Node
+ *
+ * An abstracted class for both InternalNode and LeafNode.
+ *
+ * Exposes public interfaces for Btree.
+ */
 class Node
   : public boost::intrusive_ref_counter<
            Node, boost::thread_unsafe_counter> {
@@ -91,6 +135,7 @@ class Node
     crimson::ct_error::erange>;
   template <class ValueT=void>
   using node_future = node_ertr::future<ValueT>;
+
   struct search_result_t {
     bool is_end() const { return p_cursor->is_end(); }
     Ref<tree_cursor_t> p_cursor;
@@ -108,21 +153,77 @@ class Node
   Node& operator=(const Node&) = delete;
   Node& operator=(Node&&) = delete;
 
+  /**
+   * level
+   *
+   * A positive value denotes the level (or height) of this node in tree.
+   * 0 means LeafNode, positive means InternalNode.
+   */
   level_t level() const;
+
+  /**
+   * lookup_smallest
+   *
+   * Returns a cursor pointing to the smallest key in the sub-tree formed by
+   * this node.
+   *
+   * Returns an end cursor if it is an empty root node.
+   */
   virtual node_future<Ref<tree_cursor_t>> lookup_smallest(context_t) = 0;
+
+  /**
+   * lookup_largest
+   *
+   * Returns a cursor pointing to the largest key in the sub-tree formed by
+   * this node.
+   *
+   * Returns an end cursor if it is an empty root node.
+   */
   virtual node_future<Ref<tree_cursor_t>> lookup_largest(context_t) = 0;
+
+  /**
+   * lower_bound
+   *
+   * Returns a cursor pointing to the first element in the range [first, last)
+   * of the sub-tree which does not compare less than the input key. The
+   * result also denotes whether the pointed key is equal to the input key.
+   *
+   * Returns an end cursor with MatchKindBS::NE if:
+   * - It is an empty root node;
+   * - Or the input key is larger than all the keys in the sub-tree;
+   */
   node_future<search_result_t> lower_bound(context_t c, const key_hobj_t& key);
+
+  /**
+   * insert
+   *
+   * Try to insert a key-value pair into the sub-tree formed by this node.
+   *
+   * Returns a boolean denoting whether the insertion is successful:
+   * - If true, the returned cursor points to the inserted element in tree;
+   * - If false, the returned cursor points to the conflicting element in tree;
+   */
   node_future<std::pair<Ref<tree_cursor_t>, bool>> insert(
       context_t, const key_hobj_t&, const onode_t&);
+
+  /// Recursively collects the statistics of the sub-tree formed by this node
   node_future<tree_stats_t> get_tree_stats(context_t);
+
+  /// Returns an ostream containing a dump of all the elements in the node.
   std::ostream& dump(std::ostream&) const;
+
+  /// Returns an ostream containing an one-line summary of this node.
   std::ostream& dump_brief(std::ostream&) const;
 
+  /// Initializes the tree by allocating an empty root node.
+  static node_future<> mkfs(context_t, RootNodeTracker&);
+
+  /// Loads the tree root. The tree must be initialized.
+  static node_future<Ref<Node>> load_root(context_t, RootNodeTracker&);
+
+  // Only for unit test purposes.
   void test_make_destructable(context_t, NodeExtentMutable&, Super::URef&&);
   virtual node_future<> test_clone_root(context_t, RootNodeTracker&) const = 0;
-
-  static node_future<> mkfs(context_t, RootNodeTracker&);
-  static node_future<Ref<Node>> load_root(context_t, RootNodeTracker&);
 
  protected:
   virtual node_future<> test_clone_non_root(context_t, Ref<InternalNode>) const {
@@ -164,6 +265,15 @@ class Node
   node_future<> insert_parent(context_t, Ref<Node> right_node);
 
  private:
+  /**
+   * Reversed resource management (Node)
+   *
+   * Root Node holds a reference to its parent Super class, so its parent
+   * will be alive as long as this root node is alive.
+   *
+   * None-root Node holds a reference to its parent Node, so its parent will
+   * be alive as long as any of it's children is alive.
+   */
   // as root
   Super::URef super;
   // as child/non-root
@@ -179,6 +289,13 @@ inline std::ostream& operator<<(std::ostream& os, const Node& node) {
   return node.dump_brief(os);
 }
 
+/**
+ * InternalNode
+ *
+ * A concrete implementation of Node class that represents an internal tree
+ * node. Its level is always positive and its values are logical block
+ * addresses to its child nodes. An internal node cannot be empty.
+ */
 class InternalNode final : public Node {
  public:
   // public to Node
@@ -247,12 +364,24 @@ class InternalNode final : public Node {
   static node_future<fresh_node_t> allocate(context_t, field_type_t, bool, level_t);
 
  private:
+  /**
+   * Reversed resource management (InternalNode)
+   *
+   * InteralNode keeps track of its child nodes which are still alive in
+   * memory, and their positions will be updated throughout
+   * insert/split/delete/merge operations of this node.
+   */
   // XXX: leverage intrusive data structure to control memory overhead
-  // track the current living child nodes by position (can be end)
   std::map<search_position_t, Node*> tracked_child_nodes;
   InternalNodeImpl* impl;
 };
 
+/**
+ * LeafNode
+ *
+ * A concrete implementation of Node class that represents a leaf tree node.
+ * Its level is always 0. A leaf node can only be empty if it is root.
+ */
 class LeafNode final : public Node {
  public:
   // public to tree_cursor_t
@@ -331,8 +460,14 @@ class LeafNode final : public Node {
   static node_future<fresh_node_t> allocate(context_t, field_type_t, bool);
 
  private:
+  /**
+   * Reversed resource management (LeafNode)
+   *
+   * LeafNode keeps track of the referencing cursors which are still alive in
+   * memory, and their positions will be updated throughout
+   * insert/split/delete/merge operations of this node.
+   */
   // XXX: leverage intrusive data structure to control memory overhead
-  // track the current living cursors by position (cannot be end)
   std::map<search_position_t, tree_cursor_t*> tracked_cursors;
   LeafNodeImpl* impl;
   layout_version_t layout_version = 0;

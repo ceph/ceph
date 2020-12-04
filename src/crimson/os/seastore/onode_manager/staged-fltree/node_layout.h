@@ -32,6 +32,12 @@ template <> struct node_marker_type<node_type_t::INTERNAL> {
 template <> struct node_marker_type<node_type_t::LEAF> {
   using type = LeafNodeImpl::leaf_marker_t; };
 
+/**
+ * NodeLayoutT
+ *
+ * Contains templated and concrete implementations for both InternalNodeImpl
+ * and LeafNodeImpl under a specific node layout.
+ */
 template <typename FieldType, node_type_t NODE_TYPE>
 class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
  public:
@@ -61,10 +67,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   using alloc_ertr = NodeExtentManager::tm_ertr;
   static alloc_ertr::future<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
-    // NOTE:
-    // *option1: all types of node have the same length;
-    // option2: length is defined by node/field types;
-    // option3: length is totally flexible;
+    // NOTE: Currently, all the node types have the same size for simplicity.
+    // But depending on the requirement, we may need to make node size
+    // configurable by field_type_t and node_type_t, or totally flexible.
     return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
     ).safe_then([is_level_tail, level](auto extent) {
       assert(extent->is_initial_pending());

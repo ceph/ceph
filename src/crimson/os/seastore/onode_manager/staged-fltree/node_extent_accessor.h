@@ -9,6 +9,12 @@
 
 namespace crimson::os::seastore::onode {
 
+/**
+ * DeltaRecorderT
+ *
+ * Responsible to encode and decode delta, and apply delta for a specific node
+ * layout.
+ */
 template <typename FieldType, node_type_t NODE_TYPE>
 class DeltaRecorderT final: public DeltaRecorder {
  public:
@@ -74,10 +80,9 @@ class DeltaRecorderT final: public DeltaRecorder {
 /**
  * NodeExtentAccessorT
  *
- * This component is responsible to mutate the underlying NodeExtent, record
- * mutation parameters as delta and apply the recorded modifications to the
- * NodeExtent. It contains static information about node and field type in
- * order to call methods of NodeLayoutReplayable.
+ * This component is responsible to reference and mutate the underlying
+ * NodeExtent, record mutation parameters when needed, and apply the recorded
+ * modifications for a specific node layout.
  */
 template <typename FieldType, node_type_t NODE_TYPE>
 class NodeExtentAccessorT {

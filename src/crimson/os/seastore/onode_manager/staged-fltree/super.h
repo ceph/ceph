@@ -13,6 +13,12 @@ namespace crimson::os::seastore::onode {
 
 class Node;
 class Super;
+
+/**
+ * RootNodeTracker
+ *
+ * An abstracted tracker to get the root node by Transaction.
+ */
 class RootNodeTracker {
  public:
   virtual ~RootNodeTracker() = default;
@@ -30,6 +36,12 @@ class RootNodeTracker {
   friend class Super;
 };
 
+/**
+ * Super
+ *
+ * The parent of root node. It contains the relationship between a Transaction
+ * and a root node address.
+ */
 class Super {
  public:
   using URef = std::unique_ptr<Super>;
@@ -70,6 +82,12 @@ class Super {
   Node* tracked_root_node = nullptr;
 };
 
+/**
+ * RootNodeTrackerIsolated
+ *
+ * A concrete RootNodeTracker implementation which provides root node isolation
+ * between Transactions for Seastore backend.
+ */
 class RootNodeTrackerIsolated final : public RootNodeTracker {
  public:
   ~RootNodeTrackerIsolated() override { assert(is_clean()); }
@@ -89,6 +107,12 @@ class RootNodeTrackerIsolated final : public RootNodeTracker {
   std::map<Transaction*, Super*> tracked_supers;
 };
 
+/**
+ * RootNodeTrackerShared
+ *
+ * A concrete RootNodeTracker implementation which has no isolation between
+ * Transactions for Dummy backend.
+ */
 class RootNodeTrackerShared final : public RootNodeTracker {
  public:
   ~RootNodeTrackerShared() override { assert(is_clean()); }

@@ -122,6 +122,19 @@ inline MatchKindCMP compare_to(const snap_gen_t& l, const snap_gen_t& r) {
   return toMatchKindCMP(l.gen, r.gen);
 }
 
+/**
+ * string_key_view_t
+ *
+ * The layout to store char array as an oid or an ns string which may be
+ * compressed.
+ *
+ * If compressed, the physical block only stores an unsigned int of
+ * string_size_t, with value 0 denoting Type::MIN, and value max() denoting
+ * Type::MAX.
+ *
+ * If not compressed (Type::STR), the physical block stores the char array and
+ * a valid string_size_t value.
+ */
 struct string_key_view_t {
   enum class Type {MIN, STR, MAX};
   // presumably the maximum string length is 2KiB
@@ -223,6 +236,14 @@ struct string_key_view_t {
   string_size_t length;
 };
 
+/**
+ * string_view_masked_t
+ *
+ * A common class to hide the underlying string implementation regardless of a
+ * string_key_view_t (maybe compressed), a string/string_view, or a compressed
+ * string. And leverage this consistant class to do compare, print, convert and
+ * append operations.
+ */
 class string_view_masked_t {
  public:
   using Type = string_key_view_t::Type;
@@ -382,12 +403,17 @@ inline MatchKindCMP compare_to(const ns_oid_view_t& l, const ns_oid_view_t& r) {
                     string_view_masked_t{r.oid});
 }
 
+/**
+ * key_hobj_t
+ *
+ * A specialized implementation of a full_key_t storing a ghobject_t passed
+ * from user.
+ */
 class key_hobj_t {
  public:
   explicit key_hobj_t(const ghobject_t& ghobj) : ghobj{ghobj} {}
-
   /*
-   * common interface as full_key_t
+   * common interfaces as a full_key_t
    */
   shard_t shard() const {
     return ghobj.shard_id;
@@ -440,10 +466,16 @@ inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
   return key.dump(os);
 }
 
+/**
+ * key_view_t
+ *
+ * A specialized implementation of a full_key_t pointing to the locations
+ * storing the full key in a tree node.
+ */
 class key_view_t {
  public:
-  /*
-   * common interface as full_key_t
+  /**
+   * common interfaces as a full_key_t
    */
   shard_t shard() const {
     return shard_pool_packed().shard;
@@ -479,10 +511,9 @@ class key_view_t {
     return !operator==(o);
   }
 
-  /*
+  /**
    * key_view_t specific interfaces
    */
-
   bool has_shard_pool() const {
     return p_shard_pool != nullptr;
   }
