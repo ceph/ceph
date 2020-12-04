@@ -73,6 +73,7 @@ public:
            RGWSI_Cls *_cls_svc);
 
   int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
+  int init_log();
 
   // traverse all the way back to the beginning of the period history, and
   // return a cursor to the first period in a fully attached history
@@ -105,11 +106,7 @@ public:
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section, const std::string& key, bufferlist& bl);
 
-<<<<<<< HEAD
-  int get_shard_id(const std::string& hash_key, int *shard_id);
-=======
-  int get_shard_id(const string& hash_key);
->>>>>>> bbd5a56ddfb (rgw: Remove unused trim arguments)
+  int get_shard_id(const std::string& hash_key);
 
   RGWPeriodHistory *get_period_history() {
     return period_history.get();

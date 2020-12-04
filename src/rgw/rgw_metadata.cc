@@ -269,13 +269,13 @@ public:
     e.clear();
     std::move(lentries.begin(), lentries.end(), std::back_inserter(e));
 
-    if (r < 0) {
+    if ((r < 0) && (r != -ENOENT)) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": failed to list " << oids[index]
 		 << cpp_strerror(-r) << dendl;
       return r;
     }
-    return 0;
+    return r;
   }
   int get_info(int index, RGWMetadataLogInfo *info) override {
     cls_log_header header;
@@ -385,8 +385,104 @@ RGWMetadataLog::RGWMetadataLog(CephContext *cct,
       prefix(make_prefix(period)) {
     svc.zone = _zone_svc;
     svc.cls = _cls_svc;
-    be = std::make_unique<RGWMetadataLogOmap>(cct, prefix, *svc.cls);
+//    be = std::make_unique<RGWMetadataLogOmap>(cct, prefix, *svc.cls);
   }
+
+
+int RGWMetadataLog::init()
+{
+  if (be) { // already initialized
+    return 0;
+  }
+
+  auto backing = cct->_conf.get_val<std::string>("rgw_md_log_backing");
+  ceph_assert(backing == "auto" || backing == "fifo" || backing == "omap");
+
+  auto log_pool = svc.zone->get_zone_params().log_pool;
+  bool omapexists = false, omaphasentries = false;
+  auto r = RGWMetadataLogOmap::exists(cct, *svc.cls, prefix, &omapexists, &omaphasentries);
+  if (r < 0) {
+    lderr(cct) << __PRETTY_FUNCTION__
+	       << ": Error when checking for existing Omap datalog backend: "
+	       << cpp_strerror(-r) << dendl;
+  }
+  bool fifoexists = false, fifohasentries = false;
+  /*r = RGWMetadataLogFIFO::exists(cct, prefix, lr, log_pool, &fifoexists, &fifohasentries);
+  if (r < 0) {
+    lderr(cct) << __PRETTY_FUNCTION__
+	       << ": Error when checking for existing FIFO datalog backend: "
+	       << cpp_strerror(-r) << dendl;
+  }*/
+
+  bool has_entries = omaphasentries || fifohasentries;
+  bool remove = false;
+
+  if (omapexists && fifoexists) {
+    if (has_entries) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": Both Omap and FIFO backends exist, cannot continue."
+		 << dendl;
+      return -EINVAL;
+    }
+    ldout(cct, 0)
+      << __PRETTY_FUNCTION__
+      << ": Both Omap and FIFO backends exist, but are empty. Will remove."
+      << dendl;
+    remove = true;
+  }
+  if (backing == "omap" && fifoexists) {
+    if (has_entries) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": Omap requested, but FIFO backend exists, cannot continue."
+		 << dendl;
+      return -EINVAL;
+    }
+    ldout(cct, 0) << __PRETTY_FUNCTION__
+		  << ": Omap requested, FIFO exists, but is empty. Deleting."
+		  << dendl;
+    remove = true;
+  }
+  if ((backing == "fifo") && omapexists) {
+    if (has_entries) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": FIFO requested, but Omap backend exists, cannot continue."
+		 << dendl;
+      return -EINVAL;
+    }
+    ldout(cct, 0) << __PRETTY_FUNCTION__
+		  << ": FIFO requested, Omap exists, but is empty. Deleting."
+		  << dendl;
+    remove = true;
+  }
+
+/*  if (remove) {
+    r = RGWMetadataLogBE::remove(cct, prefix, lr, log_pool);
+    if (r < 0) {
+      lderr(cct) << __PRETTY_FUNCTION__
+		 << ": remove failed, cannot continue."
+		 << dendl;
+      return r;
+    }
+    omapexists = false;
+    fifoexists = false;
+  } */
+
+  try {
+    if (backing == "omap" || (backing == "auto" && omapexists)) {
+      be = std::make_unique<RGWMetadataLogOmap>(cct, prefix, *svc.cls);
+    } else if (backing != "omap") {
+  //    be = std::make_unique<RGWMetadataLogFIFO>(cct, prefix, lr, log_pool);
+    }
+  } catch (bs::system_error& e) {
+    lderr(cct) << __PRETTY_FUNCTION__
+	       << ": Error when starting backend: "
+	       << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+
+  ceph_assert(be);
+  return 0;
+}
 
 int RGWMetadataLog::add_entry(const string& hash_key, const string& section,
 			      const string& key, bufferlist& bl) {
