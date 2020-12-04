@@ -652,6 +652,7 @@ class Module(MgrModule):
         self._completed_events = []
         self._dirty = True
         self._save()
+        self.clear_all_progress_events()
 
     def _handle_clear(self):
         self.clear()
