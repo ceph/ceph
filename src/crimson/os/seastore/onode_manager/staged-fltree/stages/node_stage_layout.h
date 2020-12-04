@@ -98,7 +98,29 @@ node_range_t fields_free_range_before(
   return {offset_start, offset_end};
 }
 
-// internal/leaf node N0, N1; leaf node N3
+/**
+ * _node_fields_013_t (node_fields_0_t, node_fields_1_t, leaf_fields_3_t
+ *
+ * The STAGE_LEFT layout implementation for node N0/N1, or the STAGE_RIGHT
+ * layout implementation for leaf node N3.
+ *
+ * The node layout storing n slots:
+ *
+ * # <----------------------------- node range --------------------------------------> #
+ * #                                                 #<~># free space                  #
+ * # <----- left part -----------------------------> # <~# <----- right slots -------> #
+ * #               # <---- left slots -------------> #~> #                             #
+ * #               #                slots [2, n) |<~>#   #<~>| right slots [2, n)      #
+ * #               # <- slot 0 -> | <- slot 1 -> |   #   #   | <-- s1 --> | <-- s0 --> #
+ * #               #              |              |   #   #   |            |            #
+ * #        | num_ #     | right  |     | right  |   #   #   | next-stage | next-stage #
+ * # header | keys # key | offset | key | offset |   #   #   | container  | container  #
+ * #        |      # 0   | 0      | 1   | 1      |...#...#...| or onode 1 | or onode 0 #
+ *                           |              |                ^            ^
+ *                           |              |                |            |
+ *                           |              +----------------+            |
+ *                           +--------------------------------------------+
+ */
 template <typename SlotType>
 struct _node_fields_013_t {
   // TODO: decide by NODE_BLOCK_SIZE, sizeof(SlotType), sizeof(laddr_t)
@@ -168,7 +190,26 @@ struct _node_fields_013_t {
 using node_fields_0_t = _node_fields_013_t<slot_0_t>;
 using node_fields_1_t = _node_fields_013_t<slot_1_t>;
 
-// internal/leaf node N2
+/**
+ * node_fields_2_t
+ *
+ * The STAGE_STRING layout implementation for node N2.
+ *
+ * The node layout storing n slots:
+ *
+ * # <--------------------------------- node range ----------------------------------------> #
+ * #                                     #<~># free space                                    #
+ * # <------- left part ---------------> # <~# <--------- right slots ---------------------> #
+ * #               # <---- offsets ----> #~> #<~>| slots [2, n)                              #
+ * #               #  offsets [2, n) |<~>#   #   | <----- slot 1 ----> | <----- slot 0 ----> #
+ * #               #                 |   #   #   |                     |                     #
+ * #        | num_ # offset | offset |   #   #   | next-stage | ns-oid | next-stage | ns-oid #
+ * # header | keys # 0      | 1      |...#...#...| container1 | 1      | container0 | 0      #
+ *                     |        |                ^                     ^
+ *                     |        |                |                     |
+ *                     |        +----------------+                     |
+ *                     +-----------------------------------------------+
+ */
 struct node_fields_2_t {
   // TODO: decide by NODE_BLOCK_SIZE, sizeof(node_off_t), sizeof(laddr_t)
   // and the minimal size of variable_key.
@@ -244,6 +285,20 @@ struct node_fields_2_t {
   node_offset_t offsets[];
 } __attribute__((packed));
 
+/**
+ * internal_fields_3_t
+ *
+ * The STAGE_RIGHT layout implementation for N2.
+ *
+ * The node layout storing 3 children:
+ *
+ * # <---------------- node range ---------------------------> #
+ * #               # <-- keys ---> # <---- laddrs -----------> #
+ * #  free space:  #           |<~>#                       |<~>#
+ * #               #           |   #                       |   #
+ * #        | num_ # key | key |   # laddr | laddr | laddr |   #
+ * # header | keys # 0   | 1   |...# 0     | 1     | 2     |...#
+ */
 // TODO: decide by NODE_BLOCK_SIZE, sizeof(snap_gen_t), sizeof(laddr_t)
 static constexpr unsigned MAX_NUM_KEYS_I3 = 170u;
 template <unsigned MAX_NUM_KEYS>
@@ -307,55 +362,5 @@ static_assert(_internal_fields_3_t<MAX_NUM_KEYS_I3>::SIZE <= NODE_BLOCK_SIZE &&
 using internal_fields_3_t = _internal_fields_3_t<MAX_NUM_KEYS_I3>;
 
 using leaf_fields_3_t = _node_fields_013_t<slot_3_t>;
-
-/*
- * block layout of a variable-sized item (right-side)
- *
- * for internal node type 0, 1:
- * previous off (block boundary) -----------------------------+
- * current off --+                                            |
- *               |                                            |
- *               V                                            V
- *        <==== |   sub |fix|sub |fix|oid char|ns char|colli-|
- *  (next-item) |...addr|key|addr|key|array & |array &|-sion |(prv-item)...
- *        <==== |   1   |1  |0   |0  |len     |len    |offset|
- *                ^                                      |
- *                |                                      |
- *                +------------ next collision ----------+
- * see item_iterator_t<node_type_t::INTERNAL>
- *
- * for internal node type 2:
- * previous off (block boundary) ----------------------+
- * current off --+                                     |
- *               |                                     |
- *               V                                     V
- *        <==== |   sub |fix|sub |fix|oid char|ns char|
- *  (next-item) |...addr|key|addr|key|array & |array &|(prv-item)...
- *        <==== |   1   |1  |0   |0  |len     |len    |
- * see sub_items_t<node_type_t::INTERNAL>
- *
- * for leaf node type 0, 1:
- * previous off (block boundary) ----------------------------------------+
- * current off --+                                                       |
- *               |                                                       |
- *               V                                                       V
- *        <==== |   fix|o-  |fix|   off|off|num |oid char|ns char|colli-|
- *  (next-item) |...key|node|key|...set|set|sub |array & |array &|-sion |(prv-item)
- *        <==== |   1  |0   |0  |   1  |0  |keys|len     |len    |offset|
- *                ^                                                  |
- *                |                                                  |
- *                +------------ next collision ----------------------+
- * see item_iterator_t<node_type_t::LEAF>
- *
- * for leaf node type 2:
- * previous off (block boundary) ---------------------------------+
- * current off --+                                                |
- *               |                                                |
- *               V                                                V
- *        <==== |   fix|o-  |fix|   off|off|num |oid char|ns char|
- *  (next-item) |...key|node|key|...set|set|sub |array & |array &|(prv-item)
- *        <==== |   1  |0   |0  |   1  |0  |keys|len     |len    |
- * see sub_items_t<node_type_t::LEAF>
- */
 
 }

@@ -8,6 +8,12 @@
 
 namespace crimson::os::seastore::onode {
 
+/**
+ * DeltaRecorder
+ *
+ * An abstracted class to encapsulate different implementations to apply delta
+ * to a specific node layout.
+ */
 class DeltaRecorder {
  public:
   virtual ~DeltaRecorder() {

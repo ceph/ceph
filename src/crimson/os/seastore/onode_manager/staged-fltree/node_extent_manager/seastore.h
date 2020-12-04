@@ -7,6 +7,12 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_delta_recorder.h"
 
+/**
+ * seastore.h
+ *
+ * Seastore backend implementations.
+ */
+
 namespace crimson::os::seastore::onode {
 
 class SeastoreSuper final: public Super {
