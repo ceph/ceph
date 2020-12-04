@@ -70,11 +70,14 @@ public:
     AdminSocket* admin_socket = bluefs->cct->get_admin_socket();
     if (admin_socket) {
       hook = new BlueFS::SocketHook(bluefs);
-      int r = admin_socket->register_command("bluestore bluefs available "
+      int r = admin_socket->register_command("bluestore bluefs device info "
                                              "name=alloc_size,type=CephInt,req=false",
                                              hook,
-                                             "Report available space for bluefs. "
-                                             "If alloc_size set, make simulation.");
+                                             "Shows space report for bluefs devices. "
+                                             "This also includes an estimation for space "
+                                             "available to bluefs at main device. "
+                                             "alloc_size, if set, specifies the custom bluefs "
+                                             "allocation unit size for the estimation above.");
       if (r != 0) {
         ldout(bluefs->cct, 1) << __func__ << " cannot register SocketHook" << dendl;
         delete hook;
@@ -104,7 +107,7 @@ private:
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
-    if (command == "bluestore bluefs available") {
+    if (command == "bluestore bluefs device info") {
       int64_t alloc_size = 0;
       cmd_getval(cmdmap, "alloc_size", alloc_size);
       if ((alloc_size & (alloc_size - 1)) != 0) {
@@ -112,8 +115,8 @@ private:
 	return -EINVAL;
       }
       if (alloc_size == 0)
-	alloc_size = bluefs->cct->_conf->bluefs_alloc_size;
-      f->open_object_section("bluefs_available_space");
+	alloc_size = bluefs->cct->_conf->bluefs_shared_alloc_size;
+      f->open_object_section("bluefs_device_info");
       for (unsigned dev = BDEV_WAL; dev <= BDEV_SLOW; dev++) {
 	if (bluefs->bdev[dev]) {
 	  f->open_object_section("dev");
@@ -126,9 +129,14 @@ private:
           f->dump_int("total", total);
           f->dump_int("free", free);
           f->dump_int("bluefs_used", used);
-	  f->close_section();
-	}
+          if (bluefs->is_shared_alloc(dev)) {
+            size_t avail = bluefs->probe_alloc_avail(dev, alloc_size);
+            f->dump_int("bluefs max available", avail);
+          }
+          f->close_section();
+        }
       }
+
       f->close_section();
     } else if (command == "bluefs stats") {
       std::stringstream ss;
@@ -3571,6 +3579,27 @@ int BlueFS::do_replay_recovery_read(FileReader *log_reader,
   return 0;
 }
 
+size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
+{
+  size_t total = 0;
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    //only count in size that is alloc_size aligned
+    size_t dist_to_alignment;
+    size_t offset_in_block = off & (alloc_size - 1);
+    if (offset_in_block == 0)
+      dist_to_alignment = 0;
+    else
+      dist_to_alignment = alloc_size - offset_in_block;
+    if (dist_to_alignment >= len)
+      return;
+    len -= dist_to_alignment;
+    total += p2align(len, alloc_size);
+  };
+  if (alloc[dev]) {
+    alloc[dev]->dump(iterated_allocation);
+  }
+  return total;
+}
 // ===============================================
 // OriginalVolumeSelector
 
