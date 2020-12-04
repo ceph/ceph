@@ -10,6 +10,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "json_spirit/json_spirit.h"
+#include "boost/lexical_cast.hpp"
 #include <sstream>
 
 #define dout_subsys ceph_subsys_rbd
@@ -24,6 +25,7 @@ namespace {
 
 const std::string TYPE_KEY{"type"};
 const std::string POOL_ID_KEY{"pool_id"};
+const std::string POOL_NAME_KEY{"pool_name"};
 const std::string POOL_NAMESPACE_KEY{"pool_namespace"};
 const std::string IMAGE_NAME_KEY{"image_name"};
 const std::string IMAGE_ID_KEY{"image_id"};
@@ -57,21 +59,52 @@ void NativeFormat<I>::open(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
+  auto& pool_name_val = m_json_object[POOL_NAME_KEY];
+  if (pool_name_val.type() == json_spirit::str_type) {
+    librados::Rados rados(m_image_ctx->md_ctx);
+    librados::IoCtx io_ctx;
+    int r = rados.ioctx_create(pool_name_val.get_str().c_str(), io_ctx);
+    if (r < 0 ) {
+      lderr(cct) << "invalid pool name" << dendl;
+      on_finish->complete(r);
+      return;
+    }
+
+    m_pool_id = io_ctx.get_id();
+  } else if (pool_name_val.type() != json_spirit::null_type) {
+    lderr(cct) << "invalid pool name" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
   auto& pool_id_val = m_json_object[POOL_ID_KEY];
-  if (pool_id_val.type() != json_spirit::int_type) {
+  if (m_pool_id != -1 && pool_id_val.type() != json_spirit::null_type) {
+    lderr(cct) << "cannot specify both pool name and pool id" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  } else if (pool_id_val.type() == json_spirit::int_type) {
+    m_pool_id = pool_id_val.get_int64();
+  } else if (pool_id_val.type() == json_spirit::str_type) {
+    try {
+      m_pool_id = boost::lexical_cast<int64_t>(pool_id_val.get_str());
+    } catch (boost::bad_lexical_cast &) {
+    }
+  }
+
+  if (m_pool_id == -1) {
     lderr(cct) << "missing or invalid pool id" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
-  m_pool_id = pool_id_val.get_int64();
 
   auto& pool_namespace_val = m_json_object[POOL_NAMESPACE_KEY];
-  if (pool_namespace_val.type() != json_spirit::str_type) {
-    lderr(cct) << "missing or invalid pool namespace" << dendl;
+  if (pool_namespace_val.type() == json_spirit::str_type) {
+    m_pool_namespace = pool_namespace_val.get_str();
+  } else if (pool_namespace_val.type() != json_spirit::null_type) {
+    lderr(cct) << "invalid pool namespace" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
-  m_pool_namespace = pool_namespace_val.get_str();
 
   auto& image_name_val = m_json_object[IMAGE_NAME_KEY];
   if (image_name_val.type() != json_spirit::str_type) {
@@ -120,8 +153,7 @@ void NativeFormat<I>::open(Context* on_finish) {
   }
 
   // open the source RBD image
-  auto ctx = util::create_async_context_callback(*m_image_ctx, on_finish);
-  m_image_ctx->state->open(flags, ctx);
+  m_image_ctx->state->open(flags, on_finish);
 }
 
 template <typename I>

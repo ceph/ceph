@@ -808,6 +808,11 @@ void ImageState<I>::complete_action_unlock(State next_state, int r) {
     TaskFinisherSingleton::get_singleton(m_image_ctx->cct).queue(ctx, r);
   } else {
     for (auto ctx : action_contexts.second) {
+      if (next_state == STATE_OPEN) {
+        // we couldn't originally wrap the open callback w/ an async wrapper in
+        // case the image failed to open
+        ctx = create_async_context_callback(*m_image_ctx, ctx);
+      }
       ctx->complete(r);
     }
 
@@ -828,9 +833,8 @@ void ImageState<I>::send_open_unlock() {
 
   m_state = STATE_OPENING;
 
-  Context *ctx = create_async_context_callback(
-    *m_image_ctx, create_context_callback<
-      ImageState<I>, &ImageState<I>::handle_open>(this));
+  Context *ctx = create_context_callback<
+    ImageState<I>, &ImageState<I>::handle_open>(this);
   image::OpenRequest<I> *req = image::OpenRequest<I>::create(
     m_image_ctx, m_open_flags, ctx);
 

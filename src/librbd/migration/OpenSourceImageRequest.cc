@@ -22,13 +22,13 @@ namespace migration {
 
 template <typename I>
 OpenSourceImageRequest<I>::OpenSourceImageRequest(
-    I* dst_image_ctx, uint64_t src_snap_id,
+    librados::IoCtx& io_ctx, I* dst_image_ctx, uint64_t src_snap_id,
     const MigrationInfo &migration_info, I** src_image_ctx, Context* on_finish)
-  : m_dst_image_ctx(dst_image_ctx), m_src_snap_id(src_snap_id),
+  : m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())), m_io_ctx(io_ctx),
+    m_dst_image_ctx(dst_image_ctx), m_src_snap_id(src_snap_id),
     m_migration_info(migration_info), m_src_image_ctx(src_image_ctx),
     m_on_finish(on_finish) {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 }
 
 template <typename I>
@@ -38,12 +38,10 @@ void OpenSourceImageRequest<I>::send() {
 
 template <typename I>
 void OpenSourceImageRequest<I>::open_source() {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", m_src_snap_id, m_dst_image_ctx->md_ctx,
-                               true);
+  *m_src_image_ctx = I::create("", "", m_src_snap_id, m_io_ctx, true);
   auto src_image_ctx = *m_src_image_ctx;
   src_image_ctx->child = m_dst_image_ctx;
 
@@ -70,8 +68,8 @@ void OpenSourceImageRequest<I>::open_source() {
   int r = source_spec_builder.parse_source_spec(source_spec,
                                                 &source_spec_object);
   if (r < 0) {
-    lderr(cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
-               << dendl;
+    lderr(m_cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
+                 << dendl;
     (*m_src_image_ctx)->state->close();
     finish(r);
     return;
@@ -80,8 +78,8 @@ void OpenSourceImageRequest<I>::open_source() {
   r = source_spec_builder.build_format(source_spec_object, import_only,
                                        &m_format);
   if (r < 0) {
-    lderr(cct) << "failed to build migration format handler: "
-               << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to build migration format handler: "
+                 << cpp_strerror(r) << dendl;
     (*m_src_image_ctx)->state->close();
     finish(r);
     return;
@@ -95,31 +93,132 @@ void OpenSourceImageRequest<I>::open_source() {
 
 template <typename I>
 void OpenSourceImageRequest<I>::handle_open_source(int r) {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to open migration source: " << cpp_strerror(r)
-               << dendl;
+    lderr(m_cct) << "failed to open migration source: " << cpp_strerror(r)
+                 << dendl;
     finish(r);
     return;
   }
 
-  // intercept any IO requests to the source image
-  auto io_image_dispatch = ImageDispatch<I>::create(
-    *m_src_image_ctx, std::move(m_format));
-  (*m_src_image_ctx)->io_image_dispatcher->register_dispatch(io_image_dispatch);
+  get_image_size();
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::get_image_size() {
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<
+    OpenSourceImageRequest<I>,
+    &OpenSourceImageRequest<I>::handle_get_image_size>(this);
+  m_format->get_image_size(CEPH_NOSNAP, &m_image_size, ctx);
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::handle_get_image_size(int r) {
+  ldout(m_cct, 10) << "r=" << r << ", "
+                   << "image_size=" << m_image_size << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to retrieve image size: " << cpp_strerror(r)
+                 << dendl;
+    close_image(r);
+    return;
+  }
+
+  auto src_image_ctx = *m_src_image_ctx;
+  src_image_ctx->image_lock.lock();
+  src_image_ctx->size = m_image_size;
+  src_image_ctx->image_lock.unlock();
+
+  get_snapshots();
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::get_snapshots() {
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<
+    OpenSourceImageRequest<I>,
+    &OpenSourceImageRequest<I>::handle_get_snapshots>(this);
+  m_format->get_snapshots(&m_snap_infos, ctx);
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::handle_get_snapshots(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to retrieve snapshots: " << cpp_strerror(r)
+                 << dendl;
+    close_image(r);
+    return;
+  }
+
+  // copy snapshot metadata to image ctx
+  auto src_image_ctx = *m_src_image_ctx;
+  src_image_ctx->image_lock.lock();
+
+  src_image_ctx->snaps.clear();
+  src_image_ctx->snap_info.clear();
+  src_image_ctx->snap_ids.clear();
+
+  ::SnapContext snapc;
+  for (auto it = m_snap_infos.rbegin(); it != m_snap_infos.rend(); ++it) {
+    auto& [snap_id, snap_info] = *it;
+    snapc.snaps.push_back(snap_id);
+
+    src_image_ctx->add_snap(
+      snap_info.snap_namespace, snap_info.name, snap_id,
+      snap_info.size, snap_info.parent, snap_info.protection_status,
+      snap_info.flags, snap_info.timestamp);
+  }
+  if (!snapc.snaps.empty()) {
+    snapc.seq = snapc.snaps[0];
+  }
+  src_image_ctx->snapc = snapc;
+
+  // ensure data_ctx and data_io_context are pointing to correct snapshot
+  if (src_image_ctx->open_snap_id != CEPH_NOSNAP) {
+    int r = src_image_ctx->snap_set(src_image_ctx->open_snap_id);
+    ceph_assert(r == 0);
+    src_image_ctx->open_snap_id = CEPH_NOSNAP;
+  }
+
+  src_image_ctx->image_lock.unlock();
 
   finish(0);
 }
 
 template <typename I>
+void OpenSourceImageRequest<I>::close_image(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  auto ctx = new LambdaContext([this, r](int) {
+    finish(r);
+  });
+  (*m_src_image_ctx)->state->close(ctx);
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::register_image_dispatch() {
+  ldout(m_cct, 10) << dendl;
+
+  // intercept any IO requests to the source image
+  auto io_image_dispatch = ImageDispatch<I>::create(
+    *m_src_image_ctx, std::move(m_format));
+  (*m_src_image_ctx)->io_image_dispatcher->register_dispatch(io_image_dispatch);
+}
+
+template <typename I>
 void OpenSourceImageRequest<I>::finish(int r) {
-  auto cct = m_dst_image_ctx->cct;
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
     *m_src_image_ctx = nullptr;
+  } else {
+    register_image_dispatch();
   }
 
   m_on_finish->complete(r);
