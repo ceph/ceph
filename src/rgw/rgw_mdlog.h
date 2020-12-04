@@ -150,6 +150,8 @@ public:
     return fmt::format("{}{}", prefix, id);
   }
 
+  int init();
+
   int add_entry(const std::string& hash_key, const std::string& section,
 		const std::string& key, ceph::bufferlist& bl);
   int get_shard_id(std::string_view hash_key);

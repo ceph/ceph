@@ -59,6 +59,17 @@ int RGWSI_MDLog::do_start(optional_yield y)
   return 0;
 }
 
+int RGWSI_MDLog::init_log()
+{
+  auto& current_period = svc.zone->get_current_period();
+
+  current_log = get_log(current_period.get_id());
+
+  current_log->init();
+
+  return 0;
+}
+
 int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
                               RGWObjVersionTracker *objv_tracker,
 			      optional_yield y) const
@@ -385,7 +396,10 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
                                 std::forward_as_tuple(period),
                                 std::forward_as_tuple(cct, store, svc.zone,
 						      svc.cls, period));
-  return &insert.first->second;
+
+  RGWMetadataLog* r = &insert.first->second;
+  r->init();
+  return r;
 }
 
 int RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl)

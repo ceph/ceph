@@ -73,6 +73,7 @@ public:
            RGWSI_Cls *_cls_svc);
 
   int do_start(optional_yield y) override;
+  int init_log();
 
   // traverse all the way back to the beginning of the period history, and
   // return a cursor to the first period in a fully attached history
