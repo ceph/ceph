@@ -300,9 +300,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         case 'iscsi':
           serviceSpec['pool'] = values['pool'];
           if (_.isString(values['trusted_ip_list']) && !_.isEmpty(values['trusted_ip_list'])) {
-            let parts = _.split(values['trusted_ip_list'], ',');
-            parts = _.map(parts, _.trim);
-            serviceSpec['trusted_ip_list'] = parts;
+            serviceSpec['trusted_ip_list'] = values['trusted_ip_list'].trim();
           }
           if (_.isNumber(values['api_port']) && values['api_port'] > 0) {
             serviceSpec['api_port'] = values['api_port'];
