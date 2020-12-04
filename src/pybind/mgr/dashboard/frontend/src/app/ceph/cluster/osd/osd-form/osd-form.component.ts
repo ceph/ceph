@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import _ from 'lodash';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { SubmitButtonComponent } from '~/app/shared/components/submit-button/submit-button.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -65,6 +66,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private orchService: OrchestratorService,
+    private hostService: HostService,
     private router: Router,
     private modalService: ModalService
   ) {
@@ -120,7 +122,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
   }
 
   getDataDevices() {
-    this.orchService.inventoryDeviceList().subscribe(
+    this.hostService.inventoryDeviceList().subscribe(
       (devices: InventoryDevice[]) => {
         this.allDevices = _.filter(devices, 'available');
         this.availDevices = [...this.allDevices];

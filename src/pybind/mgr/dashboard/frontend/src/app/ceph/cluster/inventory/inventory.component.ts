@@ -2,6 +2,7 @@ import { Component, Input, NgZone, OnChanges, OnDestroy, OnInit } from '@angular
 
 import { Subscription, timer as observableTimer } from 'rxjs';
 
+import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
@@ -27,7 +28,11 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
 
   devices: Array<InventoryDevice> = [];
 
-  constructor(private orchService: OrchestratorService, private ngZone: NgZone) {}
+  constructor(
+    private orchService: OrchestratorService,
+    private hostService: HostService,
+    private ngZone: NgZone
+  ) {}
 
   ngOnInit() {
     this.orchService.status().subscribe((status) => {
@@ -66,7 +71,7 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
     if (this.hostname === '') {
       return;
     }
-    this.orchService.inventoryDeviceList(this.hostname, refresh).subscribe(
+    this.hostService.inventoryDeviceList(this.hostname, refresh).subscribe(
       (devices: InventoryDevice[]) => {
         this.devices = devices;
       },

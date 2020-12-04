@@ -11,6 +11,7 @@ import {
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
+import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -80,7 +81,8 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
     private dimlessBinary: DimlessBinaryPipe,
     private modalService: ModalService,
     private notificationService: NotificationService,
-    private orchService: OrchestratorService
+    private orchService: OrchestratorService,
+    private hostService: HostService
   ) {}
 
   ngOnInit() {
@@ -223,7 +225,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
       ],
       submitButtonText: $localize`Execute`,
       onSubmit: (values: any) => {
-        this.orchService.identifyDevice(hostname, device, values.duration).subscribe(() => {
+        this.hostService.identifyDevice(hostname, device, values.duration).subscribe(() => {
           this.notificationService.show(
             NotificationType.success,
             $localize`Identifying '${device}' started on host '${hostname}'`
