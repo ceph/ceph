@@ -2,19 +2,19 @@
 Compliance Check
 ================
 
-The stability and reliability of a Ceph cluster is not just dependent upon the Ceph daemons, but
+The stability and reliability of a Ceph cluster is dependent not just upon the Ceph daemons, but
 also the OS and hardware that Ceph is installed on. This document is intended to promote a design 
 discussion for providing a "compliance" feature within mgr/cephadm, which would be responsible for
-identifying common platform related issues that could impact Ceph stability and operation.
+identifying common platform-related issues that could impact Ceph stability and operation.
 
-The ultimate goal of the checks is to identify issues early and raise a healthcheck WARN
+The ultimate goal of these checks is to identify issues early and raise a healthcheck WARN
 event, to alert the Administrator to the issue.
 
 Prerequisites
 =============
 In order to effectively analyse the hosts that Ceph is deployed to, this feature requires a cache
-of host related metadata. The metadata is already available from cephadm's HostFacts class and the
-gather-facts cephadm command. For the purposes of this document, we will assume that this
+of host-related metadata. The metadata is already available from cephadm's HostFacts class and the
+``gather-facts`` cephadm command. For the purposes of this document, we will assume that this
 data is available within the mgr/cephadm "cache" structure.
 
 Some checks will require that the host status is also populated e.g. ONLINE, OFFLINE, MAINTENANCE
@@ -36,9 +36,9 @@ mgr/cephadm must provide controls, such as the following;
 The status option would show the enabled/disabled state of the feature, along with the
 check-interval.
 
-The ls subcommand would show all checks in the following format;
+The ``ls`` subcommand would show all checks in the following format;
 
-check-name status description
+``check-name status description``
 
 Proposed Integration
 ====================
@@ -47,7 +47,7 @@ intervals. The interval would be configurable under via the :code:`set-check-int
 subcommand (default would be every 12 hours)
 
 
-mgr/cephadm current executes an event driven (time based) serve loop to act on deploy/remove and
+mgr/cephadm currently executes an event driven (time based) serve loop to act on deploy/remove and
 reconcile activity. In order to execute the compliance checks, the compliance check code would be 
 called from this main serve loop - when the :code:`set-check-interval` is met.
 
@@ -63,7 +63,9 @@ when enabling or disabling a check)*
 OS Consistency (OS)
 ___________________
 * all hosts must use same vendor
-* all hosts must be on the same major release
+* all hosts must be on the same major release (this check would only be applicable to distributions that
+  offer a long-term-support strategy (RHEL, CentOS, SLES, Ubuntu etc)
+
 
 *src: gather-facts output*
 
@@ -85,7 +87,7 @@ Hosts that are in an ONLINE state should adhere to the following;
 Support Status (SUPPORT)
 ________________________
 If support status has been detected, it should be consistent across all hosts. At this point
-support status us only available for Red Hat machines.
+support status is available only for Red Hat machines.
 
 *src: gather-facts output*
 
@@ -111,9 +113,9 @@ compliance check warning.
 
 Notification Strategy
 =====================
-If any of the checks fail mgr/cephadm would raise a WARN level alert
+If any of the checks fail, mgr/cephadm would raise a WARN level alert
 
 Futures
 =======
-The checks highlighted here serve as a start point only, and we should expect to expand
+The checks highlighted here serve only as a starting point, and we should expect to expand
 on the checks over time.
