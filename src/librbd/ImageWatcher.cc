@@ -88,6 +88,9 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
 
   cancel_async_requests();
 
+  // flush the task finisher queue before completing
+  on_finish = create_async_context_callback(m_task_finisher, on_finish);
+
   on_finish = new LambdaContext([this, on_finish](int r) {
     cancel_quiesce_requests();
     m_task_finisher->cancel_all();
