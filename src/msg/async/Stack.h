@@ -293,7 +293,6 @@ class Worker {
 };
 
 class NetworkStack {
-  std::string type;
   unsigned num_workers = 0;
   ceph::spinlock pool_spin;
   bool started = false;
@@ -306,7 +305,7 @@ class NetworkStack {
   CephContext *cct;
   std::vector<Worker*> workers;
 
-  explicit NetworkStack(CephContext *c, const std::string &t);
+  explicit NetworkStack(CephContext *c);
  public:
   NetworkStack(const NetworkStack &) = delete;
   NetworkStack& operator=(const NetworkStack &) = delete;
