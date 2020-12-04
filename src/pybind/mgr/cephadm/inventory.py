@@ -204,6 +204,8 @@ class HostCache():
         self.daemons = {}   # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
+        self.facts = {}                # type: Dict[str, Dict[str, Any]]
+        self.last_facts_update = {}    # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
@@ -277,6 +279,11 @@ class HostCache():
         # type: (str, Dict[str, orchestrator.DaemonDescription]) -> None
         self.daemons[host] = dm
         self.last_daemon_update[host] = datetime.datetime.utcnow()
+
+    def update_host_facts(self, host, facts):
+        # type: (str, Dict[str, Dict[str, Any]]) -> None
+        self.facts[host] = facts
+        self.last_facts_update[host] = datetime.datetime.utcnow()
 
     def update_host_devices_networks(self, host, dls, nets):
         # type: (str, List[inventory.Device], Dict[str,List[str]]) -> None
@@ -366,6 +373,10 @@ class HostCache():
             del self.daemons[host]
         if host in self.devices:
             del self.devices[host]
+        if host in self.facts:
+            del self.facts[host]
+        if host in self.last_facts_update:
+            del self.last_facts_update[host]
         if host in self.osdspec_previews:
             del self.osdspec_previews[host]
         if host in self.loading_osdspec_preview:
@@ -460,6 +471,17 @@ class HostCache():
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
             seconds=self.mgr.daemon_cache_timeout)
         if host not in self.last_daemon_update or self.last_daemon_update[host] < cutoff:
+            return True
+        return False
+
+    def host_needs_facts_refresh(self, host):
+        # type: (str) -> bool
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Skipping gather facts refresh')
+            return False
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+            seconds=self.mgr.facts_cache_timeout)
+        if host not in self.last_facts_update or self.last_facts_update[host] < cutoff:
             return True
         return False
 
