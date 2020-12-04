@@ -554,9 +554,10 @@ void BlueFS::_init_alloc()
     ceph_assert(bdev[id]->get_size());
     ceph_assert(alloc_size[id]);
     if (is_shared_alloc(id)) {
-      dout(1) << __func__ << " shared, id " << id
-        << " alloc_size 0x" << std::hex << alloc_size[id]
-        << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
+      dout(1) << __func__ << " shared, id " << id << std::hex
+              << ", capacity 0x" << bdev[id]->get_size()
+              << ", block size 0x" << alloc_size[id]
+              << std::dec << dendl;
     } else {
       std::string name = "bluefs-";
       const char* devnames[] = { "wal","db","slow" };
@@ -564,9 +565,12 @@ void BlueFS::_init_alloc()
         name += devnames[id];
       else
         name += to_string(uintptr_t(this));
-      dout(1) << __func__ << " new, id " << id
-	       << " alloc_size 0x" << std::hex << alloc_size[id]
-	       << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
+      dout(1) << __func__ << " new, id " << id << std::hex
+              << ", allocator name " << name
+              << ", allocator type " << cct->_conf->bluefs_allocator
+              << ", capacity 0x" << bdev[id]->get_size()
+              << ", block size 0x" << alloc_size[id]
+              << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				    bdev[id]->get_size(),
 				    alloc_size[id], name);
@@ -2854,22 +2858,23 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
     return -ENOENT;
   }
   extents->reserve(4);  // 4 should be (more than) enough for most allocations
-  uint64_t min_alloc_size = alloc_size[id];
-  uint64_t left = round_up_to(len, min_alloc_size);
-  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, 0, extents);
-  if (alloc_len < 0 || alloc_len < (int64_t)left) {
+  int64_t need = round_up_to(len, alloc_size[id]);
+  int64_t alloc_len = alloc[id]->allocate(need, alloc_size[id], 0, extents);
+  if (alloc_len < 0 || alloc_len < need) {
     if (alloc_len > 0) {
       alloc[id]->release(*extents);
     }
-    if (bdev[id])
-      derr << __func__ << " failed to allocate 0x" << std::hex << left
-	   << " on bdev " << (int)id
-	   << ", free 0x" << alloc[id]->get_free() << std::dec << dendl;
-    else
-      derr << __func__ << " failed to allocate 0x" << std::hex << left
-	   << " on bdev " << (int)id << ", dne" << std::dec << dendl;
-    if (alloc[id])
-      alloc[id]->dump();
+    derr << __func__ << " unable to allocate 0x" << std::hex << need
+	 << " on bdev " << (int)id
+         << ", allocator name " << alloc[id]->get_name()
+         << ", allocator type " << alloc[id]->get_type()
+         << ", capacity 0x" << alloc[id]->get_capacity()
+         << ", block size 0x" << alloc[id]->get_block_size()
+         << ", free 0x" << alloc[id]->get_free()
+         << ", fragmentation " << alloc[id]->get_fragmentation()
+         << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
+	 << std::dec << dendl;
+    alloc[id]->dump();
     return -ENOSPC;
   }
   if (is_shared_alloc(id)) {
@@ -2888,34 +2893,41 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   int64_t alloc_len = 0;
   PExtentVector extents;
   uint64_t hint = 0;
+  int64_t need = len;
   if (alloc[id]) {
+    need = round_up_to(len, alloc_size[id]);
     if (!node->extents.empty() && node->extents.back().bdev == id) {
       hint = node->extents.back().end();
     }   
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
-    alloc_len = alloc[id]->allocate(round_up_to(len, alloc_size[id]),
-				    alloc_size[id], hint, &extents);
+    alloc_len = alloc[id]->allocate(need, alloc_size[id], hint, &extents);
   }
-  if (!alloc[id] ||
-      alloc_len < 0 ||
-      alloc_len < (int64_t)round_up_to(len, alloc_size[id])) {
-    if (alloc_len > 0) {
-      alloc[id]->release(extents);
-    }
-    if (id != BDEV_SLOW) {
-      if (bdev[id]) {
-	dout(1) << __func__ << " failed to allocate 0x" << std::hex << len
-		<< " on bdev " << (int)id
-		<< ", free 0x" << alloc[id]->get_free()
-		<< "; fallback to bdev " << (int)id + 1
-		<< std::dec << dendl;
+  if (alloc_len < 0 || alloc_len < need) {
+    if (alloc[id]) {
+      if (alloc_len > 0) {
+        alloc[id]->release(extents);
       }
-      return _allocate(id + 1, len, node);
+      dout(1) << __func__ << " unable to allocate 0x" << std::hex << need
+	      << " on bdev " << (int)id
+              << ", allocator name " << alloc[id]->get_name()
+              << ", allocator type " << alloc[id]->get_type()
+              << ", capacity 0x" << alloc[id]->get_capacity()
+              << ", block size 0x" << alloc[id]->get_block_size()
+              << ", free 0x" << alloc[id]->get_free()
+              << ", fragmentation " << alloc[id]->get_fragmentation()
+              << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
+	      << std::dec << dendl;
     }
-    dout(1) << __func__ << " unable to allocate 0x" << std::hex << len
-	    << " on bdev " << (int)id << ", free 0x"
-	    << (alloc[id] ? alloc[id]->get_free() : (uint64_t)-1)
-	    << std::dec << dendl;
+
+    if (id != BDEV_SLOW) {
+      dout(20) << __func__ << " fallback to bdev "
+               << (int)id + 1
+	       << dendl;
+      return _allocate(id + 1, len, node);
+    } else {
+      derr << __func__ << " allocation failed, needed 0x" << std::hex << need
+           << dendl;
+    }
     return -ENOSPC;
   } else {
     uint64_t used = _get_used(id);
