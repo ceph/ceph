@@ -51,6 +51,11 @@ struct key_hobj_t;
 struct key_view_t;
 class NodeExtentMutable;
 
+/**
+ * NodeImpl
+ *
+ * Hides type specific node layout implementations for Node.
+ */
 class NodeImpl {
  public:
   using alloc_ertr = crimson::errorator<
@@ -83,6 +88,11 @@ class NodeImpl {
   NodeImpl() = default;
 };
 
+/**
+ * InternalNodeImpl
+ *
+ * Hides type specific node layout implementations for InternalNode.
+ */
 class InternalNodeImpl : public NodeImpl {
  public:
   struct internal_marker_t {};
@@ -130,6 +140,11 @@ class InternalNodeImpl : public NodeImpl {
   InternalNodeImpl() = default;
 };
 
+/**
+ * LeafNodeImpl
+ *
+ * Hides type specific node layout implementations for LeafNode.
+ */
 class LeafNodeImpl : public NodeImpl {
  public:
   struct leaf_marker_t {};

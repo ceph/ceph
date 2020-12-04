@@ -11,21 +11,27 @@ namespace crimson::os::seastore::onode {
 
 class NodeExtentMutable;
 
-/*
- * internal/leaf node N0, N1
+/**
+ * item_iterator_t
  *
- * (_index)
- * p_items_start
- *  |   item_range ------------+
- *  |   |     +----key---------+
- *  |   |     |                |
- *  V   V     V                V
- * |   |sub  |oid char|ns char|colli-|   |
- * |...|items|array & |array &|-sion |...|
- * |   |...  |len     |len    |offset|   |
- *      ^                      |
- *      |                      |
- *      +---- back_offset -----+
+ * The STAGE_STRING implementation for node N0/N1, implements staged contract
+ * as an iterative container to resolve crush hash conflicts.
+ *
+ * The layout of the contaner to index ns, oid strings storing n items:
+ *
+ * # <--------- container range ---------> #
+ * #<~># items [i+1, n)                    #
+ * #   #                  items [0, i) #<~>#
+ * #   # <------ item i -------------> #   #
+ * #   # <--- item_range ---> |        #   #
+ * #   #                      |        #   #
+ * #   # next-stage | ns-oid  | back_  #   #
+ * #   #  contaner  | strings | offset #   #
+ * #...#   range    |         |        #...#
+ * ^   ^                           |
+ * |   |                           |
+ * |   +---------------------------+
+ * + p_items_start
  */
 template <node_type_t NODE_TYPE>
 class item_iterator_t {

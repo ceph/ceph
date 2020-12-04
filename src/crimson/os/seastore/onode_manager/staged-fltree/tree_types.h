@@ -7,7 +7,7 @@
 
 namespace crimson::os::seastore::onode {
 
-// TODO: replace
+// TODO: Redesign according to real requirement from onode manager
 struct onode_t {
   // onode should be smaller than a node
   uint16_t size; // address up to 64 KiB sized node

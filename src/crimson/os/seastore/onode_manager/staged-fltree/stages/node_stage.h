@@ -11,6 +11,17 @@ namespace crimson::os::seastore::onode {
 
 class NodeExtentMutable;
 
+/**
+ * node_extent_t
+ *
+ * The top indexing stage implementation for node N0/N1/N2/N3, implements
+ * staged contract as an indexable container, and provides access to node
+ * header.
+ *
+ * The specific field layout are defined by FieldType which are
+ * node_fields_0_t, node_fields_1_t, node_fields_2_t, internal_fields_3_t and
+ * leaf_fields_3_t. Diagrams see node_stage_layout.h.
+ */
 template <typename FieldType, node_type_t _NODE_TYPE>
 class node_extent_t {
  public:

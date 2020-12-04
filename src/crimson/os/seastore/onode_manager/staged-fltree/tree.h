@@ -11,16 +11,21 @@
 #include "fwd.h"
 #include "tree_types.h"
 
+/**
+ * tree.h
+ *
+ * An example implementation to expose tree interfaces to users. The current
+ * interface design is based on:
+ * - ceph::os::Transaction::create/touch/remove()
+ * - ceph::ObjectStore::collection_list()
+ * - ceph::BlueStore::get_onode()
+ * - db->get_iterator(PREFIIX_OBJ) by ceph::BlueStore::fsck()
+ *
+ * TODO: Redesign the interfaces based on real onode manager requirements.
+ */
+
 namespace crimson::os::seastore::onode {
 
-/*
- * btree interfaces
- * requirements are based on:
- *   ceph::os::Transaction::create/touch/remove()
- *   ceph::ObjectStore::collection_list()
- *   ceph::BlueStore::get_onode()
- *   db->get_iterator(PREFIIX_OBJ) by ceph::BlueStore::fsck()
- */
 class Node;
 class Btree {
  public:

@@ -11,6 +11,12 @@
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 
+/**
+ * dummy.h
+ *
+ * Dummy backend implementations for test purposes.
+ */
+
 namespace crimson::os::seastore::onode {
 
 class DummySuper final: public Super {

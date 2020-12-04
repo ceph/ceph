@@ -11,7 +11,13 @@ namespace crimson::os::seastore::onode {
 
 class NodeExtent;
 
-// the wrapper of NodeExtent which is mutable and safe to be mutated
+/**
+ * NodeExtentMutable
+ *
+ * A thin wrapper of NodeExtent to make sure that only the newly allocated
+ * or the duplicated NodeExtent is mutable, and the memory modifications are
+ * safe within the extent range.
+ */
 class NodeExtentMutable {
  public:
   void copy_in_absolute(void* dst, const void* src, extent_len_t len) {

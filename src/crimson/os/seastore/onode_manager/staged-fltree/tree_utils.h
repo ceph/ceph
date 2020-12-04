@@ -16,7 +16,7 @@
 #include "tree.h"
 
 /**
- * tree_utils
+ * tree_utils.h
  *
  * Contains shared logic for unit tests and perf tool.
  */

@@ -134,6 +134,25 @@ inline void assert_mstat(
 
 enum class TrimType { BEFORE, AFTER, AT };
 
+/**
+ * staged
+ *
+ * Implements recursive logic that modifies or reads the node layout
+ * (N0/N1/N2/N3 * LEAF/INTERNAL) with the multi-stage design. The specific
+ * stage implementation is flexible. So the implementations for different
+ * stages can be assembled independently, as long as they follow the
+ * definitions of container interfaces.
+ *
+ * Multi-stage is designed to index different portions of onode keys
+ * stage-by-stage. There are at most 3 stages for a node:
+ * - STAGE_LEFT:   index shard-pool-crush for N0, or index crush for N1 node;
+ * - STAGE_STRING: index ns-oid for N0/N1/N2 nodes;
+ * - STAGE_RIGHT:  index snap-gen for N0/N1/N2/N3 nodes;
+ *
+ * The intention is to consolidate the high-level indexing implementations at
+ * the level of stage, so we don't need to write them repeatedly for every
+ * stage and for every node type.
+ */
 template <typename Params>
 struct staged {
   static_assert(Params::STAGE >= STAGE_BOTTOM);
@@ -1995,8 +2014,38 @@ struct staged {
   }
 };
 
-/*
- * staged infrastructure
+/**
+ * Configurations for struct staged
+ *
+ * staged_params_* assembles different container_t implementations (defined by
+ * stated::_iterator_t) by STAGE, and constructs the final multi-stage
+ * implementations for different node layouts defined by
+ * node_extent_t<FieldType, NODE_TYPE>.
+ *
+ * The specialized implementations for different layouts are accessible through
+ * the helper type node_to_stage_t<node_extent_t<FieldType, NODE_TYPE>>.
+ *
+ * Specifically, the settings of 8 layouts are:
+ *
+ * The layout (N0, LEAF/INTERNAL) has 3 stages:
+ * - STAGE_LEFT:   node_extent_t<node_fields_0_t, LEAF/INTERNAL>
+ * - STAGE_STRING: item_iterator_t<LEAF/INTERNAL>
+ * - STAGE_RIGHT:  sub_items_t<LEAF/INTERNAL>
+ *
+ * The layout (N1, LEAF/INTERNAL) has 3 stages:
+ * - STAGE_LEFT:   node_extent_t<node_fields_1_t, LEAF/INTERNAL>
+ * - STAGE_STRING: item_iterator_t<LEAF/INTERNAL>
+ * - STAGE_RIGHT:  sub_items_t<LEAF/INTERNAL>
+ *
+ * The layout (N2, LEAF/INTERNAL) has 2 stages:
+ * - STAGE_STRING: node_extent_t<node_fields_2_t, LEAF/INTERNAL>
+ * - STAGE_RIGHT:  sub_items_t<LEAF/INTERNAL>
+ *
+ * The layout (N3, LEAF) has 1 stage:
+ * - STAGE_RIGHT:  node_extent_t<leaf_fields_3_t, LEAF>
+ *
+ * The layout (N3, INTERNAL) has 1 stage:
+ * - STAGE_RIGHT:  node_extent_t<internal_fields_3_t, INTERNAL>
  */
 
 template <node_type_t _NODE_TYPE>

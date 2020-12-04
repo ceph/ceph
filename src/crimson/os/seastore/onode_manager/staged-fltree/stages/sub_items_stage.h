@@ -21,15 +21,22 @@ struct internal_sub_item_t {
   laddr_packed_t value;
 } __attribute__((packed));
 
-/*
- * internal node N0, N1, N2
+/**
+ * internal_sub_items_t
  *
- * p_first_item +
- * (num_items)  |
- *              V
- * |   fix|sub |fix|sub |
- * |...key|addr|key|addr|
- * |   1  |1   |0  |0   |
+ * The STAGE_RIGHT implementation for internal node N0/N1/N2, implements staged
+ * contract as an indexable container to index snap-gen to child node
+ * addresses.
+ *
+ * The layout of the contaner storing n sub-items:
+ *
+ * # <--------- container range -----------> #
+ * #<~># sub-items [2, n)                    #
+ * #   # <- sub-item 1 -> # <- sub-item 0 -> #
+ * #...# snap-gen | laddr # snap-gen | laddr #
+ *                        ^
+ *                        |
+ *           p_first_item +
  */
 class internal_sub_items_t {
  public:
@@ -100,20 +107,23 @@ class internal_sub_items_t::Appender {
   char* p_append;
 };
 
-/*
- * leaf node N0, N1, N2
+/**
+ * leaf_sub_items_t
  *
- * p_num_keys -----------------+
- * p_offsets --------------+   |
- * p_items_end -----+      |   |
- *                  |      |   |
- *                  V      V   V
- * |   fix|o-  |fix|   off|off|num |
- * |...key|node|key|...set|set|sub |
- * |   1  |0   |0  |   1  |0  |keys|
- *         ^        |       |
- *         |        |       |
- *         +--------+ <=====+
+ * The STAGE_RIGHT implementation for leaf node N0/N1/N2, implements staged
+ * contract as an indexable container to index snap-gen to onode_t.
+ *
+ * The layout of the contaner storing n sub-items:
+ *
+ * # <------------------------ container range -------------------------------> #
+ * # <---------- sub-items ----------------> # <--- offsets ---------#          #
+ * #<~># sub-items [2, n)                    #<~>| offsets [2, n)    #          #
+ * #   # <- sub-item 1 -> # <- sub-item 0 -> #   |                   #          #
+ * #...# snap-gen | onode # snap-gen | onode #...| offset1 | offset0 # num_keys #
+ *                                           ^             ^         ^
+ *                                           |             |         |
+ *                               p_items_end +   p_offsets +         |
+ *                                                        p_num_keys +
  */
 class leaf_sub_items_t {
  public:

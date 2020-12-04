@@ -11,6 +11,13 @@
 
 namespace crimson::os::seastore::onode {
 
+/**
+ * NodeLayoutReplayableT
+ *
+ * Contains templated logics to modify the layout of a NodeExtend which are
+ * also replayable. Used by NodeExtentAccessorT at runtime and by
+ * DeltaRecorderT during replay.
+ */
 template <typename FieldType, node_type_t NODE_TYPE>
 struct NodeLayoutReplayableT {
   using node_stage_t = node_extent_t<FieldType, NODE_TYPE>;
@@ -63,7 +70,6 @@ struct NodeLayoutReplayableT {
     assert(NODE_TYPE == node_type_t::INTERNAL);
     mut.copy_in_absolute(p_addr, new_addr);
   }
-
 };
 
 }

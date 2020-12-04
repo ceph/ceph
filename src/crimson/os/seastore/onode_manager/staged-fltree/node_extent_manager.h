@@ -12,6 +12,12 @@
 #include "node_extent_mutable.h"
 #include "node_types.h"
 
+/**
+ * node_extent_manager.h
+ *
+ * Contains general interfaces for different backends (Dummy and Seastore).
+ */
+
 namespace crimson::os::seastore::onode {
 
 using crimson::os::seastore::LogicalCachedExtent;
@@ -39,7 +45,7 @@ class NodeExtent : public LogicalCachedExtent {
   }
 
   /**
-   * abstracted:
+   * Abstracted interfaces to implement:
    * - CacheExtent::duplicate_for_write() -> CachedExtentRef
    * - CacheExtent::get_type() -> extent_types_t
    * - CacheExtent::get_delta() -> ceph::bufferlist
