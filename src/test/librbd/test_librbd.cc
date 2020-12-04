@@ -8888,10 +8888,12 @@ TEST_F(TestLibRBD, ConcurentOperations)
     uint64_t handle;
     ASSERT_EQ(0, image2.quiesce_watch(&watcher, &handle));
 
-    std::thread create_snap1([&image1]() {
+    auto close1_comp = new librbd::RBD::AioCompletion(NULL, NULL);
+
+    std::thread create_snap1([&image1, close1_comp]() {
       int r = image1.snap_create("snap1");
       ceph_assert(r == 0);
-      r = image1.close();
+      r = image1.aio_close(close1_comp);
       ceph_assert(r == 0);
     });
 
@@ -8908,14 +8910,17 @@ TEST_F(TestLibRBD, ConcurentOperations)
     });
 
     image2.quiesce_complete(handle, 0);
+    create_snap1.join();
 
     ASSERT_TRUE(watcher.wait_for_quiesce(2));
     image2.quiesce_complete(handle, 0);
 
-    create_snap1.join();
-
     ASSERT_TRUE(watcher.wait_for_quiesce(3));
     image2.quiesce_complete(handle, 0);
+
+    ASSERT_EQ(0, close1_comp->wait_for_complete());
+    ASSERT_EQ(1, close1_comp->is_complete());
+    ASSERT_EQ(0, close1_comp->get_return_value());
 
     create_snap2.join();
     create_snap3.join();
