@@ -87,8 +87,6 @@ The following common request header fields are not supported:
 +----------------------------+------------+
 | Name                       | Type       |
 +============================+============+
-| **x-amz-security-token**   | Request    |
-+----------------------------+------------+
 | **Server**                 | Response   |
 +----------------------------+------------+
 | **x-amz-delete-marker**    | Response   |
