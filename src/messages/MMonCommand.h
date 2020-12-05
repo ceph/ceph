@@ -15,11 +15,13 @@
 #ifndef CEPH_MMONCOMMAND_H
 #define CEPH_MMONCOMMAND_H
 
-#include "common/cmdparse.h"
 #include "messages/PaxosServiceMessage.h"
 
 #include <vector>
 #include <string>
+
+using TOPNSPC::common::cmdmap_from_json;
+using TOPNSPC::common::cmd_getval;
 
 class MMonCommand final : public PaxosServiceMessage {
 public:
@@ -45,17 +47,17 @@ public:
     cmdmap_t cmdmap;
     std::ostringstream ss;
     string prefix;
-    ceph::common::cmdmap_from_json(cmd, &cmdmap, ss);
-    ceph::common::cmd_getval(cmdmap, "prefix", prefix);
+    cmdmap_from_json(cmd, &cmdmap, ss);
+    cmd_getval(cmdmap, "prefix", prefix);
     // Some config values contain sensitive data, so don't log them
     o << "mon_command(";
     if (prefix == "config set") {
       string name;
-      ceph::common::cmd_getval(cmdmap, "name", name);
+      cmd_getval(cmdmap, "name", name);
       o << "[{prefix=" << prefix << ", name=" << name << "}]";
     } else if (prefix == "config-key set") {
       string key;
-      ceph::common::cmd_getval(cmdmap, "key", key);
+      cmd_getval(cmdmap, "key", key);
       o << "[{prefix=" << prefix << ", key=" << key << "}]";
     } else {
       for (unsigned i=0; i<cmd.size(); i++) {
