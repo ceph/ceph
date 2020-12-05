@@ -161,8 +161,8 @@ cdef extern from "rados/librados.h" nogil:
     int rados_getaddrs(rados_t cluster, char** addrs)
     int rados_application_enable(rados_ioctx_t io, const char *app_name,
                                  int force)
-    void rados_set_osdmap_full_try(rados_ioctx_t io)
-    void rados_unset_osdmap_full_try(rados_ioctx_t io)
+    void rados_set_pool_full_try(rados_ioctx_t io)
+    void rados_unset_pool_full_try(rados_ioctx_t io)
     int rados_application_list(rados_ioctx_t io, char *values,
                              size_t *values_len)
     int rados_application_metadata_get(rados_ioctx_t io, const char *app_name,
@@ -4229,14 +4229,14 @@ returned %d, but should return zero on success." % (self.name, ret))
         Set global osdmap_full_try label to true
         """
         with nogil:
-            rados_set_osdmap_full_try(self.io)
+            rados_set_pool_full_try(self.io)
 
     def unset_osdmap_full_try(self):
         """
         Unset
         """
         with nogil:
-            rados_unset_osdmap_full_try(self.io)
+            rados_unset_pool_full_try(self.io)
 
     def application_enable(self, app_name: str, force: bool = False):
         """
