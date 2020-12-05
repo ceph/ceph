@@ -221,21 +221,25 @@ as simple as::
 Automated PR validation
 -----------------------
 
-When your PR is created or updated, the Ceph project's `Continuous Integration
+When you create or update your PR, the Ceph project's `Continuous Integration
 (CI) <https://en.wikipedia.org/wiki/Continuous_integration>`_ infrastructure
-will test it automatically. At the time of this writing (September 2020), the
-automated CI testing included five tests to check that the commits in the PR
-are properly signed (see :ref:`submitting-patches`), to check that the
-documentation builds, to check that the submodules are unmodified, to check
-that the API is in order, and a :ref:`make-check` test.  Additional tests may
-be performed depending on which files are modified by your PR.
+automatically tests it. At the time of this writing (September 2020), the
+automated CI testing included five tests: 
 
-The :ref:`make-check`, builds the PR and runs it through a battery of
+#. a test to check that the commits are properly signed (see :ref:`submitting-patches`): 
+#. a test to check that the documentation builds
+#. a test to check that the submodules are unmodified
+#. a test to check that the API is in order
+#. a :ref:`make check<make-check>` test  
+   
+Additional tests may be performed depending on which files your PR modifies.
+
+The :ref:`make check<make-check>` test builds the PR and runs it through a battery of
 tests. These tests run on servers operated by the Ceph Continuous
 Integration (CI) team. When the tests complete, the result will be shown
 on GitHub in the pull request itself.
 
-You can (and should) also test your modifications before you open a PR.
+You should test your modifications before you open a PR.
 Refer to the chapters on testing for details.
 
 Notes on PR make check test
