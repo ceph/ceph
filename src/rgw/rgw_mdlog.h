@@ -123,6 +123,7 @@ class RGWMetadataLog {
   struct Svc {
     RGWSI_Zone *zone{nullptr};
     RGWSI_Cls *cls{nullptr};
+    RGWSI_RADOS *rados{nullptr};
   } svc;
 
   static std::string make_prefix(const std::string& period) {
@@ -136,24 +137,20 @@ class RGWMetadataLog {
 
   void mark_modified(int shard_id);
   std::unique_ptr<RGWMetadataLogBE> be;
+
+  int init(librados::Rados* lr);
+
 public:
   RGWMetadataLog(CephContext *cct,
 		 rgw::sal::RGWRadosStore* store,
                  RGWSI_Zone *_zone_svc,
                  RGWSI_Cls *_cls_svc,
-                 const std::string& period)
-    : cct(cct), store(store),
-      prefix(make_prefix(period)) {
-    svc.zone = _zone_svc;
-    svc.cls = _cls_svc;
-  }
-
+		 RGWSI_RADOS *_rados_svc,
+                 const std::string& period);
 
   std::string get_shard_oid(int id) const {
     return fmt::format("{}{}", prefix, id);
   }
-
-  int init(librados::Rados* lr);
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section,
 		const std::string& key, ceph::bufferlist& bl);

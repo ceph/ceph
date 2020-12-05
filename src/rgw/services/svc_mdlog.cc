@@ -61,17 +61,6 @@ int RGWSI_MDLog::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int RGWSI_MDLog::init_log(librados::Rados* lr)
-{
-  auto& current_period = svc.zone->get_current_period();
-
-  current_log = get_log(current_period.get_id());
-
-  current_log->init(lr);
-
-  return 0;
-}
-
 int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
                               RGWObjVersionTracker *objv_tracker,
 			      optional_yield y,
@@ -404,11 +393,9 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   auto insert = md_logs.emplace(std::piecewise_construct,
                                 std::forward_as_tuple(period),
                                 std::forward_as_tuple(cct, store, svc.zone,
-						      svc.cls, period));
-
-  RGWMetadataLog* r = &insert.first->second;
-  r->init(store->svc()->rados->get_rados_handle());
-  return r;
+						      svc.cls, svc.rados,
+						      period));
+  return &insert.first->second;
 }
 
 int RGWSI_MDLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl)

@@ -640,12 +640,24 @@ int RGWMetadataLogBE::remove(CephContext* cct, std::string prefix,
   return 0;
 }
 
-int RGWMetadataLog::init(librados::Rados* lr)
-{
-  if (be) { // already initialized
-    return 0;
+RGWMetadataLog::RGWMetadataLog(CephContext *cct,
+		 rgw::sal::RGWRadosStore* store,
+                 RGWSI_Zone *_zone_svc,
+                 RGWSI_Cls *_cls_svc,
+		 RGWSI_RADOS *_rados_svc,
+                 const std::string& period)
+    : cct(cct), store(store),
+      prefix(make_prefix(period)) {
+    svc.zone = _zone_svc;
+    svc.cls = _cls_svc;
+    svc.rados = _rados_svc;
+
+    init(svc.rados->get_rados_handle());
+   // be = std::make_unique<RGWMetadataLogOmap>(cct, prefix, *svc.cls);
   }
 
+int RGWMetadataLog::init(librados::Rados* lr)
+{
   auto backing = cct->_conf.get_val<std::string>("rgw_md_log_backing");
   ceph_assert(backing == "auto" || backing == "fifo" || backing == "omap");
 

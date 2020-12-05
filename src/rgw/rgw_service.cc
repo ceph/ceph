@@ -158,13 +158,8 @@ int RGWServices_Def::init(CephContext *cct,
       return r;
     }
 
-    r = mdlog->init_log(rados->get_rados_handle());
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: failed to init mdlog current log (" << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
     r = sync_modules->start(y, dpp);
+
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start sync modules service (" << cpp_strerror(-r) << dendl;
       return r;
