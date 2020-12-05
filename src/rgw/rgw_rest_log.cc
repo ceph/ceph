@@ -82,13 +82,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
   }
 
   RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls,
-      period};
-  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
-  if (r < 0) {
-    ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
+	  		  store->svc()->rados, period};
 
   op_ret = meta_log.list_entries(shard_id, max_entries, marker, entries,
                                    &last_marker, &truncated);
@@ -160,13 +154,8 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
-  if (r < 0) {
-    ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
+  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls,
+	  		  store->svc()->rados, period};
 
   op_ret = meta_log.get_info(shard_id, &info);
 }
@@ -232,13 +221,8 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
-  if (r < 0) {
-    ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
+  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls,
+	  		  store->svc()->rados, period};
 
   op_ret = meta_log.trim(shard_id, marker, true);
 }
@@ -278,13 +262,8 @@ void RGWOp_MDLog_Lock::execute(optional_yield y) {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
-  if (r < 0) {
-    ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
+  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls,
+	  		  store->svc()->rados, period};
 
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
@@ -332,13 +311,8 @@ void RGWOp_MDLog_Unlock::execute(optional_yield y) {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
-  auto r = meta_log.init(store->svc()->rados->get_rados_handle());
-  if (r < 0) {
-    ldout(s->cct, 5) << "meta_log initialization failed." << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
+  RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls,
+	  		  store->svc()->rados, period};
 
   op_ret = meta_log.unlock(shard_id, zone_id, locker_id);
 }
