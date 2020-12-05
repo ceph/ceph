@@ -287,6 +287,7 @@ Monitor::~Monitor()
 
   delete config_key_service;
   delete paxos;
+  delete logger;
   ceph_assert(session_map.sessions.empty());
 }
 
@@ -1082,8 +1083,6 @@ void Monitor::shutdown()
 
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = NULL;
   }
   if (cluster_logger) {
     if (cluster_logger_registered)
