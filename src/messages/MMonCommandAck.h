@@ -15,8 +15,10 @@
 #ifndef CEPH_MMONCOMMANDACK_H
 #define CEPH_MMONCOMMANDACK_H
 
-#include "common/cmdparse.h"
 #include "messages/PaxosServiceMessage.h"
+
+using TOPNSPC::common::cmdmap_from_json;
+using TOPNSPC::common::cmd_getval;
 
 class MMonCommandAck : public PaxosServiceMessage {
 public:
@@ -37,19 +39,19 @@ public:
     cmdmap_t cmdmap;
     stringstream ss;
     string prefix;
-    ceph::common::cmdmap_from_json(cmd, &cmdmap, ss);
-    ceph::common::cmd_getval(cmdmap, "prefix", prefix);
+    cmdmap_from_json(cmd, &cmdmap, ss);
+    cmd_getval(cmdmap, "prefix", prefix);
     // Some config values contain sensitive data, so don't log them
     o << "mon_command_ack(";
     if (prefix == "config set") {
       string name;
-      ceph::common::cmd_getval(cmdmap, "name", name);
+      cmd_getval(cmdmap, "name", name);
       o << "[{prefix=" << prefix
         << ", name=" << name << "}]"
         << "=" << r << " " << rs << " v" << version << ")";
     } else if (prefix == "config-key set") {
       string key;
-      ceph::common::cmd_getval(cmdmap, "key", key);
+      cmd_getval(cmdmap, "key", key);
       o << "[{prefix=" << prefix << ", key=" << key << "}]"
         << "=" << r << " " << rs << " v" << version << ")";
     } else {
