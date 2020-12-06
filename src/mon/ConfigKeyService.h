@@ -14,15 +14,36 @@
 #ifndef CEPH_MON_CONFIG_KEY_SERVICE_H
 #define CEPH_MON_CONFIG_KEY_SERVICE_H
 
-#include "mon/QuorumService.h"
+#include "include/Context.h"
+#include "mon/MonOpRequest.h"
 #include "mon/MonitorDBStore.h"
 
 class Paxos;
 class Monitor;
 
-class ConfigKeyService : public QuorumService
+class ConfigKeyService
 {
-  Paxos *paxos;
+public:
+  ConfigKeyService(Monitor &m, Paxos &p);
+  ~ConfigKeyService() {}
+
+  bool dispatch(MonOpRequestRef op);
+
+  int validate_osd_destroy(const int32_t id, const uuid_d& uuid);
+  void do_osd_destroy(int32_t id, uuid_d& uuid);
+  int validate_osd_new(
+      const uuid_d& uuid,
+      const std::string& dmcrypt_key,
+      std::stringstream& ss);
+  void do_osd_new(const uuid_d& uuid, const std::string& dmcrypt_key);
+
+  void get_store_prefixes(std::set<std::string>& s) const;
+
+private:
+  Monitor &mon;
+  Paxos &paxos;
+
+  bool in_quorum() const;
 
   int store_get(const std::string &key, ceph::buffer::list &bl);
   void store_put(const std::string &key, ceph::buffer::list &bl, Context *cb = NULL);
@@ -37,49 +58,6 @@ class ConfigKeyService : public QuorumService
   bool store_has_prefix(const std::string &prefix);
 
   static const std::string STORE_PREFIX;
-
-protected:
-  void service_shutdown() override { }
-
-public:
-  ConfigKeyService(Monitor *m, Paxos *p) :
-    QuorumService(m),
-    paxos(p)
-  { }
-  ~ConfigKeyService() override { }
-
-
-  /**
-   * @defgroup ConfigKeyService_Inherited_h Inherited abstract methods
-   * @{
-   */
-  void init() override { }
-  bool service_dispatch(MonOpRequestRef op) override;
-
-  void start_epoch() override { }
-  void finish_epoch() override { }
-  void cleanup() override { }
-  void service_tick() override { }
-
-  int validate_osd_destroy(const int32_t id, const uuid_d& uuid);
-  void do_osd_destroy(int32_t id, uuid_d& uuid);
-  int validate_osd_new(
-      const uuid_d& uuid,
-      const std::string& dmcrypt_key,
-      std::stringstream& ss);
-  void do_osd_new(const uuid_d& uuid, const std::string& dmcrypt_key);
-
-  int get_type() override {
-    return QuorumService::SERVICE_CONFIG_KEY;
-  }
-
-  std::string get_name() const override {
-    return "config_key";
-  }
-  void get_store_prefixes(std::set<std::string>& s) const;
-  /**
-   * @} // ConfigKeyService_Inherited_h
-   */
 };
 
 #endif // CEPH_MON_CONFIG_KEY_SERVICE_H

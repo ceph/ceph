@@ -26,7 +26,7 @@ class HealthMonitor : public PaxosService
   std::map<std::string,health_mute_t> pending_mutes;
 
 public:
-  HealthMonitor(Monitor *m, Paxos *p, const std::string& service_name);
+  HealthMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 
   /**
    * @defgroup HealthMonitor_Inherited_h Inherited abstract methods

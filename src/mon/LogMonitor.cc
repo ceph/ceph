@@ -166,9 +166,9 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
 
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
-  return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< "(" << mon->get_state_name()
+static ostream& _prefix(std::ostream *_dout, Monitor &mon, version_t v) {
+  return *_dout << "mon." << mon.name << "@" << mon.rank
+		<< "(" << mon.get_state_name()
 		<< ").log v" << v << " ";
 }
 
@@ -194,12 +194,12 @@ void LogMonitor::create_initial()
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
   e.name = g_conf()->name;
-  e.rank = entity_name_t::MON(mon->rank);
-  e.addrs = mon->messenger->get_myaddrs();
+  e.rank = entity_name_t::MON(mon.rank);
+  e.addrs = mon.messenger->get_myaddrs();
   e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
   std::stringstream ss;
-  ss << "mkfs " << mon->monmap->get_fsid();
+  ss << "mkfs " << mon.monmap->get_fsid();
   e.msg = ss.str();
   e.seq = 0;
   pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
@@ -353,7 +353,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   __u8 v = 1;
   encode(v, bl);
   for (auto p = pending_log.begin(); p != pending_log.end(); ++p)
-    p->second.encode(bl, mon->get_quorum_con_features());
+    p->second.encode(bl, mon.get_quorum_con_features());
 
   put_version(t, version, bl);
   put_last_committed(t, version);
@@ -365,7 +365,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
   ceph_assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
-  encode(summary, summary_bl, mon->get_quorum_con_features());
+  encode(summary, summary_bl, mon.get_quorum_con_features());
 
   put_version_full(t, summary.version, summary_bl);
   put_version_latest_full(t, summary.version);
@@ -373,7 +373,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 
 version_t LogMonitor::get_trim_to() const
 {
-  if (!mon->is_leader())
+  if (!mon.is_leader())
     return 0;
 
   unsigned max = g_conf()->mon_max_log_epochs;
@@ -394,7 +394,7 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
       return preprocess_command(op);
     } catch (const bad_cmd_get& e) {
       bufferlist bl;
-      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
     }
 
@@ -418,7 +418,7 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
       return prepare_command(op);
     } catch (const bad_cmd_get& e) {
       bufferlist bl;
-      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
     }
   case MSG_LOG:
@@ -459,7 +459,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   return false;
 
  done:
-  mon->no_reply(op);
+  mon.no_reply(op);
   return true;
 }
 
@@ -481,8 +481,8 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
   auto m = op->get_req<MLog>();
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
-  if (m->fsid != mon->monmap->fsid) {
-    dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid 
+  if (m->fsid != mon.monmap->fsid) {
+    dout(0) << "handle_log on fsid " << m->fsid << " != " << mon.monmap->fsid 
 	    << dendl;
     return false;
   }
@@ -505,7 +505,7 @@ void LogMonitor::_updated_log(MonOpRequestRef op)
 {
   auto m = op->get_req<MLog>();
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
-  mon->send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
+  mon.send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
 }
 
 bool LogMonitor::should_propose(double& delay)
@@ -531,12 +531,12 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
   MonSession *session = op->get_session();
   if (!session) {
-    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
+    mon.reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -560,7 +560,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       level = LogEntry::str_to_level(level_str);
       if (level == CLOG_UNKNOWN) {
         ss << "Invalid severity '" << level_str << "'";
-        mon->reply_command(op, -EINVAL, ss.str(), get_last_committed());
+        mon.reply_command(op, -EINVAL, ss.str(), get_last_committed());
         return true;
       }
     } else {
@@ -668,7 +668,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 
   string rs;
   getline(ss, rs);
-  mon->reply_command(op, r, rs, rdata, get_last_committed());
+  mon.reply_command(op, r, rs, rdata, get_last_committed());
   return true;
 }
 
@@ -685,7 +685,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -694,7 +694,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
   MonSession *session = op->get_session();
   if (!session) {
-    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
+    mon.reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -721,7 +721,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   }
 
   getline(ss, rs);
-  mon->reply_command(op, err, rs, get_last_committed());
+  mon.reply_command(op, err, rs, get_last_committed());
   return false;
 }
 
@@ -738,8 +738,8 @@ int LogMonitor::sub_name_to_id(const string& n)
 void LogMonitor::check_subs()
 {
   dout(10) << __func__ << dendl;
-  for (map<string, xlist<Subscription*>*>::iterator i = mon->session_map.subs.begin();
-       i != mon->session_map.subs.end();
+  for (map<string, xlist<Subscription*>*>::iterator i = mon.session_map.subs.begin();
+       i != mon.session_map.subs.end();
        ++i) {
     for (xlist<Subscription*>::iterator j = i->second->begin(); !j.end(); ++j) {
       if (sub_name_to_id((*j)->type) >= 0)
@@ -764,7 +764,7 @@ void LogMonitor::check_sub(Subscription *s)
     return;
   } 
  
-  MLog *mlog = new MLog(mon->monmap->fsid);
+  MLog *mlog = new MLog(mon.monmap->fsid);
 
   if (s->next == 0) { 
     /* First timer, heh? */
@@ -784,7 +784,7 @@ void LogMonitor::check_sub(Subscription *s)
     mlog->put();
   }
   if (s->onetime)
-    mon->session_map.remove_sub(s);
+    mon.session_map.remove_sub(s);
   else
     s->next = summary_version+1;
 }

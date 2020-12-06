@@ -21,7 +21,7 @@ class ConfigMonitor : public PaxosService
   std::map<std::string,ceph::buffer::list> current;
 
 public:
-  ConfigMonitor(Monitor *m, Paxos *p, const std::string& service_name);
+  ConfigMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 
   void init() override;
 

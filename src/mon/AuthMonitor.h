@@ -184,7 +184,7 @@ private:
       const EntityAuth& auth);
 
  public:
-  AuthMonitor(Monitor *mn, Paxos *p, const std::string& service_name)
+  AuthMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name),
       last_rotating_ver(0),
       max_global_id(0),
