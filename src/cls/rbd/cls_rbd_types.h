@@ -543,7 +543,7 @@ inline void decode(MirrorSnapshotState &state, ceph::buffer::list::const_iterato
   state = static_cast<MirrorSnapshotState>(int_state);
 }
 
-std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type);
+std::ostream& operator<<(std::ostream& os, MirrorSnapshotState state);
 
 typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
@@ -733,6 +733,153 @@ struct SnapshotInfo {
 };
 WRITE_CLASS_ENCODER(SnapshotInfo);
 
+enum GroupSnapshotNamespaceType {
+  GROUP_SNAPSHOT_NAMESPACE_TYPE_USER   = 0,
+  GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR = 1,
+};
+
+struct UserGroupSnapshotNamespace {
+  static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
+    GROUP_SNAPSHOT_NAMESPACE_TYPE_USER;
+
+  UserGroupSnapshotNamespace() {}
+
+  void encode(ceph::buffer::list& bl) const {
+  }
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it) {
+  }
+  void dump(ceph::Formatter *f) const {
+  }
+
+  inline bool operator==(const UserGroupSnapshotNamespace& usn) const {
+    return true;
+  }
+
+  inline bool operator<(const UserGroupSnapshotNamespace& usn) const {
+    return false;
+  }
+};
+
+struct MirrorGroupSnapshotNamespace {
+  static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
+    GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR;
+
+  MirrorSnapshotState state = MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+  std::set<std::string> mirror_peer_uuids;
+
+  std::string primary_mirror_uuid;
+  std::string primary_snap_id;
+
+  MirrorGroupSnapshotNamespace() {
+  }
+  MirrorGroupSnapshotNamespace(MirrorSnapshotState state,
+                               const std::set<std::string> &mirror_peer_uuids,
+                               const std::string &primary_mirror_uuid,
+                               const std::string &primary_snap_id)
+    : state(state), mirror_peer_uuids(mirror_peer_uuids),
+      primary_mirror_uuid(primary_mirror_uuid),
+      primary_snap_id(primary_snap_id) {
+  }
+
+  inline bool is_primary() const {
+    return (state == MIRROR_SNAPSHOT_STATE_PRIMARY ||
+            state == MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED);
+  }
+
+  inline bool is_non_primary() const {
+    return (state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY ||
+            state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED);
+  }
+
+  inline bool is_demoted() const {
+    return (state == MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED ||
+            state == MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED);
+  }
+
+  inline bool is_orphan() const {
+    return (is_non_primary() &&
+            primary_mirror_uuid.empty() &&
+            primary_snap_id.empty());
+  }
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it);
+
+  void dump(ceph::Formatter *f) const;
+
+  inline bool operator==(const MirrorGroupSnapshotNamespace& rhs) const {
+    return state == rhs.state &&
+           mirror_peer_uuids == rhs.mirror_peer_uuids &&
+           primary_mirror_uuid == rhs.primary_mirror_uuid &&
+           primary_snap_id == rhs.primary_snap_id;
+  }
+
+  inline bool operator<(const MirrorGroupSnapshotNamespace& rhs) const {
+    if (state != rhs.state) {
+      return state < rhs.state;
+    } else if (mirror_peer_uuids != rhs.mirror_peer_uuids) {
+      return mirror_peer_uuids < rhs.mirror_peer_uuids;
+    } else if (primary_mirror_uuid != rhs.primary_mirror_uuid) {
+      return primary_mirror_uuid < rhs.primary_mirror_uuid;
+    } else {
+      return primary_snap_id < rhs.primary_snap_id;
+    }
+  }
+};
+
+struct UnknownGroupSnapshotNamespace {
+  static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
+    static_cast<GroupSnapshotNamespaceType>(-1);
+
+  UnknownGroupSnapshotNamespace() {}
+
+  void encode(ceph::buffer::list& bl) const {
+  }
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it) {
+  }
+  void dump(ceph::Formatter *f) const {
+  }
+
+  inline bool operator==(const UnknownGroupSnapshotNamespace& gsn) const {
+    return true;
+  }
+
+  inline bool operator<(const UnknownGroupSnapshotNamespace& gsn) const {
+    return false;
+  }
+};
+
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceType& type);
+std::ostream& operator<<(std::ostream& os, const UserGroupSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const MirrorGroupSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const UnknownGroupSnapshotNamespace& ns);
+
+typedef std::variant<UserGroupSnapshotNamespace,
+                       MirrorGroupSnapshotNamespace,
+                       UnknownGroupSnapshotNamespace> GroupSnapshotNamespaceVariant;
+
+struct GroupSnapshotNamespace : public GroupSnapshotNamespaceVariant {
+  using GroupSnapshotNamespaceVariant::GroupSnapshotNamespaceVariant;
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& it);
+  void dump(ceph::Formatter *f) const;
+
+  template <typename F>
+  decltype(auto) visit(F&& f) const & {
+    return std::visit(std::forward<F>(f), static_cast<const GroupSnapshotNamespaceVariant&>(*this));
+  }
+  template <typename F>
+  decltype(auto) visit(F&& f) & {
+    return std::visit(std::forward<F>(f), static_cast<GroupSnapshotNamespaceVariant&>(*this));
+  }
+  static void generate_test_instances(std::list<GroupSnapshotNamespace*> &o);
+};
+WRITE_CLASS_ENCODER(GroupSnapshotNamespace);
+
+GroupSnapshotNamespaceType get_group_snap_namespace_type(
+    const GroupSnapshotNamespace& snapshot_namespace);
+
 enum GroupSnapshotState {
   GROUP_SNAPSHOT_STATE_INCOMPLETE = 0,
   GROUP_SNAPSHOT_STATE_COMPLETE = 1,
@@ -752,17 +899,17 @@ inline void decode(GroupSnapshotState &state, ceph::buffer::list::const_iterator
   state = static_cast<GroupSnapshotState>(int_state);
 }
 
+std::ostream& operator<<(std::ostream& os, GroupSnapshotState state);
+
 struct ImageSnapshotSpec {
   int64_t pool;
   std::string image_id;
   snapid_t snap_id;
 
   ImageSnapshotSpec() {}
-  ImageSnapshotSpec(int64_t _pool,
-		    std::string _image_id,
-		    snapid_t _snap_id) : pool(_pool),
-					 image_id(_image_id),
-					 snap_id(_snap_id) {}
+  ImageSnapshotSpec(int64_t pool, std::string image_id, snapid_t snap_id)
+    : pool(pool), image_id(image_id), snap_id(snap_id) {
+  }
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& it);
@@ -775,25 +922,50 @@ WRITE_CLASS_ENCODER(ImageSnapshotSpec);
 
 struct GroupSnapshot {
   std::string id;
+  GroupSnapshotNamespace snapshot_namespace = {UserGroupSnapshotNamespace{}};
   std::string name;
+
   GroupSnapshotState state = GROUP_SNAPSHOT_STATE_INCOMPLETE;
+  std::vector<ImageSnapshotSpec> snaps;
 
   GroupSnapshot() {}
-  GroupSnapshot(std::string _id,
-		std::string _name,
-		GroupSnapshotState _state) : id(_id),
-					     name(_name),
-					     state(_state) {}
-
-  std::vector<ImageSnapshotSpec> snaps;
+  GroupSnapshot(const std::string &id,
+                const GroupSnapshotNamespace &snapshot_namespace,
+                const std::string &name, GroupSnapshotState state)
+    : id(id), snapshot_namespace(snapshot_namespace), name(name), state(state) {
+  }
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& it);
   void dump(ceph::Formatter *f) const;
 
+  inline bool operator==(const GroupSnapshot& rhs) const {
+    return id == rhs.id &&
+           snapshot_namespace == rhs.snapshot_namespace &&
+           name == rhs.name &&
+           state == rhs.state &&
+           snaps == rhs.snaps;
+  }
+  inline bool operator<(const GroupSnapshot& rhs) const {
+    if (id != rhs.id) {
+      return id < rhs.id;
+    }
+    if (snapshot_namespace != rhs.snapshot_namespace) {
+      return snapshot_namespace < rhs.snapshot_namespace;
+    }
+    if (name != rhs.name) {
+      return name < rhs.name;
+    }
+    if (state != rhs.state) {
+      return state < rhs.state;
+    }
+    return snaps < rhs.snaps;
+  }
+
   static void generate_test_instances(std::list<GroupSnapshot *> &o);
 };
 WRITE_CLASS_ENCODER(GroupSnapshot);
+
 enum TrashImageSource {
   TRASH_IMAGE_SOURCE_USER = 0,
   TRASH_IMAGE_SOURCE_MIRRORING = 1,
