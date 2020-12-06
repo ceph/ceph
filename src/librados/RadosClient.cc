@@ -56,7 +56,9 @@ namespace ca = ceph::async;
 namespace cb = ceph::buffer;
 
 librados::RadosClient::RadosClient(CephContext *cct_)
-  : Dispatcher(cct_->get()) {
+  : Dispatcher(cct_->get()),
+    cct_deleter{cct, [](CephContext *p) {p->put();}}
+{
   auto& conf = cct->_conf;
   conf.add_observer(this);
   rados_mon_op_timeout = conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
