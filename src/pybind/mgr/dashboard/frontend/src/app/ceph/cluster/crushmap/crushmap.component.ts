@@ -24,6 +24,7 @@ export class CrushmapComponent implements OnInit {
   nodes: any[] = [];
   treeOptions: ITreeOptions = {
     useVirtualScroll: true,
+    nodeHeight: 22,
     actionMapping: {
       mouse: {
         click: this.onNodeSelected.bind(this)
