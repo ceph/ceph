@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/variant.hpp>
+#include <boost/variant/static_visitor.hpp>
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
 
@@ -1029,8 +1030,8 @@ std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type) {
-  switch (type) {
+std::ostream& operator<<(std::ostream& os, MirrorSnapshotState state) {
+  switch (state) {
   case MIRROR_SNAPSHOT_STATE_PRIMARY:
     os << "primary";
     break;
@@ -1045,6 +1046,194 @@ std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type) {
     break;
   default:
     os << "unknown";
+    break;
+  }
+  return os;
+}
+
+void MirrorGroupSnapshotNamespace::encode(bufferlist& bl) const {
+  using ceph::encode;
+  encode(state, bl);
+  encode(mirror_peer_uuids, bl);
+  encode(primary_mirror_uuid, bl);
+  encode(primary_snap_id, bl);
+}
+
+void MirrorGroupSnapshotNamespace::decode(uint8_t version,
+                                          bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(state, it);
+  decode(mirror_peer_uuids, it);
+  decode(primary_mirror_uuid, it);
+  decode(primary_snap_id, it);
+}
+
+void MirrorGroupSnapshotNamespace::dump(Formatter *f) const {
+  f->dump_stream("state") << state;
+  f->open_array_section("mirror_peer_uuids");
+  for (auto &peer : mirror_peer_uuids) {
+    f->dump_string("mirror_peer_uuid", peer);
+  }
+  f->close_section();
+  if (is_non_primary()) {
+    f->dump_string("primary_mirror_uuid", primary_mirror_uuid);
+    f->dump_string("primary_snap_id", primary_snap_id);
+  }
+}
+
+class EncodeGroupSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+public:
+  explicit EncodeGroupSnapshotNamespaceVisitor(bufferlist &bl) : m_bl(bl) {
+  }
+
+  template <typename T>
+  inline void operator()(const T& t) const {
+    using ceph::encode;
+    encode(static_cast<uint32_t>(T::GROUP_SNAPSHOT_NAMESPACE_TYPE), m_bl);
+    t.encode(m_bl);
+  }
+
+private:
+  bufferlist &m_bl;
+};
+
+class DecodeGroupSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+public:
+  DecodeGroupSnapshotNamespaceVisitor(uint8_t version,
+                                      bufferlist::const_iterator &iter)
+    : m_version(version), m_iter(iter) {
+  }
+
+  template <typename T>
+  inline void operator()(T& t) const {
+    t.decode(m_version, m_iter);
+  }
+private:
+  uint8_t m_version;
+  bufferlist::const_iterator &m_iter;
+};
+
+class DumpGroupSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+public:
+  explicit DumpGroupSnapshotNamespaceVisitor(Formatter *formatter,
+                                             const std::string &key)
+    : m_formatter(formatter), m_key(key) {
+  }
+
+  template <typename T>
+  inline void operator()(const T& t) const {
+    auto type = T::GROUP_SNAPSHOT_NAMESPACE_TYPE;
+    m_formatter->dump_stream(m_key.c_str()) << type;
+    t.dump(m_formatter);
+  }
+private:
+  ceph::Formatter *m_formatter;
+  std::string m_key;
+};
+
+class GetGroupSnapshotNamespaceTypeVisitor
+  : public boost::static_visitor<GroupSnapshotNamespaceType> {
+public:
+  template <typename T>
+  inline GroupSnapshotNamespaceType operator()(const T&) const {
+    return static_cast<GroupSnapshotNamespaceType>(
+        T::GROUP_SNAPSHOT_NAMESPACE_TYPE);
+  }
+};
+
+GroupSnapshotNamespaceType get_group_snap_namespace_type(
+    const GroupSnapshotNamespace& snapshot_namespace) {
+  return static_cast<GroupSnapshotNamespaceType>(snapshot_namespace.visit(
+    GetGroupSnapshotNamespaceTypeVisitor()));
+}
+
+void GroupSnapshotNamespace::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  visit(EncodeGroupSnapshotNamespaceVisitor(bl));
+  ENCODE_FINISH(bl);
+}
+
+void GroupSnapshotNamespace::decode(bufferlist::const_iterator &p)
+{
+  DECODE_START(1, p);
+  uint32_t snap_type;
+  decode(snap_type, p);
+  switch (snap_type) {
+    case cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER:
+      *this = UserGroupSnapshotNamespace();
+      break;
+    case cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR:
+      *this = MirrorGroupSnapshotNamespace();
+      break;
+    default:
+      *this = UnknownGroupSnapshotNamespace();
+      break;
+  }
+  visit(DecodeGroupSnapshotNamespaceVisitor(struct_v, p));
+  DECODE_FINISH(p);
+}
+
+void GroupSnapshotNamespace::dump(Formatter *f) const {
+  visit(DumpGroupSnapshotNamespaceVisitor(f, "snapshot_namespace_type"));
+}
+
+void GroupSnapshotNamespace::generate_test_instances(
+    std::list<GroupSnapshotNamespace*> &o) {
+  o.push_back(new GroupSnapshotNamespace(UserGroupSnapshotNamespace()));
+  o.push_back(new GroupSnapshotNamespace(MirrorGroupSnapshotNamespace(
+                                             MIRROR_SNAPSHOT_STATE_PRIMARY,
+                                             {"peer uuid"}, "", "")));
+}
+
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceType& type) {
+  switch (type) {
+  case GROUP_SNAPSHOT_NAMESPACE_TYPE_USER:
+    os << "user";
+    break;
+  case GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR:
+    os << "mirror";
+    break;
+  default:
+    os << "unknown";
+    break;
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const UserGroupSnapshotNamespace& ns) {
+  os << "[" << GROUP_SNAPSHOT_NAMESPACE_TYPE_USER << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupSnapshotNamespace& ns) {
+  os << "[" << GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR << " "
+     << "state=" << ns.state << ", "
+     << "mirror_peer_uuids=" << ns.mirror_peer_uuids;
+  if (ns.is_non_primary()) {
+    os << ", "
+       << "primary_mirror_uuid=" << ns.primary_mirror_uuid << ", "
+       << "primary_snap_id=" << ns.primary_snap_id;
+  }
+  os << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const UnknownGroupSnapshotNamespace& ns) {
+  os << "[unknown]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, GroupSnapshotState state) {
+  switch (state) {
+  case GROUP_SNAPSHOT_STATE_INCOMPLETE:
+    os << "incomplete";
+    break;
+  case GROUP_SNAPSHOT_STATE_COMPLETE:
+    os << "complete";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
     break;
   }
   return os;
@@ -1081,34 +1270,54 @@ void ImageSnapshotSpec::generate_test_instances(std::list<ImageSnapshotSpec *> &
 
 void GroupSnapshot::encode(bufferlist& bl) const {
   using ceph::encode;
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(id, bl);
   encode(name, bl);
   encode(state, bl);
   encode(snaps, bl);
+  encode(snapshot_namespace, bl);
   ENCODE_FINISH(bl);
 }
 
 void GroupSnapshot::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
-  DECODE_START(1, it);
+  DECODE_START(2, it);
   decode(id, it);
   decode(name, it);
   decode(state, it);
   decode(snaps, it);
+  if (struct_v >= 2) {
+    decode(snapshot_namespace, it);
+  }
   DECODE_FINISH(it);
 }
 
 void GroupSnapshot::dump(Formatter *f) const {
   f->dump_string("id", id);
+  f->open_object_section("namespace");
+  snapshot_namespace.visit(DumpGroupSnapshotNamespaceVisitor(f, "type"));
+  f->close_section();
   f->dump_string("name", name);
-  f->dump_int("state", state);
+  f->dump_stream("state") << state;
+  f->open_array_section("image_snapshots");
+  for (auto &snap : snaps) {
+    snap.dump(f);
+  }
+  f->close_section();
 }
 
 void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
-  o.push_back(new GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_INCOMPLETE));
-  o.push_back(new GroupSnapshot("1018643c9869", "groupsnapshot2", GROUP_SNAPSHOT_STATE_COMPLETE));
+  o.push_back(new GroupSnapshot("10152ae8944a", UserGroupSnapshotNamespace{},
+                                "groupsnapshot1",
+                                GROUP_SNAPSHOT_STATE_INCOMPLETE));
+  o.push_back(new GroupSnapshot("1018643c9869",
+                                MirrorGroupSnapshotNamespace{
+                                    MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
+                                    "uuid", "id"},
+                                "groupsnapshot2",
+                                GROUP_SNAPSHOT_STATE_COMPLETE));
 }
+
 void TrashImageSpec::encode(bufferlist& bl) const {
   ENCODE_START(2, 1, bl);
   encode(source, bl);
