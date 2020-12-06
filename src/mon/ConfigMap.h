@@ -131,6 +131,9 @@ struct ConfigMap {
     const std::string& in,
     std::string *section,
     OptionMask *mask);
+
+  void print_value(Formatter *f, bufferlist &odata,
+                   const string &name, const string &value);
 };
 
 

@@ -363,6 +363,7 @@ set(libcommon_files
   xxHash/xxhash.c
   common/error_code.cc
   log/Log.cc
+  mon/ConfigMap.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
