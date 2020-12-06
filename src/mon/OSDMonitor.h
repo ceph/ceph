@@ -677,7 +677,7 @@ protected:
   void set_default_laggy_params(int target_osd);
 
 public:
-  OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const std::string& service_name);
+  OSDMonitor(CephContext *cct, Monitor &mn, Paxos &p, const std::string& service_name);
 
   void tick() override;  // check state, take actions
 

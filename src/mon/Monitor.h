@@ -98,7 +98,7 @@ enum {
   l_mon_last,
 };
 
-class QuorumService;
+class ConfigKeyService;
 class PaxosService;
 
 class AdminSocketHook;
@@ -218,7 +218,7 @@ public:
 
   // -- elector --
 private:
-  Paxos *paxos;
+  std::unique_ptr<Paxos> paxos;
   Elector elector;
   friend class Elector;
 
@@ -684,7 +684,7 @@ public:
   friend class LogMonitor;
   friend class ConfigKeyService;
 
-  QuorumService *config_key_service;
+  std::unique_ptr<ConfigKeyService> config_key_service;
 
   // -- sessions --
   MonSessionMap session_map;
@@ -842,14 +842,14 @@ public:
 
 public:
   struct C_Command : public C_MonOp {
-    Monitor *mon;
+    Monitor &mon;
     int rc;
     std::string rs;
     ceph::buffer::list rdata;
     version_t version;
-    C_Command(Monitor *_mm, MonOpRequestRef _op, int r, std::string s, version_t v) :
+    C_Command(Monitor &_mm, MonOpRequestRef _op, int r, std::string s, version_t v) :
       C_MonOp(_op), mon(_mm), rc(r), rs(s), version(v){}
-    C_Command(Monitor *_mm, MonOpRequestRef _op, int r, std::string s, ceph::buffer::list rd, version_t v) :
+    C_Command(Monitor &_mm, MonOpRequestRef _op, int r, std::string s, ceph::buffer::list rd, version_t v) :
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
     void _finish(int r) override {
@@ -871,13 +871,13 @@ public:
         }
         ss << "cmd='" << m->cmd << "': finished";
 
-        mon->audit_clog->info() << ss.str();
-	mon->reply_command(op, rc, rs, rdata, version);
+        mon.audit_clog->info() << ss.str();
+        mon.reply_command(op, rc, rs, rdata, version);
       }
       else if (r == -ECANCELED)
         return;
       else if (r == -EAGAIN)
-	mon->dispatch_op(op);
+        mon.dispatch_op(op);
       else
 	ceph_abort_msg("bad C_Command return value");
     }
