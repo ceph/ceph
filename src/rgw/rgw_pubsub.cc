@@ -236,7 +236,7 @@ void rgw_pubsub_s3_notifications::dump_xml(Formatter *f) const {
   do_encode_xml("NotificationConfiguration", list, "TopicConfiguration", f);
 }
 
-void rgw_pubsub_s3_record::dump(Formatter *f) const {
+void rgw_pubsub_s3_event::dump(Formatter *f) const {
   encode_json("eventVersion", eventVersion, f);
   encode_json("eventSource", eventSource, f);
   encode_json("awsRegion", awsRegion, f);
@@ -935,5 +935,5 @@ void RGWPubSub::SubWithEvents<EventType>::dump(Formatter* f) const {
 // explicit instantiation for the only two possible types
 // no need to move implementation to header
 template class RGWPubSub::SubWithEvents<rgw_pubsub_event>;
-template class RGWPubSub::SubWithEvents<rgw_pubsub_s3_record>;
+template class RGWPubSub::SubWithEvents<rgw_pubsub_s3_event>;
 
