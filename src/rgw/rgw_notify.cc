@@ -18,15 +18,15 @@
 
 namespace rgw::notify {
 
-struct record_with_endpoint_t {
-  rgw_pubsub_s3_record record;
+struct event_entry_t {
+  rgw_pubsub_s3_event event;
   std::string push_endpoint;
   std::string push_endpoint_args;
   std::string arn_topic;
   
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(record, bl);
+    encode(event, bl);
     encode(push_endpoint, bl);
     encode(push_endpoint_args, bl);
     encode(arn_topic, bl);
@@ -35,14 +35,14 @@ struct record_with_endpoint_t {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(record, bl);
+    decode(event, bl);
     decode(push_endpoint, bl);
     decode(push_endpoint_args, bl);
     decode(arn_topic, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(record_with_endpoint_t)
+WRITE_CLASS_ENCODER(event_entry_t)
 
 using queues_t = std::set<std::string>;
 
@@ -149,35 +149,35 @@ class Manager {
   // processing of a specific entry
   // return whether processing was successfull (true) or not (false)
   bool process_entry(const cls_queue_entry& entry, spawn::yield_context yield) {
-    record_with_endpoint_t record_with_endpoint;
+    event_entry_t event_entry;
     auto iter = entry.data.cbegin();
     try {
-      decode(record_with_endpoint, iter);
+      decode(event_entry, iter);
     } catch (buffer::error& err) {
       ldout(cct, 5) << "WARNING: failed to decode entry. error: " << err.what() << dendl;
       return false;
     }
     try {
       // TODO move endpoint creation to queue level
-      const auto push_endpoint = RGWPubSubEndpoint::create(record_with_endpoint.push_endpoint, record_with_endpoint.arn_topic,
-          RGWHTTPArgs(record_with_endpoint.push_endpoint_args), 
+      const auto push_endpoint = RGWPubSubEndpoint::create(event_entry.push_endpoint, event_entry.arn_topic,
+          RGWHTTPArgs(event_entry.push_endpoint_args), 
           cct);
-      ldout(cct, 20) << "INFO: push endpoint created: " << record_with_endpoint.push_endpoint <<
+      ldout(cct, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
         " for entry: " << entry.marker << dendl;
-      const auto ret = push_endpoint->send_to_completion_async(cct, record_with_endpoint.record, optional_yield(io_context, yield));
+      const auto ret = push_endpoint->send_to_completion_async(cct, event_entry.event, optional_yield(io_context, yield));
       if (ret < 0) {
-        ldout(cct, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << record_with_endpoint.push_endpoint 
+        ldout(cct, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " failed. error: " << ret << " (will retry)" << dendl;
         return false;
       } else {
-        ldout(cct, 20) << "INFO: push entry: " << entry.marker << " to endpoint: " << record_with_endpoint.push_endpoint 
+        ldout(cct, 20) << "INFO: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " ok" <<  dendl;
         if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
         return true;
       }
     } catch (const RGWPubSubEndpoint::configuration_error& e) {
       ldout(cct, 5) << "WARNING: failed to create push endpoint: " 
-          << record_with_endpoint.push_endpoint << " for entry: " << entry.marker << ". error: " << e.what() << " (will retry) " << dendl;
+          << event_entry.push_endpoint << " for entry: " << entry.marker << ". error: " << e.what() << " (will retry) " << dendl;
       return false;
     }
   }
@@ -647,56 +647,56 @@ void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValue
   }
 }
 
-// populate record from request
-void populate_record_from_request(const req_state *s, 
+// populate event from request
+void populate_event_from_request(const req_state *s, 
         rgw::sal::RGWObject* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
-        rgw_pubsub_s3_record& record) { 
-  record.eventTime = mtime;
-  record.eventName = to_string(event_type);
-  record.userIdentity = s->user->get_id().id;    // user that triggered the change
-  record.x_amz_request_id = s->req_id;          // request ID of the original change
-  record.x_amz_id_2 = s->host_id;               // RGW on which the change was made
+        rgw_pubsub_s3_event& event) { 
+  event.eventTime = mtime;
+  event.eventName = to_string(event_type);
+  event.userIdentity = s->user->get_id().id;    // user that triggered the change
+  event.x_amz_request_id = s->req_id;          // request ID of the original change
+  event.x_amz_id_2 = s->host_id;               // RGW on which the change was made
   // configurationId is filled from notification configuration
-  record.bucket_name = s->bucket_name;
-  record.bucket_ownerIdentity = s->bucket_owner.get_id().id;
-  record.bucket_arn = to_string(rgw::ARN(s->bucket->get_key()));
-  record.object_key = obj->get_name();
-  record.object_size = size;
-  record.object_etag = etag;
-  record.object_versionId = obj->get_instance();
+  event.bucket_name = s->bucket_name;
+  event.bucket_ownerIdentity = s->bucket_owner.get_id().id;
+  event.bucket_arn = to_string(rgw::ARN(s->bucket->get_key()));
+  event.object_key = obj->get_name();
+  event.object_size = size;
+  event.object_etag = etag;
+  event.object_versionId = obj->get_instance();
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
-          std::back_inserter(record.object_sequencer));
-  set_event_id(record.id, etag, ts);
-  record.bucket_id = s->bucket->get_bucket_id();
+          std::back_inserter(event.object_sequencer));
+  set_event_id(event.id, etag, ts);
+  event.bucket_id = s->bucket->get_bucket_id();
   // pass meta data
   if (s->info.x_meta_map.empty()) {
     // try to fetch the metadata from the attributes
-    metadata_from_attributes(s, obj, record.x_meta_map);
+    metadata_from_attributes(s, obj, event.x_meta_map);
   } else {
-    record.x_meta_map = s->info.x_meta_map;
+    event.x_meta_map = s->info.x_meta_map;
   }
   // pass tags
   if (s->tagset.get_tags().empty()) {
     // try to fetch the tags from the attributes
-    tags_from_attributes(s, obj, record.tags);
+    tags_from_attributes(s, obj, event.tags);
   } else {
-    record.tags = s->tagset.get_tags();
+    event.tags = s->tagset.get_tags();
   }
   // opaque data will be filled from topic configuration
 }
 
-bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::RGWObject* obj, 
+bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::RGWObject* obj, 
     EventType event, const RGWObjTags* req_tags) {
-  if (!::match(filter.events, event)) { 
+  if (!match(filter.events, event)) { 
     return false;
   }
-  if (!::match(filter.s3_filter.key_filter, obj->get_name())) {
+  if (!match(filter.s3_filter.key_filter, obj->get_name())) {
     return false;
   }
 
@@ -704,14 +704,14 @@ bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::
     // metadata filter exists
     if (!s->info.x_meta_map.empty()) {
       // metadata was cached in req_state
-      if (!::match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
+      if (!match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
         return false;
       }
     } else {
       // try to fetch the metadata from the attributes
       KeyValueMap metadata;
       metadata_from_attributes(s, obj, metadata);
-      if (!::match(filter.s3_filter.metadata_filter, metadata)) {
+      if (!match(filter.s3_filter.metadata_filter, metadata)) {
         return false;
       }
     }
@@ -721,19 +721,19 @@ bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::
     // tag filter exists
     if (req_tags) {
       // tags in the request
-      if (!::match(filter.s3_filter.tag_filter, req_tags->get_tags())) {
+      if (!match(filter.s3_filter.tag_filter, req_tags->get_tags())) {
         return false;
       }
     } else if (!s->tagset.get_tags().empty()) { 
       // tags were cached in req_state
-      if (!::match(filter.s3_filter.tag_filter, s->tagset.get_tags())) {
+      if (!match(filter.s3_filter.tag_filter, s->tagset.get_tags())) {
         return false;
       }
     } else {
       // try to fetch tags from the attributes
       KeyValueMap tags;
       tags_from_attributes(s, obj, tags);
-      if (!::match(filter.s3_filter.tag_filter, tags)) {
+      if (!match(filter.s3_filter.tag_filter, tags)) {
         return false;
       }
     }
@@ -757,8 +757,8 @@ int publish_reserve(EventType event_type,
   for (const auto& bucket_topic : bucket_topics.topics) {
     const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
     const rgw_pubsub_topic& topic_cfg = topic_filter.topic;
-    if (!match(topic_filter, res.s, res.object, event_type, req_tags)) {
-      // topic does not apply to req_state
+    if (!notification_match(topic_filter, res.s, res.object, event_type, req_tags)) {
+      // notification does not apply to req_state
       continue;
     }
     ldout(res.s->cct, 20) << "INFO: notification: '" << topic_filter.s3_id << 
@@ -808,16 +808,16 @@ int publish_commit(rgw::sal::RGWObject* obj,
       // nothing to commit or already committed/aborted
       continue;
     }
-    record_with_endpoint_t record_with_endpoint;
-    populate_record_from_request(res.s, obj, size, mtime, etag, event_type, record_with_endpoint.record);
-    record_with_endpoint.record.configurationId = topic.configurationId;
-    record_with_endpoint.record.opaque_data = topic.cfg.opaque_data;
+    event_entry_t event_entry;
+    populate_event_from_request(res.s, obj, size, mtime, etag, event_type, event_entry.event);
+    event_entry.event.configurationId = topic.configurationId;
+    event_entry.event.opaque_data = topic.cfg.opaque_data;
     if (topic.cfg.dest.persistent) { 
-      record_with_endpoint.push_endpoint = std::move(topic.cfg.dest.push_endpoint);
-      record_with_endpoint.push_endpoint_args = std::move(topic.cfg.dest.push_endpoint_args);
-      record_with_endpoint.arn_topic = std::move(topic.cfg.dest.arn_topic);
+      event_entry.push_endpoint = std::move(topic.cfg.dest.push_endpoint);
+      event_entry.push_endpoint_args = std::move(topic.cfg.dest.push_endpoint_args);
+      event_entry.arn_topic = std::move(topic.cfg.dest.arn_topic);
       bufferlist bl;
-      encode(record_with_endpoint, bl);
+      encode(event_entry, bl);
       const auto& queue_name = topic.cfg.dest.arn_topic;
       if (bl.length() > res.size) {
         // try to make a larger reservation, fail only if this is not possible
@@ -872,7 +872,7 @@ int publish_commit(rgw::sal::RGWObject* obj,
                 RGWHTTPArgs(topic.cfg.dest.push_endpoint_args), 
                 res.s->cct);
         ldout(res.s->cct, 20) << "INFO: push endpoint created: " << topic.cfg.dest.push_endpoint << dendl;
-        const auto ret = push_endpoint->send_to_completion_async(res.s->cct, record_with_endpoint.record, res.s->yield);
+        const auto ret = push_endpoint->send_to_completion_async(res.s->cct, event_entry.event, res.s->yield);
         if (ret < 0) {
           ldout(res.s->cct, 1) << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint << " failed. error: " << ret << dendl;
           if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);

@@ -205,7 +205,7 @@ struct rgw_pubsub_s3_notifications {
 ]
 }*/
 
-struct rgw_pubsub_s3_record {
+struct rgw_pubsub_s3_event {
   constexpr static const char* const json_type_plural = "Records";
   std::string eventVersion = "2.2";
   // aws:s3
@@ -323,7 +323,7 @@ struct rgw_pubsub_s3_record {
 
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(rgw_pubsub_s3_record)
+WRITE_CLASS_ENCODER(rgw_pubsub_s3_event)
 
 struct rgw_pubsub_event {
   constexpr static const char* const json_type_plural = "events";
@@ -357,7 +357,7 @@ struct rgw_pubsub_event {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_event)
 
-// settign a unique ID for an event/record based on object hash and timestamp
+// settign a unique ID for an event based on object hash and timestamp
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts);
 
 struct rgw_pubsub_sub_dest {
@@ -737,7 +737,7 @@ public:
     if (conf.s3_id.empty()) {
       return std::make_shared<SubWithEvents<rgw_pubsub_event>>(this, sub);
     }
-    return std::make_shared<SubWithEvents<rgw_pubsub_s3_record>>(this, sub);
+    return std::make_shared<SubWithEvents<rgw_pubsub_s3_event>>(this, sub);
   }
 
   void get_meta_obj(rgw_raw_obj *obj) const;
