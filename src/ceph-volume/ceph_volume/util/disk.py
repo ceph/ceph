@@ -636,6 +636,8 @@ def human_readable_size(size):
     suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
     suffix_index = 0
     while size > 1024:
+        if suffix_index == len(suffixes) - 1:
+            break
         suffix_index += 1
         size = size / 1024.0
     return "{size:.2f} {suffix}".format(
