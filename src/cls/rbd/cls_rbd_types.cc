@@ -1050,8 +1050,8 @@ void GroupSpec::decode(bufferlist::const_iterator &it) {
 }
 
 void GroupSpec::dump(Formatter *f) const {
-  f->dump_string("group_id", group_id);
   f->dump_int("pool_id", pool_id);
+  f->dump_string("group_id", group_id);
 }
 
 bool GroupSpec::is_valid() const {
@@ -1075,7 +1075,8 @@ void GroupImageSnapshotNamespace::encode(bufferlist& bl) const {
   encode(group_snapshot_id, bl);
 }
 
-void GroupImageSnapshotNamespace::decode(bufferlist::const_iterator& it) {
+void GroupImageSnapshotNamespace::decode(uint8_t version,
+                                         bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(group_pool, it);
   decode(group_id, it);
@@ -1094,7 +1095,8 @@ void TrashSnapshotNamespace::encode(bufferlist& bl) const {
   encode(static_cast<uint32_t>(original_snapshot_namespace_type), bl);
 }
 
-void TrashSnapshotNamespace::decode(bufferlist::const_iterator& it) {
+void TrashSnapshotNamespace::decode(uint8_t version,
+                                    bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(original_name, it);
   uint32_t snap_type;
@@ -1118,9 +1120,12 @@ void MirrorSnapshotNamespace::encode(bufferlist& bl) const {
   encode(primary_snap_id, bl);
   encode(last_copied_object_number, bl);
   encode(snap_seqs, bl);
+  encode(group_spec, bl);
+  encode(group_snap_id, bl);
 }
 
-void MirrorSnapshotNamespace::decode(bufferlist::const_iterator& it) {
+void MirrorSnapshotNamespace::decode(uint8_t version,
+                                     bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(state, it);
   decode(complete, it);
@@ -1129,6 +1134,10 @@ void MirrorSnapshotNamespace::decode(bufferlist::const_iterator& it) {
   decode(primary_snap_id, it);
   decode(last_copied_object_number, it);
   decode(snap_seqs, it);
+  if (version >= 2) {
+    decode(group_spec, it);
+    decode(group_snap_id, it);
+  }
 }
 
 void MirrorSnapshotNamespace::dump(Formatter *f) const {
@@ -1146,6 +1155,12 @@ void MirrorSnapshotNamespace::dump(Formatter *f) const {
     f->dump_unsigned("primary_snap_id", primary_snap_id);
     f->dump_unsigned("last_copied_object_number", last_copied_object_number);
     f->dump_stream("snap_seqs") << snap_seqs;
+  }
+  if (group_spec.is_valid()) {
+    f->open_object_section("group_spec");
+    group_spec.dump(f);
+    f->close_section();
+    f->dump_string("group_snap_id", group_snap_id);
   }
 }
 
@@ -1167,15 +1182,17 @@ private:
 
 class DecodeSnapshotNamespaceVisitor {
 public:
-  DecodeSnapshotNamespaceVisitor(bufferlist::const_iterator &iter)
-    : m_iter(iter) {
+  DecodeSnapshotNamespaceVisitor(uint8_t version,
+                                 bufferlist::const_iterator &iter)
+    : m_version(version), m_iter(iter) {
   }
 
   template <typename T>
   inline void operator()(T& t) const {
-    t.decode(m_iter);
+    t.decode(m_version, m_iter);
   }
 private:
+  uint8_t m_version;
   bufferlist::const_iterator &m_iter;
 };
 
@@ -1262,14 +1279,14 @@ void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
 }
 
 void SnapshotNamespace::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   visit(EncodeSnapshotNamespaceVisitor(bl));
   ENCODE_FINISH(bl);
 }
 
 void SnapshotNamespace::decode(bufferlist::const_iterator &p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   uint32_t snap_type;
   decode(snap_type, p);
   switch (snap_type) {
@@ -1289,7 +1306,7 @@ void SnapshotNamespace::decode(bufferlist::const_iterator &p)
       *this = UnknownSnapshotNamespace();
       break;
   }
-  visit(DecodeSnapshotNamespaceVisitor(p));
+  visit(DecodeSnapshotNamespaceVisitor(struct_v, p));
   DECODE_FINISH(p);
 }
 
@@ -1379,6 +1396,11 @@ std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns) {
         << "primary_snap_id=" << ns.primary_snap_id << ", "
         << "last_copied_object_number=" << ns.last_copied_object_number << ", "
         << "snap_seqs=" << ns.snap_seqs;
+  }
+  if (ns.group_spec.is_valid()) {
+    os << ", "
+       << "group_spec=" << ns.group_spec << ", "
+       << "group_snap_id=" << ns.group_snap_id;
   }
   os << "]";
   return os;
