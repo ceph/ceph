@@ -7068,7 +7068,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (chunk_length == obs.oi.size) {
 	  // truncate
-	  for (auto p : obs.oi.manifest.chunk_map) {
+	  for (auto &p : obs.oi.manifest.chunk_map) {
 	    p.second.set_flag(chunk_info_t::FLAG_MISSING);
 	  }
 	  t->truncate(obs.oi.soid, 0);
