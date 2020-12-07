@@ -351,6 +351,7 @@ int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, opti
   list_op.params.prefix = params.prefix;
   list_op.params.delim = params.delim;
   list_op.params.marker = params.marker;
+  list_op.params.ns = params.ns;
   list_op.params.end_marker = params.end_marker;
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
