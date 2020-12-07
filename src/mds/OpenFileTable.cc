@@ -518,7 +518,10 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 	first_free_idx = omap_idx;
     }
     auto& ctl = omap_updates.at(omap_idx);
-
+    if (ctl.write_size >= max_write_size) {
+      journal_func(omap_idx);
+      ctl.write_size = 0;
+    }
     if (p != anchor_map.end()) {
       bufferlist bl;
       encode(p->second, bl);
@@ -529,11 +532,6 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     } else {
       ctl.write_size += len + sizeof(__u32);
       ctl.to_remove.emplace(key);
-    }
-
-    if (ctl.write_size >= max_write_size) {
-      journal_func(omap_idx);
-      ctl.write_size = 0;
     }
   }
 
@@ -550,13 +548,12 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
       --count;
 
       auto& ctl = omap_updates.at(omap_idx);
+      if (ctl.write_size >= max_write_size) {
+        journal_func(omap_idx);
+        ctl.write_size = 0;
+      }
       ctl.write_size += len + sizeof(__u32);
       ctl.to_remove.emplace(key);
-
-      if (ctl.write_size >= max_write_size) {
-	journal_func(omap_idx);
-	ctl.write_size = 0;
-      }
     }
     loaded_anchor_map.clear();
   }
@@ -624,24 +621,25 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 
     bool first = true;
     for (auto& it : ctl.journaled_update) {
+      if (ctl.write_size >= max_write_size) {
+        create_op_func(omap_idx, first);
+        ctl.write_size = 0;
+        first = false;
+      }
       ctl.write_size += it.first.length() + it.second.length() + 2 * sizeof(__u32);
       ctl.to_update[it.first].swap(it.second);
-      if (ctl.write_size >= max_write_size) {
-	create_op_func(omap_idx, first);
-	ctl.write_size = 0;
-	first = false;
-      }
       total_updates++;
     }
 
     for (auto& key : ctl.journaled_remove) {
+      if (ctl.write_size >= max_write_size) {
+        create_op_func(omap_idx, first);
+        ctl.write_size = 0;
+        first = false;
+      }
+
       ctl.write_size += key.length() + sizeof(__u32);
       ctl.to_remove.emplace(key);
-      if (ctl.write_size >= max_write_size) {
-	create_op_func(omap_idx, first);
-	ctl.write_size = 0;
-	first = false;
-      }
       total_removes++;
     }
 
