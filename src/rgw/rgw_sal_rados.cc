@@ -1220,6 +1220,8 @@ int RadosLifecycle::set_entry(const string& oid, const LCEntry& entry)
 int RadosLifecycle::list_entries(const string& oid, const string& marker,
 				 uint32_t max_entries, vector<LCEntry>& entries)
 {
+  entries.clear();
+
   vector<cls_rgw_lc_entry> cls_entries;
   int ret = cls_rgw_lc_list(*store->getRados()->get_lc_pool_ctx(), oid, marker, max_entries, cls_entries);
 
