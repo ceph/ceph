@@ -26,6 +26,7 @@ void Api<I>::execute_image_metadata_set(
     I *image_ctx, const std::string &key,
     const std::string &value, Context *on_finish) {
   ImageCtx* ictx = util::get_image_ctx(image_ctx);
+  std::unique_lock owner_lock{ictx->owner_lock};
   ictx->operations->execute_metadata_set(key, value, on_finish);
 }
 
@@ -33,6 +34,7 @@ template <typename I>
 void Api<I>::execute_image_metadata_remove(
     I *image_ctx, const std::string &key, Context *on_finish) {
   ImageCtx* ictx = util::get_image_ctx(image_ctx);
+  std::unique_lock owner_lock{ictx->owner_lock};
   ictx->operations->execute_metadata_remove(key, on_finish);
 }
 

@@ -131,7 +131,6 @@ void ShutdownRequest<I>::send_remove_image_cache_state() {
   using klass = ShutdownRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_remove_image_cache_state>(
     this);
-  std::shared_lock owner_lock{m_image_ctx.owner_lock};
   m_plugin_api.execute_image_metadata_remove(&m_image_ctx, IMAGE_CACHE_STATE, ctx);
 }
 

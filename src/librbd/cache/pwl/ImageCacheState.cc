@@ -67,7 +67,6 @@ ImageCacheState<I>::ImageCacheState(
 
 template <typename I>
 void ImageCacheState<I>::write_image_cache_state(Context *on_finish) {
-  std::shared_lock owner_lock{m_image_ctx->owner_lock};
   JSONFormattable f;
   ::encode_json(IMAGE_CACHE_STATE.c_str(), *this, &f);
   std::ostringstream oss;
@@ -82,7 +81,6 @@ void ImageCacheState<I>::write_image_cache_state(Context *on_finish) {
 
 template <typename I>
 void ImageCacheState<I>::clear_image_cache_state(Context *on_finish) {
-  std::shared_lock owner_lock{m_image_ctx->owner_lock};
   ldout(m_image_ctx->cct, 20) << __func__ << " Remove state: " << dendl;
   m_plugin_api.execute_image_metadata_remove(
     m_image_ctx, IMAGE_CACHE_STATE, on_finish);
