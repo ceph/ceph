@@ -9,6 +9,7 @@ tar jxvf ffsb.tar.bz2
 cd ffsb-6.0-rc2
 patch -p1 < $mydir/ffsb.patch
 ./configure
+cat config.h
 make
 cd ..
 mkdir tmp
