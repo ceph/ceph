@@ -268,6 +268,7 @@ void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
   for (auto p = release_set.begin(); p != release_set.end(); ++p) {
     const auto offset = p.get_start();
     const auto length = p.get_len();
+    ceph_assert(offset + length <= uint64_t(num_total));
     ldout(cct, 10) << __func__ << std::hex
       << " offset 0x" << offset
       << " length 0x" << length
@@ -406,6 +407,7 @@ void AvlAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> no
 void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(num_total));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
@@ -416,6 +418,7 @@ void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(num_total));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
