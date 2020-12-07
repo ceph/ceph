@@ -57,7 +57,8 @@ public:
 std::ostream &operator<<(std::ostream &lhs, const OpScheduler &);
 using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 
-OpSchedulerRef make_scheduler(CephContext *cct);
+OpSchedulerRef make_scheduler(
+  CephContext *cct, uint32_t num_shards, bool is_rotational);
 
 /**
  * Implements OpScheduler in terms of OpQueue
