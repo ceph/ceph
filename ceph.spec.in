@@ -186,6 +186,7 @@ BuildRequires:	libtool
 BuildRequires:	libxml2-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
+BuildRequires:	libicu-devel
 BuildRequires:	parted
 BuildRequires:	patch
 BuildRequires:	perl
