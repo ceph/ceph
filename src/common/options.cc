@@ -2986,61 +2986,105 @@ std::vector<Option> get_global_options() {
     Option("osd_mclock_scheduler_client_res", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("IO proportion reserved for each client (default)")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_client_wgt", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("IO share for each client (default) over reservation")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_client_lim", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(999999)
     .set_description("IO limit for each client (default) over reservation")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_background_recovery_res", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("IO proportion reserved for background recovery (default)")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_background_recovery_wgt", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("IO share for each background recovery over reservation")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_background_recovery_lim", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(999999)
     .set_description("IO limit for background recovery over reservation")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_background_best_effort_res", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("IO proportion reserved for background best_effort (default)")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_background_best_effort_wgt", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("IO share for each background best_effort over reservation")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_background_best_effort_lim", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(999999)
     .set_description("IO limit for background best_effort over reservation")
-    .set_long_description("Only considered for osd_op_queue = mClockScheduler")
+    .set_long_description("Only considered for osd_op_queue = mclock_scheduler")
     .add_see_also("osd_op_queue"),
 
     Option("osd_mclock_scheduler_anticipation_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.0)
     .set_description("mclock anticipation timeout in seconds")
     .set_long_description("the amount of time that mclock waits until the unused resource is forfeited"),
+
+    Option("osd_mclock_cost_per_io_msec", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Cost per IO in milliseconds to consider per OSD (overrides _ssd and _hdd if non-zero)")
+    .set_long_description("This option specifies the cost factor to consider in msec per OSD. This is considered by the mclock_scheduler to set an additional cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("osd_mclock_cost_per_io_msec_hdd", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Cost per IO in milliseconds to consider per OSD (for rotational media)")
+    .set_long_description("This option specifies the cost factor to consider in msec per OSD for rotational device type. This is considered by the mclock_scheduler to set an additional cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("osd_mclock_cost_per_io_msec_ssd", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Cost per IO in milliseconds to consider per OSD (for solid state media)")
+    .set_long_description("This option specifies the cost factor to consider in msec per OSD for solid state device type. This is considered by the mclock_scheduler to set an additional cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("osd_mclock_max_capacity_iops", Option::TYPE_FLOAT, Option::LEVEL_BASIC)
+    .set_default(0.0)
+    .set_description("Max IOPs capacity (at 4KiB block size) to consider per OSD (overrides _ssd and _hdd if non-zero)")
+    .set_long_description("This option specifies the max osd capacity in iops per OSD. Helps in QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue = mclock_scheduler")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("osd_mclock_max_capacity_iops_hdd", Option::TYPE_FLOAT, Option::LEVEL_BASIC)
+    .set_default(10000.0)
+    .set_description("Max IOPs capacity (at 4KiB block size) to consider per OSD (for rotational media)")
+    .set_long_description("This option specifies the max OSD capacity in iops per OSD. Helps in QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue = mclock_scheduler")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("osd_mclock_max_capacity_iops_ssd", Option::TYPE_FLOAT, Option::LEVEL_BASIC)
+    .set_default(21500.0)
+    .set_description("Max IOPs capacity (at 4KiB block size) to consider per OSD (for solid state media)")
+    .set_long_description("This option specifies the max OSD capacity in iops per OSD. Helps in QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue = mclock_scheduler")
+    .set_flag(Option::FLAG_RUNTIME),
+
+    Option("osd_mclock_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("balanced")
+    .set_enum_allowed( { "balanced", "high_recovery_ops", "high_client_ops", "custom" } )
+    .set_description("Which mclock profile to use")
+    .set_long_description("This option specifies the mclock profile to enable - one among the set of built-in profiles or a custom profile. Only considered for osd_op_queue = mclock_scheduler")
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_see_also("osd_op_queue"),
 
     Option("osd_ignore_stale_divergent_priors", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
