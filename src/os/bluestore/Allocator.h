@@ -80,7 +80,7 @@ public:
   const string& get_name() const;
   int64_t get_capacity() const
   {
-    return capacity;
+    return device_size;
   }
   int64_t get_block_size() const
   {
@@ -90,9 +90,9 @@ public:
 private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;
-
-  int64_t capacity = 0;
-  int64_t block_size = 0;
+protected:
+  const int64_t device_size = 0;
+  const int64_t block_size = 0;
 };
 
 #endif
