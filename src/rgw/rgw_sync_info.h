@@ -189,6 +189,8 @@ public:
   }
 };
 
+#define RGW_SIP_DEFAULT_SID "#0"
+
 
 class SIProvider_SingleStage : public SIProviderCommon
 {
@@ -206,10 +208,11 @@ public:
                          const std::string& name,
                          std::optional<std::string> instance,
                          SIProvider::TypeHandlerProviderRef _type_provider,
+                         std::optional<std::string> stage_id,
                          StageType type,
                          int num_shards,
                          bool disabled) : SIProviderCommon(_cct, name, instance),
-                                          stage_info({name, nullopt, type, num_shards, disabled}),
+                                          stage_info({stage_id.value_or(RGW_SIP_DEFAULT_SID), nullopt, type, num_shards, disabled}),
                                           type_provider(_type_provider) {}
 
   SIProvider::TypeHandlerProvider *get_type_provider() override {

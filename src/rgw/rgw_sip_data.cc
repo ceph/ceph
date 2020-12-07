@@ -125,6 +125,7 @@ SIProvider_DataInc::SIProvider_DataInc(CephContext *_cct,
                                                                                            "data.inc",
                                                                                            std::nullopt,
                                                                                            std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
+                                                                                           std::nullopt, /* stage id */
                                                                                            SIProvider::StageType::INC,
                                                                                            _cct->_conf->rgw_data_log_num_shards,
                                                                                            false) {

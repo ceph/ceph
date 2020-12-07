@@ -94,6 +94,7 @@ public:
 									  "data.full",
                                                                           std::nullopt,
                                                                           std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
+                                                                          std::nullopt, /* stage id */
 									  SIProvider::StageType::FULL,
 									  1,
                                                                           false) {

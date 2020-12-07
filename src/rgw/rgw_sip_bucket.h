@@ -139,6 +139,7 @@ public:
 									     "bucket.full",
                                                                              _bucket_info.bucket.get_key(),
                                                                              std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >(),
+                                                                             std::nullopt, /* stage id */
 									     SIProvider::StageType::FULL,
 									     _bucket_info.layout.current_index.layout.normal.num_shards,
                                                                              false),
@@ -199,6 +200,7 @@ public:
 									     "bucket.inc",
                                                                              _bucket_info.bucket.get_key(),
                                                                              std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >(),
+                                                                             std::nullopt, /* stage id */
 									     SIProvider::StageType::INC,
 									     _bucket_info.layout.current_index.layout.normal.num_shards,
                                                                              !_bucket_info.datasync_flag_enabled()),

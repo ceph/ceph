@@ -84,6 +84,7 @@ public:
 									     "meta.full",
                                                                              std::nullopt,
                                                                              std::make_shared<SITypeHandlerProvider_Default<siprovider_meta_info> >(),
+                                                                             std::nullopt, /* stage id */
 									     SIProvider::StageType::FULL,
 									     1,
                                                                              false) {

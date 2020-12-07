@@ -208,6 +208,7 @@ SIProvider_MetaInc::SIProvider_MetaInc(CephContext *_cct,
                                                                                           "meta.inc",
                                                                                           std::nullopt,
                                                                                           std::make_shared<SITypeHandlerProvider_Default<siprovider_meta_info> >(),
+                                                                                          std::nullopt, /* stage id */
                                                                                           SIProvider::StageType::INC,
                                                                                           _cct->_conf->rgw_md_log_max_shards,
                                                                                           false),
