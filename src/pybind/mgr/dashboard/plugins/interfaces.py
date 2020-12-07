@@ -69,3 +69,13 @@ class FilterRequest(object):
         @PM.add_abcspec
         def filter_request_before_handler(self, request):
             pass
+
+
+@PM.add_interface
+class ConfigNotify(Interface):
+    @PM.add_abcspec
+    def config_notify(self):
+        """
+        This method is called whenever a option of this mgr module has
+        been modified.
+        """
