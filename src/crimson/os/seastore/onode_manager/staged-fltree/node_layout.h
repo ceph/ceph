@@ -223,7 +223,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     auto& node_stage = extent.read();
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
       if (unlikely(node_stage.keys() == 0)) {
-        history.set<STAGE_LEFT>(MatchKindCMP::NE);
+        history.set<STAGE_LEFT>(MatchKindCMP::LT);
         return lookup_result_t<NODE_TYPE>::end();
       }
     }
@@ -252,16 +252,16 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
 #endif
 
-    // calculate MSTAT_NE3
+    // calculate MSTAT_LT3
     if constexpr (FIELD_TYPE == field_type_t::N0) {
       // currently only internal node checks mstat
       if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-        if (result_raw.mstat == MSTAT_NE2) {
+        if (result_raw.mstat == MSTAT_LT2) {
           auto cmp = compare_to<KeyT::HOBJ>(
               key, node_stage[result_raw.position.index].shard_pool);
-          assert(cmp != MatchKindCMP::PO);
+          assert(cmp != MatchKindCMP::GT);
           if (cmp != MatchKindCMP::EQ) {
-            result_raw.mstat = MSTAT_NE3;
+            result_raw.mstat = MSTAT_LT3;
           }
         }
       }

@@ -23,13 +23,13 @@ constexpr auto STAGE_BOTTOM = STAGE_RIGHT;
 // TODO: replace by
 // using match_history_t = int8_t;
 //     left_m, str_m, right_m
-//  3: PO,
-//  2: EQ,     PO,
-//  1: EQ,     EQ,    PO
+//  3: GT,
+//  2: EQ,     GT,
+//  1: EQ,     EQ,    GT
 //  0: EQ,     EQ,    EQ
-// -1: EQ,     EQ,    NE
-// -2: EQ,     NE,
-// -3: NE,
+// -1: EQ,     EQ,    LT
+// -2: EQ,     LT,
+// -3: LT,
 
 struct MatchHistory {
   template <match_stage_t STAGE>
@@ -57,7 +57,7 @@ struct MatchHistory {
   }
 
   template <match_stage_t STAGE = STAGE_TOP>
-  const bool is_PO() const;
+  const bool is_GT() const;
 
   template <match_stage_t STAGE>
   void set(MatchKindCMP match) {
@@ -81,12 +81,12 @@ struct MatchHistory {
       std::ostream& os, const std::optional<MatchKindCMP>& match) const {
     if (!match.has_value()) {
       return os << "--";
-    } else if (*match == MatchKindCMP::NE) {
-      return os << "NE";
+    } else if (*match == MatchKindCMP::LT) {
+      return os << "LT";
     } else if (*match == MatchKindCMP::EQ) {
       return os << "EQ";
-    } else if (*match == MatchKindCMP::PO) {
-      return os << "PO";
+    } else if (*match == MatchKindCMP::GT) {
+      return os << "GT";
     } else {
       ceph_abort("impossble path");
     }
@@ -101,28 +101,28 @@ inline std::ostream& operator<<(std::ostream& os, const MatchHistory& pos) {
 }
 
 template <match_stage_t STAGE>
-struct _check_PO_t {
+struct _check_GT_t {
   static bool eval(const MatchHistory* history) {
     return history->get<STAGE>() &&
-           (*history->get<STAGE>() == MatchKindCMP::PO ||
+           (*history->get<STAGE>() == MatchKindCMP::GT ||
             (*history->get<STAGE>() == MatchKindCMP::EQ &&
-             _check_PO_t<STAGE - 1>::eval(history)));
+             _check_GT_t<STAGE - 1>::eval(history)));
   }
 };
 template <>
-struct _check_PO_t<STAGE_RIGHT> {
+struct _check_GT_t<STAGE_RIGHT> {
   static bool eval(const MatchHistory* history) {
     return history->get<STAGE_RIGHT>() &&
-           *history->get<STAGE_RIGHT>() == MatchKindCMP::PO;
+           *history->get<STAGE_RIGHT>() == MatchKindCMP::GT;
   }
 };
 template <match_stage_t STAGE>
-const bool MatchHistory::is_PO() const {
+const bool MatchHistory::is_GT() const {
   static_assert(STAGE >= STAGE_BOTTOM && STAGE <= STAGE_TOP);
   if constexpr (STAGE < STAGE_TOP) {
     assert(get<STAGE + 1>() == MatchKindCMP::EQ);
   }
-  return _check_PO_t<STAGE>::eval(this);
+  return _check_GT_t<STAGE>::eval(this);
 }
 
 template <match_stage_t STAGE>

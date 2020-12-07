@@ -57,12 +57,12 @@ constexpr node_offset_t NODE_BLOCK_SIZE = DISK_BLOCK_SIZE * 1u;
 
 enum class MatchKindBS : int8_t { NE = -1, EQ = 0 };
 
-enum class MatchKindCMP : int8_t { NE = -1, EQ = 0, PO };
+enum class MatchKindCMP : int8_t { LT = -1, EQ = 0, GT };
 inline MatchKindCMP toMatchKindCMP(int value) {
   if (value > 0) {
-    return MatchKindCMP::PO;
+    return MatchKindCMP::GT;
   } else if (value < 0) {
-    return MatchKindCMP::NE;
+    return MatchKindCMP::LT;
   } else {
     return MatchKindCMP::EQ;
   }
@@ -79,10 +79,10 @@ inline MatchKindCMP toMatchKindCMP(
 }
 
 inline MatchKindCMP reverse(MatchKindCMP cmp) {
-  if (cmp == MatchKindCMP::NE) {
-    return MatchKindCMP::PO;
-  } else if (cmp == MatchKindCMP::PO) {
-    return MatchKindCMP::NE;
+  if (cmp == MatchKindCMP::LT) {
+    return MatchKindCMP::GT;
+  } else if (cmp == MatchKindCMP::GT) {
+    return MatchKindCMP::LT;
   } else {
     return cmp;
   }
