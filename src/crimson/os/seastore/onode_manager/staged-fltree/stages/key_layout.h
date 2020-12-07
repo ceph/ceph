@@ -294,9 +294,9 @@ inline MatchKindCMP compare_to(const string_view_masked_t& l, const string_view_
   } else if (l_type == r_type) {
     return MatchKindCMP::EQ;
   } else if (l_type == Type::MIN || r_type == Type::MAX) {
-    return MatchKindCMP::NE;
+    return MatchKindCMP::LT;
   } else { // l_type == Type::MAX || r_type == Type::MIN
-    return MatchKindCMP::PO;
+    return MatchKindCMP::GT;
   }
 }
 inline MatchKindCMP compare_to(std::string_view l, const string_view_masked_t& r) {
@@ -304,9 +304,9 @@ inline MatchKindCMP compare_to(std::string_view l, const string_view_masked_t& r
   assert(l.length());
   auto r_type = r.get_type();
   if (r_type == Type::MIN) {
-    return MatchKindCMP::PO;
+    return MatchKindCMP::GT;
   } else if (r_type == Type::MAX) {
-    return MatchKindCMP::NE;
+    return MatchKindCMP::LT;
   } else { // r_type == Type::STR
     assert(r.size());
     return toMatchKindCMP(l, r.to_string_view());
