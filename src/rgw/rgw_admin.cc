@@ -9374,7 +9374,7 @@ next:
       return -rc;
     }
 #else
-    cerr << "ERROR: adding lua packages in not permitted" << std::endl;
+    cerr << "ERROR: adding lua packages is not permitted" << std::endl;
     return EPERM;
 #endif
   }

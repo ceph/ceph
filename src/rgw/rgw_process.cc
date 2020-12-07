@@ -225,7 +225,6 @@ int process_request(rgw::sal::RGWRadosStore* const store,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
   rgw::dmclock::SchedulerCompleter c;
-  const auto& lua_package_path = g_conf().get_val<std::string>("rgw_luarocks_location"); 
 
   if (init_error != 0) {
     abort_early(s, nullptr, init_error, nullptr, yield);
@@ -249,7 +248,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_package_path);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -317,7 +316,7 @@ done:
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_package_path);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }
