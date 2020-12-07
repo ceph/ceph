@@ -197,7 +197,10 @@ class Monitoring(object):
             "image": "docker.io/prom/alertmanager:v0.20.0",
             "cpus": "2",
             "memory": "2GB",
-            "args": [],
+            "args": [
+               "--web.listen-address=:{}".format(port_map['alertmanager'][0]),
+               "--cluster.listen-address=:{}".format(port_map['alertmanager'][1]),
+            ],
             "config-json-files": [
                 "alertmanager.yml",
             ],
@@ -239,6 +242,7 @@ class NFSGanesha(object):
         self.userid = dict_get(config_json, 'userid')
         self.extra_args = dict_get(config_json, 'extra_args', [])
         self.files = dict_get(config_json, 'files', {})
+        self.rgw = dict_get(config_json, 'rgw', {})
 
         # validate the supplied args
         self.validate()
@@ -248,13 +252,17 @@ class NFSGanesha(object):
         # type: (str, Union[int, str]) -> NFSGanesha
         return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
 
-    @staticmethod
-    def get_container_mounts(data_dir):
+    def get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
+        if self.rgw:
+            cluster = self.rgw.get('cluster', 'ceph')
+            rgw_user = self.rgw.get('user', 'admin')
+            mounts[os.path.join(data_dir, 'keyring.rgw')] = \
+                    '/var/lib/ceph/radosgw/%s-%s/keyring:z' % (cluster, rgw_user)
         return mounts
 
     @staticmethod
@@ -293,6 +301,13 @@ class NFSGanesha(object):
                 if fname not in self.files:
                     raise Error('required file missing from config-json: %s' % fname)
 
+        # check for an RGW config
+        if self.rgw:
+            if not self.rgw.get('keyring'):
+                raise Error('RGW keyring is missing')
+            if not self.rgw.get('user'):
+                raise Error('RGW user is missing')
+
     def get_daemon_name(self):
         # type: () -> str
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -329,6 +344,14 @@ class NFSGanesha(object):
                 os.fchown(f.fileno(), uid, gid)
                 os.fchmod(f.fileno(), 0o600)
                 f.write(config_content)
+
+        # write the RGW keyring
+        if self.rgw:
+            keyring_path = os.path.join(data_dir, 'keyring.rgw')
+            with open(keyring_path, 'w') as f:
+                os.fchmod(f.fileno(), 0o600)
+                os.fchown(f.fileno(), uid, gid)
+                f.write(self.rgw.get('keyring', ''))
 
     def get_rados_grace_container(self, action):
         # type: (str) -> CephContainer
@@ -1467,7 +1490,7 @@ def copy_tree(src, dst, uid=None, gid=None):
     """
     Copy a directory tree from src to dst
     """
-    if not uid or not gid:
+    if uid is None or gid is None:
         (uid, gid) = extract_uid_gid()
 
     for src_dir in src:
@@ -1492,7 +1515,7 @@ def copy_files(src, dst, uid=None, gid=None):
     """
     Copy a files from src to dst
     """
-    if not uid or not gid:
+    if uid is None or gid is None:
         (uid, gid) = extract_uid_gid()
 
     for src_file in src:
@@ -1512,7 +1535,7 @@ def move_files(src, dst, uid=None, gid=None):
     """
     Move files from src to dst
     """
-    if not uid or not gid:
+    if uid is None or gid is None:
         (uid, gid) = extract_uid_gid()
 
     for src_file in src:
@@ -1931,7 +1954,8 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
     if daemon_type == NFSGanesha.daemon_type:
         assert daemon_id
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
-        mounts.update(NFSGanesha.get_container_mounts(data_dir))
+        nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
+        mounts.update(nfs_ganesha.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
         assert daemon_id
@@ -3181,7 +3205,7 @@ def command_bootstrap():
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password, '--force'])
 
     if args.container_init:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', args.container_init, '--force'])
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(args.container_init), '--force'])
 
     if not args.skip_dashboard:
         # Configure SSL port (cephadm only allows to configure dashboard SSL port)
@@ -4380,6 +4404,7 @@ def check_time_sync(enabler=None):
         'systemd-timesyncd.service',
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
+        'ntpsec.service',  # 20.04 (at least) / buster
     ]
     if not check_units(units, enabler):
         logger.warning('No time sync service is running; checked for %s' % units)
@@ -4583,6 +4608,7 @@ class Apt(Packager):
                                   branch=branch, commit=commit)
         self.distro = self.DISTRO_NAMES[distro]
         self.distro_codename = distro_codename
+        self.distro_version = distro_version
 
     def repo_path(self):
         return '/etc/apt/sources.list.d/ceph.list'
@@ -4624,15 +4650,17 @@ class Apt(Packager):
             logger.info('Removing repo at %s...' % self.repo_path())
             os.unlink(self.repo_path())
 
+        if self.distro == 'ubuntu':
+            self.rm_kubic_repo()
+
     def install(self, ls):
         logger.info('Installing packages %s...' % ls)
         call_throws(['apt', 'install', '-y'] + ls)
 
     def install_podman(self):
         if self.distro == 'ubuntu':
-            logger.info('Setting up repo for pdoman...')
-            self.install(['software-properties-common'])
-            call_throws(['add-apt-repository', '-y', 'ppa:projectatomic/ppa'])
+            logger.info('Setting up repo for podman...')
+            self.add_kubic_repo()
             call_throws(['apt', 'update'])
 
         logger.info('Attempting podman install...')
@@ -4641,6 +4669,49 @@ class Apt(Packager):
         except Error as e:
             logger.info('Podman did not work.  Falling back to docker...')
             self.install(['docker.io'])
+
+    def kubic_repo_url(self):
+        return 'https://download.opensuse.org/repositories/devel:/kubic:/' \
+               'libcontainers:/stable/xUbuntu_%s/' % self.distro_version
+
+    def kubic_repo_path(self):
+        return '/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list'
+
+    def kubric_repo_gpgkey_url(self):
+        return '%s/Release.key' % self.kubic_repo_url()
+
+    def kubric_repo_gpgkey_path(self):
+        return '/etc/apt/trusted.gpg.d/kubic.release.gpg'
+
+    def add_kubic_repo(self):
+        url = self.kubric_repo_gpgkey_url()
+        logger.info('Installing repo GPG key from %s...' % url)
+        try:
+            response = urlopen(url)
+        except HTTPError as err:
+            logger.error('failed to fetch GPG repo key from %s: %s' % (
+                url, err))
+            raise Error('failed to fetch GPG key')
+        key = response.read().decode('utf-8')
+        tmp_key = write_tmp(key, 0, 0)
+        keyring = self.kubric_repo_gpgkey_path()
+        call_throws(['apt-key', '--keyring', keyring, 'add', tmp_key.name])
+
+        logger.info('Installing repo file at %s...' % self.kubic_repo_path())
+        content = 'deb %s /\n' % self.kubic_repo_url()
+        with open(self.kubic_repo_path(), 'w') as f:
+            f.write(content)
+
+    def rm_kubic_repo(self):
+        keyring = self.kubric_repo_gpgkey_path()
+        if os.path.exists(keyring):
+            logger.info('Removing repo GPG key %s...' % keyring)
+            os.unlink(keyring)
+
+        p = self.kubic_repo_path()
+        if os.path.exists(p):
+            logger.info('Removing repo at %s...' % p)
+            os.unlink(p)
 
 
 class YumDnf(Packager):
@@ -5991,6 +6062,11 @@ def _parse_args(av):
 
 if __name__ == "__main__":
 
+    # root?
+    if os.geteuid() != 0:
+        sys.stderr.write('ERROR: cephadm should be run as root\n')
+        sys.exit(1)
+
     # Logger configuration
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
@@ -6010,11 +6086,6 @@ if __name__ == "__main__":
         for handler in logger.handlers:
           if handler.name == "console":
                handler.setLevel(logging.DEBUG)
-
-    # root?
-    if os.geteuid() != 0:
-        sys.stderr.write('ERROR: cephadm should be run as root\n')
-        sys.exit(1)
 
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')

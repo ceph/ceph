@@ -1,10 +1,11 @@
 import json
 import logging
-from typing import List, Dict, Any, Set, Union, Tuple, cast, Optional
+from typing import List, Dict, Any, Set, Union, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import DriveSelection
+from ceph.deployment.inventory import Device
 
 from datetime import datetime
 import orchestrator
@@ -13,6 +14,9 @@ from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
 from cephadm.services.cephadmservice import CephadmDaemonSpec, CephService
+
+if TYPE_CHECKING:
+    from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +47,8 @@ class OSDService(CephService):
         ret = create_from_spec_one(self.prepare_drivegroup(drive_group))
         return ", ".join(filter(None, ret))
 
-    def create_single_host(self, host: str, cmd: str, replace_osd_ids=None, env_vars: Optional[List[str]] = None) -> str:
+    def create_single_host(self, host: str, cmd: str, replace_osd_ids: List[str],
+                           env_vars: Optional[List[str]] = None) -> str:
         out, err, code = self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
 
         if code == 1 and ', it is already prepared' in '\n'.join(err):
@@ -113,7 +118,7 @@ class OSDService(CephService):
 
         # set osd_id_claims
 
-        def _find_inv_for_host(hostname: str, inventory_dict: dict):
+        def _find_inv_for_host(hostname: str, inventory_dict: dict) -> List[Device]:
             # This is stupid and needs to be loaded with the host
             for _host, _inventory in inventory_dict.items():
                 if _host == hostname:
@@ -146,7 +151,7 @@ class OSDService(CephService):
         logger.debug(f"Resulting ceph-volume cmd: {cmd}")
         return cmd
 
-    def get_previews(self, host) -> List[Dict[str, Any]]:
+    def get_previews(self, host: str) -> List[Dict[str, Any]]:
         # Find OSDSpecs that match host.
         osdspecs = self.resolve_osdspecs_for_host(host)
         return self.generate_previews(osdspecs, host)
@@ -213,7 +218,8 @@ class OSDService(CephService):
             return []
         return sum([spec.placement.filter_matching_hostspecs(self.mgr.inventory.all_specs()) for spec in osdspecs], [])
 
-    def resolve_osdspecs_for_host(self, host: str, specs: Optional[List[DriveGroupSpec]] = None):
+    def resolve_osdspecs_for_host(self, host: str,
+                                  specs: Optional[List[DriveGroupSpec]] = None) -> List[DriveGroupSpec]:
         matching_specs = []
         self.mgr.log.debug(f"Finding OSDSpecs for host: <{host}>")
         if not specs:
@@ -284,8 +290,8 @@ class OSDService(CephService):
 
 
 class RemoveUtil(object):
-    def __init__(self, mgr):
-        self.mgr = mgr
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr: "CephadmOrchestrator" = mgr
 
     def process_removal_queue(self) -> None:
         """
@@ -349,10 +355,11 @@ class RemoveUtil(object):
         self.mgr.to_remove_osds.intersection_update(new_queue)
         self.save_to_store()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         # OSDs can always be cleaned up manually. This ensures that we run on existing OSDs
         not_in_cluster_osds = self.mgr.to_remove_osds.not_in_cluster()
-        [self.mgr.to_remove_osds.remove(osd) for osd in not_in_cluster_osds]
+        for osd in not_in_cluster_osds:
+            self.mgr.to_remove_osds.remove(osd)
 
     def get_osds_in_cluster(self) -> List[str]:
         osd_map = self.mgr.get_osdmap()
@@ -456,12 +463,12 @@ class RemoveUtil(object):
         self.mgr.log.debug(f"cmd: {cmd_args.get('prefix')} returns: {out}")
         return True
 
-    def save_to_store(self):
+    def save_to_store(self) -> None:
         osd_queue = [osd.to_json() for osd in self.mgr.to_remove_osds.all_osds()]
         logger.debug(f"Saving {osd_queue} to store")
         self.mgr.set_store('osd_remove_queue', json.dumps(osd_queue))
 
-    def load_from_store(self):
+    def load_from_store(self) -> None:
         for k, v in self.mgr.get_store_prefix('osd_remove_queue').items():
             for osd in json.loads(v):
                 logger.debug(f"Loading osd ->{osd} from store")
@@ -598,14 +605,14 @@ class OSD:
     def exists(self) -> bool:
         return str(self.osd_id) in self.rm_util.get_osds_in_cluster()
 
-    def drain_status_human(self):
+    def drain_status_human(self) -> str:
         default_status = 'not started'
         status = 'started' if self.started and not self.draining else default_status
         status = 'draining' if self.draining else status
         status = 'done, waiting for purge' if self.drain_done_at and not self.draining else status
         return status
 
-    def pg_count_str(self):
+    def pg_count_str(self) -> str:
         return 'n/a' if self.get_pg_count() < 0 else str(self.get_pg_count())
 
     def to_json(self) -> dict:
@@ -638,7 +645,7 @@ class OSD:
             inp['hostname'] = hostname
         return cls(**inp)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.osd_id)
 
     def __eq__(self, other: object) -> bool:
@@ -652,7 +659,7 @@ class OSD:
 
 class OSDQueue(Set):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     def as_osd_ids(self) -> List[int]:

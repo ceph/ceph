@@ -9,6 +9,7 @@ from cephadm.inventory import SPEC_STORE_PREFIX
 from cephadm.utils import DATEFMT
 from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
 from orchestrator import OrchestratorError
+from cephadm.serve import CephadmServe
 from tests import mock
 
 
@@ -25,17 +26,17 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
             # with pytest.raises(OrchestratorError, match="cephadm migration still ongoing. Please wait, until the migration is complete."):
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             cephadm_module.migration_current = 0
             cephadm_module.migration.migrate()
             # assert we need all daemons.
             assert cephadm_module.migration_current == 0
 
-            cephadm_module._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             cephadm_module.migration.migrate()
 
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             out = {o.hostname for o in wait(cephadm_module, cephadm_module.list_daemons())}
             assert out == {'host1', 'host2'}
