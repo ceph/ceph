@@ -192,6 +192,7 @@ enum {
   l_bluestore_omap_clear_lat,
   l_bluestore_clist_lat,
   l_bluestore_remove_lat,
+  l_bluestore_truncate_lat,
   //****************************************
 
   // allocation stats
