@@ -165,7 +165,6 @@ int add_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::str
 
   std::string line;
   bool package_found = false;
-  // TODO: yield on reading the output
   while (c.running() && std::getline(is, line) && !line.empty()) {
     package_found = true;
   }
@@ -230,9 +229,9 @@ int list_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& 
 
 int install_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& failed_packages, std::string& output) {
   // luarocks directory cleanup
-  const auto& luarocks_location = g_conf().get_val<std::string>("rgw_luarocks_location");
   boost::system::error_code ec;
-  boost::filesystem::remove_all(luarocks_location, ec);
+  const auto& luarocks_path = store->get_luarocks_path();
+  boost::filesystem::remove_all(luarocks_path, ec);
   if (ec.value() != 0 && ec.value() != ENOENT) {
     output.append("failed to clear luarock directory: ");
     output.append(ec.message());
@@ -258,13 +257,13 @@ int install_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_
   // the lua rocks install dir will be created by luarocks the first time it is called
   for (const auto& package : packages) {
     bp::ipstream is;
-    bp::child c(p, "install", "--lua-version", CEPH_LUA_VERSION, "--tree", luarocks_location, "--deps-mode", "one", package, 
+    bp::child c(p, "install", "--lua-version", CEPH_LUA_VERSION, "--tree", luarocks_path, "--deps-mode", "one", package, 
         bp::std_in.close(),
         (bp::std_err & bp::std_out) > is);
 
-    // TODO: yield until wait returns
+    // once package reload is supported, code should yield when reading output
     std::string line = "CMD: luarocks install --lua-version " + std::string(CEPH_LUA_VERSION) + std::string(" --tree ") + 
-      luarocks_location + " --deps-mode one " + package;
+      luarocks_path + " --deps-mode one " + package;
 
     do {
       if (!line.empty()) {

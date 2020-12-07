@@ -774,15 +774,16 @@ int execute(
     OpsLogSocket* olog,
     req_state* s, 
     const char* op_name,
-    const std::string& script,
-    const std::string& package_path)
+    const std::string& script)
 
 {
   auto L = luaL_newstate();
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
-  set_package_path(L, package_path);
+  set_package_path(L, store ?
+      store->get_luarocks_path() : 
+      "");
 
   create_debug_action(L, s->cct);  
 

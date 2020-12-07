@@ -15,7 +15,7 @@ By default, all lua standard libraries are available in the script, however, in 
   - All packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart. Therefore a restart is needed for adding or removing of packages to take effect 
   - To add a package that contains C source code that needs to be compiled, use the `--allow-compilation` flag. In this case a C compiler needs to be available on the host
   - Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that lua packages in the allowlist are separated from any lua packages available on the host.
-    By default, this directory would be `/tmp/luarocks/`, and could be set to a different location via the `rgw_luarocks_location` configuration parameter. 
+    By default, this directory would be `/tmp/luarocks/<entity name>`. Its prefix part (`/tmp/luarocks/`) could be set to a different location via the `rgw_luarocks_location` configuration parameter. 
     Note that this parameter should not be set to one of the default locations where luarocks install packages (e.g. `$HOME/.luarocks`, `/usr/lib64/lua`, `/usr/share/lua`)
 	
 

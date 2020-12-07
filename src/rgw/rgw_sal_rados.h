@@ -263,6 +263,7 @@ class RGWRadosStore : public RGWStore {
   private:
     RGWRados *rados;
     RGWUserCtl *user_ctl;
+    std::string luarocks_path;
 
   public:
     RGWRadosStore()
@@ -331,6 +332,13 @@ class RGWRadosStore : public RGWStore {
     CephContext* get_cct() const override { return rados->ctx(); }
     unsigned get_subsys() const override { return ceph_subsys_rgw; }
 
+    const std::string& get_luarocks_path() const override {
+      return luarocks_path;
+    }
+
+    void set_luarocks_path(const std::string& path) override {
+      luarocks_path = path;
+    }
 };
 
 class MPRadosSerializer : public MPSerializer {

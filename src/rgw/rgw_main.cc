@@ -407,6 +407,12 @@ int radosgw_Main(int argc, const char **argv)
 #endif
   }
 
+  const auto& luarocks_path = g_conf().get_val<std::string>("rgw_luarocks_location");
+  if (luarocks_path.empty()) {
+    store->set_luarocks_path("");
+  } else {
+    store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
+  }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   std::string output;

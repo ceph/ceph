@@ -19,8 +19,7 @@ int execute(
     OpsLogSocket* olog,
     req_state *s, 
     const char* op_name,
-    const std::string& script,
-    const std::string& package_path);
+    const std::string& script);
 
 }
 
