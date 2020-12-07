@@ -106,7 +106,10 @@ class CephTestCase(unittest.TestCase):
                 return found
 
             def __enter__(self):
-                self.watcher_process = ceph_manager.run_ceph_w(watch_channel)
+                # XXX: For reason behind setting "shell" to False, see
+                # https://tracker.ceph.com/issues/49644.
+                self.watcher_process = ceph_manager.run_ceph_w(watch_channel,
+                                                               shell=False)
 
             def __exit__(self, exc_type, exc_val, exc_tb):
                 if not self.watcher_process.finished:

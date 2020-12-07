@@ -1436,7 +1436,14 @@ class CephManager:
         kwargs['check_status'] = False
         return self.run_cluster_cmd(**kwargs).exitstatus
 
-    def run_ceph_w(self, watch_channel=None):
+    # XXX: Setting "shell" to True for LocalCephManager.run_ceph_w(), doesn't
+    # work with vstart_runner.py; see https://tracker.ceph.com/issues/49644.
+    # shell=False as default parameter is just to maintain compatibility
+    # between interfaces of CephManager.run_ceph_w() and
+    # LocalCephManager.run_ceph_w(). This doesn't affect how "ceph -w" process
+    # is launched by this method since this parameters remains unused in
+    # this method.
+    def run_ceph_w(self, watch_channel=None, shell=False):
         """
         Execute "ceph -w" in the background with stdout connected to a BytesIO,
         and return the RemoteProcess.

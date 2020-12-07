@@ -964,7 +964,9 @@ class LocalCephManager(CephManager):
         """
         return LocalRemote()
 
-    def run_ceph_w(self, watch_channel=None):
+    # XXX: For reason behind setting "shell" to False, see
+    # https://tracker.ceph.com/issues/49644.
+    def run_ceph_w(self, watch_channel=None, shell=False):
         """
         :param watch_channel: Specifies the channel to be watched.
                               This can be 'cluster', 'audit', ...
@@ -974,7 +976,8 @@ class LocalCephManager(CephManager):
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        proc = self.controller.run(args=args, wait=False, stdout=StringIO())
+        proc = self.controller.run(args=args, wait=False, stdout=StringIO(),
+                                   shell=shell)
         return proc
 
     def run_cluster_cmd(self, **kwargs):
