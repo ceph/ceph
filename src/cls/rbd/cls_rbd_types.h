@@ -588,9 +588,26 @@ struct GroupSpec {
   bool is_valid() const;
 
   static std::list<GroupSpec> generate_test_instances();
+
+  inline bool operator==(const GroupSpec& rhs) const {
+    return pool_id == rhs.pool_id && group_id == rhs.group_id;
+  }
+
+  inline bool operator!=(const GroupSpec& rhs) const {
+    return !(*this == rhs);
+  }
+
+  inline bool operator<(const GroupSpec& rhs) const {
+    if (pool_id != rhs.pool_id) {
+      return pool_id < rhs.pool_id;
+    }
+    return group_id < rhs.group_id;
+  }
 };
 
 WRITE_CLASS_ENCODER(GroupSpec);
+
+std::ostream& operator<<(std::ostream& os, const GroupSpec& group_spec);
 
 enum SnapshotNamespaceType {
   SNAPSHOT_NAMESPACE_TYPE_USER   = 0,
@@ -606,7 +623,7 @@ struct UserSnapshotNamespace {
   UserSnapshotNamespace() {}
 
   void encode(ceph::buffer::list& bl) const {}
-  void decode(ceph::buffer::list::const_iterator& it) {}
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it) {}
 
   void dump(ceph::Formatter *f) const {}
 
@@ -640,7 +657,7 @@ struct GroupImageSnapshotNamespace {
   std::string group_snapshot_id;
 
   void encode(ceph::buffer::list& bl) const;
-  void decode(ceph::buffer::list::const_iterator& it);
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it);
 
   void dump(ceph::Formatter *f) const;
 
@@ -680,7 +697,7 @@ struct TrashSnapshotNamespace {
       original_snapshot_namespace_type(original_snapshot_namespace_type) {}
 
   void encode(ceph::buffer::list& bl) const;
-  void decode(ceph::buffer::list::const_iterator& it);
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it);
   void dump(ceph::Formatter *f) const;
 
   inline bool operator==(const TrashSnapshotNamespace& usn) const {
@@ -731,6 +748,8 @@ struct MirrorSnapshotNamespace {
     snapid_t primary_snap_id = CEPH_NOSNAP;
     snapid_t clean_since_snap_id;
   };
+  GroupSpec group_spec;
+  std::string group_snap_id;
   uint64_t last_copied_object_number = 0;
   SnapSeqs snap_seqs;
 
@@ -780,7 +799,7 @@ struct MirrorSnapshotNamespace {
   }
 
   void encode(ceph::buffer::list& bl) const;
-  void decode(ceph::buffer::list::const_iterator& it);
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it);
 
   void dump(ceph::Formatter *f) const;
 
@@ -790,6 +809,8 @@ struct MirrorSnapshotNamespace {
            mirror_peer_uuids == rhs.mirror_peer_uuids &&
            primary_mirror_uuid == rhs.primary_mirror_uuid &&
            primary_snap_id == rhs.primary_snap_id &&
+           group_spec == rhs.group_spec &&
+           group_snap_id == rhs.group_snap_id &&
            last_copied_object_number == rhs.last_copied_object_number &&
            snap_seqs == rhs.snap_seqs;
   }
@@ -809,6 +830,10 @@ struct MirrorSnapshotNamespace {
       return primary_mirror_uuid < rhs.primary_mirror_uuid;
     } else if (primary_snap_id != rhs.primary_snap_id) {
       return primary_snap_id < rhs.primary_snap_id;
+    } else if (group_spec != rhs.group_spec) {
+      return group_spec < rhs.group_spec;
+    } else if (group_snap_id != rhs.group_snap_id) {
+      return group_snap_id < rhs.group_snap_id;
     } else if (last_copied_object_number != rhs.last_copied_object_number) {
       return last_copied_object_number < rhs.last_copied_object_number;
     } else {
@@ -824,7 +849,7 @@ struct UnknownSnapshotNamespace {
   UnknownSnapshotNamespace() {}
 
   void encode(ceph::buffer::list& bl) const {}
-  void decode(ceph::buffer::list::const_iterator& it) {}
+  void decode(uint8_t version, ceph::buffer::list::const_iterator& it) {}
   void dump(ceph::Formatter *f) const {}
 
   inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
