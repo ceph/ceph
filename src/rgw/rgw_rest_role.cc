@@ -360,6 +360,14 @@ int RGWPutRolePolicy::get_params()
     ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     return -ERR_MALFORMED_DOC;
   }
+
+  _role = RGWRole(g_ceph_context, store, role_name, s->user->user_id.tenant);
+  int op_ret = _role.get();
+  if (op_ret < 0) {
+    s->err.message = "The role with name " +  role_name + " cannot be found.";
+    return op_ret;
+  }
+
   return 0;
 }
 
@@ -390,6 +398,13 @@ int RGWGetRolePolicy::get_params()
   if (role_name.empty() || policy_name.empty()) {
     ldout(s->cct, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
     return -EINVAL;
+  }
+
+  _role = RGWRole(g_ceph_context, store, role_name, s->user->user_id.tenant);
+  int op_ret = _role.get();
+  if (op_ret < 0) {
+    s->err.message = "The role with name " +  role_name + " cannot be found.";
+    return op_ret;
   }
   return 0;
 }
@@ -462,6 +477,13 @@ int RGWDeleteRolePolicy::get_params()
   if (role_name.empty() || policy_name.empty()) {
     ldout(s->cct, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
     return -EINVAL;
+  }
+
+  _role = RGWRole(g_ceph_context, store, role_name, s->user->user_id.tenant);
+  int op_ret = _role.get();
+  if (op_ret < 0) {
+    s->err.message = "The role with name " +  role_name + " cannot be found.";
+    return op_ret;
   }
   return 0;
 }
