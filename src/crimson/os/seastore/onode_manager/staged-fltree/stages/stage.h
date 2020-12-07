@@ -31,9 +31,9 @@ search_result_bs_t binary_search(
     // do not copy if return value is reference
     decltype(f_get_key(mid)) target = f_get_key(mid);
     auto match = compare_to<KeyT::HOBJ>(key, target);
-    if (match == MatchKindCMP::NE) {
+    if (match == MatchKindCMP::LT) {
       end = mid;
-    } else if (match == MatchKindCMP::PO) {
+    } else if (match == MatchKindCMP::GT) {
       begin = mid + 1;
     } else {
       return {mid, MatchKindBS::EQ};
@@ -87,23 +87,23 @@ inline void assert_mstat(
     const full_key_t<KeyT::HOBJ>& key,
     const full_key_t<KeyT::VIEW>& index,
     match_stat_t mstat) {
-  assert(mstat >= MSTAT_MIN && mstat <= MSTAT_NE2);
+  assert(mstat >= MSTAT_MIN && mstat <= MSTAT_LT2);
   // key < index ...
   switch (mstat) {
    case MSTAT_EQ:
     break;
-   case MSTAT_NE0:
-    assert(compare_to<KeyT::HOBJ>(key, index.snap_gen_packed()) == MatchKindCMP::NE);
+   case MSTAT_LT0:
+    assert(compare_to<KeyT::HOBJ>(key, index.snap_gen_packed()) == MatchKindCMP::LT);
     break;
-   case MSTAT_NE1:
-    assert(compare_to<KeyT::HOBJ>(key, index.ns_oid_view()) == MatchKindCMP::NE);
+   case MSTAT_LT1:
+    assert(compare_to<KeyT::HOBJ>(key, index.ns_oid_view()) == MatchKindCMP::LT);
     break;
-   case MSTAT_NE2:
+   case MSTAT_LT2:
     if (index.has_shard_pool()) {
       assert(compare_to<KeyT::HOBJ>(key, shard_pool_crush_t{
-               index.shard_pool_packed(), index.crush_packed()}) == MatchKindCMP::NE);
+               index.shard_pool_packed(), index.crush_packed()}) == MatchKindCMP::LT);
     } else {
-      assert(compare_to<KeyT::HOBJ>(key, index.crush_packed()) == MatchKindCMP::NE);
+      assert(compare_to<KeyT::HOBJ>(key, index.crush_packed()) == MatchKindCMP::LT);
     }
     break;
    default:
@@ -113,12 +113,12 @@ inline void assert_mstat(
   switch (mstat) {
    case MSTAT_EQ:
     assert(compare_to<KeyT::HOBJ>(key, index.snap_gen_packed()) == MatchKindCMP::EQ);
-   case MSTAT_NE0:
+   case MSTAT_LT0:
     if (!index.has_ns_oid())
       break;
     assert(index.ns_oid_view().type() == ns_oid_view_t::Type::MAX ||
            compare_to<KeyT::HOBJ>(key, index.ns_oid_view()) == MatchKindCMP::EQ);
-   case MSTAT_NE1:
+   case MSTAT_LT1:
     if (!index.has_crush())
       break;
     assert(compare_to<KeyT::HOBJ>(key, index.crush_packed()) == MatchKindCMP::EQ);
@@ -303,7 +303,7 @@ struct staged {
       if (exclude_last) {
         assert(end_index);
         --end_index;
-        assert(compare_to<KeyT::HOBJ>(key, container[end_index]) == MatchKindCMP::NE);
+        assert(compare_to<KeyT::HOBJ>(key, container[end_index]) == MatchKindCMP::LT);
       }
       auto ret = binary_search(key, _index, end_index,
           [this] (size_t index) { return container[index]; });
@@ -570,11 +570,11 @@ struct staged {
       assert(index() == 0);
       do {
         if (exclude_last && is_last()) {
-          assert(compare_to<KeyT::HOBJ>(key, get_key()) == MatchKindCMP::NE);
+          assert(compare_to<KeyT::HOBJ>(key, get_key()) == MatchKindCMP::LT);
           return MatchKindBS::NE;
         }
         auto match = compare_to<KeyT::HOBJ>(key, get_key());
-        if (match == MatchKindCMP::NE) {
+        if (match == MatchKindCMP::LT) {
           return MatchKindBS::NE;
         } else if (match == MatchKindCMP::EQ) {
           return MatchKindBS::EQ;
@@ -920,21 +920,21 @@ struct staged {
         // lookup is short-circuited
         if constexpr (!IS_BOTTOM) {
           assert(history.get<STAGE - 1>().has_value());
-          if (history.is_PO<STAGE - 1>()) {
+          if (history.is_GT<STAGE - 1>()) {
             auto iter = iterator_t(container);
             bool test_key_equal;
             if constexpr (STAGE == STAGE_STRING) {
               // TODO(cross-node string dedup)
               // test_key_equal = (iter.get_key().type() == ns_oid_view_t::Type::MIN);
               auto cmp = compare_to<KeyT::HOBJ>(key, iter.get_key());
-              assert(cmp != MatchKindCMP::PO);
+              assert(cmp != MatchKindCMP::GT);
               test_key_equal = (cmp == MatchKindCMP::EQ);
             } else {
               auto cmp = compare_to<KeyT::HOBJ>(key, iter.get_key());
               // From history, key[stage] == parent[stage][index - 1]
               // which should be the smallest possible value for all
               // index[stage][*]
-              assert(cmp != MatchKindCMP::PO);
+              assert(cmp != MatchKindCMP::GT);
               test_key_equal = (cmp == MatchKindCMP::EQ);
             }
             if (test_key_equal) {
@@ -945,7 +945,7 @@ struct staged {
             }
           }
         }
-        // IS_BOTTOM || !history.is_PO<STAGE - 1>()
+        // IS_BOTTOM || !history.is_GT<STAGE - 1>()
         auto iter = iterator_t(container);
         iter.seek_last();
         if constexpr (STAGE == STAGE_STRING) {
@@ -965,12 +965,12 @@ struct staged {
           auto nxt_container = iter.get_nxt_container();
           auto nxt_result = NXT_STAGE_T::template lower_bound<GET_KEY>(
               nxt_container, key, history, index_key);
-          // !history.is_PO<STAGE - 1>() means
+          // !history.is_GT<STAGE - 1>() means
           // key[stage+1 ...] <= index[stage+1 ...][*]
           assert(!nxt_result.is_end());
           return result_t::from_nxt(iter.index(), nxt_result);
         }
-      } else if (*history.get<STAGE>() == MatchKindCMP::NE) {
+      } else if (*history.get<STAGE>() == MatchKindCMP::LT) {
         exclude_last = true;
       }
     }
@@ -979,18 +979,18 @@ struct staged {
     if (iter.is_end()) {
       assert(!exclude_last);
       assert(bs_match == MatchKindBS::NE);
-      history.set<STAGE>(MatchKindCMP::PO);
+      history.set<STAGE>(MatchKindCMP::GT);
       return result_t::end();
     }
     history.set<STAGE>(bs_match == MatchKindBS::EQ ?
-                       MatchKindCMP::EQ : MatchKindCMP::NE);
+                       MatchKindCMP::EQ : MatchKindCMP::LT);
     if constexpr (IS_BOTTOM) {
       if constexpr (GET_KEY) {
         index_key->set(iter.get_key());
       }
       auto value_ptr = iter.get_p_value();
       return result_t{{iter.index()}, value_ptr,
-                      (bs_match == MatchKindBS::EQ ? MSTAT_EQ : MSTAT_NE0)};
+                      (bs_match == MatchKindBS::EQ ? MSTAT_EQ : MSTAT_LT0)};
     } else {
       if (bs_match == MatchKindBS::EQ) {
         return nxt_lower_bound<GET_KEY>(key, iter, history, index_key);
@@ -1047,7 +1047,7 @@ struct staged {
               nxt_container, key, value, position.nxt, false);
         }
       } else {
-        assert(match == MatchKindCMP::NE);
+        assert(match == MatchKindCMP::LT);
         if (index == 0) {
           // already the first index, so insert at the current index
           return {STAGE, insert_size<KeyT::VIEW>(key, value)};
@@ -1061,7 +1061,7 @@ struct staged {
 
     // XXX(multi-type): when key is from a different type of node
     auto match = compare_to<KeyT::VIEW>(key, iter.get_key());
-    if (match == MatchKindCMP::PO) {
+    if (match == MatchKindCMP::GT) {
       // key doesn't match both indexes, so insert at the current index
       ++index;
       return {STAGE, insert_size<KeyT::VIEW>(key, value)};
@@ -1132,17 +1132,17 @@ struct staged {
       --insert_stage;
     }
 
-    if (history.is_PO()) {
+    if (history.is_GT()) {
       if (position.is_end()) {
         // no need to compensate insert position
         assert(insert_stage <= STAGE && "impossible insert stage");
       } else if (position == position_t::begin()) {
         // I must be short-circuited by staged::smallest_result()
         // in staged::lower_bound(), so we need to rely on mstat instead
-        assert(mstat >= MSTAT_NE0 && mstat <= MSTAT_NE3);
-        if (mstat == MSTAT_NE0) {
+        assert(mstat >= MSTAT_LT0 && mstat <= MSTAT_LT3);
+        if (mstat == MSTAT_LT0) {
           insert_stage = STAGE_RIGHT;
-        } else if (mstat == MSTAT_NE1) {
+        } else if (mstat == MSTAT_LT1) {
           insert_stage = STAGE_STRING;
         } else {
           insert_stage = STAGE_LEFT;
@@ -1336,7 +1336,7 @@ struct staged {
         break;
       } else {
         ++iter;
-        assert(compare_to(key, iter.get_key()) == MatchKindCMP::NE);
+        assert(compare_to(key, iter.get_key()) == MatchKindCMP::LT);
         key = iter.get_key();
       }
     } while (true);
