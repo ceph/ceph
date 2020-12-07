@@ -5249,7 +5249,6 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_truncate_lat, "truncate_lat",
     "Average truncate latency",
     "tr_l", PerfCountersBuilder::PRIO_USEFUL);
-  //****************************************
 
   // Resulting size axis configuration for op histograms, values are in bytes
   PerfHistogramCommon::axis_config_d alloc_hist_x_axis_config{
