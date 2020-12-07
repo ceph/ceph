@@ -7,9 +7,9 @@ target_link_libraries(test-seastore-onode-tree-node
   crimson-os
   crimson-common)
 
-add_executable(unittest_staged_fltree
+add_executable(unittest-staged-fltree
   test_staged_fltree.cc
   ../../gtest_seastar.cc)
-add_ceph_unittest(unittest_staged_fltree)
-target_link_libraries(unittest_staged_fltree
+add_ceph_unittest(unittest-staged-fltree)
+target_link_libraries(unittest-staged-fltree
   crimson-seastore)
