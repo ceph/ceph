@@ -128,7 +128,7 @@ private:
     } else {
       ceph_assert(image_ctx.parent != nullptr);
 
-      uint32_t flags = 0;
+      uint32_t flags = deep_copy::OBJECT_COPY_REQUEST_FLAG_MIGRATION;
       if (image_ctx.migration_info.flatten) {
         flags |= deep_copy::OBJECT_COPY_REQUEST_FLAG_FLATTEN;
       }
