@@ -339,7 +339,9 @@ void ObjectCopyRequest<I>::send_write_object() {
                    << "dst_snaps=" << dst_snap_ids << dendl;
 
   librados::ObjectWriteOperation op;
-  if (!m_dst_image_ctx->migration_info.empty()) {
+
+  bool migration = ((m_flags & OBJECT_COPY_REQUEST_FLAG_MIGRATION) != 0);
+  if (migration) {
     ldout(m_cct, 20) << "assert_snapc_seq=" << dst_snap_seq << dendl;
     cls_client::assert_snapc_seq(&op, dst_snap_seq,
                                  cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ);
@@ -381,7 +383,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
   }
 
-  if (op.size() == (m_dst_image_ctx->migration_info.empty() ? 0 : 1)) {
+  if (op.size() == (migration ? 1 : 0)) {
     handle_write_object(0);
     return;
   }
