@@ -260,7 +260,7 @@ class Thrasher:
                 while proceed():
                     proc = exp_remote.run(args=cmd, wait=True,
                                           check_status=False,
-                                          stdout=BytesIO(), stderr=BytesIO())
+                                          stdout=StringIO(), stderr=StringIO())
                     if proc.exitstatus == 0:
                         break
                     elif (proc.exitstatus == 1 and
@@ -304,7 +304,7 @@ class Thrasher:
                 # If pg isn't already on this osd, then we will move it there
                 cmd = (prefix + "--op list-pgs").format(id=imp_osd)
                 proc = imp_remote.run(args=cmd, wait=True,
-                                      check_status=False, stdout=BytesIO())
+                                      check_status=False, stdout=StringIO())
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
