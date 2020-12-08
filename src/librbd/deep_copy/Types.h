@@ -11,6 +11,10 @@
 namespace librbd {
 namespace deep_copy {
 
+enum {
+  OBJECT_COPY_REQUEST_FLAG_FLATTEN = 1U << 0,
+};
+
 typedef std::vector<librados::snap_t> SnapIds;
 typedef std::map<librados::snap_t, SnapIds> SnapMap;
 
