@@ -105,16 +105,21 @@ class TestPrepare(object):
         assert expected in str(error.value)
 
     @patch('ceph_volume.devices.lvm.prepare.api.is_ceph_device')
-    def test_safe_prepare_osd_already_created(self, m_is_ceph_device):
+    @patch('ceph_volume.devices.lvm.prepare.Prepare.devs_used_as_expected')
+    def test_safe_prepare_osd_already_created(self, m_is_ceph_device, m_devs_used_as_expected, capsys):
         m_is_ceph_device.return_value = True
-        with pytest.raises(RuntimeError) as error:
-            prepare = lvm.prepare.Prepare(argv=[])
-            prepare.args = Mock()
-            prepare.args.data = '/dev/sdfoo'
-            prepare.get_lv = Mock()
-            prepare.safe_prepare()
-            expected = 'skipping {}, it is already prepared'.format('/dev/sdfoo')
-            assert expected in str(error.value)
+        m_devs_used_as_expected.return_value = True
+        prepare = lvm.prepare.Prepare(argv=[])
+        prepare.args = Mock()
+        prepare.args.data = '/dev/sdfoo'
+        prepare.args.journal = prepare.args.block_db = \
+            prepare.args.block_wal = None
+        prepare.get_lv = Mock()
+        prepare.safe_prepare()
+        expected = ('skipping {}, it is already prepared as '
+                    'requested'.format('/dev/sdfoo'))
+        stdout, stderr = capsys.readouterr()
+        assert expected in str(stderr)
 
     def test_setup_device_device_name_is_none(self):
         result = lvm.prepare.Prepare([]).setup_device(device_type='data', device_name=None, tags={'ceph.type': 'data'}, size=0, slots=None)

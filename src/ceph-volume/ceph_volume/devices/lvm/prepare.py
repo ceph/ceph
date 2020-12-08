@@ -227,10 +227,78 @@ class Prepare(object):
 
         raise RuntimeError('no data logical volume found with: {}'.format(device))
 
+    def str_to_lv(self, string):
+        try:
+            vgname, lvname = string.split('/')
+            lv = api.get_single_lv(filters={'lv_name': lvname,
+                                           'vg_name': vgname})
+        except ValueError:
+            lv = None
+
+        return lv
+
+    def all_devs_are_unused(self, devs_and_types):
+        """
+        Return true if all devs passed are NOT used by Ceph.
+        """
+        for dev, _type in devs_and_types.items():
+            if api.is_ceph_device(self.str_to_lv(dev)):
+                return False
+        return True
+
+    def all_devs_are_used(self, devs_and_types):
+        """
+        Return true if all devs passed are already used by Ceph.
+        """
+        for dev, _type in devs_and_types.items():
+            if not api.is_ceph_device(self.str_to_lv(dev)):
+                return False
+        return True
+
+    def devs_used_as_expected(self, devs_and_types):
+        """
+        Is the device passed by the user being used as the user expects?
+        """
+        for dev, _type in devs_and_types.items():
+            lv = self.str_to_lv(dev)
+            if api.is_ceph_device(lv):
+                if lv.tags['ceph.type'] != _type:
+                    return False
+        return True
+
+    def needs_prep(self):
+        """
+        Return true if all storage devices passed in arguments are unused.
+        """
+        devs_and_types = {self.args.block_db: 'db', self.args.block_wal:'wal',
+                          self.args.journal: 'journal'}
+        if None in devs_and_types:
+            devs_and_types.pop(None) # we'll have one None among keys
+        devs_and_types[self.args.data] = 'block' if self.args.bluestore else 'data'
+
+        if self.all_devs_are_unused(devs_and_types):
+            return True
+
+        if self.all_devs_are_used(devs_and_types):
+            if self.devs_used_as_expected(devs_and_types):
+                msg = ('skipping {}, it is already prepared as '
+                      'requested'.format(self.args.data))
+                terminal.success(msg)
+            else:
+                msg = ('{} is already prepared but not as '
+                      'requested'.format(self.args.data))
+                terminal.error(msg)
+            logger.info(msg)
+            return False
+
     def safe_prepare(self, args=None):
         """
         An intermediate step between `main()` and `prepare()` so that we can
-        capture the `self.osd_id` in case we need to rollback
+        capture the `self.osd_id` in case we need to rollback. Return True or
+        False depending whether or not prepare() was run.
+
+        In case the device passed is already being used by Ceph, check if it's
+        being used as the user expects and quit accordingly.
 
         :param args: Injected args, usually from `lvm create` which compounds
                      both `prepare` and `create`
@@ -238,16 +306,9 @@ class Prepare(object):
         if args is not None:
             self.args = args
 
-        try:
-            vgname, lvname = self.args.data.split('/')
-            lv = api.get_single_lv(filters={'lv_name': lvname,
-                                            'vg_name': vgname})
-        except ValueError:
-            lv = None
+        if not self.needs_prep():
+            return False
 
-        if api.is_ceph_device(lv):
-            logger.info("device {} is already used".format(self.args.data))
-            raise RuntimeError("skipping {}, it is already prepared".format(self.args.data))
         try:
             self.prepare()
         except Exception:
@@ -256,6 +317,8 @@ class Prepare(object):
             rollback_osd(self.args, self.osd_id)
             raise
         terminal.success("ceph-volume lvm prepare successful for: %s" % self.args.data)
+
+        return True
 
     def get_cluster_fsid(self):
         """
