@@ -298,6 +298,8 @@ struct BackfillState::BackfillListener {
     const hobject_t& obj,
     const eversion_t& v) = 0;
 
+  virtual void maybe_flush() = 0;
+
   virtual void update_peers_last_backfill(
     const hobject_t& new_last_backfill) = 0;
 
