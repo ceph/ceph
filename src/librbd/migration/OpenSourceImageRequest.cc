@@ -41,7 +41,7 @@ void OpenSourceImageRequest<I>::open_source() {
   ldout(m_cct, 10) << dendl;
 
   // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", m_src_snap_id, m_io_ctx, true);
+  *m_src_image_ctx = I::create("", "", CEPH_NOSNAP, m_io_ctx, true);
   auto src_image_ctx = *m_src_image_ctx;
   src_image_ctx->child = m_dst_image_ctx;
 
@@ -62,6 +62,10 @@ void OpenSourceImageRequest<I>::open_source() {
       m_migration_info.image_name, m_migration_info.image_id);
     import_only = false;
   }
+
+  ldout(m_cct, 15) << "source_spec=" << source_spec << ", "
+                   << "source_snap_id=" << m_src_snap_id << ", "
+                   << "import_only=" << import_only << dendl;
 
   SourceSpecBuilder<I> source_spec_builder{src_image_ctx};
   json_spirit::mObject source_spec_object;
@@ -169,6 +173,9 @@ void OpenSourceImageRequest<I>::handle_get_snapshots(int r) {
     auto& [snap_id, snap_info] = *it;
     snapc.snaps.push_back(snap_id);
 
+    ldout(m_cct, 10) << "adding snap: ns=" << snap_info.snap_namespace << ", "
+                     << "name=" << snap_info.name << ", "
+                     << "id=" << snap_id << dendl;
     src_image_ctx->add_snap(
       snap_info.snap_namespace, snap_info.name, snap_id,
       snap_info.size, snap_info.parent, snap_info.protection_status,
@@ -179,11 +186,22 @@ void OpenSourceImageRequest<I>::handle_get_snapshots(int r) {
   }
   src_image_ctx->snapc = snapc;
 
+  ldout(m_cct, 15) << "read snap id: " << m_src_snap_id << ", "
+                   << "write snapc={"
+                   << "seq=" << snapc.seq << ", "
+                   << "snaps=" << snapc.snaps << "}" << dendl;
+
   // ensure data_ctx and data_io_context are pointing to correct snapshot
-  if (src_image_ctx->open_snap_id != CEPH_NOSNAP) {
-    int r = src_image_ctx->snap_set(src_image_ctx->open_snap_id);
-    ceph_assert(r == 0);
-    src_image_ctx->open_snap_id = CEPH_NOSNAP;
+  if (m_src_snap_id != CEPH_NOSNAP) {
+    int r = src_image_ctx->snap_set(m_src_snap_id);
+    if (r < 0) {
+      src_image_ctx->image_lock.unlock();
+
+      lderr(m_cct) << "error setting source image snap id: "
+                   << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
   }
 
   src_image_ctx->image_lock.unlock();
