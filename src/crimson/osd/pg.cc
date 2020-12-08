@@ -313,6 +313,7 @@ ghobject_t PG::do_delete_work(ceph::os::Transaction &t,
 {
   // TODO
   shard_services.dec_pg_num();
+  return _next;
 }
 
 void PG::scrub_requested(bool deep, bool repair, bool need_auto)
