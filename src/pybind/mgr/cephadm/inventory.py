@@ -344,17 +344,21 @@ class HostCache():
             j['last_daemon_update'] = datetime_to_str(self.last_daemon_update[host])
         if host in self.last_device_update:
             j['last_device_update'] = datetime_to_str(self.last_device_update[host])
-        for name, dd in self.daemons[host].items():
-            j['daemons'][name] = dd.to_json()
-        for d in self.devices[host]:
-            j['devices'].append(d.to_json())
-        j['networks'] = self.networks[host]
-        for name, depi in self.daemon_config_deps[host].items():
-            j['daemon_config_deps'][name] = {
-                'deps': depi.get('deps', []),
-                'last_config': datetime_to_str(depi['last_config']),
-            }
-        if self.osdspec_previews[host]:
+        if host in self.daemons:
+            for name, dd in self.daemons[host].items():
+                j['daemons'][name] = dd.to_json()
+        if host in self.devices:
+            for d in self.devices[host]:
+                j['devices'].append(d.to_json())
+        if host in self.networks:
+            j['networks'] = self.networks[host]
+        if host in self.daemon_config_deps:
+            for name, depi in self.daemon_config_deps[host].items():
+                j['daemon_config_deps'][name] = {
+                    'deps': depi.get('deps', []),
+                    'last_config': datetime_to_str(depi['last_config']),
+                }
+        if host in self.osdspec_previews and self.osdspec_previews[host]:
             j['osdspec_previews'] = self.osdspec_previews[host]
 
         if host in self.last_host_check:
@@ -362,7 +366,7 @@ class HostCache():
 
         if host in self.last_etc_ceph_ceph_conf:
             j['last_etc_ceph_ceph_conf'] = datetime_to_str(self.last_etc_ceph_ceph_conf[host])
-        if self.scheduled_daemon_actions.get(host, {}):
+        if host in self.scheduled_daemon_actions:
             j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
 
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
