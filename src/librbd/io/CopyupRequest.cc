@@ -232,7 +232,7 @@ void CopyupRequest<I>::deep_copy() {
 
   ldout(cct, 20) << "oid=" << m_oid << ", flatten=" << m_flatten << dendl;
 
-  uint32_t flags = 0;
+  uint32_t flags = deep_copy::OBJECT_COPY_REQUEST_FLAG_MIGRATION;
   if (m_flatten) {
     flags |= deep_copy::OBJECT_COPY_REQUEST_FLAG_FLATTEN;
   }
