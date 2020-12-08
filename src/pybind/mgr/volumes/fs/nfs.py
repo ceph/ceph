@@ -19,17 +19,17 @@ POOL_NAME = 'nfs-ganesha'
 def available_clusters(mgr):
     '''
     This method returns list of available cluster ids.
-    It removes 'ganesha-' prefixes from cluster service id returned by cephadm.
+    Service name is service_type.service_id
     Example:
     completion.result value:
-    <ServiceDescription of <NFSServiceSpec for service_name=nfs.ganesha-vstart>>
-    return value: ['ganesha-vstart'] -> ['vstart']
+    <ServiceDescription of <NFSServiceSpec for service_name=nfs.vstart>>
+    return value: ['vstart']
     '''
     # TODO check cephadm cluster list with rados pool conf objects
     completion = mgr.describe_service(service_type='nfs')
     mgr._orchestrator_wait([completion])
     orchestrator.raise_if_exception(completion)
-    return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result
+    return [cluster.spec.service_id for cluster in completion.result
             if cluster.spec.service_id]
 
 
@@ -513,7 +513,7 @@ class FSExport(object):
     def _save_export(self, export):
         self.exports[self.rados_namespace].append(export)
         NFSRados(self.mgr, self.rados_namespace).write_obj(export.to_export_block(),
-                 f'export-{export.export_id}', f'conf-nfs.ganesha-{export.cluster_id}')
+                 f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
 
     def _delete_export(self, cluster_id, pseudo_path, export_obj=None):
         try:
@@ -525,7 +525,7 @@ class FSExport(object):
             if export:
                 if pseudo_path:
                     NFSRados(self.mgr, self.rados_namespace).remove_obj(
-                             f'export-{export.export_id}', f'conf-nfs.ganesha-{cluster_id}')
+                             f'export-{export.export_id}', f'conf-nfs.{cluster_id}')
                 self.exports[cluster_id].remove(export)
                 self._delete_user(export.fsal.user_id)
                 if not self.exports[cluster_id]:
@@ -646,7 +646,7 @@ class NFSCluster:
         self.mgr = mgr
 
     def _set_cluster_id(self, cluster_id):
-        self.cluster_id = f"ganesha-{cluster_id}"
+        self.cluster_id = cluster_id
 
     def _set_pool_namespace(self, cluster_id):
         self.pool_ns = cluster_id
