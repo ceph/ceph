@@ -197,7 +197,7 @@ class RookCluster(object):
         self.rook_pods = KubernetesResource(self.coreV1_api.list_namespaced_pod,
                                             namespace=self.rook_env.namespace,
                                             label_selector="rook_cluster={0}".format(
-                                                self.rook_env.cluster_name))
+                                                self.rook_env.namespace))
         self.nodes = KubernetesResource(self.coreV1_api.list_node)
 
     def rook_url(self, path):
@@ -284,7 +284,7 @@ class RookCluster(object):
                         rook_cluster=rook
         And MDS containers additionally have `rook_filesystem` label
 
-        Label filter is rook_cluster=<cluster name>
+        Label filter is rook_cluster=<cluster namespace>
                         rook_file_system=<self.fs_name>
         """
         def predicate(item):
@@ -319,6 +319,7 @@ class RookCluster(object):
         pods = [i for i in self.rook_pods.items if predicate(i)]
 
         pods_summary = []
+        prefix = 'sha256:'
 
         for p in pods:
             d = p.to_dict()
@@ -329,12 +330,16 @@ class RookCluster(object):
                 image_name = c['image']
                 break
 
+            image_id = d['status']['container_statuses'][0]['image_id']
+            image_id = image_id.split(prefix)[1] if prefix in image_id else image_id
+
             s = {
                 "name": d['metadata']['name'],
                 "hostname": d['spec']['node_name'],
                 "labels": d['metadata']['labels'],
                 'phase': d['status']['phase'],
                 'container_image_name': image_name,
+                'container_image_id': image_id,
                 'refreshed': refreshed,
                 # these may get set below...
                 'started': None,
