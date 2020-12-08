@@ -229,3 +229,23 @@ public:
   SIProviderRef get(std::optional<std::string> instance) override;
 };
 
+class RGWSIPGen_BucketContainer : public RGWSIPGenerator
+{
+  CephContext *cct;
+  rgw::sal::RGWRadosStore *store;
+
+  struct {
+    RGWBucketCtl *bucket;
+  } ctl;
+
+public:
+  RGWSIPGen_BucketContainer(CephContext *_cct,
+                            rgw::sal::RGWRadosStore *_store,
+                            RGWBucketCtl *_bucket_ctl) : cct(_cct),
+                                                         store(_store) {
+    ctl.bucket = _bucket_ctl;
+  }
+
+  SIProviderRef get(std::optional<std::string> instance) override;
+};
+

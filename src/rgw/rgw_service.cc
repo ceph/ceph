@@ -452,21 +452,26 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
     return r;
   }
 
-  auto sip = new SIProvider_MetaFull(cct, meta.mgr);
-  r = sip->init();
+  auto meta_full_sip = new SIProvider_MetaFull(cct, meta.mgr);
+  r = meta_full_sip->init();
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;
   }
-  si.mgr->register_sip("meta.full", "meta", { SIProvider::StageType::FULL }, std::make_shared<RGWSIPGen_Single>(sip));
 
-  auto inc_sip = new SIProvider_MetaInc(cct, svc->mdlog, svc->zone->get_current_period_id());
-  r = inc_sip->init();
+  auto meta_inc_sip = new SIProvider_MetaInc(cct, svc->mdlog, svc->zone->get_current_period_id());
+  r = meta_inc_sip->init();
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.inc)" << dendl;
     return r;
   }
-  si.mgr->register_sip("meta.inc",  "meta", { SIProvider::StageType::INC }, std::make_shared<RGWSIPGen_Single>(inc_sip));
+
+  si.mgr->register_sip("meta", "meta", { SIProvider::StageType::FULL, SIProvider::StageType::INC },
+                       std::make_shared<RGWSIPGen_Single>(new SIProvider_Container(cct,
+                                                                                   "meta",
+                                                                                   std::nullopt,
+                                                                                   { SIProviderRef(meta_full_sip),
+                                                                                     SIProviderRef(meta_inc_sip) } )));
 
   auto data_full_sip = new SIProvider_DataFull(cct, meta.mgr, bucket);
   r = data_full_sip->init();
@@ -474,7 +479,6 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;
   }
-  si.mgr->register_sip("data.full", "data", { SIProvider::StageType::FULL }, std::make_shared<RGWSIPGen_Single>(data_full_sip));
 
   auto data_inc_sip = new SIProvider_DataInc(cct, svc->datalog_rados, bucket);
   r = data_inc_sip->init();
@@ -482,7 +486,13 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;
   }
-  si.mgr->register_sip("data.inc", "data", { SIProvider::StageType::INC }, std::make_shared<RGWSIPGen_Single>(data_inc_sip));
+
+  si.mgr->register_sip("data", "data", { SIProvider::StageType::FULL, SIProvider::StageType::INC },
+                       std::make_shared<RGWSIPGen_Single>(new SIProvider_Container(cct,
+                                                                                   "data",
+                                                                                   std::nullopt,
+                                                                                   { SIProviderRef(data_full_sip),
+                                                                                     SIProviderRef(data_inc_sip) } )));
 
   return 0;
 }

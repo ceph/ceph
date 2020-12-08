@@ -280,7 +280,7 @@ public:
   SIProvider_Container(CephContext *_cct,
                        const std::string& _name,
                        std::optional<std::string> _instance,
-                       std::vector<SIProviderRef>& _providers);
+                       std::vector<SIProviderRef> _providers);
 
   stage_id_t get_first_stage() override;
   stage_id_t get_last_stage() override;

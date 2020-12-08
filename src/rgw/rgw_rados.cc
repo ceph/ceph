@@ -1409,8 +1409,7 @@ int RGWRados::initialize(const DoutPrefixProvider *dpp)
   /* this should have been part of the ctl initialization, however, we pass in RGWRadosStore that
    * ctl should not know about. The correct way would be to avoid using store at all, however this
    * requires creating svc for object listing */
-  ctl.si.mgr->register_sip("bucket.full", "bucket", { SIProvider::StageType::FULL }, std::make_shared<RGWSIPGen_BucketFull>(cct, store, ctl.bucket));
-  ctl.si.mgr->register_sip("bucket.inc", "bucket", { SIProvider::StageType::INC }, std::make_shared<RGWSIPGen_BucketInc>(cct, store, ctl.bucket));
+  ctl.si.mgr->register_sip("bucket", "bucket", { SIProvider::StageType::FULL, SIProvider::StageType::INC }, std::make_shared<RGWSIPGen_BucketContainer>(cct, store, ctl.bucket));
 
   host_id = svc.zone_utils->gen_host_id();
 

@@ -390,3 +390,38 @@ SIProviderRef RGWSIPGen_BucketInc::get(std::optional<std::string> instance)
   return result;
 }
 
+SIProviderRef RGWSIPGen_BucketContainer::get(std::optional<std::string> instance)
+{
+  if (!instance) {
+    return nullptr;
+  }
+
+  rgw_bucket bucket;
+
+  int r = rgw_bucket_parse_bucket_key(cct, *instance, &bucket, nullptr);
+  if (r < 0) {
+    ldout(cct, 20) << __func__ << ": failed to parse bucket key (instance=" << *instance << ") r=" << r << dendl;
+    return nullptr;
+  }
+
+  RGWBucketInfo bucket_info;
+  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield);
+  if (r < 0) {
+    ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
+    return nullptr;
+  }
+
+  SIProviderRef result;
+
+  auto full = new SIProvider_BucketFull(cct, store, bucket_info);
+  auto inc = new SIProvider_BucketInc(cct, store, bucket_info);
+
+  result.reset(new SIProvider_Container(cct,
+                                        "bucket",
+                                        instance,
+                                        { SIProviderRef(full),
+                                          SIProviderRef(inc) } ));
+
+  return result;
+}
+
