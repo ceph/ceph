@@ -1373,7 +1373,8 @@ class LogStream(object):
             self._write()
 
     def _write(self):
-        self._del_result_lines()
+        if opt_rotate_logs:
+            self._del_result_lines()
         if self.buffer == '':
             return
 
