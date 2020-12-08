@@ -217,11 +217,11 @@ void ImageDispatcher<I>::shut_down(Context* on_finish) {
       delete async_op;
       on_finish->complete(0);
     });
-  on_finish = new LambdaContext([this, async_op, on_finish](int r) {
-      async_op->start_op(*this->m_image_ctx);
-      async_op->flush(on_finish);
+  on_finish = new LambdaContext([this, on_finish](int r) {
+      Dispatcher<I, ImageDispatcherInterface>::shut_down(on_finish);
     });
-  Dispatcher<I, ImageDispatcherInterface>::shut_down(on_finish);
+  async_op->start_op(*this->m_image_ctx);
+  async_op->flush(on_finish);
 }
 
 template <typename I>
