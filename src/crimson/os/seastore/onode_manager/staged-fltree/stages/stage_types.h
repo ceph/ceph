@@ -19,7 +19,9 @@ constexpr match_stage_t STAGE_STRING = 1u; // nspace/oid
 constexpr match_stage_t STAGE_RIGHT = 0u;  // snap/gen
 constexpr auto STAGE_TOP = STAGE_LEFT;
 constexpr auto STAGE_BOTTOM = STAGE_RIGHT;
-
+constexpr bool is_valid_stage(match_stage_t stage) {
+  return std::clamp(stage, STAGE_BOTTOM, STAGE_TOP) == stage;
+}
 // TODO: replace by
 // using match_history_t = int8_t;
 //     left_m, str_m, right_m
@@ -34,7 +36,7 @@ constexpr auto STAGE_BOTTOM = STAGE_RIGHT;
 struct MatchHistory {
   template <match_stage_t STAGE>
   const std::optional<MatchKindCMP>& get() const {
-    static_assert(STAGE >= STAGE_BOTTOM && STAGE <= STAGE_TOP);
+    static_assert(is_valid_stage(STAGE));
     if constexpr (STAGE == STAGE_RIGHT) {
       return right_match;
     } else if (STAGE == STAGE_STRING) {
@@ -46,7 +48,7 @@ struct MatchHistory {
 
   const std::optional<MatchKindCMP>&
   get_by_stage(match_stage_t stage) const {
-    assert(stage >= STAGE_BOTTOM && stage <= STAGE_TOP);
+    assert(is_valid_stage(stage));
     if (stage == STAGE_RIGHT) {
       return right_match;
     } else if (stage == STAGE_STRING) {
@@ -61,7 +63,7 @@ struct MatchHistory {
 
   template <match_stage_t STAGE>
   void set(MatchKindCMP match) {
-    static_assert(STAGE >= STAGE_BOTTOM && STAGE <= STAGE_TOP);
+    static_assert(is_valid_stage(STAGE));
     if constexpr (STAGE < STAGE_TOP) {
       assert(*get<STAGE + 1>() == MatchKindCMP::EQ);
     }
@@ -118,7 +120,7 @@ struct _check_GT_t<STAGE_RIGHT> {
 };
 template <match_stage_t STAGE>
 const bool MatchHistory::is_GT() const {
-  static_assert(STAGE >= STAGE_BOTTOM && STAGE <= STAGE_TOP);
+  static_assert(is_valid_stage(STAGE));
   if constexpr (STAGE < STAGE_TOP) {
     assert(get<STAGE + 1>() == MatchKindCMP::EQ);
   }
@@ -127,7 +129,7 @@ const bool MatchHistory::is_GT() const {
 
 template <match_stage_t STAGE>
 struct staged_position_t {
-  static_assert(STAGE > STAGE_BOTTOM && STAGE <= STAGE_TOP);
+  static_assert(is_valid_stage(STAGE));
   using me_t = staged_position_t<STAGE>;
   using nxt_t = staged_position_t<STAGE - 1>;
   bool is_end() const {
