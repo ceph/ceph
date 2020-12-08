@@ -140,12 +140,13 @@ seastar::future<> ClientRequest::process_op(
     return seastar::now();
   }).then([this, &pg] {
     return with_blocking_future(handle.enter(pp(pg).get_obc));
-  }).then([this, &pg]() -> PG::load_obc_ertr::future<> {
+  }).then([this, &pg, &pgref]() -> PG::load_obc_ertr::future<> {
     op_info.set_from_op(&*m, *pg.get_osdmap());
-    return pg.with_locked_obc(m, op_info, this, [this, &pg](auto obc) {
+    return pg.with_locked_obc(m, op_info, this, [this, &pg, &pgref](auto obc) {
       return with_blocking_future(
         handle.enter(pp(pg).process)
-      ).then([this, &pg, obc] {
+      ).then([this, &pg, obc]() 
+          -> crimson::errorator<crimson::ct_error::eagain>::future<Ref<MOSDOpReply>> {
         if (!pg.is_primary()) {
            // primary can handle both normal ops and balanced reads
           if (is_misdirected(pg)) {
@@ -161,13 +162,15 @@ seastar::future<> ClientRequest::process_op(
           }
         }
         return pg.do_osd_ops(m, obc, op_info);
-      }).then([this](Ref<MOSDOpReply> reply) {
+      }).safe_then([this](Ref<MOSDOpReply> reply) {
         if (reply) {
           return conn->send(std::move(reply));
         } else {
           return seastar::now();
         }
-      });
+      }, crimson::ct_error::eagain::handle([this, &pgref] {
+        return process_op(pgref);
+      }));
     });
   }).safe_then([pgref=std::move(pgref)] {
     return seastar::now();
