@@ -633,9 +633,11 @@ def human_readable_size(size):
     Take a size in bytes, and transform it into a human readable size with up
     to two decimals of precision.
     """
-    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
     suffix_index = 0
     while size > 1024:
+        if suffix_index == len(suffixes) - 1:
+            break
         suffix_index += 1
         size = size / 1024.0
     return "{size:.2f} {suffix}".format(
