@@ -523,8 +523,8 @@ void PGRecovery::on_backfill_reserved()
   using BackfillState = crimson::osd::BackfillState;
   backfill_state = std::make_unique<BackfillState>(
     *this,
-    std::make_unique<BackfillState::PeeringFacade>(pg->get_peering_state()),
-    std::make_unique<BackfillState::PGFacade>(
+    std::make_unique<crimson::osd::PeeringFacade>(pg->get_peering_state()),
+    std::make_unique<crimson::osd::PGFacade>(
       *static_cast<crimson::osd::PG*>(pg)));
   // yes, it's **not** backfilling yet. The PG_STATE_BACKFILLING
   // will be set after on_backfill_reserved() returns.
