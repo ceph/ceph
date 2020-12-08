@@ -34,17 +34,17 @@ public:
                                    librados::snap_t src_snap_id_start,
                                    librados::snap_t dst_snap_id_start,
                                    const SnapMap &snap_map,
-                                   uint64_t object_number, bool flatten,
+                                   uint64_t object_number, uint32_t flags,
                                    Handler* handler, Context *on_finish) {
     return new ObjectCopyRequest(src_image_ctx, dst_image_ctx,
                                  src_snap_id_start, dst_snap_id_start, snap_map,
-                                 object_number, flatten, handler, on_finish);
+                                 object_number, flags, handler, on_finish);
   }
 
   ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
                     librados::snap_t src_snap_id_start,
                     librados::snap_t dst_snap_id_start, const SnapMap &snap_map,
-                    uint64_t object_number, bool flatten, Handler* handler,
+                    uint64_t object_number, uint32_t flags, Handler* handler,
                     Context *on_finish);
 
   void send();
@@ -107,7 +107,7 @@ private:
   librados::snap_t m_dst_snap_id_start;
   SnapMap m_snap_map;
   uint64_t m_dst_object_number;
-  bool m_flatten;
+  uint32_t m_flags;
   Handler* m_handler;
   Context *m_on_finish;
 
