@@ -253,7 +253,7 @@ class RGWRadosBucket : public RGWBucket {
 			   bool *is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual std::unique_ptr<RGWBucket> clone() {
-      return std::move(std::unique_ptr<RGWBucket>(new RGWRadosBucket(*this)));
+      return std::make_unique<RGWRadosBucket>(*this);
     }
 
     friend class RGWRadosStore;
