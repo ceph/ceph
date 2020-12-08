@@ -123,6 +123,7 @@ class CephTestCase(unittest.TestCase):
                         time.sleep(5 + timeout)
 
                 traceback.print_exc()
+                self.watcher_process.close_stdout_and_stderr()
                 log.info('=============will close self.watcher_process.stdin')
                 rv = self.watcher_process.stdin.close()
                 log.info('=============self.watcher_process.stdin closed. rv = ' + str(rv))

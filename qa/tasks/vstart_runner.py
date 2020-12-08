@@ -201,23 +201,8 @@ class LocalRemoteProcess(object):
         log.info('finished running self.subproc.communicate(), delete nonascii chars next')
         out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
         log.info('finished deleting nonascii chars')
-        if isinstance(self.stdout, StringIO):
-            log.info('writing out to self.stdout after decoding...')
-            self.stdout.write(out.decode(errors='ignore'))
-        elif self.stdout is None:
-            pass
-        else:
-            log.info('writing out to self.stdout without decoding...')
-            self.stdout.write(out)
-        if isinstance(self.stderr, StringIO):
-            log.info('writing err to self.stderr after decoding...')
-            self.stderr.write(err.decode(errors='ignore'))
-        elif self.stderr is None:
-            pass
-        else:
-            log.info('writing err to self.stderr without decoding...')
-            self.stderr.write(err)
-
+        self.write_stdout(out)
+        self.write_stderr(err)
         self.exitstatus = self.returncode = self.subproc.returncode
         log.info('self.existatus = ' + str(self.exitstatus))
 
@@ -245,22 +230,10 @@ class LocalRemoteProcess(object):
             log.info('running self.subproc.communicate()')
             out, err = self.subproc.communicate()
             log.info('finshed running self.subproc.communicate()')
-            if isinstance(self.stdout, StringIO):
-                log.info('writing out to self.stdout after decoding...')
-                self.stdout.write(out.decode(errors='ignore'))
-            elif self.stdout is None:
-                pass
-            else:
-                log.info('writing out to self.stdout without decoding...')
-                self.stdout.write(out)
-            if isinstance(self.stderr, StringIO):
-                log.info('writing err to self.stderr after decoding...')
-                self.stderr.write(err.decode(errors='ignore'))
-            elif self.stderr is None:
-                pass
-            else:
-                log.info('writing err to self.stderr without decoding...')
-                self.stderr.write(err)
+
+            self.write_stdout(out)
+            self.write_stderr(err)
+
             self.exitstatus = self.returncode = self.subproc.returncode
             log.info('finished running LocalRemote.finsished(), returning True')
             return True
@@ -268,6 +241,38 @@ class LocalRemoteProcess(object):
             log.info('self.subproc.poll is None')
             log.info('finished running LocalRemote.finsished(), returning False')
             return False
+
+    def close_stdout_and_stderr(self):
+        log.info('=============runinng LocalRemoteProcess.close_stdout_and_stderr'
+                 'self.args = ' + str(self.args))
+        if self.subproc.poll() is None:
+            return
+        log.info('running self.subproc.communicate()')
+        out, err = self.subproc.communicate()
+        log.info('finished running self.subproc.communicate()')
+        for stream, data in {self.stdout: out, self.stderr: err}.items():
+            if stream is not None:
+                self.write_stream(stream, data)
+                stream.close()
+
+        log.info('=============finished returning close_stdout_and_stderr')
+
+    def write_stream(self, stream, data):
+        if stream is None:
+            return
+
+        if isinstance(stream, StringIO):
+            log.info('writing out to self.stdout after decoding...')
+            stream.write(data.decode(errors='ignore'))
+        else:
+            log.info('writing out to self.stdout without decoding...')
+            stream.write(data)
+
+    def write_stdout(self, out):
+        self.write_stream(self.stdout, out)
+
+    def write_stderr(self, err):
+        self.write_stream(self.stderr, err)
 
     def kill(self):
         log.debug("kill ")
