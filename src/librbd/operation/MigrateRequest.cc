@@ -128,9 +128,14 @@ private:
     } else {
       ceph_assert(image_ctx.parent != nullptr);
 
+      uint32_t flags = 0;
+      if (image_ctx.migration_info.flatten) {
+        flags |= deep_copy::OBJECT_COPY_REQUEST_FLAG_FLATTEN;
+      }
+
       auto req = deep_copy::ObjectCopyRequest<I>::create(
         image_ctx.parent, &image_ctx, 0, 0, image_ctx.migration_info.snap_map,
-        m_object_no, image_ctx.migration_info.flatten, nullptr, ctx);
+        m_object_no, flags, nullptr, ctx);
 
       ldout(cct, 20) << "deep copy object req " << req << ", object_no "
                      << m_object_no << dendl;

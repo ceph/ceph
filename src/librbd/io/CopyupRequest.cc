@@ -237,11 +237,16 @@ void CopyupRequest<I>::deep_copy() {
 
   ldout(cct, 20) << "flatten=" << m_flatten << dendl;
 
+  uint32_t flags = 0;
+  if (m_flatten) {
+    flags |= deep_copy::OBJECT_COPY_REQUEST_FLAG_FLATTEN;
+  }
+
   auto ctx = util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_deep_copy>(this);
   auto req = deep_copy::ObjectCopyRequest<I>::create(
     m_image_ctx->parent, m_image_ctx, 0, 0,
-    m_image_ctx->migration_info.snap_map, m_object_no, m_flatten, nullptr, ctx);
+    m_image_ctx->migration_info.snap_map, m_object_no, flags, nullptr, ctx);
 
   req->send();
 }
