@@ -122,13 +122,18 @@ void ImageCopyRequest<I>::send_next_object_copy() {
 
   ++m_current_ops;
 
+  uint32_t flags = 0;
+  if (m_flatten) {
+    flags |= OBJECT_COPY_REQUEST_FLAG_FLATTEN;
+  }
+
   Context *ctx = new FunctionContext(
     [this, ono](int r) {
       handle_object_copy(ono, r);
     });
   ObjectCopyRequest<I> *req = ObjectCopyRequest<I>::create(
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_dst_snap_id_start,
-    m_snap_map, ono, m_flatten, ctx);
+    m_snap_map, ono, flags, ctx);
   req->send();
 }
 
