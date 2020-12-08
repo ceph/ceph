@@ -180,10 +180,13 @@ class LCFilter
     return !(has_prefix() || has_tags());
   }
 
-  // Determine if we need AND tag when creating xml
+  // Determine if we need AND when creating xml
   bool has_multi_condition() const {
     if (obj_tags.count() > 1)
       return true;
+    if (has_tags() && has_prefix()) {
+      return true;
+    }
     return false;
   }
 
