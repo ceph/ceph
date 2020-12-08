@@ -24,7 +24,7 @@ from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, match_glob, with_host, \
-    with_cephadm_module, with_service, assert_rm_service
+    with_cephadm_module, with_service, assert_rm_service, _deploy_cephadm_binary
 from cephadm.module import CephadmOrchestrator, CEPH_DATEFMT
 
 """
@@ -39,9 +39,16 @@ def assert_rm_daemon(cephadm: CephadmOrchestrator, prefix, host):
     dds: List[DaemonDescription] = wait(cephadm, cephadm.list_daemons(host=host))
     d_names = [dd.name() for dd in dds if dd.name().startswith(prefix)]
     assert d_names
+    # there should only be one daemon (if not match_glob will throw mismatch)
+    assert len(d_names) == 1
+
     c = cephadm.remove_daemons(d_names)
     [out] = wait(cephadm, c)
-    match_glob(out, f"Removed {d_names}* from host '{host}'")
+    # picking the 1st element is needed, rather than passing the list when the daemon
+    # name contains '-' char. If not, the '-' is treated as a range i.e. cephadm-exporter
+    # is treated like a m-e range which is invalid. rbd-mirror (d-m) and node-exporter (e-e)
+    # are valid, so pass without incident! Also, match_gob acts on strings anyway!
+    match_glob(out, f"Removed {d_names[0]}* from host '{host}'")
 
 
 @contextmanager
@@ -565,8 +572,10 @@ class TestCephadm(object):
             (ServiceSpec('rbd-mirror'), CephadmOrchestrator.add_rbd_mirror),
             (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.add_mds),
             (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.add_rgw),
+            (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.add_cephadm_exporter),
         ]
     )
+    @mock.patch("cephadm.module.CephadmOrchestrator._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_daemon_add(self, spec: ServiceSpec, meth, cephadm_module):
@@ -730,8 +739,10 @@ class TestCephadm(object):
                 envs=['SECRET=password'],
                 ports=[8080, 8443]
             ), CephadmOrchestrator.apply_container),
+            (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.apply_cephadm_exporter),
         ]
     )
+    @mock.patch("cephadm.module.CephadmOrchestrator._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):

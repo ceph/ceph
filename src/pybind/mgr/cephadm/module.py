@@ -30,6 +30,8 @@ from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult
+from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
+import secrets
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta, OrchestratorEvent, set_exception_subject, DaemonDescription
@@ -39,7 +41,7 @@ from . import remotes
 from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService
+    RbdMirrorService, CrashService, CephadmService, CephadmExporter, CephadmExporterConfig
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
@@ -108,6 +110,18 @@ def trivial_completion(f: Callable[..., T]) -> Callable[..., CephadmCompletion[T
         return CephadmCompletion(on_complete=lambda _: f(*args, **kwargs))
 
     return wrapper
+
+
+def service_inactive(spec_name: str):
+    def inner(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            obj = args[0]
+            if obj.get_store(f"spec.{spec_name}") is not None:
+                return 1, "", f"Unable to change configuration of an active service {spec_name}"
+            return func(*args, **kwargs)
+        return wrapper
+    return inner
 
 
 class ContainerInspectInfo(NamedTuple):
@@ -388,6 +402,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.crash_service = CrashService(self)
         self.iscsi_service = IscsiService(self)
         self.container_service = CustomContainerService(self)
+        self.cephadm_exporter_service = CephadmExporter(self)
         self.cephadm_services = {
             'mon': self.mon_service,
             'mgr': self.mgr_service,
@@ -403,6 +418,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'crash': self.crash_service,
             'iscsi': self.iscsi_service,
             'container': self.container_service,
+            'cephadm-exporter': self.cephadm_exporter_service,
         }
 
         self.template = TemplateMgr(self)
@@ -527,7 +543,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash', 'nfs',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container'
+            'container', 'cephadm-exporter',
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -931,6 +947,94 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_extra_ceph_conf(self) -> HandleCommandResult:
         return HandleCommandResult(stdout=self.extra_ceph_conf().conf)
 
+    def _set_exporter_config(self, config: Dict[str, str]) -> None:
+        self.set_store('exporter_config', json.dumps(config))
+
+    def _get_exporter_config(self) -> Dict[str, str]:
+        cfg_str = self.get_store('exporter_config')
+        return json.loads(cfg_str) if cfg_str else {}
+
+    def _set_exporter_option(self, option: str, value: Optional[str] = None) -> None:
+        kv_option = f'exporter_{option}'
+        self.set_store(kv_option, value)
+
+    def _get_exporter_option(self, option: str) -> Optional[str]:
+        kv_option = f'exporter_{option}'
+        return self.get_store(kv_option)
+
+    @orchestrator._cli_write_command(
+        prefix='cephadm generate-exporter-config',
+        desc='Generate default SSL crt/key and token for cephadm exporter daemons')
+    @service_inactive('cephadm-exporter')
+    def _generate_exporter_config(self):
+        self._set_exporter_defaults()
+        self.log.info('Default settings created for cephadm exporter(s)')
+        return 0, "", ""
+
+    def _set_exporter_defaults(self):
+        crt, key = self._generate_exporter_ssl()
+        token = self._generate_exporter_token()
+        self._set_exporter_config({
+            "crt": crt,
+            "key": key,
+            "token": token,
+            "port": CephadmExporterConfig.DEFAULT_PORT
+        })
+        self._set_exporter_option('enabled', 'true')
+
+    def _generate_exporter_ssl(self):
+        return create_self_signed_cert(dname={"O": "Ceph", "OU": "cephadm-exporter"})
+
+    def _generate_exporter_token(self):
+        return secrets.token_hex(32)
+
+    @orchestrator._cli_write_command(
+        prefix='cephadm clear-exporter-config',
+        desc='Clear the SSL configuration used by cephadm exporter daemons')
+    @service_inactive('cephadm-exporter')
+    def _clear_exporter_config(self):
+        self._clear_exporter_config_settings()
+        self.log.info('Cleared cephadm exporter configuration')
+        return 0, "", ""
+
+    def _clear_exporter_config_settings(self) -> None:
+        self.set_store('exporter_config', None)
+        self._set_exporter_option('enabled', None)
+
+    @orchestrator._cli_write_command(
+        prefix='cephadm set-exporter-config',
+        desc='Set custom cephadm-exporter configuration from a json file (-i <file>). JSON must contain crt, key, token and port')
+    @service_inactive('cephadm-exporter')
+    def _store_exporter_config(self, inbuf=None):
+
+        if not inbuf:
+            return 1, "", "JSON configuration has not been provided (-i <filename>)"
+
+        cfg = CephadmExporterConfig(self)
+        rc, reason = cfg.load_from_json(inbuf)
+        if rc:
+            return 1, "", reason
+
+        rc, reason = cfg.validate_config()
+        if rc:
+            return 1, "", reason
+
+        self._set_exporter_config({
+            "crt": cfg.crt,
+            "key": cfg.key,
+            "token": cfg.token,
+            "port": cfg.port
+        })
+        self.log.info("Loaded and verified the TLS configuration")
+        return 0, "", ""
+
+    @orchestrator._cli_read_command(
+        'cephadm get-exporter-config',
+        desc='Show the current cephadm-exporter configuraion (JSON)')
+    def _show_exporter_config(self):
+        cfg = self._get_exporter_config()
+        return 0, json.dumps(cfg, indent=2), ""
+
     class ExtraCephConf(NamedTuple):
         conf: str
         last_modified: Optional[datetime.datetime]
@@ -1091,11 +1195,18 @@ To check that the host is reachable:
 
         :env_vars: in format -> [KEY=VALUE, ..]
         """
+        self.log.debug(f"_run_cephadm : command = {command}")
+        self.log.debug(f"_run_cephadm : args = {args}")
+
+        bypass_image = ('cephadm-exporter',)
+
         with self._remote_connection(host, addr) as tpl:
             conn, connr = tpl
             assert image or entity
-            if not image and entity is not cephadmNoImage:
-                image = self._get_container_image(entity)
+            # Skip the image check for daemons deployed that are not ceph containers
+            if not str(entity).startswith(bypass_image):
+                if not image and entity is not cephadmNoImage:
+                    image = self._get_container_image(entity)
 
             final_args = []
 
@@ -1526,6 +1637,9 @@ To check that the host is reachable:
         found = self.spec_store.rm(service_name)
         if found:
             self._kick_serve_loop()
+            service = self.cephadm_services.get(service_name, None)
+            if service:
+                service.purge()
             return 'Removed service %s' % service_name
         else:
             # must be idempotent: still a success.
@@ -1738,6 +1852,15 @@ To check that the host is reachable:
                 if spec.ports:
                     ports.extend(spec.ports)
 
+            if daemon_spec.daemon_type == 'cephadm-exporter':
+                if not reconfig:
+                    assert daemon_spec.host
+                    deploy_ok = self._deploy_cephadm_binary(daemon_spec.host)
+                    if not deploy_ok:
+                        msg = f"Unable to deploy the cephadm binary to {daemon_spec.host}"
+                        self.log.warning(msg)
+                        return msg
+
             cephadm_config, deps = self.cephadm_services[daemon_spec.daemon_type].generate_config(
                 daemon_spec)
 
@@ -1803,6 +1926,17 @@ To check that the host is reachable:
                 self.events.for_daemon(
                     daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
             return msg
+
+    def _deploy_cephadm_binary(self, host: str) -> bool:
+        # Use tee (from coreutils) to create a copy of cephadm on the target machine
+        self.log.info(f"Deploying cephadm binary to {host}")
+        with self._remote_connection(host) as tpl:
+            conn, _connr = tpl
+            _out, _err, code = remoto.process.check(
+                conn,
+                ['tee', '-', '/var/lib/ceph/{}/cephadm'.format(self._cluster_fsid)],
+                stdin=self._cephadm.encode('utf-8'))
+        return code == 0
 
     @forall_hosts
     def _remove_daemons(self, name, host) -> str:
@@ -1977,6 +2111,7 @@ To check that the host is reachable:
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
+                'cephadm-exporter': PlacementSpec(host_pattern='*'),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -2106,6 +2241,17 @@ To check that the host is reachable:
 
     @trivial_completion
     def apply_container(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @trivial_completion
+    def add_cephadm_exporter(self, spec):
+        # type: (ServiceSpec) -> List[str]
+        return self._add_daemon('cephadm-exporter',
+                                spec,
+                                self.cephadm_exporter_service.prepare_create)
+
+    @trivial_completion
+    def apply_cephadm_exporter(self, spec) -> str:
         return self._apply(spec)
 
     def _get_container_image_info(self, image_name) -> ContainerInspectInfo:
