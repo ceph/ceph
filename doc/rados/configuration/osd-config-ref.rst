@@ -433,7 +433,9 @@ Operations
 
 ``osd client op priority``
 
-:Description: The priority set for client operations.
+:Description: The priority set for client operations.  This value is relative
+              to that of ``osd recovery op priority`` below.  The default
+              strongly favors client ops over recovery.
 
 :Type: 32-bit Integer
 :Default: ``63``
@@ -442,7 +444,12 @@ Operations
 
 ``osd recovery op priority``
 
-:Description: The priority set for recovery operations, if not specified by the pool's ``recovery_op_priority``.
+:Description: The priority of recovery operations vs client operations, if not specified by the
+              pool's ``recovery_op_priority``.  The default value prioritizes client
+              ops (see above) over recovery ops.  You may adjust the tradeoff of client
+              impact against the time to restore cluster health by lowering this value
+              for increased prioritization of client ops, or by increasing it to favor
+              recovery.
 
 :Type: 32-bit Integer
 :Default: ``3``
