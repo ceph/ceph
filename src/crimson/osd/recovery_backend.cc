@@ -136,6 +136,25 @@ seastar::future<> RecoveryBackend::handle_backfill(
   }
 }
 
+seastar::future<> RecoveryBackend::handle_backfill_remove(
+  MOSDPGBackfillRemove& m)
+{
+  logger().debug("{} m.ls=", __func__, m.ls);
+  assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
+
+  ObjectStore::Transaction t;
+  for ([[maybe_unused]] const auto& [soid, ver] : m.ls) {
+    // TODO: the reserved space management. PG::try_reserve_recovery_space().
+    t.remove(pg.get_collection_ref()->get_cid(),
+	      ghobject_t(soid, ghobject_t::NO_GEN, pg.get_pg_whoami().shard));
+  }
+  return shard_services.get_store().do_transaction(
+    pg.get_collection_ref(), std::move(t)
+  ).handle_exception([] (auto) {
+    ceph_abort_msg("this transaction shall not fail");
+  });
+}
+
 seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
   const hobject_t& start,
   [[maybe_unused]] const std::int64_t min,
@@ -274,6 +293,8 @@ seastar::future<> RecoveryBackend::handle_recovery_op(
   switch (m->get_header().type) {
   case MSG_OSD_PG_BACKFILL:
     return handle_backfill(*boost::static_pointer_cast<MOSDPGBackfill>(m));
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    return handle_backfill_remove(*boost::static_pointer_cast<MOSDPGBackfillRemove>(m));
   case MSG_OSD_PG_SCAN:
     return handle_scan(*boost::static_pointer_cast<MOSDPGScan>(m));
   default:

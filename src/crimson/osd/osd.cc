@@ -650,6 +650,8 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
     case MSG_OSD_PG_SCAN:
       [[fallthrough]];
     case MSG_OSD_PG_BACKFILL:
+      [[fallthrough]];
+    case MSG_OSD_PG_BACKFILL_REMOVE:
       return handle_recovery_subreq(conn, boost::static_pointer_cast<MOSDFastDispatchOp>(m));
     case MSG_OSD_PG_LEASE:
       [[fallthrough]];
