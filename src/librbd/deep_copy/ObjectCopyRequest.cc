@@ -37,13 +37,13 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
                                         librados::snap_t dst_snap_id_start,
                                         const SnapMap &snap_map,
                                         uint64_t dst_object_number,
-                                        bool flatten, Handler* handler,
+                                        uint32_t flags, Handler* handler,
                                         Context *on_finish)
   : m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
     m_src_snap_id_start(src_snap_id_start),
     m_dst_snap_id_start(dst_snap_id_start), m_snap_map(snap_map),
-    m_dst_object_number(dst_object_number), m_flatten(flatten),
+    m_dst_object_number(dst_object_number), m_flags(flags),
     m_handler(handler), m_on_finish(on_finish) {
   ceph_assert(src_image_ctx->data_ctx.is_valid());
   ceph_assert(dst_image_ctx->data_ctx.is_valid());
@@ -513,7 +513,8 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     }
   }
 
-  if (!dne_image_interval.empty() && (!only_dne_extents || m_flatten)) {
+  bool flatten = ((m_flags & OBJECT_COPY_REQUEST_FLAG_FLATTEN) != 0);
+  if (!dne_image_interval.empty() && (!only_dne_extents || flatten)) {
     auto snap_map_it = m_snap_map.begin();
     ceph_assert(snap_map_it != m_snap_map.end());
 
