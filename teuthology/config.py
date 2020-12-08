@@ -185,6 +185,7 @@ class TeuthologyConfig(YamlConfig):
                 'size': 1,
             },
         },
+        'rocketchat': None,
         'sleep_before_teardown': 0,
     }
 

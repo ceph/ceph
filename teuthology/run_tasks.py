@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import types
+import yaml
 
 from copy import deepcopy
 from humanfriendly import format_timespan
@@ -203,6 +204,41 @@ def run_tasks(tasks, ctx):
             del exc_info
         timer.mark("tasks complete")
 
+
+def build_rocketchat_message(ctx, stack, sleep_time_sec, template_path=None):
+    message_template_path = template_path or os.path.dirname(__file__) + \
+            '/templates/rocketchat-sleep-before-teardown.jinja2'
+
+    with open(message_template_path) as f:
+        template_text = f.read()
+
+    template = jinja2.Template(template_text)
+    archive_path = ctx.config.get('archive_path')
+    job_id = ctx.config.get('job_id')
+    status = get_status(ctx.summary)
+    stack_path = ' -> '.join(task for task, _ in stack)
+    suite_name=ctx.config.get('suite')
+    sleep_date=time.time()
+    sleep_date_str=time.strftime('%Y-%m-%d %H:%M:%S',
+                                 time.gmtime(sleep_date))
+
+    message = template.render(
+        sleep_time=format_timespan(sleep_time_sec),
+        sleep_time_sec=sleep_time_sec,
+        sleep_date=sleep_date_str,
+        owner=ctx.owner,
+        run_name=ctx.name,
+        job_id=ctx.config.get('job_id'),
+        job_desc=ctx.config.get('description'),
+        job_info=get_results_url(ctx.name, job_id),
+        job_logs=get_http_log_path(archive_path, job_id),
+        suite_name=suite_name,
+        status=status,
+        task_stack=stack_path,
+    )
+    return message
+
+
 def build_email_body(ctx, stack, sleep_time_sec):
     email_template_path = os.path.dirname(__file__) + \
             '/templates/email-sleep-before-teardown.jinja2'
@@ -239,7 +275,57 @@ def build_email_body(ctx, stack, sleep_time_sec):
     )
     return (subject.strip(), body.strip())
 
+
+def rocketchat_send_message(ctx, message, channels):
+    """
+    Send the message to the given RocketChat channels
+
+    Before sending the message we read the config file
+    from `~/.config/rocketchat.api/settings.yaml` which
+    must include next records:
+
+        username: 'userloginname'
+        password: 'userbigsecret'
+        domain: 'https://chat.suse.de'
+
+    :param message:     plain text message content in the Rocket.Chat
+                        messaging format
+    :param channels:    a list of channels where to send the message,
+                        the user private channel should be prefixed
+                        with '@' symbol
+    """
+    try:
+        from rocketchat.api import RocketChatAPI
+    except Exception as e:
+        log.warning(f'rocketchat: Failed to import rocketchat.api: {e}')
+        return
+
+    settings_path = \
+        os.environ.get('HOME') + '/.config/rocketchat.api/settings.yaml'
+
+    try:
+        with open(settings_path) as f:
+            settings = yaml.safe_load(f)
+    except Exception as e:
+        log.warning(f'rocketchat: Failed to load settings from {settings_path}: {e}')
+
+    r = RocketChatAPI(settings=settings)
+    for channel in channels:
+        try:
+            r.send_message(message, channel)
+        except Exception as e:
+            log.warning(f'rocketchat: Failed to send message to "{channel}" channel: {e}')
+
+
 def notify_sleep_before_teardown(ctx, stack, sleep_time):
+    rocketchat = ctx.config.get('rocketchat', None)
+
+    if rocketchat:
+        channels = [_ for _ in [_.strip() for _ in rocketchat.split(',')] if _]
+        log.info("Sending a message to Rocket.Chat channels: %s", channels)
+        message = build_rocketchat_message(ctx, stack, sleep_time)
+        rocketchat_send_message(ctx, message, channels)
+
     email = ctx.config.get('email', None)
     if not email:
         # we have no email configured, return silently
