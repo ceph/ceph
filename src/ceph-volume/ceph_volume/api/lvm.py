@@ -596,7 +596,7 @@ class VolumeGroup(object):
         '''
         Return how many extents fit the VG slot times
         '''
-        return int(int(self.vg_free_count) / slots)
+        return int(int(self.vg_extent_count) / slots)
 
 
 def create_vg(devices, name=None, name_prefix=None):

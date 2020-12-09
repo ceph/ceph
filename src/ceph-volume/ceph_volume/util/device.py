@@ -490,7 +490,6 @@ class Device(object):
             # only check generic if no vgs are present. Vgs might hold lvs and
             # that might cause 'locked' to trigger
             rejected.extend(self._check_generic_reject_reasons())
-
         return len(rejected) == 0, rejected
 
     def _check_raw_reject_reasons(self):
