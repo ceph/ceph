@@ -3,9 +3,7 @@ add_executable(test-seastore-onode-tree-node
 add_ceph_unittest(test-seastore-onode-tree-node)
 target_link_libraries(test-seastore-onode-tree-node
   crimson-seastore
-  GTest::Main
-  crimson-os
-  crimson-common)
+  GTest::Main)
 
 add_executable(unittest-staged-fltree
   test_staged_fltree.cc

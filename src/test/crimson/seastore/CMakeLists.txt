@@ -6,9 +6,7 @@ add_ceph_unittest(unittest-transaction-manager)
 target_link_libraries(
   unittest-transaction-manager
   ${CMAKE_DL_LIBS}
-  crimson-seastore
-  crimson-os
-  crimson-common)
+  crimson-seastore)
 
 add_executable(unittest-btree-lba-manager
   test_btree_lba_manager.cc
@@ -17,9 +15,7 @@ add_ceph_unittest(unittest-btree-lba-manager)
 target_link_libraries(
   unittest-btree-lba-manager
   ${CMAKE_DL_LIBS}
-  crimson-seastore
-  crimson-os
-  crimson-common)
+  crimson-seastore)
 
 add_executable(unittest-seastore-journal
   test_seastore_journal.cc)
@@ -28,9 +24,7 @@ add_ceph_test(unittest-seastore-journal
 target_link_libraries(
   unittest-seastore-journal
   crimson::gtest
-  crimson-seastore
-  crimson-os
-  crimson-common)
+  crimson-seastore)
 
 add_executable(unittest-seastore-cache
   test_block.cc
@@ -40,9 +34,7 @@ add_ceph_test(unittest-seastore-cache
 target_link_libraries(
   unittest-seastore-cache
   crimson::gtest
-  crimson-seastore
-  crimson-os
-  crimson-common)
+  crimson-seastore)
 
 add_executable(unittest-extmap-manager
   test_extmap_manager.cc
