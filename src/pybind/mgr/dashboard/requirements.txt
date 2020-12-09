@@ -19,7 +19,7 @@ py==1.5.2
 pycodestyle==2.4.0
 pycparser==2.18
 PyJWT==1.6.4
-pyopenssl==17.5.0
+pyopenssl
 pytest==3.3.2
 pytest-cov==2.5.1
 pytest-faulthandler==1.0.1
