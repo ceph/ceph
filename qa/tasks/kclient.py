@@ -48,6 +48,7 @@ def task(ctx, config):
         -kclient:
             client.0:
                 debug: true
+                mntopts: ["nowsync"]
 
     :param ctx: Context
     :param config: Configuration
@@ -110,8 +111,7 @@ def task(ctx, config):
             remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
             remote.run(args=["sudo", "bash", "-c", "echo 'module libceph +p' > /sys/kernel/debug/dynamic_debug/control"])
 
-        kernel_mount.mount()
-
+        kernel_mount.mount(mntopts=client_config.get('mntopts', []))
 
     def umount_all():
         log.info('Unmounting kernel clients...')
