@@ -175,6 +175,7 @@ class CephFSTestCase(CephTestCase):
         if self.REQUIRE_RECOVERY_FILESYSTEM:
             if not self.REQUIRE_FILESYSTEM:
                 self.skipTest("Recovery filesystem requires a primary filesystem as well")
+            # After Octopus is EOL, we can remove this setting:
             self.fs.mon_manager.raw_cluster_cmd('fs', 'flag', 'set',
                                                 'enable_multiple', 'true',
                                                 '--yes-i-really-mean-it')
