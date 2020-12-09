@@ -56,6 +56,5 @@ target_link_libraries(crimson-alienstore
   heap_profiler
   ${BLKID_LIBRARIES}
   ${UDEV_LIBRARIES}
-  crimson-os
   crimson
   blk)
